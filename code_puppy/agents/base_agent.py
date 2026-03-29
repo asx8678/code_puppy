@@ -42,10 +42,12 @@ from pydantic_ai.durable_exec.dbos import DBOSAgent
 
 # Rust acceleration bridge (optional - falls back to Python)
 from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
+
 if RUST_AVAILABLE:
     from code_puppy._core_bridge import (
         process_messages_batch,
         prune_and_filter,
+        split_for_summarization as rust_split_for_summarization,
         truncation_indices as rust_truncation_indices,
         serialize_messages_for_rust,
     )
@@ -763,6 +765,54 @@ class BaseAgent(ABC):
         # Get the configured protected token count
         protected_tokens_limit = get_protected_token_count()
 
+        # --- Rust fast path ------------------------------------------------
+        if is_rust_enabled():
+            try:
+                # Serialize messages and get per-message token counts
+                serialized = serialize_messages_for_rust(messages)
+                result = process_messages_batch(serialized, [], [], "")
+                per_message_tokens = result.per_message_tokens
+
+                # Build tool_call_ids_per_message: list of [(id, kind), ...] per message
+                tool_call_ids_per_message: List[List[Tuple[str, str]]] = []
+                for msg in messages:
+                    ids_for_msg: List[Tuple[str, str]] = []
+                    for part in getattr(msg, "parts", []) or []:
+                        tool_call_id = getattr(part, "tool_call_id", None)
+                        if tool_call_id:
+                            part_kind = getattr(part, "part_kind", "")
+                            if part_kind:
+                                ids_for_msg.append((tool_call_id, part_kind))
+                    tool_call_ids_per_message.append(ids_for_msg)
+
+                # Call Rust split_for_summarization
+                split_result = rust_split_for_summarization(
+                    per_message_tokens,
+                    tool_call_ids_per_message,
+                    protected_tokens_limit,
+                )
+
+                # Convert indices back to message lists
+                messages_to_summarize = [
+                    messages[i] for i in split_result.summarize_indices
+                ]
+                protected_messages = [
+                    messages[i] for i in split_result.protected_indices
+                ]
+                protected_token_count = split_result.protected_token_count
+
+                # Emit info messages (consistent with Python path)
+                emit_info(
+                    f"🔒 Protecting {len(protected_messages)} recent messages ({protected_token_count} tokens, limit: {protected_tokens_limit})"
+                )
+                emit_info(f"📝 Summarizing {len(messages_to_summarize)} older messages")
+
+                return messages_to_summarize, protected_messages
+            except Exception:
+                # Fall through to Python path on any error
+                pass
+        # ----------------------------------------------------------------
+
         # Calculate tokens for messages from most recent backwards (excluding system message)
         protected_messages = []
         protected_token_count = system_tokens  # Start with system message tokens
@@ -1065,20 +1115,30 @@ class BaseAgent(ABC):
                 serialized = serialize_messages_for_rust(messages)
                 # Extract actual tool definitions for accurate context overhead
                 tool_defs = []
-                pydantic_agent = getattr(self, 'pydantic_agent', None)
+                pydantic_agent = getattr(self, "pydantic_agent", None)
                 if pydantic_agent:
-                    _tools = getattr(pydantic_agent, '_tools', None)
+                    _tools = getattr(pydantic_agent, "_tools", None)
                     if _tools and isinstance(_tools, dict):
                         for tname, tfunc in _tools.items():
-                            td = {"name": tname, "description": getattr(tfunc, '__doc__', '') or ''}
-                            schema = getattr(tfunc, 'schema', None)
+                            td = {
+                                "name": tname,
+                                "description": getattr(tfunc, "__doc__", "") or "",
+                            }
+                            schema = getattr(tfunc, "schema", None)
                             if schema and isinstance(schema, dict):
                                 import json as _json
+
                                 td["inputSchema"] = _json.dumps(schema)
                             tool_defs.append(td)
-                mcp_defs = getattr(self, '_mcp_tool_definitions_cache', []) or []
-                system_prompt = self.get_full_system_prompt() if hasattr(self, 'get_full_system_prompt') else ""
-                batch_result = process_messages_batch(serialized, tool_defs, mcp_defs, system_prompt)
+                mcp_defs = getattr(self, "_mcp_tool_definitions_cache", []) or []
+                system_prompt = (
+                    self.get_full_system_prompt()
+                    if hasattr(self, "get_full_system_prompt")
+                    else ""
+                )
+                batch_result = process_messages_batch(
+                    serialized, tool_defs, mcp_defs, system_prompt
+                )
                 message_tokens = batch_result.total_message_tokens
                 context_overhead = batch_result.context_overhead_tokens
                 # Cache for reuse by accumulator and other methods
@@ -1088,11 +1148,15 @@ class BaseAgent(ABC):
             except Exception as exc:
                 logger.debug("Rust fallback in message_history_processor: %s", exc, exc_info=True)
                 # Fall back to Python on any Rust error
-                message_tokens = sum(self.estimate_tokens_for_message(msg) for msg in messages)
+                message_tokens = sum(
+                    self.estimate_tokens_for_message(msg) for msg in messages
+                )
                 context_overhead = self.estimate_context_overhead_tokens()
                 self._rust_batch_result = None
         else:
-            message_tokens = sum(self.estimate_tokens_for_message(msg) for msg in messages)
+            message_tokens = sum(
+                self.estimate_tokens_for_message(msg) for msg in messages
+            )
             context_overhead = self.estimate_context_overhead_tokens()
             self._rust_batch_result = None
         total_current_tokens = message_tokens + context_overhead
@@ -1187,9 +1251,8 @@ class BaseAgent(ABC):
             try:
                 serialized = serialize_messages_for_rust(messages)
                 batch = process_messages_batch(serialized, [], [], "")
-                second_has_thinking = (
-                    len(messages) > 1
-                    and any(isinstance(p, ThinkingPart) for p in messages[1].parts)
+                second_has_thinking = len(messages) > 1 and any(
+                    isinstance(p, ThinkingPart) for p in messages[1].parts
                 )
                 kept = rust_truncation_indices(
                     batch.per_message_tokens, protected_tokens, second_has_thinking
