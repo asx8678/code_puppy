@@ -25,6 +25,10 @@ _LEGACY_SIGNATURE_SIZE = (
     32  # legacy signature bytes, retained only for backward-compat parsing
 )
 
+from code_puppy._core_bridge import RUST_AVAILABLE
+if RUST_AVAILABLE:
+    from code_puppy._core_bridge import serialize_session as rust_serialize, deserialize_session as rust_deserialize
+
 SessionHistory = List[Any]
 TokenEstimator = Callable[[Any], int]
 
@@ -98,7 +102,12 @@ def save_session(
         pickle_file.write(pickle_data)
     tmp_pickle.replace(paths.pickle_path)
 
-    total_tokens = sum(token_estimator(message) for message in history)
+    # Use cached token counts from Rust batch processing if available
+    _cached = getattr(token_estimator, '_cached_total_tokens', None)
+    if _cached is not None:
+        total_tokens = _cached
+    else:
+        total_tokens = sum(token_estimator(message) for message in history)
     metadata = SessionMetadata(
         session_name=session_name,
         timestamp=timestamp,
