@@ -666,6 +666,13 @@ class BaseAgent(ABC):
         return bool(has_content or has_content_delta)
 
     def filter_huge_messages(self, messages: List[ModelMessage]) -> List[ModelMessage]:
+        if RUST_AVAILABLE:
+            try:
+                serialized = serialize_messages_for_rust(messages)
+                result = prune_and_filter(serialized, set(), 50000)
+                return [messages[i] for i in result.surviving_indices]
+            except Exception:
+                pass
         filtered = [m for m in messages if self.estimate_tokens_for_message(m) < 50000]
         pruned = self.prune_interrupted_tool_calls(filtered)
         return pruned
@@ -1054,7 +1061,19 @@ class BaseAgent(ABC):
         if RUST_AVAILABLE:
             try:
                 serialized = serialize_messages_for_rust(messages)
-                tool_defs = []  # Tool defs extracted below if needed
+                # Extract actual tool definitions for accurate context overhead
+                tool_defs = []
+                pydantic_agent = getattr(self, 'pydantic_agent', None)
+                if pydantic_agent:
+                    _tools = getattr(pydantic_agent, '_tools', None)
+                    if _tools and isinstance(_tools, dict):
+                        for tname, tfunc in _tools.items():
+                            td = {"name": tname, "description": getattr(tfunc, '__doc__', '') or ''}
+                            schema = getattr(tfunc, 'schema', None)
+                            if schema and isinstance(schema, dict):
+                                import json as _json
+                                td["inputSchema"] = _json.dumps(schema)
+                            tool_defs.append(td)
                 mcp_defs = getattr(self, '_mcp_tool_definitions_cache', []) or []
                 system_prompt = self.get_full_system_prompt() if hasattr(self, 'get_full_system_prompt') else ""
                 batch_result = process_messages_batch(serialized, tool_defs, mcp_defs, system_prompt)
@@ -1159,10 +1178,27 @@ class BaseAgent(ABC):
         import queue
 
         emit_info("Truncating message history to manage token usage")
-        result = [messages[0]]  # Always keep the first message (system prompt)
 
-        # Check if second message exists and contains a ThinkingPart
-        # If so, protect it (extended thinking context shouldn't be lost)
+        # Try Rust fast path
+        if RUST_AVAILABLE:
+            try:
+                serialized = serialize_messages_for_rust(messages)
+                batch = process_messages_batch(serialized, [], [], "")
+                second_has_thinking = (
+                    len(messages) > 1
+                    and any(isinstance(p, ThinkingPart) for p in messages[1].parts)
+                )
+                kept = rust_truncation_indices(
+                    batch.per_message_tokens, protected_tokens, second_has_thinking
+                )
+                result = [messages[i] for i in kept]
+                result = self.prune_interrupted_tool_calls(result)
+                return result
+            except Exception:
+                pass
+
+        # Python fallback
+        result = [messages[0]]
         skip_second = False
         if len(messages) > 1:
             second_msg = messages[1]
@@ -1175,21 +1211,15 @@ class BaseAgent(ABC):
 
         num_tokens = 0
         stack = queue.LifoQueue()
-
-        # Determine which messages to consider for the recent-tokens window
-        # Skip first message (already added), and skip second if it has thinking
         start_idx = 2 if skip_second else 1
         messages_to_scan = messages[start_idx:]
 
-        # Put messages in reverse order (most recent first) into the stack
-        # but break when we exceed protected_tokens
         for msg in reversed(messages_to_scan):
             num_tokens += self.estimate_tokens_for_message(msg)
             if num_tokens > protected_tokens:
                 break
             stack.put(msg)
 
-        # Pop messages from stack to get them in chronological order
         while not stack.empty():
             result.append(stack.get())
 
@@ -1612,16 +1642,12 @@ class BaseAgent(ABC):
             message_history=list(_message_history),  # Copy to avoid mutation issues
             incoming_messages=list(messages),
         )
-        # Use Rust-cached hashes when available (computed in single batch pass)
-        if RUST_AVAILABLE and hasattr(self, '_rust_message_hashes') and self._rust_message_hashes is not None:
-            try:
-                serialized_history = serialize_messages_for_rust(_message_history)
-                history_batch = process_messages_batch(serialized_history, [], [], "")
-                message_history_hashes = set(history_batch.message_hashes)
-            except Exception:
-                message_history_hashes = set([self.hash_message(m) for m in _message_history])
-        else:
-            message_history_hashes = set([self.hash_message(m) for m in _message_history])
+        # Use Python hashing for dedup in the accumulator.
+        # We must stay in the same hash domain as compacted_message_hashes
+        # (which are accumulated over turns using Python hash()). Rust
+        # acceleration is applied in message_history_processor for token
+        # estimation — that's where the big speedup lives.
+        message_history_hashes = set([self.hash_message(m) for m in _message_history])
         messages_added = 0
         last_msg_index = len(messages) - 1
         for i, msg in enumerate(messages):

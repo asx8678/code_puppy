@@ -33,7 +33,7 @@ pub fn prune_and_filter_impl(
     for (i, msg) in msgs.iter().enumerate() {
         if msg.parts.iter().any(|p| p.tool_call_id.as_ref().map_or(false, |id| mismatched.contains(id.as_str()))) { continue; }
         let tokens: i64 = msg.parts.iter().map(|p| estimate_tokens(&stringify_part_for_tokens(p))).sum();
-        if tokens > max_tokens_per_message { continue; }
+        if tokens >= max_tokens_per_message { continue; }
         if msg.parts.len() == 1 && msg.parts[0].part_kind == "thinking" && msg.parts[0].content.as_ref().map_or(true, |c| c.is_empty()) { continue; }
         surviving.push(i);
     }

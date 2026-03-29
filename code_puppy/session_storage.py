@@ -96,11 +96,30 @@ def save_session(
     ensure_directory(base_dir)
     paths = build_session_paths(base_dir, session_name)
 
-    pickle_data = pickle.dumps(history)
-    tmp_pickle = paths.pickle_path.with_suffix(".tmp")
-    with tmp_pickle.open("wb") as pickle_file:
-        pickle_file.write(pickle_data)
-    tmp_pickle.replace(paths.pickle_path)
+    # Use Rust MessagePack when available, pickle as fallback
+    if RUST_AVAILABLE:
+        try:
+            from code_puppy._core_bridge import serialize_messages_for_rust
+            serialized = serialize_messages_for_rust(history)
+            session_data = rust_serialize(serialized)
+            save_path = paths.pickle_path.with_suffix(".msgpack")
+        except Exception:
+            session_data = pickle.dumps(history)
+            save_path = paths.pickle_path
+    else:
+        session_data = pickle.dumps(history)
+        save_path = paths.pickle_path
+    tmp_file = save_path.with_suffix(".tmp")
+    with tmp_file.open("wb") as out_file:
+        out_file.write(session_data)
+    tmp_file.replace(save_path)
+    # Also write pickle for backward compat if we used msgpack
+    if RUST_AVAILABLE and save_path != paths.pickle_path:
+        pickle_data = pickle.dumps(history)
+        tmp_pickle = paths.pickle_path.with_suffix(".tmp")
+        with tmp_pickle.open("wb") as pickle_file:
+            pickle_file.write(pickle_data)
+        tmp_pickle.replace(paths.pickle_path)
 
     # Use cached token counts from Rust batch processing if available
     _cached = getattr(token_estimator, '_cached_total_tokens', None)
