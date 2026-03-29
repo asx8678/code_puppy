@@ -383,6 +383,7 @@ def test_network_traffic_on_simple_message(
     ALLOWED_DOMAINS = {
         "cloud.dbos.dev",
         "api.synthetic.new",
+        "api.fireworks.ai",
         "pypi.org",
     }
 

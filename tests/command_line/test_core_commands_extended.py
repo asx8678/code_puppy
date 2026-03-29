@@ -631,7 +631,7 @@ class TestHandleModelCommand:
     def test_model_command_with_valid_argument(self):
         """Test model command with a valid model name argument."""
         with patch(
-            "code_puppy.command_line.model_picker_completion.update_model_in_input",
+            "code_puppy.command_line.core_commands.update_model_in_input",
             return_value="/m synthetic-GLM-4.7",
         ):
             with patch(
@@ -665,7 +665,7 @@ class TestHandleModelCommand:
     def test_model_command_m_alias(self):
         """Test model command with /m alias."""
         with patch(
-            "code_puppy.command_line.model_picker_completion.update_model_in_input",
+            "code_puppy.command_line.core_commands.update_model_in_input",
             return_value="",
         ):
             with patch(
