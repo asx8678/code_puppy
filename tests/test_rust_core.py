@@ -22,7 +22,6 @@ from pydantic_ai.messages import (
 )
 
 from code_puppy._core_bridge import (
-    RUST_AVAILABLE,
     serialize_message_for_rust,
     serialize_messages_for_rust,
 )

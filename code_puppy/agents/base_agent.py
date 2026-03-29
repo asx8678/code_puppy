@@ -46,7 +46,6 @@ if RUST_AVAILABLE:
         process_messages_batch,
         prune_and_filter,
         truncation_indices as rust_truncation_indices,
-        split_for_summarization as rust_split_for_summarization,
         serialize_messages_for_rust,
     )
 

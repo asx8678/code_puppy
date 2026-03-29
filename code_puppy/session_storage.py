@@ -25,9 +25,6 @@ _LEGACY_SIGNATURE_SIZE = (
     32  # legacy signature bytes, retained only for backward-compat parsing
 )
 
-from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
-if RUST_AVAILABLE:
-    from code_puppy._core_bridge import serialize_session as rust_serialize, deserialize_session as rust_deserialize
 
 SessionHistory = List[Any]
 TokenEstimator = Callable[[Any], int]
@@ -96,37 +93,13 @@ def save_session(
     ensure_directory(base_dir)
     paths = build_session_paths(base_dir, session_name)
 
-    # Use Rust MessagePack when available, pickle as fallback
-    if is_rust_enabled():
-        try:
-            from code_puppy._core_bridge import serialize_messages_for_rust
-            serialized = serialize_messages_for_rust(history)
-            session_data = rust_serialize(serialized)
-            save_path = paths.pickle_path.with_suffix(".msgpack")
-        except Exception:
-            session_data = pickle.dumps(history)
-            save_path = paths.pickle_path
-    else:
-        session_data = pickle.dumps(history)
-        save_path = paths.pickle_path
-    tmp_file = save_path.with_suffix(".tmp")
-    with tmp_file.open("wb") as out_file:
-        out_file.write(session_data)
-    tmp_file.replace(save_path)
-    # Also write pickle for backward compat if we used msgpack
-    if is_rust_enabled() and save_path != paths.pickle_path:
-        pickle_data = pickle.dumps(history)
-        tmp_pickle = paths.pickle_path.with_suffix(".tmp")
-        with tmp_pickle.open("wb") as pickle_file:
-            pickle_file.write(pickle_data)
-        tmp_pickle.replace(paths.pickle_path)
+    pickle_data = pickle.dumps(history)
+    tmp_pickle = paths.pickle_path.with_suffix(".tmp")
+    with tmp_pickle.open("wb") as pickle_file:
+        pickle_file.write(pickle_data)
+    tmp_pickle.replace(paths.pickle_path)
 
-    # Use cached token counts from Rust batch processing if available
-    _cached = getattr(token_estimator, '_cached_total_tokens', None)
-    if _cached is not None:
-        total_tokens = _cached
-    else:
-        total_tokens = sum(token_estimator(message) for message in history)
+    total_tokens = sum(token_estimator(message) for message in history)
     metadata = SessionMetadata(
         session_name=session_name,
         timestamp=timestamp,
