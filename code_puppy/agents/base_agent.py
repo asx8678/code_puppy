@@ -3,6 +3,7 @@
 import asyncio
 import dataclasses
 import json
+import logging
 import math
 import pathlib
 import signal
@@ -99,6 +100,8 @@ from code_puppy.tools.agent_tools import _active_subagent_tasks
 from code_puppy.tools.command_runner import (
     is_awaiting_user_input,
 )
+
+logger = logging.getLogger(__name__)
 
 # Global flag to track delayed compaction requests
 _delayed_compaction_requested = False
@@ -670,8 +673,8 @@ class BaseAgent(ABC):
                 serialized = serialize_messages_for_rust(messages)
                 result = prune_and_filter(serialized, 50000)
                 return [messages[i] for i in result.surviving_indices]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Rust fallback in filter_huge_messages: %s", exc, exc_info=True)
         filtered = [m for m in messages if self.estimate_tokens_for_message(m) < 50000]
         pruned = self.prune_interrupted_tool_calls(filtered)
         return pruned
@@ -1082,7 +1085,8 @@ class BaseAgent(ABC):
                 self._rust_batch_result = batch_result
                 self._rust_per_message_tokens = batch_result.per_message_tokens
                 self._rust_message_hashes = batch_result.message_hashes
-            except Exception:
+            except Exception as exc:
+                logger.debug("Rust fallback in message_history_processor: %s", exc, exc_info=True)
                 # Fall back to Python on any Rust error
                 message_tokens = sum(self.estimate_tokens_for_message(msg) for msg in messages)
                 context_overhead = self.estimate_context_overhead_tokens()
@@ -1193,8 +1197,8 @@ class BaseAgent(ABC):
                 result = [messages[i] for i in kept]
                 result = self.prune_interrupted_tool_calls(result)
                 return result
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Rust fallback in truncation: %s", exc, exc_info=True)
 
         # Python fallback
         result = [messages[0]]
