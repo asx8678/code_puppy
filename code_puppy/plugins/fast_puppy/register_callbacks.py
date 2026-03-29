@@ -125,8 +125,24 @@ def _try_auto_build() -> bool:
         import code_puppy._core_bridge as bridge
         importlib.reload(bridge)
 
+        # Also patch the module-level RUST_AVAILABLE that other modules
+        # already copied at import time (e.g., base_agent.py line 43)
+        import code_puppy.agents.base_agent as _ba
+        if hasattr(_ba, "RUST_AVAILABLE"):
+            _ba.RUST_AVAILABLE = bridge.RUST_AVAILABLE
+        # Re-import the Rust functions into base_agent's namespace
         if bridge.RUST_AVAILABLE:
-            emit_info("🐕⚡ Fast Puppy: Rust module built successfully! Zoom zoom!")
+            try:
+                _ba.process_messages_batch = bridge.process_messages_batch
+                _ba.prune_and_filter = bridge.prune_and_filter
+                _ba.rust_truncation_indices = bridge.truncation_indices
+                _ba.serialize_messages_for_rust = bridge.serialize_messages_for_rust
+                _ba.is_rust_enabled = bridge.is_rust_enabled
+            except Exception:
+                pass
+
+        if bridge.RUST_AVAILABLE:
+            emit_info("🐕⚡ Fast Puppy: Rust module compiled and ready — Zoom! Zoom!")
             return True
         else:
             emit_info("🐕 Fast Puppy: Build succeeded but module not loadable")
