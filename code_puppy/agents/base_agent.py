@@ -1208,7 +1208,11 @@ class BaseAgent(ABC):
                 # Use truncation instead of summarization
                 protected_tokens = get_protected_token_count()
                 filtered_messages = self.filter_huge_messages(messages)
-                result_messages = self.truncation(filtered_messages, protected_tokens)
+                # Pass cached per_message_tokens when available from Rust batch processing
+                cached_tokens = getattr(self, '_rust_per_message_tokens', None)
+                result_messages = self.truncation(
+                    filtered_messages, protected_tokens, per_message_tokens=cached_tokens
+                )
                 # Track dropped messages by hash so message_history_accumulator
                 # won't re-inject them from pydantic-ai's full message list on
                 # subsequent calls within the same run (fixes ghost-task bug).
@@ -1240,7 +1244,10 @@ class BaseAgent(ABC):
         return messages
 
     def truncation(
-        self, messages: List[ModelMessage], protected_tokens: int
+        self,
+        messages: List[ModelMessage],
+        protected_tokens: int,
+        per_message_tokens: Optional[List[int]] = None,
     ) -> List[ModelMessage]:
         """
         Truncate message history to manage token usage.
@@ -1253,6 +1260,9 @@ class BaseAgent(ABC):
         Args:
             messages: List of messages to truncate
             protected_tokens: Number of tokens to protect
+            per_message_tokens: Optional pre-computed per-message token counts.
+                When provided (e.g., from message_history_processor), avoids
+                re-serializing and re-computing token counts.
 
         Returns:
             Truncated list of messages
@@ -1264,14 +1274,18 @@ class BaseAgent(ABC):
         # Try Rust fast path
         if is_rust_enabled():
             try:
-                serialized = serialize_messages_for_rust(messages)
-                batch = process_messages_batch(serialized, [], [], "")
+                if per_message_tokens is not None:
+                    # Reuse pre-computed tokens from caller (e.g., message_history_processor)
+                    tokens = per_message_tokens
+                else:
+                    # Compute from scratch when not provided
+                    serialized = serialize_messages_for_rust(messages)
+                    batch = process_messages_batch(serialized, [], [], "")
+                    tokens = batch.per_message_tokens
                 second_has_thinking = len(messages) > 1 and any(
                     isinstance(p, ThinkingPart) for p in messages[1].parts
                 )
-                kept = rust_truncation_indices(
-                    batch.per_message_tokens, protected_tokens, second_has_thinking
-                )
+                kept = rust_truncation_indices(tokens, protected_tokens, second_has_thinking)
                 result = [messages[i] for i in kept]
                 result = self.prune_interrupted_tool_calls(result)
                 return result
