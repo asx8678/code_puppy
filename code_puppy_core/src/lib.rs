@@ -12,7 +12,6 @@ use serialization::{
     deserialize_session_impl, serialize_session_impl, serialize_session_incremental_impl,
 };
 use token_estimation::process_messages_batch_impl;
-use types::Message;
 
 // ── Result types exposed to Python ──────────────────────────────────────────
 
@@ -55,9 +54,6 @@ pub struct SplitResult {
 
 // ── Helper: parse list[dict] → Vec<Message> ─────────────────────────────────
 
-fn parse_messages(messages: &Bound<'_, PyList>) -> PyResult<Vec<Message>> {
-    messages.iter().map(|obj| Message::from_py(&obj)).collect()
-}
 
 // ── Python-facing functions ─────────────────────────────────────────────────
 

@@ -8,7 +8,7 @@ use crate::types::{Message, MessagePart, ToolDefinition};
 use crate::ProcessResult;
 
 pub fn estimate_tokens(text: &str) -> i64 {
-    std::cmp::max(1, (text.len() as f64 / 2.5).floor() as i64)
+    std::cmp::max(1, (text.chars().count() as f64 / 2.5).floor() as i64)
 }
 
 pub fn stringify_part_for_tokens(part: &MessagePart) -> String {
