@@ -171,14 +171,16 @@ def _on_startup():
         _try_auto_build()
 
     # Now apply the persisted preference
-    from code_puppy._core_bridge import RUST_AVAILABLE, set_rust_enabled
+    from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled, set_rust_enabled
 
-    if saved is None:
-        return  # Default: ON if available
-    set_rust_enabled(saved)
-    if RUST_AVAILABLE:
-        state = "enabled" if saved else "disabled"
-        emit_info(f"🐕⚡ Fast Puppy: Rust acceleration {state} (from puppy.cfg)")
+    if saved is not None:
+        set_rust_enabled(saved)
+
+    # Always announce Rust status on startup
+    if is_rust_enabled():
+        emit_info("🐕⚡ Fast Puppy: Rust acceleration active — Zoom! Zoom!")
+    elif RUST_AVAILABLE and not is_rust_enabled():
+        emit_info("🐕💤 Fast Puppy: Rust installed but disabled (/fast_puppy enable to activate)")
 
 
 def _custom_help():
