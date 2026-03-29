@@ -25,7 +25,7 @@ _LEGACY_SIGNATURE_SIZE = (
     32  # legacy signature bytes, retained only for backward-compat parsing
 )
 
-from code_puppy._core_bridge import RUST_AVAILABLE
+from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
 if RUST_AVAILABLE:
     from code_puppy._core_bridge import serialize_session as rust_serialize, deserialize_session as rust_deserialize
 
@@ -97,7 +97,7 @@ def save_session(
     paths = build_session_paths(base_dir, session_name)
 
     # Use Rust MessagePack when available, pickle as fallback
-    if RUST_AVAILABLE:
+    if is_rust_enabled():
         try:
             from code_puppy._core_bridge import serialize_messages_for_rust
             serialized = serialize_messages_for_rust(history)
@@ -114,7 +114,7 @@ def save_session(
         out_file.write(session_data)
     tmp_file.replace(save_path)
     # Also write pickle for backward compat if we used msgpack
-    if RUST_AVAILABLE and save_path != paths.pickle_path:
+    if is_rust_enabled() and save_path != paths.pickle_path:
         pickle_data = pickle.dumps(history)
         tmp_pickle = paths.pickle_path.with_suffix(".tmp")
         with tmp_pickle.open("wb") as pickle_file:

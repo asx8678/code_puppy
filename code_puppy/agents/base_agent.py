@@ -40,7 +40,7 @@ from pydantic_ai import (
 from pydantic_ai.durable_exec.dbos import DBOSAgent
 
 # Rust acceleration bridge (optional - falls back to Python)
-from code_puppy._core_bridge import RUST_AVAILABLE
+from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
 if RUST_AVAILABLE:
     from code_puppy._core_bridge import (
         process_messages_batch,
@@ -666,7 +666,7 @@ class BaseAgent(ABC):
         return bool(has_content or has_content_delta)
 
     def filter_huge_messages(self, messages: List[ModelMessage]) -> List[ModelMessage]:
-        if RUST_AVAILABLE:
+        if is_rust_enabled():
             try:
                 serialized = serialize_messages_for_rust(messages)
                 result = prune_and_filter(serialized, set(), 50000)
@@ -1058,7 +1058,7 @@ class BaseAgent(ABC):
         model_max = self.get_model_context_length()
 
         # Use Rust batch processing when available (single pass for tokens + hashes)
-        if RUST_AVAILABLE:
+        if is_rust_enabled():
             try:
                 serialized = serialize_messages_for_rust(messages)
                 # Extract actual tool definitions for accurate context overhead
@@ -1180,7 +1180,7 @@ class BaseAgent(ABC):
         emit_info("Truncating message history to manage token usage")
 
         # Try Rust fast path
-        if RUST_AVAILABLE:
+        if is_rust_enabled():
             try:
                 serialized = serialize_messages_for_rust(messages)
                 batch = process_messages_batch(serialized, [], [], "")
