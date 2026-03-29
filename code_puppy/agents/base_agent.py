@@ -1134,6 +1134,8 @@ class BaseAgent(ABC):
                 if pydantic_agent:
                     _tools = getattr(pydantic_agent, "_tools", None)
                     if _tools and isinstance(_tools, dict):
+                        import json as _json
+
                         for tname, tfunc in _tools.items():
                             td = {
                                 "name": tname,
@@ -1141,8 +1143,6 @@ class BaseAgent(ABC):
                             }
                             schema = getattr(tfunc, "schema", None)
                             if schema and isinstance(schema, dict):
-                                import json as _json
-
                                 td["inputSchema"] = _json.dumps(schema)
                             tool_defs.append(td)
                 mcp_defs = getattr(self, "_mcp_tool_definitions_cache", []) or []
@@ -1156,10 +1156,7 @@ class BaseAgent(ABC):
                 )
                 message_tokens = batch_result.total_message_tokens
                 context_overhead = batch_result.context_overhead_tokens
-                # Cache for reuse by accumulator and other methods
-                self._rust_batch_result = batch_result
                 self._rust_per_message_tokens = batch_result.per_message_tokens
-                self._rust_message_hashes = batch_result.message_hashes
             except Exception as exc:
                 logger.debug("Rust fallback in message_history_processor: %s", exc, exc_info=True)
                 # Fall back to Python on any Rust error
@@ -1167,13 +1164,11 @@ class BaseAgent(ABC):
                     self.estimate_tokens_for_message(msg) for msg in messages
                 )
                 context_overhead = self.estimate_context_overhead_tokens()
-                self._rust_batch_result = None
         else:
             message_tokens = sum(
                 self.estimate_tokens_for_message(msg) for msg in messages
             )
             context_overhead = self.estimate_context_overhead_tokens()
-            self._rust_batch_result = None
         total_current_tokens = message_tokens + context_overhead
         proportion_used = total_current_tokens / model_max
 
