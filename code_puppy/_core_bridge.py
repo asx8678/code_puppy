@@ -41,6 +41,34 @@ except ImportError:
     serialize_session_incremental = None  # type: ignore[assignment]
 
 
+# --- Fast Puppy toggle ---------------------------------------------------
+# When True (default), Rust acceleration is used at runtime if the module
+# is installed.  /fast_puppy disable flips this to False so every call
+# falls through to the Python path — no restart needed.
+_rust_user_enabled: bool = True
+
+
+def is_rust_enabled() -> bool:
+    """Check if Rust acceleration is both available AND enabled by the user."""
+    return RUST_AVAILABLE and _rust_user_enabled
+
+
+def set_rust_enabled(enabled: bool) -> None:
+    """Toggle Rust acceleration on or off at runtime."""
+    global _rust_user_enabled
+    _rust_user_enabled = enabled
+
+
+def get_rust_status() -> dict:
+    """Return diagnostic info for /fast_puppy status."""
+    return {
+        "installed": RUST_AVAILABLE,
+        "enabled": _rust_user_enabled,
+        "active": is_rust_enabled(),
+    }
+# --------------------------------------------------------------------------
+
+
 def serialize_message_for_rust(message: Any) -> dict:
     """Convert a pydantic-ai ModelMessage to the dict format expected by Rust.
 
