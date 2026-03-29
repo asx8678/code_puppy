@@ -63,13 +63,6 @@ pub fn prune_and_filter_impl(
         surviving.push(i);
     }
 
-    while let Some(&last_idx) = surviving.last() {
-        if msgs[last_idx].kind == "response" {
-            surviving.pop();
-        } else {
-            break;
-        }
-    }
 
     let pending = call_ids.difference(&return_ids).count();
     Ok(PruneResult {

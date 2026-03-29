@@ -1068,6 +1068,21 @@ class BaseAgent(ABC):
         if not messages:
             return messages
 
+        # Rust fast path — prune_and_filter handles mismatched tool-call pruning
+        # in a single pass, plus filters empty thinking parts and trailing responses
+        if is_rust_enabled():
+            try:
+                serialized = serialize_messages_for_rust(messages)
+                result = prune_and_filter(serialized, 999_999_999)
+                return [messages[i] for i in result.surviving_indices]
+            except Exception as exc:
+                logger.debug(
+                    "Rust fallback in prune_interrupted_tool_calls: %s",
+                    exc,
+                    exc_info=True,
+                )
+
+        # Python fallback — original implementation
         tool_call_ids: Set[str] = set()
         tool_return_ids: Set[str] = set()
 
