@@ -16,7 +16,7 @@ use token_estimation::process_messages_batch_impl;
 // ── Result types exposed to Python ──────────────────────────────────────────
 
 #[pyclass(frozen)]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ProcessResult {
     #[pyo3(get)]
     pub per_message_tokens: Vec<i64>,
@@ -29,7 +29,7 @@ pub struct ProcessResult {
 }
 
 #[pyclass(frozen)]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct PruneResult {
     #[pyo3(get)]
     pub surviving_indices: Vec<usize>,
@@ -42,7 +42,7 @@ pub struct PruneResult {
 }
 
 #[pyclass(frozen)]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct SplitResult {
     #[pyo3(get)]
     pub summarize_indices: Vec<usize>,
@@ -54,7 +54,6 @@ pub struct SplitResult {
 
 // ── Helper: parse list[dict] → Vec<Message> ─────────────────────────────────
 
-
 // ── Python-facing functions ─────────────────────────────────────────────────
 
 #[pyfunction]
@@ -65,7 +64,12 @@ fn process_messages_batch<'py>(
     mcp_tool_definitions: &Bound<'py, PyList>,
     system_prompt: &str,
 ) -> PyResult<ProcessResult> {
-    process_messages_batch_impl(messages, tool_definitions, mcp_tool_definitions, system_prompt)
+    process_messages_batch_impl(
+        messages,
+        tool_definitions,
+        mcp_tool_definitions,
+        system_prompt,
+    )
 }
 
 #[pyfunction]

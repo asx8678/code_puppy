@@ -82,7 +82,12 @@ impl Message {
             }
         }
 
-        Ok(Message { kind, role, instructions, parts })
+        Ok(Message {
+            kind,
+            role,
+            instructions,
+            parts,
+        })
     }
 }
 
@@ -98,8 +103,7 @@ impl ToolDefinition {
             _ => None,
         };
         let input_schema: Option<serde_json::Value> = {
-            let schema_val = dict.get_item("inputSchema")?
-                .or(dict.get_item("schema")?);
+            let schema_val = dict.get_item("inputSchema")?.or(dict.get_item("schema")?);
             match schema_val {
                 Some(v) if !v.is_none() => {
                     if let Ok(s) = v.extract::<String>() {
@@ -112,6 +116,10 @@ impl ToolDefinition {
             }
         };
 
-        Ok(ToolDefinition { name, description, input_schema })
+        Ok(ToolDefinition {
+            name,
+            description,
+            input_schema,
+        })
     }
 }

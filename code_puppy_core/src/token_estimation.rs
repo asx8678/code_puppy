@@ -48,7 +48,9 @@ fn estimate_context_overhead(
     for tool in tool_defs.iter().chain(mcp_tool_defs.iter()) {
         total += estimate_tokens(&tool.name);
         if let Some(ref desc) = tool.description {
-            if !desc.is_empty() { total += estimate_tokens(desc); }
+            if !desc.is_empty() {
+                total += estimate_tokens(desc);
+            }
         }
         if let Some(ref schema) = tool.input_schema {
             let s = serde_json::to_string(schema).unwrap_or_default();
@@ -64,9 +66,18 @@ pub fn process_messages_batch_impl(
     mcp_tool_definitions: &Bound<'_, PyList>,
     system_prompt: &str,
 ) -> PyResult<ProcessResult> {
-    let msgs: Vec<Message> = messages.iter().map(|o| Message::from_py(&o)).collect::<PyResult<_>>()?;
-    let tool_defs: Vec<ToolDefinition> = tool_definitions.iter().map(|o| ToolDefinition::from_py(&o)).collect::<PyResult<_>>()?;
-    let mcp_defs: Vec<ToolDefinition> = mcp_tool_definitions.iter().map(|o| ToolDefinition::from_py(&o)).collect::<PyResult<_>>()?;
+    let msgs: Vec<Message> = messages
+        .iter()
+        .map(|o| Message::from_py(&o))
+        .collect::<PyResult<_>>()?;
+    let tool_defs: Vec<ToolDefinition> = tool_definitions
+        .iter()
+        .map(|o| ToolDefinition::from_py(&o))
+        .collect::<PyResult<_>>()?;
+    let mcp_defs: Vec<ToolDefinition> = mcp_tool_definitions
+        .iter()
+        .map(|o| ToolDefinition::from_py(&o))
+        .collect::<PyResult<_>>()?;
 
     let mut per_message_tokens = Vec::with_capacity(msgs.len());
     let mut message_hashes = Vec::with_capacity(msgs.len());
@@ -76,7 +87,9 @@ pub fn process_messages_batch_impl(
         let mut msg_tokens: i64 = 0;
         for part in &msg.parts {
             let s = stringify_part_for_tokens(part);
-            if !s.is_empty() { msg_tokens += estimate_tokens(&s); }
+            if !s.is_empty() {
+                msg_tokens += estimate_tokens(&s);
+            }
         }
         msg_tokens = std::cmp::max(1, msg_tokens);
         per_message_tokens.push(msg_tokens);
@@ -86,13 +99,27 @@ pub fn process_messages_batch_impl(
 
     let context_overhead = estimate_context_overhead(&tool_defs, &mcp_defs, system_prompt);
 
-    Ok(ProcessResult { per_message_tokens, total_message_tokens, context_overhead_tokens: context_overhead, message_hashes })
+    Ok(ProcessResult {
+        per_message_tokens,
+        total_message_tokens,
+        context_overhead_tokens: context_overhead,
+        message_hashes,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test] fn test_estimate_tokens_empty() { assert_eq!(estimate_tokens(""), 1); }
-    #[test] fn test_estimate_tokens_hello() { assert_eq!(estimate_tokens("Hello, world!"), 5); }
-    #[test] fn test_estimate_tokens_large() { assert_eq!(estimate_tokens(&"x".repeat(3000)), 1200); }
+    #[test]
+    fn test_estimate_tokens_empty() {
+        assert_eq!(estimate_tokens(""), 1);
+    }
+    #[test]
+    fn test_estimate_tokens_hello() {
+        assert_eq!(estimate_tokens("Hello, world!"), 5);
+    }
+    #[test]
+    fn test_estimate_tokens_large() {
+        assert_eq!(estimate_tokens(&"x".repeat(3000)), 1200);
+    }
 }
