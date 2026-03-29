@@ -668,7 +668,7 @@ class BaseAgent(ABC):
         if is_rust_enabled():
             try:
                 serialized = serialize_messages_for_rust(messages)
-                result = prune_and_filter(serialized, set(), 50000)
+                result = prune_and_filter(serialized, 50000)
                 return [messages[i] for i in result.surviving_indices]
             except Exception:
                 pass

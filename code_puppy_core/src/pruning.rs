@@ -10,7 +10,6 @@ use crate::{PruneResult, SplitResult};
 
 pub fn prune_and_filter_impl(
     messages: &Bound<'_, PyList>,
-    _compacted_hashes: std::collections::HashSet<i64>,
     max_tokens_per_message: i64,
 ) -> PyResult<PruneResult> {
     let msgs: Vec<Message> = messages

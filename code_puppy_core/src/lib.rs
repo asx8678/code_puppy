@@ -73,13 +73,12 @@ fn process_messages_batch<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (messages, compacted_hashes, max_tokens_per_message=50000))]
+#[pyo3(signature = (messages, max_tokens_per_message=50000))]
 fn prune_and_filter(
     messages: &Bound<'_, PyList>,
-    compacted_hashes: std::collections::HashSet<i64>,
     max_tokens_per_message: i64,
 ) -> PyResult<PruneResult> {
-    prune_and_filter_impl(messages, compacted_hashes, max_tokens_per_message)
+    prune_and_filter_impl(messages, max_tokens_per_message)
 }
 
 #[pyfunction]
