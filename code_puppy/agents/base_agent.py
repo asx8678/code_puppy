@@ -38,6 +38,18 @@ from pydantic_ai import (
     UsageLimits,
 )
 from pydantic_ai.durable_exec.dbos import DBOSAgent
+
+# Rust acceleration bridge (optional - falls back to Python)
+from code_puppy._core_bridge import RUST_AVAILABLE
+if RUST_AVAILABLE:
+    from code_puppy._core_bridge import (
+        process_messages_batch,
+        prune_and_filter,
+        truncation_indices as rust_truncation_indices,
+        split_for_summarization as rust_split_for_summarization,
+        serialize_messages_for_rust,
+    )
+
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -1038,8 +1050,29 @@ class BaseAgent(ABC):
         # First, prune any interrupted/mismatched tool-call conversations
         model_max = self.get_model_context_length()
 
-        message_tokens = sum(self.estimate_tokens_for_message(msg) for msg in messages)
-        context_overhead = self.estimate_context_overhead_tokens()
+        # Use Rust batch processing when available (single pass for tokens + hashes)
+        if RUST_AVAILABLE:
+            try:
+                serialized = serialize_messages_for_rust(messages)
+                tool_defs = []  # Tool defs extracted below if needed
+                mcp_defs = getattr(self, '_mcp_tool_definitions_cache', []) or []
+                system_prompt = self.get_full_system_prompt() if hasattr(self, 'get_full_system_prompt') else ""
+                batch_result = process_messages_batch(serialized, tool_defs, mcp_defs, system_prompt)
+                message_tokens = batch_result.total_message_tokens
+                context_overhead = batch_result.context_overhead_tokens
+                # Cache for reuse by accumulator and other methods
+                self._rust_batch_result = batch_result
+                self._rust_per_message_tokens = batch_result.per_message_tokens
+                self._rust_message_hashes = batch_result.message_hashes
+            except Exception:
+                # Fall back to Python on any Rust error
+                message_tokens = sum(self.estimate_tokens_for_message(msg) for msg in messages)
+                context_overhead = self.estimate_context_overhead_tokens()
+                self._rust_batch_result = None
+        else:
+            message_tokens = sum(self.estimate_tokens_for_message(msg) for msg in messages)
+            context_overhead = self.estimate_context_overhead_tokens()
+            self._rust_batch_result = None
         total_current_tokens = message_tokens + context_overhead
         proportion_used = total_current_tokens / model_max
 
@@ -1579,7 +1612,16 @@ class BaseAgent(ABC):
             message_history=list(_message_history),  # Copy to avoid mutation issues
             incoming_messages=list(messages),
         )
-        message_history_hashes = set([self.hash_message(m) for m in _message_history])
+        # Use Rust-cached hashes when available (computed in single batch pass)
+        if RUST_AVAILABLE and hasattr(self, '_rust_message_hashes') and self._rust_message_hashes is not None:
+            try:
+                serialized_history = serialize_messages_for_rust(_message_history)
+                history_batch = process_messages_batch(serialized_history, [], [], "")
+                message_history_hashes = set(history_batch.message_hashes)
+            except Exception:
+                message_history_hashes = set([self.hash_message(m) for m in _message_history])
+        else:
+            message_history_hashes = set([self.hash_message(m) for m in _message_history])
         messages_added = 0
         last_msg_index = len(messages) - 1
         for i, msg in enumerate(messages):
