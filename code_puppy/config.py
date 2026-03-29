@@ -312,6 +312,8 @@ def get_config_keys():
         default_keys.append(f"banner_color_{banner_name}")
     # Add resume message count configuration
     default_keys.append("resume_message_count")
+    # Add fast puppy (Rust acceleration) control key
+    default_keys.append("enable_fast_puppy")
 
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
