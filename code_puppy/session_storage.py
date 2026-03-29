@@ -25,6 +25,7 @@ _LEGACY_SIGNATURE_SIZE = (
     32  # legacy signature bytes, retained only for backward-compat parsing
 )
 
+
 SessionHistory = List[Any]
 TokenEstimator = Callable[[Any], int]
 
