@@ -69,12 +69,14 @@ def reset_module_state():
     am._CURRENT_AGENT = None
     am._SESSION_AGENTS_CACHE.clear()
     am._SESSION_FILE_LOADED = False
+    am._REGISTRY_POPULATED = False
     yield
     am._AGENT_REGISTRY.clear()
     am._AGENT_HISTORIES.clear()
     am._CURRENT_AGENT = None
     am._SESSION_AGENTS_CACHE.clear()
     am._SESSION_FILE_LOADED = False
+    am._REGISTRY_POPULATED = False
 
 
 class TestIsProcessAlive:
