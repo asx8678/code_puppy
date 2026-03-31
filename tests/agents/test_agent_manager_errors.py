@@ -15,11 +15,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from code_puppy.agents.agent_manager import (
+    AgentInfo,
     get_current_agent,
     load_agent,
     set_current_agent,
 )
 from code_puppy.agents.base_agent import BaseAgent
+from code_puppy.agents.json_agent import JSONAgent
 
 
 class TestAgentManagerErrors:
@@ -83,7 +85,14 @@ class TestAgentManagerErrors:
 
         with patch(
             "code_puppy.agents.agent_manager._AGENT_REGISTRY",
-            {"code-puppy": mock_agent_class},
+            {
+                "code-puppy": AgentInfo(
+                    name="code-puppy",
+                    display_name="Code Puppy",
+                    description="Test agent",
+                    factory=mock_agent_class,
+                )
+            },
         ):
             # Should fallback to code-puppy instead of raising error
             result = load_agent("nonexistent-agent")
@@ -144,7 +153,14 @@ class TestAgentManagerErrors:
 
         with patch(
             "code_puppy.agents.agent_manager._AGENT_REGISTRY",
-            {"code-puppy": mock_agent_class},
+            {
+                "code-puppy": AgentInfo(
+                    name="code-puppy",
+                    display_name="Code Puppy",
+                    description="Test agent",
+                    factory=mock_agent_class,
+                )
+            },
         ):
             with patch(
                 "code_puppy.agents.agent_manager.get_current_agent"
@@ -185,7 +201,14 @@ class TestAgentManagerErrors:
 
         with patch(
             "code_puppy.agents.agent_manager._AGENT_REGISTRY",
-            {"Code-Puppy": mock_agent_class},
+            {
+                "Code-Puppy": AgentInfo(
+                    name="Code-Puppy",
+                    display_name="Code Puppy",
+                    description="Test agent",
+                    factory=mock_agent_class,
+                )
+            },
         ):
             # Different case should not match
             with pytest.raises(ValueError, match="Agent 'code-puppy' not found"):
@@ -212,10 +235,18 @@ class TestAgentManagerErrors:
         """Test load_agent when JSON agent path is invalid."""
         mock_discover.return_value = None
 
-        # Mock registry with invalid JSON agent path
+        # Mock registry with invalid JSON agent path via AgentInfo factory
         with patch(
             "code_puppy.agents.agent_manager._AGENT_REGISTRY",
-            {"json-agent": "/invalid/path/agent.json"},
+            {
+                "json-agent": AgentInfo(
+                    name="json-agent",
+                    display_name="Json Agent",
+                    description="Test agent",
+                    factory=lambda: JSONAgent("/invalid/path/agent.json"),
+                    json_path="/invalid/path/agent.json",
+                )
+            },
         ):
             # JSONAgent converts FileNotFoundError to ValueError
             with pytest.raises(ValueError, match="Failed to load JSON agent config"):
@@ -232,7 +263,14 @@ class TestAgentManagerErrors:
 
         with patch(
             "code_puppy.agents.agent_manager._AGENT_REGISTRY",
-            {"failing-agent": mock_agent_class},
+            {
+                "failing-agent": AgentInfo(
+                    name="failing-agent",
+                    display_name="Failing Agent",
+                    description="Test agent",
+                    factory=mock_agent_class,
+                )
+            },
         ):
             with pytest.raises(RuntimeError, match="Agent initialization failed"):
                 load_agent("failing-agent")

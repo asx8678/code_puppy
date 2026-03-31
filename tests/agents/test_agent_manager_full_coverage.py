@@ -11,7 +11,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import code_puppy.agents.agent_manager as am
+from code_puppy.agents.agent_manager import AgentInfo
 from code_puppy.agents.base_agent import BaseAgent
+from code_puppy.agents.json_agent import JSONAgent
 
 
 # Concrete agent for testing
@@ -348,7 +350,8 @@ class TestDiscoverAgents:
         ]
         am._discover_agents()
         assert "json-plugin" in am._AGENT_REGISTRY
-        assert am._AGENT_REGISTRY["json-plugin"] == "/path/to/agent.json"
+        assert isinstance(am._AGENT_REGISTRY["json-plugin"], AgentInfo)
+        assert am._AGENT_REGISTRY["json-plugin"].json_path == "/path/to/agent.json"
 
     @patch("code_puppy.agents.agent_manager.on_register_agents")
     @patch("code_puppy.agents.agent_manager.discover_json_agents", return_value={})
@@ -441,26 +444,38 @@ class TestGetAvailableAgents:
                 }
             )
         )
-        am._AGENT_REGISTRY["json-test"] = str(agent_file)
+        am._AGENT_REGISTRY["json-test"] = AgentInfo(
+            name="json-test",
+            display_name="JSON Test",
+            description="Test JSON agent",
+            factory=lambda: JSONAgent(str(agent_file)),
+            json_path=str(agent_file),
+        )
         with (
             patch("code_puppy.config.PACK_AGENT_NAMES", set()),
             patch("code_puppy.config.UC_AGENT_NAMES", set()),
         ):
             agents = am.get_available_agents()
             assert "json-test" in agents
+            assert agents["json-test"] == "JSON Test"
 
     @patch("code_puppy.agents.agent_manager._discover_agents")
     @patch("code_puppy.config.get_pack_agents_enabled", return_value=True)
     @patch("code_puppy.config.get_universal_constructor_enabled", return_value=True)
     def test_exception_fallback(self, mock_uc, mock_pack, mock_discover):
-        # Bad agent ref that will raise
-        am._AGENT_REGISTRY["bad"] = "nonexistent_path.json"
+        # AgentInfo now stores display_name directly — verify it's returned as-is
+        am._AGENT_REGISTRY["bad"] = AgentInfo(
+            name="bad",
+            display_name="Bad",
+            description="Fallback display name test",
+            factory=lambda: None,
+        )
         with (
             patch("code_puppy.config.PACK_AGENT_NAMES", set()),
             patch("code_puppy.config.UC_AGENT_NAMES", set()),
         ):
             agents = am.get_available_agents()
-            assert agents["bad"] == "Bad"  # Fallback to title()
+            assert agents["bad"] == "Bad"  # display_name stored in AgentInfo
 
 
 class TestGetAgentDescriptions:
@@ -470,7 +485,12 @@ class TestGetAgentDescriptions:
     @patch("code_puppy.config.get_pack_agents_enabled", return_value=True)
     @patch("code_puppy.config.get_universal_constructor_enabled", return_value=True)
     def test_returns_descriptions(self, mock_uc, mock_pack, mock_discover):
-        am._AGENT_REGISTRY["my-agent"] = FakeAgent
+        am._AGENT_REGISTRY["my-agent"] = AgentInfo(
+            name="my-agent",
+            display_name="My Agent",
+            description="A fake agent for testing",
+            factory=FakeAgent,
+        )
         with (
             patch("code_puppy.config.PACK_AGENT_NAMES", set()),
             patch("code_puppy.config.UC_AGENT_NAMES", set()),
@@ -482,7 +502,13 @@ class TestGetAgentDescriptions:
     @patch("code_puppy.config.get_pack_agents_enabled", return_value=True)
     @patch("code_puppy.config.get_universal_constructor_enabled", return_value=True)
     def test_exception_fallback(self, mock_uc, mock_pack, mock_discover):
-        am._AGENT_REGISTRY["bad"] = "nonexistent.json"
+        # AgentInfo now stores description directly — verify it's returned as-is
+        am._AGENT_REGISTRY["bad"] = AgentInfo(
+            name="bad",
+            display_name="Bad",
+            description="No description available",
+            factory=lambda: None,
+        )
         with (
             patch("code_puppy.config.PACK_AGENT_NAMES", set()),
             patch("code_puppy.config.UC_AGENT_NAMES", set()),
@@ -557,7 +583,12 @@ class TestCloneAgent:
     def test_clone_python_agent(
         self, mock_success, mock_filter, mock_pinned, mock_dir, mock_discover, tmp_path
     ):
-        am._AGENT_REGISTRY["fake-agent"] = FakeAgent
+        am._AGENT_REGISTRY["fake-agent"] = AgentInfo(
+            name="fake-agent",
+            display_name="Fake Agent",
+            description="A fake agent for testing",
+            factory=FakeAgent,
+        )
         mock_dir.return_value = str(tmp_path)
 
         result = am.clone_agent("fake-agent")
@@ -576,7 +607,12 @@ class TestCloneAgent:
     def test_clone_python_agent_with_pinned_model(
         self, mock_success, mock_filter, mock_pinned, mock_dir, mock_discover, tmp_path
     ):
-        am._AGENT_REGISTRY["extras-agent"] = FakeAgentWithExtras
+        am._AGENT_REGISTRY["extras-agent"] = AgentInfo(
+            name="extras-agent",
+            display_name="Extras Agent",
+            description="Agent with extras",
+            factory=FakeAgentWithExtras,
+        )
         mock_dir.return_value = str(tmp_path)
 
         result = am.clone_agent("extras-agent")
@@ -610,7 +646,13 @@ class TestCloneAgent:
                 }
             )
         )
-        am._AGENT_REGISTRY["src"] = str(source)
+        am._AGENT_REGISTRY["src"] = AgentInfo(
+            name="src",
+            display_name="Source",
+            description="Test JSON agent",
+            factory=lambda: JSONAgent(str(source)),
+            json_path=str(source),
+        )
         mock_dir.return_value = str(tmp_path)
 
         result = am.clone_agent("src")
@@ -635,7 +677,13 @@ class TestCloneAgent:
                 }
             )
         )
-        am._AGENT_REGISTRY["src2"] = str(source)
+        am._AGENT_REGISTRY["src2"] = AgentInfo(
+            name="src2",
+            display_name="Src2",
+            description="Test JSON agent",
+            factory=lambda: JSONAgent(str(source)),
+            json_path=str(source),
+        )
         mock_dir.return_value = str(tmp_path)
 
         result = am.clone_agent("src2")
@@ -660,7 +708,13 @@ class TestCloneAgent:
                 }
             )
         )
-        am._AGENT_REGISTRY["src3"] = str(source)
+        am._AGENT_REGISTRY["src3"] = AgentInfo(
+            name="src3",
+            display_name="Src3",
+            description="Test JSON agent",
+            factory=lambda: JSONAgent(str(source)),
+            json_path=str(source),
+        )
         mock_dir.return_value = str(tmp_path)
 
         result = am.clone_agent("src3")
@@ -749,7 +803,13 @@ class TestDeleteCloneAgent:
     )
     @patch("code_puppy.agents.agent_manager.emit_warning")
     def test_not_json_agent(self, mock_warn, mock_name, mock_discover):
-        am._AGENT_REGISTRY["agent-clone-1"] = FakeAgent
+        am._AGENT_REGISTRY["agent-clone-1"] = AgentInfo(
+            name="agent-clone-1",
+            display_name="Agent Clone 1",
+            description="Test",
+            factory=FakeAgent,
+            json_path=None,
+        )
         assert am.delete_clone_agent("agent-clone-1") is False
 
     @patch("code_puppy.agents.agent_manager._discover_agents")
@@ -758,7 +818,13 @@ class TestDeleteCloneAgent:
     )
     @patch("code_puppy.agents.agent_manager.emit_warning")
     def test_file_doesnt_exist(self, mock_warn, mock_name, mock_discover):
-        am._AGENT_REGISTRY["agent-clone-1"] = "/nonexistent/path.json"
+        am._AGENT_REGISTRY["agent-clone-1"] = AgentInfo(
+            name="agent-clone-1",
+            display_name="Agent Clone 1",
+            description="Test",
+            factory=lambda: None,
+            json_path="/nonexistent/path.json",
+        )
         assert am.delete_clone_agent("agent-clone-1") is False
 
     @patch("code_puppy.agents.agent_manager._discover_agents")
@@ -773,7 +839,13 @@ class TestDeleteCloneAgent:
         clone_file = tmp_path / "other_dir" / "agent-clone-1.json"
         clone_file.parent.mkdir(parents=True)
         clone_file.touch()
-        am._AGENT_REGISTRY["agent-clone-1"] = str(clone_file)
+        am._AGENT_REGISTRY["agent-clone-1"] = AgentInfo(
+            name="agent-clone-1",
+            display_name="Agent Clone 1",
+            description="Test",
+            factory=lambda: None,
+            json_path=str(clone_file),
+        )
         mock_dir.return_value = str(tmp_path / "agents")
         assert am.delete_clone_agent("agent-clone-1") is False
 
@@ -790,7 +862,13 @@ class TestDeleteCloneAgent:
         agents_dir.mkdir()
         clone_file = agents_dir / "agent-clone-1.json"
         clone_file.touch()
-        am._AGENT_REGISTRY["agent-clone-1"] = str(clone_file)
+        am._AGENT_REGISTRY["agent-clone-1"] = AgentInfo(
+            name="agent-clone-1",
+            display_name="Agent Clone 1",
+            description="Test",
+            factory=lambda: None,
+            json_path=str(clone_file),
+        )
         am._AGENT_HISTORIES["agent-clone-1"] = []
         mock_dir.return_value = str(agents_dir)
         assert am.delete_clone_agent("agent-clone-1") is True
@@ -810,7 +888,13 @@ class TestDeleteCloneAgent:
         agents_dir.mkdir()
         clone_file = agents_dir / "agent-clone-1.json"
         clone_file.touch()
-        am._AGENT_REGISTRY["agent-clone-1"] = str(clone_file)
+        am._AGENT_REGISTRY["agent-clone-1"] = AgentInfo(
+            name="agent-clone-1",
+            display_name="Agent Clone 1",
+            description="Test",
+            factory=lambda: None,
+            json_path=str(clone_file),
+        )
         mock_dir.return_value = str(agents_dir)
 
         with patch.object(Path, "unlink", side_effect=Exception("fail")):
@@ -847,7 +931,12 @@ class TestLoadAgent:
     def test_fallback_to_code_puppy(self, mock_discover):
         from code_puppy.agents.agent_code_puppy import CodePuppyAgent
 
-        am._AGENT_REGISTRY["code-puppy"] = CodePuppyAgent
+        am._AGENT_REGISTRY["code-puppy"] = AgentInfo(
+            name="code-puppy",
+            display_name="Code Puppy",
+            description="The main code puppy agent",
+            factory=CodePuppyAgent,
+        )
         agent = am.load_agent("nonexistent")
         assert agent.name == "code-puppy"
 
@@ -870,7 +959,13 @@ class TestLoadAgent:
                 }
             )
         )
-        am._AGENT_REGISTRY["json-test"] = str(agent_file)
+        am._AGENT_REGISTRY["json-test"] = AgentInfo(
+            name="json-test",
+            display_name="JSON Test",
+            description="desc",
+            factory=lambda: JSONAgent(str(agent_file)),
+            json_path=str(agent_file),
+        )
         agent = am.load_agent("json-test")
         assert agent.name == "json-test"
 
