@@ -4,7 +4,6 @@ import asyncio
 import dataclasses
 import json
 import logging
-import math
 import pathlib
 import signal
 import threading
@@ -98,6 +97,7 @@ from code_puppy.messaging.spinner import (
 )
 from code_puppy.model_factory import ModelFactory, make_model_settings
 from code_puppy.summarization_agent import run_summarization_sync, SummarizationError
+from code_puppy.token_utils import estimate_token_count as _estimate_token_count
 from code_puppy.tools.agent_tools import _active_subagent_tasks
 from code_puppy.tools.command_runner import (
     is_awaiting_user_input,
@@ -172,8 +172,10 @@ class BaseAgent(ABC):
         # Cache for MCP tool definitions (for token estimation)
         # This is populated after the first successful run when MCP tools are retrieved
         self._mcp_tool_definitions_cache: List[Dict[str, Any]] = []
-        # Cache for system prompt and tool defs used in message_history_processor
-        # These are stable across turns; invalidated only on model/tool changes
+        # Cache for system prompt and tool defs used in message_history_processor.
+        # These are intentionally session-scoped: populated once per run_with_mcp
+        # entry and never invalidated, because the model and tool set are stable
+        # within a single agent session.
         self._cached_system_prompt: Optional[str] = None
         self._cached_tool_defs: Optional[List[Dict[str, Any]]] = None
 
@@ -484,8 +486,9 @@ class BaseAgent(ABC):
         """
         Simple token estimation using len(message) / 2.5.
         This replaces tiktoken with a much simpler approach.
+        Delegates to the shared utility in token_utils for a single source of truth.
         """
-        return max(1, math.floor((len(text) / 2.5)))
+        return _estimate_token_count(text)
 
     def estimate_tokens_for_message(self, message: ModelMessage) -> int:
         """
@@ -652,15 +655,6 @@ class BaseAgent(ABC):
         # Simply clear the cache - it will be repopulated on the next agent run
         # This is safer than trying to call async methods from sync context
         self._mcp_tool_definitions_cache = []
-
-    def _invalidate_prompt_cache(self) -> None:
-        """Invalidate the cached system prompt and tool definitions.
-
-        Call this when the agent's model or tools change so that
-        message_history_processor picks up fresh values on the next turn.
-        """
-        self._cached_system_prompt = None
-        self._cached_tool_defs = None
 
     def _is_tool_call_part(self, part: Any) -> bool:
         if isinstance(part, (ToolCallPart, ToolCallPartDelta)):
