@@ -1,6 +1,6 @@
 """Tests for HealthMonitor wiring in MCPManager."""
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
+from unittest.mock import MagicMock
 from code_puppy.mcp_.manager import MCPManager
 from code_puppy.mcp_.health_monitor import HealthMonitor
 

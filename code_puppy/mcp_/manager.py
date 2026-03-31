@@ -655,9 +655,7 @@ class MCPManager:
                 if self._health_monitor is not None:
                     await self._health_monitor.stop_monitoring(server_id)
             except Exception as e:
-                logger.warning(
-                    f"Could not stop health monitoring for {server_id}: {e}"
-                )
+                logger.warning(f"Could not stop health monitoring for {server_id}: {e}")
 
             return True
 
