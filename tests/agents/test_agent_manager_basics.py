@@ -9,6 +9,7 @@ import pytest
 
 from code_puppy.agents.agent_manager import (
     _AGENT_REGISTRY,
+    AgentInfo,
     _discover_agents,
     _invalidate_agent_registry,
     _load_session_data,
@@ -148,9 +149,11 @@ class TestAgentManagerBasics:
 
         _discover_agents()
 
-        # Verify agent was registered
+        # Verify agent was registered as an AgentInfo
         assert "mock-agent" in _AGENT_REGISTRY
-        assert _AGENT_REGISTRY["mock-agent"] == MockAgent
+        assert isinstance(_AGENT_REGISTRY["mock-agent"], AgentInfo)
+        assert _AGENT_REGISTRY["mock-agent"].factory == MockAgent
+        assert _AGENT_REGISTRY["mock-agent"].name == "mock-agent"
 
     @patch("code_puppy.agents.agent_manager.discover_json_agents")
     @patch("pkgutil.iter_modules")
@@ -164,9 +167,10 @@ class TestAgentManagerBasics:
 
         _discover_agents()
 
-        # Verify JSON agent was registered
+        # Verify JSON agent was registered as an AgentInfo
         assert "json-agent" in _AGENT_REGISTRY
-        assert _AGENT_REGISTRY["json-agent"] == "/path/to/agent.json"
+        assert isinstance(_AGENT_REGISTRY["json-agent"], AgentInfo)
+        assert _AGENT_REGISTRY["json-agent"].json_path == "/path/to/agent.json"
 
     @patch("code_puppy.agents.agent_manager.discover_json_agents")
     @patch("pkgutil.iter_modules")

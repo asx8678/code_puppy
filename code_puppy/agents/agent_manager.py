@@ -7,8 +7,9 @@ import pkgutil
 import re
 import threading
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Type, Union
+from typing import Callable, Dict, List, Optional
 
 from pydantic_ai.messages import ModelMessage
 
@@ -17,8 +18,26 @@ from code_puppy.agents.json_agent import JSONAgent, discover_json_agents
 from code_puppy.callbacks import on_agent_reload, on_register_agents
 from code_puppy.messaging import emit_success, emit_warning
 
-# Registry of available agents (Python classes and JSON file paths)
-_AGENT_REGISTRY: Dict[str, Union[Type[BaseAgent], str]] = {}
+
+@dataclass(frozen=True)
+class AgentInfo:
+    """Immutable metadata snapshot for a discovered agent.
+
+    Stores the metadata captured at discovery time so that
+    ``get_available_agents()`` and ``get_agent_descriptions()`` never
+    need to re-instantiate the agent just to read its name or description.
+    """
+
+    name: str
+    display_name: str
+    description: str
+    factory: Callable  # callable () -> BaseAgent instance
+    # Present only for JSON-file agents; None for Python-class agents.
+    json_path: Optional[str] = None
+
+
+# Registry of available agents (AgentInfo objects, keyed by agent name)
+_AGENT_REGISTRY: Dict[str, AgentInfo] = {}
 _AGENT_HISTORIES: Dict[str, List[ModelMessage]] = {}
 _CURRENT_AGENT: Optional[BaseAgent] = None
 _REGISTRY_POPULATED: bool = False
@@ -221,9 +240,14 @@ def _discover_agents(message_group_id: Optional[str] = None):
                     and issubclass(attr, BaseAgent)
                     and attr not in [BaseAgent, JSONAgent]
                 ):
-                    # Create an instance to get the name
+                    # Instantiate once to capture metadata into AgentInfo
                     agent_instance = attr()
-                    _AGENT_REGISTRY[agent_instance.name] = attr
+                    _AGENT_REGISTRY[agent_instance.name] = AgentInfo(
+                        name=agent_instance.name,
+                        display_name=agent_instance.display_name,
+                        description=agent_instance.description,
+                        factory=attr,
+                    )
 
         except Exception as e:
             # Skip problematic modules
@@ -264,9 +288,14 @@ def _discover_agents(message_group_id: Optional[str] = None):
                             and issubclass(attr, BaseAgent)
                             and attr not in [BaseAgent, JSONAgent]
                         ):
-                            # Create an instance to get the name
+                            # Instantiate once to capture metadata into AgentInfo
                             agent_instance = attr()
-                            _AGENT_REGISTRY[agent_instance.name] = attr
+                            _AGENT_REGISTRY[agent_instance.name] = AgentInfo(
+                                name=agent_instance.name,
+                                display_name=agent_instance.display_name,
+                                description=agent_instance.description,
+                                factory=attr,
+                            )
 
                 except Exception as e:
                     emit_warning(
@@ -295,7 +324,20 @@ def _discover_agents(message_group_id: Optional[str] = None):
                     message_group=message_group_id,
                 )
                 continue
-            _AGENT_REGISTRY[agent_name] = json_path
+            try:
+                _json_tmp = JSONAgent(json_path)
+                _json_display = _json_tmp.display_name
+                _json_desc = _json_tmp.description
+            except Exception:
+                _json_display = agent_name.replace("-", " ").title() + " 🤖"
+                _json_desc = "No description available"
+            _AGENT_REGISTRY[agent_name] = AgentInfo(
+                name=agent_name,
+                display_name=_json_display,
+                description=_json_desc,
+                factory=lambda _p=json_path: JSONAgent(_p),
+                json_path=json_path,
+            )
 
     except Exception as e:
         emit_warning(
@@ -323,11 +365,33 @@ def _discover_agents(message_group_id: Optional[str] = None):
                     if isinstance(agent_class, type) and issubclass(
                         agent_class, BaseAgent
                     ):
-                        _AGENT_REGISTRY[agent_name] = agent_class
+                        try:
+                            _plugin_inst = agent_class()
+                            _AGENT_REGISTRY[agent_name] = AgentInfo(
+                                name=_plugin_inst.name,
+                                display_name=_plugin_inst.display_name,
+                                description=_plugin_inst.description,
+                                factory=agent_class,
+                            )
+                        except Exception:
+                            pass  # skip problematic plugin agent
                 elif "json_path" in agent_def:
                     json_path = agent_def["json_path"]
                     if isinstance(json_path, str):
-                        _AGENT_REGISTRY[agent_name] = json_path
+                        try:
+                            _pj_tmp = JSONAgent(json_path)
+                            _pj_display = _pj_tmp.display_name
+                            _pj_desc = _pj_tmp.description
+                        except Exception:
+                            _pj_display = agent_name.replace("-", " ").title() + " 🤖"
+                            _pj_desc = "No description available"
+                        _AGENT_REGISTRY[agent_name] = AgentInfo(
+                            name=agent_name,
+                            display_name=_pj_display,
+                            description=_pj_desc,
+                            factory=lambda _p=json_path: JSONAgent(_p),
+                            json_path=json_path,
+                        )
 
     except Exception as e:
         emit_warning(
@@ -368,7 +432,7 @@ def get_available_agents() -> Dict[str, str]:
     uc_enabled = get_universal_constructor_enabled()
 
     agents = {}
-    for name, agent_ref in _AGENT_REGISTRY.items():
+    for name, agent_info in _AGENT_REGISTRY.items():
         # Filter out pack agents if disabled
         if not pack_agents_enabled and name in PACK_AGENT_NAMES:
             continue
@@ -377,14 +441,7 @@ def get_available_agents() -> Dict[str, str]:
         if not uc_enabled and name in UC_AGENT_NAMES:
             continue
 
-        try:
-            if isinstance(agent_ref, str):  # JSON agent (file path)
-                agent_instance = JSONAgent(agent_ref)
-            else:  # Python agent (class)
-                agent_instance = agent_ref()
-            agents[name] = agent_instance.display_name
-        except Exception:
-            agents[name] = name.title()  # Fallback
+        agents[name] = agent_info.display_name
 
     return agents
 
@@ -489,11 +546,8 @@ def load_agent(agent_name: str) -> BaseAgent:
                 f"Agent '{agent_name}' not found and no fallback available"
             )
 
-    agent_ref = _AGENT_REGISTRY[agent_name]
-    if isinstance(agent_ref, str):  # JSON agent (file path)
-        return JSONAgent(agent_ref)
-    else:  # Python agent (class)
-        return agent_ref()
+    agent_info = _AGENT_REGISTRY[agent_name]
+    return agent_info.factory()
 
 
 def get_agent_descriptions() -> Dict[str, str]:
@@ -520,7 +574,7 @@ def get_agent_descriptions() -> Dict[str, str]:
     uc_enabled = get_universal_constructor_enabled()
 
     descriptions = {}
-    for name, agent_ref in _AGENT_REGISTRY.items():
+    for name, agent_info in _AGENT_REGISTRY.items():
         # Filter out pack agents if disabled
         if not pack_agents_enabled and name in PACK_AGENT_NAMES:
             continue
@@ -529,14 +583,7 @@ def get_agent_descriptions() -> Dict[str, str]:
         if not uc_enabled and name in UC_AGENT_NAMES:
             continue
 
-        try:
-            if isinstance(agent_ref, str):  # JSON agent (file path)
-                agent_instance = JSONAgent(agent_ref)
-            else:  # Python agent (class)
-                agent_instance = agent_ref()
-            descriptions[name] = agent_instance.description
-        except Exception:
-            descriptions[name] = "No description available"
+        descriptions[name] = agent_info.description
 
     return descriptions
 
@@ -627,8 +674,8 @@ def clone_agent(agent_name: str) -> Optional[str]:
     message_group_id = str(uuid.uuid4())
     _discover_agents(message_group_id=message_group_id)
 
-    agent_ref = _AGENT_REGISTRY.get(agent_name)
-    if agent_ref is None:
+    agent_info = _AGENT_REGISTRY.get(agent_name)
+    if agent_info is None:
         emit_warning(f"Agent '{agent_name}' not found for cloning.")
         return None
 
@@ -642,8 +689,8 @@ def clone_agent(agent_name: str) -> Optional[str]:
     clone_path = agents_dir / f"{clone_name}.json"
 
     try:
-        if isinstance(agent_ref, str):
-            with open(agent_ref, "r", encoding="utf-8") as f:
+        if agent_info.json_path is not None:
+            with open(agent_info.json_path, "r", encoding="utf-8") as f:
                 source_config = json.load(f)
 
             source_display_name = source_config.get("display_name")
@@ -664,7 +711,7 @@ def clone_agent(agent_name: str) -> Optional[str]:
             if not clone_config.get("model"):
                 clone_config.pop("model", None)
         else:
-            agent_instance = agent_ref()
+            agent_instance = agent_info.factory()
             clone_config = {
                 "name": clone_name,
                 "display_name": _build_clone_display_name(
@@ -724,16 +771,16 @@ def delete_clone_agent(agent_name: str) -> bool:
         emit_warning("Cannot delete the active agent. Switch agents first.")
         return False
 
-    agent_ref = _AGENT_REGISTRY.get(agent_name)
-    if agent_ref is None:
+    agent_info = _AGENT_REGISTRY.get(agent_name)
+    if agent_info is None:
         emit_warning(f"Clone '{agent_name}' not found.")
         return False
 
-    if not isinstance(agent_ref, str):
+    if agent_info.json_path is None:
         emit_warning(f"Clone '{agent_name}' is not a JSON agent.")
         return False
 
-    clone_path = Path(agent_ref)
+    clone_path = Path(agent_info.json_path)
     if not clone_path.exists():
         emit_warning(f"Clone file for '{agent_name}' does not exist.")
         return False
