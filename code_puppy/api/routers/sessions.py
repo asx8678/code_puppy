@@ -3,12 +3,39 @@
 import asyncio
 import json
 import pickle
+import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+_VALID_SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
+
+
+def _validate_session_id(session_id: str) -> str:
+    """Validate session_id to prevent path traversal attacks.
+
+    Allows: alphanumeric characters, hyphens, underscores.
+    Must start with an alphanumeric character.
+    Max length: 128 characters.
+
+    Args:
+        session_id: The session identifier to validate
+
+    Returns:
+        The validated session_id (unchanged).
+
+    Raises:
+        HTTPException: 400 if session_id is invalid.
+    """
+    if not _VALID_SESSION_ID_RE.match(session_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid session_id: must match ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$",
+        )
+    return session_id
 
 # Thread pool for blocking file I/O
 _executor = ThreadPoolExecutor(max_workers=2)
@@ -145,6 +172,7 @@ async def get_session(session_id: str) -> SessionInfo:
     Raises:
         HTTPException: 404 if session not found, 504 on timeout
     """
+    session_id = _validate_session_id(session_id)
     sessions_dir = _get_sessions_dir()
     txt_file = sessions_dir / f"{session_id}.txt"
 
@@ -184,6 +212,7 @@ async def get_session_messages(session_id: str) -> List[Dict[str, Any]]:
     Raises:
         HTTPException: 404 if session messages not found, 500 on load error, 504 on timeout
     """
+    session_id = _validate_session_id(session_id)
     sessions_dir = _get_sessions_dir()
     pkl_file = sessions_dir / f"{session_id}.pkl"
 
@@ -219,6 +248,7 @@ async def delete_session(session_id: str) -> Dict[str, str]:
     Raises:
         HTTPException: 404 if session not found
     """
+    session_id = _validate_session_id(session_id)
     sessions_dir = _get_sessions_dir()
     txt_file = sessions_dir / f"{session_id}.txt"
     pkl_file = sessions_dir / f"{session_id}.pkl"
