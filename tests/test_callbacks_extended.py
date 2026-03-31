@@ -713,5 +713,7 @@ class TestNewConcurrentAndEnsureFuture:
         elapsed = time.monotonic() - start
 
         # Concurrent: ~0.1s. Serial: ~0.2s.
-        assert elapsed < 0.15, f"Callbacks ran serially ({elapsed:.2f}s), expected ~0.1s concurrent"
+        assert elapsed < 0.15, (
+            f"Callbacks ran serially ({elapsed:.2f}s), expected ~0.1s concurrent"
+        )
         assert set(results) == {"one", "two"}
