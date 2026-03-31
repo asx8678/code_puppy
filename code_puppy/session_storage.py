@@ -10,14 +10,31 @@ from __future__ import annotations
 
 import json
 import pickle
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple
 
+import msgpack
+
 
 def _safe_loads(data: bytes) -> Any:
-    """Deserialize pickle data."""
-    return pickle.loads(data)  # noqa: S301
+    """Deserialize session data, preferring MessagePack over pickle.
+
+    Tries MessagePack first (new format).  Falls back to pickle for legacy
+    session files, but emits a deprecation warning so users know to re-save.
+    """
+    try:
+        return msgpack.unpackb(data, raw=False)
+    except Exception:
+        warnings.warn(
+            "Loading session from legacy pickle format. "
+            "Re-save this session to migrate to the MessagePack format. "
+            "Pickle support will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return pickle.loads(data)  # noqa: S301
 
 
 _LEGACY_SIGNED_HEADER = b"CPSESSION\x01"
@@ -58,10 +75,13 @@ class SessionMetadata:
 
 
 def _extract_pickle_payload(raw: bytes) -> bytes:
-    """Return the pickle payload from raw session file bytes.
+    """Return the serialized payload from raw session file bytes.
 
-    New format is raw pickle bytes.
-    Legacy format was: header + 32-byte signature + pickle payload.
+    New format is raw MessagePack bytes (written by ``save_session``).
+    Legacy formats that are still handled on read:
+      - Plain pickle bytes (no header)
+      - Signed format: ``CPSESSION\x01`` header + 32-byte HMAC signature +
+        pickle payload (oldest legacy format; signature is ignored).
     We no longer verify or generate signatures.
     """
     if raw.startswith(_LEGACY_SIGNED_HEADER):
@@ -100,10 +120,10 @@ def save_session(
         "messages": history,
         "compacted_hashes": list(compacted_hashes) if compacted_hashes is not None else [],
     }
-    pickle_data = pickle.dumps(payload)
+    msgpack_data = msgpack.packb(payload, use_bin_type=True)
     tmp_pickle = paths.pickle_path.with_suffix(".tmp")
     with tmp_pickle.open("wb") as pickle_file:
-        pickle_file.write(pickle_data)
+        pickle_file.write(msgpack_data)
     tmp_pickle.replace(paths.pickle_path)
 
     total_tokens = sum(token_estimator(message) for message in history)
