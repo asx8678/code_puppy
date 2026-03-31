@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP
 
 from .async_lifecycle import get_lifecycle_manager
+from .health_monitor import HealthMonitor
 from .managed_server import ManagedMCPServer, ServerConfig, ServerState
 from .registry import ServerRegistry
 from .status_tracker import ServerStatusTracker
@@ -78,6 +79,9 @@ class MCPManager:
         # Active managed servers (server_id -> ManagedMCPServer)
         self._managed_servers: Dict[str, ManagedMCPServer] = {}
 
+        # Health monitor (lazily initialized)
+        self._health_monitor: Optional[HealthMonitor] = None
+
         # Sync servers from mcp_servers.json into registry
         self.sync_from_config()
 
@@ -85,6 +89,59 @@ class MCPManager:
         self._initialize_servers()
 
         logger.info("MCPManager initialized with core components")
+
+    def _get_health_monitor(self) -> HealthMonitor:
+        """Lazy initializer for the HealthMonitor."""
+        if self._health_monitor is None:
+            self._health_monitor = HealthMonitor(check_interval=30)
+        return self._health_monitor
+
+    def get_server_health(self, server_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get health status for a server from the health monitor.
+
+        Builds a health summary from the monitor's public attributes.
+        Returns None if the health monitor has not been initialized or
+        the server has no recorded health data.
+
+        Args:
+            server_id: ID of server to get health for
+
+        Returns:
+            Dictionary with health status fields, or None if unavailable
+        """
+        if self._health_monitor is None:
+            return None
+        try:
+            monitor = self._health_monitor
+            history = monitor.health_history.get(server_id)
+            if not history:
+                return {
+                    "server_id": server_id,
+                    "is_monitoring": server_id in monitor.monitoring_tasks,
+                    "is_healthy": None,
+                    "consecutive_failures": monitor.consecutive_failures.get(
+                        server_id, 0
+                    ),
+                    "last_check_time": monitor.last_check_time.get(server_id),
+                    "latest_error": None,
+                    "latest_latency_ms": None,
+                }
+            latest = history[-1]
+            return {
+                "server_id": server_id,
+                "is_monitoring": server_id in monitor.monitoring_tasks,
+                "is_healthy": latest.is_healthy,
+                "consecutive_failures": monitor.consecutive_failures.get(server_id, 0),
+                "last_check_time": monitor.last_check_time.get(server_id),
+                "latest_check_timestamp": latest.timestamp,
+                "latest_error": latest.error,
+                "latest_latency_ms": latest.latency_ms,
+                "latest_check_type": latest.check_type,
+            }
+        except Exception as e:
+            logger.warning(f"Error getting health status for {server_id}: {e}")
+            return None
 
     def sync_from_config(self) -> None:
         """Sync servers from mcp_servers.json into the registry.
@@ -454,6 +511,15 @@ class MCPManager:
                     {"message": "Server enabled (process will start when used)"},
                 )
 
+            # Start health monitoring for the server
+            try:
+                monitor = self._get_health_monitor()
+                await monitor.start_monitoring(server_id, managed_server)
+            except Exception as e:
+                logger.warning(
+                    f"Could not start health monitoring for {server_id}: {e}"
+                )
+
             return True
 
         except Exception as e:
@@ -582,6 +648,15 @@ class MCPManager:
                 logger.warning(f"Could not stop process for server {server_id}: {e}")
                 self.status_tracker.record_event(
                     server_id, "disabled", {"message": "Server disabled"}
+                )
+
+            # Stop health monitoring for the server
+            try:
+                if self._health_monitor is not None:
+                    await self._health_monitor.stop_monitoring(server_id)
+            except Exception as e:
+                logger.warning(
+                    f"Could not stop health monitoring for {server_id}: {e}"
                 )
 
             return True
@@ -726,6 +801,33 @@ class MCPManager:
         if server_id in self._managed_servers:
             del self._managed_servers[server_id]
             managed_removed = True
+
+        # Stop health monitoring for the removed server
+        if self._health_monitor is not None:
+            try:
+                loop = asyncio.get_running_loop()
+
+                async def _stop_health_monitoring():
+                    try:
+                        await self._health_monitor.stop_monitoring(server_id)
+                    except Exception as e:
+                        logger.warning(
+                            f"Could not stop health monitoring for removed server {server_id}: {e}"
+                        )
+
+                loop.create_task(
+                    _stop_health_monitoring(),
+                    name=f"stop_health_monitor_{server_id}",
+                )
+            except RuntimeError:
+                # No running event loop - monitoring tasks will be abandoned
+                logger.debug(
+                    f"No event loop to stop health monitoring for removed server {server_id}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Could not schedule health monitor stop for {server_id}: {e}"
+                )
 
         # Record removal event if server existed
         if registry_removed or managed_removed:
