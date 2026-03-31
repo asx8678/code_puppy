@@ -1,11 +1,11 @@
 """Tests for HMAC-SHA256 integrity check on session pickle files (code_puppy-bb4)."""
+
 from __future__ import annotations
 
 import hashlib
 import hmac
 import pickle
 from pathlib import Path
-from typing import Callable
 from unittest.mock import patch
 
 import pytest
