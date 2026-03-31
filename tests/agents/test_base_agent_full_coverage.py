@@ -757,21 +757,21 @@ class TestDelayedCompaction:
 
     @patch("code_puppy.agents.base_agent.emit_info")
     def test_request_and_check(self, mock_info, agent):
-        base_agent_module._delayed_compaction_requested = False
+        agent._delayed_compaction_requested = False
         agent.request_delayed_compaction()
-        assert base_agent_module._delayed_compaction_requested is True
+        assert agent._delayed_compaction_requested is True
         # With no pending tool calls, should return True
         agent._message_history = [ModelRequest(parts=[TextPart(content="msg")])]
         assert agent.should_attempt_delayed_compaction() is True
-        assert base_agent_module._delayed_compaction_requested is False
+        assert agent._delayed_compaction_requested is False
 
     def test_should_attempt_not_requested(self, agent):
-        base_agent_module._delayed_compaction_requested = False
+        agent._delayed_compaction_requested = False
         assert agent.should_attempt_delayed_compaction() is False
 
     @patch("code_puppy.agents.base_agent.emit_info")
     def test_should_attempt_with_pending_calls(self, mock_info, agent):
-        base_agent_module._delayed_compaction_requested = True
+        agent._delayed_compaction_requested = True
         tc = ToolCallPart(tool_name="t", args="{}", tool_call_id="tc1")
         agent._message_history = [
             ModelRequest(parts=[TextPart(content="sys")]),
@@ -1385,7 +1385,7 @@ class TestRunWithMcp:
         mock_result.data = "ok"
         agent._code_generation_agent.run = AsyncMock(return_value=mock_result)
         agent._message_history = [ModelRequest(parts=[TextPart(content="msg")])]
-        base_agent_module._delayed_compaction_requested = True
+        agent._delayed_compaction_requested = True
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,

@@ -105,9 +105,6 @@ from code_puppy.tools.command_runner import (
 
 logger = logging.getLogger(__name__)
 
-# Global flag to track delayed compaction requests
-_delayed_compaction_requested = False
-
 _reload_count = 0
 
 
@@ -178,6 +175,8 @@ class BaseAgent(ABC):
         # within a single agent session.
         self._cached_system_prompt: Optional[str] = None
         self._cached_tool_defs: Optional[List[Dict[str, Any]]] = None
+        # Per-instance flag for delayed compaction (not a module global — safe with parallel agents)
+        self._delayed_compaction_requested: bool = False
 
     def get_identity(self) -> str:
         """Get a unique identity for this agent instance.
@@ -1018,8 +1017,7 @@ class BaseAgent(ABC):
         This sets a global flag that will be checked during the next message
         processing cycle to trigger compaction when it's safe to do so.
         """
-        global _delayed_compaction_requested
-        _delayed_compaction_requested = True
+        self._delayed_compaction_requested = True
         emit_info(
             "🔄 Delayed compaction requested - will attempt after tool calls complete",
             message_group="token_context_status",
@@ -1032,14 +1030,13 @@ class BaseAgent(ABC):
         Returns:
             True if delayed compaction was requested and no tool calls are pending
         """
-        global _delayed_compaction_requested
-        if not _delayed_compaction_requested:
+        if not self._delayed_compaction_requested:
             return False
 
         # Check if it's now safe to compact
         messages = self.get_message_history()
         if not self.has_pending_tool_calls(messages):
-            _delayed_compaction_requested = False  # Reset the flag
+            self._delayed_compaction_requested = False  # Reset the flag
             return True
 
         return False
