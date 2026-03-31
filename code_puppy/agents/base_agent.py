@@ -104,7 +104,14 @@ from code_puppy.tools.command_runner import (
     is_awaiting_user_input,
 )
 
-_RUST_ENABLED: bool = is_rust_enabled()
+def _rust_enabled() -> bool:
+    """Check current Rust acceleration state (respects /fast_puppy toggle).
+
+    Replaces the old module-level ``_RUST_ENABLED`` bool which was evaluated
+    once at import time and never updated, making the /fast_puppy toggle
+    completely non-functional for all 5 Rust hot paths.
+    """
+    return is_rust_enabled()
 
 logger = logging.getLogger(__name__)
 
@@ -688,7 +695,7 @@ class BaseAgent(ABC):
         return bool(has_content or has_content_delta)
 
     def filter_huge_messages(self, messages: List[ModelMessage]) -> List[ModelMessage]:
-        if _RUST_ENABLED:
+        if _rust_enabled():
             try:
                 serialized = serialize_messages_for_rust(messages)
                 result = prune_and_filter(serialized, 50000)
@@ -786,7 +793,7 @@ class BaseAgent(ABC):
         protected_tokens_limit = get_protected_token_count()
 
         # --- Rust fast path ------------------------------------------------
-        if _RUST_ENABLED:
+        if _rust_enabled():
             try:
                 # Serialize messages and get per-message token counts
                 serialized = serialize_messages_for_rust(messages)
@@ -1088,7 +1095,7 @@ class BaseAgent(ABC):
 
         # Rust fast path — prune_and_filter handles mismatched tool-call pruning
         # in a single pass, plus filters empty thinking parts and trailing responses
-        if _RUST_ENABLED:
+        if _rust_enabled():
             try:
                 serialized = serialize_messages_for_rust(messages)
                 result = prune_and_filter(serialized, 999_999_999)
@@ -1143,7 +1150,7 @@ class BaseAgent(ABC):
         model_max = self.get_model_context_length()
 
         # Use Rust batch processing when available (single pass for tokens + hashes)
-        if _RUST_ENABLED:
+        if _rust_enabled():
             try:
                 serialized = serialize_messages_for_rust(messages)
                 # Extract actual tool definitions for accurate context overhead
@@ -1296,7 +1303,7 @@ class BaseAgent(ABC):
         emit_info("Truncating message history to manage token usage")
 
         # Try Rust fast path
-        if _RUST_ENABLED:
+        if _rust_enabled():
             try:
                 if per_message_tokens is not None:
                     # Reuse pre-computed tokens from caller (e.g., message_history_processor)

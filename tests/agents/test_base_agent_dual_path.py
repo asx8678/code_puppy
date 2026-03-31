@@ -5,7 +5,7 @@ Covers the Rust fast-path and Python fallback for:
 - prune_interrupted_tool_calls
 - message_history_processor
 
-We mock ``_RUST_ENABLED`` and ``process_messages_batch`` to exercise both code
+We mock ``_rust_enabled`` and ``process_messages_batch`` to exercise both code
 paths without requiring the actual Rust extension.
 """
 
@@ -16,7 +16,6 @@ import pytest
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
-    SystemPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -30,6 +29,7 @@ from code_puppy.agents.agent_code_puppy import CodePuppyAgent
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_messages(count: int = 3, *, with_tools: bool = False) -> list:
     """Build a simple list of ModelRequest/ModelResponse pairs."""
     msgs = []
@@ -37,12 +37,18 @@ def _make_messages(count: int = 3, *, with_tools: bool = False) -> list:
         if with_tools and i == 1:
             msgs.append(
                 ModelResponse(
-                    parts=[ToolCallPart(tool_name="foo", args={"a": 1}, tool_call_id="tc1")]
+                    parts=[
+                        ToolCallPart(tool_name="foo", args={"a": 1}, tool_call_id="tc1")
+                    ]
                 )
             )
             msgs.append(
                 ModelRequest(
-                    parts=[ToolReturnPart(tool_name="foo", content="ok", tool_call_id="tc1")]
+                    parts=[
+                        ToolReturnPart(
+                            tool_name="foo", content="ok", tool_call_id="tc1"
+                        )
+                    ]
                 )
             )
         else:
@@ -51,7 +57,9 @@ def _make_messages(count: int = 3, *, with_tools: bool = False) -> list:
     return msgs
 
 
-def _fake_batch_result(total_message_tokens=100, context_overhead_tokens=50, per_message_tokens=None):
+def _fake_batch_result(
+    total_message_tokens=100, context_overhead_tokens=50, per_message_tokens=None
+):
     """Return an object shaped like a Rust ProcessResult."""
     if per_message_tokens is None:
         per_message_tokens = [10] * 10
@@ -72,13 +80,18 @@ def _fake_prune_result(surviving_indices=None):
 # filter_huge_messages – Rust path
 # ---------------------------------------------------------------------------
 
+
 class TestFilterHugeMessagesDualPath:
     """Exercise both Rust and Python paths in filter_huge_messages."""
 
-    @patch("code_puppy.agents.base_agent._RUST_ENABLED", True)
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
     @patch("code_puppy.agents.base_agent.prune_and_filter")
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
-    def test_rust_path_returns_subset(self, mock_serialize, mock_prune,):
+    def test_rust_path_returns_subset(
+        self,
+        mock_serialize,
+        mock_prune,
+    ):
         mock_serialize.return_value = [{"fake": True}]
         mock_prune.return_value = _fake_prune_result([0, 2])
         agent = CodePuppyAgent()
@@ -89,8 +102,11 @@ class TestFilterHugeMessagesDualPath:
         assert result[0] is msgs[0]
         assert result[1] is msgs[2]
 
-    @patch("code_puppy.agents.base_agent._RUST_ENABLED", True)
-    @patch("code_puppy.agents.base_agent.prune_and_filter", side_effect=RuntimeError("boom"))
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
+    @patch(
+        "code_puppy.agents.base_agent.prune_and_filter",
+        side_effect=RuntimeError("boom"),
+    )
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
     def test_rust_exception_falls_back_to_python(self, mock_serialize, mock_prune):
         """When the Rust call raises, filter_huge_messages falls back to Python."""
@@ -102,15 +118,15 @@ class TestFilterHugeMessagesDualPath:
         assert isinstance(result, list)
         assert len(result) >= 1  # prune may alter count
 
-    @patch("code_puppy.agents.base_agent._RUST_ENABLED", False)
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: False)
     def test_python_path_no_rust(self):
-        """When _RUST_ENABLED is False, only Python path runs."""
+        """When _rust_enabled() returns False, only Python path runs."""
         agent = CodePuppyAgent()
         msgs = _make_messages(3)
         result = agent.filter_huge_messages(msgs)
         assert isinstance(result, list)
 
-    @patch("code_puppy.agents.base_agent._RUST_ENABLED", False)
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: False)
     def test_python_path_filters_large_messages(self):
         """Python path drops messages with token estimate > 50000."""
         agent = CodePuppyAgent()
@@ -129,9 +145,9 @@ class TestFilterHugeMessagesDualPath:
 # prune_interrupted_tool_calls – Rust path
 # ---------------------------------------------------------------------------
 
-class TestPruneInterruptedToolCallsDualPath:
 
-    @patch("code_puppy.agents.base_agent._RUST_ENABLED", True)
+class TestPruneInterruptedToolCallsDualPath:
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
     @patch("code_puppy.agents.base_agent.prune_and_filter")
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
     def test_rust_path_returns_subset(self, mock_serialize, mock_prune):
@@ -144,8 +160,10 @@ class TestPruneInterruptedToolCallsDualPath:
         assert result[0] is msgs[0]
         assert result[1] is msgs[1]
 
-    @patch("code_puppy.agents.base_agent._RUST_ENABLED", True)
-    @patch("code_puppy.agents.base_agent.prune_and_filter", side_effect=OSError("segfault"))
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
+    @patch(
+        "code_puppy.agents.base_agent.prune_and_filter", side_effect=OSError("segfault")
+    )
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
     def test_rust_exception_falls_back_to_python(self, mock_serialize, mock_prune):
         mock_serialize.return_value = [{"fake": True}]
@@ -155,7 +173,7 @@ class TestPruneInterruptedToolCallsDualPath:
         # Python fallback should still produce a valid list
         assert isinstance(result, list)
 
-    @patch("code_puppy.agents.base_agent._RUST_ENABLED", False)
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: False)
     def test_python_path_removes_mismatched_tool_call(self):
         """Python path removes tool calls without matching returns."""
         agent = CodePuppyAgent()
@@ -169,11 +187,14 @@ class TestPruneInterruptedToolCallsDualPath:
         result = agent.prune_interrupted_tool_calls(msgs)
         # orphan tool call should be dropped
         assert all(
-            not any(getattr(p, "tool_call_id", None) == "orphan" for p in getattr(m, "parts", []))
+            not any(
+                getattr(p, "tool_call_id", None) == "orphan"
+                for p in getattr(m, "parts", [])
+            )
             for m in result
         )
 
-    @patch("code_puppy.agents.base_agent._RUST_ENABLED", False)
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: False)
     def test_python_path_keeps_matched_tool_pairs(self):
         """Python path keeps messages with matched tool call/return pairs."""
         agent = CodePuppyAgent()
@@ -183,7 +204,11 @@ class TestPruneInterruptedToolCallsDualPath:
                 parts=[ToolCallPart(tool_name="foo", args={}, tool_call_id="matched")]
             ),
             ModelRequest(
-                parts=[ToolReturnPart(tool_name="foo", content="ok", tool_call_id="matched")]
+                parts=[
+                    ToolReturnPart(
+                        tool_name="foo", content="ok", tool_call_id="matched"
+                    )
+                ]
             ),
         ]
         result = agent.prune_interrupted_tool_calls(msgs)
@@ -198,8 +223,8 @@ class TestPruneInterruptedToolCallsDualPath:
 # message_history_processor – Rust path
 # ---------------------------------------------------------------------------
 
-class TestMessageHistoryProcessorDualPath:
 
+class TestMessageHistoryProcessorDualPath:
     @pytest.fixture
     def agent(self):
         agent = CodePuppyAgent()
@@ -207,7 +232,7 @@ class TestMessageHistoryProcessorDualPath:
         agent.get_model_context_length = MagicMock(return_value=200_000)
         return agent
 
-    @patch("code_puppy.agents.base_agent._RUST_ENABLED", True)
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
     @patch("code_puppy.agents.base_agent.process_messages_batch")
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
     def test_rust_path_computes_tokens(self, mock_serialize, mock_batch, agent):
@@ -221,10 +246,15 @@ class TestMessageHistoryProcessorDualPath:
         # Under compaction threshold (600 / 200000 < 0.8) → returns msgs unchanged
         assert result is msgs
 
-    @patch("code_puppy.agents.base_agent._RUST_ENABLED", True)
-    @patch("code_puppy.agents.base_agent.process_messages_batch", side_effect=RuntimeError("panic"))
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
+    @patch(
+        "code_puppy.agents.base_agent.process_messages_batch",
+        side_effect=RuntimeError("panic"),
+    )
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
-    def test_rust_exception_falls_back_to_python(self, mock_serialize, mock_batch, agent):
+    def test_rust_exception_falls_back_to_python(
+        self, mock_serialize, mock_batch, agent
+    ):
         mock_serialize.return_value = [{"fake": True}]
         msgs = _make_messages(2)
         ctx = SimpleNamespace()
@@ -232,20 +262,28 @@ class TestMessageHistoryProcessorDualPath:
         # Fallback uses Python estimate_tokens_for_message
         assert isinstance(result, list)
 
-    @patch("code_puppy.agents.base_agent._RUST_ENABLED", False)
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: False)
     def test_python_path_computes_tokens(self, agent):
         msgs = _make_messages(2)
         ctx = SimpleNamespace()
         result = agent.message_history_processor(ctx, msgs)
         assert isinstance(result, list)
 
-    @patch("code_puppy.agents.base_agent._RUST_ENABLED", True)
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
     @patch("code_puppy.agents.base_agent.process_messages_batch")
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
     @patch("code_puppy.agents.base_agent.get_compaction_threshold", return_value=0.0)
-    @patch("code_puppy.agents.base_agent.get_compaction_strategy", return_value="truncation")
+    @patch(
+        "code_puppy.agents.base_agent.get_compaction_strategy",
+        return_value="truncation",
+    )
     def test_rust_path_triggers_compaction(
-        self, mock_strategy, mock_threshold, mock_serialize, mock_batch, agent,
+        self,
+        mock_strategy,
+        mock_threshold,
+        mock_serialize,
+        mock_batch,
+        agent,
     ):
         """When proportion_used > threshold, compaction kicks in (Rust path)."""
         mock_serialize.return_value = [{"fake": True}]
