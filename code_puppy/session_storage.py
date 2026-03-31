@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import pickle
 import warnings
 from dataclasses import dataclass
@@ -24,6 +25,8 @@ import msgpack
 
 # Magic header that marks files written in the new msgpack format.
 _MSGPACK_MAGIC = b"MSGPACK\x01"
+
+logger = logging.getLogger(__name__)
 
 
 def _msgpack_default(obj: Any) -> Any:
@@ -159,6 +162,7 @@ def save_session(
     token_estimator: TokenEstimator,
     auto_saved: bool = False,
     compacted_hashes: Optional[List] = None,
+    precomputed_total: Optional[int] = None,
 ) -> SessionMetadata:
     ensure_directory(base_dir)
     paths = build_session_paths(base_dir, session_name)
@@ -192,7 +196,11 @@ def save_session(
         pickle_file.write(_MSGPACK_MAGIC + hmac_signature + msgpack_data)
     tmp_pickle.replace(paths.pickle_path)
 
-    total_tokens = sum(token_estimator(message) for message in history)
+    total_tokens = (
+        precomputed_total
+        if (precomputed_total is not None and precomputed_total >= 0)
+        else sum(token_estimator(message) for message in history)
+    )
     metadata = SessionMetadata(
         session_name=session_name,
         timestamp=timestamp,
@@ -259,14 +267,67 @@ def load_session_with_hashes(
     Returns:
         ``(messages, compacted_hashes)`` tuple.  For legacy session files that
         contain only the message list, ``compacted_hashes`` will be ``[]``.
+
+    On corruption or deserialisation errors a user-visible warning is emitted
+    (via ``code_puppy.messaging.emit_warning``) and ``([], [])`` is returned
+    so callers get an empty session rather than an unhandled exception.
     """
     paths = build_session_paths(base_dir, session_name)
     if not paths.pickle_path.exists():
         raise FileNotFoundError(paths.pickle_path)
 
-    raw = paths.pickle_path.read_bytes()
-    data = _load_raw_bytes(raw)
-    return _parse_session_payload(data)
+    # --- 1. Read raw bytes from disk ---
+    try:
+        raw = paths.pickle_path.read_bytes()
+    except OSError as exc:
+        logger.warning(
+            "Session '%s' could not be read from disk: %s: %s",
+            session_name,
+            type(exc).__name__,
+            exc,
+        )
+        from code_puppy.messaging import (
+            emit_warning,
+        )  # lazy import – avoids circular deps
+
+        emit_warning(
+            f"Session '{session_name}' could not be loaded: {type(exc).__name__}: {exc}"
+        )
+        return [], []
+
+    # --- 2. Deserialize bytes ---
+    try:
+        data = _load_raw_bytes(raw)
+    except (ValueError, pickle.UnpicklingError, Exception) as exc:
+        logger.warning(
+            "Session '%s' deserialization failed: %s: %s",
+            session_name,
+            type(exc).__name__,
+            exc,
+        )
+        from code_puppy.messaging import emit_warning
+
+        emit_warning(
+            f"Session '{session_name}' could not be loaded: {type(exc).__name__}: {exc}"
+        )
+        return [], []
+
+    # --- 3. Parse the deserialized payload into (messages, hashes) ---
+    try:
+        return _parse_session_payload(data)
+    except Exception as exc:
+        logger.warning(
+            "Session '%s' payload parse failed: %s: %s",
+            session_name,
+            type(exc).__name__,
+            exc,
+        )
+        from code_puppy.messaging import emit_warning
+
+        emit_warning(
+            f"Session '{session_name}' could not be loaded: {type(exc).__name__}: {exc}"
+        )
+        return [], []
 
 
 def list_sessions(base_dir: Path) -> List[str]:
