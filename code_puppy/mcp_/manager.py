@@ -78,6 +78,10 @@ class MCPManager:
         # Active managed servers (server_id -> ManagedMCPServer)
         self._managed_servers: Dict[str, ManagedMCPServer] = {}
 
+        # Pending background tasks (server_id -> Task)
+        self._pending_start_tasks: dict = {}
+        self._pending_stop_tasks: dict = {}
+
         # Sync servers from mcp_servers.json into registry
         self.sync_from_config()
 
@@ -507,14 +511,11 @@ class MCPManager:
             )
 
             # Store task reference to prevent garbage collection
-            if not hasattr(self, "_pending_start_tasks"):
-                self._pending_start_tasks = {}
             self._pending_start_tasks[server_id] = task
 
             # Add callback to clean up task reference when done
             def cleanup_task(t):
-                if hasattr(self, "_pending_start_tasks"):
-                    self._pending_start_tasks.pop(server_id, None)
+                self._pending_start_tasks.pop(server_id, None)
 
             task.add_done_callback(cleanup_task)
 
@@ -631,14 +632,11 @@ class MCPManager:
             )
 
             # Store task reference to prevent garbage collection
-            if not hasattr(self, "_pending_stop_tasks"):
-                self._pending_stop_tasks = {}
             self._pending_stop_tasks[server_id] = task
 
             # Add callback to clean up task reference when done
             def cleanup_task(t):
-                if hasattr(self, "_pending_stop_tasks"):
-                    self._pending_stop_tasks.pop(server_id, None)
+                self._pending_stop_tasks.pop(server_id, None)
 
             task.add_done_callback(cleanup_task)
 

@@ -28,6 +28,11 @@ from .config import EXTRA_MODELS_FILE, get_value, get_yolo_mode
 from .http_utils import create_async_client, get_cert_bundle_path, get_http2
 from .round_robin_model import RoundRobinModel
 
+# Token calculation constants
+_OUTPUT_TOKEN_RATIO = 0.15
+_MIN_OUTPUT_TOKENS = 2048
+_MAX_OUTPUT_TOKENS = 65536
+
 logger = logging.getLogger(__name__)
 
 # Registry for custom model provider classes from plugins
@@ -135,8 +140,11 @@ def make_model_settings(
         except Exception:
             # Fallback if config loading fails (e.g., in CI environments)
             context_length = 128000
-        # min 2048, 15% of context, max 65536
-        max_tokens = max(2048, min(int(0.15 * context_length), 65536))
+        # min _MIN_OUTPUT_TOKENS, _OUTPUT_TOKEN_RATIO of context, max _MAX_OUTPUT_TOKENS
+        max_tokens = max(
+            _MIN_OUTPUT_TOKENS,
+            min(int(_OUTPUT_TOKEN_RATIO * context_length), _MAX_OUTPUT_TOKENS),
+        )
 
     model_settings_dict["max_tokens"] = max_tokens
     effective_settings = get_effective_model_settings(model_name)
