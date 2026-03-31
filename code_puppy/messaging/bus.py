@@ -117,17 +117,26 @@ class MessageBus:
                     self._startup_buffer = self._startup_buffer[-self._maxsize :]
                 return
 
-            # Thread-safe put: use call_soon_threadsafe when the event loop
-            # is known (cross-thread call), otherwise put directly (same
-            # thread / no loop yet, e.g. during tests or early startup).
+            # Thread-safe put: if already on the event loop thread, call
+            # directly to ensure immediate delivery (avoids deferred put that
+            # could cause get_message_nowait to miss the message). For true
+            # cross-thread calls, use call_soon_threadsafe.
             if self._event_loop is not None:
                 try:
-                    self._event_loop.call_soon_threadsafe(
-                        self._put_to_outgoing, message
-                    )
+                    running_loop = asyncio.get_running_loop()
                 except RuntimeError:
-                    # Loop closed – fall back to direct put
+                    running_loop = None
+                if running_loop is self._event_loop:
+                    # Already on the event loop thread - put directly
                     self._put_to_outgoing(message)
+                else:
+                    try:
+                        self._event_loop.call_soon_threadsafe(
+                            self._put_to_outgoing, message
+                        )
+                    except RuntimeError:
+                        # Loop closed – fall back to direct put
+                        self._put_to_outgoing(message)
             else:
                 self._put_to_outgoing(message)
 
@@ -399,16 +408,25 @@ class MessageBus:
         else:
             # For non-response commands (CancelAgentCommand, etc.),
             # put them in the incoming queue for the agent to process.
-            # Use call_soon_threadsafe when the event loop is known so this
-            # is safe to call from any thread.
+            # If already on the event loop thread, call directly for
+            # immediate delivery. For true cross-thread calls, use
+            # call_soon_threadsafe.
             if self._event_loop is not None:
                 try:
-                    self._event_loop.call_soon_threadsafe(
-                        self._put_to_incoming, command
-                    )
+                    running_loop = asyncio.get_running_loop()
                 except RuntimeError:
-                    # Loop closed – fall back to direct put
+                    running_loop = None
+                if running_loop is self._event_loop:
+                    # Already on the event loop thread - put directly
                     self._put_to_incoming(command)
+                else:
+                    try:
+                        self._event_loop.call_soon_threadsafe(
+                            self._put_to_incoming, command
+                        )
+                    except RuntimeError:
+                        # Loop closed – fall back to direct put
+                        self._put_to_incoming(command)
             else:
                 self._put_to_incoming(command)
 
