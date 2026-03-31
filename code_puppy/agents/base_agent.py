@@ -178,6 +178,10 @@ class BaseAgent(ABC):
         self._cached_tool_defs: Optional[List[Dict[str, Any]]] = None
         # Per-instance flag for delayed compaction (not a module global — safe with parallel agents)
         self._delayed_compaction_requested: bool = False
+        # Per-turn Rust serialization cache: avoids redundant serialize_messages_for_rust() calls
+        # within a single turn's call chain. Keyed by id(messages) — safe because the same
+        # list object is passed through all helpers in one turn. Reset at run_with_mcp entry.
+        self._rust_serialization_cache: Optional[Tuple[int, Any]] = None
 
     def get_identity(self) -> str:
         """Get a unique identity for this agent instance.
@@ -669,10 +673,26 @@ class BaseAgent(ABC):
         has_content_delta = getattr(part, "content_delta", None) is not None
         return bool(has_content or has_content_delta)
 
+    def _get_rust_serialized(self, messages: List[Any]) -> Any:
+        """Get Rust-serialized messages, using cache if messages list is unchanged.
+
+        Within a single turn all helpers receive the same list object, so
+        id(messages) is a stable cache key. The cache is reset at the start
+        of each run_with_mcp call, preventing stale data across turns.
+        """
+        msg_id = id(messages)
+        if self._rust_serialization_cache is not None:
+            cached_id, cached_result = self._rust_serialization_cache
+            if cached_id == msg_id:
+                return cached_result
+        result = serialize_messages_for_rust(messages)
+        self._rust_serialization_cache = (msg_id, result)
+        return result
+
     def filter_huge_messages(self, messages: List[ModelMessage]) -> List[ModelMessage]:
         if is_rust_enabled():
             try:
-                serialized = serialize_messages_for_rust(messages)
+                serialized = self._get_rust_serialized(messages)
                 result = prune_and_filter(serialized, 50000)
                 return [messages[i] for i in result.surviving_indices]
             except Exception as exc:
@@ -769,7 +789,7 @@ class BaseAgent(ABC):
         if is_rust_enabled():
             try:
                 # Serialize messages and get per-message token counts
-                serialized = serialize_messages_for_rust(messages)
+                serialized = self._get_rust_serialized(messages)
                 result = process_messages_batch(serialized, [], [], "")
                 per_message_tokens = result.per_message_tokens
 
@@ -1070,7 +1090,7 @@ class BaseAgent(ABC):
         # in a single pass, plus filters empty thinking parts and trailing responses
         if is_rust_enabled():
             try:
-                serialized = serialize_messages_for_rust(messages)
+                serialized = self._get_rust_serialized(messages)
                 result = prune_and_filter(serialized, 999_999_999)
                 return [messages[i] for i in result.surviving_indices]
             except Exception as exc:
@@ -1125,7 +1145,7 @@ class BaseAgent(ABC):
         # Use Rust batch processing when available (single pass for tokens + hashes)
         if is_rust_enabled():
             try:
-                serialized = serialize_messages_for_rust(messages)
+                serialized = self._get_rust_serialized(messages)
                 # Extract actual tool definitions for accurate context overhead
                 # Use cached tool_defs (only computed once per agent lifecycle)
                 if self._cached_tool_defs is None:
@@ -1279,7 +1299,7 @@ class BaseAgent(ABC):
                     tokens = per_message_tokens
                 else:
                     # Compute from scratch when not provided
-                    serialized = serialize_messages_for_rust(messages)
+                    serialized = self._get_rust_serialized(messages)
                     batch = process_messages_batch(serialized, [], [], "")
                     tokens = batch.per_message_tokens
                 second_has_thinking = len(messages) > 1 and any(
@@ -1997,6 +2017,10 @@ class BaseAgent(ABC):
                     char if ord(char) < 0xD800 or ord(char) > 0xDFFF else "\ufffd"
                     for char in prompt
                 )
+
+        # Reset per-turn Rust serialization cache so stale data from a previous
+        # turn cannot leak into this one.
+        self._rust_serialization_cache = None
 
         group_id = str(uuid.uuid4())
         # Avoid double-loading: reuse existing agent if already built
