@@ -215,7 +215,8 @@ class RetryManager:
         # Unknown exception types - do not retry to fail fast
         logger.warning(
             "Unknown exception type %s in should_retry(), not retrying: %s",
-            type(error).__name__, error
+            type(error).__name__,
+            error,
         )
         return False
 
