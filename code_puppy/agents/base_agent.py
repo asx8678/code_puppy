@@ -67,6 +67,7 @@ from rich.text import Text
 
 from code_puppy.agents.event_stream_handler import event_stream_handler
 from code_puppy.callbacks import (
+    on_agent_exception,
     on_agent_run_end,
     on_agent_run_start,
     on_message_history_processor_end,
@@ -2323,6 +2324,13 @@ class BaseAgent(ABC):
             _run_success = False
             _run_error = e
             _run_response_text = ""
+            # Fire exception callback for plugins/monitoring
+            try:
+                await on_agent_exception(
+                    e, agent_name=self.name, session_id=group_id
+                )
+            except Exception:
+                pass  # Never let callback errors mask the original exception
             raise
         finally:
             # Fire agent_run_end hook - plugins can use this for:
