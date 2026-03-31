@@ -97,6 +97,7 @@ class TestLoadRawBytes:
     def test_loads_legacy_signed_format(self) -> None:
         """Legacy CPSESSION format loads with deprecation warning."""
         from code_puppy.session_storage import _LEGACY_SIGNED_HEADER
+
         original = {"messages": ["legacy"], "compacted_hashes": []}
         pickle_data = pickle.dumps(original)
         legacy_sig = _compute_hmac(b"", pickle_data)
@@ -160,8 +161,8 @@ class TestSaveLoadIntegration:
         # Verify structure: MAGIC + HMAC(32) + msgpack
         assert raw.startswith(_MSGPACK_MAGIC)
         offset = len(_MSGPACK_MAGIC)
-        stored_hmac = raw[offset:offset + 32]
-        msgpack_data = raw[offset + 32:]
+        stored_hmac = raw[offset : offset + 32]
+        msgpack_data = raw[offset + 32 :]
 
         # Verify HMAC
         expected_hmac = _compute_hmac(b"", msgpack_data)
@@ -216,9 +217,7 @@ class TestSaveLoadIntegration:
             "file_path": str(pkl_path),
             "auto_saved": False,
         }
-        (tmp_path / "legacy_meta.json").write_text(
-            __import__("json").dumps(meta)
-        )
+        (tmp_path / "legacy_meta.json").write_text(__import__("json").dumps(meta))
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
@@ -226,5 +225,7 @@ class TestSaveLoadIntegration:
 
         assert loaded == history
         # Should have at least one DeprecationWarning
-        deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+        deprecation_warnings = [
+            x for x in w if issubclass(x.category, DeprecationWarning)
+        ]
         assert len(deprecation_warnings) >= 1
