@@ -1,6 +1,6 @@
 """Shared helpers for persisting and restoring chat sessions.
 
-This module centralises the pickle + metadata handling that used to live in
+This module centralises the msgpack + metadata handling that used to live in
 both the CLI command handler and the auto-save feature. Keeping it here helps
 us avoid duplication while staying inside the Zen-of-Python sweet spot: simple
 is better than complex, nested side effects are worse than deliberate helpers.
@@ -8,11 +8,49 @@ is better than complex, nested side effects are worse than deliberate helpers.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import pickle
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple
+
+import msgpack
+from pydantic import TypeAdapter
+from pydantic_ai.messages import ModelMessage
+
+# ----- msgpack helpers -----
+
+# Magic header that marks files written in the new msgpack format.
+_MSGPACK_MAGIC = b"MSGPACK\x01"
+
+_message_adapter: TypeAdapter[ModelMessage] = TypeAdapter(ModelMessage)
+
+
+def _msgpack_default(obj: Any) -> Any:
+    """Handle types that msgpack can't serialize natively."""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"can not serialize '{type(obj).__name__}' object")
+
+
+def _deserialize_messages(raw_messages: list) -> list:
+    """Convert dicts back to pydantic-ai message objects.
+
+    If messages are already pydantic-ai objects (e.g. from legacy pickle),
+    return them as-is.
+    """
+    result = []
+    for m in raw_messages:
+        if isinstance(m, dict) and "kind" in m:
+            result.append(_message_adapter.validate_python(m))
+        else:
+            result.append(m)  # Already a proper object (legacy pickle path)
+    return result
+
+
+# ----- legacy pickle helpers (load path only) -----
 
 
 def _safe_loads(data: bytes) -> Any:
@@ -57,17 +95,20 @@ class SessionMetadata:
         }
 
 
-def _extract_pickle_payload(raw: bytes) -> bytes:
-    """Return the pickle payload from raw session file bytes.
+def _load_raw_bytes(raw: bytes) -> Any:
+    """Deserialize session file bytes, handling msgpack, legacy-signed, and plain pickle."""
+    # New msgpack format: magic header followed by msgpack payload
+    if raw.startswith(_MSGPACK_MAGIC):
+        payload = raw[len(_MSGPACK_MAGIC) :]
+        return msgpack.unpackb(payload, raw=False)
 
-    New format is raw pickle bytes.
-    Legacy format was: header + 32-byte signature + pickle payload.
-    We no longer verify or generate signatures.
-    """
+    # Legacy signed format: CPSESSION\x01 + 32-byte signature + pickle
     if raw.startswith(_LEGACY_SIGNED_HEADER):
         offset = len(_LEGACY_SIGNED_HEADER) + _LEGACY_SIGNATURE_SIZE
-        return raw[offset:]
-    return raw
+        return _safe_loads(raw[offset:])
+
+    # Plain pickle (original format)
+    return _safe_loads(raw)
 
 
 def ensure_directory(path: Path) -> Path:
@@ -94,16 +135,27 @@ def save_session(
     ensure_directory(base_dir)
     paths = build_session_paths(base_dir, session_name)
 
-    # Always save in the new dict format so compacted hashes are preserved.
-    # Legacy session files (plain list) are still handled gracefully on load.
+    # Convert pydantic-ai message objects to plain dicts so msgpack can handle them.
+    # Plain strings / ints / etc. pass through dataclasses.asdict() unchanged because
+    # they are not dataclasses – we guard with dataclasses.is_dataclass().
+    serializable_history = [
+        dataclasses.asdict(m)
+        if dataclasses.is_dataclass(m) and not isinstance(m, type)
+        else m
+        for m in history
+    ]
+
     payload: dict = {
-        "messages": history,
-        "compacted_hashes": list(compacted_hashes) if compacted_hashes is not None else [],
+        "messages": serializable_history,
+        "compacted_hashes": list(compacted_hashes)
+        if compacted_hashes is not None
+        else [],
     }
-    pickle_data = pickle.dumps(payload)
+    msgpack_data = msgpack.packb(payload, use_bin_type=True, default=_msgpack_default)
+
     tmp_pickle = paths.pickle_path.with_suffix(".tmp")
     with tmp_pickle.open("wb") as pickle_file:
-        pickle_file.write(pickle_data)
+        pickle_file.write(_MSGPACK_MAGIC + msgpack_data)
     tmp_pickle.replace(paths.pickle_path)
 
     total_tokens = sum(token_estimator(message) for message in history)
@@ -126,7 +178,7 @@ def save_session(
 
 
 def _parse_session_payload(data: Any) -> Tuple[SessionHistory, List]:
-    """Parse session pickle payload into ``(messages, compacted_hashes)``.
+    """Parse session payload into ``(messages, compacted_hashes)``.
 
     Handles two on-disk formats:
 
@@ -136,8 +188,9 @@ def _parse_session_payload(data: Any) -> Tuple[SessionHistory, List]:
       is returned as an empty list so callers don't need special-casing.
     """
     if isinstance(data, dict) and "messages" in data:
-        return data["messages"], data.get("compacted_hashes", [])
-    # Legacy format: raw list only
+        messages = _deserialize_messages(data["messages"])
+        return messages, data.get("compacted_hashes", [])
+    # Legacy format: raw list only (already objects from pickle)
     return data, []
 
 
@@ -157,8 +210,7 @@ def load_session(
         raise FileNotFoundError(paths.pickle_path)
 
     raw = paths.pickle_path.read_bytes()
-    pickle_data = _extract_pickle_payload(raw)
-    data = _safe_loads(pickle_data)
+    data = _load_raw_bytes(raw)
     messages, _ = _parse_session_payload(data)
     return messages
 
@@ -177,8 +229,7 @@ def load_session_with_hashes(
         raise FileNotFoundError(paths.pickle_path)
 
     raw = paths.pickle_path.read_bytes()
-    pickle_data = _extract_pickle_payload(raw)
-    data = _safe_loads(pickle_data)
+    data = _load_raw_bytes(raw)
     return _parse_session_payload(data)
 
 
@@ -231,8 +282,6 @@ async def restore_autosave_interactively(base_dir: Path) -> None:
         return
 
     # Import locally to avoid pulling the messaging layer into storage modules
-    from datetime import datetime
-
     from prompt_toolkit.formatted_text import FormattedText
 
     from code_puppy.agents.agent_manager import get_current_agent
