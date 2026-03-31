@@ -1,6 +1,5 @@
 # agent_tools.py
 import asyncio
-import hashlib
 import itertools
 import json
 import pickle
@@ -63,13 +62,10 @@ def _generate_dbos_workflow_id(base_id: str) -> str:
 
 
 def _generate_session_hash_suffix() -> str:
-    """Generate a short SHA1 hash suffix based on current timestamp for uniqueness.
+    """Generate a unique session ID suffix using uuid4 for collision safety."""
+    import uuid
 
-    Returns:
-        A 6-character hex string, e.g., "a3f2b1"
-    """
-    timestamp = str(datetime.now().timestamp())
-    return hashlib.sha1(timestamp.encode()).hexdigest()[:6]
+    return uuid.uuid4().hex[:8]
 
 
 # Regex pattern for kebab-case session IDs

@@ -50,9 +50,9 @@ class TestGenerateDbosWorkflowId:
 
 
 class TestGenerateSessionHashSuffix:
-    def test_returns_6_char_hex(self):
+    def test_returns_8_char_hex(self):
         suffix = _generate_session_hash_suffix()
-        assert len(suffix) == 6
+        assert len(suffix) == 8
         int(suffix, 16)  # Should be valid hex
 
 
