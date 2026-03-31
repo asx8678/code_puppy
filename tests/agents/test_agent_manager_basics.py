@@ -10,6 +10,7 @@ import pytest
 from code_puppy.agents.agent_manager import (
     _AGENT_REGISTRY,
     _discover_agents,
+    _invalidate_agent_registry,
     _load_session_data,
     _save_session_data,
     get_available_agents,
@@ -68,8 +69,9 @@ class TestAgentManagerBasics:
 
     def setup_method(self):
         """Setup for each test method."""
-        # Clear the registry before each test
+        # Clear the registry and invalidate cache before each test
         _AGENT_REGISTRY.clear()
+        _invalidate_agent_registry()
 
     def test_list_agents_basic(self):
         """Test basic list_agents functionality."""

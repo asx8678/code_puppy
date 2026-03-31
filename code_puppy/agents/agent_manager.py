@@ -21,6 +21,7 @@ from code_puppy.messaging import emit_success, emit_warning
 _AGENT_REGISTRY: Dict[str, Union[Type[BaseAgent], str]] = {}
 _AGENT_HISTORIES: Dict[str, List[ModelMessage]] = {}
 _CURRENT_AGENT: Optional[BaseAgent] = None
+_REGISTRY_POPULATED: bool = False
 
 # Terminal session-based agent selection
 _SESSION_AGENTS_CACHE: dict[str, str] = {}
@@ -190,6 +191,9 @@ def _ensure_session_cache_loaded() -> None:
 
 def _discover_agents(message_group_id: Optional[str] = None):
     """Dynamically discover all agent classes and JSON agents."""
+    global _REGISTRY_POPULATED
+    if _REGISTRY_POPULATED:
+        return  # Already discovered, use cached registry
     # Always clear the registry to force refresh
     _AGENT_REGISTRY.clear()
 
@@ -330,6 +334,14 @@ def _discover_agents(message_group_id: Optional[str] = None):
             f"Warning: Could not load plugin agents: {e}",
             message_group=message_group_id,
         )
+
+    _REGISTRY_POPULATED = True  # Mark registry as fully populated
+
+
+def _invalidate_agent_registry() -> None:
+    """Invalidate the agent registry cache, forcing re-discovery on next call."""
+    global _REGISTRY_POPULATED
+    _REGISTRY_POPULATED = False
 
 
 def get_available_agents() -> Dict[str, str]:
@@ -534,6 +546,8 @@ def refresh_agents():
 
     This clears the agent registry cache and forces a rediscovery of all agents.
     """
+    # Invalidate cache so _discover_agents performs a full re-scan
+    _invalidate_agent_registry()
     # Generate a message group ID for agent refreshing
     message_group_id = str(uuid.uuid4())
     _discover_agents(message_group_id=message_group_id)
