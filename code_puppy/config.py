@@ -1564,6 +1564,7 @@ def auto_save_session_if_enabled() -> bool:
             timestamp=now.isoformat(),
             token_estimator=current_agent.estimate_tokens_for_message,
             auto_saved=True,
+            compacted_hashes=list(current_agent.get_compacted_message_hashes()),
         )
 
         emit_info(

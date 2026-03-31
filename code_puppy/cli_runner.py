@@ -696,7 +696,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                                 emit_warning,
                             )
                             from code_puppy.session_storage import (
-                                load_session,
+                                load_session_with_hashes,
                                 restore_autosave_interactively,
                             )
 
@@ -706,12 +706,14 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                                 emit_warning("Autosave load cancelled")
                                 continue
 
-                            # Load the session
+                            # Load the session (including persisted compacted hashes)
                             base_dir = Path(AUTOSAVE_DIR)
-                            history = load_session(chosen_session, base_dir)
+                            history, compacted_hashes = load_session_with_hashes(chosen_session, base_dir)
 
                             agent = get_current_agent()
                             agent.set_message_history(history)
+                            if compacted_hashes:
+                                agent.restore_compacted_hashes(compacted_hashes)
 
                             # Set current autosave session
                             set_current_autosave_from_session_name(chosen_session)

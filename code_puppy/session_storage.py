@@ -12,7 +12,7 @@ import json
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, List
+from typing import Any, Callable, List, Optional, Tuple
 
 
 def _safe_loads(data: bytes) -> Any:
@@ -89,11 +89,18 @@ def save_session(
     timestamp: str,
     token_estimator: TokenEstimator,
     auto_saved: bool = False,
+    compacted_hashes: Optional[List] = None,
 ) -> SessionMetadata:
     ensure_directory(base_dir)
     paths = build_session_paths(base_dir, session_name)
 
-    pickle_data = pickle.dumps(history)
+    # Always save in the new dict format so compacted hashes are preserved.
+    # Legacy session files (plain list) are still handled gracefully on load.
+    payload: dict = {
+        "messages": history,
+        "compacted_hashes": list(compacted_hashes) if compacted_hashes is not None else [],
+    }
+    pickle_data = pickle.dumps(payload)
     tmp_pickle = paths.pickle_path.with_suffix(".tmp")
     with tmp_pickle.open("wb") as pickle_file:
         pickle_file.write(pickle_data)
@@ -118,9 +125,30 @@ def save_session(
     return metadata
 
 
+def _parse_session_payload(data: Any) -> Tuple[SessionHistory, List]:
+    """Parse session pickle payload into ``(messages, compacted_hashes)``.
+
+    Handles two on-disk formats:
+
+    * **New format** – ``dict`` with ``"messages"`` and ``"compacted_hashes"``
+      keys (written by this module from the point of this change onward).
+    * **Legacy format** – plain ``list`` of messages; ``compacted_hashes``
+      is returned as an empty list so callers don't need special-casing.
+    """
+    if isinstance(data, dict) and "messages" in data:
+        return data["messages"], data.get("compacted_hashes", [])
+    # Legacy format: raw list only
+    return data, []
+
+
 def load_session(
     session_name: str, base_dir: Path, *, allow_legacy: bool = False
 ) -> SessionHistory:
+    """Load message history from a session file.
+
+    Returns only the message list.  Use :func:`load_session_with_hashes` when
+    you also need the persisted compacted-message hashes.
+    """
     # Kept for API compatibility; legacy loading is always supported now.
     _ = allow_legacy
 
@@ -130,7 +158,28 @@ def load_session(
 
     raw = paths.pickle_path.read_bytes()
     pickle_data = _extract_pickle_payload(raw)
-    return _safe_loads(pickle_data)
+    data = _safe_loads(pickle_data)
+    messages, _ = _parse_session_payload(data)
+    return messages
+
+
+def load_session_with_hashes(
+    session_name: str, base_dir: Path
+) -> Tuple[SessionHistory, List]:
+    """Load message history *and* compacted-message hashes from a session file.
+
+    Returns:
+        ``(messages, compacted_hashes)`` tuple.  For legacy session files that
+        contain only the message list, ``compacted_hashes`` will be ``[]``.
+    """
+    paths = build_session_paths(base_dir, session_name)
+    if not paths.pickle_path.exists():
+        raise FileNotFoundError(paths.pickle_path)
+
+    raw = paths.pickle_path.read_bytes()
+    pickle_data = _extract_pickle_payload(raw)
+    data = _safe_loads(pickle_data)
+    return _parse_session_payload(data)
 
 
 def list_sessions(base_dir: Path) -> List[str]:
@@ -303,7 +352,7 @@ async def restore_autosave_interactively(base_dir: Path) -> None:
         return
 
     try:
-        history = load_session(chosen_name, base_dir)
+        history, compacted_hashes = load_session_with_hashes(chosen_name, base_dir)
     except FileNotFoundError:
         emit_warning(f"Autosave '{chosen_name}' could not be found")
         return
@@ -313,6 +362,8 @@ async def restore_autosave_interactively(base_dir: Path) -> None:
 
     agent = get_current_agent()
     agent.set_message_history(history)
+    if compacted_hashes:
+        agent.restore_compacted_hashes(compacted_hashes)
 
     # Set current autosave session id so subsequent autosaves overwrite this session
     try:
