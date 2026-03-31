@@ -420,6 +420,7 @@ class TestLoadConfigExtended:
     def setup_method(self):
         """Clear config cache before each test to prevent cross-test contamination."""
         from code_puppy.model_factory import clear_config_cache
+
         clear_config_cache()
 
     def test_load_config_multiple_callbacks_warning(self):
