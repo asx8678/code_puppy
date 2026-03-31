@@ -172,6 +172,10 @@ class BaseAgent(ABC):
         # Cache for MCP tool definitions (for token estimation)
         # This is populated after the first successful run when MCP tools are retrieved
         self._mcp_tool_definitions_cache: List[Dict[str, Any]] = []
+        # Cache for system prompt and tool defs used in message_history_processor
+        # These are stable across turns; invalidated only on model/tool changes
+        self._cached_system_prompt: Optional[str] = None
+        self._cached_tool_defs: Optional[List[Dict[str, Any]]] = None
 
     def get_identity(self) -> str:
         """Get a unique identity for this agent instance.
@@ -648,6 +652,15 @@ class BaseAgent(ABC):
         # Simply clear the cache - it will be repopulated on the next agent run
         # This is safer than trying to call async methods from sync context
         self._mcp_tool_definitions_cache = []
+
+    def _invalidate_prompt_cache(self) -> None:
+        """Invalidate the cached system prompt and tool definitions.
+
+        Call this when the agent's model or tools change so that
+        message_history_processor picks up fresh values on the next turn.
+        """
+        self._cached_system_prompt = None
+        self._cached_tool_defs = None
 
     def _is_tool_call_part(self, part: Any) -> bool:
         if isinstance(part, (ToolCallPart, ToolCallPartDelta)):
@@ -1138,28 +1151,35 @@ class BaseAgent(ABC):
             try:
                 serialized = serialize_messages_for_rust(messages)
                 # Extract actual tool definitions for accurate context overhead
-                tool_defs = []
-                pydantic_agent = getattr(self, "pydantic_agent", None)
-                if pydantic_agent:
-                    _tools = getattr(pydantic_agent, "_tools", None)
-                    if _tools and isinstance(_tools, dict):
-                        import json as _json
+                # Use cached tool_defs (only computed once per agent lifecycle)
+                if self._cached_tool_defs is None:
+                    _build_tool_defs = []
+                    pydantic_agent = getattr(self, "pydantic_agent", None)
+                    if pydantic_agent:
+                        _tools = getattr(pydantic_agent, "_tools", None)
+                        if _tools and isinstance(_tools, dict):
+                            import json as _json
 
-                        for tname, tfunc in _tools.items():
-                            td = {
-                                "name": tname,
-                                "description": getattr(tfunc, "__doc__", "") or "",
-                            }
-                            schema = getattr(tfunc, "schema", None)
-                            if schema and isinstance(schema, dict):
-                                td["inputSchema"] = _json.dumps(schema)
-                            tool_defs.append(td)
+                            for tname, tfunc in _tools.items():
+                                td = {
+                                    "name": tname,
+                                    "description": getattr(tfunc, "__doc__", "") or "",
+                                }
+                                schema = getattr(tfunc, "schema", None)
+                                if schema and isinstance(schema, dict):
+                                    td["inputSchema"] = _json.dumps(schema)
+                                _build_tool_defs.append(td)
+                    self._cached_tool_defs = _build_tool_defs
+                tool_defs = self._cached_tool_defs
                 mcp_defs = getattr(self, "_mcp_tool_definitions_cache", []) or []
-                system_prompt = (
-                    self.get_full_system_prompt()
-                    if hasattr(self, "get_full_system_prompt")
-                    else ""
-                )
+                # Use cached system prompt (only computed once per agent lifecycle)
+                if self._cached_system_prompt is None:
+                    self._cached_system_prompt = (
+                        self.get_full_system_prompt()
+                        if hasattr(self, "get_full_system_prompt")
+                        else ""
+                    )
+                system_prompt = self._cached_system_prompt
                 batch_result = process_messages_batch(
                     serialized, tool_defs, mcp_defs, system_prompt
                 )
