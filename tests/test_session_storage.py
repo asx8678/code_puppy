@@ -290,11 +290,11 @@ def test_load_raw_bytes_falls_back_to_pickle_with_warning():
 
 def test_load_raw_bytes_prefers_msgpack():
     """_load_raw_bytes() should use MessagePack without any warning for new data."""
-    from code_puppy.session_storage import _MSGPACK_MAGIC, _compute_hmac
+    from code_puppy.session_storage import _MSGPACK_MAGIC, _compute_hmac, _get_hmac_key
 
     payload = {"messages": ["a", "b"], "compacted_hashes": ["x"]}
     msgpack_data = msgpack.packb(payload, use_bin_type=True)
-    hmac_sig = _compute_hmac(b"", msgpack_data)
+    hmac_sig = _compute_hmac(_get_hmac_key(), msgpack_data)
     full_data = _MSGPACK_MAGIC + hmac_sig + msgpack_data
 
     with warnings.catch_warnings(record=True) as caught:
