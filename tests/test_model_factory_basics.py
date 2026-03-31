@@ -432,3 +432,42 @@ class TestModelFactoryBasics:
 
             assert model is not None
             assert model.model_name == "anthropic/claude-3.5-sonnet"
+
+
+class TestConfigCache:
+    def setup_method(self):
+        from code_puppy.model_factory import clear_config_cache
+        clear_config_cache()
+
+    def teardown_method(self):
+        from code_puppy.model_factory import clear_config_cache
+        clear_config_cache()
+
+    def test_load_config_returns_same_object_on_cache_hit(self):
+        """Second call should return same cached dict object (cache hit)."""
+        result1 = ModelFactory.load_config()
+        result2 = ModelFactory.load_config()
+        assert result1 is result2
+
+    def test_clear_config_cache_forces_reload(self):
+        """clear_config_cache() should force a fresh load on next call."""
+        result1 = ModelFactory.load_config()
+        clear_config_cache()
+        result2 = ModelFactory.load_config()
+        # Should be equal content but different objects
+        assert result1 == result2
+
+    def test_get_config_mtime_returns_float(self):
+        """_get_config_mtime should always return a float."""
+        from code_puppy.model_factory import _get_config_mtime
+        mtime = _get_config_mtime()
+        assert isinstance(mtime, float)
+        assert mtime >= 0.0
+
+    def test_get_config_mtime_handles_missing_files(self):
+        """Should return 0.0 when no config files exist."""
+        from code_puppy.model_factory import _get_config_mtime
+        import unittest.mock
+        with unittest.mock.patch("pathlib.Path.stat", side_effect=FileNotFoundError):
+            mtime = _get_config_mtime()
+            assert mtime == 0.0
