@@ -2028,6 +2028,15 @@ class BaseAgent(ABC):
             self._code_generation_agent or self.reload_code_generation_agent()
         )
 
+        # Warm MCP tool cache before first run so turn-1 context overhead is accurate.
+        # _update_mcp_tool_cache is a no-op when cache is already populated or no
+        # MCP servers are registered, so it is safe to call on every entry.
+        if not self._mcp_tool_definitions_cache and getattr(self, "_mcp_servers", None):
+            try:
+                await self._update_mcp_tool_cache()
+            except Exception:
+                pass  # Servers may not be connectable yet; cache stays empty
+
         # If a custom output_type is specified, create a temporary agent with that type
         if output_type is not None:
             pydantic_agent = self._create_agent_with_output_type(output_type)
