@@ -437,10 +437,12 @@ class TestModelFactoryBasics:
 class TestConfigCache:
     def setup_method(self):
         from code_puppy.model_factory import clear_config_cache
+
         clear_config_cache()
 
     def teardown_method(self):
         from code_puppy.model_factory import clear_config_cache
+
         clear_config_cache()
 
     def test_load_config_returns_same_object_on_cache_hit(self):
@@ -460,6 +462,7 @@ class TestConfigCache:
     def test_get_config_mtime_returns_float(self):
         """_get_config_mtime should always return a float."""
         from code_puppy.model_factory import _get_config_mtime
+
         mtime = _get_config_mtime()
         assert isinstance(mtime, float)
         assert mtime >= 0.0
@@ -468,6 +471,7 @@ class TestConfigCache:
         """Should return 0.0 when no config files exist."""
         from code_puppy.model_factory import _get_config_mtime
         import unittest.mock
+
         with unittest.mock.patch("pathlib.Path.stat", side_effect=FileNotFoundError):
             mtime = _get_config_mtime()
             assert mtime == 0.0
