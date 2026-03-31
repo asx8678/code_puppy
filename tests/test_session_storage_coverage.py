@@ -82,7 +82,7 @@ def mock_interactive_imports(
         if mock_load_session is not None:
             patches.append(
                 patch(
-                    "code_puppy.session_storage.load_session",
+                    "code_puppy.session_storage.load_session_with_hashes",
                     mock_load_session,
                 )
             )

@@ -338,7 +338,7 @@ class TestHandleLoadContextCommand:
     def test_file_not_found_with_available(self):
         with (
             patch(
-                "code_puppy.command_line.session_commands.load_session",
+                "code_puppy.command_line.session_commands.load_session_with_hashes",
                 side_effect=FileNotFoundError(),
             ),
             patch(
@@ -354,7 +354,7 @@ class TestHandleLoadContextCommand:
     def test_file_not_found_no_available(self):
         with (
             patch(
-                "code_puppy.command_line.session_commands.load_session",
+                "code_puppy.command_line.session_commands.load_session_with_hashes",
                 side_effect=FileNotFoundError(),
             ),
             patch(
@@ -370,7 +370,7 @@ class TestHandleLoadContextCommand:
     def test_generic_exception(self):
         with (
             patch(
-                "code_puppy.command_line.session_commands.load_session",
+                "code_puppy.command_line.session_commands.load_session_with_hashes",
                 side_effect=Exception("corrupt"),
             ),
             patch("code_puppy.messaging.emit_error") as me,
@@ -383,8 +383,8 @@ class TestHandleLoadContextCommand:
         agent.estimate_tokens_for_message.return_value = 50
         with (
             patch(
-                "code_puppy.command_line.session_commands.load_session",
-                return_value=["m1", "m2"],
+                "code_puppy.command_line.session_commands.load_session_with_hashes",
+                return_value=(["m1", "m2"], []),
             ),
             patch(
                 "code_puppy.agents.agent_manager.get_current_agent",
@@ -401,8 +401,8 @@ class TestHandleLoadContextCommand:
         agent.estimate_tokens_for_message.return_value = 50
         with (
             patch(
-                "code_puppy.command_line.session_commands.load_session",
-                return_value=["m1"],
+                "code_puppy.command_line.session_commands.load_session_with_hashes",
+                return_value=(["m1"], []),
             ),
             patch(
                 "code_puppy.agents.agent_manager.get_current_agent",
