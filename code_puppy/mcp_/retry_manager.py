@@ -50,6 +50,8 @@ class RetryManager:
     protected by an ``asyncio.Lock`` for coroutine-safe access.
     """
 
+    MAX_BACKOFF_SECONDS: float = 60.0
+
     def __init__(self):
         """Initialize the retry manager."""
         self._stats: Dict[str, RetryStats] = defaultdict(RetryStats)
@@ -144,19 +146,19 @@ class RetryManager:
             return 1.0
 
         elif strategy == "linear":
-            return float(attempt)
+            return min(float(attempt), self.MAX_BACKOFF_SECONDS)
 
         elif strategy == "exponential":
-            return 2.0 ** (attempt - 1)
+            return min(2.0 ** (attempt - 1), self.MAX_BACKOFF_SECONDS)
 
         elif strategy == "exponential_jitter":
             base_delay = 2.0 ** (attempt - 1)
             jitter = random.uniform(-0.25, 0.25)  # ±25% jitter
-            return max(0.1, base_delay * (1 + jitter))
+            return max(0.1, min(base_delay * (1 + jitter), self.MAX_BACKOFF_SECONDS))
 
         else:
             logger.warning(f"Unknown backoff strategy: {strategy}, using exponential")
-            return 2.0 ** (attempt - 1)
+            return min(2.0 ** (attempt - 1), self.MAX_BACKOFF_SECONDS)
 
     def should_retry(self, error: Exception) -> bool:
         """
@@ -210,9 +212,12 @@ class RetryManager:
         if "schema" in error_str or "validation" in error_str:
             return False
 
-        # By default, consider other errors as potentially retryable
-        # This is conservative but helps handle unknown transient issues
-        return True
+        # Unknown exception types - do not retry to fail fast
+        logger.warning(
+            "Unknown exception type %s in should_retry(), not retrying: %s",
+            type(error).__name__, error
+        )
+        return False
 
     async def record_retry(self, server_id: str, attempts: int, success: bool) -> None:
         """
