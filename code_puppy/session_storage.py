@@ -8,22 +8,62 @@ is better than complex, nested side effects are worse than deliberate helpers.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import logging
+import os
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple
 
-
-def _safe_loads(data: bytes) -> Any:
-    """Deserialize pickle data."""
-    return pickle.loads(data)  # noqa: S301
-
-
 _LEGACY_SIGNED_HEADER = b"CPSESSION\x01"
 _LEGACY_SIGNATURE_SIZE = (
     32  # legacy signature bytes, retained only for backward-compat parsing
 )
+
+_SESSION_HMAC_PREFIX = b"CPSIG\x02"
+_HMAC_SIG_SIZE = 32  # SHA-256 produces 32 bytes
+
+
+def _get_session_hmac_key() -> bytes:
+    """Get or create a per-installation HMAC key for session integrity."""
+    key_path = Path(os.path.expanduser("~/.code_puppy/session_hmac.key"))
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    if key_path.exists():
+        return key_path.read_bytes()
+    key = os.urandom(32)
+    key_path.write_bytes(key)
+    key_path.chmod(0o600)
+    return key
+
+
+def _sign_session_data(data: bytes) -> bytes:
+    """Prepend HMAC-SHA256 signature to session data."""
+    key = _get_session_hmac_key()
+    sig = hmac.new(key, data, hashlib.sha256).digest()
+    return _SESSION_HMAC_PREFIX + sig + data
+
+
+def _safe_loads(data: bytes) -> Any:
+    """Deserialize pickle data after verifying HMAC integrity."""
+    if data.startswith(_SESSION_HMAC_PREFIX):
+        prefix_len = len(_SESSION_HMAC_PREFIX)
+        sig = data[prefix_len : prefix_len + _HMAC_SIG_SIZE]
+        payload = data[prefix_len + _HMAC_SIG_SIZE :]
+        key = _get_session_hmac_key()
+        expected = hmac.new(key, payload, hashlib.sha256).digest()
+        if not hmac.compare_digest(sig, expected):
+            raise ValueError(
+                "Session file integrity check failed - file may be tampered"
+            )
+        return pickle.loads(payload)  # noqa: S301
+    # Legacy: no signature (backward compat - load but warn)
+    logging.getLogger(__name__).warning(
+        "Loading unsigned session file (legacy format)"
+    )
+    return pickle.loads(data)  # noqa: S301
 
 
 SessionHistory = List[Any]
@@ -100,7 +140,7 @@ def save_session(
         "messages": history,
         "compacted_hashes": list(compacted_hashes) if compacted_hashes is not None else [],
     }
-    pickle_data = pickle.dumps(payload)
+    pickle_data = _sign_session_data(pickle.dumps(payload))
     tmp_pickle = paths.pickle_path.with_suffix(".tmp")
     with tmp_pickle.open("wb") as pickle_file:
         pickle_file.write(pickle_data)
