@@ -8,7 +8,7 @@ This module handles:
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -21,13 +21,9 @@ from pydantic_ai.messages import (
 from rich.text import Text
 
 from code_puppy.config import (
-    get_compaction_strategy,
-    get_compaction_threshold,
     get_model_context_length,
-    get_protected_token_count,
 )
 from code_puppy.messaging import emit_info, emit_warning
-from code_puppy.summarization_agent import run_summarization_sync, SummarizationError
 
 logger = logging.getLogger(__name__)
 

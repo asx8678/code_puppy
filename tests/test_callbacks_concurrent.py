@@ -83,22 +83,30 @@ class TestTriggerCallbacksSync:
         result = _trigger_callbacks_sync("startup")
         assert result == ["async_result"]
 
-    def test_async_callback_in_running_loop_logs_warning(self):
-        """Lines 158-165: async callback in running loop yields None with warning."""
+    def test_async_callback_in_running_loop_schedules_task(self):
+        """async callback in running loop is scheduled via asyncio.ensure_future.
+
+        New behavior (after asyncio.gather improvement): instead of returning None
+        and logging a warning, _trigger_callbacks_sync schedules the coroutine as a
+        Task so it runs later in the event loop. The result is an asyncio.Task, not None.
+        """
+        import asyncio as _asyncio
 
         async def async_cb():
-            return "should_not_run"
+            return "should_run_eventually"
 
         register_callback("startup", async_cb)
 
         async def run_inside_loop():
             # This calls _trigger_callbacks_sync while an event loop is running
-            with patch("code_puppy.callbacks.logger") as mock_logger:
-                result = _trigger_callbacks_sync("startup")
-                # The async callback can't be awaited, so result is None
-                assert result == [None]
-                # Warning was logged
-                mock_logger.warning.assert_called()
+            result = _trigger_callbacks_sync("startup")
+            # New behavior: returns a scheduled Task, not None
+            assert len(result) == 1
+            assert isinstance(result[0], _asyncio.Task), (
+                f"Expected asyncio.Task, got {type(result[0])}: {result[0]}"
+            )
+            # Let the task run to completion
+            await _asyncio.sleep(0)
 
         asyncio.run(run_inside_loop())
 

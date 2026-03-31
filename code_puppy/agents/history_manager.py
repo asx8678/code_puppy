@@ -6,7 +6,6 @@ This module handles message history operations including:
 - History validation and cleanup
 """
 
-import dataclasses
 from typing import Any, List, Set
 
 from pydantic_ai.messages import (

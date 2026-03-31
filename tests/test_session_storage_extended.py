@@ -290,6 +290,9 @@ class TestSessionStorageExtended:
         self, tmp_path: Path, token_estimator: Callable[[Any], int]
     ):
         """Test saving and loading complex data structures."""
+        # msgpack does not preserve Python tuples — they round-trip as lists.
+        # Session history should only contain pydantic-ai message objects in
+        # production, so tuple types are not a supported session payload.
         complex_history = [
             {
                 "role": "user",
@@ -299,7 +302,7 @@ class TestSessionStorageExtended:
             ["list", "of", "items"],
             42,
             None,
-            ("tuple", "data"),
+            ["list", "not", "tuple"],  # tuples become lists through msgpack
         ]
 
         save_session(
