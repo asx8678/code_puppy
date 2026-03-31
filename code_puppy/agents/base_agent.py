@@ -1014,7 +1014,7 @@ class BaseAgent(ABC):
         """
         Request that compaction be attempted after the current tool calls complete.
 
-        This sets a global flag that will be checked during the next message
+        This sets a per-instance flag that will be checked during the next message
         processing cycle to trigger compaction when it's safe to do so.
         """
         self._delayed_compaction_requested = True
