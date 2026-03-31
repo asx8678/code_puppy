@@ -6,16 +6,14 @@ configuration/validation, and the top-level run dispatch.
 """
 
 import argparse
-import asyncio
 import os
 import sys
 import time
-import traceback
 
 from dbos import DBOS, DBOSConfig
 from rich.console import Console
 
-from code_puppy import __version__, callbacks, plugins
+from code_puppy import __version__, callbacks
 from code_puppy.config import (
     DBOS_DATABASE_URL,
     ensure_config_exists,
@@ -25,8 +23,6 @@ from code_puppy.config import (
 from code_puppy.http_utils import find_available_port
 from code_puppy.keymap import KeymapError, validate_cancel_agent_key
 from code_puppy.terminal_utils import (
-    print_truecolor_warning,
-    reset_unix_terminal,
     reset_windows_terminal_full,
 )
 from code_puppy.version_checker import default_version_mismatch_behavior
@@ -110,7 +106,9 @@ class AppRunner:
 
         # Legacy renderer for backward compatibility (emits via get_global_queue)
         message_queue = get_global_queue()
-        message_renderer = SynchronousInteractiveRenderer(message_queue, display_console)
+        message_renderer = SynchronousInteractiveRenderer(
+            message_queue, display_console
+        )
         message_renderer.start()
 
         # New MessageBus renderer for structured messages (tools emit here)
@@ -216,7 +214,9 @@ class AppRunner:
                     from code_puppy.model_factory import ModelFactory
 
                     models_config = ModelFactory.load_config()
-                    available_models = list(models_config.keys()) if models_config else []
+                    available_models = (
+                        list(models_config.keys()) if models_config else []
+                    )
                     emit_error(f"Model '{model_name}' not found")
                     emit_system_message(
                         f"Available models: {', '.join(available_models)}"
@@ -286,7 +286,10 @@ class AppRunner:
 
         current_version = __version__
         no_version_update = os.getenv("NO_VERSION_UPDATE", "").lower() in (
-            "1", "true", "yes", "on",
+            "1",
+            "true",
+            "yes",
+            "on",
         )
         if no_version_update:
             emit_system_message(f"Current version: {current_version}")
@@ -337,7 +340,9 @@ class AppRunner:
                 await execute_single_prompt(initial_command, message_renderer)
             else:
                 # Default to interactive mode (no args = same as -i)
-                await interactive_mode(message_renderer, initial_command=initial_command)
+                await interactive_mode(
+                    message_renderer, initial_command=initial_command
+                )
         finally:
             if message_renderer:
                 message_renderer.stop()

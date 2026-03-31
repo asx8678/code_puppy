@@ -60,7 +60,6 @@ def _base_main_patches():
         "code_puppy.app_runner.initialize_command_history_file": MagicMock(),
         "code_puppy.app_runner.get_use_dbos": MagicMock(return_value=False),
         "code_puppy.app_runner.default_version_mismatch_behavior": MagicMock(),
-        "code_puppy.app_runner.print_truecolor_warning": MagicMock(),
         "code_puppy.cli_runner.reset_unix_terminal": MagicMock(),
         "code_puppy.app_runner.reset_windows_terminal_full": MagicMock(),
         "code_puppy.app_runner.callbacks": MagicMock(

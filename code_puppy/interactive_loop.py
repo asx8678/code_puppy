@@ -5,9 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from code_puppy.agents import get_current_agent
 from code_puppy.command_line.attachments import parse_prompt_attachments
-from code_puppy.command_line.clipboard import get_clipboard_manager
 from code_puppy.config import (
     AUTOSAVE_DIR,
     COMMAND_HISTORY_FILE,
@@ -21,7 +19,8 @@ from code_puppy.terminal_utils import (
     reset_windows_terminal_full,
 )
 
-# Import prompt runner helpers so tests can patch them at this module level
+from code_puppy.agents import get_current_agent  # noqa: F401
+from code_puppy.command_line.clipboard import get_clipboard_manager  # noqa: F401
 from code_puppy.prompt_runner import run_prompt_with_attachments  # noqa: F401
 
 
@@ -86,7 +85,6 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
             execute_shell_passthrough(initial_command)
             initial_command = None
 
-    # Initialize the runtime agent manager
     if initial_command:
         from code_puppy.agents import get_current_agent
         from code_puppy.messaging import emit_info, emit_success, emit_system_message
@@ -392,7 +390,9 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
 
                             # Load the session (including persisted compacted hashes)
                             base_dir = Path(AUTOSAVE_DIR)
-                            history, compacted_hashes = load_session_with_hashes(chosen_session, base_dir)
+                            history, compacted_hashes = load_session_with_hashes(
+                                chosen_session, base_dir
+                            )
 
                             agent = get_current_agent()
                             agent.set_message_history(history)
