@@ -334,9 +334,9 @@ class TestInitialCommandPassthrough:
         mock_agent.get_user_prompt.return_value = "Enter task:"
 
         with (
-            patch("code_puppy.cli_runner.print_truecolor_warning"),
+            patch("code_puppy.interactive_loop.print_truecolor_warning"),
             patch(
-                "code_puppy.cli_runner.get_cancel_agent_display_name",
+                "code_puppy.interactive_loop.get_cancel_agent_display_name",
                 return_value="Ctrl+C",
             ),
             patch("code_puppy.messaging.emit_system_message"),
@@ -344,13 +344,13 @@ class TestInitialCommandPassthrough:
             patch("code_puppy.messaging.emit_success"),
             patch("code_puppy.messaging.emit_warning"),
             patch("code_puppy.command_line.motd.print_motd"),
-            patch("code_puppy.cli_runner.get_current_agent", return_value=mock_agent),
+            patch("code_puppy.interactive_loop.get_current_agent", return_value=mock_agent),
             patch(
                 "code_puppy.agents.agent_manager.get_current_agent",
                 return_value=mock_agent,
             ),
             patch(
-                "code_puppy.cli_runner.run_prompt_with_attachments",
+                "code_puppy.interactive_loop.run_prompt_with_attachments",
                 new_callable=AsyncMock,
             ) as mock_run_prompt,
             patch(
@@ -378,9 +378,9 @@ class TestInitialCommandPassthrough:
         mock_renderer.console = MagicMock()
 
         with (
-            patch("code_puppy.cli_runner.get_current_agent") as mock_agent,
+            patch("code_puppy.prompt_runner.get_current_agent") as mock_agent,
             patch(
-                "code_puppy.cli_runner.run_prompt_with_attachments"
+                "code_puppy.prompt_runner.run_prompt_with_attachments"
             ) as mock_run_prompt,
         ):
             asyncio.run(execute_single_prompt("!ls -la", mock_renderer))
@@ -408,9 +408,9 @@ class TestInitialCommandPassthrough:
         mock_response.all_messages.return_value = []
 
         with (
-            patch("code_puppy.cli_runner.get_current_agent"),
+            patch("code_puppy.prompt_runner.get_current_agent"),
             patch(
-                "code_puppy.cli_runner.run_prompt_with_attachments",
+                "code_puppy.prompt_runner.run_prompt_with_attachments",
                 new_callable=AsyncMock,
                 return_value=(mock_response, None),
             ),
