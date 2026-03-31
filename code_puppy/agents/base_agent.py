@@ -1053,6 +1053,36 @@ class BaseAgent(ABC):
 
         return False
 
+    def compact_messages(
+        self, messages: List[ModelMessage]
+    ) -> tuple[List[ModelMessage], dict]:
+        """Compact message history for delayed compaction.
+
+        Called when delayed compaction is triggered after tool calls complete.
+        Uses truncation to bring the context within the model's context window.
+
+        Args:
+            messages: Current message history to compact.
+
+        Returns:
+            Tuple of (compacted_messages, metadata_dict). On error, returns
+            the original messages unchanged so the agent can continue running.
+        """
+        model_max = self.get_model_context_length()
+        # Protect ~25% of context window for the upcoming response
+        protected_tokens = model_max // 4
+        try:
+            compacted = self.truncation(messages, protected_tokens=protected_tokens)
+            return compacted, {
+                "method": "truncation",
+                "original_count": len(messages),
+                "compacted_count": len(compacted),
+            }
+        except Exception as exc:
+            logger.debug("compact_messages: truncation failed, returning original: %s", exc)
+            return messages, {"method": "noop", "error": str(exc)}
+
+
     def get_pending_tool_call_count(self, messages: List[ModelMessage]) -> int:
         """
         Get the count of pending tool calls for debugging purposes.
