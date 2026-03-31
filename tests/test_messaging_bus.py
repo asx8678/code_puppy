@@ -15,7 +15,6 @@ import pytest
 from code_puppy.messaging.bus import (
     MessageBus,
     _session_id_var,
-    get_message_bus,
     get_session_context,
     set_session_context,
 )
@@ -226,7 +225,6 @@ class TestSessionContext:
 
         results = {}
         barrier = threading.Barrier(3)
-        bus = get_message_bus()
 
         def worker(tid):
             set_session_context(f"session-{tid}")
