@@ -85,7 +85,7 @@ class TestBaseAgentEdgeCases:
 
         # Should not crash
         result = agent.hash_message(msg)
-        assert isinstance(result, str)
+        assert isinstance(result, int)
 
     def test_hash_message_with_none_parts(self, agent):
         """Test hash_message when parts is None."""
@@ -97,7 +97,7 @@ class TestBaseAgentEdgeCases:
 
         # Should not crash even with missing parts attribute
         result = agent.hash_message(msg)
-        assert isinstance(result, str)
+        assert isinstance(result, int)
 
     def test_hash_message_with_corrupted_parts(self, agent):
         """Test hash_message with corrupted part objects."""
@@ -112,7 +112,7 @@ class TestBaseAgentEdgeCases:
 
         # Should not crash with corrupted parts
         result = agent.hash_message(msg)
-        assert isinstance(result, str)
+        assert isinstance(result, int)
 
     def test_stringify_message_part_with_none_part(self, agent):
         """Test stringify_message_part with None input."""
@@ -383,7 +383,7 @@ class TestBaseAgentEdgeCases:
 
         # Should not crash with circular references
         result = agent.hash_message(msg)
-        assert isinstance(result, str)
+        assert isinstance(result, int)
 
     @patch("code_puppy.model_factory.ModelFactory.get_model")
     @patch("code_puppy.model_factory.ModelFactory.load_config")

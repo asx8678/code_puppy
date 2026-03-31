@@ -160,6 +160,26 @@ class TestGetModelName:
         assert agent.get_model_name() == "global-model"
 
 
+class TestCleanBinaries:
+    """Tests for _clean_binaries (lines 340, 344)."""
+
+    def test_removes_binary_content(self, agent):
+        binary = BinaryContent(data=b"hello", media_type="image/png")
+        part = MagicMock()
+        part.content = ["text", binary]
+        msg = MagicMock(parts=[part])
+        agent._clean_binaries([msg])
+        assert binary not in part.content
+        assert "text" in part.content
+
+    def test_no_list_content_unchanged(self, agent):
+        part = MagicMock()
+        part.content = "just a string"
+        msg = MagicMock(parts=[part])
+        agent._clean_binaries([msg])
+        assert part.content == "just a string"
+
+
 class TestStringifyPartExtended:
     """Tests for _stringify_part branches (lines 376-386)."""
 
@@ -2066,6 +2086,16 @@ class TestRunWithMcpAdditional:
         ):
             mock_prep.return_value = MagicMock(user_prompt="prompt")
             await agent.run_with_mcp("describe", link_attachments=[img])
+
+
+class TestCleanBinariesListContent:
+    """Test _clean_binaries with list content containing binaries (line 340)."""
+
+    def test_part_without_content_attr(self, agent):
+        part = MagicMock(spec=[])
+        msg = MagicMock(parts=[part])
+        result = agent._clean_binaries([msg])
+        assert result == [msg]
 
 
 class TestCompactMessages:

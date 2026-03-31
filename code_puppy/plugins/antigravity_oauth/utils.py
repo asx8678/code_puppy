@@ -59,7 +59,6 @@ def save_antigravity_models(models: Dict[str, Any]) -> bool:
         models_path = get_antigravity_models_path()
         with open(models_path, "w", encoding="utf-8") as f:
             json.dump(models, f, indent=2)
-        models_path.chmod(0o600)
         return True
     except Exception as e:
         logger.error("Failed to save Antigravity models: %s", e)

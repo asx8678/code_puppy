@@ -373,7 +373,6 @@ def save_claude_models(models: Dict[str, Any]) -> bool:
         models_path = get_claude_models_path()
         with open(models_path, "w", encoding="utf-8") as handle:
             json.dump(models, handle, indent=2)
-        models_path.chmod(0o600)
         return True
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Failed to save Claude models: %s", exc)
@@ -412,6 +411,7 @@ def exchange_code_for_tokens(
             timeout=30,
         )
         logger.info("Token exchange response: %s", response.status_code)
+        logger.debug("Response body: %s", response.text)
         if response.status_code == 200:
             content_type = response.headers.get("content-type", "")
             if not content_type.startswith("application/json"):
