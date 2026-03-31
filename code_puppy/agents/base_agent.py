@@ -1,6 +1,7 @@
 """Base agent configuration class for defining agent properties."""
 
 import asyncio
+import functools
 import dataclasses
 import json
 import logging
@@ -41,6 +42,7 @@ from pydantic_ai.durable_exec.dbos import DBOSAgent
 
 # Rust acceleration bridge (optional - falls back to Python)
 from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
+
 
 if RUST_AVAILABLE:
     from code_puppy._core_bridge import (
@@ -102,6 +104,8 @@ from code_puppy.tools.agent_tools import _active_subagent_tasks
 from code_puppy.tools.command_runner import (
     is_awaiting_user_input,
 )
+
+_RUST_ENABLED: bool = is_rust_enabled()
 
 logger = logging.getLogger(__name__)
 
@@ -503,6 +507,7 @@ class BaseAgent(ABC):
 
         return max(1, total_tokens)
 
+    @functools.cached_property
     def estimate_context_overhead_tokens(self) -> int:
         """
         Estimate the token overhead from system prompt and tool definitions.
@@ -685,13 +690,15 @@ class BaseAgent(ABC):
         return bool(has_content or has_content_delta)
 
     def filter_huge_messages(self, messages: List[ModelMessage]) -> List[ModelMessage]:
-        if is_rust_enabled():
+        if _RUST_ENABLED:
             try:
                 serialized = serialize_messages_for_rust(messages)
                 result = prune_and_filter(serialized, 50000)
                 return [messages[i] for i in result.surviving_indices]
             except Exception as exc:
-                logger.debug("Rust fallback in filter_huge_messages: %s", exc, exc_info=True)
+                logger.debug(
+                    "Rust fallback in filter_huge_messages: %s", exc, exc_info=True
+                )
         filtered = [m for m in messages if self.estimate_tokens_for_message(m) < 50000]
         pruned = self.prune_interrupted_tool_calls(filtered)
         return pruned
@@ -781,7 +788,7 @@ class BaseAgent(ABC):
         protected_tokens_limit = get_protected_token_count()
 
         # --- Rust fast path ------------------------------------------------
-        if is_rust_enabled():
+        if _RUST_ENABLED:
             try:
                 # Serialize messages and get per-message token counts
                 serialized = serialize_messages_for_rust(messages)
@@ -1083,7 +1090,7 @@ class BaseAgent(ABC):
 
         # Rust fast path — prune_and_filter handles mismatched tool-call pruning
         # in a single pass, plus filters empty thinking parts and trailing responses
-        if is_rust_enabled():
+        if _RUST_ENABLED:
             try:
                 serialized = serialize_messages_for_rust(messages)
                 result = prune_and_filter(serialized, 999_999_999)
@@ -1138,7 +1145,7 @@ class BaseAgent(ABC):
         model_max = self.get_model_context_length()
 
         # Use Rust batch processing when available (single pass for tokens + hashes)
-        if is_rust_enabled():
+        if _RUST_ENABLED:
             try:
                 serialized = serialize_messages_for_rust(messages)
                 # Extract actual tool definitions for accurate context overhead
@@ -1178,7 +1185,9 @@ class BaseAgent(ABC):
                 context_overhead = batch_result.context_overhead_tokens
                 self._rust_per_message_tokens = batch_result.per_message_tokens
             except Exception as exc:
-                logger.debug("Rust fallback in message_history_processor: %s", exc, exc_info=True)
+                logger.debug(
+                    "Rust fallback in message_history_processor: %s", exc, exc_info=True
+                )
                 # Fall back to Python on any Rust error
                 message_tokens = sum(
                     self.estimate_tokens_for_message(msg) for msg in messages
@@ -1224,9 +1233,11 @@ class BaseAgent(ABC):
                 protected_tokens = get_protected_token_count()
                 filtered_messages = self.filter_huge_messages(messages)
                 # Pass cached per_message_tokens when available from Rust batch processing
-                cached_tokens = getattr(self, '_rust_per_message_tokens', None)
+                cached_tokens = getattr(self, "_rust_per_message_tokens", None)
                 result_messages = self.truncation(
-                    filtered_messages, protected_tokens, per_message_tokens=cached_tokens
+                    filtered_messages,
+                    protected_tokens,
+                    per_message_tokens=cached_tokens,
                 )
                 # Track dropped messages by hash so message_history_accumulator
                 # won't re-inject them from pydantic-ai's full message list on
@@ -1287,7 +1298,7 @@ class BaseAgent(ABC):
         emit_info("Truncating message history to manage token usage")
 
         # Try Rust fast path
-        if is_rust_enabled():
+        if _RUST_ENABLED:
             try:
                 if per_message_tokens is not None:
                     # Reuse pre-computed tokens from caller (e.g., message_history_processor)
@@ -1300,7 +1311,9 @@ class BaseAgent(ABC):
                 second_has_thinking = len(messages) > 1 and any(
                     isinstance(p, ThinkingPart) for p in messages[1].parts
                 )
-                kept = rust_truncation_indices(tokens, protected_tokens, second_has_thinking)
+                kept = rust_truncation_indices(
+                    tokens, protected_tokens, second_has_thinking
+                )
                 result = [messages[i] for i in kept]
                 result = self.prune_interrupted_tool_calls(result)
                 return result

@@ -284,11 +284,13 @@ def _get_json_agents_pinned_to_model(model_name: str) -> list:
 )
 def handle_pin_model_command(command: str) -> bool:
     """Pin a specific model to an agent."""
+    from code_puppy.agents.agent_manager import get_agent_descriptions
     from code_puppy.agents.json_agent import discover_json_agents
     from code_puppy.command_line.model_picker_completion import load_model_names
     from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
 
     tokens = command.split()
+    builtin_agents = get_agent_descriptions()
 
     if len(tokens) != 3:
         emit_warning("Usage: /pin_model <agent-name> <model-name>")
@@ -296,11 +298,6 @@ def handle_pin_model_command(command: str) -> bool:
         # Show available models and agents
         available_models = load_model_names()
         json_agents = discover_json_agents()
-
-        # Get built-in agents
-        from code_puppy.agents.agent_manager import get_agent_descriptions
-
-        builtin_agents = get_agent_descriptions()
 
         emit_info("Available models:")
         for model in available_models:
@@ -334,11 +331,6 @@ def handle_pin_model_command(command: str) -> bool:
 
     # Check if this is a JSON agent or a built-in Python agent
     json_agents = discover_json_agents()
-
-    # Get list of available built-in agents
-    from code_puppy.agents.agent_manager import get_agent_descriptions
-
-    builtin_agents = get_agent_descriptions()
 
     is_json_agent = agent_name in json_agents
     is_builtin_agent = agent_name in builtin_agents
@@ -410,22 +402,19 @@ def handle_pin_model_command(command: str) -> bool:
 )
 def handle_unpin_command(command: str) -> bool:
     """Unpin a model from an agent (resets to default)."""
+    from code_puppy.agents.agent_manager import get_agent_descriptions
     from code_puppy.agents.json_agent import discover_json_agents
     from code_puppy.config import get_agent_pinned_model
     from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
 
     tokens = command.split()
+    builtin_agents = get_agent_descriptions()
 
     if len(tokens) != 2:
         emit_warning("Usage: /unpin <agent-name>")
 
         # Show available agents
         json_agents = discover_json_agents()
-
-        # Get built-in agents
-        from code_puppy.agents.agent_manager import get_agent_descriptions
-
-        builtin_agents = get_agent_descriptions()
 
         if builtin_agents:
             emit_info("Available built-in agents:")
@@ -456,11 +445,6 @@ def handle_unpin_command(command: str) -> bool:
 
     # Check if this is a JSON agent or a built-in Python agent
     json_agents = discover_json_agents()
-
-    # Get list of available built-in agents
-    from code_puppy.agents.agent_manager import get_agent_descriptions
-
-    builtin_agents = get_agent_descriptions()
 
     # Find matching agent (case-insensitive)
     agent_name = None
