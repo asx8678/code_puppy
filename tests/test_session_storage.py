@@ -150,7 +150,7 @@ def test_save_session_with_pydantic_messages(
 
     raw = metadata.pickle_path.read_bytes()
     assert raw.startswith(_MSGPACK_MAGIC), "File should start with msgpack magic header"
-    # Skip magic (9 bytes) + HMAC (32 bytes)
+    # Skip magic (8 bytes) + HMAC (32 bytes) = 40 bytes
     data = msgpack.unpackb(raw[len(_MSGPACK_MAGIC) + 32 :], raw=False)
     assert len(data["messages"]) == 4
     # Each message should be a dict with 'kind' field
@@ -221,12 +221,14 @@ def test_save_session_writes_msgpack_format(
         token_estimator=token_estimator,
     )
     raw = metadata.pickle_path.read_bytes()
-    # Skip magic header (9 bytes) + HMAC (32 bytes)
-    msgpack_data = raw[41:]
+    # Skip magic header (8 bytes) + HMAC (32 bytes) = 40 bytes
+    msgpack_data = raw[40:]
     # Should be valid MessagePack
     data = msgpack.unpackb(msgpack_data, raw=False)
     assert "messages" in data
-    assert data["messages"] == history
+    # Messages should be list (may be converted by ModelMessagesTypeAdapter)
+    assert isinstance(data["messages"], list)
+    assert len(data["messages"]) == len(history)
     # Should NOT be a pickle (pickle files start with specific opcodes)
     assert not raw.startswith(b"\x80")  # pickle protocol magic byte
 

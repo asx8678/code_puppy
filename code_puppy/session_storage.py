@@ -71,9 +71,8 @@ def _load_raw_bytes(raw: bytes) -> Any:
     """Deserialize session file bytes, handling msgpack, legacy-signed, and plain pickle."""
     # New msgpack format: magic header followed by msgpack payload + HMAC
     if raw.startswith(_MSGPACK_MAGIC):
-        # Format: MAGIC (9 bytes) + HMAC (32 bytes) + msgpack payload
+        # Format: MAGIC (8 bytes) + HMAC (32 bytes) + msgpack payload
         offset = len(_MSGPACK_MAGIC) + 32
-        payload = raw[len(_MSGPACK_MAGIC) : offset]
         msgpack_data = raw[offset:]
         
         # Verify HMAC integrity (using empty key for now - can be enhanced with key management)
