@@ -66,23 +66,24 @@ def _fire_callback(event_type: str, event_data: Any, session_id: Optional[str]) 
 # Token Estimation
 # =============================================================================
 
+from code_puppy.token_utils import estimate_token_count as _estimate_token_count
+
 
 def _estimate_tokens(content: str) -> int:
     """Estimate token count from content string.
 
-    Uses a rough heuristic: ~4 characters per token for English text.
-    This is a ballpark estimate - actual tokenization varies by model.
+    Delegates to the shared token_utils heuristic (1 token per 2.5 chars)
+    so all parts of the codebase use the same formula.
 
     Args:
         content: The text content to estimate tokens for
 
     Returns:
-        Estimated token count (minimum 1 for non-empty content)
+        Estimated token count (0 for empty content, minimum 1 otherwise)
     """
     if not content:
         return 0
-    # Rough estimate: 4 chars = 1 token, minimum 1 for any content
-    return max(1, len(content) // 4)
+    return _estimate_token_count(content)
 
 
 # =============================================================================
