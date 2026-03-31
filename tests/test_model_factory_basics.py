@@ -4,11 +4,15 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from code_puppy.model_factory import ModelFactory
+from code_puppy.model_factory import ModelFactory, clear_config_cache
 
 
 class TestModelFactoryBasics:
     """Test core functionality of ModelFactory."""
+
+    def setup_method(self):
+        """Clear config cache before each test to prevent cross-test contamination."""
+        clear_config_cache()
 
     @patch("code_puppy.model_factory.pathlib.Path.exists", return_value=False)
     @patch("code_puppy.model_factory.callbacks.get_callbacks", return_value=[])
