@@ -10,6 +10,8 @@ from pathlib import Path
 import msgpack
 import pytest
 
+from unittest.mock import patch
+
 from code_puppy.session_storage import (
     _MSGPACK_MAGIC,
     _compute_hmac,
@@ -17,6 +19,16 @@ from code_puppy.session_storage import (
     load_session,
     save_session,
 )
+
+# Fixed 32-byte test key used to mock the per-install HMAC key
+_TEST_HMAC_KEY = b"a" * 32
+
+
+@pytest.fixture(autouse=True)
+def _mock_hmac_key():
+    """Patch _get_hmac_key so tests don't touch the real filesystem key."""
+    with patch("code_puppy.session_storage._get_hmac_key", return_value=_TEST_HMAC_KEY):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +43,7 @@ def _token_estimator(msg: object) -> int:
 def _make_msgpack_data(data: dict) -> bytes:
     """Create properly formatted msgpack session data with HMAC."""
     msgpack_bytes = msgpack.packb(data, use_bin_type=True)
-    hmac_sig = _compute_hmac(b"", msgpack_bytes)
+    hmac_sig = _compute_hmac(_TEST_HMAC_KEY, msgpack_bytes)
     return _MSGPACK_MAGIC + hmac_sig + msgpack_bytes
 
 
@@ -44,15 +56,15 @@ class TestComputeHmac:
     def test_returns_32_bytes(self) -> None:
         """HMAC-SHA256 should return 32 bytes."""
         data = b"test data"
-        result = _compute_hmac(b"", data)
+        result = _compute_hmac(b"key", data)
         assert len(result) == 32
         assert isinstance(result, bytes)
 
     def test_same_input_same_output(self) -> None:
         """HMAC should be deterministic for same input."""
         data = b"consistent"
-        hmac1 = _compute_hmac(b"", data)
-        hmac2 = _compute_hmac(b"", data)
+        hmac1 = _compute_hmac(b"key", data)
+        hmac2 = _compute_hmac(b"key", data)
         assert hmac1 == hmac2
 
     def test_different_key_different_hmac(self) -> None:
@@ -165,7 +177,7 @@ class TestSaveLoadIntegration:
         msgpack_data = raw[offset + 32 :]
 
         # Verify HMAC
-        expected_hmac = _compute_hmac(b"", msgpack_data)
+        expected_hmac = _compute_hmac(_TEST_HMAC_KEY, msgpack_data)
         assert hmac.compare_digest(stored_hmac, expected_hmac)
 
     def test_load_session_round_trip(self, tmp_path: Path) -> None:

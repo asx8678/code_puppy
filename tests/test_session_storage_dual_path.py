@@ -22,6 +22,7 @@ from code_puppy.session_storage import (
     _MSGPACK_MAGIC,
     SessionMetadata,
     _compute_hmac,
+    _get_hmac_key,
     _deserialize_messages,
     _load_raw_bytes,
     _msgpack_default,
@@ -100,7 +101,7 @@ class TestLoadRawBytes:
         """Loading msgpack format with valid HMAC succeeds."""
         payload = {"messages": [{"kind": "request", "content": "hi"}]}
         msgpack_data = msgpack.packb(payload, use_bin_type=True)
-        hmac_sig = _compute_hmac(b"", msgpack_data)
+        hmac_sig = _compute_hmac(_get_hmac_key(), msgpack_data)
         raw = _MSGPACK_MAGIC + hmac_sig + msgpack_data
         result = _load_raw_bytes(raw)
         assert isinstance(result, dict)

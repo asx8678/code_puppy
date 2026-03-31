@@ -74,23 +74,35 @@ def _compute_hmac(key: bytes, data: bytes) -> bytes:
 def _get_or_create_hmac_key() -> bytes:
     """Get or create a per-installation HMAC key for session integrity.
 
-    The key is stored at ~/.code_puppy/.session_hmac_key with chmod 0o600.
-    Generated once on first run using os.urandom(32).
+    Uses atomic file creation (O_CREAT|O_EXCL via open mode 'xb') to prevent
+    TOCTOU races when multiple processes start simultaneously. The key is
+    stored at DATA_DIR/.session_hmac_key with chmod 0o600.
     """
     from code_puppy import config  # local import to avoid circular deps
 
     key_path = Path(config.DATA_DIR) / ".session_hmac_key"
-    if key_path.exists():
-        return key_path.read_bytes()
-    key = os.urandom(32)
     key_path.parent.mkdir(parents=True, exist_ok=True)
-    key_path.write_bytes(key)
-    key_path.chmod(0o600)
-    return key
+    try:
+        with key_path.open("xb") as f:  # O_CREAT|O_EXCL — atomic, prevents TOCTOU
+            key = os.urandom(32)
+            f.write(key)
+        key_path.chmod(0o600)
+        return key
+    except FileExistsError:
+        key = key_path.read_bytes()
+        if len(key) != 32:
+            logger.warning(
+                "HMAC key file at %s is corrupted (%d bytes, expected 32), regenerating",
+                key_path,
+                len(key),
+            )
+            key = os.urandom(32)
+            key_path.write_bytes(key)
+            key_path.chmod(0o600)
+        return key
 
 
-# Cached HMAC key — lazily initialised on first use.
-_HMAC_KEY: bytes | None = None
+_HMAC_KEY: bytes | None = None  # lazily populated on first call
 
 
 def _get_hmac_key() -> bytes:
