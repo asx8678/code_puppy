@@ -29,11 +29,24 @@ _BUILTIN_DEFAULT = 2
 # Module-level per-session override; None means "use config file value"
 _session_max: int | None = None
 
+# Cached result of reading the config file so we only parse it once per session
+_cached_config: int | None = None
+
 
 def _read_config_max() -> int:
-    """Read max_parallelism from the TOML config, with graceful fallback."""
+    """Read max_parallelism from the TOML config, with graceful fallback.
+
+    The result is cached after the first read so the file is not parsed on
+    every prompt injection.
+    """
+    global _cached_config
+    if _cached_config is not None:
+        return _cached_config
+
+    result = _BUILTIN_DEFAULT
     if not _CONFIG_PATH.exists():
-        return _BUILTIN_DEFAULT
+        _cached_config = result
+        return _cached_config
     try:
         try:
             import tomllib  # Python 3.11+
@@ -43,21 +56,28 @@ def _read_config_max() -> int:
             except ImportError:
                 # Last-resort: manual parse of the one key we need
                 text = _CONFIG_PATH.read_text()
-                for line in text.splitlines():
-                    line = line.strip()
-                    if line.startswith("max_parallelism"):
-                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
-                        return int(val)
-                return _BUILTIN_DEFAULT
+                for raw in text.splitlines():
+                    line = raw.strip()
+                    key, _, value = line.partition("=")
+                    if key.strip() == "max_parallelism":
+                        result = int(value.strip().strip('"').strip("'"))
+                        break
+                _cached_config = result
+                return _cached_config
 
         with open(_CONFIG_PATH, "rb") as fh:
             data = tomllib.load(fh)
-        return int(data.get("pack_leader", {}).get("max_parallelism", _BUILTIN_DEFAULT))
+        result = int(
+            data.get("pack_leader", {}).get("max_parallelism", _BUILTIN_DEFAULT)
+        )
     except Exception as exc:
         logger.warning(
             "pack_parallelism: could not read config %s: %s", _CONFIG_PATH, exc
         )
-        return _BUILTIN_DEFAULT
+        result = _BUILTIN_DEFAULT
+
+    _cached_config = result
+    return _cached_config
 
 
 def _effective_max() -> int:
@@ -93,7 +113,7 @@ register_callback("load_prompt", _prompt_addition)
 # custom_command hook — /pack-parallel N
 # ---------------------------------------------------------------------------
 
-_COMMAND_NAMES = {"pack-parallel", "pack-parallelism", "pack-par"}
+_COMMAND_NAMES = {"pack-parallel", "pack-par"}
 
 
 def _handle_command(command: str, name: str):
@@ -136,6 +156,10 @@ def _handle_command(command: str, name: str):
     if new_val < 1:
         emit_error("pack-parallel: value must be at least 1")
         return True
+
+    if new_val > 32:
+        emit_info(f"⚠️ /pack-parallel: {new_val} is very high, capping at 32")
+        new_val = 32
 
     _session_max = new_val
     emit_info(
