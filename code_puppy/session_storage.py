@@ -8,7 +8,6 @@ is better than complex, nested side effects are worse than deliberate helpers.
 
 from __future__ import annotations
 
-import dataclasses
 import json
 import pickle
 from dataclasses import dataclass
@@ -17,15 +16,11 @@ from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple
 
 import msgpack
-from pydantic import TypeAdapter
-from pydantic_ai.messages import ModelMessage
 
 # ----- msgpack helpers -----
 
 # Magic header that marks files written in the new msgpack format.
 _MSGPACK_MAGIC = b"MSGPACK\x01"
-
-_message_adapter: TypeAdapter[ModelMessage] = TypeAdapter(ModelMessage)
 
 
 def _msgpack_default(obj: Any) -> Any:
@@ -36,18 +31,25 @@ def _msgpack_default(obj: Any) -> Any:
 
 
 def _deserialize_messages(raw_messages: list) -> list:
-    """Convert dicts back to pydantic-ai message objects.
+    """Restore serialized dicts back to pydantic-ai message objects.
 
-    If messages are already pydantic-ai objects (e.g. from legacy pickle),
-    return them as-is.
+    Handles three cases:
+    - dicts with 'kind' key: new msgpack format, validate via TypeAdapter
+    - already-instantiated ModelRequest/ModelResponse: legacy pickle format
+    - plain values (e.g. strings in tests): return as-is
     """
-    result = []
-    for m in raw_messages:
-        if isinstance(m, dict) and "kind" in m:
-            result.append(_message_adapter.validate_python(m))
-        else:
-            result.append(m)  # Already a proper object (legacy pickle path)
-    return result
+    if not raw_messages:
+        return raw_messages
+    first = raw_messages[0]
+    # New format: list of dicts with 'kind' discriminator
+    if isinstance(first, dict) and "kind" in first:
+        try:
+            from pydantic_ai.messages import ModelMessagesTypeAdapter
+
+            return list(ModelMessagesTypeAdapter.validate_python(raw_messages))
+        except Exception:
+            return raw_messages
+    return raw_messages
 
 
 # ----- legacy pickle helpers (load path only) -----
@@ -135,15 +137,18 @@ def save_session(
     ensure_directory(base_dir)
     paths = build_session_paths(base_dir, session_name)
 
-    # Convert pydantic-ai message objects to plain dicts so msgpack can handle them.
-    # Plain strings / ints / etc. pass through dataclasses.asdict() unchanged because
-    # they are not dataclasses – we guard with dataclasses.is_dataclass().
-    serializable_history = [
-        dataclasses.asdict(m)
-        if dataclasses.is_dataclass(m) and not isinstance(m, type)
-        else m
-        for m in history
-    ]
+    # Convert pydantic-ai message objects to msgpack-serializable dicts.
+    # ModelMessagesTypeAdapter handles ModelRequest/ModelResponse dataclasses
+    # that msgpack cannot serialize natively.
+    try:
+        from pydantic_ai.messages import ModelMessagesTypeAdapter
+
+        serializable_history = ModelMessagesTypeAdapter.dump_python(
+            history, mode="json"
+        )
+    except Exception:
+        # Fallback for non-pydantic history (e.g. tests with plain strings)
+        serializable_history = history
 
     payload: dict = {
         "messages": serializable_history,
@@ -190,7 +195,9 @@ def _parse_session_payload(data: Any) -> Tuple[SessionHistory, List]:
     if isinstance(data, dict) and "messages" in data:
         messages = _deserialize_messages(data["messages"])
         return messages, data.get("compacted_hashes", [])
-    # Legacy format: raw list only (already objects from pickle)
+    # Legacy format: raw list only
+    if isinstance(data, list):
+        return _deserialize_messages(data), []
     return data, []
 
 
