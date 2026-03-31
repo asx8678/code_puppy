@@ -64,6 +64,7 @@ def _generate_dbos_workflow_id(base_id: str) -> str:
 def _generate_session_hash_suffix() -> str:
     """Generate a unique session ID suffix using uuid4 for collision safety."""
     import uuid
+
     return uuid.uuid4().hex[:8]
 
 
