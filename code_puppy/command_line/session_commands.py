@@ -9,7 +9,11 @@ from pathlib import Path
 
 from code_puppy.command_line.command_registry import register_command
 from code_puppy.config import CONTEXTS_DIR
-from code_puppy.session_storage import list_sessions, load_session, load_session_with_hashes, save_session
+from code_puppy.session_storage import (
+    list_sessions,
+    load_session_with_hashes,
+    save_session,
+)
 
 
 # Import get_commands_help from command_handler to avoid circular imports
@@ -276,8 +280,7 @@ def handle_load_context_command(command: str) -> bool:
 
     agent = get_current_agent()
     agent.set_message_history(history)
-    if compacted_hashes:
-        agent.restore_compacted_hashes(compacted_hashes)
+    agent.restore_compacted_hashes(compacted_hashes)
     total_tokens = sum(agent.estimate_tokens_for_message(m) for m in history)
 
     # Rotate autosave id to avoid overwriting any existing autosave

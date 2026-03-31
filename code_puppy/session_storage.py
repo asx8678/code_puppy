@@ -362,8 +362,7 @@ async def restore_autosave_interactively(base_dir: Path) -> None:
 
     agent = get_current_agent()
     agent.set_message_history(history)
-    if compacted_hashes:
-        agent.restore_compacted_hashes(compacted_hashes)
+    agent.restore_compacted_hashes(compacted_hashes)
 
     # Set current autosave session id so subsequent autosaves overwrite this session
     try:
