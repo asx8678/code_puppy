@@ -80,7 +80,11 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.coverage.run]
+branch = true
 omit = ["code_puppy/main.py"]
+
+[tool.coverage.report]
+fail_under = 40
 
 [tool.uv]
 python-preference = "only-managed"

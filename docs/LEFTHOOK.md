@@ -10,7 +10,7 @@ This repo uses Lefthook to run fast, low-drama git hooks.
   - ruff check --fix on staged `*.py`
   - pnpm check (only if pnpm is installed)
 - pre-push
-  - pytest (via `uv run` if available, fallback to `pytest`)
+  - *(removed — tests run in CI only via `.github/workflows/ci.yml`)*
 
 ## Smart fallbacks
 
@@ -26,7 +26,7 @@ lefthook install
 
 # run manually
 lefthook run pre-commit
-lefthook run pre-push
+# Note: pre-push hook is inactive — tests run in CI only
 ```
 
 If `lefthook` isn’t installed, commits still work — but hooks won’t run. Enforcement should also exist in CI.
