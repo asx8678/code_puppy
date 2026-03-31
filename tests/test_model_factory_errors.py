@@ -4,11 +4,15 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
-from code_puppy.model_factory import ModelFactory, get_custom_config
+from code_puppy.model_factory import ModelFactory, clear_config_cache, get_custom_config
 
 
 class TestModelFactoryErrors:
     """Test error handling in ModelFactory - focus on exception paths."""
+
+    def setup_method(self):
+        """Clear config cache before each test to prevent cross-test contamination."""
+        clear_config_cache()
 
     def test_get_model_invalid_name(self):
         """Test get_model() with completely invalid model name."""

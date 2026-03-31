@@ -417,6 +417,12 @@ class TestGetCustomConfig:
 class TestLoadConfigExtended:
     """Extended tests for ModelFactory.load_config()."""
 
+    def setup_method(self):
+        """Clear config cache before each test to prevent cross-test contamination."""
+        from code_puppy.model_factory import clear_config_cache
+
+        clear_config_cache()
+
     def test_load_config_multiple_callbacks_warning(self):
         """Test warning is logged when multiple callbacks are registered."""
         from code_puppy.model_factory import ModelFactory
