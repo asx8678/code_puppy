@@ -712,8 +712,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
 
                             agent = get_current_agent()
                             agent.set_message_history(history)
-                            if compacted_hashes:
-                                agent.restore_compacted_hashes(compacted_hashes)
+                            agent.restore_compacted_hashes(compacted_hashes)
 
                             # Set current autosave session
                             set_current_autosave_from_session_name(chosen_session)
