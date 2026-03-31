@@ -14,7 +14,7 @@ import json
 import pickle
 import struct
 from pathlib import Path
-from typing import Any, Callable, List
+from typing import Any, List
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -96,10 +96,9 @@ class TestTryDecodeRustSession:
             + compacted_json
         )
 
-        with patch(
-            "code_puppy.session_storage.deserialize_session", None
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=False
+        with (
+            patch("code_puppy.session_storage.deserialize_session", None),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=False),
         ):
             with pytest.raises(ValueError, match="Rust is not available"):
                 _try_decode_rust_session(raw)
@@ -117,10 +116,9 @@ class TestTryDecodeRustSession:
         )
 
         mock_deser = MagicMock(return_value=[])
-        with patch(
-            "code_puppy.session_storage.deserialize_session", mock_deser
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=False
+        with (
+            patch("code_puppy.session_storage.deserialize_session", mock_deser),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=False),
         ):
             with pytest.raises(ValueError, match="Rust is not available"):
                 _try_decode_rust_session(raw)
@@ -130,10 +128,9 @@ class TestTryDecodeRustSession:
         raw = _RUST_SESSION_HEADER + b"\x00\x00\x00\x05" + b"\xff\xfe"  # truncated
 
         mock_deser = MagicMock(side_effect=Exception("bad msgpack"))
-        with patch(
-            "code_puppy.session_storage.deserialize_session", mock_deser
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=True
+        with (
+            patch("code_puppy.session_storage.deserialize_session", mock_deser),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=True),
         ):
             with pytest.raises(ValueError, match="Failed to decode Rust session"):
                 _try_decode_rust_session(raw)
@@ -153,10 +150,9 @@ class TestTryDecodeRustSession:
         )
 
         mock_deser = MagicMock(return_value=messages)
-        with patch(
-            "code_puppy.session_storage.deserialize_session", mock_deser
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=True
+        with (
+            patch("code_puppy.session_storage.deserialize_session", mock_deser),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=True),
         ):
             result = _try_decode_rust_session(raw)
 
@@ -169,17 +165,14 @@ class TestTryDecodeRustSession:
         """A Rust payload with empty compacted hashes bytes (legacy) uses []."""
         msgpack_bytes = b"\x90"
         raw = (
-            _RUST_SESSION_HEADER
-            + struct.pack(">I", len(msgpack_bytes))
-            + msgpack_bytes
+            _RUST_SESSION_HEADER + struct.pack(">I", len(msgpack_bytes)) + msgpack_bytes
             # No compacted hashes section
         )
 
         mock_deser = MagicMock(return_value=[])
-        with patch(
-            "code_puppy.session_storage.deserialize_session", mock_deser
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=True
+        with (
+            patch("code_puppy.session_storage.deserialize_session", mock_deser),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=True),
         ):
             result = _try_decode_rust_session(raw)
 
@@ -203,13 +196,13 @@ class TestSaveSessionRustPath:
         msgpack_bytes = b"\x92\xde\xad\xbe"
         mock_ser = MagicMock(return_value=msgpack_bytes)
 
-        with patch(
-            "code_puppy.session_storage.serialize_session", mock_ser
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=True
-        ), patch(
-            "code_puppy.session_storage.serialize_messages_for_rust",
-            return_value=history,
+        with (
+            patch("code_puppy.session_storage.serialize_session", mock_ser),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=True),
+            patch(
+                "code_puppy.session_storage.serialize_messages_for_rust",
+                return_value=history,
+            ),
         ):
             save_session(
                 history=history,
@@ -229,13 +222,13 @@ class TestSaveSessionRustPath:
         msgpack_bytes = b"\x91\x01"
         mock_ser = MagicMock(return_value=msgpack_bytes)
 
-        with patch(
-            "code_puppy.session_storage.serialize_session", mock_ser
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=True
-        ), patch(
-            "code_puppy.session_storage.serialize_messages_for_rust",
-            return_value=history,
+        with (
+            patch("code_puppy.session_storage.serialize_session", mock_ser),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=True),
+            patch(
+                "code_puppy.session_storage.serialize_messages_for_rust",
+                return_value=history,
+            ),
         ):
             save_session(
                 history=history,
@@ -259,8 +252,9 @@ class TestSaveSessionRustPath:
         """When serialize_session is None, fall back to pickle format."""
         history = _make_history(3)
 
-        with patch("code_puppy.session_storage.serialize_session", None), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=False
+        with (
+            patch("code_puppy.session_storage.serialize_session", None),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=False),
         ):
             save_session(
                 history=history,
@@ -282,13 +276,13 @@ class TestSaveSessionRustPath:
         history = _make_history(2)
 
         mock_ser = MagicMock(side_effect=RuntimeError("boom"))
-        with patch(
-            "code_puppy.session_storage.serialize_session", mock_ser
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=True
-        ), patch(
-            "code_puppy.session_storage.serialize_messages_for_rust",
-            side_effect=RuntimeError("conversion boom"),
+        with (
+            patch("code_puppy.session_storage.serialize_session", mock_ser),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=True),
+            patch(
+                "code_puppy.session_storage.serialize_messages_for_rust",
+                side_effect=RuntimeError("conversion boom"),
+            ),
         ):
             # Should NOT raise — fallback to pickle
             save_session(
@@ -309,10 +303,9 @@ class TestSaveSessionRustPath:
         history = _make_history(2)
         mock_ser = MagicMock()
 
-        with patch(
-            "code_puppy.session_storage.serialize_session", mock_ser
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=False
+        with (
+            patch("code_puppy.session_storage.serialize_session", mock_ser),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=False),
         ):
             save_session(
                 history=history,
@@ -360,10 +353,9 @@ class TestLoadSessionRustFormat:
         _write_rust_session(session_path, messages, [], msgpack_bytes)
 
         mock_deser = MagicMock(return_value=messages)
-        with patch(
-            "code_puppy.session_storage.deserialize_session", mock_deser
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=True
+        with (
+            patch("code_puppy.session_storage.deserialize_session", mock_deser),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=True),
         ):
             result = load_session("rust_session", tmp_path)
 
@@ -378,10 +370,9 @@ class TestLoadSessionRustFormat:
         _write_rust_session(session_path, messages, compacted_hashes, msgpack_bytes)
 
         mock_deser = MagicMock(return_value=messages)
-        with patch(
-            "code_puppy.session_storage.deserialize_session", mock_deser
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=True
+        with (
+            patch("code_puppy.session_storage.deserialize_session", mock_deser),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=True),
         ):
             loaded_messages, loaded_hashes = load_session_with_hashes(
                 "rust_hashes", tmp_path
@@ -396,10 +387,9 @@ class TestLoadSessionRustFormat:
         session_path = tmp_path / "rust_only.pkl"
         _write_rust_session(session_path, [], [], msgpack_bytes)
 
-        with patch(
-            "code_puppy.session_storage.deserialize_session", None
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=False
+        with (
+            patch("code_puppy.session_storage.deserialize_session", None),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=False),
         ):
             with pytest.raises(ValueError, match="Rust is not available"):
                 load_session("rust_only", tmp_path)
@@ -410,8 +400,9 @@ class TestLoadSessionRustFormat:
         payload = {"messages": history, "compacted_hashes": []}
         (tmp_path / "pkl_session.pkl").write_bytes(pickle.dumps(payload))
 
-        with patch("code_puppy.session_storage.serialize_session", None), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=False
+        with (
+            patch("code_puppy.session_storage.serialize_session", None),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=False),
         ):
             result = load_session("pkl_session", tmp_path)
 
@@ -450,17 +441,20 @@ class TestRustRoundTrip:
         def fake_deserialize(data):
             return pickle.loads(data)  # noqa: S301
 
-        with patch(
-            "code_puppy.session_storage.serialize_session",
-            side_effect=fake_serialize,
-        ), patch(
-            "code_puppy.session_storage.deserialize_session",
-            side_effect=fake_deserialize,
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=True
-        ), patch(
-            "code_puppy.session_storage.serialize_messages_for_rust",
-            side_effect=lambda h: h,  # identity — already dicts
+        with (
+            patch(
+                "code_puppy.session_storage.serialize_session",
+                side_effect=fake_serialize,
+            ),
+            patch(
+                "code_puppy.session_storage.deserialize_session",
+                side_effect=fake_deserialize,
+            ),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=True),
+            patch(
+                "code_puppy.session_storage.serialize_messages_for_rust",
+                side_effect=lambda h: h,  # identity — already dicts
+            ),
         ):
             save_session(
                 history=history,
@@ -486,17 +480,20 @@ class TestRustRoundTrip:
         def fake_deserialize(data):
             return pickle.loads(data)  # noqa: S301
 
-        with patch(
-            "code_puppy.session_storage.serialize_session",
-            side_effect=fake_serialize,
-        ), patch(
-            "code_puppy.session_storage.deserialize_session",
-            side_effect=fake_deserialize,
-        ), patch(
-            "code_puppy.session_storage.is_rust_enabled", return_value=True
-        ), patch(
-            "code_puppy.session_storage.serialize_messages_for_rust",
-            side_effect=lambda h: h,
+        with (
+            patch(
+                "code_puppy.session_storage.serialize_session",
+                side_effect=fake_serialize,
+            ),
+            patch(
+                "code_puppy.session_storage.deserialize_session",
+                side_effect=fake_deserialize,
+            ),
+            patch("code_puppy.session_storage.is_rust_enabled", return_value=True),
+            patch(
+                "code_puppy.session_storage.serialize_messages_for_rust",
+                side_effect=lambda h: h,
+            ),
         ):
             save_session(
                 history=[],

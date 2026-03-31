@@ -204,8 +204,7 @@ def _try_decode_rust_session(raw: bytes) -> Optional[Tuple[SessionHistory, List]
         return messages, compacted_hashes
     except Exception as exc:
         raise ValueError(
-            f"Failed to decode Rust session format: {exc}. "
-            "The file may be corrupted."
+            f"Failed to decode Rust session format: {exc}. The file may be corrupted."
         ) from exc
 
 
