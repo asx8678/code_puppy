@@ -1,7 +1,6 @@
 """Base agent configuration class for defining agent properties."""
 
 import asyncio
-import functools
 import dataclasses
 import json
 import logging
@@ -507,7 +506,6 @@ class BaseAgent(ABC):
 
         return max(1, total_tokens)
 
-    @functools.cached_property
     def estimate_context_overhead_tokens(self) -> int:
         """
         Estimate the token overhead from system prompt and tool definitions.
