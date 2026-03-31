@@ -33,7 +33,6 @@ It also handles request/response correlation for user interactions:
 """
 
 import asyncio
-import queue
 import threading
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
@@ -59,7 +58,7 @@ class MessageBus:
     """Central coordinator for bidirectional Agent <-> UI communication.
 
     Thread-safe message bus that works in both sync and async contexts.
-    Uses stdlib queue.Queue for thread-safe sync operation.
+    Uses asyncio.Queue for zero-latency async operation with call_soon_threadsafe for cross-thread puts.
     Manages outgoing messages, incoming commands, and request/response correlation.
     """
 
@@ -72,11 +71,14 @@ class MessageBus:
         self._maxsize = maxsize
         self._lock = threading.Lock()
 
-        # Use sync queues by default (works in any context)
-        self._outgoing: queue.Queue[AnyMessage] = queue.Queue(maxsize=maxsize)
-        self._incoming: queue.Queue[AnyCommand] = queue.Queue(maxsize=maxsize)
+        # asyncio.Queue for zero-latency async consumption.
+        # emit() / provide_response() use call_soon_threadsafe when the loop
+        # is known so that cross-thread puts are safe.
+        self._outgoing: asyncio.Queue[AnyMessage] = asyncio.Queue(maxsize=maxsize)
+        self._incoming: asyncio.Queue[AnyCommand] = asyncio.Queue(maxsize=maxsize)
 
-        # Event loop reference for async request/response (optional)
+        # Event loop reference – set lazily the first time an async method
+        # runs, then reused for call_soon_threadsafe cross-thread puts.
         self._event_loop: Optional[asyncio.AbstractEventLoop] = None
 
         # Startup buffering
@@ -115,16 +117,28 @@ class MessageBus:
                     self._startup_buffer = self._startup_buffer[-self._maxsize :]
                 return
 
-            # Direct put into thread-safe queue - inside lock to prevent race
-            try:
-                self._outgoing.put_nowait(message)
-            except queue.Full:
-                # Drop oldest and retry
+            # Thread-safe put: if already on the event loop thread, call
+            # directly to ensure immediate delivery (avoids deferred put that
+            # could cause get_message_nowait to miss the message). For true
+            # cross-thread calls, use call_soon_threadsafe.
+            if self._event_loop is not None:
                 try:
-                    self._outgoing.get_nowait()
-                    self._outgoing.put_nowait(message)
-                except queue.Empty:
-                    pass
+                    running_loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    running_loop = None
+                if running_loop is self._event_loop:
+                    # Already on the event loop thread - put directly
+                    self._put_to_outgoing(message)
+                else:
+                    try:
+                        self._event_loop.call_soon_threadsafe(
+                            self._put_to_outgoing, message
+                        )
+                    except RuntimeError:
+                        # Loop closed – fall back to direct put
+                        self._put_to_outgoing(message)
+            else:
+                self._put_to_outgoing(message)
 
     def emit_text(
         self,
@@ -173,6 +187,34 @@ class MessageBus:
 
         message = ShellLineMessage(line=line, stream=stream)  # type: ignore[arg-type]
         self.emit(message)
+
+    # =========================================================================
+    # Internal put helpers (must be called from the event loop thread)
+    # =========================================================================
+
+    def _put_to_outgoing(self, message: AnyMessage) -> None:
+        """Put a message into the outgoing queue, dropping oldest if full."""
+        try:
+            self._outgoing.put_nowait(message)
+        except asyncio.QueueFull:
+            # Drop oldest message and retry
+            try:
+                self._outgoing.get_nowait()
+                self._outgoing.put_nowait(message)
+            except asyncio.QueueEmpty:
+                pass
+
+    def _put_to_incoming(self, command: AnyCommand) -> None:
+        """Put a command into the incoming queue, dropping oldest if full."""
+        try:
+            self._incoming.put_nowait(command)
+        except asyncio.QueueFull:
+            # Drop oldest command and retry
+            try:
+                self._incoming.get_nowait()
+                self._incoming.put_nowait(command)
+            except asyncio.QueueEmpty:
+                pass
 
     # =========================================================================
     # Session Context (Multi-Agent Tracking)
@@ -225,6 +267,9 @@ class MessageBus:
 
         # Create a Future to wait on
         loop = asyncio.get_running_loop()
+        # Capture the loop for cross-thread call_soon_threadsafe usage
+        if self._event_loop is None:
+            self._event_loop = loop
         future: asyncio.Future[str] = loop.create_future()
 
         with self._lock:
@@ -271,6 +316,8 @@ class MessageBus:
         prompt_id = str(uuid4())
 
         loop = asyncio.get_running_loop()
+        if self._event_loop is None:
+            self._event_loop = loop
         future: asyncio.Future[Tuple[bool, Optional[str]]] = loop.create_future()
 
         with self._lock:
@@ -313,6 +360,8 @@ class MessageBus:
         prompt_id = str(uuid4())
 
         loop = asyncio.get_running_loop()
+        if self._event_loop is None:
+            self._event_loop = loop
         future: asyncio.Future[Tuple[int, str]] = loop.create_future()
 
         with self._lock:
@@ -358,16 +407,28 @@ class MessageBus:
             )
         else:
             # For non-response commands (CancelAgentCommand, etc.),
-            # put them in the incoming queue for the agent to process
-            try:
-                self._incoming.put_nowait(command)
-            except queue.Full:
-                # Drop oldest and retry
+            # put them in the incoming queue for the agent to process.
+            # If already on the event loop thread, call directly for
+            # immediate delivery. For true cross-thread calls, use
+            # call_soon_threadsafe.
+            if self._event_loop is not None:
                 try:
-                    self._incoming.get_nowait()
-                    self._incoming.put_nowait(command)
-                except queue.Empty:
-                    pass
+                    running_loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    running_loop = None
+                if running_loop is self._event_loop:
+                    # Already on the event loop thread - put directly
+                    self._put_to_incoming(command)
+                else:
+                    try:
+                        self._event_loop.call_soon_threadsafe(
+                            self._put_to_incoming, command
+                        )
+                    except RuntimeError:
+                        # Loop closed – fall back to direct put
+                        self._put_to_incoming(command)
+            else:
+                self._put_to_incoming(command)
 
     def _complete_request(self, prompt_id: str, result: object) -> None:
         """Complete a pending request with the given result."""
@@ -401,17 +462,15 @@ class MessageBus:
         """Get the next outgoing message (async).
 
         Called by the renderer to consume messages.
-        Blocks until a message is available.
+        Blocks until a message is available with zero busy-wait.
 
         Returns:
             The next message to display.
         """
-        # For async usage, wrap sync queue in asyncio-friendly way
-        while True:
-            try:
-                return self._outgoing.get_nowait()
-            except queue.Empty:
-                await asyncio.sleep(0.01)
+        # Capture the running loop for cross-thread puts
+        if self._event_loop is None:
+            self._event_loop = asyncio.get_running_loop()
+        return await self._outgoing.get()
 
     def get_message_nowait(self) -> Optional[AnyMessage]:
         """Get the next outgoing message without blocking.
@@ -421,24 +480,22 @@ class MessageBus:
         """
         try:
             return self._outgoing.get_nowait()
-        except queue.Empty:
+        except asyncio.QueueEmpty:
             return None
 
     async def get_command(self) -> AnyCommand:
         """Get the next incoming command (async).
 
         Called by the agent to consume commands (e.g., CancelAgentCommand).
-        Blocks until a command is available.
+        Blocks until a command is available with zero busy-wait.
 
         Returns:
             The next command to process.
         """
-        # For async usage, wrap sync queue in asyncio-friendly way
-        while True:
-            try:
-                return self._incoming.get_nowait()
-            except queue.Empty:
-                await asyncio.sleep(0.01)
+        # Capture the running loop for cross-thread puts
+        if self._event_loop is None:
+            self._event_loop = asyncio.get_running_loop()
+        return await self._incoming.get()
 
     # =========================================================================
     # Startup Buffering

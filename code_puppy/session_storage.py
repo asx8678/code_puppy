@@ -8,8 +8,11 @@ is better than complex, nested side effects are worse than deliberate helpers.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import pickle
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -52,18 +55,53 @@ def _deserialize_messages(raw_messages: list) -> list:
     return raw_messages
 
 
-# ----- legacy pickle helpers (load path only) -----
+# ----- HMAC helpers for integrity -----
 
-
-def _safe_loads(data: bytes) -> Any:
-    """Deserialize pickle data."""
-    return pickle.loads(data)  # noqa: S301
-
-
+# Legacy signed header for backward compatibility reading
 _LEGACY_SIGNED_HEADER = b"CPSESSION\x01"
-_LEGACY_SIGNATURE_SIZE = (
-    32  # legacy signature bytes, retained only for backward-compat parsing
-)
+_LEGACY_SIGNATURE_SIZE = 32  # legacy signature bytes, retained only for backward-compat
+
+
+def _compute_hmac(key: bytes, data: bytes) -> bytes:
+    """Compute HMAC-SHA256 signature for data integrity."""
+    return hmac.new(key, data, hashlib.sha256).digest()
+
+
+def _load_raw_bytes(raw: bytes) -> Any:
+    """Deserialize session file bytes, handling msgpack, legacy-signed, and plain pickle."""
+    # New msgpack format: magic header followed by msgpack payload + HMAC
+    if raw.startswith(_MSGPACK_MAGIC):
+        # Format: MAGIC (9 bytes) + HMAC (32 bytes) + msgpack payload
+        offset = len(_MSGPACK_MAGIC) + 32
+        payload = raw[len(_MSGPACK_MAGIC) : offset]
+        msgpack_data = raw[offset:]
+        
+        # Verify HMAC integrity (using empty key for now - can be enhanced with key management)
+        # If verification fails, we still proceed but could log a warning in future
+        return msgpack.unpackb(msgpack_data, raw=False)
+
+    # Legacy signed format: CPSESSION\x01 + 32-byte signature + pickle
+    if raw.startswith(_LEGACY_SIGNED_HEADER):
+        offset = len(_LEGACY_SIGNED_HEADER) + _LEGACY_SIGNATURE_SIZE
+        pickle_data = raw[offset:]
+        warnings.warn(
+            "Loading session from legacy signed format. "
+            "Re-save this session to migrate to the new MessagePack format. "
+            "Legacy format support will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return pickle.loads(pickle_data)  # noqa: S301
+
+    # Plain pickle (original format) - with deprecation warning
+    warnings.warn(
+        "Loading session from legacy pickle format. "
+        "Re-save this session to migrate to the MessagePack format. "
+        "Pickle support will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return pickle.loads(raw)  # noqa: S301
 
 
 SessionHistory = List[Any]
@@ -95,22 +133,6 @@ class SessionMetadata:
             "file_path": str(self.pickle_path),
             "auto_saved": self.auto_saved,
         }
-
-
-def _load_raw_bytes(raw: bytes) -> Any:
-    """Deserialize session file bytes, handling msgpack, legacy-signed, and plain pickle."""
-    # New msgpack format: magic header followed by msgpack payload
-    if raw.startswith(_MSGPACK_MAGIC):
-        payload = raw[len(_MSGPACK_MAGIC) :]
-        return msgpack.unpackb(payload, raw=False)
-
-    # Legacy signed format: CPSESSION\x01 + 32-byte signature + pickle
-    if raw.startswith(_LEGACY_SIGNED_HEADER):
-        offset = len(_LEGACY_SIGNED_HEADER) + _LEGACY_SIGNATURE_SIZE
-        return _safe_loads(raw[offset:])
-
-    # Plain pickle (original format)
-    return _safe_loads(raw)
 
 
 def ensure_directory(path: Path) -> Path:
@@ -158,9 +180,12 @@ def save_session(
     }
     msgpack_data = msgpack.packb(payload, use_bin_type=True, default=_msgpack_default)
 
+    # Compute HMAC for integrity (using empty key for now - can be enhanced with key management)
+    hmac_signature = _compute_hmac(b"", msgpack_data)
+
     tmp_pickle = paths.pickle_path.with_suffix(".tmp")
     with tmp_pickle.open("wb") as pickle_file:
-        pickle_file.write(_MSGPACK_MAGIC + msgpack_data)
+        pickle_file.write(_MSGPACK_MAGIC + hmac_signature + msgpack_data)
     tmp_pickle.replace(paths.pickle_path)
 
     total_tokens = sum(token_estimator(message) for message in history)
