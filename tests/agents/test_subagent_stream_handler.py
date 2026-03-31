@@ -57,19 +57,20 @@ class TestEstimateTokens:
         assert _estimate_tokens("abcd") == 1
 
     def test_longer_content_scales_correctly(self):
-        """Longer content should scale at ~4 chars per token."""
-        # 8 chars = 2 tokens
-        assert _estimate_tokens("abcdefgh") == 2
-        # 16 chars = 4 tokens
-        assert _estimate_tokens("a" * 16) == 4
-        # 100 chars = 25 tokens
-        assert _estimate_tokens("x" * 100) == 25
+        """Longer content should scale at ~2.5 chars per token."""
+        # 8 chars = floor(8/2.5) = 3 tokens
+        assert _estimate_tokens("abcdefgh") == 3
+        # 16 chars = floor(16/2.5) = 6 tokens
+        assert _estimate_tokens("a" * 16) == 6
+        # 100 chars = floor(100/2.5) = 40 tokens
+        assert _estimate_tokens("x" * 100) == 40
 
     def test_realistic_text_estimation(self):
         """Test with realistic text content."""
+        import math as _math
         text = "Hello, this is a test message for token estimation."
-        # len(text) // 4 = estimated tokens
-        expected = len(text) // 4
+        # floor(len(text) / 2.5) = estimated tokens
+        expected = _math.floor(len(text) / 2.5)
         assert _estimate_tokens(text) == expected
 
 

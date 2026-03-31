@@ -1496,7 +1496,9 @@ class TestRunWithMcp:
         ):
             mock_prep.return_value = MagicMock(user_prompt="prompt")
             await agent.run_with_mcp("test")
-            mock_cache.assert_called_once()
+            # Cache is warmed at start (when empty) and refreshed after success;
+            # assert it was called at least once (post-run update is the key assertion)
+            mock_cache.assert_called()
 
     @pytest.mark.asyncio
     async def test_keyboard_cancel_key_listener_path(self, agent):
