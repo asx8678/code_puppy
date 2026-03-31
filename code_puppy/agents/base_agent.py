@@ -1218,7 +1218,7 @@ class BaseAgent(ABC):
                 # Request delayed compaction for when tool calls complete
                 self.request_delayed_compaction()
                 # Return original messages without compaction
-                return messages, []
+                return messages
 
             if compaction_strategy == "truncation":
                 # Use truncation instead of summarization
