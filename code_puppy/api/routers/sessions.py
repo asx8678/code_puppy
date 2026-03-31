@@ -37,6 +37,7 @@ def _validate_session_id(session_id: str) -> str:
         )
     return session_id
 
+
 # Thread pool for blocking file I/O
 _executor = ThreadPoolExecutor(max_workers=2)
 
