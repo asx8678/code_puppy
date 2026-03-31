@@ -22,7 +22,7 @@ class TestGenerateSessionHashSuffix:
         from code_puppy.tools.agent_tools import _generate_session_hash_suffix
 
         result = _generate_session_hash_suffix()
-        assert len(result) == 6
+        assert len(result) == 8
         int(result, 16)  # Should be valid hex
 
 
