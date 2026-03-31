@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import pathlib
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from anthropic import AsyncAnthropic
 from openai import AsyncAzureOpenAI
@@ -24,65 +24,11 @@ from code_puppy.messaging import emit_warning
 
 from . import callbacks
 from .claude_cache_client import ClaudeCacheAsyncClient, patch_anthropic_client_messages
-from .config import (
-    ANTIGRAVITY_MODELS_FILE,
-    CHATGPT_MODELS_FILE,
-    CLAUDE_MODELS_FILE,
-    EXTRA_MODELS_FILE,
-    GEMINI_MODELS_FILE,
-    get_value,
-    get_yolo_mode,
-)
+from .config import EXTRA_MODELS_FILE, get_value, get_yolo_mode
 from .http_utils import create_async_client, get_cert_bundle_path, get_http2
 from .round_robin_model import RoundRobinModel
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Config cache (mtime-based invalidation)
-# ---------------------------------------------------------------------------
-
-_config_cache: Optional[Dict[str, Any]] = None
-_config_cache_mtime: float = 0.0
-
-
-def _get_config_mtime() -> float:
-    """Return the maximum mtime across all model config files.
-
-    Used to decide whether the cached config is still valid.
-    Files that don't exist yet are simply skipped.
-    """
-    bundled_models = pathlib.Path(__file__).parent / "models.json"
-    paths = [
-        bundled_models,
-        pathlib.Path(EXTRA_MODELS_FILE),
-        pathlib.Path(CHATGPT_MODELS_FILE),
-        pathlib.Path(CLAUDE_MODELS_FILE),
-        pathlib.Path(GEMINI_MODELS_FILE),
-        pathlib.Path(ANTIGRAVITY_MODELS_FILE),
-    ]
-    mtimes: list[float] = []
-    for path in paths:
-        try:
-            mtime = path.stat().st_mtime
-            # Guard against mocked/non-numeric values (e.g. in tests)
-            if isinstance(mtime, (int, float)):
-                mtimes.append(float(mtime))
-        except (FileNotFoundError, OSError, TypeError, AttributeError):
-            pass
-    return max(mtimes) if mtimes else 0.0
-
-
-def clear_config_cache() -> None:
-    """Invalidate the ModelFactory.load_config() cache.
-
-    Call this after modifying model config files, writing new OAuth token
-    files, or whenever a plugin needs to force a fresh config read.
-    """
-    global _config_cache, _config_cache_mtime
-    _config_cache = None
-    _config_cache_mtime = 0.0
-
 
 # Registry for custom model provider classes from plugins
 _CUSTOM_MODEL_PROVIDERS: Dict[str, type] = {}
@@ -345,11 +291,6 @@ class ModelFactory:
 
     @staticmethod
     def load_config() -> Dict[str, Any]:
-        global _config_cache, _config_cache_mtime
-        current_mtime = _get_config_mtime()
-        if _config_cache is not None and current_mtime <= _config_cache_mtime:
-            return _config_cache
-
         load_model_config_callbacks = callbacks.get_callbacks("load_model_config")
         if len(load_model_config_callbacks) > 0:
             if len(load_model_config_callbacks) > 1:
@@ -364,6 +305,14 @@ class ModelFactory:
             bundled_models = pathlib.Path(__file__).parent / "models.json"
             with open(bundled_models, "r") as f:
                 config = json.load(f)
+
+        # Import OAuth model file paths from main config
+        from code_puppy.config import (
+            ANTIGRAVITY_MODELS_FILE,
+            CHATGPT_MODELS_FILE,
+            CLAUDE_MODELS_FILE,
+            GEMINI_MODELS_FILE,
+        )
 
         # Build list of extra model sources
         extra_sources: list[tuple[pathlib.Path, str, bool]] = [
@@ -419,8 +368,6 @@ class ModelFactory:
                 f"Failed to load plugin models config: {exc}"
             )
 
-        _config_cache = config
-        _config_cache_mtime = current_mtime
         return config
 
     @staticmethod

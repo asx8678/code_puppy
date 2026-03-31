@@ -150,12 +150,10 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> List[Any]:
                 # Try to get the running event loop
                 try:
                     asyncio.get_running_loop()
-                    # We're in an async context already - this shouldn't happen for sync triggers
-                    # but if it does, we can't use run_until_complete
-                    logger.warning(
-                        f"Async callback {callback.__name__} called from async context in sync trigger"
-                    )
-                    results.append(None)
+                    # NB: result is a Task/Future, not the callback's return value.
+                    # Callers should handle non-dict results gracefully.
+                    future = asyncio.ensure_future(result)
+                    results.append(future)
                     continue
                 except RuntimeError:
                     # No running loop - we're in a sync/worker thread context
@@ -182,22 +180,21 @@ async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> List[Any]:
 
     logger.debug(f"Triggering {len(callbacks)} async callbacks for phase '{phase}'")
 
-    results = []
-    for callback in callbacks:
+    async def _run_one(callback: CallbackFunc) -> Any:
         try:
             result = callback(*args, **kwargs)
             if asyncio.iscoroutine(result):
                 result = await result
-            results.append(result)
             logger.debug(f"Successfully executed async callback {callback.__name__}")
+            return result
         except Exception as e:
             logger.error(
                 f"Async callback {callback.__name__} failed in phase '{phase}': {e}\n"
                 f"{traceback.format_exc()}"
             )
-            results.append(None)
+            return None
 
-    return results
+    return list(await asyncio.gather(*[_run_one(cb) for cb in callbacks]))
 
 
 async def on_startup() -> List[Any]:

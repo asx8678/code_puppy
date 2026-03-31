@@ -5,7 +5,6 @@ This module provides a managed wrapper around pydantic-ai MCP server classes
 that adds management capabilities while maintaining 100% compatibility.
 """
 
-import logging
 import os
 import uuid
 from dataclasses import dataclass, field
@@ -25,10 +24,6 @@ from pydantic_ai.mcp import (
 
 from code_puppy.http_utils import create_async_client
 from code_puppy.mcp_.blocking_startup import BlockingMCPServerStdio
-from code_puppy.mcp_.circuit_breaker import CircuitBreaker, CircuitOpenError
-from code_puppy.mcp_.retry_manager import get_retry_manager
-
-logger = logging.getLogger(__name__)
 
 
 def _expand_env_vars(value: Any) -> Any:
@@ -133,8 +128,6 @@ class ManagedMCPServer:
         self._start_time: Optional[datetime] = None
         self._stop_time: Optional[datetime] = None
         self._error_message: Optional[str] = None
-        # Circuit breaker for protecting tool calls (lazily initialized)
-        self._circuit_breaker: Optional[CircuitBreaker] = None
 
         # Initialize the pydantic server
         try:
@@ -201,7 +194,7 @@ class ManagedMCPServer:
                     sse_kwargs["http_client"] = self._get_http_client()
 
                 self._pydantic_server = MCPServerSSE(
-                    **sse_kwargs, process_tool_call=self._protected_process_tool_call
+                    **sse_kwargs, process_tool_call=process_tool_call
                 )
 
             elif server_type == "stdio":
@@ -236,7 +229,7 @@ class ManagedMCPServer:
                 message_group = uuid.uuid4()
                 self._pydantic_server = BlockingMCPServerStdio(
                     **stdio_kwargs,
-                    process_tool_call=self._protected_process_tool_call,
+                    process_tool_call=process_tool_call,
                     tool_prefix=self.config.name,
                     emit_stderr=False,  # Logs go to file, not console (use /mcp logs to view)
                     message_group=message_group,
@@ -267,7 +260,7 @@ class ManagedMCPServer:
                     http_kwargs["headers"] = _expand_env_vars(config["headers"])
 
                 self._pydantic_server = MCPServerStreamableHTTP(
-                    **http_kwargs, process_tool_call=self._protected_process_tool_call
+                    **http_kwargs, process_tool_call=process_tool_call
                 )
 
             else:
@@ -297,88 +290,6 @@ class ManagedMCPServer:
         timeout = self.config.config.get("timeout", 30)
         client = create_async_client(headers=resolved_headers, timeout=timeout)
         return client
-
-    def _get_circuit_breaker(self) -> CircuitBreaker:
-        """
-        Lazily initialize and return the circuit breaker for this server.
-
-        Returns:
-            CircuitBreaker instance scoped to this server
-        """
-        if self._circuit_breaker is None:
-            self._circuit_breaker = CircuitBreaker(
-                failure_threshold=3,
-                timeout=30,
-            )
-        return self._circuit_breaker
-
-    async def _protected_process_tool_call(
-        self,
-        ctx: RunContext[Any],
-        call_tool: CallToolFunc,
-        name: str,
-        tool_args: dict[str, Any],
-    ) -> ToolResult:
-        """
-        Process a tool call with circuit breaker and retry protection.
-
-        Wraps the actual MCP tool call with:
-        - A retry manager (exponential-jitter backoff, up to 3 attempts)
-        - A circuit breaker (opens after 3 consecutive call failures)
-
-        Falls through to the bare call if resilience helpers are unavailable.
-
-        Args:
-            ctx: Run context from pydantic-ai
-            call_tool: The underlying call_tool function from pydantic-ai
-            name: Name of the tool to call
-            tool_args: Arguments for the tool
-
-        Returns:
-            ToolResult from the tool execution
-
-        Raises:
-            CircuitOpenError: If the circuit breaker is open for this server
-            Exception: Any exception raised by the tool call after all retries
-        """
-        from rich.console import Console
-
-        from code_puppy.config import get_banner_color
-
-        console = Console()
-        color = get_banner_color("mcp_tool_call")
-        banner = f"[bold white on {color}] MCP TOOL CALL [/bold white on {color}]"
-        console.print(f"\n{banner} \U0001f527 [bold cyan]{name}[/bold cyan]")
-
-        server_id = self.config.id or self.config.name
-
-        async def _do_call() -> ToolResult:
-            return await call_tool(name, tool_args, {"deps": ctx.deps})
-
-        try:
-            cb = self._get_circuit_breaker()
-            retry_mgr = get_retry_manager()
-
-            async def _call_with_retry() -> ToolResult:
-                return await retry_mgr.retry_with_backoff(
-                    func=_do_call,
-                    max_attempts=3,
-                    strategy="exponential_jitter",
-                    server_id=server_id,
-                )
-
-            return await cb.call(_call_with_retry)
-        except CircuitOpenError:
-            logger.warning(
-                "Circuit breaker OPEN for MCP server %s, tool call '%s' blocked",
-                server_id,
-                name,
-            )
-            raise
-        except Exception:
-            # All other exceptions propagate normally (retry manager already
-            # exhausted retries before raising)
-            raise
 
     def enable(self) -> None:
         """Enable server availability."""

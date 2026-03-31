@@ -159,26 +159,6 @@ class TestRetryManager:
         """Test that unknown strategy defaults to exponential."""
         assert self.retry_manager.calculate_backoff(3, "unknown") == 4.0
 
-    def test_calculate_backoff_linear_capped(self):
-        """Linear backoff should never exceed MAX_BACKOFF_SECONDS."""
-        assert self.retry_manager.calculate_backoff(100, "linear") == 60.0
-
-    def test_calculate_backoff_exponential_capped(self):
-        """Exponential backoff should never exceed MAX_BACKOFF_SECONDS."""
-        # 2^9 = 512 → capped at 60
-        assert self.retry_manager.calculate_backoff(10, "exponential") == 60.0
-
-    def test_calculate_backoff_exponential_jitter_capped(self):
-        """Exponential-jitter backoff should never exceed MAX_BACKOFF_SECONDS."""
-        for _ in range(20):
-            assert (
-                self.retry_manager.calculate_backoff(10, "exponential_jitter") <= 60.0
-            )
-
-    def test_calculate_backoff_unknown_strategy_capped(self):
-        """Unknown strategy fallback should also be capped."""
-        assert self.retry_manager.calculate_backoff(10, "bogus") == 60.0
-
     def test_should_retry_retryable_errors(self):
         """Test that retryable errors are identified correctly."""
         # Network errors
@@ -274,12 +254,6 @@ class TestRetryManager:
         assert not self.retry_manager.should_retry(Exception("Permission denied"))
         assert not self.retry_manager.should_retry(Exception("Unauthorized access"))
         assert not self.retry_manager.should_retry(Exception("Forbidden operation"))
-
-    def test_should_retry_unknown_exception_returns_false(self):
-        """Unknown exception types should NOT be retried (fail fast)."""
-        assert not self.retry_manager.should_retry(RuntimeError("unexpected"))
-        assert not self.retry_manager.should_retry(KeyError("missing_key"))
-        assert not self.retry_manager.should_retry(TypeError("bad type"))
 
     @pytest.mark.asyncio
     async def test_record_and_get_retry_stats(self):

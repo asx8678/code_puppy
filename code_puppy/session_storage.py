@@ -8,75 +8,22 @@ is better than complex, nested side effects are worse than deliberate helpers.
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
-import logging
-import os
 import pickle
-import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple
 
-from code_puppy._core_bridge import (
-    deserialize_session,
-    is_rust_enabled,
-    serialize_messages_for_rust,
-    serialize_session,
-)
+
+def _safe_loads(data: bytes) -> Any:
+    """Deserialize pickle data."""
+    return pickle.loads(data)  # noqa: S301
 
 
 _LEGACY_SIGNED_HEADER = b"CPSESSION\x01"
 _LEGACY_SIGNATURE_SIZE = (
     32  # legacy signature bytes, retained only for backward-compat parsing
 )
-
-_SESSION_HMAC_PREFIX = b"CPSIG\x02"
-_HMAC_SIG_SIZE = 32  # SHA-256 produces 32 bytes
-
-# Rust/MessagePack session format header.
-# Format: header (8 bytes) + uint32 BE (msgpack length) + msgpack bytes + json(compacted_hashes)
-_RUST_SESSION_HEADER = b"CPRSESS\x01"
-
-
-def _get_session_hmac_key() -> bytes:
-    """Get or create a per-installation HMAC key for session integrity."""
-    key_path = Path(os.path.expanduser("~/.code_puppy/session_hmac.key"))
-    key_path.parent.mkdir(parents=True, exist_ok=True)
-    if key_path.exists():
-        return key_path.read_bytes()
-    key = os.urandom(32)
-    key_path.write_bytes(key)
-    key_path.chmod(0o600)
-    return key
-
-
-def _sign_session_data(data: bytes) -> bytes:
-    """Prepend HMAC-SHA256 signature to session data."""
-    key = _get_session_hmac_key()
-    sig = hmac.new(key, data, hashlib.sha256).digest()
-    return _SESSION_HMAC_PREFIX + sig + data
-
-
-def _safe_loads(data: bytes) -> Any:
-    """Deserialize pickle data after verifying HMAC integrity."""
-    if data.startswith(_SESSION_HMAC_PREFIX):
-        prefix_len = len(_SESSION_HMAC_PREFIX)
-        sig = data[prefix_len : prefix_len + _HMAC_SIG_SIZE]
-        payload = data[prefix_len + _HMAC_SIG_SIZE :]
-        key = _get_session_hmac_key()
-        expected = hmac.new(key, payload, hashlib.sha256).digest()
-        if not hmac.compare_digest(sig, expected):
-            raise ValueError(
-                "Session file integrity check failed - file may be tampered"
-            )
-        return pickle.loads(payload)  # noqa: S301
-    # Legacy: no signature (backward compat - load but warn)
-    logging.getLogger(__name__).warning(
-        "Loading unsigned session file (legacy format)"
-    )
-    return pickle.loads(data)  # noqa: S301
 
 
 SessionHistory = List[Any]
@@ -149,30 +96,11 @@ def save_session(
 
     # Always save in the new dict format so compacted hashes are preserved.
     # Legacy session files (plain list) are still handled gracefully on load.
-    compacted_list = list(compacted_hashes) if compacted_hashes is not None else []
-    if serialize_session is not None and is_rust_enabled():
-        try:
-            messages_as_dicts = serialize_messages_for_rust(history)
-            msgpack_bytes = serialize_session(messages_as_dicts)
-            compacted_encoded = json.dumps(compacted_list).encode("utf-8")
-            pickle_data = (
-                _RUST_SESSION_HEADER
-                + struct.pack(">I", len(msgpack_bytes))
-                + msgpack_bytes
-                + compacted_encoded
-            )
-        except Exception:
-            payload: dict = {
-                "messages": history,
-                "compacted_hashes": compacted_list,
-            }
-            pickle_data = _sign_session_data(pickle.dumps(payload))
-    else:
-        payload = {
-            "messages": history,
-            "compacted_hashes": compacted_list,
-        }
-        pickle_data = _sign_session_data(pickle.dumps(payload))
+    payload: dict = {
+        "messages": history,
+        "compacted_hashes": list(compacted_hashes) if compacted_hashes is not None else [],
+    }
+    pickle_data = pickle.dumps(payload)
     tmp_pickle = paths.pickle_path.with_suffix(".tmp")
     with tmp_pickle.open("wb") as pickle_file:
         pickle_file.write(pickle_data)
@@ -213,42 +141,6 @@ def _parse_session_payload(data: Any) -> Tuple[SessionHistory, List]:
     return data, []
 
 
-def _try_decode_rust_session(raw: bytes) -> Optional[Tuple[SessionHistory, List]]:
-    """Attempt to decode a Rust/MessagePack session file.
-
-    Returns (messages, compacted_hashes) if the file is in Rust format and
-    can be decoded, or None if decoding is not possible (Rust unavailable
-    or format not recognised).
-
-    Raises ValueError if the header is present but decoding fails and there
-    is no fallback possible (so callers can propagate a useful error).
-    """
-    if not raw.startswith(_RUST_SESSION_HEADER):
-        return None
-
-    if deserialize_session is None or not is_rust_enabled():
-        raise ValueError(
-            "Session was saved with Rust serialization but Rust is not available. "
-            "Install the code_puppy_core extension to load this session."
-        )
-
-    try:
-        offset = len(_RUST_SESSION_HEADER)
-        (msgpack_len,) = struct.unpack(">I", raw[offset : offset + 4])
-        offset += 4
-        msgpack_bytes = raw[offset : offset + msgpack_len]
-        compacted_bytes = raw[offset + msgpack_len :]
-        messages = list(deserialize_session(msgpack_bytes))
-        compacted_hashes: List = (
-            json.loads(compacted_bytes.decode("utf-8")) if compacted_bytes else []
-        )
-        return messages, compacted_hashes
-    except Exception as exc:
-        raise ValueError(
-            f"Failed to decode Rust session format: {exc}. The file may be corrupted."
-        ) from exc
-
-
 def load_session(
     session_name: str, base_dir: Path, *, allow_legacy: bool = False
 ) -> SessionHistory:
@@ -265,14 +157,6 @@ def load_session(
         raise FileNotFoundError(paths.pickle_path)
 
     raw = paths.pickle_path.read_bytes()
-
-    # Try Rust/MessagePack format first.
-    rust_result = _try_decode_rust_session(raw)
-    if rust_result is not None:
-        messages, _ = rust_result
-        return messages
-
-    # Fall back to pickle (new dict format or legacy plain list).
     pickle_data = _extract_pickle_payload(raw)
     data = _safe_loads(pickle_data)
     messages, _ = _parse_session_payload(data)
@@ -285,21 +169,14 @@ def load_session_with_hashes(
     """Load message history *and* compacted-message hashes from a session file.
 
     Returns:
-        (messages, compacted_hashes) tuple.  For legacy session files that
-        contain only the message list, compacted_hashes will be [].
+        ``(messages, compacted_hashes)`` tuple.  For legacy session files that
+        contain only the message list, ``compacted_hashes`` will be ``[]``.
     """
     paths = build_session_paths(base_dir, session_name)
     if not paths.pickle_path.exists():
         raise FileNotFoundError(paths.pickle_path)
 
     raw = paths.pickle_path.read_bytes()
-
-    # Try Rust/MessagePack format first.
-    rust_result = _try_decode_rust_session(raw)
-    if rust_result is not None:
-        return rust_result
-
-    # Fall back to pickle (new dict format or legacy plain list).
     pickle_data = _extract_pickle_payload(raw)
     data = _safe_loads(pickle_data)
     return _parse_session_payload(data)

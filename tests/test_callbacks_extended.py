@@ -662,3 +662,58 @@ class TestStreamEventCallback:
             assert results[1] == "OK"  # Survived
             assert successful_events == ["token"]
             mock_logger.error.assert_called_once()
+
+
+class TestNewConcurrentAndEnsureFuture:
+    """Test new concurrent execution and ensure_future behaviors."""
+
+    def setup_method(self):
+        """Clean up callbacks before each test."""
+        clear_callbacks()
+
+    @pytest.mark.asyncio
+    async def test_async_callback_runs_via_ensure_future_in_sync_trigger(self):
+        """Verify async callbacks scheduled via ensure_future actually execute (not silently dropped)."""
+        import asyncio
+
+        executed = asyncio.Event()
+
+        async def async_cb():
+            executed.set()
+            return "done"
+
+        register_callback("load_model_config", async_cb)
+        results = on_load_model_config()
+
+        # Result should be a Future (not None as before the fix)
+        assert results[0] is not None
+        # Give the scheduled future time to complete
+        await asyncio.sleep(0.05)
+        assert executed.is_set(), "Async callback was silently dropped!"
+
+    @pytest.mark.asyncio
+    async def test_trigger_callbacks_runs_concurrently(self):
+        """Verify async callbacks run concurrently via asyncio.gather, not serially."""
+        import time
+        import asyncio
+
+        async def slow_cb_1():
+            await asyncio.sleep(0.1)
+            return "one"
+
+        async def slow_cb_2():
+            await asyncio.sleep(0.1)
+            return "two"
+
+        register_callback("startup", slow_cb_1)
+        register_callback("startup", slow_cb_2)
+
+        start = time.monotonic()
+        results = await on_startup()
+        elapsed = time.monotonic() - start
+
+        # Concurrent: ~0.1s. Serial: ~0.2s.
+        assert elapsed < 0.15, (
+            f"Callbacks ran serially ({elapsed:.2f}s), expected ~0.1s concurrent"
+        )
+        assert set(results) == {"one", "two"}
