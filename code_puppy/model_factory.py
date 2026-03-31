@@ -341,9 +341,7 @@ def _build_openai(model_name: str, model_config: dict, config: dict) -> Any:
         return None
     provider = OpenAIProvider(api_key=api_key)
     if "codex" in model_name:
-        model = OpenAIResponsesModel(
-            model_name=model_config["name"], provider=provider
-        )
+        model = OpenAIResponsesModel(model_name=model_config["name"], provider=provider)
     else:
         model = OpenAIChatModel(model_name=model_config["name"], provider=provider)
     model.provider = provider
@@ -391,9 +389,7 @@ def _build_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
     return AnthropicModel(model_name=model_config["name"], provider=provider)
 
 
-def _build_custom_anthropic(
-    model_name: str, model_config: dict, config: dict
-) -> Any:
+def _build_custom_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
     url, headers, verify, api_key = get_custom_config(model_config)
     if not api_key:
         emit_warning(
@@ -629,9 +625,7 @@ def _build_cerebras(model_name: str, model_config: dict, config: dict) -> Any:
     headers["X-Cerebras-3rd-Party-Integration"] = "code-puppy"
     # Pass "cerebras" so RetryingAsyncClient knows to ignore Cerebras's
     # absurdly aggressive Retry-After headers (they send 60s!)
-    client = create_async_client(
-        headers=headers, verify=verify, model_name="cerebras"
-    )
+    client = create_async_client(headers=headers, verify=verify, model_name="cerebras")
     provider = ZaiCerebrasProvider(
         api_key=api_key,
         http_client=client,
