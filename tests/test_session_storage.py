@@ -198,3 +198,4 @@ def test_pydantic_messages_with_compacted_hashes(
     assert len(loaded_history) == 4
     assert isinstance(loaded_history[0], ModelRequest)
     assert loaded_hashes == hashes
+
