@@ -1,7 +1,6 @@
 """Tests for code_puppy.messaging.bus - MessageBus and global functions."""
 
 import asyncio
-import queue
 from unittest.mock import patch
 
 import pytest
@@ -452,8 +451,8 @@ def test_outgoing_queue_overflow_race_empty():
     bus = MessageBus(maxsize=1)
     bus.mark_renderer_active()
     # Patch put_nowait to always raise Full, and get_nowait to raise Empty
-    with patch.object(bus._outgoing, "put_nowait", side_effect=queue.Full):
-        with patch.object(bus._outgoing, "get_nowait", side_effect=queue.Empty):
+    with patch.object(bus._outgoing, "put_nowait", side_effect=asyncio.QueueFull):
+        with patch.object(bus._outgoing, "get_nowait", side_effect=asyncio.QueueEmpty):
             bus.emit(TextMessage(level=MessageLevel.INFO, text="x"))
             # Should not raise - catches Empty
 
@@ -469,8 +468,8 @@ def test_incoming_queue_overflow():
 def test_incoming_queue_overflow_race_empty():
     """Incoming queue: Full then Empty (race condition)."""
     bus = MessageBus(maxsize=1)
-    with patch.object(bus._incoming, "put_nowait", side_effect=queue.Full):
-        with patch.object(bus._incoming, "get_nowait", side_effect=queue.Empty):
+    with patch.object(bus._incoming, "put_nowait", side_effect=asyncio.QueueFull):
+        with patch.object(bus._incoming, "get_nowait", side_effect=asyncio.QueueEmpty):
             bus.provide_response(CancelAgentCommand())
             # Should not raise - catches Empty
 

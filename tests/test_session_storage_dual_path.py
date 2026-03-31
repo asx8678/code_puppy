@@ -21,12 +21,11 @@ import pytest
 from code_puppy.session_storage import (
     _MSGPACK_MAGIC,
     SessionMetadata,
+    _compute_hmac,
     _deserialize_messages,
     _load_raw_bytes,
     _msgpack_default,
     _parse_session_payload,
-    _safe_loads,
-    build_session_paths,
     cleanup_sessions,
     load_session,
     load_session_with_hashes,
@@ -37,6 +36,7 @@ from code_puppy.session_storage import (
 # ---------------------------------------------------------------------------
 # _msgpack_default
 # ---------------------------------------------------------------------------
+
 
 class TestMsgpackDefault:
     def test_datetime_serialized_as_isoformat(self):
@@ -53,6 +53,7 @@ class TestMsgpackDefault:
 # ---------------------------------------------------------------------------
 # _deserialize_messages
 # ---------------------------------------------------------------------------
+
 
 class TestDeserializeMessages:
     def test_empty_list_returns_empty(self):
@@ -76,9 +77,14 @@ class TestDeserializeMessages:
             # Make validate_python raise
             mock_adapter.validate_python.side_effect = ValueError("bad data")
             # Need to patch the import inside the function
-            with patch.dict("sys.modules", {"pydantic_ai.messages": MagicMock(
-                ModelMessagesTypeAdapter=mock_adapter
-            )}):
+            with patch.dict(
+                "sys.modules",
+                {
+                    "pydantic_ai.messages": MagicMock(
+                        ModelMessagesTypeAdapter=mock_adapter
+                    )
+                },
+            ):
                 result = _deserialize_messages(bad_data)
                 # Falls back to returning raw data
                 assert result == bad_data or result is bad_data
@@ -88,10 +94,14 @@ class TestDeserializeMessages:
 # _load_raw_bytes
 # ---------------------------------------------------------------------------
 
+
 class TestLoadRawBytes:
     def test_msgpack_format(self, tmp_path):
+        """Loading msgpack format with valid HMAC succeeds."""
         payload = {"messages": [{"kind": "request", "content": "hi"}]}
-        raw = _MSGPACK_MAGIC + msgpack.packb(payload, use_bin_type=True)
+        msgpack_data = msgpack.packb(payload, use_bin_type=True)
+        hmac_sig = _compute_hmac(b"", msgpack_data)
+        raw = _MSGPACK_MAGIC + hmac_sig + msgpack_data
         result = _load_raw_bytes(raw)
         assert isinstance(result, dict)
         assert "messages" in result
@@ -106,6 +116,7 @@ class TestLoadRawBytes:
 # ---------------------------------------------------------------------------
 # save_session – fallback for non-pydantic history
 # ---------------------------------------------------------------------------
+
 
 class TestSaveSessionFallback:
     def test_saves_plain_strings_as_history(self, tmp_path):
@@ -128,6 +139,7 @@ class TestSaveSessionFallback:
 # ---------------------------------------------------------------------------
 # _parse_session_payload
 # ---------------------------------------------------------------------------
+
 
 class TestParseSessionPayload:
     def test_dict_with_messages_key(self):
@@ -159,6 +171,7 @@ class TestParseSessionPayload:
 # load_session / load_session_with_hashes – FileNotFoundError
 # ---------------------------------------------------------------------------
 
+
 class TestLoadSessionErrors:
     def test_load_session_file_not_found(self, tmp_path):
         """Line 236: raises FileNotFoundError when session file doesn't exist."""
@@ -173,6 +186,7 @@ class TestLoadSessionErrors:
 # ---------------------------------------------------------------------------
 # cleanup_sessions – OSError on unlink
 # ---------------------------------------------------------------------------
+
 
 class TestCleanupSessionsOSError:
     def test_oserror_on_unlink_is_swallowed(self, tmp_path):
@@ -199,6 +213,7 @@ class TestCleanupSessionsOSError:
 # restore_autosave_interactively – exception paths
 # ---------------------------------------------------------------------------
 
+
 class TestRestoreAutosaveErrors:
     @pytest.mark.asyncio
     async def test_restore_file_not_found(self, tmp_path):
@@ -208,7 +223,9 @@ class TestRestoreAutosaveErrors:
         async def fake_prompt(*args, **kwargs):
             return "1"  # select first session
 
-        with patch("code_puppy.session_storage.list_sessions", return_value=["autosave_01"]):
+        with patch(
+            "code_puppy.session_storage.list_sessions", return_value=["autosave_01"]
+        ):
             with patch(
                 "code_puppy.session_storage.load_session_with_hashes",
                 side_effect=FileNotFoundError("gone"),
@@ -234,7 +251,9 @@ class TestRestoreAutosaveErrors:
         async def fake_prompt(*args, **kwargs):
             return "1"  # select first session
 
-        with patch("code_puppy.session_storage.list_sessions", return_value=["autosave_01"]):
+        with patch(
+            "code_puppy.session_storage.list_sessions", return_value=["autosave_01"]
+        ):
             with patch(
                 "code_puppy.session_storage.load_session_with_hashes",
                 side_effect=ValueError("corrupt data"),
