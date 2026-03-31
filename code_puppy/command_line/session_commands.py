@@ -9,7 +9,7 @@ from pathlib import Path
 
 from code_puppy.command_line.command_registry import register_command
 from code_puppy.config import CONTEXTS_DIR
-from code_puppy.session_storage import list_sessions, load_session, save_session
+from code_puppy.session_storage import list_sessions, load_session, load_session_with_hashes, save_session
 
 
 # Import get_commands_help from command_handler to avoid circular imports
@@ -226,6 +226,7 @@ def handle_dump_context_command(command: str) -> bool:
             base_dir=Path(CONTEXTS_DIR),
             timestamp=datetime.now().isoformat(),
             token_estimator=agent.estimate_tokens_for_message,
+            compacted_hashes=list(agent.get_compacted_message_hashes()),
         )
         emit_success(
             f"✅ Context saved: {metadata.message_count} messages ({metadata.total_tokens} tokens)\n"
@@ -262,7 +263,7 @@ def handle_load_context_command(command: str) -> bool:
     session_path = contexts_dir / f"{session_name}.pkl"
 
     try:
-        history = load_session(session_name, contexts_dir)
+        history, compacted_hashes = load_session_with_hashes(session_name, contexts_dir)
     except FileNotFoundError:
         emit_error(f"Context file not found: {session_path}")
         available = list_sessions(contexts_dir)
@@ -275,6 +276,8 @@ def handle_load_context_command(command: str) -> bool:
 
     agent = get_current_agent()
     agent.set_message_history(history)
+    if compacted_hashes:
+        agent.restore_compacted_hashes(compacted_hashes)
     total_tokens = sum(agent.estimate_tokens_for_message(m) for m in history)
 
     # Rotate autosave id to avoid overwriting any existing autosave

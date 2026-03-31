@@ -306,6 +306,15 @@ class BaseAgent(ABC):
         """
         self._compacted_message_hashes.add(message_hash)
 
+    def restore_compacted_hashes(self, hashes: List) -> None:
+        """Restore compacted message hashes from a persisted session.
+
+        Args:
+            hashes: List of message hashes (int or str) to restore into the
+                    internal compacted-hashes set.
+        """
+        self._compacted_message_hashes = set(hashes)
+
     def get_model_name(self) -> Optional[str]:
         """Get pinned model name for this agent, if specified.
 
