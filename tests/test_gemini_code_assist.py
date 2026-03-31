@@ -263,48 +263,45 @@ class TestGeminiCodeAssistModel:
                 "usageMetadata": {},
             }
         }
-        with patch("httpx.AsyncClient") as MockClient:
-            client_instance = AsyncMock()
-            client_instance.post = AsyncMock(return_value=mock_resp)
-            MockClient.return_value.__aenter__ = AsyncMock(return_value=client_instance)
-            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+        client_instance = AsyncMock()
+        client_instance.post = AsyncMock(return_value=mock_resp)
+        client_instance.is_closed = False
+        model._client = client_instance
 
-            msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
-            result = await model.request(msgs, None, default_params)
-            assert result.parts[0].content == "ok"
+        msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
+        result = await model.request(msgs, None, default_params)
+        assert result.parts[0].content == "ok"
 
     @pytest.mark.anyio
     async def test_request_error(self, model, default_params):
         mock_resp = MagicMock()
         mock_resp.status_code = 500
         mock_resp.text = "Internal Server Error"
-        with patch("httpx.AsyncClient") as MockClient:
-            client_instance = AsyncMock()
-            client_instance.post = AsyncMock(return_value=mock_resp)
-            MockClient.return_value.__aenter__ = AsyncMock(return_value=client_instance)
-            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+        client_instance = AsyncMock()
+        client_instance.post = AsyncMock(return_value=mock_resp)
+        client_instance.is_closed = False
+        model._client = client_instance
 
-            msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
-            with pytest.raises(RuntimeError, match="500"):
-                await model.request(msgs, None, default_params)
+        msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
+        with pytest.raises(RuntimeError, match="500"):
+            await model.request(msgs, None, default_params)
 
     @pytest.mark.anyio
     async def test_request_stream_success(self, model, default_params):
         mock_response = AsyncMock()
         mock_response.status_code = 200
 
-        with patch("httpx.AsyncClient") as MockClient:
-            client_instance = AsyncMock()
-            stream_cm = AsyncMock()
-            stream_cm.__aenter__ = AsyncMock(return_value=mock_response)
-            stream_cm.__aexit__ = AsyncMock(return_value=False)
-            client_instance.stream = MagicMock(return_value=stream_cm)
-            MockClient.return_value.__aenter__ = AsyncMock(return_value=client_instance)
-            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+        client_instance = AsyncMock()
+        stream_cm = AsyncMock()
+        stream_cm.__aenter__ = AsyncMock(return_value=mock_response)
+        stream_cm.__aexit__ = AsyncMock(return_value=False)
+        client_instance.stream = MagicMock(return_value=stream_cm)
+        client_instance.is_closed = False
+        model._client = client_instance
 
-            msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
-            async with model.request_stream(msgs, None, default_params) as streamed:
-                assert isinstance(streamed, StreamedResponse)
+        msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
+        async with model.request_stream(msgs, None, default_params) as streamed:
+            assert isinstance(streamed, StreamedResponse)
 
     @pytest.mark.anyio
     async def test_request_stream_error(self, model, default_params):
@@ -312,19 +309,18 @@ class TestGeminiCodeAssistModel:
         mock_response.status_code = 400
         mock_response.aread = AsyncMock(return_value=b"Bad Request")
 
-        with patch("httpx.AsyncClient") as MockClient:
-            client_instance = AsyncMock()
-            stream_cm = AsyncMock()
-            stream_cm.__aenter__ = AsyncMock(return_value=mock_response)
-            stream_cm.__aexit__ = AsyncMock(return_value=False)
-            client_instance.stream = MagicMock(return_value=stream_cm)
-            MockClient.return_value.__aenter__ = AsyncMock(return_value=client_instance)
-            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+        client_instance = AsyncMock()
+        stream_cm = AsyncMock()
+        stream_cm.__aenter__ = AsyncMock(return_value=mock_response)
+        stream_cm.__aexit__ = AsyncMock(return_value=False)
+        client_instance.stream = MagicMock(return_value=stream_cm)
+        client_instance.is_closed = False
+        model._client = client_instance
 
-            msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
-            with pytest.raises(RuntimeError, match="400"):
-                async with model.request_stream(msgs, None, default_params):
-                    pass
+        msgs = [ModelRequest(parts=[UserPromptPart(content="hi")])]
+        with pytest.raises(RuntimeError, match="400"):
+            async with model.request_stream(msgs, None, default_params):
+                pass
 
 
 class TestStreamedResponse:
