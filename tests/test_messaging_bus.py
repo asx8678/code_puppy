@@ -6,7 +6,6 @@ queue management, and async/sync operation.
 """
 
 import asyncio
-import queue
 import threading
 from unittest.mock import patch
 
@@ -32,8 +31,8 @@ class TestMessageBusInitialization:
         """Test default initialization."""
         bus = MessageBus()
         assert bus._maxsize == 1000
-        assert isinstance(bus._outgoing, queue.Queue)
-        assert isinstance(bus._incoming, queue.Queue)
+        assert isinstance(bus._outgoing, asyncio.Queue)
+        assert isinstance(bus._incoming, asyncio.Queue)
         assert bus._current_session_id is None
         assert not bus._has_active_renderer
         assert bus._startup_buffer == []
@@ -47,8 +46,8 @@ class TestMessageBusInitialization:
         """Test that outgoing and incoming queues are separate."""
         bus = MessageBus()
         assert bus._outgoing is not bus._incoming
-        assert isinstance(bus._outgoing, queue.Queue)
-        assert isinstance(bus._incoming, queue.Queue)
+        assert isinstance(bus._outgoing, asyncio.Queue)
+        assert isinstance(bus._incoming, asyncio.Queue)
 
 
 class TestMessageBusEmission:
@@ -482,7 +481,7 @@ class TestQueueAccess:
 
         # Put a command in incoming queue
         cmd = UserInputResponse(prompt_id="test", value="response")
-        bus._incoming.put(cmd)
+        bus._incoming.put_nowait(cmd)
 
         retrieved = bus._incoming.get_nowait()
         assert retrieved.value == "response"
