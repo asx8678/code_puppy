@@ -2,6 +2,7 @@
 
 import asyncio
 import dataclasses
+import hashlib
 import json
 import logging
 import pathlib
@@ -315,7 +316,7 @@ class BaseAgent(ABC):
         """Restore compacted message hashes from a persisted session.
 
         Args:
-            hashes: List of message hashes (int or str) to restore into the
+            hashes: List of message hashes (str) to restore into the
                     internal compacted-hashes set.
         """
         self._compacted_message_hashes = set(hashes)
@@ -419,7 +420,7 @@ class BaseAgent(ABC):
         result = "|".join(attributes)
         return result
 
-    def hash_message(self, message: Any) -> int:
+    def hash_message(self, message: Any) -> str:
         """Create a stable hash for a model message that ignores timestamps."""
         role = getattr(message, "role", None)
         instructions = getattr(message, "instructions", None)
@@ -433,7 +434,7 @@ class BaseAgent(ABC):
             self._stringify_part(part) for part in getattr(message, "parts", [])
         ]
         canonical = "||".join(header_bits + part_strings)
-        return hash(canonical)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def stringify_message_part(self, part) -> str:
         """
