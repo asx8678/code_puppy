@@ -12,7 +12,12 @@ from unittest.mock import patch
 
 import pytest
 
-from code_puppy.messaging.bus import MessageBus
+from code_puppy.messaging.bus import (
+    MessageBus,
+    _session_id_var,
+    get_session_context,
+    set_session_context,
+)
 from code_puppy.messaging.commands import (
     ConfirmationResponse,
     SelectionResponse,
@@ -28,13 +33,17 @@ from code_puppy.messaging.messages import (
 class TestMessageBusInitialization:
     """Test MessageBus initialization and basic setup."""
 
+    def setup_method(self):
+        """Reset ContextVar state between tests to prevent bleed-over."""
+        _session_id_var.set(None)
+
     def test_initialization_default(self):
         """Test default initialization."""
         bus = MessageBus()
         assert bus._maxsize == 1000
         assert isinstance(bus._outgoing, queue.Queue)
         assert isinstance(bus._incoming, queue.Queue)
-        assert bus._current_session_id is None
+        assert bus.get_session_context() is None
         assert not bus._has_active_renderer
         assert bus._startup_buffer == []
 
@@ -169,6 +178,10 @@ class TestMessageBusEmission:
 class TestSessionContext:
     """Test session context management."""
 
+    def setup_method(self):
+        """Reset ContextVar state between tests to prevent bleed-over."""
+        _session_id_var.set(None)
+
     def test_set_session_context(self):
         """Test setting session context."""
         bus = MessageBus()
@@ -205,6 +218,28 @@ class TestSessionContext:
 
         # Should have collected some session contexts
         assert len(results) == 3
+
+    def test_contextvar_provides_thread_isolation(self):
+        """Each thread should see only its own session_id."""
+        import threading
+
+        results = {}
+        barrier = threading.Barrier(3)
+
+        def worker(tid):
+            set_session_context(f"session-{tid}")
+            barrier.wait()  # ensure all threads have set before reading
+            results[tid] = get_session_context()
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(3)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Each thread should read back its OWN value, not another's
+        for tid, value in results.items():
+            assert value == f"session-{tid}"
 
 
 class TestUserInputRequest:

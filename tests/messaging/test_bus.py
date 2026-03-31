@@ -36,6 +36,10 @@ from code_puppy.messaging.messages import (
 
 @pytest.fixture
 def bus():
+    # Reset the module-level ContextVar so tests don't bleed into each other
+    from code_puppy.messaging.bus import _session_id_var
+
+    _session_id_var.set(None)
     return MessageBus(maxsize=10)
 
 
