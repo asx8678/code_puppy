@@ -25,6 +25,7 @@ from pydantic_ai.messages import (
     ToolCallPart,
     ToolCallPartDelta,
 )
+from code_puppy.token_utils import estimate_token_count as _estimate_token_count
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,6 @@ def _fire_callback(event_type: str, event_data: Any, session_id: Optional[str]) 
 # Token Estimation
 # =============================================================================
 
-from code_puppy.token_utils import estimate_token_count as _estimate_token_count
 
 
 def _estimate_tokens(content: str) -> int:
