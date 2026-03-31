@@ -69,14 +69,19 @@ def _compute_hmac(key: bytes, data: bytes) -> bytes:
 
 def _load_raw_bytes(raw: bytes) -> Any:
     """Deserialize session file bytes, handling msgpack, legacy-signed, and plain pickle."""
-    # New msgpack format: magic header followed by msgpack payload + HMAC
+    # New msgpack format: magic header followed by HMAC + msgpack payload
     if raw.startswith(_MSGPACK_MAGIC):
         # Format: MAGIC (8 bytes) + HMAC (32 bytes) + msgpack payload
-        offset = len(_MSGPACK_MAGIC) + 32
-        msgpack_data = raw[offset:]
-        
+        offset = len(_MSGPACK_MAGIC)
+        stored_hmac = raw[offset : offset + 32]
+        msgpack_data = raw[offset + 32 :]
+
         # Verify HMAC integrity (using empty key for now - can be enhanced with key management)
-        # If verification fails, we still proceed but could log a warning in future
+        expected_hmac = _compute_hmac(b"", msgpack_data)
+        if not hmac.compare_digest(stored_hmac, expected_hmac):
+            raise ValueError(
+                "Session file HMAC integrity check failed — file may be corrupted or tampered"
+            )
         return msgpack.unpackb(msgpack_data, raw=False)
 
     # Legacy signed format: CPSESSION\x01 + 32-byte signature + pickle
