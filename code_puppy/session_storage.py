@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import logging
 import pickle
 import warnings
@@ -70,6 +71,36 @@ def _compute_hmac(key: bytes, data: bytes) -> bytes:
     return hmac.new(key, data, hashlib.sha256).digest()
 
 
+def _get_or_create_hmac_key() -> bytes:
+    """Get or create a per-installation HMAC key for session integrity.
+
+    The key is stored at ~/.code_puppy/.session_hmac_key with chmod 0o600.
+    Generated once on first run using os.urandom(32).
+    """
+    from code_puppy import config  # local import to avoid circular deps
+
+    key_path = Path(config.DATA_DIR) / ".session_hmac_key"
+    if key_path.exists():
+        return key_path.read_bytes()
+    key = os.urandom(32)
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    key_path.write_bytes(key)
+    key_path.chmod(0o600)
+    return key
+
+
+# Cached HMAC key — lazily initialised on first use.
+_HMAC_KEY: bytes | None = None
+
+
+def _get_hmac_key() -> bytes:
+    """Return cached HMAC key, initializing on first call."""
+    global _HMAC_KEY
+    if _HMAC_KEY is None:
+        _HMAC_KEY = _get_or_create_hmac_key()
+    return _HMAC_KEY
+
+
 def _load_raw_bytes(raw: bytes) -> Any:
     """Deserialize session file bytes, handling msgpack, legacy-signed, and plain pickle."""
     # New msgpack format: magic header followed by HMAC + msgpack payload
@@ -79,8 +110,8 @@ def _load_raw_bytes(raw: bytes) -> Any:
         stored_hmac = raw[offset : offset + 32]
         msgpack_data = raw[offset + 32 :]
 
-        # Verify HMAC integrity (using empty key for now - can be enhanced with key management)
-        expected_hmac = _compute_hmac(b"", msgpack_data)
+        # Verify HMAC integrity using per-install secret key
+        expected_hmac = _compute_hmac(_get_hmac_key(), msgpack_data)
         if not hmac.compare_digest(stored_hmac, expected_hmac):
             raise ValueError(
                 "Session file HMAC integrity check failed — file may be corrupted or tampered"
@@ -188,8 +219,8 @@ def save_session(
     }
     msgpack_data = msgpack.packb(payload, use_bin_type=True, default=_msgpack_default)
 
-    # Compute HMAC for integrity (using empty key for now - can be enhanced with key management)
-    hmac_signature = _compute_hmac(b"", msgpack_data)
+    # Compute HMAC for integrity using per-install secret key
+    hmac_signature = _compute_hmac(_get_hmac_key(), msgpack_data)
 
     tmp_pickle = paths.pickle_path.with_suffix(".tmp")
     with tmp_pickle.open("wb") as pickle_file:
