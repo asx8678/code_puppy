@@ -271,6 +271,7 @@ def save_chatgpt_models(models: Dict[str, Any]) -> bool:
         models_path = get_chatgpt_models_path()
         with open(models_path, "w", encoding="utf-8") as handle:
             json.dump(models, handle, indent=2)
+        models_path.chmod(0o600)
         return True
     except Exception as exc:
         logger.error("Failed to save ChatGPT models: %s", exc)
