@@ -54,6 +54,11 @@ from .messages import (
 )
 
 
+# Default timeout in seconds for user-facing request_* methods.
+# If the UI does not respond within this window the call raises TimeoutError.
+_REQUEST_TIMEOUT_SECONDS: float = 300.0
+
+
 class MessageBus:
     """Central coordinator for bidirectional Agent <-> UI communication.
 
@@ -285,9 +290,13 @@ class MessageBus:
         self.emit(request)
 
         try:
-            # Wait for response
-            result = await future
+            # Wait for response — timeout prevents permanent hang if UI disconnects
+            result = await asyncio.wait_for(
+                asyncio.shield(future), timeout=_REQUEST_TIMEOUT_SECONDS
+            )
             return result if result else (default or "")
+        except asyncio.TimeoutError:
+            return default or ""
         finally:
             # Clean up
             with self._lock:
@@ -333,7 +342,11 @@ class MessageBus:
         self.emit(request)
 
         try:
-            return await future
+            return await asyncio.wait_for(
+                asyncio.shield(future), timeout=_REQUEST_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError:
+            return (False, None)
         finally:
             with self._lock:
                 self._pending_requests.pop(prompt_id, None)
@@ -376,7 +389,11 @@ class MessageBus:
         self.emit(request)
 
         try:
-            return await future
+            return await asyncio.wait_for(
+                asyncio.shield(future), timeout=_REQUEST_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError:
+            return (-1, "")
         finally:
             with self._lock:
                 self._pending_requests.pop(prompt_id, None)
