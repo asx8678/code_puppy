@@ -150,12 +150,13 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> List[Any]:
                 # Try to get the running event loop
                 try:
                     asyncio.get_running_loop()
-                    # We're in an async context already - this shouldn't happen for sync triggers
-                    # but if it does, we can't use run_until_complete
+                    # We're in an async context already - schedule the coroutine so it
+                    # actually runs instead of being silently dropped.
                     logger.warning(
                         f"Async callback {callback.__name__} called from async context in sync trigger"
                     )
-                    results.append(None)
+                    future = asyncio.ensure_future(result)
+                    results.append(future)
                     continue
                 except RuntimeError:
                     # No running loop - we're in a sync/worker thread context
@@ -173,6 +174,26 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> List[Any]:
     return results
 
 
+async def _safe_invoke(callback: CallbackFunc, phase: PhaseType, *args, **kwargs) -> Any:
+    """Invoke a single callback safely, catching any exceptions per-callback.
+
+    Used by _trigger_callbacks so that one failing callback does not prevent
+    the remaining callbacks from running.
+    """
+    try:
+        result = callback(*args, **kwargs)
+        if asyncio.iscoroutine(result):
+            result = await result
+        logger.debug(f"Successfully executed async callback {callback.__name__}")
+        return result
+    except Exception as e:
+        logger.error(
+            f"Async callback {callback.__name__} failed in phase '{phase}': {e}\n"
+            f"{traceback.format_exc()}"
+        )
+        return None
+
+
 async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> List[Any]:
     callbacks = get_callbacks(phase)
 
@@ -182,22 +203,13 @@ async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> List[Any]:
 
     logger.debug(f"Triggering {len(callbacks)} async callbacks for phase '{phase}'")
 
-    results = []
-    for callback in callbacks:
-        try:
-            result = callback(*args, **kwargs)
-            if asyncio.iscoroutine(result):
-                result = await result
-            results.append(result)
-            logger.debug(f"Successfully executed async callback {callback.__name__}")
-        except Exception as e:
-            logger.error(
-                f"Async callback {callback.__name__} failed in phase '{phase}': {e}\n"
-                f"{traceback.format_exc()}"
-            )
-            results.append(None)
-
-    return results
+    # Run all callbacks concurrently; _safe_invoke isolates each callback's
+    # exceptions so one failure never silences the others.
+    return list(
+        await asyncio.gather(
+            *[_safe_invoke(cb, phase, *args, **kwargs) for cb in callbacks]
+        )
+    )
 
 
 async def on_startup() -> List[Any]:
