@@ -1,5 +1,6 @@
 """Agent manager for handling different agent configurations."""
 
+import dataclasses
 import importlib
 import json
 import os
@@ -36,15 +37,31 @@ class AgentInfo:
     json_path: Optional[str] = None
 
 
-# Registry of available agents (AgentInfo objects, keyed by agent name)
-_AGENT_REGISTRY: Dict[str, AgentInfo] = {}
-_AGENT_HISTORIES: Dict[str, List[ModelMessage]] = {}
-_CURRENT_AGENT: Optional[BaseAgent] = None
-_REGISTRY_POPULATED: bool = False
+@dataclass
+class AgentManagerState:
+    """Encapsulates all mutable module-level state for the agent manager.
 
-# Terminal session-based agent selection
-_SESSION_AGENTS_CACHE: dict[str, str] = {}
-_SESSION_FILE_LOADED: bool = False
+    Replaces the six process-global variables that previously scattered
+    mutable state across the module, making the state easier to inspect,
+    reset in tests, and reason about.
+    """
+
+    agent_registry: Dict[str, AgentInfo] = dataclasses.field(default_factory=dict)
+    agent_histories: Dict[str, List[ModelMessage]] = dataclasses.field(
+        default_factory=dict
+    )
+    current_agent: Optional[BaseAgent] = None
+    registry_populated: bool = False
+    session_agents_cache: Dict[str, str] = dataclasses.field(default_factory=dict)
+    session_file_loaded: bool = False
+
+
+# Module-level singleton – all functions reference _state.<field> instead of
+# bare module globals so the state is fully encapsulated.
+_state = AgentManagerState()
+
+# Thread lock for session cache updates (not part of state because it must
+# never be replaced or serialised).
 _SESSION_LOCK = threading.Lock()
 
 
@@ -201,20 +218,18 @@ def _save_session_data(sessions: dict[str, str]) -> None:
 
 def _ensure_session_cache_loaded() -> None:
     """Ensure the session cache is loaded from disk."""
-    global _SESSION_AGENTS_CACHE, _SESSION_FILE_LOADED
     with _SESSION_LOCK:
-        if not _SESSION_FILE_LOADED:
-            _SESSION_AGENTS_CACHE.update(_load_session_data())
-            _SESSION_FILE_LOADED = True
+        if not _state.session_file_loaded:
+            _state.session_agents_cache.update(_load_session_data())
+            _state.session_file_loaded = True
 
 
 def _discover_agents(message_group_id: Optional[str] = None):
     """Dynamically discover all agent classes and JSON agents."""
-    global _REGISTRY_POPULATED
-    if _REGISTRY_POPULATED:
+    if _state.registry_populated:
         return  # Already discovered, use cached registry
     # Always clear the registry to force refresh
-    _AGENT_REGISTRY.clear()
+    _state.agent_registry.clear()
 
     # 1. Discover Python agent classes in the agents package
     import code_puppy.agents as agents_package
@@ -242,7 +257,7 @@ def _discover_agents(message_group_id: Optional[str] = None):
                 ):
                     # Instantiate once to capture metadata into AgentInfo
                     agent_instance = attr()
-                    _AGENT_REGISTRY[agent_instance.name] = AgentInfo(
+                    _state.agent_registry[agent_instance.name] = AgentInfo(
                         name=agent_instance.name,
                         display_name=agent_instance.display_name,
                         description=agent_instance.description,
@@ -290,7 +305,7 @@ def _discover_agents(message_group_id: Optional[str] = None):
                         ):
                             # Instantiate once to capture metadata into AgentInfo
                             agent_instance = attr()
-                            _AGENT_REGISTRY[agent_instance.name] = AgentInfo(
+                            _state.agent_registry[agent_instance.name] = AgentInfo(
                                 name=agent_instance.name,
                                 display_name=agent_instance.display_name,
                                 description=agent_instance.description,
@@ -318,7 +333,7 @@ def _discover_agents(message_group_id: Optional[str] = None):
         # Add JSON agents to registry (store file path instead of class)
         # Python (builtin) agents take precedence over JSON agents.
         for agent_name, json_path in json_agents.items():
-            if agent_name in _AGENT_REGISTRY:
+            if agent_name in _state.agent_registry:
                 emit_warning(
                     f"JSON agent '{agent_name}' skipped: builtin Python agent with the same name takes precedence.",
                     message_group=message_group_id,
@@ -331,7 +346,7 @@ def _discover_agents(message_group_id: Optional[str] = None):
             except Exception:
                 _json_display = agent_name.replace("-", " ").title() + " 🤖"
                 _json_desc = "No description available"
-            _AGENT_REGISTRY[agent_name] = AgentInfo(
+            _state.agent_registry[agent_name] = AgentInfo(
                 name=agent_name,
                 display_name=_json_display,
                 description=_json_desc,
@@ -367,7 +382,7 @@ def _discover_agents(message_group_id: Optional[str] = None):
                     ):
                         try:
                             _plugin_inst = agent_class()
-                            _AGENT_REGISTRY[agent_name] = AgentInfo(
+                            _state.agent_registry[agent_name] = AgentInfo(
                                 name=_plugin_inst.name,
                                 display_name=_plugin_inst.display_name,
                                 description=_plugin_inst.description,
@@ -385,7 +400,7 @@ def _discover_agents(message_group_id: Optional[str] = None):
                         except Exception:
                             _pj_display = agent_name.replace("-", " ").title() + " 🤖"
                             _pj_desc = "No description available"
-                        _AGENT_REGISTRY[agent_name] = AgentInfo(
+                        _state.agent_registry[agent_name] = AgentInfo(
                             name=agent_name,
                             display_name=_pj_display,
                             description=_pj_desc,
@@ -399,13 +414,12 @@ def _discover_agents(message_group_id: Optional[str] = None):
             message_group=message_group_id,
         )
 
-    _REGISTRY_POPULATED = True  # Mark registry as fully populated
+    _state.registry_populated = True  # Mark registry as fully populated
 
 
 def _invalidate_agent_registry() -> None:
     """Invalidate the agent registry cache, forcing re-discovery on next call."""
-    global _REGISTRY_POPULATED
-    _REGISTRY_POPULATED = False
+    _state.registry_populated = False
 
 
 def get_available_agents() -> Dict[str, str]:
@@ -432,7 +446,7 @@ def get_available_agents() -> Dict[str, str]:
     uc_enabled = get_universal_constructor_enabled()
 
     agents = {}
-    for name, agent_info in _AGENT_REGISTRY.items():
+    for name, agent_info in _state.agent_registry.items():
         # Filter out pack agents if disabled
         if not pack_agents_enabled and name in PACK_AGENT_NAMES:
             continue
@@ -458,7 +472,7 @@ def get_current_agent_name() -> str:
 
     # First check for session-specific agent
     with _SESSION_LOCK:
-        session_agent = _SESSION_AGENTS_CACHE.get(session_id)
+        session_agent = _state.session_agents_cache.get(session_id)
     if session_agent:
         return session_agent
 
@@ -477,11 +491,10 @@ def set_current_agent(agent_name: str) -> bool:
     Returns:
         True if the agent was set successfully, False if agent not found.
     """
-    global _CURRENT_AGENT
     curr_agent = get_current_agent()
     if curr_agent is not None:
         # Store a shallow copy so future mutations don't affect saved history
-        _AGENT_HISTORIES[curr_agent.name] = list(curr_agent.get_message_history())
+        _state.agent_histories[curr_agent.name] = list(curr_agent.get_message_history())
     # Generate a message group ID for agent switching
     message_group_id = str(uuid.uuid4())
     _discover_agents(message_group_id=message_group_id)
@@ -490,18 +503,18 @@ def set_current_agent(agent_name: str) -> bool:
 
     # Clear the cached config when switching agents
     agent_obj = load_agent(agent_name)
-    _CURRENT_AGENT = agent_obj
+    _state.current_agent = agent_obj
 
     # Update session-based agent selection and persist to disk
     _ensure_session_cache_loaded()
     session_id = get_terminal_session_id()
     with _SESSION_LOCK:
-        _SESSION_AGENTS_CACHE[session_id] = agent_name
-        cache_snapshot = dict(_SESSION_AGENTS_CACHE)
+        _state.session_agents_cache[session_id] = agent_name
+        cache_snapshot = dict(_state.session_agents_cache)
     _save_session_data(cache_snapshot)
-    if agent_obj.name in _AGENT_HISTORIES:
+    if agent_obj.name in _state.agent_histories:
         # Restore a copy to avoid sharing the same list instance
-        agent_obj.set_message_history(list(_AGENT_HISTORIES[agent_obj.name]))
+        agent_obj.set_message_history(list(_state.agent_histories[agent_obj.name]))
     on_agent_reload(agent_obj.id, agent_name)
     return True
 
@@ -512,13 +525,11 @@ def get_current_agent() -> BaseAgent:
     Returns:
         The current agent configuration instance.
     """
-    global _CURRENT_AGENT
-
-    if _CURRENT_AGENT is None:
+    if _state.current_agent is None:
         agent_name = get_current_agent_name()
-        _CURRENT_AGENT = load_agent(agent_name)
+        _state.current_agent = load_agent(agent_name)
 
-    return _CURRENT_AGENT
+    return _state.current_agent
 
 
 def load_agent(agent_name: str) -> BaseAgent:
@@ -537,16 +548,16 @@ def load_agent(agent_name: str) -> BaseAgent:
     message_group_id = str(uuid.uuid4())
     _discover_agents(message_group_id=message_group_id)
 
-    if agent_name not in _AGENT_REGISTRY:
+    if agent_name not in _state.agent_registry:
         # Fallback to code-puppy if agent not found
-        if "code-puppy" in _AGENT_REGISTRY:
+        if "code-puppy" in _state.agent_registry:
             agent_name = "code-puppy"
         else:
             raise ValueError(
                 f"Agent '{agent_name}' not found and no fallback available"
             )
 
-    agent_info = _AGENT_REGISTRY[agent_name]
+    agent_info = _state.agent_registry[agent_name]
     return agent_info.factory()
 
 
@@ -574,7 +585,7 @@ def get_agent_descriptions() -> Dict[str, str]:
     uc_enabled = get_universal_constructor_enabled()
 
     descriptions = {}
-    for name, agent_info in _AGENT_REGISTRY.items():
+    for name, agent_info in _state.agent_registry.items():
         # Filter out pack agents if disabled
         if not pack_agents_enabled and name in PACK_AGENT_NAMES:
             continue
@@ -674,7 +685,7 @@ def clone_agent(agent_name: str) -> Optional[str]:
     message_group_id = str(uuid.uuid4())
     _discover_agents(message_group_id=message_group_id)
 
-    agent_info = _AGENT_REGISTRY.get(agent_name)
+    agent_info = _state.agent_registry.get(agent_name)
     if agent_info is None:
         emit_warning(f"Agent '{agent_name}' not found for cloning.")
         return None
@@ -683,7 +694,7 @@ def clone_agent(agent_name: str) -> Optional[str]:
 
     agents_dir = Path(get_user_agents_directory())
     base_name = _strip_clone_suffix(agent_name)
-    existing_names = set(_AGENT_REGISTRY.keys())
+    existing_names = set(_state.agent_registry.keys())
     clone_index = _next_clone_index(base_name, existing_names, agents_dir)
     clone_name = f"{base_name}-clone-{clone_index}"
     clone_path = agents_dir / f"{clone_name}.json"
@@ -771,7 +782,7 @@ def delete_clone_agent(agent_name: str) -> bool:
         emit_warning("Cannot delete the active agent. Switch agents first.")
         return False
 
-    agent_info = _AGENT_REGISTRY.get(agent_name)
+    agent_info = _state.agent_registry.get(agent_name)
     if agent_info is None:
         emit_warning(f"Clone '{agent_name}' not found.")
         return False
@@ -795,8 +806,8 @@ def delete_clone_agent(agent_name: str) -> bool:
     try:
         clone_path.unlink()
         emit_success(f"Deleted clone '{agent_name}'.")
-        _AGENT_REGISTRY.pop(agent_name, None)
-        _AGENT_HISTORIES.pop(agent_name, None)
+        _state.agent_registry.pop(agent_name, None)
+        _state.agent_histories.pop(agent_name, None)
         return True
     except Exception as exc:
         emit_warning(f"Failed to delete clone '{agent_name}': {exc}")

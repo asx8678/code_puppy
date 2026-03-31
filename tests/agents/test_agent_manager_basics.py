@@ -7,8 +7,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import code_puppy.agents.agent_manager as _am
+
 from code_puppy.agents.agent_manager import (
-    _AGENT_REGISTRY,
     AgentInfo,
     _discover_agents,
     _invalidate_agent_registry,
@@ -23,6 +24,9 @@ from code_puppy.agents.agent_manager import (
 )
 from code_puppy.agents.base_agent import BaseAgent
 from code_puppy.agents.json_agent import JSONAgent
+
+# Convenience alias to the encapsulated state singleton
+_state = _am._state
 
 
 # Define list_agents and get_agent functions for the test interface
@@ -71,7 +75,7 @@ class TestAgentManagerBasics:
     def setup_method(self):
         """Setup for each test method."""
         # Clear the registry and invalidate cache before each test
-        _AGENT_REGISTRY.clear()
+        _state.agent_registry.clear()
         _invalidate_agent_registry()
 
     def test_list_agents_basic(self):
@@ -150,10 +154,10 @@ class TestAgentManagerBasics:
         _discover_agents()
 
         # Verify agent was registered as an AgentInfo
-        assert "mock-agent" in _AGENT_REGISTRY
-        assert isinstance(_AGENT_REGISTRY["mock-agent"], AgentInfo)
-        assert _AGENT_REGISTRY["mock-agent"].factory == MockAgent
-        assert _AGENT_REGISTRY["mock-agent"].name == "mock-agent"
+        assert "mock-agent" in _state.agent_registry
+        assert isinstance(_state.agent_registry["mock-agent"], AgentInfo)
+        assert _state.agent_registry["mock-agent"].factory == MockAgent
+        assert _state.agent_registry["mock-agent"].name == "mock-agent"
 
     @patch("code_puppy.agents.agent_manager.discover_json_agents")
     @patch("pkgutil.iter_modules")
@@ -168,9 +172,9 @@ class TestAgentManagerBasics:
         _discover_agents()
 
         # Verify JSON agent was registered as an AgentInfo
-        assert "json-agent" in _AGENT_REGISTRY
-        assert isinstance(_AGENT_REGISTRY["json-agent"], AgentInfo)
-        assert _AGENT_REGISTRY["json-agent"].json_path == "/path/to/agent.json"
+        assert "json-agent" in _state.agent_registry
+        assert isinstance(_state.agent_registry["json-agent"], AgentInfo)
+        assert _state.agent_registry["json-agent"].json_path == "/path/to/agent.json"
 
     @patch("code_puppy.agents.agent_manager.discover_json_agents")
     @patch("pkgutil.iter_modules")
@@ -206,12 +210,12 @@ class TestAgentManagerBasics:
             _discover_agents()
 
         # Valid agent should be registered, internal modules should NOT be
-        assert "valid-agent" in _AGENT_REGISTRY
+        assert "valid-agent" in _state.agent_registry
         # Verify internal modules were properly skipped
-        assert "_internal" not in _AGENT_REGISTRY
-        assert "base_agent" not in _AGENT_REGISTRY
-        assert "json_agent" not in _AGENT_REGISTRY
-        assert "agent_manager" not in _AGENT_REGISTRY
+        assert "_internal" not in _state.agent_registry
+        assert "base_agent" not in _state.agent_registry
+        assert "json_agent" not in _state.agent_registry
+        assert "agent_manager" not in _state.agent_registry
 
     @patch("code_puppy.agents.agent_manager.discover_json_agents")
     @patch("pkgutil.iter_modules")
@@ -302,7 +306,7 @@ class TestAgentManagerBasics:
         """Test loading an agent that doesn't exist."""
         # Clear registry and mock discovery to return no agents
         with patch("code_puppy.agents.agent_manager._discover_agents"):
-            _AGENT_REGISTRY.clear()
+            _state.agent_registry.clear()
 
             # The actual behavior is that it tries to fallback to code-puppy
             # Since we have no agents, it should raise ValueError
@@ -426,7 +430,7 @@ class TestAgentManagerBasics:
         # Clear global current agent to force loading
         import code_puppy.agents.agent_manager as am
 
-        am._CURRENT_AGENT = None
+        am._state.current_agent = None
 
         agent = get_current_agent()
 
@@ -437,23 +441,23 @@ class TestAgentManagerBasics:
     def test_agent_registry_isolation(self):
         """Test that agent registry works in isolation."""
         # Test that registry starts empty
-        original_size = len(_AGENT_REGISTRY)
+        original_size = len(_state.agent_registry)
 
         # Add a test agent
-        _AGENT_REGISTRY["test-agent"] = MockAgent
+        _state.agent_registry["test-agent"] = MockAgent
 
         # Verify it was added
-        assert "test-agent" in _AGENT_REGISTRY
-        assert len(_AGENT_REGISTRY) == original_size + 1
+        assert "test-agent" in _state.agent_registry
+        assert len(_state.agent_registry) == original_size + 1
 
         # Clear for cleanup
-        _AGENT_REGISTRY.clear()
+        _state.agent_registry.clear()
 
     def test_load_agent_with_empty_registry(self):
         """Test load_agent behavior with completely empty registry."""
         # Mock discovery to ensure empty registry
         with patch("code_puppy.agents.agent_manager._discover_agents"):
-            _AGENT_REGISTRY.clear()
+            _state.agent_registry.clear()
 
             with pytest.raises(ValueError, match="not found and no fallback"):
                 load_agent("any-agent")

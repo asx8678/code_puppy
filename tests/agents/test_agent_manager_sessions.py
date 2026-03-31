@@ -379,8 +379,8 @@ class TestSessionCaching:
         # Reset module globals
         import code_puppy.agents.agent_manager as am
 
-        am._SESSION_FILE_LOADED = False
-        am._SESSION_AGENTS_CACHE.clear()
+        am._state.session_file_loaded = False
+        am._state.session_agents_cache.clear()
 
         with patch("code_puppy.agents.agent_manager._load_session_data") as mock_load:
             mock_load.return_value = {"session_123": "code-puppy"}
@@ -397,8 +397,8 @@ class TestSessionCaching:
         """Test that ensure updates the cache dict."""
         import code_puppy.agents.agent_manager as am
 
-        am._SESSION_FILE_LOADED = False
-        am._SESSION_AGENTS_CACHE.clear()
+        am._state.session_file_loaded = False
+        am._state.session_agents_cache.clear()
 
         test_sessions = {
             "session_111": "code-puppy",
@@ -410,17 +410,17 @@ class TestSessionCaching:
 
             _ensure_session_cache_loaded()
 
-            assert am._SESSION_AGENTS_CACHE == test_sessions
+            assert am._state.session_agents_cache == test_sessions
 
     def test_ensure_session_cache_loaded_marks_as_loaded(self):
         """Test that ensure sets the loaded flag."""
         import code_puppy.agents.agent_manager as am
 
-        am._SESSION_FILE_LOADED = False
+        am._state.session_file_loaded = False
 
         with patch("code_puppy.agents.agent_manager._load_session_data") as mock_load:
             mock_load.return_value = {}
 
             _ensure_session_cache_loaded()
 
-            assert am._SESSION_FILE_LOADED is True
+            assert am._state.session_file_loaded is True
