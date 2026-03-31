@@ -33,6 +33,7 @@ It also handles request/response correlation for user interactions:
 """
 
 import asyncio
+import contextvars
 import queue
 import threading
 from typing import Any, Dict, List, Optional, Tuple
@@ -52,6 +53,11 @@ from .messages import (
     SelectionRequest,
     TextMessage,
     UserInputRequest,
+)
+
+# ContextVar for per-coroutine/thread session tracking — safe for parallel agents
+_session_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "_session_id_var", default=None
 )
 
 
@@ -86,8 +92,8 @@ class MessageBus:
         # Request/Response correlation: prompt_id → Future (for async usage)
         self._pending_requests: Dict[str, asyncio.Future[Any]] = {}
 
-        # Session context for multi-agent tracking
-        self._current_session_id: Optional[str] = None
+        # Session context is now stored in a ContextVar (see module level)
+        # to support parallel agents without race conditions.
 
     # =========================================================================
     # Outgoing Messages (Agent → UI)
@@ -105,8 +111,10 @@ class MessageBus:
         """
         # Auto-tag message with current session if not already set
         with self._lock:
-            if message.session_id is None and self._current_session_id is not None:
-                message.session_id = self._current_session_id
+            if message.session_id is None:
+                current = _session_id_var.get()
+                if current is not None:
+                    message.session_id = current
 
             if not self._has_active_renderer:
                 self._startup_buffer.append(message)
@@ -187,8 +195,7 @@ class MessageBus:
         Args:
             session_id: The session ID to tag messages with, or None to clear.
         """
-        with self._lock:
-            self._current_session_id = session_id
+        _session_id_var.set(session_id)
 
     def get_session_context(self) -> Optional[str]:
         """Get the current session context.
@@ -196,8 +203,7 @@ class MessageBus:
         Returns:
             The current session_id, or None if not set.
         """
-        with self._lock:
-            return self._current_session_id
+        return _session_id_var.get()
 
     # =========================================================================
     # User Input Requests (Agent waits for UI response)
