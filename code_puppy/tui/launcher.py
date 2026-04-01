@@ -11,14 +11,12 @@ import os
 def is_tui_enabled() -> bool:
     """Check if Textual TUI mode is enabled.
 
-    The Textual TUI is now the default. Set CODE_PUPPY_LEGACY_TUI=1
-    to fall back to the old prompt_toolkit-based UI.
+    The Textual TUI is opt-in while still under development.
+    Set CODE_PUPPY_TUI=1 to enable it. Otherwise the classic
+    prompt_toolkit UI is used.
     """
-    # Check if legacy mode is explicitly requested
-    legacy = os.getenv("CODE_PUPPY_LEGACY_TUI", "").lower()
-    if legacy in ("1", "true", "yes", "on"):
-        return False
-    return True
+    tui = os.getenv("CODE_PUPPY_TUI", "").lower()
+    return tui in ("1", "true", "yes", "on")
 
 
 async def textual_interactive_mode(
