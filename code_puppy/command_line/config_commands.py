@@ -48,6 +48,7 @@ def handle_show_command(command: str) -> bool:
     from code_puppy.keymap import (
         get_cancel_agent_display_name)
     from code_puppy.messaging import emit_info
+    from code_puppy.model_packs import get_current_pack
 
     puppy_name = get_puppy_name()
     owner_name = get_owner_name()
@@ -77,6 +78,7 @@ def handle_show_command(command: str) -> bool:
 [bold]protected_tokens:[/bold]      [cyan]{protected_tokens:,}[/cyan] recent tokens preserved
 [bold]compaction_threshold:[/bold]     [cyan]{compaction_threshold:.1%}[/cyan] context usage triggers compaction
 [bold]compaction_strategy:[/bold]   [cyan]{compaction_strategy}[/cyan] (summarization or truncation)
+[bold]model_pack:[/bold]            [cyan]{get_current_pack().name}[/cyan] ({get_current_pack().description})
 [bold]resume_message_count:[/bold] [cyan]{get_resume_message_count()}[/cyan] messages shown on /resume
 [bold]reasoning_effort:[/bold]      [cyan]{get_openai_reasoning_effort()}[/cyan]
 [bold]verbosity:[/bold]             [cyan]{get_openai_verbosity()}[/cyan]
