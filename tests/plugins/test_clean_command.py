@@ -54,7 +54,11 @@ def clean_env(tmp_path: Path):
 
     with patch.dict(
         "code_puppy.plugins.clean_command.register_callbacks.__dict__",
-        {"config": patches["code_puppy.plugins.clean_command.register_callbacks.config"]},
+        {
+            "config": patches[
+                "code_puppy.plugins.clean_command.register_callbacks.config"
+            ]
+        },
     ):
         yield Paths()
 
@@ -94,7 +98,7 @@ def _populate_logs(env):
 def _populate_cache(env):
     browser = env.cache / "browser_profiles"
     browser.mkdir(exist_ok=True)
-    (browser / "default" ).mkdir(exist_ok=True)
+    (browser / "default").mkdir(exist_ok=True)
     (browser / "default" / "data.bin").write_bytes(b"b" * 500)
 
     workflows = env.data / "browser_workflows"
@@ -131,7 +135,16 @@ def _import_plugin():
         _human_size,
         _CATEGORIES,
     )
-    return _handle_clean_command, _custom_help, _show_status, _show_help, _run_clean, _human_size, _CATEGORIES
+
+    return (
+        _handle_clean_command,
+        _custom_help,
+        _show_status,
+        _show_help,
+        _run_clean,
+        _human_size,
+        _CATEGORIES,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -438,7 +451,7 @@ class TestErrorResilience:
         _populate_history(clean_env)
         handler, *_ = _import_plugin()
 
-        hist = clean_env.state / "command_history.txt"
+        _hist = clean_env.state / "command_history.txt"
         with patch.object(Path, "unlink", side_effect=OSError("permission denied")):
             handler("/clean history", "clean")  # should not raise
 

@@ -26,7 +26,11 @@ def _session_targets() -> List[Tuple[str, Path, str]]:
     return [
         ("Autosave sessions", Path(config.AUTOSAVE_DIR), "dir"),
         ("Sub-agent sessions", Path(config.DATA_DIR) / "subagent_sessions", "dir"),
-        ("Terminal sessions", Path(config.STATE_DIR) / "terminal_sessions.json", "file"),
+        (
+            "Terminal sessions",
+            Path(config.STATE_DIR) / "terminal_sessions.json",
+            "file",
+        ),
         ("Session HMAC key", Path(config.DATA_DIR) / ".session_hmac_key", "file"),
     ]
 
@@ -47,7 +51,11 @@ def _cache_targets() -> List[Tuple[str, Path, str]]:
     return [
         ("Browser profiles", Path(config.CACHE_DIR) / "browser_profiles", "dir"),
         ("Browser workflows", Path(config.DATA_DIR) / "browser_workflows", "dir"),
-        ("Skills cache", Path.home() / ".code_puppy" / "cache" / "skills_catalog.json", "file"),
+        (
+            "Skills cache",
+            Path.home() / ".code_puppy" / "cache" / "skills_catalog.json",
+            "file",
+        ),
         ("API server PID", Path(config.STATE_DIR) / "api_server.pid", "file"),
     ]
 
@@ -137,9 +145,10 @@ def _clean_dir(path: Path, dry_run: bool) -> Tuple[int, int]:
         return count, total
     try:
         shutil.rmtree(path)
-        path.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         emit_warning(f"  ⚠️  Could not fully clean {path}: {exc}")
+    finally:
+        path.mkdir(parents=True, exist_ok=True)
     return count, total
 
 
@@ -177,7 +186,9 @@ def _clean_targets(
             c, b = _clean_file(path, dry_run)
         if c:
             prefix = "Would remove" if dry_run else "Removed"
-            emit_info(f"  🗑️  {prefix} {label}: {c} file{'s' if c != 1 else ''}, {_human_size(b)}")
+            emit_info(
+                f"  🗑️  {prefix} {label}: {c} file{'s' if c != 1 else ''}, {_human_size(b)}"
+            )
         total_files += c
         total_bytes += b
     return total_files, total_bytes
@@ -194,15 +205,23 @@ def _show_help() -> None:
     emit_info("Usage:")
     emit_info("  /clean help              Show this help message")
     emit_info("  /clean status            Show disk usage per category")
-    emit_info("  /clean all               Clean everything (sessions, history, logs, cache, db)")
-    emit_info("  /clean sessions          Clean autosave + sub-agent + terminal sessions")
+    emit_info(
+        "  /clean all               Clean everything (sessions, history, logs, cache, db)"
+    )
+    emit_info(
+        "  /clean sessions          Clean autosave + sub-agent + terminal sessions"
+    )
     emit_info("  /clean history           Clean command history")
     emit_info("  /clean logs              Clean error logs")
-    emit_info("  /clean cache             Clean browser profiles, workflows, skills cache")
+    emit_info(
+        "  /clean cache             Clean browser profiles, workflows, skills cache"
+    )
     emit_info("  /clean db                Clean DBOS state database")
     emit_info("")
     emit_info("Options:")
-    emit_info("  --dry-run                Preview what would be cleaned without deleting")
+    emit_info(
+        "  --dry-run                Preview what would be cleaned without deleting"
+    )
     emit_info("")
     emit_info("Examples:")
     emit_info("  /clean sessions --dry-run")
