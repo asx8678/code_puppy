@@ -73,16 +73,12 @@ class PolicyEngine:
     def rules(self) -> list[PolicyRule]:
         return list(self._rules)
 
-    def check(
+    def _find_matching_rule(
         self,
         tool_name: str,
         args: dict | None = None,
-    ) -> PermissionDecision:
-        """Evaluate a tool call against policy rules.
-
-        Returns Allow(), Deny(), or AskUser() based on the first matching
-        rule. Falls back to default_decision if no rule matches.
-        """
+    ) -> PolicyRule | None:
+        """Return the first rule matching *tool_name* and *args*, or None."""
         stringified = json.dumps(args, sort_keys=True) if args else None
         command = (args or {}).get("command", "")
 
@@ -99,8 +95,23 @@ class PolicyEngine:
                 and not rule._compiled_args.search(stringified)
             ):
                 continue
-            return self._to_decision(rule.decision, rule)
+            return rule
 
+        return None
+
+    def check(
+        self,
+        tool_name: str,
+        args: dict | None = None,
+    ) -> PermissionDecision:
+        """Evaluate a tool call against policy rules.
+
+        Returns Allow(), Deny(), or AskUser() based on the first matching
+        rule. Falls back to default_decision if no rule matches.
+        """
+        rule = self._find_matching_rule(tool_name, args)
+        if rule is not None:
+            return self._to_decision(rule.decision, rule)
         return self._to_decision(self._default_decision)
 
     def check_explicit(
@@ -118,24 +129,9 @@ class PolicyEngine:
         the shell-safety LLM risk assessor) and only want to short-circuit
         on an explicit allow/deny policy rule.
         """
-        stringified = json.dumps(args, sort_keys=True) if args else None
-        command = (args or {}).get("command", "")
-
-        for rule in self._rules:
-            if not self._matches_tool(rule, tool_name):
-                continue
-            if rule._compiled_command and not rule._compiled_command.search(
-                str(command)
-            ):
-                continue
-            if (
-                rule._compiled_args
-                and stringified
-                and not rule._compiled_args.search(stringified)
-            ):
-                continue
+        rule = self._find_matching_rule(tool_name, args)
+        if rule is not None:
             return self._to_decision(rule.decision, rule)
-
         return None  # no explicit rule matched
 
     def check_shell_command_explicit(

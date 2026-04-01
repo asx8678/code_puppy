@@ -73,7 +73,11 @@ class Semaphore:
         await future  # blocks until release() resolves us
 
     def release(self) -> None:
-        """Free the held slot, granting it directly to the next waiter if any."""
+        """Free the held slot, granting it directly to the next waiter if any.
+
+        Raises:
+            RuntimeError: If called more times than :meth:`acquire` (double-release).
+        """
         if self._waiters:
             # Hand the slot directly to the oldest waiter — don't increment
             # _available since the slot stays occupied by the new holder.
@@ -81,6 +85,11 @@ class Semaphore:
             if not future.done():
                 future.set_result(None)
         else:
+            if self._available >= self._max:
+                raise RuntimeError(
+                    f"Semaphore.release() called too many times "
+                    f"(available={self._available}, max={self._max})"
+                )
             self._available += 1
 
     async def __aenter__(self) -> "Semaphore":

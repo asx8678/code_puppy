@@ -27,6 +27,22 @@ except Exception:  # pragma: no cover
 if TYPE_CHECKING:
     from code_puppy.tui.app import CodePuppyApp
 
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
+class TUIHost(Protocol):
+    """Protocol that any TUI app must satisfy to host a StreamRenderer.
+
+    This decouples the renderer from the concrete CodePuppyApp class,
+    making it testable and enforcing the contract at the type level.
+    """
+
+    def write_to_chat(self, content: str, **kwargs) -> None: ...
+    def set_working(self, working: bool, message: str = "") -> None: ...
+    def update_token_rate(self, rate: float) -> None: ...
+
+
 logger = logging.getLogger(__name__)
 
 # Tool name to banner display name mapping
@@ -62,7 +78,7 @@ class StreamRenderer:
         renderer.finalize()
     """
 
-    def __init__(self, app: "CodePuppyApp") -> None:
+    def __init__(self, app: "CodePuppyApp | TUIHost") -> None:
         self.app = app
         self._streaming_parts: set[int] = set()
         self._thinking_parts: set[int] = set()

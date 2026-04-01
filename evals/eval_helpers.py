@@ -44,7 +44,7 @@ class EvalResult:
     model_name: str = ""
 
 
-EVAL_LOGS_DIR = Path("evals/logs")
+EVAL_LOGS_DIR = Path(__file__).parent / "logs"
 
 
 def log_eval(name: str, result: EvalResult) -> None:
