@@ -354,7 +354,7 @@ class BaseAgent(ABC):
             attributes.append(f"content={content}")
         elif isinstance(content, pydantic.BaseModel):
             attributes.append(
-                f"content={json.dumps(content.model_dump(), sort_keys=True)}"
+                f"content={content.model_dump_json()}"
             )
         elif isinstance(content, dict):
             attributes.append(f"content={json.dumps(content, sort_keys=True)}")
@@ -407,7 +407,7 @@ class BaseAgent(ABC):
             if isinstance(part.content, str):
                 result = part.content
             elif isinstance(part.content, pydantic.BaseModel):
-                result = json.dumps(part.content.model_dump())
+                result = part.content.model_dump_json()
             elif isinstance(part.content, dict):
                 result = json.dumps(part.content)
             elif isinstance(part.content, list):
