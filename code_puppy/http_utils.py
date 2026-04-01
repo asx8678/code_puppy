@@ -5,6 +5,7 @@ This module provides functions for creating properly configured HTTP clients.
 """
 
 import asyncio
+import logging
 import os
 import socket
 import time
@@ -96,6 +97,29 @@ except ImportError:
         pass
 
 
+def _notify_adaptive_rate_limiter(model_name: str, status_code: int) -> None:
+    """Fire-and-forget notification to the adaptive rate limiter on 429.
+
+    This helper avoids coupling http_utils to the rate limiter at import
+    time and swallows any errors so that a buggy or misconfigured rate
+    limiter never breaks the HTTP pipeline.
+    """
+    if status_code != 429 or not model_name:
+        return
+    try:
+        from code_puppy.adaptive_rate_limiter import record_rate_limit
+
+        asyncio.ensure_future(record_rate_limit(model_name))
+        emit_info(
+            f"Adaptive rate limiter triggered for model '{model_name}' "
+            f"(HTTP 429). Reducing concurrency."
+        )
+    except Exception:
+        # Never let the rate limiter break normal operation
+        logger = logging.getLogger(__name__)
+        logger.debug("adaptive_rate_limiter notification skipped", exc_info=True)
+
+
 class RetryingAsyncClient(httpx.AsyncClient):
     """AsyncClient with built-in rate limit handling (429) and retries.
 
@@ -132,6 +156,12 @@ class RetryingAsyncClient(httpx.AsyncClient):
                 # Check for retryable status
                 if response.status_code not in self.retry_status_codes:
                     return response
+
+                # Notify adaptive rate limiter on 429
+                if response.status_code == 429 and self.model_name:
+                    _notify_adaptive_rate_limiter(
+                        self.model_name, response.status_code
+                    )
 
                 # Close response if we're going to retry
                 await response.aclose()
