@@ -327,6 +327,13 @@ class CodePuppyApp(App):
             self.push_screen(UCScreen())
             return
 
+        # Handle /add_model via Textual screen
+        if command.strip().lower() in ("/add_model",):
+            from code_puppy.tui.screens.add_model_screen import AddModelScreen
+
+            self.push_screen(AddModelScreen())
+            return
+
         try:
             from code_puppy.command_line.command_handler import handle_command
 
