@@ -199,31 +199,33 @@ class CodePuppyApp(App):
         self._update_info_bar()
 
     def _update_info_bar(self) -> None:
-        """Refresh the info bar status text."""
+        """Refresh the info bar status and token rate."""
         try:
             bar = self.query_one("#info-bar", InfoBar)
         except Exception:
             return
 
-        bar.is_working = self.is_working
-
+        # Status text
         if self.is_working:
-            parts = []
-            if self.token_rate > 0:
-                parts.append(f"⏳ {self.token_rate:.1f} t/s")
             if self.status_message:
-                parts.append(self.status_message)
-            elif self.token_rate == 0:
-                parts.append("⏳ Working...")
-            bar.status_text = " │ ".join(parts) if parts else "⏳ Working..."
-        else:
-            if self.token_rate > 0:
-                bar.status_text = f"Ready │ Last: {self.token_rate:.1f} t/s"
+                bar.status_text = f"⏳ {self.status_message}"
             else:
-                bar.status_text = "Ready"
+                bar.status_text = "⏳ Working..."
+        else:
+            bar.status_text = "Ready"
 
-        # Also refresh agent/model in case they changed
+        # Token rate — always show when available
+        if self.token_rate > 0:
+            bar.rate_text = f"⚡ {self.token_rate:.1f} t/s"
+        else:
+            bar.rate_text = ""
+
+        # Refresh agent/model in case they changed
         bar.update_from_app_state()
+
+    def on_screen_resume(self, event) -> None:
+        """Refresh info bar whenever a screen is popped (agent/model may have changed)."""
+        self._update_info_bar()
 
     # --- Completion overlay handlers ---
 

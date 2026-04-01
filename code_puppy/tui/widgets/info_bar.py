@@ -1,6 +1,6 @@
 """Info bar widget — replaces both StatusBar and Footer.
 
-Shows current agent, model, status, and key shortcuts in a single
+Shows current agent, model, and token rate in a single
 bottom-docked bar with live updates.
 """
 
@@ -13,7 +13,7 @@ from textual.widgets import Static
 
 
 class InfoBar(Widget):
-    """Single-line bottom bar showing current agent, model, and status."""
+    """Single-line bottom bar showing current agent, model, and performance."""
 
     DEFAULT_CSS = """
     InfoBar {
@@ -49,10 +49,10 @@ class InfoBar(Widget):
         color: $text-muted;
     }
 
-    InfoBar > .info-bar--keys {
+    InfoBar > .info-bar--rate {
         width: auto;
         padding: 0 1;
-        color: $text-muted;
+        color: $warning;
     }
     """
 
@@ -60,7 +60,7 @@ class InfoBar(Widget):
     agent_name: reactive[str] = reactive("", layout=True)
     model_name: reactive[str] = reactive("", layout=True)
     status_text: reactive[str] = reactive("Ready", layout=True)
-    is_working: reactive[bool] = reactive(False)
+    rate_text: reactive[str] = reactive("", layout=True)
 
     def compose(self) -> ComposeResult:
         yield Static("", classes="info-bar--agent", id="ib-agent")
@@ -68,7 +68,7 @@ class InfoBar(Widget):
         yield Static("", classes="info-bar--model", id="ib-model")
         yield Static(" │ ", classes="info-bar--sep")
         yield Static("", classes="info-bar--status", id="ib-status")
-        yield Static("F1 Help  F4 Settings", classes="info-bar--keys", id="ib-keys")
+        yield Static("", classes="info-bar--rate", id="ib-rate")
 
     def _refresh_agent(self) -> None:
         """Update the agent label."""
@@ -94,6 +94,14 @@ class InfoBar(Widget):
         except Exception:
             pass
 
+    def _refresh_rate(self) -> None:
+        """Update the token rate label."""
+        try:
+            label = self.query_one("#ib-rate", Static)
+            label.update(self.rate_text)
+        except Exception:
+            pass
+
     def watch_agent_name(self, value: str) -> None:
         self._refresh_agent()
 
@@ -103,16 +111,8 @@ class InfoBar(Widget):
     def watch_status_text(self, value: str) -> None:
         self._refresh_status()
 
-    def watch_is_working(self, value: bool) -> None:
-        """Update keys hint based on working state."""
-        try:
-            keys = self.query_one("#ib-keys", Static)
-            if value:
-                keys.update("Ctrl+X Cancel")
-            else:
-                keys.update("F1 Help  F4 Settings")
-        except Exception:
-            pass
+    def watch_rate_text(self, value: str) -> None:
+        self._refresh_rate()
 
     def update_from_app_state(self) -> None:
         """Pull current agent/model from app state. Call on mount and after changes."""
