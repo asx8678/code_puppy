@@ -432,7 +432,8 @@ FILE_IGNORE_PATTERNS = [
 ]
 
 # Backwards compatibility for any imports still referring to IGNORE_PATTERNS
-IGNORE_PATTERNS = DIR_IGNORE_PATTERNS + FILE_IGNORE_PATTERNS
+# Deduplicate to reduce regex compilation cost (~38 duplicates across categories)
+IGNORE_PATTERNS = list(dict.fromkeys(DIR_IGNORE_PATTERNS + FILE_IGNORE_PATTERNS))
 
 
 # ---------------------------------------------------------------------------
