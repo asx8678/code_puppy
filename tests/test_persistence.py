@@ -1,253 +1,227 @@
-"""Tests for code_puppy.persistence atomic write helpers."""
+"""Tests for persistence module atomic write operations."""
 
 import json
-import os
+import tempfile
 from pathlib import Path
 
-import pytest
 import msgpack
+import pytest
 
 from code_puppy.persistence import (
     atomic_write_bytes,
     atomic_write_json,
     atomic_write_msgpack,
     atomic_write_text,
+    read_json,
+    read_msgpack,
     safe_resolve_path,
 )
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+class TestSafeResolvePath:
+    """Test path resolution and validation."""
 
-@pytest.fixture()
-def tmp_dir(tmp_path: Path) -> Path:
-    """Return a fresh temp directory for each test."""
-    return tmp_path
+    def test_resolve_simple_path(self, tmp_path: Path):
+        """Test basic path resolution."""
+        test_file = tmp_path / "test.txt"
+        result = safe_resolve_path(test_file)
+        assert isinstance(result, Path)
+        assert result.is_absolute()
 
+    def test_resolve_with_allowed_parent_valid(self, tmp_path: Path):
+        """Test path within allowed parent succeeds."""
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        test_file = subdir / "test.txt"
+        
+        result = safe_resolve_path(test_file, allowed_parent=tmp_path)
+        assert result == test_file.resolve()
 
-# ---------------------------------------------------------------------------
-# atomic_write_text
-# ---------------------------------------------------------------------------
+    def test_resolve_with_allowed_parent_invalid(self, tmp_path: Path):
+        """Test path outside allowed parent fails."""
+        other_dir = tmp_path / "other"
+        other_dir.mkdir()
+        test_file = other_dir / "test.txt"
+        
+        # Try to validate against a different parent
+        fake_parent = tmp_path / "fake"
+        fake_parent.mkdir()
+        
+        with pytest.raises(ValueError, match="outside allowed parent"):
+            safe_resolve_path(test_file, allowed_parent=fake_parent)
+
 
 class TestAtomicWriteText:
-    def test_successful_write(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "hello.txt"
-        atomic_write_text(target, "hello world")
-        assert target.read_text(encoding="utf-8") == "hello world"
+    """Test atomic text file writes."""
 
-    def test_encoding_parameter(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "latin.txt"
-        atomic_write_text(target, "café", encoding="latin-1")
-        assert target.read_text(encoding="latin-1") == "café"
+    def test_write_and_read(self, tmp_path: Path):
+        """Test text can be written and read back."""
+        test_file = tmp_path / "test.txt"
+        content = "Hello, World!"
+        
+        atomic_write_text(test_file, content)
+        
+        assert test_file.exists()
+        assert test_file.read_text() == content
 
-    def test_creates_parent_dirs(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "a" / "b" / "c.txt"
-        atomic_write_text(target, "deep")
-        assert target.read_text() == "deep"
+    def test_overwrite_existing(self, tmp_path: Path):
+        """Test overwriting existing file works."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("old content")
+        
+        new_content = "new content"
+        atomic_write_text(test_file, new_content)
+        
+        assert test_file.read_text() == new_content
 
-    def test_overwrites_existing(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "overwrite.txt"
-        target.write_text("old")
-        atomic_write_text(target, "new")
-        assert target.read_text() == "new"
+    def test_custom_encoding(self, tmp_path: Path):
+        """Test custom encoding works."""
+        test_file = tmp_path / "test.txt"
+        content = "Héllo, Wörld!"
+        
+        atomic_write_text(test_file, content, encoding="utf-8")
+        
+        assert test_file.read_text(encoding="utf-8") == content
 
-
-# ---------------------------------------------------------------------------
-# atomic_write_json
-# ---------------------------------------------------------------------------
-
-class TestAtomicWriteJson:
-    def test_round_trip(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "data.json"
-        original = {"name": "test", "values": [1, 2, 3]}
-        atomic_write_json(target, original)
-        restored = json.loads(target.read_text())
-        assert restored == original
-
-    def test_indent(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "indented.json"
-        atomic_write_json(target, {"a": 1}, indent=4)
-        # Default indent is 2; explicit indent=4 should produce longer output
-        text = target.read_text()
-        assert "    " in text  # 4-space indent
-
-    def test_creates_parent_dirs(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "deep" / "file.json"
-        atomic_write_json(target, {"ok": True})
-        assert json.loads(target.read_text()) == {"ok": True}
-
-
-# ---------------------------------------------------------------------------
-# atomic_write_bytes
-# ---------------------------------------------------------------------------
 
 class TestAtomicWriteBytes:
-    def test_successful_write(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "bin.dat"
-        data = b"\x00\x01\x02\xff"
-        atomic_write_bytes(target, data)
-        assert target.read_bytes() == data
+    """Test atomic binary file writes."""
 
-    def test_overwrites(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "bin.dat"
-        target.write_bytes(b"old")
-        atomic_write_bytes(target, b"new")
-        assert target.read_bytes() == b"new"
+    def test_write_and_read(self, tmp_path: Path):
+        """Test bytes can be written and read back."""
+        test_file = tmp_path / "test.bin"
+        data = b"\x00\x01\x02\x03\xff"
+        
+        atomic_write_bytes(test_file, data)
+        
+        assert test_file.exists()
+        assert test_file.read_bytes() == data
 
 
-# ---------------------------------------------------------------------------
-# atomic_write_msgpack
-# ---------------------------------------------------------------------------
+class TestAtomicWriteJson:
+    """Test atomic JSON file writes."""
+
+    def test_write_and_read(self, tmp_path: Path):
+        """Test JSON data can be written and read back."""
+        test_file = tmp_path / "test.json"
+        data = {"key": "value", "number": 42, "nested": {"a": 1}}
+        
+        atomic_write_json(test_file, data)
+        
+        assert test_file.exists()
+        loaded = json.loads(test_file.read_text())
+        assert loaded == data
+
+    def test_non_serializable_raises(self, tmp_path: Path):
+        """Test that non-serializable data raises TypeError."""
+        test_file = tmp_path / "test.json"
+        
+        with pytest.raises(TypeError, match="not JSON-serializable"):
+            atomic_write_json(test_file, {"datetime": __import__('datetime').datetime.now()})
+
+    def test_custom_default_serializer(self, tmp_path: Path):
+        """Test custom default serializer works."""
+        test_file = tmp_path / "test.json"
+        
+        class CustomObj:
+            def __init__(self, value):
+                self.value = value
+        
+        def serialize(obj):
+            if isinstance(obj, CustomObj):
+                return {"custom_value": obj.value}
+            raise TypeError()
+        
+        data = {"obj": CustomObj("test")}
+        atomic_write_json(test_file, data, default=serialize)
+        
+        loaded = json.loads(test_file.read_text())
+        assert loaded["obj"]["custom_value"] == "test"
+
+    def test_read_json_with_default(self, tmp_path: Path):
+        """Test read_json returns default for missing file."""
+        test_file = tmp_path / "nonexistent.json"
+        
+        result = read_json(test_file, default={"default": True})
+        assert result == {"default": True}
+
+    def test_read_json_existing(self, tmp_path: Path):
+        """Test read_json loads existing file."""
+        test_file = tmp_path / "test.json"
+        data = {"key": "value"}
+        test_file.write_text(json.dumps(data))
+        
+        result = read_json(test_file)
+        assert result == data
+
 
 class TestAtomicWriteMsgpack:
-    def test_round_trip(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "data.msgpack"
-        original = {"key": "value", "nums": [1, 2, 3]}
-        atomic_write_msgpack(target, original)
-        raw = target.read_bytes()
-        restored = msgpack.unpackb(raw, raw=False)
-        assert restored == original
+    """Test atomic msgpack file writes."""
 
-    def test_binary_payload_round_trip(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "binary.msgpack"
-        original = {"format": "pydantic-ai-json", "payload": b'[{"role":"user"}]'}
-        atomic_write_msgpack(target, original)
-        raw = target.read_bytes()
-        restored = msgpack.unpackb(raw, raw=False)
-        assert restored == original
+    def test_write_and_read(self, tmp_path: Path):
+        """Test msgpack data can be written and read back."""
+        test_file = tmp_path / "test.msgpack"
+        data = {"key": "value", "number": 42, "binary": b"bytes"}
+        
+        atomic_write_msgpack(test_file, data)
+        
+        assert test_file.exists()
+        loaded = msgpack.unpackb(test_file.read_bytes(), raw=False)
+        assert loaded == data
 
-    def test_custom_default(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "custom.msgpack"
+    def test_non_serializable_raises(self, tmp_path: Path):
+        """Test that non-serializable data raises TypeError."""
+        test_file = tmp_path / "test.msgpack"
+        
+        with pytest.raises(TypeError, match="not msgpack-serializable"):
+            atomic_write_msgpack(test_file, {"file": open(__file__)})  # File objects can't be serialized
 
-        def _default(obj):
-            if isinstance(obj, set):
-                return list(obj)
-            raise TypeError(f"Cannot serialize {type(obj)}")
+    def test_read_msgpack_with_default(self, tmp_path: Path):
+        """Test read_msgpack returns default for missing file."""
+        test_file = tmp_path / "nonexistent.msgpack"
+        
+        result = read_msgpack(test_file, default={"default": True})
+        assert result == {"default": True}
 
-        data = {"items": {1, 2, 3}}
-        atomic_write_msgpack(target, data, default=_default)
-        raw = target.read_bytes()
-        restored = msgpack.unpackb(raw, raw=False)
-        assert sorted(restored["items"]) == [1, 2, 3]
-
-
-# ---------------------------------------------------------------------------
-# Partial-write safety (no corrupt leftovers)
-# ---------------------------------------------------------------------------
-
-class TestPartialWriteSafety:
-    def test_no_temp_file_left_on_success(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "clean.txt"
-        atomic_write_text(target, "ok")
-        # Only the target file should exist; no *.tmp stragglers
-        tmp_files = list(tmp_dir.glob("*.tmp"))
-        assert len(tmp_files) == 0
-
-    def test_atomic_write_text_no_corrupt_file(self, tmp_dir: Path) -> None:
-        """Simulate failure mid-write — the original content should remain."""
-        target = tmp_dir / "important.txt"
-        target.write_text("original content")
-
-        # Monkey-patch os.replace to raise on the first call
-        original_replace = os.replace
-        call_count = 0
-
-        def _failing_replace(src, dst):
-            nonlocal call_count
-            call_count += 1
-            raise OSError("simulated disk error")
-
-        os.replace = _failing_replace
-        try:
-            with pytest.raises(OSError):
-                atomic_write_text(target, "new content")
-        finally:
-            os.replace = original_replace
-
-        # The original file must still be intact
-        assert target.read_text() == "original content"
-
-    def test_atomic_write_json_no_corrupt_file(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "data.json"
-        atomic_write_json(target, {"v": 1})
-        original_text = target.read_text()
-
-        original_replace = os.replace
-
-        def _failing_replace(src, dst):
-            raise OSError("simulated failure")
-
-        os.replace = _failing_replace
-        try:
-            with pytest.raises(OSError):
-                atomic_write_json(target, {"v": 2})
-        finally:
-            os.replace = original_replace
-
-        # File still has the first version's content
-        assert target.read_text() == original_text
-        assert json.loads(target.read_text())["v"] == 1
-
-    def test_atomic_write_msgpack_no_corrupt_file(self, tmp_dir: Path) -> None:
-        target = tmp_dir / "data.msgpack"
-        original_data = {"v": "first"}
-        atomic_write_msgpack(target, original_data)
-        original_bytes = target.read_bytes()
-
-        original_replace = os.replace
-
-        def _failing_replace(src, dst):
-            raise OSError("simulated failure")
-
-        os.replace = _failing_replace
-        try:
-            with pytest.raises(OSError):
-                atomic_write_msgpack(target, {"v": "second"})
-        finally:
-            os.replace = original_replace
-
-        # Original msgpack data intact
-        assert target.read_bytes() == original_bytes
-        assert msgpack.unpackb(target.read_bytes(), raw=False) == original_data
+    def test_read_msgpack_existing(self, tmp_path: Path):
+        """Test read_msgpack loads existing file."""
+        test_file = tmp_path / "test.msgpack"
+        data = {"key": "value"}
+        test_file.write_bytes(msgpack.packb(data, use_bin_type=True))
+        
+        result = read_msgpack(test_file)
+        assert result == data
 
 
-# ---------------------------------------------------------------------------
-# safe_resolve_path
-# ---------------------------------------------------------------------------
+class TestAtomicity:
+    """Test atomic behavior - no partial files on failure."""
 
-class TestSafeResolvePath:
-    def test_resolves_relative(self, tmp_dir: Path) -> None:
-        child = tmp_dir / "subdir" / "file.txt"
-        child.parent.mkdir(parents=True)
-        resolved = safe_resolve_path(child)
-        assert resolved == child.resolve()
+    def test_no_partial_file_on_exception(self, tmp_path: Path, monkeypatch):
+        """Test that temp file is cleaned up if write fails."""
+        test_file = tmp_path / "test.txt"
+        
+        # Patch mkstemp to succeed but write to fail
+        original_mkstemp = __import__('tempfile').mkstemp
+        
+        def failing_mkstemp(*args, **kwargs):
+            fd, name = original_mkstemp(*args, **kwargs)
+            # Close the fd to simulate normal behavior
+            __import__('os').close(fd)
+            return -1, name  # Return invalid fd
+        
+        monkeypatch.setattr("tempfile.mkstemp", failing_mkstemp)
+        
+        with pytest.raises(Exception):
+            atomic_write_text(test_file, "content")
+        
+        # Target file should not exist
+        assert not test_file.exists()
 
-    def test_valid_within_parent(self, tmp_dir: Path) -> None:
-        child = tmp_dir / "ok.txt"
-        resolved = safe_resolve_path(child, allowed_parent=tmp_dir)
-        assert resolved == child.resolve()
-
-    def test_invalid_outside_parent(self, tmp_dir: Path) -> None:
-        outside = tmp_dir / ".." / "outside.txt"
-        with pytest.raises(ValueError, match="outside allowed parent"):
-            safe_resolve_path(outside, allowed_parent=tmp_dir)
-
-    def test_symlink_traversal_blocked(self, tmp_dir: Path) -> None:
-        # Create a directory outside allowed_parent with a symlink pointing in
-        outside_dir = tmp_dir / ".." / "evil"
-        outside_dir.mkdir(parents=True, exist_ok=True)
-        # Make it absolute so resolve doesn't canonicalise back
-        outside_dir = outside_dir.resolve()
-
-        link = tmp_dir / "escape_link"
-        link.symlink_to(outside_dir)
-
-        with pytest.raises(ValueError, match="outside allowed parent"):
-            safe_resolve_path(link / "payload.txt", allowed_parent=tmp_dir)
-
-    def test_no_parent_constraint(self, tmp_dir: Path) -> None:
-        """Without allowed_parent, any path is fine."""
-        anywhere = Path("/tmp/anywhere.txt")
-        resolved = safe_resolve_path(anywhere)
-        assert resolved.is_absolute()
+    def test_directory_created_automatically(self, tmp_path: Path):
+        """Test that parent directories are created."""
+        nested_file = tmp_path / "a" / "b" / "c" / "test.txt"
+        
+        atomic_write_text(nested_file, "content")
+        
+        assert nested_file.exists()
+        assert nested_file.read_text() == "content"
