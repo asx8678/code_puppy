@@ -127,6 +127,8 @@ class BaseAgent(ABC):
         self._cached_tool_defs: list[dict[str, Any | None]] = None
         # Per-instance flag for delayed compaction (not a module global — safe with parallel agents)
         self._delayed_compaction_requested: bool = False
+        # Per-invocation cache for _collect_tool_call_ids (see method)
+        self._tool_ids_cache = None
 
     def get_identity(self) -> str:
         """Get a unique identity for this agent instance.
@@ -930,14 +932,10 @@ class BaseAgent(ABC):
             return 128000
 
     @staticmethod
-    def _collect_tool_call_ids(
+    def _collect_tool_call_ids_uncached(
         messages: list[ModelMessage],
     ) -> tuple[set[str], set[str]]:
-        """Collect tool_call_ids and tool_return_ids from messages.
-
-        Returns:
-            Tuple of (tool_call_ids, tool_return_ids) sets.
-        """
+        """Collect tool_call_ids and tool_return_ids from messages (no caching)."""
         call_ids: set[str] = set()
         return_ids: set[str] = set()
         for msg in messages:
@@ -950,6 +948,24 @@ class BaseAgent(ABC):
                 else:
                     return_ids.add(tcid)
         return call_ids, return_ids
+
+    def _collect_tool_call_ids(
+        self,
+        messages: list[ModelMessage],
+    ) -> tuple[set[str], set[str]]:
+        """Collect tool_call_ids and tool_return_ids with per-list caching.
+
+        Caches result keyed by (id(messages), len(messages)) so repeated
+        calls within a single message_history_processor invocation reuse
+        the previous scan.  The cache is invalidated automatically when
+        a different list or length is seen.
+        """
+        cache_key = (id(messages), len(messages))
+        if self._tool_ids_cache is not None and self._tool_ids_cache[0] == cache_key:
+            return self._tool_ids_cache[1]
+        result = self._collect_tool_call_ids_uncached(messages)
+        self._tool_ids_cache = (cache_key, result)
+        return result
 
     def has_pending_tool_calls(self, messages: list[ModelMessage]) -> bool:
         """
