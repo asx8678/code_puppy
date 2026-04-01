@@ -5,62 +5,62 @@ import os
 from unittest.mock import patch
 
 
-def test_tui_disabled_by_default():
-    """TUI mode should be disabled by default."""
+def test_tui_enabled_by_default():
+    """TUI mode should be ENABLED by default (Textual is the new default)."""
     from code_puppy.tui.launcher import is_tui_enabled
 
     with patch.dict(os.environ, {}, clear=True):
-        # Remove the var if it exists
         os.environ.pop("CODE_PUPPY_TUI", None)
+        os.environ.pop("CODE_PUPPY_LEGACY_TUI", None)
+        assert is_tui_enabled() is True
+
+
+def test_tui_disabled_with_legacy_env_var():
+    """TUI mode disabled when CODE_PUPPY_LEGACY_TUI=1."""
+    from code_puppy.tui.launcher import is_tui_enabled
+
+    with patch.dict(os.environ, {"CODE_PUPPY_LEGACY_TUI": "1"}):
         assert is_tui_enabled() is False
 
 
-def test_tui_enabled_with_env_var():
-    """TUI mode enabled with CODE_PUPPY_TUI=1."""
+def test_tui_disabled_with_legacy_true():
+    """TUI mode disabled with CODE_PUPPY_LEGACY_TUI=true."""
     from code_puppy.tui.launcher import is_tui_enabled
 
-    with patch.dict(os.environ, {"CODE_PUPPY_TUI": "1"}):
-        assert is_tui_enabled() is True
-
-
-def test_tui_enabled_with_true():
-    """TUI mode enabled with CODE_PUPPY_TUI=true."""
-    from code_puppy.tui.launcher import is_tui_enabled
-
-    with patch.dict(os.environ, {"CODE_PUPPY_TUI": "true"}):
-        assert is_tui_enabled() is True
-
-
-def test_tui_enabled_with_yes():
-    """TUI mode enabled with CODE_PUPPY_TUI=yes."""
-    from code_puppy.tui.launcher import is_tui_enabled
-
-    with patch.dict(os.environ, {"CODE_PUPPY_TUI": "yes"}):
-        assert is_tui_enabled() is True
-
-
-def test_tui_enabled_with_on():
-    """TUI mode enabled with CODE_PUPPY_TUI=on."""
-    from code_puppy.tui.launcher import is_tui_enabled
-
-    with patch.dict(os.environ, {"CODE_PUPPY_TUI": "on"}):
-        assert is_tui_enabled() is True
-
-
-def test_tui_disabled_with_zero():
-    """TUI mode disabled with CODE_PUPPY_TUI=0."""
-    from code_puppy.tui.launcher import is_tui_enabled
-
-    with patch.dict(os.environ, {"CODE_PUPPY_TUI": "0"}):
+    with patch.dict(os.environ, {"CODE_PUPPY_LEGACY_TUI": "true"}):
         assert is_tui_enabled() is False
 
 
-def test_tui_disabled_with_random_string():
-    """TUI mode disabled with random string."""
+def test_tui_disabled_with_legacy_yes():
+    """TUI mode disabled with CODE_PUPPY_LEGACY_TUI=yes."""
+    from code_puppy.tui.launcher import is_tui_enabled
+
+    with patch.dict(os.environ, {"CODE_PUPPY_LEGACY_TUI": "yes"}):
+        assert is_tui_enabled() is False
+
+
+def test_tui_disabled_with_legacy_on():
+    """TUI mode disabled with CODE_PUPPY_LEGACY_TUI=on."""
+    from code_puppy.tui.launcher import is_tui_enabled
+
+    with patch.dict(os.environ, {"CODE_PUPPY_LEGACY_TUI": "on"}):
+        assert is_tui_enabled() is False
+
+
+def test_tui_enabled_with_legacy_zero():
+    """TUI mode stays enabled when CODE_PUPPY_LEGACY_TUI=0 (not requesting legacy)."""
+    from code_puppy.tui.launcher import is_tui_enabled
+
+    with patch.dict(os.environ, {"CODE_PUPPY_LEGACY_TUI": "0"}):
+        assert is_tui_enabled() is True
+
+
+def test_tui_enabled_with_old_env_var_ignored():
+    """Old CODE_PUPPY_TUI variable is now ignored; TUI is still default."""
     from code_puppy.tui.launcher import is_tui_enabled
 
     with patch.dict(os.environ, {"CODE_PUPPY_TUI": "maybe"}):
-        assert is_tui_enabled() is False
+        assert is_tui_enabled() is True
 
 
 def test_launcher_module_importable():

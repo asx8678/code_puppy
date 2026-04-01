@@ -7,11 +7,21 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from prompt_toolkit import Application
-from prompt_toolkit.formatted_text import HTML
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout import Layout, Window
-from prompt_toolkit.layout.controls import FormattedTextControl
+try:
+    from prompt_toolkit import Application
+    from prompt_toolkit.formatted_text import HTML
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.layout import Layout, Window
+    from prompt_toolkit.layout.controls import FormattedTextControl
+    _HAS_PROMPT_TOOLKIT = True
+except ImportError:
+    Application = None  # type: ignore
+    HTML = None  # type: ignore
+    KeyBindings = None  # type: ignore
+    Layout = None  # type: ignore
+    Window = None  # type: ignore
+    FormattedTextControl = None  # type: ignore
+    _HAS_PROMPT_TOOLKIT = False
 from rapidfuzz.distance import JaroWinkler
 from rich.console import Console
 from rich.panel import Panel

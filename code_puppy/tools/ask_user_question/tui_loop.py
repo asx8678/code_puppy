@@ -11,16 +11,20 @@ import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from prompt_toolkit import Application
-from prompt_toolkit.application import run_in_terminal
-from prompt_toolkit.formatted_text import ANSI, FormattedText
-from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
-from prompt_toolkit.layout import Layout, VSplit, Window
-from prompt_toolkit.layout.controls import FormattedTextControl
-from prompt_toolkit.layout.dimension import Dimension
-from prompt_toolkit.output import create_output
-from prompt_toolkit.output.color_depth import ColorDepth
-from prompt_toolkit.widgets import Frame
+try:
+    from prompt_toolkit import Application
+    from prompt_toolkit.application import run_in_terminal
+    from prompt_toolkit.formatted_text import ANSI, FormattedText
+    from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+    from prompt_toolkit.layout import Layout, VSplit, Window
+    from prompt_toolkit.layout.controls import FormattedTextControl
+    from prompt_toolkit.layout.dimension import Dimension
+    from prompt_toolkit.output import create_output
+    from prompt_toolkit.output.color_depth import ColorDepth
+    from prompt_toolkit.widgets import Frame
+    _HAS_PROMPT_TOOLKIT = True
+except ImportError:
+    _HAS_PROMPT_TOOLKIT = False
 
 from .constants import (
     ARROW_DOWN,

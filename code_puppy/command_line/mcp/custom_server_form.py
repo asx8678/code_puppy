@@ -9,18 +9,22 @@ import os
 import sys
 import time
 
-from prompt_toolkit.application import Application
-from prompt_toolkit.filters import Condition
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout import (
-    Dimension,
-    HSplit,
-    Layout,
-    VSplit,
-    Window)
-from prompt_toolkit.layout.controls import FormattedTextControl
-from prompt_toolkit.lexers import PygmentsLexer
-from prompt_toolkit.widgets import Frame, TextArea
+try:
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.filters import Condition
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.layout import (
+        Dimension,
+        HSplit,
+        Layout,
+        VSplit,
+        Window)
+    from prompt_toolkit.layout.controls import FormattedTextControl
+    from prompt_toolkit.lexers import PygmentsLexer
+    from prompt_toolkit.widgets import Frame, TextArea
+    _HAS_PROMPT_TOOLKIT = True
+except ImportError:
+    _HAS_PROMPT_TOOLKIT = False
 from pygments.lexers.data import JsonLexer
 
 from code_puppy.messaging import emit_info, emit_success

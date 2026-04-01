@@ -1,10 +1,19 @@
 import os
 from collections.abc import Iterable
 
-from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import Completer, Completion
-from prompt_toolkit.document import Document
-from prompt_toolkit.history import FileHistory
+try:
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.completion import Completer, Completion
+    from prompt_toolkit.document import Document
+    from prompt_toolkit.history import FileHistory
+    _HAS_PROMPT_TOOLKIT = True
+except ImportError:
+    PromptSession = None  # type: ignore
+    Completer = object  # type: ignore
+    Completion = None  # type: ignore
+    Document = None  # type: ignore
+    FileHistory = None  # type: ignore
+    _HAS_PROMPT_TOOLKIT = False
 
 from code_puppy.config import get_global_model_name
 from code_puppy.model_factory import ModelFactory
