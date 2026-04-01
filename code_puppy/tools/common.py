@@ -436,60 +436,75 @@ FILE_IGNORE_PATTERNS = [
 IGNORE_PATTERNS = DIR_IGNORE_PATTERNS + FILE_IGNORE_PATTERNS
 
 
+# ---------------------------------------------------------------------------
+# Pre-compiled pattern matching (compiled once at import time)
+# ---------------------------------------------------------------------------
+import re as _re
+
+
+def _compile_patterns(patterns: list[str]) -> _re.Pattern:
+    """Compile a list of glob/fnmatch patterns into a single regex.
+
+    Each pattern is translated via ``fnmatch.translate`` (which handles ``*``
+    and ``?``) and the results are OR-joined into one compiled regex.
+    Duplicate patterns are removed to keep the regex lean.
+    """
+    seen: set[str] = set()
+    regex_parts: list[str] = []
+    for pat in patterns:
+        if pat in seen:
+            continue
+        seen.add(pat)
+        regex_parts.append(fnmatch.translate(pat))
+    if not regex_parts:
+        return _re.compile(r"(?!)")  # matches nothing
+    return _re.compile("|".join(f"(?:{p})" for p in regex_parts))
+
+
+_DIR_IGNORE_RE: _re.Pattern = _compile_patterns(DIR_IGNORE_PATTERNS)
+_ALL_IGNORE_RE: _re.Pattern = _compile_patterns(IGNORE_PATTERNS)
+
+
+def _matches_compiled(path: str, compiled_re: _re.Pattern) -> bool:
+    """Check if *path* (or any of its sub-paths) matches *compiled_re*.
+
+    ``fnmatch.translate`` turns ``**`` into a regex that requires at least one
+    ``/`` before the matched segment, so a bare ``foo.png`` won't match
+    ``**/*.png``.  We normalise by prepending ``./`` when the path has no
+    leading directory to keep the semantics identical to the old loop-based
+    implementation.
+    """
+    # Strip leading ./ for consistent matching
+    cleaned = path.lstrip("./") if path.startswith("./") else path
+    # Normalise: ensure there is always a directory prefix so that **
+    # patterns like "**/dist/**" and "**/*.png" match root-level entries.
+    dotted = f"./{cleaned}"
+    # Try normalised path (with ./ prefix)
+    if compiled_re.match(dotted):
+        return True
+    # Also try with trailing / for directory patterns like **/node_modules/**
+    if compiled_re.match(f"{dotted}/"):
+        return True
+    # Also try the raw cleaned path (covers patterns without **)
+    if compiled_re.match(cleaned):
+        return True
+    # Try all suffixes (handles nested paths)
+    parts = Path(cleaned).parts
+    for i in range(1, len(parts)):
+        sub = str(Path(*parts[i:]))
+        if compiled_re.match(f"./{sub}") or compiled_re.match(sub):
+            return True
+    return False
+
+
 def should_ignore_path(path: str) -> bool:
     """Return True if *path* matches any pattern in IGNORE_PATTERNS."""
-    # Convert path to Path object for better pattern matching
-    path_obj = Path(path)
-
-    for pattern in IGNORE_PATTERNS:
-        # Try pathlib's match method which handles ** patterns properly
-        try:
-            if path_obj.match(pattern):
-                return True
-        except ValueError:
-            # If pathlib can't handle the pattern, fall back to fnmatch
-            if fnmatch.fnmatch(path, pattern):
-                return True
-
-        # Additional check: if pattern contains **, try matching against
-        # different parts of the path to handle edge cases
-        if "**" in pattern:
-            # Convert pattern to handle different path representations
-            simplified_pattern = pattern.replace("**/", "").replace("/**", "")
-
-            # Check if any part of the path matches the simplified pattern
-            path_parts = path_obj.parts
-            for i in range(len(path_parts)):
-                subpath = Path(*path_parts[i:])
-                if fnmatch.fnmatch(str(subpath), simplified_pattern):
-                    return True
-                # Also check individual parts
-                if fnmatch.fnmatch(path_parts[i], simplified_pattern):
-                    return True
-
-    return False
+    return _matches_compiled(path, _ALL_IGNORE_RE)
 
 
 def should_ignore_dir_path(path: str) -> bool:
     """Return True if path matches any directory ignore pattern (directories only)."""
-    path_obj = Path(path)
-    for pattern in DIR_IGNORE_PATTERNS:
-        try:
-            if path_obj.match(pattern):
-                return True
-        except ValueError:
-            if fnmatch.fnmatch(path, pattern):
-                return True
-        if "**" in pattern:
-            simplified = pattern.replace("**/", "").replace("/**", "")
-            parts = path_obj.parts
-            for i in range(len(parts)):
-                subpath = Path(*parts[i:])
-                if fnmatch.fnmatch(str(subpath), simplified):
-                    return True
-                if fnmatch.fnmatch(parts[i], simplified):
-                    return True
-    return False
+    return _matches_compiled(path, _DIR_IGNORE_RE)
 
 
 # ============================================================================
