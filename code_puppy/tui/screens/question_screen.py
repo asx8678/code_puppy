@@ -2,15 +2,6 @@
 
 Replaces code_puppy/tools/ask_user_question/tui_loop.py + terminal_ui.py.
 
-Two-panel Textual Screen:
-    Left  — question headers list (✓ for answered)
-    Right — current question options (radio/checkbox style)
-
-Usage::
-
-    answers, cancelled, timed_out = await app.push_screen_wait(
-        QuestionScreen(questions, timeout_seconds=300)
-    )
 """
 
 from __future__ import annotations
@@ -36,24 +27,8 @@ QuestionResult = tuple[list[QuestionAnswer], bool, bool]
 
 class QuestionScreen(Screen[QuestionResult]):
     """Textual Screen for interactive question answering.
-
-    Replaces the prompt_toolkit TUI in tui_loop.py / terminal_ui.py with
-    a native Textual screen.
-
-    Left panel: question headers with ✓ for answered ones.
-    Right panel: current question text + options (radio or checkbox style).
-    Bottom: optional "Other" text input + timeout countdown bar.
-
-    Key bindings
-    ------------
-    ← / h       Switch to previous question
-    → / l       Switch to next question
-    ↑ / k       Move cursor up in options
-    ↓ / j       Move cursor down in options
-    Space       Toggle option (multi-select) or select (single-select)
-    Enter       Confirm selection; advance to next Q or submit on last
-    Ctrl+S      Submit all answers immediately
-    Escape      Cancel (or exit "Other" text mode)
+    Bindings: ←/→ switch question · ↑/↓ navigate options · Space toggle
+    Enter confirm/advance · Ctrl+S submit all · Escape cancel.
     """
 
     BINDINGS = [
@@ -141,10 +116,6 @@ class QuestionScreen(Screen[QuestionResult]):
         self._state = QuestionUIState(questions)
         self._state.timeout_seconds = timeout_seconds
 
-    # ------------------------------------------------------------------
-    # Compose / mount
-    # ------------------------------------------------------------------
-
     def compose(self) -> ComposeResult:
         yield Static(
             "❓ Questions — ←/→ Switch · ↑/↓ Navigate"
@@ -167,10 +138,6 @@ class QuestionScreen(Screen[QuestionResult]):
         self._refresh_all()
         self.query_one("#q-right", RichLog).focus()
         self.set_interval(1.0, self._on_timer_tick)
-
-    # ------------------------------------------------------------------
-    # Rendering helpers
-    # ------------------------------------------------------------------
 
     def _render_left_panel(self) -> None:
         """Rebuild the question-headers list on the left."""
@@ -301,10 +268,6 @@ class QuestionScreen(Screen[QuestionResult]):
         self._update_other_input()
         self._update_timeout_display()
 
-    # ------------------------------------------------------------------
-    # Timer tick
-    # ------------------------------------------------------------------
-
     async def _on_timer_tick(self) -> None:
         """Called every second by set_interval to check for timeout."""
         if self._state.is_timed_out():
@@ -312,12 +275,8 @@ class QuestionScreen(Screen[QuestionResult]):
             return
         self._update_timeout_display()
 
-    # ------------------------------------------------------------------
-    # Actions
-    # ------------------------------------------------------------------
-
     def action_cancel(self) -> None:
-        """Escape — exit 'Other' text mode first; then cancel the screen."""
+        """Escape: exit Other-text mode, or cancel."""
         self._state.reset_activity_timer()
         if self._state.entering_other_text:
             self._state.entering_other_text = False
@@ -327,14 +286,14 @@ class QuestionScreen(Screen[QuestionResult]):
         self.dismiss(([], True, False))
 
     def action_submit_all(self) -> None:
-        """Ctrl+S — immediately submit all current answers."""
+        """Ctrl+S: submit all answers immediately."""
         self._state.reset_activity_timer()
         if self._state.entering_other_text:
             self._state.commit_other_text()
         self.dismiss((self._state.build_answers(), False, False))
 
     def action_confirm(self) -> None:
-        """Enter — select/confirm and advance to next question or submit."""
+        """Enter: select/confirm and advance or submit."""
         self._state.reset_activity_timer()
 
         if self._state.entering_other_text:
@@ -366,7 +325,7 @@ class QuestionScreen(Screen[QuestionResult]):
                 self._refresh_all()
 
     def action_toggle_option(self) -> None:
-        """Space — toggle checkbox (multi) or select radio (single)."""
+        """Space: toggle checkbox (multi) or select radio (single)."""
         self._state.reset_activity_timer()
 
         if self._state.entering_other_text:
@@ -385,7 +344,7 @@ class QuestionScreen(Screen[QuestionResult]):
         self._refresh_all()
 
     def action_prev_option(self) -> None:
-        """Up / k — move option cursor up."""
+        """Up / k: move option cursor up."""
         if self._state.entering_other_text:
             return
         self._state.reset_activity_timer()
@@ -393,7 +352,7 @@ class QuestionScreen(Screen[QuestionResult]):
         self._render_right_panel()
 
     def action_next_option(self) -> None:
-        """Down / j — move option cursor down."""
+        """Down / j: move option cursor down."""
         if self._state.entering_other_text:
             return
         self._state.reset_activity_timer()
@@ -401,7 +360,7 @@ class QuestionScreen(Screen[QuestionResult]):
         self._render_right_panel()
 
     def action_prev_question(self) -> None:
-        """Left / h — switch to previous question."""
+        """Left / h: switch to previous question."""
         if self._state.entering_other_text:
             return
         self._state.reset_activity_timer()
@@ -409,26 +368,22 @@ class QuestionScreen(Screen[QuestionResult]):
         self._refresh_all()
 
     def action_next_question(self) -> None:
-        """Right / l — switch to next question."""
+        """Right / l: switch to next question."""
         if self._state.entering_other_text:
             return
         self._state.reset_activity_timer()
         self._state.next_question()
         self._refresh_all()
 
-    # ------------------------------------------------------------------
-    # Widget events
-    # ------------------------------------------------------------------
-
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Enter pressed inside the 'Other' text input."""
+        """Commit Other text when Enter is pressed inside the input."""
         if event.input.id == "q-other-input":
             self._state.other_text_buffer = event.value
             self._state.commit_other_text()
             self._refresh_all()
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        """Keep state buffer in sync with the Input widget."""
+        """Sync state buffer with Input widget value."""
         if (
             event.input.id == "q-other-input"
             and self._state.entering_other_text
