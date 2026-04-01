@@ -134,6 +134,8 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
             log_error(e, context="Initial command processing error")
 
     # Check if prompt_toolkit is installed
+    get_input_with_combined_completion = None
+    get_prompt_with_active_model = None
     try:
         from code_puppy.command_line.prompt_toolkit_completion import (
             get_input_with_combined_completion,
@@ -141,27 +143,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
     except ImportError:
         from code_puppy.messaging import emit_warning
 
-        emit_warning("Warning: prompt_toolkit not installed. Installing now...")
-        try:
-            import subprocess
-
-            subprocess.check_call(
-                [sys.executable, "-m", "pip", "install", "--quiet", "prompt_toolkit"]
-            )
-            from code_puppy.messaging import emit_success
-
-            emit_success("Successfully installed prompt_toolkit")
-            from code_puppy.command_line.prompt_toolkit_completion import (
-                get_input_with_combined_completion,
-                get_prompt_with_active_model)
-        except Exception as e:
-            from code_puppy.messaging import emit_error, emit_warning
-
-            emit_error(f"Error installing prompt_toolkit: {e}")
-            from code_puppy.error_logging import log_error
-
-            log_error(e, context="prompt_toolkit installation error")
-            emit_warning("Falling back to basic input without tab completion")
+        emit_warning("prompt_toolkit not available. Falling back to basic input.")
 
     # Autosave loading is now manual - use /autosave_load command
 
@@ -220,7 +202,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
 
         try:
             # Use prompt_toolkit for enhanced input with path completion
-            try:
+            if get_input_with_combined_completion is not None:
                 # Windows-specific: Reset terminal state before prompting
                 reset_windows_terminal_ansi()
 
@@ -237,7 +219,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                     ensure_ctrl_c_disabled()
                 except ImportError:
                     pass
-            except ImportError:
+            else:
                 # Fall back to basic input if prompt_toolkit is not available
                 task = input(">>> ")
 
