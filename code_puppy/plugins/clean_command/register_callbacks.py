@@ -61,9 +61,17 @@ def _cache_targets() -> List[Tuple[str, Path, str]]:
 
 
 def _db_targets() -> List[Tuple[str, Path, str]]:
-    return [
-        ("DBOS database", Path(config.DATA_DIR) / "dbos_store.sqlite", "file"),
+    """DBOS database and its WAL/SHM journal files."""
+    db_path = Path(config.DATA_DIR) / "dbos_store.sqlite"
+    targets: List[Tuple[str, Path, str]] = [
+        ("DBOS database", db_path, "file"),
     ]
+    # Include WAL/SHM journal files when they exist (status + cleanup)
+    for suffix in ("-wal", "-shm"):
+        journal = db_path.parent / (db_path.name + suffix)
+        if journal.is_file():
+            targets.append((f"DBOS journal ({suffix})", journal, "file"))
+    return targets
 
 
 _CATEGORIES: Dict[str, Any] = {
@@ -73,6 +81,13 @@ _CATEGORIES: Dict[str, Any] = {
     "cache": ("Cache", _cache_targets),
     "db": ("Database", _db_targets),
 }
+
+# Categories safe to include in "/clean all".
+# The "db" category is excluded because deleting the DBOS SQLite database
+# while DBOS holds an active connection causes
+# ``sqlite3.OperationalError: attempt to write a readonly database``.
+# Users must run "/clean db" explicitly (which destroys DBOS first).
+_SAFE_CATEGORY_KEYS: List[str] = [k for k in _CATEGORIES if k != "db"]
 
 # ---------------------------------------------------------------------------
 # Size / cleanup helpers
@@ -195,6 +210,50 @@ def _clean_targets(
 
 
 # ---------------------------------------------------------------------------
+# DBOS-safe database cleanup
+# ---------------------------------------------------------------------------
+
+
+def _destroy_dbos() -> bool:
+    """Attempt to gracefully shut down DBOS.  Returns True on success."""
+    try:
+        from dbos import DBOS
+
+        DBOS.destroy()
+        return True
+    except Exception:
+        return False
+
+
+def _clean_db(dry_run: bool) -> Tuple[int, int]:
+    """Clean the DBOS database with safety handling.
+
+    Unlike other categories, the ``db`` category must destroy the active DBOS
+    connection **before** deleting the underlying SQLite file.  Deleting while
+    DBOS holds an open connection causes
+    ``sqlite3.OperationalError: attempt to write a readonly database``.
+
+    Returns ``(total_files, total_bytes)``.
+    """
+    if not dry_run:
+        if _destroy_dbos():
+            emit_info("  🔌 DBOS connection closed")
+        else:
+            emit_warning(
+                "  ⚠️  Could not close DBOS connection — database may still be locked"
+            )
+
+    _, target_fn = _CATEGORIES["db"]
+    targets = target_fn()
+    total_files, total_bytes = _clean_targets(targets, dry_run)
+
+    if not dry_run and total_files > 0:
+        emit_warning("  ⚠️  Please restart Code Puppy for DBOS to reinitialize.")
+
+    return total_files, total_bytes
+
+
+# ---------------------------------------------------------------------------
 # Subcommand handlers
 # ---------------------------------------------------------------------------
 
@@ -206,7 +265,7 @@ def _show_help() -> None:
     emit_info("  /clean help              Show this help message")
     emit_info("  /clean status            Show disk usage per category")
     emit_info(
-        "  /clean all               Clean everything (sessions, history, logs, cache, db)"
+        "  /clean all               Clean everything except db (sessions, history, logs, cache)"
     )
     emit_info(
         "  /clean sessions          Clean autosave + sub-agent + terminal sessions"
@@ -216,7 +275,9 @@ def _show_help() -> None:
     emit_info(
         "  /clean cache             Clean browser profiles, workflows, skills cache"
     )
-    emit_info("  /clean db                Clean DBOS state database")
+    emit_info(
+        "  /clean db                Clean DBOS state database (⚠️ requires restart)"
+    )
     emit_info("")
     emit_info("Options:")
     emit_info(
@@ -229,6 +290,7 @@ def _show_help() -> None:
     emit_info("")
     emit_info("⚠️  Config files (puppy.cfg, mcp_servers.json, models, OAuth tokens)")
     emit_info("   are never touched.")
+    emit_info("💡 /clean all excludes db — use /clean db explicitly (needs restart).")
 
 
 def _show_status() -> None:
@@ -259,9 +321,13 @@ def _run_clean(categories: List[str], dry_run: bool) -> None:
     grand_files = 0
     grand_bytes = 0
     for key in categories:
-        display_name, target_fn = _CATEGORIES[key]
-        targets = target_fn()
-        files, nbytes = _clean_targets(targets, dry_run)
+        if key == "db":
+            # db category requires special DBOS-safe handling
+            files, nbytes = _clean_db(dry_run)
+        else:
+            display_name, target_fn = _CATEGORIES[key]
+            targets = target_fn()
+            files, nbytes = _clean_targets(targets, dry_run)
         grand_files += files
         grand_bytes += nbytes
 
@@ -309,7 +375,7 @@ def _handle_clean_command(command: str, name: str) -> Optional[bool]:
         elif subcmd == "status":
             _show_status()
         elif subcmd == "all":
-            _run_clean(list(_CATEGORIES.keys()), dry_run)
+            _run_clean(_SAFE_CATEGORY_KEYS, dry_run)
         elif subcmd in _CATEGORIES:
             _run_clean([subcmd], dry_run)
         else:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -112,6 +112,13 @@ def _populate_db(env):
     (env.data / "dbos_store.sqlite").write_bytes(b"S" * 1024)
 
 
+def _populate_db_with_journals(env):
+    """Create dummy DBOS database with WAL and SHM journal files."""
+    (env.data / "dbos_store.sqlite").write_bytes(b"S" * 1024)
+    (env.data / "dbos_store.sqlite-wal").write_bytes(b"W" * 512)
+    (env.data / "dbos_store.sqlite-shm").write_bytes(b"H" * 256)
+
+
 def _populate_all(env):
     _populate_sessions(env)
     _populate_history(env)
@@ -134,6 +141,9 @@ def _import_plugin():
         _run_clean,
         _human_size,
         _CATEGORIES,
+        _SAFE_CATEGORY_KEYS,
+        _clean_db,
+        _destroy_dbos,
     )
 
     return (
@@ -144,6 +154,9 @@ def _import_plugin():
         _run_clean,
         _human_size,
         _CATEGORIES,
+        _SAFE_CATEGORY_KEYS,
+        _clean_db,
+        _destroy_dbos,
     )
 
 
@@ -341,7 +354,11 @@ class TestCleanDb:
         handler, *_ = _import_plugin()
 
         assert (clean_env.data / "dbos_store.sqlite").exists()
-        handler("/clean db", "clean")
+        with patch(
+            "code_puppy.plugins.clean_command.register_callbacks._destroy_dbos",
+            return_value=True,
+        ):
+            handler("/clean db", "clean")
         assert not (clean_env.data / "dbos_store.sqlite").exists()
 
     def test_clean_db_dry_run(self, clean_env):
@@ -351,14 +368,79 @@ class TestCleanDb:
         handler("/clean db --dry-run", "clean")
         assert (clean_env.data / "dbos_store.sqlite").exists()
 
+    def test_clean_db_calls_destroy_dbos(self, clean_env):
+        """Verify that /clean db calls _destroy_dbos before deleting."""
+        _populate_db(clean_env)
+        handler, *_ = _import_plugin()
+
+        with patch(
+            "code_puppy.plugins.clean_command.register_callbacks._destroy_dbos",
+            return_value=True,
+        ) as mock_destroy:
+            handler("/clean db", "clean")
+            mock_destroy.assert_called_once()
+
+    def test_clean_db_does_not_call_destroy_on_dry_run(self, clean_env):
+        """Dry run should NOT call _destroy_dbos."""
+        _populate_db(clean_env)
+        handler, *_ = _import_plugin()
+
+        with patch(
+            "code_puppy.plugins.clean_command.register_callbacks._destroy_dbos",
+            return_value=True,
+        ) as mock_destroy:
+            handler("/clean db --dry-run", "clean")
+            mock_destroy.assert_not_called()
+
+    def test_clean_db_cleans_journal_files(self, clean_env):
+        """WAL and SHM journal files should also be cleaned."""
+        _populate_db_with_journals(clean_env)
+        handler, *_ = _import_plugin()
+
+        assert (clean_env.data / "dbos_store.sqlite-wal").exists()
+        assert (clean_env.data / "dbos_store.sqlite-shm").exists()
+
+        with patch(
+            "code_puppy.plugins.clean_command.register_callbacks._destroy_dbos",
+            return_value=True,
+        ):
+            handler("/clean db", "clean")
+
+        assert not (clean_env.data / "dbos_store.sqlite").exists()
+        assert not (clean_env.data / "dbos_store.sqlite-wal").exists()
+        assert not (clean_env.data / "dbos_store.sqlite-shm").exists()
+
+    def test_clean_db_handles_destroy_failure(self, clean_env):
+        """Should still clean even if DBOS.destroy() fails."""
+        _populate_db(clean_env)
+        handler, *_ = _import_plugin()
+
+        with patch(
+            "code_puppy.plugins.clean_command.register_callbacks._destroy_dbos",
+            return_value=False,
+        ):
+            handler("/clean db", "clean")
+
+        assert not (clean_env.data / "dbos_store.sqlite").exists()
+
 
 # ---------------------------------------------------------------------------
-# Tests: /clean all
+# Tests: /clean all  (MUST exclude db)
 # ---------------------------------------------------------------------------
 
 
 class TestCleanAll:
-    def test_clean_all(self, clean_env):
+    def test_safe_category_keys_excludes_db(self):
+        """_SAFE_CATEGORY_KEYS must not include 'db'."""
+        *_, _SAFE_CATEGORY_KEYS, _, _ = _import_plugin()
+        assert "db" not in _SAFE_CATEGORY_KEYS
+        assert "sessions" in _SAFE_CATEGORY_KEYS
+        assert "history" in _SAFE_CATEGORY_KEYS
+        assert "logs" in _SAFE_CATEGORY_KEYS
+        assert "cache" in _SAFE_CATEGORY_KEYS
+
+    def test_clean_all_does_not_delete_db(self, clean_env):
+        """'/clean all' must NOT delete dbos_store.sqlite."""
         _populate_all(clean_env)
         handler, *_ = _import_plugin()
 
@@ -373,8 +455,8 @@ class TestCleanAll:
         assert list((clean_env.state / "logs").iterdir()) == []
         # Cache cleaned
         assert list((clean_env.cache / "browser_profiles").iterdir()) == []
-        # DB cleaned
-        assert not (clean_env.data / "dbos_store.sqlite").exists()
+        # DB NOT cleaned — this is the critical assertion!
+        assert (clean_env.data / "dbos_store.sqlite").exists()
 
     def test_clean_all_dry_run(self, clean_env):
         _populate_all(clean_env)
@@ -421,23 +503,66 @@ class TestDryRunPosition:
 
 class TestHumanSize:
     def test_bytes(self):
-        *_, _human_size, _ = _import_plugin()
+        *_, _human_size, _, _, _, _ = _import_plugin()
         assert _human_size(0) == "0 B"
         assert _human_size(512) == "512 B"
         assert _human_size(1023) == "1023 B"
 
     def test_kilobytes(self):
-        *_, _human_size, _ = _import_plugin()
+        *_, _human_size, _, _, _, _ = _import_plugin()
         assert _human_size(1024) == "1.0 KB"
         assert _human_size(1536) == "1.5 KB"
 
     def test_megabytes(self):
-        *_, _human_size, _ = _import_plugin()
+        *_, _human_size, _, _, _, _ = _import_plugin()
         assert _human_size(1024 * 1024) == "1.0 MB"
 
     def test_gigabytes(self):
-        *_, _human_size, _ = _import_plugin()
+        *_, _human_size, _, _, _, _ = _import_plugin()
         assert _human_size(1024 * 1024 * 1024) == "1.0 GB"
+
+
+# ---------------------------------------------------------------------------
+# Tests: _destroy_dbos
+# ---------------------------------------------------------------------------
+
+
+class TestDestroyDbos:
+    def test_destroy_dbos_success(self):
+        """_destroy_dbos returns True when DBOS.destroy() succeeds."""
+        *_, _clean_db, _destroy_dbos = _import_plugin()
+
+        mock_dbos = MagicMock()
+        with patch.dict("sys.modules", {"dbos": mock_dbos}):
+            mock_dbos.DBOS.destroy = MagicMock()
+            result = _destroy_dbos()
+            assert result is True
+
+    def test_destroy_dbos_import_error(self):
+        """_destroy_dbos returns False when dbos is not installed."""
+        *_, _clean_db, _destroy_dbos = _import_plugin()
+
+        with patch(
+            "code_puppy.plugins.clean_command.register_callbacks._destroy_dbos",
+            side_effect=ImportError("no module named dbos"),
+        ):
+            # Direct test: if import fails, function should handle gracefully
+            pass
+
+        # Test the actual function with a mocked import that fails
+        with patch.dict("sys.modules", {"dbos": None}):
+            result = _destroy_dbos()
+            assert result is False
+
+    def test_destroy_dbos_runtime_error(self):
+        """_destroy_dbos returns False on unexpected errors."""
+        *_, _clean_db, _destroy_dbos = _import_plugin()
+
+        mock_dbos = MagicMock()
+        mock_dbos.DBOS.destroy.side_effect = RuntimeError("DBOS not initialized")
+        with patch.dict("sys.modules", {"dbos": mock_dbos}):
+            result = _destroy_dbos()
+            assert result is False
 
 
 # ---------------------------------------------------------------------------
