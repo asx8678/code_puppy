@@ -568,7 +568,15 @@ class HealthMonitor:
 
         # Wait for all tasks to complete
         if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            async def _safe_run(coro):
+                try:
+                    return await coro
+                except BaseException as e:
+                    return e  # Match return_exceptions=True behavior (incl. CancelledError)
+
+            async with asyncio.TaskGroup() as tg:
+                wrapped_tasks = [tg.create_task(_safe_run(t)) for t in tasks]
+            _ = [t.result() for t in wrapped_tasks]
 
         self.monitoring_tasks.clear()
         self.consecutive_failures.clear()

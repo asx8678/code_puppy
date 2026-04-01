@@ -215,7 +215,16 @@ async def execute_hooks_parallel(
     if not hooks:
         return []
     tasks = [execute_hook(hook, event_data, env_vars) for hook in hooks]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _safe_run(coro):
+        try:
+            return await coro
+        except Exception as e:
+            return e
+
+    async with asyncio.TaskGroup() as tg:
+        wrapped_tasks = [tg.create_task(_safe_run(t)) for t in tasks]
+    results = [t.result() for t in wrapped_tasks]
     final_results = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
