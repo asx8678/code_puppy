@@ -928,6 +928,28 @@ class BaseAgent(ABC):
             # Be safe; don't blow up status/compaction if model lookup fails
             return 128000
 
+    @staticmethod
+    def _collect_tool_call_ids(
+        messages: list[ModelMessage],
+    ) -> tuple[set[str], set[str]]:
+        """Collect tool_call_ids and tool_return_ids from messages.
+
+        Returns:
+            Tuple of (tool_call_ids, tool_return_ids) sets.
+        """
+        call_ids: set[str] = set()
+        return_ids: set[str] = set()
+        for msg in messages:
+            for part in getattr(msg, "parts", []) or []:
+                tcid = getattr(part, "tool_call_id", None)
+                if not tcid:
+                    continue
+                if part.part_kind == "tool-call":
+                    call_ids.add(tcid)
+                else:
+                    return_ids.add(tcid)
+        return call_ids, return_ids
+
     def has_pending_tool_calls(self, messages: list[ModelMessage]) -> bool:
         """
         Check if there are any pending tool calls in the message history.
@@ -940,25 +962,8 @@ class BaseAgent(ABC):
         """
         if not messages:
             return False
-
-        tool_call_ids: set[str] = set()
-        tool_return_ids: set[str] = set()
-
-        # Collect all tool call and return IDs
-        for msg in messages:
-            for part in getattr(msg, "parts", []) or []:
-                tool_call_id = getattr(part, "tool_call_id", None)
-                if not tool_call_id:
-                    continue
-
-                if part.part_kind == "tool-call":
-                    tool_call_ids.add(tool_call_id)
-                elif part.part_kind == "tool-return":
-                    tool_return_ids.add(tool_call_id)
-
-        # Pending tool calls are those without corresponding returns
-        pending_calls = tool_call_ids - tool_return_ids
-        return len(pending_calls) > 0
+        tool_call_ids, tool_return_ids = self._collect_tool_call_ids(messages)
+        return bool(tool_call_ids - tool_return_ids)
 
     def request_delayed_compaction(self) -> None:
         """
@@ -1030,23 +1035,8 @@ class BaseAgent(ABC):
         """
         if not messages:
             return 0
-
-        tool_call_ids: set[str] = set()
-        tool_return_ids: set[str] = set()
-
-        for msg in messages:
-            for part in getattr(msg, "parts", []) or []:
-                tool_call_id = getattr(part, "tool_call_id", None)
-                if not tool_call_id:
-                    continue
-
-                if part.part_kind == "tool-call":
-                    tool_call_ids.add(tool_call_id)
-                elif part.part_kind == "tool-return":
-                    tool_return_ids.add(tool_call_id)
-
-        pending_calls = tool_call_ids - tool_return_ids
-        return len(pending_calls)
+        tool_call_ids, tool_return_ids = self._collect_tool_call_ids(messages)
+        return len(tool_call_ids - tool_return_ids)
 
     def prune_interrupted_tool_calls(
         self, messages: list[ModelMessage]
@@ -1075,22 +1065,7 @@ class BaseAgent(ABC):
                     exc_info=True)
 
         # Python fallback — original implementation
-        tool_call_ids: set[str] = set()
-        tool_return_ids: set[str] = set()
-
-        # First pass: collect ids for calls vs returns
-        for msg in messages:
-            for part in getattr(msg, "parts", []) or []:
-                tool_call_id = getattr(part, "tool_call_id", None)
-                if not tool_call_id:
-                    continue
-                # Heuristic: if it's an explicit ToolCallPart or has a tool_name/args,
-                # consider it a call; otherwise it's a return/result.
-                if part.part_kind == "tool-call":
-                    tool_call_ids.add(tool_call_id)
-                else:
-                    tool_return_ids.add(tool_call_id)
-
+        tool_call_ids, tool_return_ids = self._collect_tool_call_ids(messages)
         mismatched: set[str] = tool_call_ids.symmetric_difference(tool_return_ids)
         if not mismatched:
             return messages
