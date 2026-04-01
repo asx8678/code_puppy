@@ -107,7 +107,7 @@ class BaseAgent(ABC):
     """Base class for all agent configurations."""
 
     def __init__(self):
-        self.id = str(uuid.uuid4())
+        self.id = str(uuid.uuid7())  # time-sortable for chronological ordering
         self._message_history: list[Any] = []
         self._compacted_message_hashes: set[str] = set()
         # Agent construction cache
