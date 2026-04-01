@@ -300,8 +300,8 @@ class TestCallbacksExtended:
         sync_results = on_load_model_config()
         assert sync_results == []
 
-    def test_get_callbacks_returns_copy(self):
-        """Test that get_callbacks returns a copy, not the original list."""
+    def test_get_callbacks_returns_immutable_snapshot(self):
+        """Test that get_callbacks returns an immutable tuple snapshot."""
 
         def test_callback():
             return "test"
@@ -311,14 +311,12 @@ class TestCallbacksExtended:
         callbacks1 = get_callbacks("startup")
         callbacks2 = get_callbacks("startup")
 
-        # Modifying one shouldn't affect the other
-        def extra_callback():
-            return "extra"
-
-        callbacks1.append(extra_callback)
-
-        assert len(callbacks1) == 2
+        # Returns a tuple — immutable, so mutating the internal list
+        # doesn't affect already-returned snapshots
+        assert isinstance(callbacks1, tuple)
+        assert len(callbacks1) == 1
         assert len(callbacks2) == 1
+        assert callbacks1 == callbacks2
         assert len(get_callbacks("startup")) == 1
 
 

@@ -125,8 +125,12 @@ def clear_callbacks(phase: PhaseType | None = None) -> None:
             logger.debug(f"Cleared async callbacks for phase '{phase}'")
 
 
-def get_callbacks(phase: PhaseType) -> list[CallbackFunc]:
-    return _callbacks.get(phase, []).copy()
+def get_callbacks(phase: PhaseType) -> tuple[CallbackFunc, ...]:
+    """Return an immutable snapshot of callbacks for the given phase.
+
+    Returns a tuple (cheaper than list.copy()) to prevent accidental mutation.
+    """
+    return tuple(_callbacks.get(phase, ()))
 
 
 def count_callbacks(phase: PhaseType | None = None) -> int:
