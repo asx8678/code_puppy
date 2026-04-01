@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import pathlib
-from typing import Any, Callable, Dict
+from typing import Any, Callable
 
 from anthropic import AsyncAnthropic
 from openai import AsyncAzureOpenAI
@@ -82,7 +82,7 @@ CONTEXT_1M_BETA = "context-1m-2025-08-07"
 
 
 def _build_anthropic_beta_header(
-    model_config: Dict,
+    model_config: dict,
     *,
     interleaved_thinking: bool = False) -> str | None:
     """Build the anthropic-beta header value for an Anthropic model.
@@ -318,22 +318,30 @@ def get_custom_config(model_config):
 # ---------------------------------------------------------------------------
 
 
-def _build_gemini(model_name: str, model_config: dict, config: dict) -> Any:
-    api_key = get_api_key("GEMINI_API_KEY")
-    if not api_key:
+def _require_api_key(env_var: str, model_config: dict) -> str | None:
+    """Get an API key, emitting a warning and returning None if not found.
+
+    This DRYs up the repeated pattern across 10+ model builder functions.
+    """
+    key = get_api_key(env_var)
+    if not key:
         emit_warning(
-            f"GEMINI_API_KEY is not set (check config or environment); skipping Gemini model '{model_config.get('name')}'."
+            f"{env_var} is not set (check config or environment); "
+            f"skipping model '{model_config.get('name')}'."
         )
+    return key
+
+
+def _build_gemini(model_name: str, model_config: dict, config: dict) -> Any:
+    api_key = _require_api_key("GEMINI_API_KEY", model_config)
+    if not api_key:
         return None
     return GeminiModel(model_name=model_config["name"], api_key=api_key)
 
 
 def _build_openai(model_name: str, model_config: dict, config: dict) -> Any:
-    api_key = get_api_key("OPENAI_API_KEY")
+    api_key = _require_api_key("OPENAI_API_KEY", model_config)
     if not api_key:
-        emit_warning(
-            f"OPENAI_API_KEY is not set (check config or environment); skipping OpenAI model '{model_config.get('name')}'."
-        )
         return None
     provider = OpenAIProvider(api_key=api_key)
     if "codex" in model_name:
@@ -345,11 +353,8 @@ def _build_openai(model_name: str, model_config: dict, config: dict) -> Any:
 
 
 def _build_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
-    api_key = get_api_key("ANTHROPIC_API_KEY")
+    api_key = _require_api_key("ANTHROPIC_API_KEY", model_config)
     if not api_key:
-        emit_warning(
-            f"ANTHROPIC_API_KEY is not set (check config or environment); skipping Anthropic model '{model_config.get('name')}'."
-        )
         return None
 
     verify = get_cert_bundle_path()
@@ -504,11 +509,8 @@ def _build_custom_openai(model_name: str, model_config: dict, config: dict) -> A
 
 
 def _build_zai_coding(model_name: str, model_config: dict, config: dict) -> Any:
-    api_key = get_api_key("ZAI_API_KEY")
+    api_key = _require_api_key("ZAI_API_KEY", model_config)
     if not api_key:
-        emit_warning(
-            f"ZAI_API_KEY is not set (check config or environment); skipping ZAI coding model '{model_config.get('name')}'."
-        )
         return None
     provider = OpenAIProvider(
         api_key=api_key,
@@ -521,11 +523,8 @@ def _build_zai_coding(model_name: str, model_config: dict, config: dict) -> Any:
 
 
 def _build_zai_api(model_name: str, model_config: dict, config: dict) -> Any:
-    api_key = get_api_key("ZAI_API_KEY")
+    api_key = _require_api_key("ZAI_API_KEY", model_config)
     if not api_key:
-        emit_warning(
-            f"ZAI_API_KEY is not set (check config or environment); skipping ZAI API model '{model_config.get('name')}'."
-        )
         return None
     provider = OpenAIProvider(
         api_key=api_key,
