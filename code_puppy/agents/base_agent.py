@@ -1,6 +1,7 @@
 """Base agent configuration class for defining agent properties."""
 
 import asyncio
+import contextlib
 import dataclasses
 import json
 import logging
@@ -2029,40 +2030,32 @@ class BaseAgent(ABC):
 
                 usage_limits = UsageLimits(request_limit=get_message_limit())
 
-                # Handle MCP servers - add them temporarily when using DBOS
-                if (
-                    get_use_dbos()
-                    and hasattr(self, "_mcp_servers")
-                    and self._mcp_servers
-                ):
-                    # Temporarily add MCP servers to the DBOS agent using internal _toolsets
-                    original_toolsets = pydantic_agent._toolsets
-                    pydantic_agent._toolsets = original_toolsets + self._mcp_servers
+                # Build context managers based on configuration, then run once.
+                @contextlib.contextmanager
+                def _mcp_injection():
+                    """Temporarily inject MCP servers into DBOS agent toolsets."""
+                    if (
+                        get_use_dbos()
+                        and hasattr(self, "_mcp_servers")
+                        and self._mcp_servers
+                    ):
+                        original = pydantic_agent._toolsets
+                        pydantic_agent._toolsets = original + self._mcp_servers
+                        try:
+                            yield
+                        finally:
+                            pydantic_agent._toolsets = original
+                    else:
+                        yield
 
-                    try:
-                        # Set the workflow ID for DBOS context so DBOS and Code Puppy ID match
-                        with SetWorkflowID(group_id):
-                            result_ = await pydantic_agent.run(
-                                prompt_payload,
-                                message_history=self.get_message_history(),
-                                usage_limits=usage_limits,
-                                event_stream_handler=event_stream_handler,
-                                **kwargs)
-                            return result_
-                    finally:
-                        # Always restore original toolsets
-                        pydantic_agent._toolsets = original_toolsets
-                elif get_use_dbos():
-                    with SetWorkflowID(group_id):
-                        result_ = await pydantic_agent.run(
-                            prompt_payload,
-                            message_history=self.get_message_history(),
-                            usage_limits=usage_limits,
-                            event_stream_handler=event_stream_handler,
-                            **kwargs)
-                        return result_
-                else:
-                    # Non-DBOS path (MCP servers are already included)
+                # Set the workflow ID for DBOS context so DBOS and Code Puppy ID match
+                workflow_ctx = (
+                    SetWorkflowID(group_id)
+                    if get_use_dbos()
+                    else contextlib.nullcontext()
+                )
+
+                with _mcp_injection(), workflow_ctx:
                     result_ = await pydantic_agent.run(
                         prompt_payload,
                         message_history=self.get_message_history(),
