@@ -103,7 +103,10 @@ _CONFIRMATION_LOCK = threading.Lock()
 # Track running shell processes so we can kill them on Ctrl-C from the UI
 _RUNNING_PROCESSES: set[subprocess.Popen] = set()
 _RUNNING_PROCESSES_LOCK = threading.Lock()
-_USER_KILLED_PROCESSES = set()
+# Bounded set of PIDs killed by user — prevents unbounded growth on long sessions.
+# Uses a list as backing store, capped at 1024 entries (evict oldest on overflow).
+_USER_KILLED_PROCESSES: set[int] = set()
+_USER_KILLED_PROCESSES_MAX = 1024
 
 # Global state for shell command keyboard handling
 _SHELL_CTRL_X_STOP_EVENT: threading.Event | None = None
@@ -229,6 +232,11 @@ def kill_all_running_shell_processes() -> int:
             if p.poll() is None:
                 _kill_process_group(p)
                 count += 1
+                # Evict oldest PIDs if at capacity to prevent unbounded growth
+                if len(_USER_KILLED_PROCESSES) >= _USER_KILLED_PROCESSES_MAX:
+                    # Discard an arbitrary element (set has no ordering, but that's fine
+                    # — stale PIDs from much earlier are unlikely to collide)
+                    _USER_KILLED_PROCESSES.pop()
                 _USER_KILLED_PROCESSES.add(p.pid)
         finally:
             _unregister_process(p)
