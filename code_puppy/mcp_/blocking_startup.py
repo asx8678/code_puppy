@@ -372,12 +372,15 @@ class StartupMonitor:
             style="cyan",
             message_group=self.message_group)
 
-        tasks = [
-            asyncio.create_task(wait_server(name, server))
-            for name, server in self.servers.items()
-        ]
+        async def _safe_run(coro):
+            try:
+                return await coro
+            except Exception as e:
+                return e  # Match return_exceptions=True behavior
 
-        await asyncio.gather(*tasks, return_exceptions=True)
+        async with asyncio.TaskGroup() as tg:
+            for name, server in self.servers.items():
+                tg.create_task(_safe_run(wait_server(name, server)))
 
         # Report summary
         ready_count = sum(1 for r in results.values() if r)
