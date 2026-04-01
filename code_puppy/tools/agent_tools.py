@@ -338,7 +338,9 @@ def register_invoke_agent(agent):
             # Auto-generate a session ID with hash suffix for uniqueness
             # Example: "qa-expert-session-a3f2b1"
             hash_suffix = _generate_session_hash_suffix()
-            session_id = f"{agent_name}-session-{hash_suffix}"
+            # Sanitize agent_name: replace underscores with hyphens for kebab-case compliance
+            sanitized_agent_name = agent_name.replace("_", "-").lower()
+            session_id = f"{sanitized_agent_name}-session-{hash_suffix}"
         elif is_new_session:
             # User provided a base name for a NEW session - append hash suffix
             # Example: "review-auth" -> "review-auth-a3f2b1"
@@ -418,6 +420,8 @@ def register_invoke_agent(agent):
             from code_puppy.model_utils import prepare_prompt_for_model
 
             prompt_additions = callbacks.on_load_prompt()
+            # Filter out None values that can occur when callbacks fail
+            prompt_additions = [p for p in prompt_additions if p is not None]
             if len(prompt_additions):
                 instructions += "\n" + "\n".join(prompt_additions)
 
