@@ -150,6 +150,12 @@ class CodePuppyApp(App):
 
     def on_mount(self) -> None:
         """Initialize the app after mounting."""
+        # Start the message bridge so emit_info/emit_warning/etc. appear in the TUI
+        from code_puppy.tui.message_bridge import TUIMessageBridge
+
+        self._message_bridge = TUIMessageBridge(self)
+        self._message_bridge.start()
+
         chat = self.query_one("#chat-log", RichLog)
         chat.write("[bold cyan]🐶 Welcome to Code Puppy![/]")
         chat.write("")
@@ -164,6 +170,11 @@ class CodePuppyApp(App):
             self._initial_command = None
             # Schedule it to run after the app is fully mounted
             self.call_later(self._run_initial_command, initial)
+
+    def on_unmount(self) -> None:
+        """Clean up resources when the app exits."""
+        if hasattr(self, "_message_bridge"):
+            self._message_bridge.stop()
 
     async def _run_initial_command(self, command: str) -> None:
         """Execute the initial command passed at startup."""
@@ -414,31 +425,33 @@ class CodePuppyApp(App):
 
         try:
             from code_puppy.agents import get_current_agent
+            from code_puppy.agents.event_stream_handler import set_streaming_console
             from code_puppy.config import auto_save_session_if_enabled, save_command_to_history
             from code_puppy.prompt_runner import run_prompt_with_attachments
+            from code_puppy.tui.message_bridge import TUIConsole
 
             save_command_to_history(text)
 
             agent = get_current_agent()
 
-            # Run agent — note: spinner_console=None because Textual handles display
+            # Redirect event_stream_handler output to the TUI chat log
+            tui_console = TUIConsole(self)
+            set_streaming_console(tui_console)
+
             result, agent_task = await run_prompt_with_attachments(
-                agent, text, spinner_console=None, use_spinner=False
+                agent, text, spinner_console=tui_console, use_spinner=False
             )
 
             if result is None:
                 chat.write("[yellow]Task cancelled.[/yellow]")
                 return
 
-            # The response has already been streamed via event_stream_handler
-            # but we also emit the final structured response
+            # Display the final response as formatted markdown
             agent_response = result.output
+            if agent_response:
+                from rich.markdown import Markdown
 
-            from code_puppy.messaging import get_message_bus
-            from code_puppy.messaging.messages import AgentResponseMessage
-
-            response_msg = AgentResponseMessage(content=agent_response, is_markdown=True)
-            get_message_bus().emit(response_msg)
+                chat.write(Markdown(str(agent_response)))
 
             # Update message history for autosave
             if hasattr(result, "all_messages"):
