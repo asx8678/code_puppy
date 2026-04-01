@@ -118,9 +118,24 @@ _KEYBOARD_CONTEXT_LOCK = threading.Lock()
 _ACTIVE_STOP_EVENTS: set[threading.Event] = set()
 _ACTIVE_STOP_EVENTS_LOCK = threading.Lock()
 
-# Thread pool for running blocking shell commands without blocking the event loop
-# This allows multiple sub-agents to run shell commands in parallel
-_SHELL_EXECUTOR = ThreadPoolExecutor(max_workers=16, thread_name_prefix="shell_cmd_")
+# Thread pool for running blocking shell commands without blocking the event loop.
+# Lazy-initialized on first use to avoid spawning 16 threads at import time.
+_SHELL_EXECUTOR: ThreadPoolExecutor | None = None
+_SHELL_EXECUTOR_LOCK = threading.Lock()
+
+
+def _get_shell_executor() -> ThreadPoolExecutor:
+    """Get or create the shell executor (lazy, thread-safe)."""
+    global _SHELL_EXECUTOR
+    if _SHELL_EXECUTOR is None:
+        with _SHELL_EXECUTOR_LOCK:
+            if _SHELL_EXECUTOR is None:  # double-check
+                import atexit
+                _SHELL_EXECUTOR = ThreadPoolExecutor(
+                    max_workers=16, thread_name_prefix="shell_cmd_",
+                )
+                atexit.register(_SHELL_EXECUTOR.shutdown, wait=False)
+    return _SHELL_EXECUTOR
 
 
 def _register_process(proc: subprocess.Popen) -> None:
@@ -1217,7 +1232,7 @@ async def _run_command_inner(
         # Run the blocking shell command in a thread pool to avoid blocking the event loop
         # This allows multiple sub-agents to run shell commands in parallel
         return await loop.run_in_executor(
-            _SHELL_EXECUTOR,
+            _get_shell_executor(),
             partial(_run_command_sync, command, cwd, timeout, group_id, silent))
     except Exception as e:
         if not silent:
