@@ -30,10 +30,6 @@ class SkillInfo:
     source_level: SourceLevel = "project"
 
 
-# Global cache for discovered skills
-_skill_cache: list[SkillInfo] | None = None
-
-
 def get_default_skill_directories() -> list[Path]:
     """Return default directories to scan for skills.
 
@@ -92,8 +88,6 @@ def discover_skills(directories: list[Path] | None = None) -> list[SkillInfo]:
         Deduplicated list of SkillInfo objects (one per name, highest
         precedence wins).
     """
-    global _skill_cache
-
     if directories is not None:
         # Explicit directories — all "project" level, use dict for dedup
         ordered_sources: list[tuple[Path, SourceLevel]] = [
@@ -132,7 +126,6 @@ def discover_skills(directories: list[Path] | None = None) -> list[SkillInfo]:
             skill_map[skill.name] = skill
 
     discovered_skills = list(skill_map.values())
-    _skill_cache = discovered_skills
 
     logger.info(
         "Discovered %d skills (deduplicated by name) from %d sources",
@@ -144,6 +137,4 @@ def discover_skills(directories: list[Path] | None = None) -> list[SkillInfo]:
 
 def refresh_skill_cache() -> list[SkillInfo]:
     """Force re-discovery of all skills."""
-    global _skill_cache
-    _skill_cache = None
     return discover_skills()
