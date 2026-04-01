@@ -4,6 +4,13 @@ import traceback
 from typing import Any, Callable, Literal
 
 from code_puppy import _backlog
+from code_puppy.run_context import (
+    RunContext,
+    create_child_run_context,
+    create_root_run_context,
+    get_current_run_context,
+    set_current_run_context,
+)
 
 PhaseType = Literal[
     "startup",
@@ -384,6 +391,11 @@ async def on_pre_tool_call(
     This allows plugins to inspect, modify, or log tool calls before
     they are executed.
 
+    If an active :class:`~code_puppy.run_context.RunContext` exists, a child
+    context is created for the tool invocation and set as the current context.
+    The previous context is automatically restored by
+    :func:`~code_puppy.callbacks.on_post_tool_call`.
+
     Args:
         tool_name: Name of the tool being called
         tool_args: Arguments being passed to the tool
@@ -392,6 +404,18 @@ async def on_pre_tool_call(
     Returns:
         List of results from registered callbacks.
     """
+    parent = get_current_run_context()
+    if parent is not None:
+        child = create_child_run_context(
+            parent,
+            component_type="tool",
+            component_name=tool_name,
+            metadata={"tool_args_keys": list(tool_args.keys())},
+        )
+        # Stash the parent so on_post_tool_call can restore it.
+        child.metadata["_parent_ref"] = parent
+        set_current_run_context(child)
+
     return await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
 
 
@@ -406,6 +430,9 @@ async def on_post_tool_call(
     This allows plugins to inspect tool results, log execution times,
     or perform post-processing.
 
+    If a tool-level :class:`~code_puppy.run_context.RunContext` is active it
+    is closed and the parent context is restored.
+
     Args:
         tool_name: Name of the tool that was called
         tool_args: Arguments that were passed to the tool
@@ -416,6 +443,15 @@ async def on_post_tool_call(
     Returns:
         List of results from registered callbacks.
     """
+    # Close the tool-level child context and restore the parent.
+    ctx = get_current_run_context()
+    if ctx is not None and ctx.component_type == "tool" and ctx.component_name == tool_name:
+        ctx.close()
+        ctx.metadata["duration_ms"] = duration_ms
+        # Restore the parent context that was stashed by on_pre_tool_call.
+        parent = ctx.metadata.pop("_parent_ref", None)
+        set_current_run_context(parent)
+
     return await _trigger_callbacks(
         "post_tool_call", tool_name, tool_args, result, duration_ms, context
     )
@@ -429,6 +465,12 @@ async def on_stream_event(
     This allows plugins to react to streaming events in real-time,
     such as tokens being generated, tool calls starting, etc.
 
+    If an active :class:`~code_puppy.run_context.RunContext` exists, the
+    context's ``run_id`` and ``component_name`` are attached to
+    *event_data* (when it is a dict) under the keys ``_run_id`` and
+    ``_component_name`` so that downstream consumers can correlate events
+    with the tracing hierarchy without changing the callback signature.
+
     Args:
         event_type: Type of the streaming event
         event_data: Data associated with the event
@@ -437,6 +479,11 @@ async def on_stream_event(
     Returns:
         List of results from registered callbacks.
     """
+    ctx = get_current_run_context()
+    if ctx is not None and isinstance(event_data, dict):
+        event_data.setdefault("_run_id", ctx.run_id)
+        event_data.setdefault("_component_name", ctx.component_name)
+
     return await _trigger_callbacks(
         "stream_event", event_type, event_data, agent_session_id
     )
@@ -544,6 +591,10 @@ async def on_agent_run_start(
     - Logging/analytics
     - Resource allocation
 
+    Additionally, a root :class:`~code_puppy.run_context.RunContext` is created
+    and set in the current ``ContextVar`` so that downstream tool / stream
+    callbacks can access hierarchical tracing information.
+
     Args:
         agent_name: Name of the agent starting
         model_name: Name of the model being used
@@ -552,6 +603,15 @@ async def on_agent_run_start(
     Returns:
         List of results from registered callbacks.
     """
+    # Create and activate a root run context for hierarchical tracing.
+    ctx = create_root_run_context(
+        component_type="agent",
+        component_name=agent_name,
+        session_id=session_id,
+        metadata={"model_name": model_name},
+    )
+    set_current_run_context(ctx)
+
     return await _trigger_callbacks(
         "agent_run_start", agent_name, model_name, session_id
     )
@@ -569,6 +629,10 @@ async def on_agent_run_end(
 
     This fires at the end of run_with_mcp, in the finally block.
     Always fires regardless of success/failure/cancellation.
+
+    The active :class:`~code_puppy.run_context.RunContext` (if any) is closed
+    and enriched with ``success``, ``error``, and ``response_text`` before the
+    callbacks fire.
 
     Useful for:
     - Stopping background tasks (like token refresh heartbeats)
@@ -589,6 +653,18 @@ async def on_agent_run_end(
     Returns:
         List of results from registered callbacks.
     """
+    # Close and enrich the current run context (if one exists).
+    ctx = get_current_run_context()
+    if ctx is not None:
+        ctx.close()
+        ctx.metadata["success"] = success
+        if error is not None:
+            ctx.metadata["error"] = str(error)
+        if response_text is not None:
+            ctx.metadata["response_text_length"] = len(response_text)
+        if metadata:
+            ctx.metadata.update(metadata)
+
     return await _trigger_callbacks(
         "agent_run_end",
         agent_name,
