@@ -30,11 +30,8 @@ jobs:
       - name: Setup uv virtual environment
         run: uv venv
 
-      - name: Install dependencies
-        run: uv pip install -e .
-
-      - name: Install pexpect for integration tests
-        run: uv pip install pexpect>=4.9.0
+      - name: Install dependencies (locked)
+        run: uv sync --frozen
 
       - name: Run tests
         env:
