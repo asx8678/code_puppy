@@ -334,6 +334,43 @@ class CodePuppyApp(App):
             self.push_screen(AddModelScreen())
             return
 
+        # Handle /mcp install via Textual screen
+        _cmd_parts = command.strip().split()
+        if (
+            len(_cmd_parts) >= 2
+            and _cmd_parts[0].lower() == "/mcp"
+            and _cmd_parts[1].lower() == "install"
+        ):
+            from code_puppy.tui.screens.mcp_screen import MCPScreen
+
+            def _on_mcp_selected(server_id: str | None) -> None:
+                if server_id:
+                    self._install_mcp_server(server_id)
+
+            self.push_screen(MCPScreen(), callback=_on_mcp_selected)
+            return
+
+        # Handle /mcp add via Textual form screen
+        if (
+            len(_cmd_parts) >= 2
+            and _cmd_parts[0].lower() == "/mcp"
+            and _cmd_parts[1].lower() == "add"
+        ):
+            from code_puppy.tui.screens.mcp_form_screen import MCPFormScreen
+
+            def _on_mcp_form_done(server_name: str | None) -> None:
+                if server_name:
+                    _chat = self.query_one("#chat-log", RichLog)
+                    _chat.write(
+                        f"[bold green]✅ Custom MCP server '[cyan]{server_name}[/cyan]' added![/bold green]"
+                    )
+                    _chat.write(
+                        f"[dim]Use '/mcp start {server_name}' to start it.[/dim]"
+                    )
+
+            self.push_screen(MCPFormScreen(), callback=_on_mcp_form_done)
+            return
+
         try:
             from code_puppy.command_line.command_handler import handle_command
 
@@ -452,6 +489,73 @@ class CodePuppyApp(App):
             self.status_message = ""
             chat = self.query_one("#chat-log", RichLog)
             chat.write("[red]Task cancelled.[/red]")
+
+    # --- MCP install helpers ---
+
+    def _install_mcp_server(self, server_id: str) -> None:
+        """Install a catalog MCP server with env-var defaults (no interactive prompt)."""
+        import os
+
+        chat = self.query_one("#chat-log", RichLog)
+        try:
+            from code_puppy.mcp_.server_registry_catalog import catalog
+
+            server = catalog.by_id.get(server_id)
+        except Exception:
+            server = None
+
+        if server is None:
+            chat.write(f"[red]Unknown MCP server: {server_id}[/red]")
+            return
+
+        # Build a minimal config using already-set env vars; skip interactive prompts
+        env_vars = {}
+        for var in server.get_environment_vars():
+            val = os.environ.get(var, "")
+            if val:
+                env_vars[var] = val
+
+        install_config = {
+            "name": server.name,
+            "env_vars": env_vars,
+            "cmd_args": {},
+        }
+
+        chat.write(
+            f"[bold]⏳ Installing [cyan]{server.display_name}[/cyan]...[/bold]"
+        )
+
+        def _do_install() -> None:
+            try:
+                from code_puppy.command_line.mcp.catalog_server_installer import (
+                    install_catalog_server,
+                )
+                from code_puppy.mcp_.manager import get_manager
+
+                manager = get_manager()
+                success = install_catalog_server(manager, server, install_config)
+                self.app.call_from_thread(
+                    self._on_mcp_install_done, server.display_name, success
+                )
+            except Exception as exc:
+                self.app.call_from_thread(
+                    self._on_mcp_install_done, server.display_name, False, str(exc)
+                )
+
+        self.run_worker(_do_install, thread=True)
+
+    def _on_mcp_install_done(
+        self, display_name: str, success: bool, error: str | None = None
+    ) -> None:
+        """Report MCP install result to the chat log."""
+        chat = self.query_one("#chat-log", RichLog)
+        if success:
+            chat.write(
+                f"[bold green]✅ '{display_name}' installed successfully![/bold green]"
+            )
+        else:
+            msg = error or "Installation failed."
+            chat.write(f"[bold red]❌ Install failed: {msg}[/bold red]")
 
     # --- Public API for other modules to write to the chat ---
 
