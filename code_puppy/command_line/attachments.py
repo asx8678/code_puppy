@@ -6,7 +6,7 @@ import os
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from pydantic_ai import BinaryContent, DocumentUrl, ImageUrl
 

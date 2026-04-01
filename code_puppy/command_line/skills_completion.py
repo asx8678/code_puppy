@@ -11,7 +11,7 @@ completion simply returns no skill ids.
 
 import logging
 import time
-from typing import Iterable
+from collections.abc import Iterable
 
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document

@@ -1,5 +1,5 @@
 import os
-from typing import Iterable
+from collections.abc import Iterable
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion

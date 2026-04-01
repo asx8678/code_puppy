@@ -1,5 +1,5 @@
 import logging
-from typing import Iterable
+from collections.abc import Iterable
 
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
