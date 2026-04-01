@@ -4,28 +4,19 @@ import os
 import pathlib
 from typing import Any, Callable
 
-from anthropic import AsyncAnthropic
-from openai import AsyncAzureOpenAI
-from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
-from pydantic_ai.models.openai import (
-    OpenAIChatModel,
-    OpenAIChatModelSettings,
-    OpenAIResponsesModel)
-from pydantic_ai.profiles import ModelProfile
-from pydantic_ai.providers.anthropic import AnthropicProvider
-from pydantic_ai.providers.cerebras import CerebrasProvider
-from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.providers.openrouter import OpenRouterProvider
+# Light pydantic-ai imports needed at module scope for make_model_settings()
+from pydantic_ai.models.anthropic import AnthropicModelSettings
+from pydantic_ai.models.openai import OpenAIChatModelSettings
 from pydantic_ai.settings import ModelSettings
 
-from code_puppy.gemini_model import GeminiModel
 from code_puppy.messaging import emit_warning
 
 from . import callbacks
-from .claude_cache_client import ClaudeCacheAsyncClient, patch_anthropic_client_messages
 from .config import EXTRA_MODELS_FILE, get_value, get_yolo_mode
 from .http_utils import create_async_client, get_cert_bundle_path, get_http2
-from .round_robin_model import RoundRobinModel
+
+# Heavy SDK imports are deferred to builder functions to reduce startup time.
+# See _build_anthropic(), _build_openai(), etc.
 
 # Token calculation constants
 _OUTPUT_TOKEN_RATIO = 0.15
@@ -249,7 +240,10 @@ def make_model_settings(
     return model_settings
 
 
-class ZaiChatModel(OpenAIChatModel):
+from pydantic_ai.models.openai import OpenAIChatModel as _OpenAIChatModel
+
+
+class ZaiChatModel(_OpenAIChatModel):
     def _process_response(self, response):
         response.object = "chat.completion"
         return super()._process_response(response)
@@ -333,6 +327,8 @@ def _require_api_key(env_var: str, model_config: dict) -> str | None:
 
 
 def _build_gemini(model_name: str, model_config: dict, config: dict) -> Any:
+    from code_puppy.gemini_model import GeminiModel
+
     api_key = _require_api_key("GEMINI_API_KEY", model_config)
     if not api_key:
         return None
@@ -340,6 +336,9 @@ def _build_gemini(model_name: str, model_config: dict, config: dict) -> Any:
 
 
 def _build_openai(model_name: str, model_config: dict, config: dict) -> Any:
+    from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+
     api_key = _require_api_key("OPENAI_API_KEY", model_config)
     if not api_key:
         return None
@@ -353,6 +352,11 @@ def _build_openai(model_name: str, model_config: dict, config: dict) -> Any:
 
 
 def _build_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
+    from anthropic import AsyncAnthropic
+    from pydantic_ai.models.anthropic import AnthropicModel
+    from pydantic_ai.providers.anthropic import AnthropicProvider
+    from code_puppy.claude_cache_client import ClaudeCacheAsyncClient, patch_anthropic_client_messages
+
     api_key = _require_api_key("ANTHROPIC_API_KEY", model_config)
     if not api_key:
         return None
@@ -389,6 +393,11 @@ def _build_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
 
 
 def _build_custom_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
+    from anthropic import AsyncAnthropic
+    from pydantic_ai.models.anthropic import AnthropicModel
+    from pydantic_ai.providers.anthropic import AnthropicProvider
+    from code_puppy.claude_cache_client import ClaudeCacheAsyncClient, patch_anthropic_client_messages
+
     url, headers, verify, api_key = get_custom_config(model_config)
     if not api_key:
         emit_warning(
@@ -436,6 +445,10 @@ def _build_custom_anthropic(model_name: str, model_config: dict, config: dict) -
 
 
 def _build_azure_openai(model_name: str, model_config: dict, config: dict) -> Any:
+    from openai import AsyncAzureOpenAI
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+
     azure_endpoint_config = model_config.get("azure_endpoint")
     if not azure_endpoint_config:
         raise ValueError(
@@ -492,6 +505,9 @@ def _build_azure_openai(model_name: str, model_config: dict, config: dict) -> An
 
 
 def _build_custom_openai(model_name: str, model_config: dict, config: dict) -> Any:
+    from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+
     url, headers, verify, api_key = get_custom_config(model_config)
     client = create_async_client(headers=headers, verify=verify)
     provider_args: dict = dict(
@@ -509,6 +525,8 @@ def _build_custom_openai(model_name: str, model_config: dict, config: dict) -> A
 
 
 def _build_zai_coding(model_name: str, model_config: dict, config: dict) -> Any:
+    from pydantic_ai.providers.openai import OpenAIProvider
+
     api_key = _require_api_key("ZAI_API_KEY", model_config)
     if not api_key:
         return None
@@ -523,6 +541,8 @@ def _build_zai_coding(model_name: str, model_config: dict, config: dict) -> Any:
 
 
 def _build_zai_api(model_name: str, model_config: dict, config: dict) -> Any:
+    from pydantic_ai.providers.openai import OpenAIProvider
+
     api_key = _require_api_key("ZAI_API_KEY", model_config)
     if not api_key:
         return None
@@ -541,6 +561,8 @@ def _build_zai_api(model_name: str, model_config: dict, config: dict) -> Any:
 
 
 def _build_custom_gemini(model_name: str, model_config: dict, config: dict) -> Any:
+    from code_puppy.gemini_model import GeminiModel
+
     # Backwards compatibility: delegate to antigravity plugin if antigravity flag is set
     # New configs use type="antigravity" directly, but old configs may have
     # type="custom_gemini" with antigravity=True
@@ -588,6 +610,11 @@ def _build_custom_gemini(model_name: str, model_config: dict, config: dict) -> A
 
 
 def _build_cerebras(model_name: str, model_config: dict, config: dict) -> Any:
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.profiles import ModelProfile
+    from pydantic_ai.providers.cerebras import CerebrasProvider
+    from pydantic_ai.providers.openai import OpenAIProvider
+
     # Define the provider subclass inline so that mocking CerebrasProvider in
     # tests still works correctly (matches original behaviour).
     class ZaiCerebrasProvider(CerebrasProvider):
@@ -619,6 +646,9 @@ def _build_cerebras(model_name: str, model_config: dict, config: dict) -> Any:
 
 
 def _build_openrouter(model_name: str, model_config: dict, config: dict) -> Any:
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openrouter import OpenRouterProvider
+
     api_key_config = model_config.get("api_key")
     api_key = None
 
@@ -699,6 +729,8 @@ def _build_gemini_oauth(model_name: str, model_config: dict, config: dict) -> An
 
 
 def _build_round_robin(model_name: str, model_config: dict, config: dict) -> Any:
+    from code_puppy.round_robin_model import RoundRobinModel
+
     model_names = model_config.get("models")
     if not model_names or not isinstance(model_names, list):
         raise ValueError(
