@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from code_puppy.command_line.attachments import parse_prompt_attachments
+from code_puppy.prompt_runner import run_prompt_with_attachments
 from code_puppy.config import (
     AUTOSAVE_DIR,
     COMMAND_HISTORY_FILE,
