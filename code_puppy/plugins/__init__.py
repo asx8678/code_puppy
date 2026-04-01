@@ -167,6 +167,12 @@ def load_plugin_callbacks() -> dict[str, list[str]]:
     _PLUGINS_LOADED = True
     logger.debug(f"Loaded plugins: builtin={result['builtin']}, user={result['user']}")
 
+    # Drain any events that were buffered during plugin loading
+    from code_puppy.callbacks import drain_all_backlogs
+    drained = drain_all_backlogs()
+    if drained:
+        logger.debug(f"Drained backlogged events for phases: {list(drained.keys())}")
+
     return result
 
 

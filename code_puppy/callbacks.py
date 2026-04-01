@@ -3,6 +3,8 @@ import logging
 import traceback
 from typing import Any, Callable, Literal
 
+from code_puppy import _backlog
+
 PhaseType = Literal[
     "startup",
     "shutdown",
@@ -118,10 +120,12 @@ def clear_callbacks(phase: PhaseType | None = None) -> None:
     if phase is None:
         for p in _callbacks:
             _callbacks[p].clear()
+        _backlog.clear()
         logger.debug("Cleared all async callbacks")
     else:
         if phase in _callbacks:
             _callbacks[phase].clear()
+            _backlog.clear(phase)
             logger.debug(f"Cleared async callbacks for phase '{phase}'")
 
 
@@ -143,6 +147,7 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> list[Any]:
     callbacks = get_callbacks(phase)
     if not callbacks:
         logger.debug(f"No callbacks registered for phase '{phase}'")
+        _backlog.buffer_event(phase, args, kwargs)
         return []
 
     results = []
@@ -180,6 +185,7 @@ async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> list[Any]:
 
     if not callbacks:
         logger.debug(f"No callbacks registered for phase '{phase}'")
+        _backlog.buffer_event(phase, args, kwargs)
         return []
 
     logger.debug(f"Triggering {len(callbacks)} async callbacks for phase '{phase}'")
@@ -206,6 +212,33 @@ async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> list[Any]:
     async with asyncio.TaskGroup() as tg:
         tasks = [tg.create_task(_run_one(cb)) for cb in callbacks]
     results = [t.result() for t in tasks]
+    return results
+
+
+
+def drain_backlog(phase: PhaseType) -> list[Any]:
+    """Replay buffered events for a phase that had no listeners when fired.
+
+    Call after registering callbacks to process events that were fired
+    during plugin loading before listeners were registered.
+    """
+    buffered = _backlog.drain_backlog(phase)
+    results = []
+    for args, kwargs in buffered:
+        results.extend(_trigger_callbacks_sync(phase, *args, **kwargs))
+    return results
+
+
+def drain_all_backlogs() -> dict[str, list[Any]]:
+    """Drain backlogs for all phases. Call after plugin loading completes."""
+    all_buffered = _backlog.drain_all()
+    results: dict[str, list[Any]] = {}
+    for phase, events in all_buffered.items():
+        phase_results = []
+        for args, kwargs in events:
+            phase_results.extend(_trigger_callbacks_sync(phase, *args, **kwargs))
+        if phase_results:
+            results[phase] = phase_results
     return results
 
 
