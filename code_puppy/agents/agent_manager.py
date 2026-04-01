@@ -453,7 +453,7 @@ def get_current_agent_name() -> str:
 
     Returns:
         The name of the current agent for this session.
-        Priority: session agent > config default > 'code-puppy'.
+        Priority: session agent > last selected agent > config default > 'code-puppy'.
     """
     _ensure_session_cache_loaded()
     session_id = get_terminal_session_id()
@@ -463,6 +463,15 @@ def get_current_agent_name() -> str:
         session_agent = _state.session_agents_cache.get(session_id)
     if session_agent:
         return session_agent
+
+    # Fall back to last selected agent (from plugin)
+    try:
+        from code_puppy.plugins.remember_last_agent import get_last_agent
+        last_agent = get_last_agent()
+        if last_agent:
+            return last_agent
+    except ImportError:
+        pass  # Plugin not available
 
     # Fall back to config default
     from ..config import get_default_agent
