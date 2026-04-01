@@ -29,9 +29,15 @@ logger = logging.getLogger(__name__)
 _CUSTOM_MODEL_PROVIDERS: dict[str, type] = {}
 
 
+_providers_loaded = False
+
+
 def _load_plugin_model_providers():
-    """Load custom model providers from plugins."""
-    global _CUSTOM_MODEL_PROVIDERS
+    """Load custom model providers from plugins (lazy, called on first use)."""
+    global _CUSTOM_MODEL_PROVIDERS, _providers_loaded
+    if _providers_loaded:
+        return
+    _providers_loaded = True
     try:
         from code_puppy.callbacks import on_register_model_providers
 
@@ -41,10 +47,6 @@ def _load_plugin_model_providers():
                 _CUSTOM_MODEL_PROVIDERS.update(result)
     except Exception as e:
         logger.warning("Failed to load plugin model providers: %s", e)
-
-
-# Load plugin model providers at module initialization
-_load_plugin_model_providers()
 
 
 # Registry for model builder functions: model_type -> builder callable
@@ -909,6 +911,9 @@ class ModelFactory:
                     f"configuration are set."
                 )
             return result
+
+        # Ensure plugin model providers are loaded (lazy initialization)
+        _load_plugin_model_providers()
 
         # Check for plugin-registered model provider classes first
         if model_type in _CUSTOM_MODEL_PROVIDERS:
