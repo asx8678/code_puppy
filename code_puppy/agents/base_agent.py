@@ -110,6 +110,9 @@ class BaseAgent(ABC):
         self.id = str(uuid.uuid7())  # time-sortable for chronological ordering
         self._message_history: list[Any] = []
         self._compacted_message_hashes: set[str] = set()
+        # Incremental hash set maintained alongside _message_history to avoid
+        # O(n*p) rehashing in message_history_accumulator on every agent turn.
+        self._message_history_hashes: set[int] = set()
         # Agent construction cache
         self._code_generation_agent = None
         self._last_model_name: str | None = None
@@ -227,11 +230,14 @@ class BaseAgent(ABC):
             history: List of messages to set as the conversation history.
         """
         self._message_history = history
+        # Rebuild hash set when history is replaced wholesale
+        self._message_history_hashes = set(self.hash_message(m) for m in history)
 
     def clear_message_history(self) -> None:
         """Clear the message history for this agent."""
         self._message_history = []
         self._compacted_message_hashes.clear()
+        self._message_history_hashes.clear()
 
     def append_to_message_history(self, message: Any) -> None:
         """Append a message to this agent's history.
@@ -240,6 +246,7 @@ class BaseAgent(ABC):
             message: Message to append to the conversation history.
         """
         self._message_history.append(message)
+        self._message_history_hashes.add(self.hash_message(message))
 
     def extend_message_history(self, history: list[Any]) -> None:
         """Extend this agent's message history with multiple messages.
@@ -248,6 +255,7 @@ class BaseAgent(ABC):
             history: List of messages to append to the conversation history.
         """
         self._message_history.extend(history)
+        self._message_history_hashes.update(self.hash_message(m) for m in history)
 
     def get_compacted_message_hashes(self) -> set[str]:
         """Get the set of compacted message hashes for this agent.
@@ -1723,7 +1731,9 @@ class BaseAgent(ABC):
         # (which are accumulated over turns using Python hash()). Rust
         # acceleration is applied in message_history_processor for token
         # estimation — that's where the big speedup lives.
-        message_history_hashes = {self.hash_message(m) for m in _message_history}
+        # Use the incrementally-maintained hash set instead of rebuilding
+        # from scratch each turn (was O(n*p), now O(1)).
+        message_history_hashes = self._message_history_hashes
         messages_added = 0
         last_msg_index = len(messages) - 1
         for i, msg in enumerate(messages):
