@@ -12,14 +12,7 @@ from abc import ABC, abstractmethod
 from typing import (
     Any,
     Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Type,
-    Union)
+    Sequence)
 
 import mcp
 import pydantic
@@ -268,7 +261,7 @@ class BaseAgent(ABC):
         """
         self._compacted_message_hashes.add(message_hash)
 
-    def restore_compacted_hashes(self, hashes: List) -> None:
+    def restore_compacted_hashes(self, hashes: list) -> None:
         """Restore compacted message hashes from a persisted session.
 
         Args:

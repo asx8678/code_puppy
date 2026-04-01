@@ -13,8 +13,8 @@ from pathlib import Path
 from code_puppy.config import STATE_DIR
 
 # Logs directory within the state directory (per XDG spec, logs are state data)
-LOGS_DIR = os.path.join(STATE_DIR, "logs")
-ERROR_LOG_FILE = os.path.join(LOGS_DIR, "errors.log")
+LOGS_DIR = Path(STATE_DIR) / "logs"
+ERROR_LOG_FILE = LOGS_DIR / "errors.log"
 MAX_LOG_SIZE = 5 * 1024 * 1024  # 5MB
 
 

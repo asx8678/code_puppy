@@ -21,7 +21,6 @@ NO Rich markup or formatting should be embedded in any string fields.
 """
 
 from datetime import datetime, timezone
-from typing import Union
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
