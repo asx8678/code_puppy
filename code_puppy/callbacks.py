@@ -12,13 +12,6 @@ from code_puppy.run_context import (
     create_root_run_context,
     RunContextManager,
 )
-from code_puppy.run_context import (
-    RunContext,
-    create_child_run_context,
-    create_root_run_context,
-    get_current_run_context,
-    set_current_run_context,
-)
 
 PhaseType = Literal[
     "startup",
@@ -414,7 +407,7 @@ async def on_pre_tool_call(
     """
     parent = get_current_run_context()
     if parent is not None:
-        child = create_child_run_context(
+        child = RunContext.create_child(
             parent,
             component_type="tool",
             component_name=tool_name,
