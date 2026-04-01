@@ -13,7 +13,7 @@ from textual.binding import Binding
 from textual.reactive import reactive
 from textual.widgets import Header, Input, RichLog
 
-from code_puppy.tui.theme import APP_CSS
+from code_puppy.tui.theme import APP_CSS, CODE_PUPPY_THEME
 from code_puppy.tui.widgets.completion_overlay import CompletionOverlay
 from code_puppy.tui.widgets.info_bar import InfoBar
 
@@ -32,6 +32,7 @@ class PuppyInput(Input):
         dock: bottom;
         height: 3;
         margin: 0 1;
+        border: tall $primary-darken-2;
     }
     """
 
@@ -100,13 +101,18 @@ class CodePuppyApp(App):
 
     TITLE = "Code Puppy 🐶"
 
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.register_theme(CODE_PUPPY_THEME)
+        self.theme = "code-puppy"
+
     CSS = (
         APP_CSS
         + """
     /* App-specific styles */
     #chat-log {
         height: 1fr;
-        border-bottom: solid $primary-lighten-3;
+        border-bottom: solid $primary-darken-1;
         scrollbar-gutter: stable;
         padding: 0 1;
     }

@@ -1,24 +1,46 @@
 """Textual CSS theme for Code Puppy TUI.
 
-Maps existing banner colors from code_puppy.config to CSS variables,
-and defines the consistent color palette used across all screens.
+Color palette based on the original CLI jewel-tone banner colors:
+  - Deep sapphire blue (thinking/primary)
+  - Amethyst purple (AI responses)
+  - Amber/gold (shell commands, edits)
+  - Teal/cyan (UI chrome)
+  - Muted grays (dim text)
+
+Dark background, easy on the eyes, no garish neons.
 """
 
-# Standard CSS that all screens share
-# Uses Textual's CSS variable system for theming
+from textual.theme import Theme
+
+# ---------------------------------------------------------------------------
+# Custom theme — matches the original Code Puppy CLI feel
+# ---------------------------------------------------------------------------
+
+CODE_PUPPY_THEME = Theme(
+    name="code-puppy",
+    primary="#5f87af",       # Steel blue — panels, borders, primary UI
+    secondary="#875faf",     # Amethyst — AI responses, secondary accents
+    accent="#af875f",        # Warm amber — highlights, selections
+    warning="#d7af5f",       # Gold — warnings, token rate
+    error="#af5f5f",         # Muted red — errors (not screaming)
+    success="#5faf5f",       # Soft green — success, agent name
+    foreground="#c0c0c0",    # Light gray — main text (not pure white)
+    background="#1c1c1c",    # Near-black — like a terminal
+    surface="#262626",       # Dark gray — panels, elevated surfaces
+    panel="#303030",         # Slightly lighter — cards, overlays
+    dark=True,
+    luminosity_spread=0.15,
+    text_alpha=0.9,
+)
+
+# ---------------------------------------------------------------------------
+# Shared CSS variables and component styles
+# ---------------------------------------------------------------------------
+
 APP_CSS = """
 /* ============================================
    Code Puppy TUI Theme
    ============================================ */
-
-/* Base colors */
-$puppy-cyan: rgb(0, 200, 200);
-$puppy-green: rgb(0, 200, 100);
-$puppy-yellow: rgb(200, 180, 0);
-$puppy-red: rgb(200, 60, 60);
-$puppy-blue: rgb(60, 120, 200);
-$puppy-purple: rgb(140, 80, 200);
-$puppy-dim: rgb(120, 120, 120);
 
 /* Screen backgrounds */
 Screen {
@@ -33,7 +55,7 @@ SplitPanel {
 SplitPanel > .split-panel--left {
     width: 35%;
     min-width: 25;
-    border-right: solid $primary-lighten-2;
+    border-right: solid $primary-darken-1;
 }
 
 SplitPanel > .split-panel--right {
@@ -84,7 +106,7 @@ SearchableList > ListView {
     padding: 1;
     color: $text-muted;
     background: $surface;
-    border-top: solid $primary-lighten-3;
+    border-top: solid $primary-darken-1;
 }
 
 /* Preview panel content */
