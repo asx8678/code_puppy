@@ -14,7 +14,9 @@ class TestHasSeenMotd:
         """When track file doesn't exist, version hasn't been seen."""
         from code_puppy.command_line.motd import has_seen_motd
 
-        with patch("code_puppy.command_line.motd.os.path.exists", return_value=False):
+        mock_path = MagicMock()
+        mock_path.exists.return_value = False
+        with patch("code_puppy.command_line.motd.MOTD_TRACK_FILE", mock_path):
             result = has_seen_motd("2026-01-01")
 
         assert result is False
@@ -24,7 +26,9 @@ class TestHasSeenMotd:
         from code_puppy.command_line.motd import has_seen_motd
 
         mock_file_content = "2025-12-01\n2026-01-01\n2026-02-01\n"
-        with patch("code_puppy.command_line.motd.os.path.exists", return_value=True):
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        with patch("code_puppy.command_line.motd.MOTD_TRACK_FILE", mock_path):
             with patch("builtins.open", mock_open(read_data=mock_file_content)):
                 result = has_seen_motd("2026-01-01")
 
@@ -35,7 +39,9 @@ class TestHasSeenMotd:
         from code_puppy.command_line.motd import has_seen_motd
 
         mock_file_content = "2025-12-01\n2025-11-01\n"
-        with patch("code_puppy.command_line.motd.os.path.exists", return_value=True):
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        with patch("code_puppy.command_line.motd.MOTD_TRACK_FILE", mock_path):
             with patch("builtins.open", mock_open(read_data=mock_file_content)):
                 result = has_seen_motd("2026-01-01")
 
@@ -46,7 +52,9 @@ class TestHasSeenMotd:
         from code_puppy.command_line.motd import has_seen_motd
 
         mock_file_content = "\n\n2026-01-01\n\n\n"
-        with patch("code_puppy.command_line.motd.os.path.exists", return_value=True):
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        with patch("code_puppy.command_line.motd.MOTD_TRACK_FILE", mock_path):
             with patch("builtins.open", mock_open(read_data=mock_file_content)):
                 result = has_seen_motd("2026-01-01")
 
@@ -57,7 +65,9 @@ class TestHasSeenMotd:
         from code_puppy.command_line.motd import has_seen_motd
 
         mock_file_content = "  2026-01-01  \n"
-        with patch("code_puppy.command_line.motd.os.path.exists", return_value=True):
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        with patch("code_puppy.command_line.motd.MOTD_TRACK_FILE", mock_path):
             with patch("builtins.open", mock_open(read_data=mock_file_content)):
                 result = has_seen_motd("2026-01-01")
 
@@ -71,28 +81,26 @@ class TestMarkMotdSeen:
         """Should create config directory if it doesn't exist."""
         from code_puppy.command_line.motd import mark_motd_seen
 
-        with patch("code_puppy.command_line.motd.os.makedirs") as mock_makedirs:
-            with patch(
-                "code_puppy.command_line.motd.os.path.exists", return_value=False
-            ):
-                with patch("builtins.open", mock_open()):
-                    mark_motd_seen("2026-01-01")
+        mock_path = MagicMock()
+        mock_path.exists.return_value = False
+        with patch("code_puppy.command_line.motd.MOTD_TRACK_FILE", mock_path):
+            with patch("builtins.open", mock_open()):
+                mark_motd_seen("2026-01-01")
 
-        mock_makedirs.assert_called_once()
+        mock_path.parent.mkdir.assert_called_once()
         # Check exist_ok=True was passed
-        assert mock_makedirs.call_args[1]["exist_ok"] is True
+        assert mock_path.parent.mkdir.call_args[1]["exist_ok"] is True
 
     def test_appends_version_when_file_empty(self):
         """Should append version to file when file is new/empty."""
         from code_puppy.command_line.motd import mark_motd_seen
 
         mock_file = mock_open(read_data="")
-        with patch("code_puppy.command_line.motd.os.makedirs"):
-            with patch(
-                "code_puppy.command_line.motd.os.path.exists", return_value=False
-            ):
-                with patch("builtins.open", mock_file):
-                    mark_motd_seen("2026-01-01")
+        mock_path = MagicMock()
+        mock_path.exists.return_value = False
+        with patch("code_puppy.command_line.motd.MOTD_TRACK_FILE", mock_path):
+            with patch("builtins.open", mock_file):
+                mark_motd_seen("2026-01-01")
 
         # Should have opened file for appending and written version
         mock_file().write.assert_called_with("2026-01-01\n")
@@ -114,12 +122,11 @@ class TestMarkMotdSeen:
                 return mock_append()
             return mock_open()()
 
-        with patch("code_puppy.command_line.motd.os.makedirs"):
-            with patch(
-                "code_puppy.command_line.motd.os.path.exists", return_value=True
-            ):
-                with patch("builtins.open", side_effect=open_side_effect):
-                    mark_motd_seen("2026-01-01")
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        with patch("code_puppy.command_line.motd.MOTD_TRACK_FILE", mock_path):
+            with patch("builtins.open", side_effect=open_side_effect):
+                mark_motd_seen("2026-01-01")
 
         # Should write the new version
         mock_append().write.assert_called_with("2026-01-01\n")
@@ -140,12 +147,11 @@ class TestMarkMotdSeen:
                 return mock_append()
             return mock_open()()
 
-        with patch("code_puppy.command_line.motd.os.makedirs"):
-            with patch(
-                "code_puppy.command_line.motd.os.path.exists", return_value=True
-            ):
-                with patch("builtins.open", side_effect=open_side_effect):
-                    mark_motd_seen("2026-01-01")
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        with patch("code_puppy.command_line.motd.MOTD_TRACK_FILE", mock_path):
+            with patch("builtins.open", side_effect=open_side_effect):
+                mark_motd_seen("2026-01-01")
 
         # Should NOT have opened file for appending (version already there)
         mock_append().write.assert_not_called()
@@ -255,5 +261,5 @@ class TestMotdConstants:
         from code_puppy.command_line.motd import MOTD_TRACK_FILE
 
         # Just verify the filename - CONFIG_DIR is dynamic during tests
-        assert MOTD_TRACK_FILE.endswith("motd.txt")
-        assert ".code_puppy" in MOTD_TRACK_FILE or "code_puppy" in MOTD_TRACK_FILE
+        assert str(MOTD_TRACK_FILE).endswith("motd.txt")
+        assert ".code_puppy" in str(MOTD_TRACK_FILE) or "code_puppy" in str(MOTD_TRACK_FILE)

@@ -1,5 +1,4 @@
 import glob
-import os
 from pathlib import Path
 from collections.abc import Iterable
 
@@ -33,9 +32,9 @@ class FilePathCompleter(Completer):
                 base = Path(base_path_str).expanduser()
                 if base.is_dir():
                     paths = [
-                        str(base / f)
-                        for f in os.listdir(base)
-                        if not f.startswith(".") or text_after_symbol.endswith(".")
+                        str(base / f.name)
+                        for f in base.iterdir()
+                        if not f.name.startswith(".") or text_after_symbol.endswith(".")
                     ]
                 else:
                     paths = []

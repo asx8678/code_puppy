@@ -120,11 +120,11 @@ def log_error_message(
         pass
 
 
-def get_log_file_path() -> str:
+def get_log_file_path() -> Path:
     """Return the path to the error log file."""
     return ERROR_LOG_FILE
 
 
-def get_logs_dir() -> str:
+def get_logs_dir() -> Path:
     """Return the path to the logs directory."""
     return LOGS_DIR

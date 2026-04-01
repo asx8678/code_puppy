@@ -5,6 +5,7 @@ state management, and edge cases to boost coverage from 35% to 80%+.
 """
 
 import concurrent.futures
+from pathlib import Path
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
@@ -85,26 +86,26 @@ class TestHandleCdCommand:
     def test_cd_with_tilde_expansion(self):
         """Test cd command handles tilde (~) expansion correctly."""
         with patch("code_puppy.messaging.emit_success"):
-            with patch("os.path.expanduser", return_value="/home/user"):
-                with patch("os.path.isabs", return_value=True):
-                    with patch("os.path.isdir", return_value=True):
+            with patch.object(Path, "expanduser", return_value=Path("/home/user")):
+                with patch.object(Path, "is_absolute", return_value=True):
+                    with patch.object(Path, "is_dir", return_value=True):
                         with patch("os.chdir") as mock_chdir:
                             result = handle_cd_command("/cd ~")
                             assert result is True
-                            mock_chdir.assert_called_once_with("/home/user")
+                            mock_chdir.assert_called_once_with(Path("/home/user"))
 
     def test_cd_with_relative_path(self):
         """Test cd command handles relative paths correctly."""
         with patch("code_puppy.messaging.emit_success"):
-            with patch("os.path.expanduser", side_effect=lambda x: x):
-                with patch("os.path.isabs", return_value=False):
-                    with patch("os.getcwd", return_value="/current/dir"):
-                        with patch("os.path.isdir", return_value=True):
+            with patch.object(Path, "expanduser", lambda self: self):
+                with patch.object(Path, "is_absolute", return_value=False):
+                    with patch.object(Path, "cwd", return_value=Path("/current/dir")):
+                        with patch.object(Path, "is_dir", return_value=True):
                             with patch("os.chdir") as mock_chdir:
                                 result = handle_cd_command("/cd subdir")
                                 assert result is True
                                 mock_chdir.assert_called_once_with(
-                                    "/current/dir/subdir"
+                                    Path("/current/dir/subdir")
                                 )
 
     def test_cd_with_special_characters(self):
@@ -112,13 +113,13 @@ class TestHandleCdCommand:
         special_path = "/path with spaces & symbols"
 
         with patch("code_puppy.messaging.emit_success"):
-            with patch("os.path.expanduser", return_value=special_path):
-                with patch("os.path.isabs", return_value=True):
-                    with patch("os.path.isdir", return_value=True):
+            with patch.object(Path, "expanduser", return_value=Path(special_path)):
+                with patch.object(Path, "is_absolute", return_value=True):
+                    with patch.object(Path, "is_dir", return_value=True):
                         with patch("os.chdir") as mock_chdir:
                             result = handle_cd_command(f'/cd "{special_path}"')
                             assert result is True
-                            mock_chdir.assert_called_once_with(special_path)
+                            mock_chdir.assert_called_once_with(Path(special_path))
 
     def test_cd_listing_with_permission_error(self):
         """Test cd listing handles permission errors gracefully."""
