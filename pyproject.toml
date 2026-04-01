@@ -8,6 +8,9 @@ version = "0.0.438"
 description = "Code generation agent"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
+# Minimum version constraints. Exact versions are pinned in uv.lock.
+# CI MUST use `uv sync --frozen` to enforce the lockfile.
+# To update: `uv lock --upgrade-package <pkg>` then commit uv.lock.
 dependencies = [
     "pydantic-ai-slim[openai,anthropic,mcp]==1.60.0",
     "typer>=0.24.1",
