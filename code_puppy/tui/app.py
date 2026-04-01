@@ -49,8 +49,58 @@ class PuppyInput(Input):
         self._history_index = -1
         self._saved_input = ""
 
+    def _get_overlay(self) -> "CompletionOverlay | None":
+        """Get the completion overlay, or None if not available."""
+        try:
+            return self.app.query_one("#completions", CompletionOverlay)
+        except Exception:
+            return None
+
+    def _trigger_completions(self) -> None:
+        """Show completions for the current input value."""
+        from code_puppy.tui.completion import get_completions
+
+        completions = get_completions(self.value, self.cursor_position)
+        overlay = self._get_overlay()
+        if overlay is None:
+            return
+        if completions:
+            overlay.show_completions(completions)
+        else:
+            overlay.hide_overlay()
+
     def on_key(self, event) -> None:
-        """Handle up/down arrow for history navigation and tab for completion."""
+        """Handle up/down arrow for history and completion navigation."""
+        overlay = self._get_overlay()
+        overlay_visible = overlay is not None and overlay.is_visible
+
+        # When overlay is visible, forward navigation keys to it
+        if overlay_visible:
+            if event.key == "up":
+                option_list = overlay.query_one("#completion-list")
+                if option_list.highlighted is not None and option_list.highlighted > 0:
+                    option_list.highlighted -= 1
+                event.prevent_default()
+                return
+            elif event.key == "down":
+                option_list = overlay.query_one("#completion-list")
+                if option_list.highlighted is not None:
+                    option_list.highlighted += 1
+                event.prevent_default()
+                return
+            elif event.key == "tab" or event.key == "enter":
+                # Accept the highlighted completion
+                option_list = overlay.query_one("#completion-list")
+                if option_list.highlighted is not None:
+                    option_list.action_select()
+                event.prevent_default()
+                return
+            elif event.key == "escape":
+                overlay.hide_overlay()
+                event.prevent_default()
+                return
+
+        # Normal history navigation (when overlay is NOT visible)
         if event.key == "up":
             if not self._history:
                 return
@@ -75,16 +125,7 @@ class PuppyInput(Input):
             event.prevent_default()
         elif event.key == "tab":
             event.prevent_default()
-            # Post a message to the app to show completions
-            from code_puppy.tui.completion import get_completions
-
-            completions = get_completions(self.value, self.cursor_position)
-            if completions:
-                try:
-                    overlay = self.app.query_one("#completions", CompletionOverlay)
-                    overlay.show_completions(completions)
-                except Exception:
-                    pass
+            self._trigger_completions()
 
 
 class CodePuppyApp(App):
@@ -154,6 +195,12 @@ class CodePuppyApp(App):
         chat.write("")
         chat.write("[dim]Type a message or /command to get started.[/dim]")
         chat.write("[dim]Press F1 for help, Escape to quit.[/dim]")
+
+        # Ensure slash commands are registered so completions work immediately
+        try:
+            import code_puppy.command_line.command_handler  # noqa: F401
+        except Exception:
+            pass
         chat.write("")
         self.query_one("#input", PuppyInput).focus()
 
@@ -269,12 +316,40 @@ class CodePuppyApp(App):
         """Refocus input when completions dismissed."""
         self.query_one("#input", PuppyInput).focus()
 
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Auto-show slash command completions as the user types."""
+        if event.input.id != "input":
+            return
+
+        text = event.value.lstrip()
+        try:
+            overlay = self.query_one("#completions", CompletionOverlay)
+        except Exception:
+            return
+
+        if text.startswith("/") or "@" in text:
+            from code_puppy.tui.completion import get_completions
+
+            completions = get_completions(event.value, len(event.value))
+            if completions:
+                overlay.show_completions(completions)
+            else:
+                overlay.hide_overlay()
+        else:
+            overlay.hide_overlay()
+
     # --- Input handling ---
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle user input submission."""
         if event.input.id != "input":
             return
+
+        # Hide completions overlay on submit
+        try:
+            self.query_one("#completions", CompletionOverlay).hide_overlay()
+        except Exception:
+            pass
 
         text = event.value.strip()
         if not text:

@@ -76,7 +76,7 @@ class CompletionOverlay(Widget):
         if items:
             self.display = True
             option_list.highlighted = 0
-            option_list.focus()
+            # Don't steal focus from input — user keeps typing to filter
         else:
             self.hide_overlay()
 
