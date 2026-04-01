@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 
-from pydantic import BaseModel, conint
+from pydantic import BaseModel
 from pydantic_ai import RunContext
 
 # ---------------------------------------------------------------------------
@@ -36,7 +36,7 @@ class ListFileOutput(BaseModel):
 
 class ReadFileOutput(BaseModel):
     content: str | None
-    num_tokens: conint(lt=10000)
+    num_tokens: int  # estimated token count (no upper bound — large files are valid)
     error: str | None = None
 
 
