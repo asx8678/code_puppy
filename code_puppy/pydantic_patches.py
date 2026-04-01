@@ -269,10 +269,13 @@ def patch_tool_call_callbacks() -> None:
             # triggering UnexpectedModelBehavior crashes.
             try:
                 from code_puppy import callbacks
+from code_puppy.run_context import get_current_run_context, RunContext, RunContextManager
                 from code_puppy.messaging import emit_warning
 
+                # Get current run context for tracing
+                current_ctx = get_current_run_context()
                 callback_results = await callbacks.on_pre_tool_call(
-                    tool_name, tool_args
+                    tool_name, tool_args, current_ctx
                 )
 
                 for callback_result in callback_results:
@@ -320,9 +323,12 @@ def patch_tool_call_callbacks() -> None:
                 final_result = result if error is None else {"error": str(error)}
                 try:
                     from code_puppy import callbacks
+from code_puppy.run_context import get_current_run_context, RunContext, RunContextManager
 
+                    # Get current run context for tracing
+                    current_ctx = get_current_run_context()
                     await callbacks.on_post_tool_call(
-                        tool_name, tool_args, final_result, duration_ms
+                        tool_name, tool_args, final_result, duration_ms, current_ctx
                     )
                 except Exception:
                     pass  # never block tool execution
