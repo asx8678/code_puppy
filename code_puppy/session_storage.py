@@ -125,9 +125,23 @@ def _load_raw_bytes(raw: bytes) -> Any:
         # Verify HMAC integrity using per-install secret key
         expected_hmac = _compute_hmac(_get_hmac_key(), msgpack_data)
         if not hmac.compare_digest(stored_hmac, expected_hmac):
-            raise ValueError(
-                "Session file HMAC integrity check failed — file may be corrupted or tampered"
+            # Backward compat: files saved after msgpack migration but
+            # before HMAC was added have format MAGIC + raw msgpack (no HMAC).
+            # Try loading from offset 8 as plain msgpack.
+            try:
+                data = msgpack.unpackb(raw[offset:], raw=False)
+            except Exception:
+                raise ValueError(
+                    "Session file HMAC integrity check failed — file may be corrupted or tampered"
+                )
+            warnings.warn(
+                "Loading session from pre-HMAC msgpack format. "
+                "Re-save this session to add integrity protection. "
+                "Pre-HMAC msgpack support will be removed in a future version.",
+                DeprecationWarning,
+                stacklevel=2,
             )
+            return data
         return msgpack.unpackb(msgpack_data, raw=False)
 
     # Legacy signed format: CPSESSION\x01 + 32-byte signature + pickle

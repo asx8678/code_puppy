@@ -241,3 +241,61 @@ class TestSaveLoadIntegration:
             x for x in w if issubclass(x.category, DeprecationWarning)
         ]
         assert len(deprecation_warnings) >= 1
+
+
+class TestPreHmacMsgpackCompat:
+    """Tests for backward compatibility with pre-HMAC msgpack session files."""
+
+    def test_loads_pre_hmac_msgpack_with_warning(self) -> None:
+        """Pre-HMAC msgpack files (MAGIC + raw msgpack, no HMAC) load with deprecation warning."""
+        original = {"messages": ["old", "session"], "compacted_hashes": []}
+        # Build pre-HMAC format: MAGIC + msgpack (no HMAC)
+        msgpack_bytes = msgpack.packb(original, use_bin_type=True)
+        raw = _MSGPACK_MAGIC + msgpack_bytes
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = _load_raw_bytes(raw)
+            assert result == original
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "pre-hmac" in str(w[0].message).lower()
+
+    def test_pre_hmac_msgpack_preserves_complex_data(self) -> None:
+        """Pre-HMAC fallback correctly deserializes non-trivial payloads."""
+        original = {
+            "messages": [
+                {"kind": "request", "parts": [{"content": "hello"}]},
+                {"kind": "response", "parts": [{"content": "world"}]},
+            ],
+            "compacted_hashes": ["abc123", "def456"],
+        }
+        msgpack_bytes = msgpack.packb(original, use_bin_type=True)
+        raw = _MSGPACK_MAGIC + msgpack_bytes
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            result = _load_raw_bytes(raw)
+            assert result == original
+
+    def test_rejects_corrupted_pre_hmac_msgpack(self) -> None:
+        """Corrupted pre-HMAC msgpack files still raise ValueError."""
+        # Build something that starts with MAGIC but has garbage after
+        raw = _MSGPACK_MAGIC + b"\xff\xfe\xfd" * 20
+        with pytest.raises(ValueError, match="HMAC integrity check failed"):
+            _load_raw_bytes(raw)
+
+    def test_valid_hmac_still_preferred_over_fallback(self) -> None:
+        """Files with valid HMAC load via the primary path, not the fallback."""
+        original = {"messages": ["new"], "compacted_hashes": []}
+        raw = _make_msgpack_data(original)
+
+        # Should load without any deprecation warning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = _load_raw_bytes(raw)
+            assert result == original
+            deprecation_warnings = [
+                x for x in w if issubclass(x.category, DeprecationWarning)
+            ]
+            assert len(deprecation_warnings) == 0
