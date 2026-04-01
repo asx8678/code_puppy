@@ -320,6 +320,27 @@ class CodePuppyApp(App):
             self.push_screen(OnboardingScreen())
             return
 
+        # Handle /skills via Textual screen
+        if command.strip().lower() in ("/skills",):
+            from code_puppy.tui.screens.skills_screen import SkillsScreen
+
+            self.push_screen(SkillsScreen())
+            return
+
+        # Handle /hooks via Textual screen
+        if command.strip().lower() in ("/hooks",):
+            from code_puppy.tui.screens.hooks_screen import HooksScreen
+
+            self.push_screen(HooksScreen())
+            return
+
+        # Handle /scheduler via Textual screen
+        if command.strip().lower() in ("/scheduler",):
+            from code_puppy.tui.screens.scheduler_screen import SchedulerScreen
+
+            self.push_screen(SchedulerScreen())
+            return
+
         # Handle /uc via Textual screen
         if command.strip().lower() in ("/uc",):
             from code_puppy.tui.screens.uc_screen import UCScreen
