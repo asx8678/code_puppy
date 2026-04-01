@@ -777,7 +777,7 @@ def register_read_file(agent):
     """Register only the read_file tool."""
 
     @agent.tool
-    def read_file(
+    async def read_file(
         context: RunContext,
         file_path: str = "",
         start_line: int | None = None,
@@ -786,7 +786,7 @@ def register_read_file(agent):
 
         Use start_line/num_lines for large files to avoid overwhelming context.
         """
-        return _read_file(context, file_path, start_line, num_lines)
+        return await _read_file(context, file_path, start_line, num_lines)
 
 
 def register_grep(agent):
