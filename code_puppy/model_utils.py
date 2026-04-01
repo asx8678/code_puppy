@@ -93,12 +93,29 @@ def prepare_prompt_for_model(
     results = callbacks.on_get_model_system_prompt(
         model_name, system_prompt, user_prompt
     )
+    effective_system_prompt = system_prompt
+    effective_user_prompt = user_prompt
+    plugin_fully_handled = False
+    plugin_is_claude_code = False
+
     for result in results:
-        if result and isinstance(result, dict) and result.get("handled"):
-            return PreparedPrompt(
-                instructions=result.get("instructions", system_prompt),
-                user_prompt=result.get("user_prompt", user_prompt),
-                is_claude_code=result.get("is_claude_code", False))
+        if not result or not isinstance(result, dict):
+            continue
+        effective_system_prompt = result.get("instructions", effective_system_prompt)
+        effective_user_prompt = result.get("user_prompt", effective_user_prompt)
+        if result.get("handled"):
+            plugin_fully_handled = True
+            plugin_is_claude_code = result.get("is_claude_code", False)
+
+    if plugin_fully_handled:
+        return PreparedPrompt(
+            instructions=effective_system_prompt,
+            user_prompt=effective_user_prompt,
+            is_claude_code=plugin_is_claude_code,
+        )
+
+    system_prompt = effective_system_prompt
+    user_prompt = effective_user_prompt
 
     # Handle Claude Code models
     if is_claude_code_model(model_name):

@@ -1,8 +1,27 @@
 from pathlib import Path
 
+import pytest
+
+from code_puppy import callbacks as callbacks_module
+from code_puppy.model_utils import prepare_prompt_for_model
 from code_puppy.plugins.repo_compass.formatter import format_structure_map
 from code_puppy.plugins.repo_compass.indexer import build_structure_map
 from code_puppy.plugins.repo_compass.register_callbacks import _build_repo_context, _inject_repo_context
+
+
+@pytest.fixture(autouse=True)
+def _isolate_callback_registry():
+    snapshot = {
+        phase: list(callbacks_module.get_callbacks(phase))
+        for phase in callbacks_module._callbacks
+    }
+    try:
+        yield
+    finally:
+        callbacks_module.clear_callbacks()
+        for phase, funcs in snapshot.items():
+            for func in funcs:
+                callbacks_module.register_callback(phase, func)
 
 
 def test_build_structure_map_extracts_python_symbols(tmp_path: Path):
@@ -62,3 +81,61 @@ def test_inject_repo_context_appends_to_system_prompt(monkeypatch):
     assert result["user_prompt"] == "hello"
     assert "BASE PROMPT" in result["instructions"]
     assert "Repo Compass" in result["instructions"]
+
+
+def test_prepare_prompt_for_model_uses_repo_compass_callback(monkeypatch):
+    monkeypatch.setattr(
+        "code_puppy.callbacks.on_get_model_system_prompt",
+        lambda model_name, default_system_prompt, user_prompt: [
+            {
+                "instructions": "BASE\n\n## Repo Compass\n- sample.py [python]: def run()",
+                "user_prompt": user_prompt,
+                "handled": True,
+            }
+        ],
+    )
+
+    result = prepare_prompt_for_model("gpt-5", "BASE", "hello")
+
+    assert "Repo Compass" in result.instructions
+    assert result.user_prompt == "hello"
+    assert result.is_claude_code is False
+
+
+def test_prepare_prompt_for_model_applies_repo_compass_augmentation(monkeypatch):
+    monkeypatch.setattr(
+        "code_puppy.callbacks.on_get_model_system_prompt",
+        lambda model_name, default_system_prompt, user_prompt: [
+            {
+                "instructions": "BASE\n\n## Repo Compass\n- sample.py [python]: def run()",
+                "user_prompt": user_prompt,
+                "handled": False,
+            }
+        ],
+    )
+
+    result = prepare_prompt_for_model("gpt-5", "BASE", "hello")
+
+    assert "Repo Compass" in result.instructions
+    assert result.user_prompt == "hello"
+    assert result.is_claude_code is False
+
+
+def test_prepare_prompt_for_claude_code_preserves_repo_compass_augmentation(monkeypatch):
+    monkeypatch.setattr(
+        "code_puppy.callbacks.on_get_model_system_prompt",
+        lambda model_name, default_system_prompt, user_prompt: [
+            {
+                "instructions": "BASE\n\n## Repo Compass\n- sample.py [python]: def run()",
+                "user_prompt": user_prompt,
+                "handled": False,
+            }
+        ],
+    )
+
+    result = prepare_prompt_for_model("claude-code-sonnet", "BASE", "hello")
+
+    assert result.is_claude_code is True
+    assert result.instructions == "You are Claude Code, Anthropic's official CLI for Claude."
+    assert "Repo Compass" in result.user_prompt
+    assert result.user_prompt.endswith("hello")

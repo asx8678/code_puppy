@@ -1,5 +1,18 @@
 """Tests for the model_utils module."""
 
+import pytest
+
+from code_puppy import callbacks as callbacks_module
+
+
+@pytest.fixture(autouse=True)
+def _disable_prompt_plugins(monkeypatch):
+    monkeypatch.setattr(
+        callbacks_module,
+        "on_get_model_system_prompt",
+        lambda model_name, default_system_prompt, user_prompt: [],
+    )
+
 from code_puppy.model_utils import (
     CLAUDE_CODE_INSTRUCTIONS,
     PreparedPrompt,
