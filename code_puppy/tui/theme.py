@@ -1,32 +1,30 @@
 """Textual CSS theme for Code Puppy TUI.
 
-Color palette matches the original Code Puppy CLI exactly:
+Color palette matches the original Code Puppy CLI spirit:
   - Deep blue primary (deep_sky_blue4)
-  - Purple secondary (medium_purple4 / dark_violet)
-  - Cyan/teal accents (dark_cyan / dark_slate_gray3)
-  - Green success (sea_green3)
-  - Pink errors (deep_pink4)
+  - Muted purple secondary (medium_purple4)
+  - Soft, desaturated accents — easy on the eyes
   - Black background, just like a terminal
 """
 
 from textual.theme import Theme
 
 # ---------------------------------------------------------------------------
-# Custom theme — exact match to the original Code Puppy CLI colors
+# Custom theme — muted, eye-friendly palette on black
 # ---------------------------------------------------------------------------
 
 CODE_PUPPY_THEME = Theme(
     name="code-puppy",
-    primary="#005faf",       # deep_sky_blue4 — the main CLI color
-    secondary="#5f5f87",     # medium_purple4 — AI responses
-    accent="#00af87",        # dark_cyan — tools, highlights
-    warning="#d7af00",       # yellow — warnings (not brown)
-    error="#af005f",         # deep_pink4 — errors
-    success="#5fd787",       # sea_green3 — success, confirmations
-    foreground="#bcbcbc",    # grey74 — readable but not blinding
+    primary="#005faf",       # deep_sky_blue4 — the signature CLI blue
+    secondary="#7878af",     # muted lavender — AI responses, previews
+    accent="#6a9fb5",        # dusty steel blue — selections, highlights
+    warning="#c0a36e",       # muted sand — warnings, token rate
+    error="#b05070",         # soft rose — errors (not screaming pink)
+    success="#87a987",       # sage green — success, agent name
+    foreground="#b0b0b0",    # soft gray — readable, not harsh
     background="#000000",    # pure black — like the old terminal
-    surface="#121212",       # grey7 — barely lifted from black
-    panel="#1c1c1c",         # grey11 — subtle panel elevation
+    surface="#121212",       # barely lifted from black
+    panel="#1c1c1c",         # subtle panel elevation
     dark=True,
     luminosity_spread=0.15,
     text_alpha=0.9,
