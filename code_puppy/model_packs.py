@@ -28,10 +28,13 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from code_puppy.persistence import atomic_write_json, read_json
 from typing import Any
 
 from code_puppy.config import DATA_DIR, get_global_model_name
 from code_puppy.messaging import emit_error, emit_info, emit_warning
+from code_puppy.persistence import atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -248,12 +251,7 @@ def load_user_packs() -> None:
     global _user_packs
     packs_file = get_packs_file()
     
-    if not packs_file.exists():
-        return
-    
-    try:
-        with open(packs_file, "r") as f:
-            data = json.load(f)
+    data = read_json(packs_file, default={})
         
         for pack_name, pack_data in data.items():
             roles = {}
@@ -294,8 +292,7 @@ def save_user_packs() -> None:
             }
         }
     
-    with open(packs_file, "w") as f:
-        json.dump(data, f, indent=2)
+    atomic_write_json(packs_file, data)
 
 
 def get_pack(name: str | None = None) -> ModelPack:
