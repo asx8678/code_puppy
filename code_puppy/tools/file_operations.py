@@ -502,8 +502,9 @@ def _read_file(
                     for char in content
                 )
 
-            # Simple approximation: ~4 characters per token
-            num_tokens = len(content) // 4
+            # Use shared token estimation (content-aware, sampling for large texts)
+            from code_puppy.token_utils import estimate_token_count as _etc
+            num_tokens = _etc(content)
             if num_tokens > 10000:
                 return ReadFileOutput(
                     content=None,
