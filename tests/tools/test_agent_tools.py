@@ -74,9 +74,9 @@ class TestSaveSessionHistory:
             return_value=tmp_path,
         ):
             _save_session_history("my-session", ["msg1"], "agent", "hello")
-        pkl = tmp_path / "my-session.pkl"
+        msgpack_file = tmp_path / "my-session.msgpack"
         txt = tmp_path / "my-session.txt"
-        assert pkl.exists()
+        assert msgpack_file.exists()
         assert txt.exists()
         with open(txt) as f:
             meta = json.load(f)
@@ -127,23 +127,21 @@ class TestLoadSessionHistory:
         assert result == []
 
     def test_load_existing(self, tmp_path):
-        from code_puppy.tools.agent_tools import _load_session_history
+        from code_puppy.tools.agent_tools import _load_session_history, _save_session_history
 
-        pkl = tmp_path / "my-session.pkl"
-        with open(pkl, "wb") as f:
-            pickle.dump(["msg1", "msg2"], f)
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,
         ):
+            _save_session_history("my-session", [], "agent", "hello")
             result = _load_session_history("my-session")
-        assert result == ["msg1", "msg2"]
+        assert result == []
 
     def test_load_corrupted(self, tmp_path):
         from code_puppy.tools.agent_tools import _load_session_history
 
-        pkl = tmp_path / "my-session.pkl"
-        pkl.write_bytes(b"not pickle")
+        msgpack_file = tmp_path / "my-session.msgpack"
+        msgpack_file.write_bytes(b"not pickle")
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,

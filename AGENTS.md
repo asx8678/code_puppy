@@ -18,6 +18,10 @@ register_callback("startup", _on_startup)
 
 That's it. The plugin loader auto-discovers `register_callbacks.py` in subdirs.
 
+> **Security note:** user plugins in `~/.code_puppy/plugins/` are treated as trusted local Python code.
+> They are imported and executed during plugin discovery with the same local privileges as Code Puppy itself.
+> There is currently no isolated safe mode for user plugins, so do not install untrusted plugins.
+
 ## Available Hooks
 
 `register_callback("<hook>", func)` — deduplicated, async hooks accept sync or async functions.

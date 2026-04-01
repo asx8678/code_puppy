@@ -3,6 +3,12 @@
 Prepend a prompt with `!` to execute it as a shell command directly,
 bypassing the agent entirely. Inspired by Claude Code's `!` prefix.
 
+Security model:
+- This path is for **explicit user-initiated direct shell execution**.
+- It does **not** go through the agent/tool safety pipeline used by
+  ``agent_run_shell_command``.
+- It should be treated like typing a command directly into your terminal.
+
 Examples:
     !ls -la
     !git status
@@ -108,7 +114,7 @@ def execute_shell_passthrough(task: str) -> None:
     # Banner + command on one line, context hint below
     banner = _format_banner()
     console.print(f"\n{banner} [dim]$ {safe_command}[/dim]")
-    console.print("[dim]↳ Direct shell · Bypassing AI agent[/dim]")
+    console.print("[dim]↳ Direct shell · Bypassing AI agent and tool safety checks[/dim]")
 
     start_time = time.monotonic()
 

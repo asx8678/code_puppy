@@ -55,6 +55,7 @@ from pydantic_ai.messages import (
     ToolReturnPart)
 from rich.text import Text
 
+from code_puppy.agents.agent_prompt_mixin import AgentPromptMixin
 from code_puppy.agents.event_stream_handler import event_stream_handler
 from code_puppy.callbacks import (
     on_agent_exception,
@@ -106,7 +107,7 @@ _reload_count = 0
 
 
 logger = logging.getLogger(__name__)
-class BaseAgent(ABC):
+class BaseAgent(ABC, AgentPromptMixin):
     """Base class for all agent configurations."""
 
     def __init__(self):
@@ -138,78 +139,7 @@ class BaseAgent(ABC):
         # Cached context overhead tokens (invalidated by reload_code_generation_agent)
         self._cached_context_overhead: int | None = None
 
-    def get_identity(self) -> str:
-        """Get a unique identity for this agent instance.
 
-        Returns:
-            A string like 'python-programmer-a3f2b1' combining name + short UUID.
-        """
-        return f"{self.name}-{self.id[:6]}"
-
-    def get_identity_prompt(self) -> str:
-        """Get the identity prompt suffix to embed in system prompts.
-
-        Returns:
-            A string instructing the agent about its identity for task ownership.
-        """
-        return (
-            f"\n\nYour ID is `{self.get_identity()}`. "
-            "Use this for any tasks which require identifying yourself "
-            "such as claiming task ownership or coordination with other agents."
-        )
-
-    def get_platform_info(self) -> str:
-        """Return runtime platform context for the system prompt.
-
-        Includes OS, shell, date, language locale, git repo detection,
-        and current working directory.  Inspired by aider's
-        base_coder.get_platform_info().
-        """
-        import os
-        import platform as _platform
-        from datetime import datetime
-        from pathlib import Path
-
-        lines: list[str] = []
-
-        # OS / architecture
-        try:
-            lines.append(f"- Platform: {_platform.platform()}")
-        except Exception:
-            lines.append("- Platform: unknown")
-
-        # Shell
-        shell_var = "COMSPEC" if os.name == "nt" else "SHELL"
-        shell_val = os.environ.get(shell_var, "unknown")
-        lines.append(f"- Shell: {shell_var}={shell_val}")
-
-        # Current date
-        dt = datetime.now().astimezone().strftime("%Y-%m-%d")
-        lines.append(f"- Current date: {dt}")
-
-        # Working directory
-        lines.append(f"- Working directory: {os.getcwd()}")
-
-        # Git repo detection
-        if Path(".git").is_dir():
-            lines.append("- The user is working inside a git repository")
-
-        return "\n".join(lines) + "\n"
-
-    def get_full_system_prompt(self) -> str:
-        """Get the complete system prompt with platform info and identity.
-
-        Assembles: base prompt + platform context + agent identity.
-        Platform info gives the model awareness of OS, shell, date, and
-        environment so it can generate appropriate commands and advice.
-
-        Returns:
-            The full system prompt including platform and identity information.
-        """
-        prompt = self.get_system_prompt()
-        prompt += "\n\n# Environment\n" + self.get_platform_info()
-        prompt += self.get_identity_prompt()
-        return prompt
 
     @property
     @abstractmethod

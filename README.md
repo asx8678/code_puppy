@@ -179,6 +179,47 @@ For examples and more information about agent rules, visit [https://agent.md](ht
 
 Use the `/mcp` command to manage MCP (list, start, stop, status, etc.)
 
+## Security Model: Shell Commands and Plugins
+
+### Shell command paths
+
+Code Puppy has **two distinct shell execution paths**:
+
+1. **Agent tool path** — `agent_run_shell_command`
+   - Used by agents and sub-agents
+   - Flows through the `run_shell_command` callback hook
+   - Can be governed by the `shell_safety` plugin and `PolicyEngine`
+   - In non-yolo mode, also supports interactive user confirmation
+
+2. **Direct shell passthrough** — `!<command>`
+   - Runs a shell command immediately from the user prompt
+   - **Bypasses the AI agent entirely**
+   - **Does not use the agent/tool safety pipeline**
+   - Should be treated like running the command directly in your terminal
+
+If you want Code Puppy safety and policy checks, use the agent tool path rather than `!<command>`.
+If you use `!<command>`, you are explicitly choosing direct local execution.
+
+### Plugin trust boundary
+
+Built-in plugins ship with Code Puppy, but **user plugins are fully trusted local code**.
+Any Python in `~/.code_puppy/plugins/` is imported and executed during plugin discovery.
+That means user plugins can read files, execute processes, modify configuration, and access any data your local Python process can access.
+
+Only install or keep user plugins you trust at the same level as other local developer tooling.
+
+### Safe-mode expectations
+
+At the moment, Code Puppy does **not** provide a fully isolated "safe mode" for user plugins.
+If you need a more locked-down session, the safest current approach is:
+
+- remove or rename untrusted directories under `~/.code_puppy/plugins/`
+- avoid `!<command>` passthrough for sensitive workflows
+- prefer non-yolo execution so agent tool calls can be reviewed
+- use policy rules for `agent_run_shell_command` where appropriate
+
+A future hardening direction is an explicit user-plugin disable switch and/or policy-aware shell passthrough mode.
+
 ## Round Robin Model Distribution
 
 Code Puppy supports **Round Robin model distribution** to help you overcome rate limits and distribute load across multiple AI models. This feature automatically cycles through configured models with each request, maximizing your API usage while staying within rate limits.

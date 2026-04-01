@@ -1,12 +1,13 @@
 """Tests for agent tools functionality."""
 
 import json
+from datetime import datetime, timezone
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart
+from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
 from code_puppy.tools.agent_tools import (
     _generate_session_hash_suffix,
@@ -59,6 +60,7 @@ class TestAgentTools:
 
             # Get prompt additions to verify they exist
             prompt_additions = callbacks.on_load_prompt()
+            prompt_additions = [p for p in prompt_additions if isinstance(p, str) and p]
 
             # Verify we have file permission prompt additions
             assert len(prompt_additions) > 0
@@ -251,9 +253,9 @@ class TestSessionSaveLoad:
     def mock_messages(self):
         """Create mock ModelMessage objects for testing."""
         return [
-            ModelRequest(parts=[TextPart(content="Hello, can you help?")]),
+            ModelRequest(parts=[UserPromptPart(content="Hello, can you help?")]),
             ModelResponse(parts=[TextPart(content="Sure, I can help!")]),
-            ModelRequest(parts=[TextPart(content="What is 2+2?")]),
+            ModelRequest(parts=[UserPromptPart(content="What is 2+2?")]),
             ModelResponse(parts=[TextPart(content="2+2 equals 4.")]),
         ]
 
@@ -317,8 +319,8 @@ class TestSessionSaveLoad:
             with pytest.raises(ValueError, match="must be kebab-case"):
                 _load_session_history("Invalid_Session")
 
-    def test_save_creates_pkl_and_txt_files(self, temp_session_dir, mock_messages):
-        """Test that save creates both .pkl and .txt files."""
+    def test_save_creates_msgpack_and_txt_files(self, temp_session_dir, mock_messages):
+        """Test that save creates both .msgpack and .txt files."""
         session_id = "test-session"
         agent_name = "test-agent"
         initial_prompt = "Test prompt"
@@ -335,9 +337,9 @@ class TestSessionSaveLoad:
             )
 
             # Check that both files exist
-            pkl_file = temp_session_dir / f"{session_id}.pkl"
+            msgpack_file = temp_session_dir / f"{session_id}.msgpack"
             txt_file = temp_session_dir / f"{session_id}.txt"
-            assert pkl_file.exists()
+            assert msgpack_file.exists()
             assert txt_file.exists()
 
     def test_txt_file_contains_readable_metadata(self, temp_session_dir, mock_messages):
@@ -424,6 +426,34 @@ class TestSessionSaveLoad:
             # Should return empty list instead of crashing
             loaded_messages = _load_session_history(session_id)
             assert loaded_messages == []
+
+    def test_save_and_load_roundtrip_with_datetime_content(self, temp_session_dir):
+        """Test session persistence works when serialized content includes datetimes."""
+        session_id = "datetime-session"
+        agent_name = "test-agent"
+        timestamp = datetime(2026, 4, 1, 12, 0, tzinfo=timezone.utc)
+        mock_messages = [
+            ModelRequest(parts=[UserPromptPart(content=f"Timestamp: {timestamp.isoformat()}")]),
+            ModelResponse(parts=[TextPart(content="Recorded successfully")]),
+        ]
+
+        with patch(
+            "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
+            return_value=temp_session_dir,
+        ):
+            _save_session_history(
+                session_id=session_id,
+                message_history=mock_messages,
+                agent_name=agent_name,
+                initial_prompt="Persist this session",
+            )
+
+            loaded_messages = _load_session_history(session_id)
+
+        assert len(loaded_messages) == len(mock_messages)
+        for loaded, original in zip(loaded_messages, mock_messages):
+            assert type(loaded) is type(original)
+            assert loaded.parts == original.parts
 
     def test_save_without_initial_prompt(self, temp_session_dir, mock_messages):
         """Test that save works without initial_prompt (subsequent saves)."""
@@ -551,7 +581,7 @@ class TestSessionIntegration:
     def mock_messages(self):
         """Create mock ModelMessage objects for testing."""
         return [
-            ModelRequest(parts=[TextPart(content="Hello")]),
+            ModelRequest(parts=[UserPromptPart(content="Hello")]),
             ModelResponse(parts=[TextPart(content="Hi there!")]),
         ]
 

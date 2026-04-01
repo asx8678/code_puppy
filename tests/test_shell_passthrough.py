@@ -275,6 +275,7 @@ class TestExecuteShellPassthrough:
 
         second_call = str(console.print.call_args_list[1])
         assert "Bypassing AI" in second_call
+        assert "safety checks" in second_call
 
     @patch("code_puppy.command_line.shell_passthrough.subprocess.run")
     @patch("code_puppy.command_line.shell_passthrough._get_console")
@@ -344,7 +345,6 @@ class TestInitialCommandPassthrough:
             patch("code_puppy.messaging.emit_success"),
             patch("code_puppy.messaging.emit_warning"),
             patch("code_puppy.command_line.motd.print_motd"),
-            patch("code_puppy.interactive_loop.get_current_agent", return_value=mock_agent),
             patch(
                 "code_puppy.agents.agent_manager.get_current_agent",
                 return_value=mock_agent,

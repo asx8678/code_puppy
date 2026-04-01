@@ -138,12 +138,17 @@ def _save_session_history(
 
     sessions_dir = _get_subagent_sessions_dir()
 
-    # Save msgpack file with message history (replaces legacy pickle)
+    # Save msgpack file with JSON-serialized message history.
+    # We store the pydantic-ai JSON payload inside msgpack so datetime-bearing
+    # messages round-trip safely without relying on msgpack extension hooks.
     msgpack_path = sessions_dir / f"{session_id}.msgpack"
     with open(msgpack_path, "wb") as f:
         from pydantic_ai.messages import ModelMessagesTypeAdapter
-        data = ModelMessagesTypeAdapter.dump_python(message_history, mode="python")
-        f.write(msgpack.packb(data, use_bin_type=True))
+        payload = {
+            "format": "pydantic-ai-json",
+            "payload": ModelMessagesTypeAdapter.dump_json(message_history),
+        }
+        f.write(msgpack.packb(payload, use_bin_type=True))
 
     # Save or update txt file with metadata
     txt_path = sessions_dir / f"{session_id}.txt"
@@ -197,6 +202,11 @@ def _load_session_history(session_id: str) -> list[ModelMessage]:
             raw = msgpack_path.read_bytes()
             data = msgpack.unpackb(raw, raw=False)
             from pydantic_ai.messages import ModelMessagesTypeAdapter
+            if isinstance(data, dict) and data.get("format") == "pydantic-ai-json":
+                payload = data.get("payload", b"[]")
+                if isinstance(payload, str):
+                    payload = payload.encode("utf-8")
+                return ModelMessagesTypeAdapter.validate_json(payload)
             return ModelMessagesTypeAdapter.validate_python(data)
         except Exception:
             pass  # Fall through to pickle or return empty

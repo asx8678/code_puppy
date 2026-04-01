@@ -1,18 +1,77 @@
+## Implementation Status
+
+### ✅ Completed (Phase 1)
+
+**Files Implemented:**
+- `exinfo.py` - ExInfo dataclass and ErrorSeverity enum
+- `registry.py` - ExceptionRegistry with class-based and pattern-based lookup
+- `builtins.py` - 15+ built-in exception registrations
+- `register_callbacks.py` - agent_exception and agent_run_end hooks
+- `__init__.py` - Public API exports
+
+**Features Working:**
+- Class-based exception registration and lookup
+- MRO-based parent class resolution
+- Pattern-based fallback for string-matching
+- Retry classification (True/False)
+- Severity-based user messaging (emit_error/warning/info)
+- Retry delay recommendations
+- Built-in coverage for network, auth, filesystem, and value errors
+- Callback support in ExInfo
+
+**Tests:**
+- 30 comprehensive unit tests covering all functionality
+- Tests for ExInfo, ExceptionRegistry, builtins, and custom patterns
+
+### 📋 Still To Do (Future Phases)
+
+1. User configuration file support (~/.code_puppy/error_classifier.yaml)
+2. More granular exception hierarchies with merged metadata
+3. Async-specific exception handling (asyncio.TimeoutError)
+4. i18n support for user-facing messages
+5. Integration with structured logging (JSON output)
+6. Retry orchestration helpers (exponential backoff, circuit breaker integration)
+
+## Usage Example
+
+```python
+from code_puppy.plugins.error_classifier import ExceptionRegistry, ExInfo
+from code_puppy.plugins.error_classifier.exinfo import ErrorSeverity
+
+# Register a custom exception
+ExceptionRegistry.register(
+    MyAPIError,
+    ExInfo(
+        name="API Error",
+        retry=True,
+        description="My API returned an error.",
+        suggestion="Check API status at https://status.example.com",
+        severity=ErrorSeverity.WARNING,
+        retry_after_seconds=30,
+    )
+)
+
+# Classify an exception
+should_retry, ex_info = ExceptionRegistry.classify(some_exception)
+if should_retry:
+    delay = ExceptionRegistry.get_retry_delay(some_exception)
+    print(f"Retry in {delay} seconds...")
+```
 # Structured Exception Registry Plugin - Design Document
 
 **Issue:** `code_puppy-eazr`  
-**Status:** Planning  
+**Status:** ✅ Implemented  
 **Priority:** P2
 
-## Overview & Goals
+## Overview
 
 The Error Classifier plugin provides centralized, structured error handling for Code Puppy. It maintains a registry mapping exception classes to rich metadata (ExInfo), enabling automatic classification of errors into retryable vs permanent, with actionable guidance for users.
 
 **Goals:**
-1. Unified exception metadata registry
-2. Automatic error classification via `agent_exception` hook
-3. Distinguish transient (retryable) vs permanent errors
-4. Provide contextual suggestions for common errors
+1. ✅ Unified exception metadata registry
+2. ✅ Automatic error classification via `agent_exception` hook
+3. ✅ Distinguish transient (retryable) vs permanent errors
+4. ✅ Provide contextual suggestions for common errors
 
 ## ExInfo Dataclass Definition
 
