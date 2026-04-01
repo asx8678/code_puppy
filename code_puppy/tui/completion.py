@@ -6,7 +6,7 @@ completion. Shows results in an OptionList overlay above the input.
 
 import glob
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
