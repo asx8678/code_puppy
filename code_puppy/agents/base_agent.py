@@ -4,11 +4,9 @@ import asyncio
 import dataclasses
 import json
 import logging
-import pathlib
 import signal
 import threading
 import time
-import traceback
 import uuid
 from abc import ABC, abstractmethod
 from typing import (
@@ -104,6 +102,7 @@ from code_puppy.tools.command_runner import (
     is_awaiting_user_input,
 )
 
+
 def _rust_enabled() -> bool:
     """Check current Rust acceleration state (respects /fast_puppy toggle).
 
@@ -113,54 +112,10 @@ def _rust_enabled() -> bool:
     """
     return is_rust_enabled()
 
+
 logger = logging.getLogger(__name__)
 
 _reload_count = 0
-
-
-def _log_error_to_file(exc: Exception) -> Optional[str]:
-    """Log detailed error information to ~/.code_puppy/error_logs/log_{timestamp}.txt.
-
-    Args:
-        exc: The exception to log.
-
-    Returns:
-        The path to the log file if successful, None otherwise.
-    """
-    try:
-        from code_puppy.error_logging import get_logs_dir
-
-        error_logs_dir = pathlib.Path(get_logs_dir())
-        error_logs_dir.mkdir(parents=True, exist_ok=True)
-
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        log_file = error_logs_dir / f"log_{timestamp}.txt"
-
-        with open(log_file, "w", encoding="utf-8") as f:
-            f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"Exception Type: {type(exc).__name__}\n")
-            f.write(f"Exception Message: {str(exc)}\n")
-            f.write(f"Exception Args: {exc.args}\n")
-            f.write("\n--- Full Traceback ---\n")
-            f.write(traceback.format_exc())
-            f.write("\n--- Exception Chain ---\n")
-            # Walk the exception chain for chained exceptions
-            current = exc
-            chain_depth = 0
-            while current is not None and chain_depth < 10:
-                f.write(
-                    f"\n[Cause {chain_depth}] {type(current).__name__}: {current}\n"
-                )
-                f.write("".join(traceback.format_tb(current.__traceback__)))
-                current = (
-                    current.__cause__ if current.__cause__ else current.__context__
-                )
-                chain_depth += 1
-
-        return str(log_file)
-    except Exception:
-        # Don't let logging errors break the main flow
-        return None
 
 
 class BaseAgent(ABC):
@@ -1079,9 +1034,10 @@ class BaseAgent(ABC):
                 "compacted_count": len(compacted),
             }
         except Exception as exc:
-            logger.debug("compact_messages: truncation failed, returning original: %s", exc)
+            logger.debug(
+                "compact_messages: truncation failed, returning original: %s", exc
+            )
             return messages, {"method": "noop", "error": str(exc)}
-
 
     def get_pending_tool_call_count(self, messages: List[ModelMessage]) -> int:
         """
@@ -1932,7 +1888,6 @@ class BaseAgent(ABC):
         on_cancel_agent: Optional[Callable[[], None]] = None,
     ) -> None:
         import msvcrt
-        import time
 
         # Get the cancel agent char code if we're using keyboard-based cancel
         cancel_agent_char: Optional[str] = None

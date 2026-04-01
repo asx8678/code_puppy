@@ -21,7 +21,6 @@ from pydantic_ai.messages import (
 )
 
 import code_puppy.agents.base_agent as base_agent_module
-from code_puppy.agents.base_agent import _log_error_to_file
 
 
 # Concrete subclass for testing
@@ -48,49 +47,6 @@ class ConcreteAgent(base_agent_module.BaseAgent):
 @pytest.fixture
 def agent():
     return ConcreteAgent()
-
-
-class TestLogErrorToFile:
-    """Tests for _log_error_to_file function (lines 107-140)."""
-
-    def test_logs_simple_exception(self, tmp_path):
-        with patch("code_puppy.error_logging.get_logs_dir", return_value=str(tmp_path)):
-            try:
-                raise ValueError("test error")
-            except ValueError as exc:
-                result = _log_error_to_file(exc)
-
-        assert result is not None
-        assert tmp_path.name in result or "log_" in result
-        content = pathlib.Path(result).read_text()
-        assert "ValueError" in content
-        assert "test error" in content
-
-    def test_logs_chained_exception(self, tmp_path):
-        with patch("code_puppy.error_logging.get_logs_dir", return_value=str(tmp_path)):
-            try:
-                try:
-                    raise RuntimeError("root cause")
-                except RuntimeError as inner:
-                    raise ValueError("outer") from inner
-            except ValueError as exc:
-                result = _log_error_to_file(exc)
-
-        assert result is not None
-        content = pathlib.Path(result).read_text()
-        assert "root cause" in content
-        assert "Cause 0" in content
-        assert "Cause 1" in content
-
-    def test_returns_none_on_error(self):
-        with patch(
-            "code_puppy.error_logging.get_logs_dir", side_effect=Exception("fail")
-        ):
-            try:
-                raise ValueError("test")
-            except ValueError as exc:
-                result = _log_error_to_file(exc)
-        assert result is None
 
 
 class TestBaseAgentProperties:
