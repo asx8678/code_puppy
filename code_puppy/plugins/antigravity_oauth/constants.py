@@ -8,6 +8,19 @@ ANTIGRAVITY_CLIENT_ID = (
 )
 import os as _os
 
+import platform as _platform
+
+
+def _get_platform_tag() -> str:
+    """Build a platform tag matching Antigravity conventions (e.g. 'darwin/arm64')."""
+    system = _platform.system().lower()  # 'darwin', 'linux', 'windows'
+    machine = _platform.machine().lower()  # 'arm64', 'x86_64', 'amd64'
+    # Normalize x86_64 → amd64 to match Go/Google convention
+    if machine == "x86_64":
+        machine = "amd64"
+    return f"{system}/{machine}"
+
+
 # Client secret loaded from environment variable. The hardcoded value was
 # removed from source control for security. To use Antigravity OAuth, set:
 #   export ANTIGRAVITY_CLIENT_SECRET="your-secret-here"
@@ -71,7 +84,7 @@ ANTIGRAVITY_VERSION = "1.15.8"
 # Uses ANTIGRAVITY_VERSION to ensure the User-Agent version stays in sync
 # with the single source of truth, preventing "version no longer supported" errors.
 ANTIGRAVITY_HEADERS: dict[str, str] = {
-    "User-Agent": f"antigravity/{ANTIGRAVITY_VERSION} windows/amd64",
+    "User-Agent": f"antigravity/{ANTIGRAVITY_VERSION} {_get_platform_tag()}",
     "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
     "Client-Metadata": '{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}',
     "x-goog-api-key": "",  # Must be present but empty for Antigravity
