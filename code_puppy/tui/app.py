@@ -298,6 +298,14 @@ class CodePuppyApp(App):
     async def _handle_slash_command(self, command: str) -> None:
         """Dispatch a slash command to the command handler."""
         chat = self.query_one("#chat-log", RichLog)
+
+        # Handle /colors natively via Textual screen
+        if command.strip().lower() in ("/colors",):
+            from code_puppy.tui.screens.colors_screen import ColorsScreen
+
+            self.push_screen(ColorsScreen())
+            return
+
         try:
             from code_puppy.command_line.command_handler import handle_command
 
