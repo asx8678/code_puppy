@@ -70,6 +70,9 @@ packages = ["code_puppy"]
 [tool.hatch.build.targets.wheel]
 include = ["code_puppy/**"]
 
+[tool.ruff]
+target-version = "py312"
+
 [tool.ruff.lint.per-file-ignores]
 "code_puppy/main.py" = ["E402"]
 "code_puppy/cli_runner.py" = ["E402"]
