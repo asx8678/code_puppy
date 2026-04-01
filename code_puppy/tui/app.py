@@ -131,6 +131,7 @@ class CodePuppyApp(App):
         Binding("f2", "show_model_picker", "Model", show=True),
         Binding("f3", "show_agent_picker", "Agent", show=True),
         Binding("f4", "show_settings", "Settings", show=True),
+        Binding("ctrl+h", "show_help", "Help", show=False),  # Mac-friendly alt
         Binding("ctrl+x", "cancel_task", "Cancel", show=False),
     ]
 
@@ -309,6 +310,35 @@ class CodePuppyApp(App):
     async def _handle_slash_command(self, command: str) -> None:
         """Dispatch a slash command to the command handler."""
         chat = self.query_one("#chat-log", RichLog)
+        cmd_lower = command.strip().lower()
+        cmd_parts = cmd_lower.split()
+        cmd_name = cmd_parts[0] if cmd_parts else ""
+
+        # --- Native Textual screens (handled directly, no handle_command) ---
+
+        if cmd_name == "/help":
+            # Render help directly in chat (don't rely on message bridge)
+            try:
+                from code_puppy.command_line.command_handler import get_commands_help
+
+                help_text = get_commands_help()
+                chat.write(help_text)
+            except Exception as e:
+                chat.write(f"[red]Error loading help: {e}[/red]")
+            return
+
+        if cmd_name == "/settings":
+            from code_puppy.tui.screens.model_settings_screen import ModelSettingsScreen
+
+            self.push_screen(ModelSettingsScreen())
+            return
+
+        if cmd_name == "/agent" and len(cmd_parts) == 1:
+            # Just "/agent" with no args → show picker
+            from code_puppy.tui.screens.agent_screen import AgentScreen
+
+            self.push_screen(AgentScreen())
+            return
 
         # Handle /colors natively via Textual screen
         if command.strip().lower() in ("/colors",):
@@ -409,12 +439,16 @@ class CodePuppyApp(App):
             result = handle_command(command)
 
             if result is True:
-                pass  # Command handled, output already emitted via messaging
+                # Command handled — output was emitted via messaging system
+                # The TUIMessageBridge will display it asynchronously
+                # Add a small delay to let the bridge process messages
+                await asyncio.sleep(0.1)
             elif isinstance(result, str):
                 # Command returned text to process as agent prompt
                 await self._handle_agent_prompt(result)
             elif result is False:
-                pass  # Unknown command, warning already emitted
+                chat.write(f"[yellow]Unknown command: {command}[/yellow]")
+                chat.write("[dim]Type /help for available commands.[/dim]")
         except Exception as e:
             chat.write(f"[red]Command error: {e}[/red]")
 
