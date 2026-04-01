@@ -198,7 +198,15 @@ async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> list[Any]:
             )
             return None
 
-    return list(await asyncio.gather(*[_run_one(cb) for cb in callbacks]))
+    # Use TaskGroup (Python 3.11+) for better error handling:
+    # auto-cancels remaining tasks on first unhandled failure.
+    # Since _run_one already catches all exceptions and returns None,
+    # TaskGroup won't cancel siblings, but it structures the concurrency better.
+    results: list[Any] = []
+    async with asyncio.TaskGroup() as tg:
+        tasks = [tg.create_task(_run_one(cb)) for cb in callbacks]
+    results = [t.result() for t in tasks]
+    return results
 
 
 async def on_startup() -> list[Any]:
