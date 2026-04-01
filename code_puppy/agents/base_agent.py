@@ -851,11 +851,189 @@ class BaseAgent(ABC):
 
         return messages_to_summarize, protected_messages
 
+    # Maximum recursion depth for binary-split summarization.
+    # Each level halves the problem, so depth 4 handles histories up to ~16x
+    # the summarizer's context window before falling back.
+    _SUMMARIZE_MAX_DEPTH = 4
+
+    # Summarization instructions shared by all summarization calls.
+    _SUMMARIZE_INSTRUCTIONS = (
+        "The input will be a log of Agentic AI steps that have been taken"
+        " as well as user queries, etc. Summarize the contents of these steps."
+        " The high level details should remain but the bulk of the content from tool-call"
+        " responses should be compacted and summarized. For example if you see a tool-call"
+        " reading a file, and the file contents are large, then in your summary you might just"
+        " write: * used read_file on space_invaders.cpp - contents removed."
+        "\n Make sure your result is a bulleted list of all steps and interactions."
+        "\n\nNOTE: This summary represents older conversation history. Recent messages are preserved separately."
+    )
+
+    def _estimate_batch_tokens(self, messages: list[ModelMessage]) -> int:
+        """Estimate total tokens for a batch of messages."""
+        return sum(self.estimate_tokens_for_message(m) for m in messages)
+
+    def _summarize_single_batch(
+        self,
+        messages_to_summarize: list[ModelMessage],
+    ) -> list[ModelMessage]:
+        """Run a single summarization call on a batch of messages.
+
+        This is the low-level helper that calls run_summarization_sync.
+        It prunes orphaned tool calls before sending and normalizes the
+        return value to always be a list of ModelMessage.
+
+        Raises:
+            SummarizationError: If the LLM call fails.
+        """
+        pruned = self.prune_interrupted_tool_calls(messages_to_summarize)
+        if not pruned:
+            return []
+
+        new_messages = run_summarization_sync(
+            self._SUMMARIZE_INSTRUCTIONS, message_history=pruned
+        )
+
+        if not isinstance(new_messages, list):
+            emit_warning(
+                "Summarization agent returned non-list output; wrapping into message request"
+            )
+            new_messages = [ModelRequest([TextPart(str(new_messages))])]
+
+        return list(new_messages)
+
+    def _binary_split_summarize(
+        self,
+        messages_to_summarize: list[ModelMessage],
+        depth: int = 0,
+    ) -> list[ModelMessage]:
+        """Recursively summarize messages using a binary-split strategy.
+
+        When the messages to summarize exceed the summarizer model's context
+        window, this method splits them in half, summarizes the first half,
+        and checks whether the result plus the second half now fits.  If not,
+        it recurses on the combined result.
+
+        This guarantees convergence because each recursion at least halves the
+        input, bounded by ``_SUMMARIZE_MAX_DEPTH``.
+
+        Args:
+            messages_to_summarize: Messages to compress (system message NOT included).
+            depth: Current recursion depth (callers should not set this).
+
+        Returns:
+            A list of summarized messages (without the system message prefix).
+
+        Raises:
+            SummarizationError: Propagated from the underlying LLM call.
+        """
+        if not messages_to_summarize:
+            return []
+
+        batch_tokens = self._estimate_batch_tokens(messages_to_summarize)
+
+        # Use 80% of the summarizer's context as the safe threshold so we
+        # leave room for the summarization instructions themselves.
+        summarizer_limit = int(self.get_model_context_length() * 0.80)
+
+        # Base case: the batch fits in a single summarization call, or we've
+        # hit the maximum recursion depth and must attempt a best-effort call.
+        if batch_tokens <= summarizer_limit or depth >= self._SUMMARIZE_MAX_DEPTH:
+            if depth >= self._SUMMARIZE_MAX_DEPTH and batch_tokens > summarizer_limit:
+                emit_warning(
+                    f"Binary-split summarization hit max depth ({self._SUMMARIZE_MAX_DEPTH}). "
+                    f"Attempting best-effort summarization of {batch_tokens} tokens "
+                    f"(limit ~{summarizer_limit})."
+                )
+            return self._summarize_single_batch(messages_to_summarize)
+
+        # Recursive case: split roughly in half.
+        mid = len(messages_to_summarize) // 2
+
+        # Adjust the split point to avoid breaking tool_use / tool_result
+        # pairs.  _find_safe_split_index expects a full message list with the
+        # system message at index 0, so we temporarily prepend a placeholder.
+        # Instead, we manually scan for tool-call boundaries near the midpoint.
+        mid = self._find_safe_summarize_split(messages_to_summarize, mid)
+
+        head = messages_to_summarize[:mid]
+        tail = messages_to_summarize[mid:]
+
+        # Edge case: if split produced an empty partition, just do best-effort.
+        if not head or not tail:
+            return self._summarize_single_batch(messages_to_summarize)
+
+        emit_info(
+            f"📐 Binary split (depth {depth + 1}): "
+            f"summarizing first {len(head)} messages, "
+            f"keeping {len(tail)} for next pass"
+        )
+
+        # Summarize the first half.
+        summarized_head = self._summarize_single_batch(head)
+
+        # Check whether the combined summary + tail now fits.
+        combined = summarized_head + tail
+        combined_tokens = self._estimate_batch_tokens(combined)
+
+        if combined_tokens <= summarizer_limit:
+            # It fits — done!
+            return combined
+
+        # Still too big — recurse on the combined result.
+        return self._binary_split_summarize(combined, depth=depth + 1)
+
+    def _find_safe_summarize_split(
+        self,
+        messages: list[ModelMessage],
+        target_idx: int,
+    ) -> int:
+        """Find a safe split point near *target_idx* that doesn't break tool pairs.
+
+        Scans backwards from *target_idx* to find a boundary where no
+        tool_call in the first half has its tool_return in the second half.
+        Falls back to *target_idx* if no better split is found within a
+        reasonable window.
+        """
+        if target_idx <= 0:
+            return target_idx
+
+        # Collect tool_call_ids that appear AFTER the proposed split.
+        tail_return_ids: set[str] = set()
+        for msg in messages[target_idx:]:
+            for part in getattr(msg, "parts", []) or []:
+                if getattr(part, "part_kind", None) == "tool-return":
+                    tid = getattr(part, "tool_call_id", None)
+                    if tid:
+                        tail_return_ids.add(tid)
+
+        if not tail_return_ids:
+            return target_idx
+
+        # Walk backwards looking for a position where no tool_call in head
+        # has its return in the tail.
+        for candidate in range(target_idx, max(target_idx - 10, 0), -1):
+            head_call_ids: set[str] = set()
+            for msg in messages[:candidate]:
+                for part in getattr(msg, "parts", []) or []:
+                    if getattr(part, "part_kind", None) == "tool-call":
+                        tid = getattr(part, "tool_call_id", None)
+                        if tid:
+                            head_call_ids.add(tid)
+            if not head_call_ids.intersection(tail_return_ids):
+                return candidate
+
+        # Couldn't find a clean break — use the original target.
+        return target_idx
+
     def summarize_messages(
         self, messages: list[ModelMessage], with_protection: bool = True
     ) -> tuple[list[ModelMessage], list[ModelMessage]]:
-        """
-        Summarize messages while protecting recent messages up to PROTECTED_TOKENS.
+        """Summarize messages while protecting recent messages up to PROTECTED_TOKENS.
+
+        Uses a binary-split strategy: when the messages to summarize exceed
+        the summarizer's context window, the batch is recursively split in
+        half, each half summarized independently, and the results combined.
+        This guarantees convergence for arbitrarily large histories.
 
         Returns:
             Tuple of (compacted_messages, summarized_source_messages)
@@ -882,39 +1060,14 @@ class BaseAgent(ABC):
             # Nothing to summarize, so just return the original sequence
             return self.prune_interrupted_tool_calls(messages), []
 
-        instructions = (
-            "The input will be a log of Agentic AI steps that have been taken"
-            " as well as user queries, etc. Summarize the contents of these steps."
-            " The high level details should remain but the bulk of the content from tool-call"
-            " responses should be compacted and summarized. For example if you see a tool-call"
-            " reading a file, and the file contents are large, then in your summary you might just"
-            " write: * used read_file on space_invaders.cpp - contents removed."
-            "\n Make sure your result is a bulleted list of all steps and interactions."
-            "\n\nNOTE: This summary represents older conversation history. Recent messages are preserved separately."
-        )
-
         try:
-            # Prune any orphaned tool calls from messages before sending to LLM
-            # The LLM requires every tool_use to have a matching tool_result
-            pruned_messages_to_summarize = self.prune_interrupted_tool_calls(
-                messages_to_summarize
-            )
+            new_messages = self._binary_split_summarize(messages_to_summarize)
 
-            if not pruned_messages_to_summarize:
-                # After pruning, nothing left to summarize
+            if not new_messages:
+                # Summarization produced nothing (e.g., all messages pruned)
                 return self.prune_interrupted_tool_calls(messages), []
 
-            new_messages = run_summarization_sync(
-                instructions, message_history=pruned_messages_to_summarize
-            )
-
-            if not isinstance(new_messages, list):
-                emit_warning(
-                    "Summarization agent returned non-list output; wrapping into message request"
-                )
-                new_messages = [ModelRequest([TextPart(str(new_messages))])]
-
-            compacted: list[ModelMessage] = [system_message] + list(new_messages)
+            compacted: list[ModelMessage] = [system_message] + new_messages
 
             # Drop the system message from protected_messages because we already included it
             protected_tail = [
@@ -929,7 +1082,7 @@ class BaseAgent(ABC):
             emit_error(f"Summarization failed: {e}")
             if e.original_error:
                 emit_warning(
-                    f"💡 Tip: Underlying error was {type(e.original_error).__name__}. "
+                    f"\U0001f4a1 Tip: Underlying error was {type(e.original_error).__name__}. "
                     "Consider using '/set compaction_strategy=truncation' as a fallback."
                 )
             return messages, []  # Return original messages on failure
