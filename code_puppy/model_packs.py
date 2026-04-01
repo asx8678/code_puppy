@@ -251,7 +251,8 @@ def load_user_packs() -> None:
     global _user_packs
     packs_file = get_packs_file()
     
-    data = read_json(packs_file, default={})
+    try:
+        data = read_json(packs_file, default={})
         
         for pack_name, pack_data in data.items():
             roles = {}

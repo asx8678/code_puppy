@@ -13,6 +13,11 @@ from code_puppy.config import (
     finalize_autosave_session,
     save_command_to_history)
 from code_puppy.keymap import get_cancel_agent_display_name
+from code_puppy.repl_session import (
+    load_session,
+    record_command,
+    save_session,
+)
 from code_puppy.terminal_utils import (
     print_truecolor_warning,
     reset_windows_terminal_ansi,
