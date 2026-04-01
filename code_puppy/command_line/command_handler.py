@@ -272,11 +272,26 @@ def handle_command(command: str):
             emit_warning(f"Custom command hook error: {e}")
 
         if name:
-            emit_warning(
-                Text.from_markup(
-                    f"Unknown command: {command}\n[dim]Type /help for options.[/dim]"
+            from rapidfuzz import process as fuzz_process
+
+            from code_puppy.command_line.command_registry import get_unique_commands
+
+            _ensure_plugins_loaded()
+            all_names = [cmd.name for cmd in get_unique_commands()]
+            matches = fuzz_process.extract(name, all_names, limit=2, score_cutoff=60)
+            if matches:
+                suggestions = ", ".join(f"/{m[0]}" for m in matches)
+                emit_warning(
+                    Text.from_markup(
+                        f"Unknown command: {command}\n[dim]Did you mean: {suggestions}?[/dim]"
+                    )
                 )
-            )
+            else:
+                emit_warning(
+                    Text.from_markup(
+                        f"Unknown command: {command}\n[dim]Type /help for options.[/dim]"
+                    )
+                )
         else:
             # Show current model ONLY here
             from code_puppy.command_line.model_picker_completion import get_active_model
