@@ -336,10 +336,20 @@ class AppRunner:
             if prompt_only_mode:
                 await execute_single_prompt(initial_command, message_renderer)
             else:
-                # Default to interactive mode (no args = same as -i)
-                await interactive_mode(
-                    message_renderer, initial_command=initial_command
-                )
+                # Check if Textual TUI mode is enabled
+                from code_puppy.tui.launcher import is_tui_enabled
+
+                if is_tui_enabled():
+                    from code_puppy.tui.launcher import textual_interactive_mode
+
+                    await textual_interactive_mode(
+                        message_renderer, initial_command=initial_command
+                    )
+                else:
+                    # Default to interactive mode (no args = same as -i)
+                    await interactive_mode(
+                        message_renderer, initial_command=initial_command
+                    )
         finally:
             if message_renderer:
                 message_renderer.stop()

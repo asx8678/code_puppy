@@ -5,6 +5,7 @@ interactive loop. It provides a chat-style interface with scrollable output,
 an input line at the bottom, and a status bar showing token rate.
 """
 
+import asyncio
 from collections import deque
 
 from textual.app import App, ComposeResult
@@ -13,6 +14,7 @@ from textual.reactive import reactive
 from textual.widgets import Footer, Header, Input, RichLog, Static
 
 from code_puppy.tui.theme import APP_CSS
+from code_puppy.tui.widgets.completion_overlay import CompletionOverlay
 
 # Maximum number of history entries to keep
 MAX_HISTORY = 500
@@ -60,7 +62,7 @@ class PuppyInput(Input):
         self._saved_input = ""
 
     def on_key(self, event) -> None:
-        """Handle up/down arrow for history navigation."""
+        """Handle up/down arrow for history navigation and tab for completion."""
         if event.key == "up":
             if not self._history:
                 return
@@ -83,6 +85,18 @@ class PuppyInput(Input):
                 self.value = self._saved_input
             self.cursor_position = len(self.value)
             event.prevent_default()
+        elif event.key == "tab":
+            event.prevent_default()
+            # Post a message to the app to show completions
+            from code_puppy.tui.completion import get_completions
+
+            completions = get_completions(self.value, self.cursor_position)
+            if completions:
+                try:
+                    overlay = self.app.query_one("#completions", CompletionOverlay)
+                    overlay.show_completions(completions)
+                except Exception:
+                    pass
 
 
 class CodePuppyApp(App):
@@ -91,6 +105,7 @@ class CodePuppyApp(App):
     Layout:
         Header — app name, model, agent
         RichLog — scrollable chat output
+        CompletionOverlay — tab-completion dropdown
         StatusBar — token rate, activity messages
         PuppyInput — command/message input
         Footer — F-key bindings
@@ -128,6 +143,7 @@ class CodePuppyApp(App):
         """Create the app layout."""
         yield Header()
         yield RichLog(id="chat-log", highlight=True, markup=True, wrap=True)
+        yield CompletionOverlay(id="completions")
         yield StatusBar(id="status-bar")
         yield PuppyInput(id="input")
         yield Footer()
@@ -140,8 +156,23 @@ class CodePuppyApp(App):
         chat.write("[dim]Type a message or /command to get started.[/dim]")
         chat.write("[dim]Press F1 for help, Escape to quit.[/dim]")
         chat.write("")
-        # Focus the input
         self.query_one("#input", PuppyInput).focus()
+
+        # Execute initial command if provided
+        initial = getattr(self, "_initial_command", None)
+        if initial:
+            self._initial_command = None
+            # Schedule it to run after the app is fully mounted
+            self.call_later(self._run_initial_command, initial)
+
+    async def _run_initial_command(self, command: str) -> None:
+        """Execute the initial command passed at startup."""
+        chat = self.query_one("#chat-log", RichLog)
+        chat.write(f"\n[bold]Initial:[/bold] {command}")
+        if command.startswith("/"):
+            await self._handle_slash_command(command)
+        else:
+            await self._handle_agent_prompt(command)
 
     # --- Reactive watchers ---
 
@@ -191,6 +222,37 @@ class CodePuppyApp(App):
 
         bar.update(" │ ".join(parts))
 
+    # --- Completion overlay handlers ---
+
+    def on_completion_overlay_completion_selected(
+        self, event: CompletionOverlay.CompletionSelected
+    ) -> None:
+        """Apply selected completion to input."""
+        input_widget = self.query_one("#input", PuppyInput)
+        text = input_widget.value
+
+        # For @ file completions, replace from the @ to cursor
+        if "@" in text:
+            at_pos = text.rfind("@")
+            input_widget.value = text[: at_pos + 1] + event.item.text
+        # For / commands, replace the whole input
+        elif text.lstrip().startswith("/"):
+            parts = text.split(None, 1)
+            if len(parts) > 1 and event.item.text.startswith("/"):
+                # Subcommand completion (e.g., /model name)
+                input_widget.value = parts[0] + " " + event.item.text
+            else:
+                input_widget.value = event.item.text
+        else:
+            input_widget.value = event.item.text
+
+        input_widget.cursor_position = len(input_widget.value)
+        input_widget.focus()
+
+    def on_completion_overlay_completion_dismissed(self, event) -> None:
+        """Refocus input when completions dismissed."""
+        self.query_one("#input", PuppyInput).focus()
+
     # --- Input handling ---
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -220,15 +282,98 @@ class CodePuppyApp(App):
             chat.write("[dim]Conversation cleared.[/dim]")
             return
 
-        # Placeholder for future integration:
-        # - /commands will be dispatched to handle_command()
-        # - Regular text will be sent to the agent via run_prompt_with_attachments()
-        # - Streaming responses will be written to chat-log via stream_renderer
-        # For now, echo back to demonstrate the shell works
+        # Shell pass-through: !command
+        if text.startswith("!") and len(text) > 1:
+            await self._handle_shell_passthrough(text)
+            return
+
+        # Slash commands
         if text.startswith("/"):
-            chat.write(f"[yellow]Command: {text} (not yet wired)[/yellow]")
-        else:
-            chat.write(f"[dim]Message received: {text} (agent not yet wired)[/dim]")
+            await self._handle_slash_command(text)
+            return
+
+        # Regular text → send to agent
+        await self._handle_agent_prompt(text)
+
+    async def _handle_slash_command(self, command: str) -> None:
+        """Dispatch a slash command to the command handler."""
+        chat = self.query_one("#chat-log", RichLog)
+        try:
+            from code_puppy.command_line.command_handler import handle_command
+
+            result = handle_command(command)
+
+            if result is True:
+                pass  # Command handled, output already emitted via messaging
+            elif isinstance(result, str):
+                # Command returned text to process as agent prompt
+                await self._handle_agent_prompt(result)
+            elif result is False:
+                pass  # Unknown command, warning already emitted
+        except Exception as e:
+            chat.write(f"[red]Command error: {e}[/red]")
+
+    async def _handle_agent_prompt(self, text: str) -> None:
+        """Send text to the agent and stream the response."""
+        chat = self.query_one("#chat-log", RichLog)
+        self.set_working(True, "Sending to agent...")
+
+        try:
+            from code_puppy.agents import get_current_agent
+            from code_puppy.config import auto_save_session_if_enabled, save_command_to_history
+            from code_puppy.prompt_runner import run_prompt_with_attachments
+
+            save_command_to_history(text)
+
+            agent = get_current_agent()
+
+            # Run agent — note: spinner_console=None because Textual handles display
+            result, agent_task = await run_prompt_with_attachments(
+                agent, text, spinner_console=None, use_spinner=False
+            )
+
+            if result is None:
+                chat.write("[yellow]Task cancelled.[/yellow]")
+                return
+
+            # The response has already been streamed via event_stream_handler
+            # but we also emit the final structured response
+            agent_response = result.output
+
+            from code_puppy.messaging import get_message_bus
+            from code_puppy.messaging.messages import AgentResponseMessage
+
+            response_msg = AgentResponseMessage(content=agent_response, is_markdown=True)
+            get_message_bus().emit(response_msg)
+
+            # Update message history for autosave
+            if hasattr(result, "all_messages"):
+                agent.set_message_history(list(result.all_messages()))
+
+            auto_save_session_if_enabled()
+
+        except asyncio.CancelledError:
+            chat.write("[yellow]Task cancelled by user.[/yellow]")
+        except Exception as e:
+            chat.write(f"[red]Error: {e}[/red]")
+            try:
+                from code_puppy.error_logging import log_error
+
+                log_error(e, context="TUI agent response error")
+            except Exception:
+                pass
+        finally:
+            self.set_working(False)
+
+    async def _handle_shell_passthrough(self, text: str) -> None:
+        """Handle !command shell passthrough."""
+        chat = self.query_one("#chat-log", RichLog)
+        try:
+            from code_puppy.command_line.shell_passthrough import execute_shell_passthrough
+
+            execute_shell_passthrough(text)
+        except Exception as e:
+            chat.write(f"[red]Shell error: {e}[/red]")
 
     # --- Action handlers for F-keys ---
 
@@ -262,6 +407,9 @@ class CodePuppyApp(App):
     def action_cancel_task(self) -> None:
         """Cancel the currently running task."""
         if self.is_working:
+            # Cancel any running agent task
+            if hasattr(self, "_current_agent_task") and self._current_agent_task:
+                self._current_agent_task.cancel()
             self.is_working = False
             self.status_message = ""
             chat = self.query_one("#chat-log", RichLog)
