@@ -246,6 +246,9 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
 
             emit_success("\nGoodbye! (Ctrl+D)")
 
+            # Save REPL session state
+            save_session()
+
             # Cancel any running agent task for clean shutdown
             if current_agent_task and not current_agent_task.done():
                 emit_info("Cancelling running agent task...")
@@ -256,6 +259,10 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                     pass  # Expected when cancelling
 
             break
+
+        # Record command in REPL session history
+        if task.strip():
+            record_command(task)
 
         # Shell pass-through: !<command> executes directly, bypassing the agent
         from code_puppy.command_line.shell_passthrough import (
