@@ -8,7 +8,6 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -24,18 +23,15 @@ from code_puppy.plugins.agent_skills.config import (
     get_skills_enabled,
     remove_skill_directory,
     set_skill_disabled,
-    set_skills_enabled,
-)
+    set_skills_enabled)
 from code_puppy.plugins.agent_skills.discovery import (
     SkillInfo,
     discover_skills,
-    refresh_skill_cache,
-)
+    refresh_skill_cache)
 from code_puppy.plugins.agent_skills.metadata import (
     SkillMetadata,
     get_skill_resources,
-    parse_skill_metadata,
-)
+    parse_skill_metadata)
 from code_puppy.tools.command_runner import set_awaiting_user_input
 
 PAGE_SIZE = 15  # Items per page
@@ -46,9 +42,9 @@ class SkillsMenu:
 
     def __init__(self):
         """Initialize the skills menu."""
-        self.skills: List[SkillInfo] = []
-        self.disabled_skills: List[str] = []
-        self.skill_directories: List[Path] = []
+        self.skills: list[SkillInfo] = []
+        self.disabled_skills: list[str] = []
+        self.skill_directories: list[Path] = []
         self.skills_enabled = False
 
         # State management
@@ -57,8 +53,8 @@ class SkillsMenu:
         self.result = None
 
         # UI controls (set during run)
-        self.menu_control: Optional[FormattedTextControl] = None
-        self.preview_control: Optional[FormattedTextControl] = None
+        self.menu_control: FormattedTextControl | None = None
+        self.preview_control: FormattedTextControl | None = None
 
         # Initialize data
         self._refresh_data()
@@ -73,13 +69,13 @@ class SkillsMenu:
         except Exception as e:
             emit_error(f"Failed to refresh skills data: {e}")
 
-    def _get_current_skill(self) -> Optional[SkillInfo]:
+    def _get_current_skill(self) -> SkillInfo | None:
         """Get the currently selected skill."""
         if 0 <= self.selected_idx < len(self.skills):
             return self.skills[self.selected_idx]
         return None
 
-    def _get_skill_metadata(self, skill: SkillInfo) -> Optional[SkillMetadata]:
+    def _get_skill_metadata(self, skill: SkillInfo) -> SkillMetadata | None:
         """Get metadata for a skill."""
         try:
             return parse_skill_metadata(skill.path)
@@ -286,7 +282,7 @@ class SkillsMenu:
 
         return lines
 
-    def _wrap_text(self, text: str, width: int) -> List[str]:
+    def _wrap_text(self, text: str, width: int) -> list[str]:
         """Wrap text to specified width."""
         words = text.split()
         lines = []
@@ -436,8 +432,7 @@ class SkillsMenu:
             layout=layout,
             key_bindings=kb,
             full_screen=False,
-            mouse_support=False,
-        )
+            mouse_support=False)
 
         set_awaiting_user_input(True)
 
@@ -478,7 +473,7 @@ class SkillsMenu:
         return self.result
 
 
-def _prompt_for_directory() -> Optional[str]:
+def _prompt_for_directory() -> str | None:
     """Prompt user for a directory path to add."""
     from code_puppy.tools.common import safe_input
 
@@ -503,7 +498,7 @@ def _prompt_for_directory() -> Optional[str]:
     return None
 
 
-def _show_directories_menu() -> Optional[str]:
+def _show_directories_menu() -> str | None:
     """Show current directories and allow removal."""
     from code_puppy.tools.common import safe_input
 
@@ -579,8 +574,7 @@ def show_skills_menu() -> bool:
 
         elif result == "install":
             from code_puppy.plugins.agent_skills.skills_install_menu import (
-                run_skills_install_menu,
-            )
+                run_skills_install_menu)
 
             install_result = run_skills_install_menu()
             if install_result:

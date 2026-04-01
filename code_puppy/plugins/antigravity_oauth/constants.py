@@ -1,6 +1,6 @@
 """Constants for Antigravity OAuth flows and Cloud Code Assist API integration."""
 
-from typing import Any, Dict, List
+from typing import Any
 
 # OAuth client credentials (from Antigravity/Google IDE)
 ANTIGRAVITY_CLIENT_ID = (
@@ -9,7 +9,7 @@ ANTIGRAVITY_CLIENT_ID = (
 ANTIGRAVITY_CLIENT_SECRET = "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"
 
 # OAuth scopes required for Antigravity integrations
-ANTIGRAVITY_SCOPES: List[str] = [
+ANTIGRAVITY_SCOPES: list[str] = [
     "https://www.googleapis.com/auth/cloud-platform",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
@@ -57,7 +57,7 @@ ANTIGRAVITY_VERSION = "1.15.8"
 # Request headers for Antigravity API.
 # Uses ANTIGRAVITY_VERSION to ensure the User-Agent version stays in sync
 # with the single source of truth, preventing "version no longer supported" errors.
-ANTIGRAVITY_HEADERS: Dict[str, str] = {
+ANTIGRAVITY_HEADERS: dict[str, str] = {
     "User-Agent": f"antigravity/{ANTIGRAVITY_VERSION} windows/amd64",
     "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
     "Client-Metadata": '{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}',
@@ -65,7 +65,7 @@ ANTIGRAVITY_HEADERS: Dict[str, str] = {
 }
 
 # Request headers for Gemini CLI fallback
-GEMINI_CLI_HEADERS: Dict[str, str] = {
+GEMINI_CLI_HEADERS: dict[str, str] = {
     "User-Agent": "google-api-nodejs-client/9.15.1",
     "X-Goog-Api-Client": "gl-node/22.17.0",
     "Client-Metadata": "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI",
@@ -75,7 +75,7 @@ GEMINI_CLI_HEADERS: Dict[str, str] = {
 ANTIGRAVITY_PROVIDER_ID = "google"
 
 # Available models with their configurations
-ANTIGRAVITY_MODELS: Dict[str, Dict[str, Any]] = {
+ANTIGRAVITY_MODELS: dict[str, dict[str, Any]] = {
     # Gemini models
     "gemini-3-pro-low": {
         "name": "Gemini 3 Pro Low (Antigravity)",

@@ -8,14 +8,13 @@ Key guarantees
    all console output.
 """
 
-from __future__ import annotations
 
 import difflib
 import json
 import os
 import traceback
 import warnings
-from typing import Annotated, Any, Dict, List, Union
+from typing import Annotated, Any
 
 import json_repair
 from pydantic import BaseModel, WithJsonSchema
@@ -27,12 +26,11 @@ from code_puppy.messaging import (  # Structured messaging types
     DiffMessage,
     emit_error,
     emit_warning,
-    get_message_bus,
-)
+    get_message_bus)
 from code_puppy.tools.common import _find_best_window, generate_group_id
 
 
-def _create_rejection_response(file_path: str) -> Dict[str, Any]:
+def _create_rejection_response(file_path: str) -> dict[str, Any]:
     """Create a standardized rejection response with user feedback if available.
 
     Args:
@@ -45,8 +43,7 @@ def _create_rejection_response(file_path: str) -> Dict[str, Any]:
     try:
         from code_puppy.plugins.file_permission_handler.register_callbacks import (
             clear_user_feedback,
-            get_last_user_feedback,
-        )
+            get_last_user_feedback)
 
         user_feedback = get_last_user_feedback()
         # Clear feedback after reading it
@@ -85,7 +82,7 @@ class Replacement(BaseModel):
 
 class ReplacementsPayload(BaseModel):
     file_path: str
-    replacements: List[Replacement]
+    replacements: list[Replacement]
 
 
 class ContentPayload(BaseModel):
@@ -94,10 +91,10 @@ class ContentPayload(BaseModel):
     overwrite: bool = False
 
 
-EditFilePayload = Union[DeleteSnippetPayload, ReplacementsPayload, ContentPayload]
+EditFilePayload = DeleteSnippetPayload | ReplacementsPayload, ContentPayload
 
 
-def _parse_diff_lines(diff_text: str) -> List[DiffLine]:
+def _parse_diff_lines(diff_text: str) -> list[DiffLine]:
     """Parse unified diff text into structured DiffLine objects.
 
     Args:
@@ -147,8 +144,7 @@ def _parse_diff_lines(diff_text: str) -> List[DiffLine]:
             DiffLine(
                 line_number=max(1, line_number),
                 type=line_type,
-                content=content,
-            )
+                content=content)
         )
 
     return diff_lines
@@ -159,8 +155,7 @@ def _emit_diff_message(
     operation: str,
     diff_text: str,
     old_content: str | None = None,
-    new_content: str | None = None,
-) -> None:
+    new_content: str | None = None) -> None:
     """Emit a structured DiffMessage for UI display.
 
     Args:
@@ -174,8 +169,7 @@ def _emit_diff_message(
     try:
         from code_puppy.plugins.file_permission_handler.register_callbacks import (
             clear_diff_shown_flag,
-            was_diff_already_shown,
-        )
+            was_diff_already_shown)
 
         if was_diff_already_shown():
             # Diff already displayed in permission panel, skip redundant display
@@ -194,8 +188,7 @@ def _emit_diff_message(
         operation=operation,
         old_content=old_content,
         new_content=new_content,
-        diff_lines=diff_lines,
-    )
+        diff_lines=diff_lines)
     get_message_bus().emit(diff_msg)
 
 
@@ -211,8 +204,7 @@ def _delete_snippet_from_file(
     context: RunContext | None,
     file_path: str,
     snippet: str,
-    message_group: str | None = None,
-) -> Dict[str, Any]:
+    message_group: str | None = None) -> dict[str, Any]:
     file_path = os.path.abspath(file_path)
     diff_text = ""
     try:
@@ -241,8 +233,7 @@ def _delete_snippet_from_file(
                 modified.splitlines(keepends=True),
                 fromfile=f"a/{os.path.basename(file_path)}",
                 tofile=f"b/{os.path.basename(file_path)}",
-                n=get_diff_context_lines(),
-            )
+                n=get_diff_context_lines())
         )
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(modified)
@@ -260,9 +251,8 @@ def _delete_snippet_from_file(
 def _replace_in_file(
     context: RunContext | None,
     path: str,
-    replacements: List[Dict[str, str]],
-    message_group: str | None = None,
-) -> Dict[str, Any]:
+    replacements: list[dict[str, str]],
+    message_group: str | None = None) -> dict[str, Any]:
     """Robust replacement engine with explicit edge‑case reporting."""
     file_path = os.path.abspath(path)
     diff_text = ""
@@ -318,8 +308,7 @@ def _replace_in_file(
         if modified == original:
             emit_warning(
                 "No changes to apply – proposed content is identical.",
-                message_group=message_group,
-            )
+                message_group=message_group)
             return {
                 "success": False,
                 "path": file_path,
@@ -336,8 +325,7 @@ def _replace_in_file(
                 modified.splitlines(keepends=True),
                 fromfile=f"a/{os.path.basename(file_path)}",
                 tofile=f"b/{os.path.basename(file_path)}",
-                n=get_diff_context_lines(),
-            )
+                n=get_diff_context_lines())
         )
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(modified)
@@ -357,8 +345,7 @@ def _write_to_file(
     path: str,
     content: str,
     overwrite: bool = False,
-    message_group: str | None = None,
-) -> Dict[str, Any]:
+    message_group: str | None = None) -> dict[str, Any]:
     file_path = os.path.abspath(path)
 
     try:
@@ -392,8 +379,7 @@ def _write_to_file(
             content.splitlines(keepends=True),
             fromfile="/dev/null" if not exists else f"a/{os.path.basename(file_path)}",
             tofile=f"b/{os.path.basename(file_path)}",
-            n=get_diff_context_lines(),
-        )
+            n=get_diff_context_lines())
         diff_text = "".join(diff_lines)
 
         os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
@@ -416,7 +402,7 @@ def _write_to_file(
 
 def delete_snippet_from_file(
     context: RunContext, file_path: str, snippet: str, message_group: str | None = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     # Use the plugin system for permission handling with operation data
     from code_puppy.callbacks import on_file_permission
 
@@ -445,8 +431,7 @@ def write_to_file(
     path: str,
     content: str,
     overwrite: bool,
-    message_group: str | None = None,
-) -> Dict[str, Any]:
+    message_group: str | None = None) -> dict[str, Any]:
     # Use the plugin system for permission handling with operation data
     from code_puppy.callbacks import on_file_permission
 
@@ -475,9 +460,8 @@ def write_to_file(
 def replace_in_file(
     context: RunContext,
     path: str,
-    replacements: List[Dict[str, str]],
-    message_group: str | None = None,
-) -> Dict[str, Any]:
+    replacements: list[dict[str, str]],
+    message_group: str | None = None) -> dict[str, Any]:
     # Use the plugin system for permission handling with operation data
     from code_puppy.callbacks import on_file_permission
 
@@ -501,7 +485,7 @@ def replace_in_file(
 
 def _edit_file(
     context: RunContext, payload: EditFilePayload, group_id: str | None = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     High-level implementation of the *edit_file* behaviour.
 
@@ -567,8 +551,7 @@ def _edit_file(
                 file_path,
                 payload.content,
                 payload.overwrite,
-                message_group=group_id,
-            )
+                message_group=group_id)
         else:
             return {
                 "success": False,
@@ -579,8 +562,7 @@ def _edit_file(
     except Exception as e:
         emit_error(
             "Unable to route file modification tool call to sub-tool",
-            message_group=group_id,
-        )
+            message_group=group_id)
         emit_error(str(e), message_group=group_id)
         return {
             "success": False,
@@ -592,7 +574,7 @@ def _edit_file(
 
 def _delete_file(
     context: RunContext, file_path: str, message_group: str | None = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     file_path = os.path.abspath(file_path)
 
     # Use the plugin system for permission handling with operation data
@@ -630,8 +612,7 @@ def _delete_file(
                     [],
                     fromfile=f"a/{os.path.basename(file_path)}",
                     tofile=f"b/{os.path.basename(file_path)}",
-                    n=get_diff_context_lines(),
-                )
+                    n=get_diff_context_lines())
             )
             os.remove(file_path)
             res = {
@@ -665,14 +646,12 @@ def register_edit_file(agent):
         "Agents listing 'edit_file' in their tools config will automatically "
         "get the three new tools via TOOL_EXPANSIONS.",
         DeprecationWarning,
-        stacklevel=2,
-    )
+        stacklevel=2)
 
     @agent.tool
     def edit_file(
         context: RunContext,
-        payload: EditFilePayload | str = "",
-    ) -> Dict[str, Any]:
+        payload: EditFilePayload | str = "") -> dict[str, Any]:
         """Comprehensive file editing tool supporting multiple modification strategies.
 
         Supports: ContentPayload (create/overwrite), ReplacementsPayload (targeted edits),
@@ -731,7 +710,7 @@ def register_delete_file(agent):
     """Register only the delete_file tool."""
 
     @agent.tool
-    def delete_file(context: RunContext, file_path: str = "") -> Dict[str, Any]:
+    def delete_file(context: RunContext, file_path: str = "") -> dict[str, Any]:
         """Safely delete files with comprehensive logging and diff generation.
 
         Shows exactly what content was removed via diff output.
@@ -772,8 +751,7 @@ def register_create_file(agent):
         context: RunContext,
         file_path: str = "",
         content: str = "",
-        overwrite: bool = False,
-    ) -> Dict[str, Any]:
+        overwrite: bool = False) -> dict[str, Any]:
         """Create a new file or overwrite an existing one with the provided content."""
         group_id = generate_group_id("create_file", file_path)
         result = _write_file(
@@ -811,7 +789,7 @@ _REPLACEMENT_ITEM_SCHEMA = {
 
 # Type alias used by the tool signature.  The Annotated + WithJsonSchema
 # tells Pydantic to emit _REPLACEMENT_ITEM_SCHEMA inline instead of a $ref.
-InlineReplacement = Annotated[Dict[str, str], WithJsonSchema(_REPLACEMENT_ITEM_SCHEMA)]
+InlineReplacement = Annotated[dict[str, str], WithJsonSchema(_REPLACEMENT_ITEM_SCHEMA)]
 
 
 def register_replace_in_file(agent):
@@ -821,8 +799,7 @@ def register_replace_in_file(agent):
     def replace_in_file(
         context: RunContext,
         file_path: str = "",
-        replacements: List[InlineReplacement] = [],
-    ) -> Dict[str, Any]:
+        replacements: list[InlineReplacement] = []) -> dict[str, Any]:
         """Apply targeted text replacements to an existing file.
 
         Each replacement specifies an old_str to find and a new_str to replace it with.
@@ -845,8 +822,7 @@ def register_replace_in_file(agent):
             replacements=[
                 Replacement(old_str=r["old_str"], new_str=r["new_str"])
                 for r in replacements
-            ],
-        )
+            ])
         enhanced_results = on_edit_file(context, result, payload)
         if enhanced_results:
             for enhanced_result in enhanced_results:
@@ -866,8 +842,7 @@ def register_delete_snippet(agent):
     def delete_snippet(
         context: RunContext,
         file_path: str = "",
-        snippet: str = "",
-    ) -> Dict[str, Any]:
+        snippet: str = "") -> dict[str, Any]:
         """Remove the first occurrence of a text snippet from a file."""
         group_id = generate_group_id("delete_snippet", file_path)
         result = _remove_snippet(context, file_path, snippet, message_group=group_id)

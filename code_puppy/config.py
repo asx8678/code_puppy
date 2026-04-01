@@ -3,7 +3,6 @@ import datetime
 import json
 import os
 import pathlib
-from typing import Optional
 
 from code_puppy.session_storage import save_session
 
@@ -183,10 +182,10 @@ DEFAULT_SECTION = "puppy"
 REQUIRED_KEYS = ["puppy_name", "owner_name"]
 
 # Runtime-only autosave session ID (per-process)
-_CURRENT_AUTOSAVE_ID: Optional[str] = None
+_CURRENT_AUTOSAVE_ID: str | None = None
 
 # Session-local model name (initialized from file on first access, then cached)
-_SESSION_MODEL: Optional[str] = None
+_SESSION_MODEL: str | None = None
 
 # Cache containers for model validation and defaults
 _model_validation_cache = {}
@@ -440,8 +439,7 @@ def _default_vision_model_from_models_json() -> str:
                 "gpt-4.1-mini",
                 "gpt-4.1-nano",
                 "claude-4-0-sonnet",
-                "gemini-2.5-flash-preview-05-20",
-            )
+                "gemini-2.5-flash-preview-05-20")
             for candidate in preferred_candidates:
                 if candidate in models_config:
                     _default_vision_model_cache = candidate
@@ -658,7 +656,7 @@ def set_openai_verbosity(value: str) -> None:
     set_config_value("openai_verbosity", normalized)
 
 
-def get_temperature() -> Optional[float]:
+def get_temperature() -> float | None:
     """Return the configured model temperature (0.0 to 2.0).
 
     Returns:
@@ -676,7 +674,7 @@ def get_temperature() -> Optional[float]:
         return None
 
 
-def set_temperature(value: Optional[float]) -> None:
+def set_temperature(value: float | None) -> None:
     """Set the global model temperature in config.
 
     Args:
@@ -707,8 +705,8 @@ def _sanitize_model_name_for_key(model_name: str) -> str:
 
 
 def get_model_setting(
-    model_name: str, setting: str, default: Optional[float] = None
-) -> Optional[float]:
+    model_name: str, setting: str, default: float | None = None
+) -> float | None:
     """Get a specific setting for a model.
 
     Args:
@@ -732,7 +730,7 @@ def get_model_setting(
         return default
 
 
-def set_model_setting(model_name: str, setting: str, value: Optional[float]) -> None:
+def set_model_setting(model_name: str, setting: str, value: float | None) -> None:
     """Set a specific setting for a model.
 
     Args:
@@ -816,7 +814,7 @@ def clear_model_settings(model_name: str) -> None:
         _invalidate_config()
 
 
-def get_effective_model_settings(model_name: Optional[str] = None) -> dict:
+def get_effective_model_settings(model_name: str | None = None) -> dict:
     """Get all effective settings for a model, filtered by what the model supports.
 
     This is the generalized way to get model settings. It:
@@ -858,7 +856,7 @@ def get_effective_model_settings(model_name: Optional[str] = None) -> dict:
 
 
 # Legacy functions for backward compatibility
-def get_effective_temperature(model_name: Optional[str] = None) -> Optional[float]:
+def get_effective_temperature(model_name: str | None = None) -> float | None:
     """Get the effective temperature for a model.
 
     Checks per-model settings first, then falls back to global temperature.
@@ -873,7 +871,7 @@ def get_effective_temperature(model_name: Optional[str] = None) -> Optional[floa
     return settings.get("temperature")
 
 
-def get_effective_top_p(model_name: Optional[str] = None) -> Optional[float]:
+def get_effective_top_p(model_name: str | None = None) -> float | None:
     """Get the effective top_p for a model.
 
     Args:
@@ -886,7 +884,7 @@ def get_effective_top_p(model_name: Optional[str] = None) -> Optional[float]:
     return settings.get("top_p")
 
 
-def get_effective_seed(model_name: Optional[str] = None) -> Optional[int]:
+def get_effective_seed(model_name: str | None = None) -> int | None:
     """Get the effective seed for a model.
 
     Args:
@@ -994,7 +992,7 @@ def get_user_agents_directory() -> str:
     return AGENTS_DIR
 
 
-def get_project_agents_directory() -> Optional[str]:
+def get_project_agents_directory() -> str | None:
     """Get the project-local agents directory path.
 
     Looks for a .code_puppy/agents/ directory in the current working directory.
@@ -1552,8 +1550,7 @@ def auto_save_session_if_enabled() -> bool:
             timestamp=now.isoformat(),
             token_estimator=current_agent.estimate_tokens_for_message,
             auto_saved=True,
-            compacted_hashes=list(current_agent.get_compacted_message_hashes()),
-        )
+            compacted_hashes=list(current_agent.get_compacted_message_hashes()))
 
         emit_info(
             f"🐾 Auto-saved session: {metadata.message_count} messages ({metadata.total_tokens} tokens)"

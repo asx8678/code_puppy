@@ -120,8 +120,7 @@ def execute_shell_passthrough(task: str) -> None:
             # Inherit stdio — output goes straight to the terminal
             stdin=sys.stdin,
             stdout=sys.stdout,
-            stderr=sys.stderr,
-        )
+            stderr=sys.stderr)
         elapsed = time.monotonic() - start_time
 
         if result.returncode == 0:

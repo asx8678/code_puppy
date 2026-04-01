@@ -1,5 +1,5 @@
 import os
-from typing import Iterable, Optional
+from typing import Iterable
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
@@ -77,11 +77,10 @@ class ModelNameCompleter(Completer):
                 model_name,
                 start_position=start_position,
                 display=model_name,
-                display_meta=meta,
-            )
+                display_meta=meta)
 
 
-def _find_matching_model(rest: str, model_names: list[str]) -> Optional[str]:
+def _find_matching_model(rest: str, model_names: list[str]) -> str | None:
     """
     Find the best matching model for the given input.
 
@@ -116,7 +115,7 @@ def _find_matching_model(rest: str, model_names: list[str]) -> Optional[str]:
     return None
 
 
-def update_model_in_input(text: str) -> Optional[str]:
+def update_model_in_input(text: str) -> str | None:
     # If input starts with /model or /m and a model name, set model and strip it out
     content = text.strip()
     model_names = load_model_names()
@@ -182,14 +181,12 @@ def update_model_in_input(text: str) -> Optional[str]:
 async def get_input_with_model_completion(
     prompt_str: str = ">>> ",
     trigger: str = "/model",
-    history_file: Optional[str] = None,
-) -> str:
+    history_file: str | None = None) -> str:
     history = FileHistory(os.path.expanduser(history_file)) if history_file else None
     session = PromptSession(
         completer=ModelNameCompleter(trigger),
         history=history,
-        complete_while_typing=True,
-    )
+        complete_while_typing=True)
     text = await session.prompt_async(prompt_str)
     possibly_stripped = update_model_in_input(text)
     if possibly_stripped is not None:

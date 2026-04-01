@@ -6,7 +6,7 @@ their output captured and routed through our message queue system.
 """
 
 import traceback
-from typing import Any, Optional
+from typing import Any
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -26,9 +26,8 @@ class QueueConsole:
 
     def __init__(
         self,
-        queue: Optional[MessageQueue] = None,
-        fallback_console: Optional[Console] = None,
-    ):
+        queue: MessageQueue | None = None,
+        fallback_console: Console | None = None):
         self.queue = queue or get_global_queue()
         self.fallback_console = fallback_console or Console()
 
@@ -37,10 +36,9 @@ class QueueConsole:
         *values: Any,
         sep: str = " ",
         end: str = "\n",
-        style: Optional[str] = None,
+        style: str | None = None,
         highlight: bool = True,
-        **kwargs,
-    ):
+        **kwargs):
         """Print values to the message queue."""
         # Handle Rich objects properly
         if len(values) == 1 and hasattr(values[0], "__rich_console__"):
@@ -83,15 +81,14 @@ class QueueConsole:
     def print_exception(
         self,
         *,
-        width: Optional[int] = None,
+        width: int | None = None,
         extra_lines: int = 3,
-        theme: Optional[str] = None,
+        theme: str | None = None,
         word_wrap: bool = False,
         show_locals: bool = False,
         indent_guides: bool = True,
         suppress: tuple = (),
-        max_frames: int = 100,
-    ):
+        max_frames: int = 100):
         """Print exception information to the queue."""
         # Get the exception traceback
         exc_text = traceback.format_exc()
@@ -101,21 +98,19 @@ class QueueConsole:
             MessageType.ERROR,
             f"Exception:\n{exc_text}",
             exception=True,
-            show_locals=show_locals,
-        )
+            show_locals=show_locals)
 
     def log(
         self,
         *values: Any,
         sep: str = " ",
         end: str = "\n",
-        style: Optional[str] = None,
-        justify: Optional[str] = None,
-        emoji: Optional[bool] = None,
-        markup: Optional[bool] = None,
-        highlight: Optional[bool] = None,
-        log_locals: bool = False,
-    ):
+        style: str | None = None,
+        justify: str | None = None,
+        emoji: bool | None = None,
+        markup: bool | None = None,
+        highlight: bool | None = None,
+        log_locals: bool = False):
         """Log a message (similar to print but with logging semantics)."""
         content = sep.join(str(v) for v in values) + end
 
@@ -132,7 +127,7 @@ class QueueConsole:
         )
 
     def _infer_message_type_from_rich_object(
-        self, content: Any, style: Optional[str] = None
+        self, content: Any, style: str | None = None
     ) -> MessageType:
         """Infer message type from Rich object type and style."""
         if style:
@@ -161,7 +156,7 @@ class QueueConsole:
         return MessageType.INFO
 
     def _infer_message_type(
-        self, content: str, style: Optional[str] = None
+        self, content: str, style: str | None = None
     ) -> MessageType:
         """Infer message type from content and style."""
         if style:
@@ -199,8 +194,7 @@ class QueueConsole:
             MessageType.SYSTEM,
             f"─── {title} ───" if title else "─" * 40,
             rule=True,
-            style=style,
-        )
+            style=style)
 
     def status(self, status: str, *, spinner: str = "dots"):
         """Show a status message (simplified)."""
@@ -266,6 +260,6 @@ class QueueConsole:
         self.fallback_console.file = value
 
 
-def get_queue_console(queue: Optional[MessageQueue] = None) -> QueueConsole:
+def get_queue_console(queue: MessageQueue | None = None) -> QueueConsole:
     """Get a QueueConsole instance."""
     return QueueConsole(queue or get_global_queue())

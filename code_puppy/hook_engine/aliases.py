@@ -17,13 +17,13 @@ Adding a new provider
 3. That's it — the matcher picks it up automatically.
 """
 
-from typing import Dict, FrozenSet, Optional
+from typing import FrozenSet
 
 # ---------------------------------------------------------------------------
 # Claude Code  (Anthropic)
 # Source: `claude mcp serve` → tools/list  (verified against v2.1.52)
 # ---------------------------------------------------------------------------
-CLAUDE_CODE_ALIASES: Dict[str, str] = {
+CLAUDE_CODE_ALIASES: dict[str, str] = {
     # Shell execution
     "Bash": "agent_run_shell_command",
     # File system — read
@@ -62,7 +62,7 @@ CLAUDE_CODE_ALIASES: Dict[str, str] = {
 # Run `gemini mcp serve` (or equivalent) and inspect the tools/list response,
 # then add entries following the same pattern as CLAUDE_CODE_ALIASES above.
 # ---------------------------------------------------------------------------
-GEMINI_ALIASES: Dict[str, str] = {
+GEMINI_ALIASES: dict[str, str] = {
     # Add Gemini → code_puppy tool mappings here
 }
 
@@ -72,7 +72,7 @@ GEMINI_ALIASES: Dict[str, str] = {
 # TODO: populate once Codex MCP tool names are verified.
 # Run the Codex MCP server, inspect tools/list, and add entries here.
 # ---------------------------------------------------------------------------
-CODEX_ALIASES: Dict[str, str] = {
+CODEX_ALIASES: dict[str, str] = {
     # Add Codex → code_puppy tool mappings here
 }
 
@@ -81,7 +81,7 @@ CODEX_ALIASES: Dict[str, str] = {
 # Swarm  (internal / multi-agent)
 # TODO: populate if Swarm exposes its own canonical tool name vocabulary.
 # ---------------------------------------------------------------------------
-SWARM_ALIASES: Dict[str, str] = {
+SWARM_ALIASES: dict[str, str] = {
     # Add Swarm → code_puppy tool mappings here
 }
 
@@ -90,7 +90,7 @@ SWARM_ALIASES: Dict[str, str] = {
 # Master registry — all active alias tables, merged at module load time.
 # To disable a provider's aliases, remove its entry from this dict.
 # ---------------------------------------------------------------------------
-PROVIDER_ALIASES: Dict[str, Dict[str, str]] = {
+PROVIDER_ALIASES: dict[str, dict[str, str]] = {
     "claude": CLAUDE_CODE_ALIASES,
     "gemini": GEMINI_ALIASES,  # placeholder — empty until populated
     "codex": CODEX_ALIASES,  # placeholder — empty until populated
@@ -103,7 +103,7 @@ PROVIDER_ALIASES: Dict[str, Dict[str, str]] = {
 # ---------------------------------------------------------------------------
 
 
-def _build_lookup() -> Dict[str, FrozenSet[str]]:
+def _build_lookup() -> dict[str, FrozenSet[str]]:
     """
     Return a dict mapping every known name (provider *and* internal) to the
     full set of equivalent names, including itself.
@@ -112,7 +112,7 @@ def _build_lookup() -> Dict[str, FrozenSet[str]]:
         "Bash" -> frozenset({"Bash", "agent_run_shell_command"})
         "agent_run_shell_command" -> frozenset({"Bash", "agent_run_shell_command"})
     """
-    groups: Dict[str, set] = {}
+    groups: dict[str, set] = {}
 
     for provider_aliases in PROVIDER_ALIASES.values():
         for provider_name, internal_name in provider_aliases.items():
@@ -123,7 +123,7 @@ def _build_lookup() -> Dict[str, FrozenSet[str]]:
             groups[key].add(provider_name)
 
     # Build the final lookup: every alias points to the frozen group
-    lookup: Dict[str, FrozenSet[str]] = {}
+    lookup: dict[str, FrozenSet[str]] = {}
     for group in groups.values():
         frozen = frozenset(group)
         for name in group:
@@ -132,7 +132,7 @@ def _build_lookup() -> Dict[str, FrozenSet[str]]:
 
 
 # Module-level singleton — import this in matcher.py
-ALIAS_LOOKUP: Dict[str, FrozenSet[str]] = _build_lookup()
+ALIAS_LOOKUP: dict[str, FrozenSet[str]] = _build_lookup()
 
 
 def get_aliases(tool_name: str) -> FrozenSet[str]:
@@ -143,7 +143,7 @@ def get_aliases(tool_name: str) -> FrozenSet[str]:
     return ALIAS_LOOKUP.get(tool_name.lower(), frozenset({tool_name}))
 
 
-def resolve_internal_name(provider_tool_name: str) -> Optional[str]:
+def resolve_internal_name(provider_tool_name: str) -> str | None:
     """
     Return the code_puppy internal tool name for a given provider tool name,
     or None if the name is not a known provider alias.

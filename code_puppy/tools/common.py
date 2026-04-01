@@ -5,7 +5,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Callable, Optional, Tuple
+from typing import Callable
 
 from prompt_toolkit import Application
 from prompt_toolkit.formatted_text import HTML
@@ -35,8 +35,7 @@ try:
         emit_info,
         emit_success,
         emit_warning,
-        get_queue_console,
-    )
+        get_queue_console)
 
     # Use queue console by default, but allow fallback
     NO_COLOR = bool(int(os.environ.get("CODE_PUPPY_NO_COLOR", "0")))
@@ -693,8 +692,7 @@ def brighten_hex(hex_color: str, factor: float) -> str:
 def _format_diff_with_syntax_highlighting(
     diff_text: str,
     addition_color: str | None = None,
-    deletion_color: str | None = None,
-) -> Text:
+    deletion_color: str | None = None) -> Text:
     """Format diff with full syntax highlighting using Pygments.
 
     This renders diffs with:
@@ -800,8 +798,7 @@ def format_diff_with_colors(diff_text: str) -> Text:
     """
     from code_puppy.config import (
         get_diff_addition_color,
-        get_diff_deletion_color,
-    )
+        get_diff_deletion_color)
 
     if not diff_text or not diff_text.strip():
         return Text("-- no diff available --", style="dim")
@@ -819,15 +816,13 @@ def format_diff_with_colors(diff_text: str) -> Text:
     return _format_diff_with_syntax_highlighting(
         diff_text,
         addition_color=addition_base_color,
-        deletion_color=deletion_base_color,
-    )
+        deletion_color=deletion_base_color)
 
 
 async def arrow_select_async(
     message: str,
     choices: list[str],
-    preview_callback: Optional[Callable[[int], str]] = None,
-) -> str:
+    preview_callback: Callable[[int | None, str]] = None) -> str:
     """Async version: Show an arrow-key navigable selector with optional preview.
 
     Args:
@@ -931,8 +926,7 @@ async def arrow_select_async(
     app = Application(
         layout=layout,
         key_bindings=kb,
-        full_screen=False,
-    )
+        full_screen=False)
 
     # Flush output before prompt_toolkit takes control
     sys.stdout.flush()
@@ -1011,8 +1005,7 @@ def arrow_select(message: str, choices: list[str]) -> str:
     app = Application(
         layout=layout,
         key_bindings=kb,
-        full_screen=False,
-    )
+        full_screen=False)
 
     # Flush output before prompt_toolkit takes control
     sys.stdout.flush()
@@ -1045,8 +1038,7 @@ def get_user_approval(
     content: Text | str,
     preview: str | None = None,
     border_style: str = "dim white",
-    puppy_name: str | None = None,
-) -> tuple[bool, str | None]:
+    puppy_name: str | None = None) -> tuple[bool, str | None]:
     """Show a beautiful approval panel with arrow-key selector.
 
     Args:
@@ -1094,8 +1086,7 @@ def get_user_approval(
         # Mark that we showed a diff preview
         try:
             from code_puppy.plugins.file_permission_handler.register_callbacks import (
-                set_diff_already_shown,
-            )
+                set_diff_already_shown)
 
             set_diff_already_shown(True)
         except ImportError:
@@ -1106,8 +1097,7 @@ def get_user_approval(
         panel_content,
         title=f"[bold white]{title}[/bold white]",
         border_style=border_style,
-        padding=(1, 2),
-    )
+        padding=(1, 2))
 
     # Pause spinners BEFORE showing panel
     set_awaiting_user_input(True)
@@ -1146,8 +1136,7 @@ def get_user_approval(
                 "✓ Approve",
                 "✗ Reject",
                 f"💬 Reject with feedback (tell {puppy_name} what to change)",
-            ],
-        )
+            ])
 
         if choice == "✓ Approve":
             confirmed = True
@@ -1160,8 +1149,7 @@ def get_user_approval(
             emit_info(f"Tell {puppy_name} what to change:")
             user_feedback = Prompt.ask(
                 "[bold green]➤[/bold green]",
-                default="",
-            ).strip()
+                default="").strip()
 
             if not user_feedback:
                 user_feedback = None
@@ -1213,8 +1201,7 @@ async def get_user_approval_async(
     content: Text | str,
     preview: str | None = None,
     border_style: str = "dim white",
-    puppy_name: str | None = None,
-) -> tuple[bool, str | None]:
+    puppy_name: str | None = None) -> tuple[bool, str | None]:
     """Async version of get_user_approval - show a beautiful approval panel with arrow-key selector.
 
     Args:
@@ -1261,8 +1248,7 @@ async def get_user_approval_async(
         # Mark that we showed a diff preview
         try:
             from code_puppy.plugins.file_permission_handler.register_callbacks import (
-                set_diff_already_shown,
-            )
+                set_diff_already_shown)
 
             set_diff_already_shown(True)
         except ImportError:
@@ -1273,8 +1259,7 @@ async def get_user_approval_async(
         panel_content,
         title=f"[bold white]{title}[/bold white]",
         border_style=border_style,
-        padding=(1, 2),
-    )
+        padding=(1, 2))
 
     # Pause spinners BEFORE showing panel
     set_awaiting_user_input(True)
@@ -1313,8 +1298,7 @@ async def get_user_approval_async(
                 "✓ Approve",
                 "✗ Reject",
                 f"💬 Reject with feedback (tell {puppy_name} what to change)",
-            ],
-        )
+            ])
 
         if choice == "✓ Approve":
             confirmed = True
@@ -1327,8 +1311,7 @@ async def get_user_approval_async(
             emit_info(f"Tell {puppy_name} what to change:")
             user_feedback = Prompt.ask(
                 "[bold green]➤[/bold green]",
-                default="",
-            ).strip()
+                default="").strip()
 
             if not user_feedback:
                 user_feedback = None
@@ -1377,8 +1360,7 @@ async def get_user_approval_async(
 
 def _find_best_window(
     haystack_lines: list[str],
-    needle: str,
-) -> Tuple[Optional[Tuple[int, int]], float]:
+    needle: str) -> tuple[tuple[int, int | None], float]:
     """
     Return (start, end) indices of the window with the highest
     Jaro-Winkler similarity to `needle`, along with that score.
@@ -1388,7 +1370,7 @@ def _find_best_window(
     needle_lines = needle.splitlines()
     win_size = len(needle_lines)
     best_score = 0.0
-    best_span: Optional[Tuple[int, int]] = None
+    best_span: tuple[int, int | None] = None
     # Pre-join the needle once; join windows on the fly
     for i in range(len(haystack_lines) - win_size + 1):
         window = "\n".join(haystack_lines[i : i + win_size])

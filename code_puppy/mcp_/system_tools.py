@@ -5,7 +5,6 @@ System tool detection and validation for MCP server requirements.
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import Dict, List, Optional
 
 
 @dataclass
@@ -14,9 +13,9 @@ class ToolInfo:
 
     name: str
     available: bool
-    version: Optional[str] = None
-    path: Optional[str] = None
-    error: Optional[str] = None
+    version: str | None = None
+    path: str | None = None
+    error: str | None = None
 
 
 class SystemToolDetector:
@@ -90,12 +89,12 @@ class SystemToolDetector:
         )
 
     @classmethod
-    def detect_tools(cls, tool_names: List[str]) -> Dict[str, ToolInfo]:
+    def detect_tools(cls, tool_names: list[str]) -> dict[str, ToolInfo]:
         """Detect multiple tools."""
         return {name: cls.detect_tool(name) for name in tool_names}
 
     @classmethod
-    def _parse_version(cls, tool_name: str, output: str) -> Optional[str]:
+    def _parse_version(cls, tool_name: str, output: str) -> str | None:
         """Parse version string from command output."""
         if not output:
             return None
@@ -124,7 +123,7 @@ class SystemToolDetector:
         return None
 
     @classmethod
-    def check_package_dependencies(cls, packages: List[str]) -> Dict[str, bool]:
+    def check_package_dependencies(cls, packages: list[str]) -> dict[str, bool]:
         """Check if package dependencies are available."""
         results = {}
 
@@ -156,8 +155,7 @@ class SystemToolDetector:
                 ["npm", "list", "-g", package],
                 capture_output=True,
                 text=True,
-                timeout=10,
-            )
+                timeout=10)
             return result.returncode == 0
         except Exception:
             return False
@@ -174,7 +172,7 @@ class SystemToolDetector:
             return False
 
     @classmethod
-    def get_installation_suggestions(cls, tool_name: str) -> List[str]:
+    def get_installation_suggestions(cls, tool_name: str) -> list[str]:
         """Get installation suggestions for a missing tool."""
         suggestions = {
             "node": [

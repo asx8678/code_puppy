@@ -4,7 +4,7 @@ Main HookEngine orchestration class.
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .executor import execute_hooks_sequential, get_blocking_result
 from .matcher import matches
@@ -12,14 +12,12 @@ from .models import (
     EventData,
     HookConfig,
     HookRegistry,
-    ProcessEventResult,
-)
+    ProcessEventResult)
 from .registry import build_registry_from_config, get_registry_stats
 from .validator import (
     format_validation_report,
     get_config_suggestions,
-    validate_hooks_config,
-)
+    validate_hooks_config)
 
 logger = logging.getLogger(__name__)
 
@@ -37,20 +35,19 @@ class HookEngine:
 
     def __init__(
         self,
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any | None] = None,
         strict_validation: bool = True,
-        env_vars: Optional[Dict[str, str]] = None,
-    ):
+        env_vars: dict[str, str | None] = None):
         self.env_vars = env_vars or {}
         self.strict_validation = strict_validation
-        self._registry: Optional[HookRegistry] = None
+        self._registry: HookRegistry | None = None
 
         if config:
             self.load_config(config)
         else:
             self._registry = HookRegistry()
 
-    def load_config(self, config: Dict[str, Any]) -> None:
+    def load_config(self, config: dict[str, Any]) -> None:
         is_valid, errors = validate_hooks_config(config)
 
         if not is_valid:
@@ -74,7 +71,7 @@ class HookEngine:
                 logger.error(f"Failed to build hook registry: {e}", exc_info=True)
                 self._registry = HookRegistry()
 
-    def reload_config(self, config: Dict[str, Any]) -> None:
+    def reload_config(self, config: dict[str, Any]) -> None:
         self.load_config(config)
 
     async def process_event(
@@ -82,8 +79,7 @@ class HookEngine:
         event_type: str,
         event_data: EventData,
         sequential: bool = True,
-        stop_on_block: bool = True,
-    ) -> ProcessEventResult:
+        stop_on_block: bool = True) -> ProcessEventResult:
         """Process an event through the hook engine."""
         start_time = time.perf_counter()
 
@@ -100,8 +96,7 @@ class HookEngine:
                 blocked=False,
                 executed_hooks=0,
                 results=[],
-                total_duration_ms=duration_ms,
-            )
+                total_duration_ms=duration_ms)
 
         matching_hooks = self._filter_hooks_by_matcher(
             all_hooks, event_data.tool_name, event_data.tool_args
@@ -113,8 +108,7 @@ class HookEngine:
                 blocked=False,
                 executed_hooks=0,
                 results=[],
-                total_duration_ms=duration_ms,
-            )
+                total_duration_ms=duration_ms)
 
         logger.debug(
             f"Processing {event_type}: {len(matching_hooks)} matching hook(s) for tool '{event_data.tool_name}'"
@@ -151,15 +145,13 @@ class HookEngine:
             executed_hooks=len(results),
             results=results,
             blocking_reason=blocking_reason,
-            total_duration_ms=duration_ms,
-        )
+            total_duration_ms=duration_ms)
 
     def _filter_hooks_by_matcher(
         self,
-        hooks: List[HookConfig],
+        hooks: list[HookConfig],
         tool_name: str,
-        tool_args: Dict[str, Any],
-    ) -> List[HookConfig]:
+        tool_args: dict[str, Any]) -> list[HookConfig]:
         matching_hooks = []
         for hook in hooks:
             try:
@@ -171,17 +163,17 @@ class HookEngine:
                 )
         return matching_hooks
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         if not self._registry:
             return {"total_hooks": 0, "error": "No registry loaded"}
         return get_registry_stats(self._registry)
 
-    def get_hooks_for_event(self, event_type: str) -> List[HookConfig]:
+    def get_hooks_for_event(self, event_type: str) -> list[HookConfig]:
         if not self._registry:
             return []
         return self._registry.get_hooks_for_event(event_type)
 
-    def count_hooks(self, event_type: Optional[str] = None) -> int:
+    def count_hooks(self, event_type: str | None = None) -> int:
         if not self._registry:
             return 0
         return self._registry.count_hooks(event_type)
@@ -200,10 +192,10 @@ class HookEngine:
             return False
         return self._registry.remove_hook(event_type, hook_id)
 
-    def set_env_vars(self, env_vars: Dict[str, str]) -> None:
+    def set_env_vars(self, env_vars: dict[str, str]) -> None:
         self.env_vars = env_vars
 
-    def update_env_vars(self, env_vars: Dict[str, str]) -> None:
+    def update_env_vars(self, env_vars: dict[str, str]) -> None:
         self.env_vars.update(env_vars)
 
     @property
@@ -211,11 +203,11 @@ class HookEngine:
         return self._registry is not None
 
     @property
-    def registry(self) -> Optional[HookRegistry]:
+    def registry(self) -> HookRegistry | None:
         return self._registry
 
 
-def validate_config_file(config: Dict[str, Any]) -> str:
+def validate_config_file(config: dict[str, Any]) -> str:
     is_valid, errors = validate_hooks_config(config)
     suggestions = get_config_suggestions(config, errors) if not is_valid else []
     return format_validation_report(is_valid, errors, suggestions)

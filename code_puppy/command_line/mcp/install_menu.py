@@ -8,7 +8,6 @@ import logging
 import os
 import sys
 import time
-from typing import List, Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -21,8 +20,7 @@ from code_puppy.tools.command_runner import set_awaiting_user_input
 
 from .catalog_server_installer import (
     install_catalog_server,
-    prompt_for_server_config,
-)
+    prompt_for_server_config)
 from .custom_server_form import run_custom_server_form
 
 logger = logging.getLogger(__name__)
@@ -44,8 +42,8 @@ class MCPInstallMenu:
         """
         self.manager = manager
         self.catalog = None
-        self.categories: List[str] = []
-        self.current_category: Optional[str] = None
+        self.categories: list[str] = []
+        self.current_category: str | None = None
         self.current_servers: List = []
 
         # State management
@@ -83,7 +81,7 @@ class MCPInstallMenu:
             emit_error(f"Error loading server catalog: {e}")
             self.categories = [CUSTOM_SERVER_CATEGORY]
 
-    def _get_current_category(self) -> Optional[str]:
+    def _get_current_category(self) -> str | None:
         """Get the currently selected category."""
         if 0 <= self.selected_category_idx < len(self.categories):
             return self.categories[self.selected_category_idx]
@@ -638,8 +636,7 @@ class MCPInstallMenu:
             layout=layout,
             key_bindings=kb,
             full_screen=False,
-            mouse_support=False,
-        )
+            mouse_support=False)
 
         set_awaiting_user_input(True)
 

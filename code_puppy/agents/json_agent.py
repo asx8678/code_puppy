@@ -3,7 +3,6 @@
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from .base_agent import BaseAgent
 
@@ -81,7 +80,7 @@ class JSONAgent(BaseAgent):
 
         return system_prompt
 
-    def get_available_tools(self) -> List[str]:
+    def get_available_tools(self) -> list[str]:
         """Get available tools from JSON config.
 
         Supports both built-in tools and Universal Constructor (UC) tools.
@@ -119,11 +118,11 @@ class JSONAgent(BaseAgent):
 
         return requested_tools
 
-    def get_user_prompt(self) -> Optional[str]:
+    def get_user_prompt(self) -> str | None:
         """Get custom user prompt from JSON config."""
         return self._config.get("user_prompt")
 
-    def get_tools_config(self) -> Optional[Dict]:
+    def get_tools_config(self) -> Dict | None:
         """Get tool configuration from JSON config."""
         return self._config.get("tools_config")
 
@@ -135,7 +134,7 @@ class JSONAgent(BaseAgent):
         self._config = self._load_config()
         self._validate_config()
 
-    def get_model_name(self) -> Optional[str]:
+    def get_model_name(self) -> str | None:
         """Get pinned model name from JSON config, if specified.
 
         Returns:
@@ -147,7 +146,7 @@ class JSONAgent(BaseAgent):
         return result
 
 
-def discover_json_agents() -> Dict[str, str]:
+def discover_json_agents() -> dict[str, str]:
     """Discover JSON agent files in the user's and project's agents directories.
 
     Searches two locations:
@@ -161,10 +160,9 @@ def discover_json_agents() -> Dict[str, str]:
     """
     from code_puppy.config import (
         get_project_agents_directory,
-        get_user_agents_directory,
-    )
+        get_user_agents_directory)
 
-    agents: Dict[str, str] = {}
+    agents: dict[str, str] = {}
 
     # 1. Discover user-level agents first
     user_agents_dir = Path(get_user_agents_directory())
@@ -178,8 +176,7 @@ def discover_json_agents() -> Dict[str, str]:
                     "Skipping invalid user agent file: %s (reason: %s: %s)",
                     json_file,
                     type(e).__name__,
-                    str(e),
-                )
+                    str(e))
                 continue
 
     # 2. Discover project-level agents (overrides user agents on name collision)
@@ -195,8 +192,7 @@ def discover_json_agents() -> Dict[str, str]:
                     "Skipping invalid project agent file: %s (reason: %s: %s)",
                     json_file,
                     type(e).__name__,
-                    str(e),
-                )
+                    str(e))
                 continue
 
     return agents

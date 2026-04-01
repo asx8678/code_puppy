@@ -3,7 +3,6 @@ MCP Install Command - Installs pre-configured MCP servers from the registry.
 """
 
 import logging
-from typing import List, Optional
 
 from rich.text import Text
 
@@ -23,7 +22,7 @@ class InstallCommand(MCPCommandBase):
     Installs pre-configured MCP servers with interactive menu-based browser.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Install a pre-configured MCP server from the registry.
 
@@ -77,12 +76,10 @@ class InstallCommand(MCPCommandBase):
                 if not results:
                     emit_info(
                         f"❌ No server found matching '{server_name_or_id}'",
-                        message_group=group_id,
-                    )
+                        message_group=group_id)
                     emit_info(
                         "Try '/mcp install' to browse available servers",
-                        message_group=group_id,
-                    )
+                        message_group=group_id)
                     return False
                 elif len(results) == 1:
                     selected_server = results[0]
@@ -90,8 +87,7 @@ class InstallCommand(MCPCommandBase):
                     # Multiple matches, show them
                     emit_info(
                         f"🔍 Multiple servers found matching '{server_name_or_id}':",
-                        message_group=group_id,
-                    )
+                        message_group=group_id)
                     for i, server in enumerate(results[:5]):
                         indicators = []
                         if server.verified:
@@ -105,14 +101,12 @@ class InstallCommand(MCPCommandBase):
 
                         emit_info(
                             f"  {i + 1}. {server.display_name}{indicator_str}",
-                            message_group=group_id,
-                        )
+                            message_group=group_id)
                         emit_info(f"     ID: {server.id}", message_group=group_id)
 
                     emit_info(
                         "Please use the exact server ID: '/mcp install <server_id>'",
-                        message_group=group_id,
-                    )
+                        message_group=group_id)
                     return False
 
             # Show what we're installing
@@ -155,8 +149,7 @@ class InstallCommand(MCPCommandBase):
                     Text.from_markup(
                         "\n[yellow]Required Environment Variables:[/yellow]"
                     ),
-                    message_group=group_id,
-                )
+                    message_group=group_id)
                 for var in required_env_vars:
                     # Check if already set in environment
                     import os
@@ -165,8 +158,7 @@ class InstallCommand(MCPCommandBase):
                     if current_value:
                         emit_info(
                             Text.from_markup(f"  {var}: [green]Already set[/green]"),
-                            message_group=group_id,
-                        )
+                            message_group=group_id)
                         env_vars[var] = current_value
                     else:
                         value = emit_prompt(f"  Enter value for {var}: ").strip()
@@ -178,8 +170,7 @@ class InstallCommand(MCPCommandBase):
             if required_cmd_args:
                 emit_info(
                     Text.from_markup("\n[yellow]Command Line Arguments:[/yellow]"),
-                    message_group=group_id,
-                )
+                    message_group=group_id)
                 for arg_config in required_cmd_args:
                     name = arg_config.get("name", "")
                     prompt = arg_config.get("prompt", name)

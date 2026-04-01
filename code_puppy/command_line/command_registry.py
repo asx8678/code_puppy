@@ -5,7 +5,7 @@ enabling automatic help generation and eliminating static command lists.
 """
 
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional
+from typing import Callable
 
 
 @dataclass
@@ -16,9 +16,9 @@ class CommandInfo:
     description: str
     handler: Callable[[str], bool]
     usage: str = ""
-    aliases: List[str] = field(default_factory=list)
+    aliases: list[str] = field(default_factory=list)
     category: str = "core"
-    detailed_help: Optional[str] = None
+    detailed_help: str | None = None
 
     def __post_init__(self):
         """Set default usage if not provided."""
@@ -27,17 +27,16 @@ class CommandInfo:
 
 
 # Global registry: maps command name/alias -> CommandInfo
-_COMMAND_REGISTRY: Dict[str, CommandInfo] = {}
+_COMMAND_REGISTRY: dict[str, CommandInfo] = {}
 
 
 def register_command(
     name: str,
     description: str,
     usage: str = "",
-    aliases: Optional[List[str]] = None,
+    aliases: list[str | None] = None,
     category: str = "core",
-    detailed_help: Optional[str] = None,
-):
+    detailed_help: str | None = None):
     """Decorator to register a command handler.
 
     This decorator registers a command function so it can be:
@@ -78,8 +77,7 @@ def register_command(
             usage=usage,
             aliases=aliases or [],
             category=category,
-            detailed_help=detailed_help,
-        )
+            detailed_help=detailed_help)
 
         # Register primary name
         _COMMAND_REGISTRY[name] = cmd_info
@@ -93,7 +91,7 @@ def register_command(
     return decorator
 
 
-def get_all_commands() -> Dict[str, CommandInfo]:
+def get_all_commands() -> dict[str, CommandInfo]:
     """Get all registered commands.
 
     Returns:
@@ -103,7 +101,7 @@ def get_all_commands() -> Dict[str, CommandInfo]:
     return _COMMAND_REGISTRY.copy()
 
 
-def get_unique_commands() -> List[CommandInfo]:
+def get_unique_commands() -> list[CommandInfo]:
     """Get unique registered commands (no duplicates from aliases).
 
     Returns:
@@ -119,7 +117,7 @@ def get_unique_commands() -> List[CommandInfo]:
     return unique
 
 
-def get_command(name: str) -> Optional[CommandInfo]:
+def get_command(name: str) -> CommandInfo | None:
     """Get command info by name or alias (case-insensitive).
 
     First tries exact match for backward compatibility, then falls back to

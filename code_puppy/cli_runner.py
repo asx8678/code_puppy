@@ -39,8 +39,7 @@ from code_puppy.interactive_loop import interactive_mode  # noqa: F401, E402
 # prompt_runner provides the two prompt-execution helpers
 from code_puppy.prompt_runner import (  # noqa: F401, E402
     execute_single_prompt,
-    run_prompt_with_attachments,
-)
+    run_prompt_with_attachments)
 
 
 # ---------------------------------------------------------------------------

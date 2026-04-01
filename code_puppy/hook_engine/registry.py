@@ -6,7 +6,7 @@ Builds and manages the HookRegistry from configuration dictionaries.
 
 import logging
 import re
-from typing import Any, Dict
+from typing import Any
 
 from .models import HookConfig, HookRegistry
 
@@ -26,7 +26,7 @@ SUPPORTED_EVENT_TYPES = [
 ]
 
 
-def build_registry_from_config(config: Dict[str, Any]) -> HookRegistry:
+def build_registry_from_config(config: dict[str, Any]) -> HookRegistry:
     """
     Build a HookRegistry from a configuration dictionary.
 
@@ -67,8 +67,7 @@ def build_registry_from_config(config: Dict[str, Any]) -> HookRegistry:
                         timeout=hook_data.get("timeout", 5000),
                         once=hook_data.get("once", False),
                         enabled=hook_data.get("enabled", True),
-                        id=hook_data.get("id"),
-                    )
+                        id=hook_data.get("id"))
                     registry.add_hook(event_type, hook)
                 except (ValueError, KeyError) as e:
                     logger.warning(f"Skipping invalid hook in {event_type}: {e}")
@@ -76,9 +75,9 @@ def build_registry_from_config(config: Dict[str, Any]) -> HookRegistry:
     return registry
 
 
-def get_registry_stats(registry: HookRegistry) -> Dict[str, Any]:
+def get_registry_stats(registry: HookRegistry) -> dict[str, Any]:
     """Get statistics about a registry."""
-    stats: Dict[str, Any] = {
+    stats: dict[str, Any] = {
         "total_hooks": registry.count_hooks(),
         "enabled_hooks": 0,
         "disabled_hooks": 0,

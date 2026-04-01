@@ -9,8 +9,7 @@ from .browser_manager import (
     cleanup_all_browsers,
     get_browser_session,
     get_session_browser_manager,
-    set_browser_session,
-)
+    set_browser_session)
 
 
 def format_terminal_banner(text: str) -> str:

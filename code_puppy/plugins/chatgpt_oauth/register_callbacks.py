@@ -4,10 +4,9 @@ Provides OAuth authentication for ChatGPT models and registers
 the 'chatgpt_oauth' model type handler.
 """
 
-from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info, emit_success, emit_warning
@@ -19,20 +18,17 @@ from .utils import (
     get_valid_access_token,
     load_chatgpt_models,
     load_stored_tokens,
-    remove_chatgpt_models,
-)
+    remove_chatgpt_models)
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             "chatgpt-auth",
-            "Authenticate with ChatGPT via OAuth and import available models",
-        ),
+            "Authenticate with ChatGPT via OAuth and import available models"),
         (
             "chatgpt-status",
-            "Check ChatGPT OAuth authentication status and configured models",
-        ),
+            "Check ChatGPT OAuth authentication status and configured models"),
         ("chatgpt-logout", "Remove ChatGPT OAuth tokens and imported models"),
     ]
 
@@ -79,7 +75,7 @@ def _handle_chatgpt_logout() -> None:
     emit_success("ChatGPT logout complete")
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[bool]:
+def _handle_custom_command(command: str, name: str) -> bool | None:
     if not name:
         return None
 
@@ -157,8 +153,7 @@ def _create_chatgpt_oauth_model(
     provider = OpenAIProvider(
         api_key=access_token,
         base_url=base_url,
-        http_client=client,
-    )
+        http_client=client)
 
     # ChatGPT Codex API only supports Responses format
     model = OpenAIResponsesModel(model_name=model_config["name"], provider=provider)
@@ -166,7 +161,7 @@ def _create_chatgpt_oauth_model(
     return model
 
 
-def _register_model_types() -> List[Dict[str, Any]]:
+def _register_model_types() -> list[dict[str, Any]]:
     """Register the chatgpt_oauth model type handler."""
     return [{"type": "chatgpt_oauth", "handler": _create_chatgpt_oauth_model}]
 

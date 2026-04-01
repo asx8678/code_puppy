@@ -8,7 +8,6 @@ import asyncio
 import sys
 import unicodedata
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -66,7 +65,7 @@ def _sanitize_display_text(text: str) -> str:
     return cleaned
 
 
-def _get_tool_entries() -> List[UCToolInfo]:
+def _get_tool_entries() -> list[UCToolInfo]:
     """Get all UC tools sorted by name.
 
     Returns:
@@ -166,7 +165,7 @@ def _delete_tool(tool: UCToolInfo) -> bool:
         return False
 
 
-def _load_source_code(tool: UCToolInfo) -> Tuple[List[str], Optional[str]]:
+def _load_source_code(tool: UCToolInfo) -> tuple[list[str], str | None]:
     """Load source code lines from a tool's file.
 
     Args:
@@ -184,10 +183,9 @@ def _load_source_code(tool: UCToolInfo) -> Tuple[List[str], Optional[str]]:
 
 
 def _render_menu_panel(
-    tools: List[UCToolInfo],
+    tools: list[UCToolInfo],
     page: int,
-    selected_idx: int,
-) -> List:
+    selected_idx: int) -> List:
     """Render the left menu panel with pagination.
 
     Args:
@@ -256,7 +254,7 @@ def _render_menu_panel(
     return lines
 
 
-def _render_preview_panel(tool: Optional[UCToolInfo]) -> List:
+def _render_preview_panel(tool: UCToolInfo | None) -> List:
     """Render the right preview panel with tool details.
 
     Args:
@@ -353,10 +351,9 @@ def _render_preview_panel(tool: Optional[UCToolInfo]) -> List:
 
 def _render_source_panel(
     tool: UCToolInfo,
-    source_lines: List[str],
+    source_lines: list[str],
     scroll_offset: int,
-    error: Optional[str] = None,
-) -> List:
+    error: str | None = None) -> List:
     """Render source code panel with syntax highlighting.
 
     Args:
@@ -417,8 +414,7 @@ def _render_source_panel(
     lines.append(
         (
             "fg:ansibrightblack",
-            f" Lines {scroll_offset + 1}-{end_offset} of {total_lines}",
-        )
+            f" Lines {scroll_offset + 1}-{end_offset} of {total_lines}")
     )
     lines.append(("fg:ansibrightblack", f" (Page {current_page}/{total_pages})"))
     lines.append(("", "\n\n"))
@@ -436,7 +432,7 @@ def _render_source_panel(
     return lines
 
 
-def _highlight_python_line(line: str) -> List[Tuple[str, str]]:
+def _highlight_python_line(line: str) -> list[tuple[str, str]]:
     """Apply basic Python syntax highlighting to a line.
 
     Args:
@@ -564,20 +560,18 @@ def _show_source_code(tool: UCToolInfo) -> None:
             "python",
             theme="monokai",
             line_numbers=True,
-            word_wrap=True,
-        )
+            word_wrap=True)
         panel = Panel(
             syntax,
             title=f"[bold cyan]{tool.full_name}[/bold cyan]",
             border_style="cyan",
-            padding=(0, 1),
-        )
+            padding=(0, 1))
         emit_info(panel)
     except Exception as e:
         emit_error(f"Could not read source: {e}")
 
 
-async def interactive_uc_picker() -> Optional[str]:
+async def interactive_uc_picker() -> str | None:
     """Show interactive TUI to browse UC tools.
 
     Returns:
@@ -597,12 +591,12 @@ async def interactive_uc_picker() -> Optional[str]:
 
     total_pages = [max(1, (len(tools) + PAGE_SIZE - 1) // PAGE_SIZE)]
 
-    def get_current_tool() -> Optional[UCToolInfo]:
+    def get_current_tool() -> UCToolInfo | None:
         if 0 <= selected_idx[0] < len(tools):
             return tools[selected_idx[0]]
         return None
 
-    def refresh_tools(selected_name: Optional[str] = None) -> None:
+    def refresh_tools(selected_name: str | None = None) -> None:
         nonlocal tools
         tools = _get_tool_entries()
         total_pages[0] = max(1, (len(tools) + PAGE_SIZE - 1) // PAGE_SIZE)
@@ -799,8 +793,7 @@ async def interactive_uc_picker() -> Optional[str]:
                     layout=layout,
                     key_bindings=list_kb,
                     full_screen=False,
-                    mouse_support=False,
-                )
+                    mouse_support=False)
             else:
                 # Source view
                 update_source_display()
@@ -809,8 +802,7 @@ async def interactive_uc_picker() -> Optional[str]:
                     layout=layout,
                     key_bindings=source_kb,
                     full_screen=False,
-                    mouse_support=False,
-                )
+                    mouse_support=False)
 
             await app.run_async()
 
@@ -860,8 +852,7 @@ async def interactive_uc_picker() -> Optional[str]:
     name="uc",
     description="Universal Constructor - browse and manage custom tools",
     usage="/uc",
-    category="tools",
-)
+    category="tools")
 def handle_uc_command(command: str) -> bool:
     """Handle the /uc command - opens the interactive TUI.
 

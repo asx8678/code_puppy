@@ -12,8 +12,7 @@ from code_puppy.config import CONTEXTS_DIR
 from code_puppy.session_storage import (
     list_sessions,
     load_session_with_hashes,
-    save_session,
-)
+    save_session)
 
 
 # Import get_commands_help from command_handler to avoid circular imports
@@ -40,16 +39,14 @@ def get_commands_help():
       /session new    Create new session and rotate ID
 
     Sessions are used for auto-saving conversation history.
-    """,
-)
+    """)
 def handle_session_command(command: str) -> bool:
     """Handle /session command."""
     from code_puppy.config import (
         AUTOSAVE_DIR,
         get_current_autosave_id,
         get_current_autosave_session_name,
-        rotate_autosave_id,
-    )
+        rotate_autosave_id)
     from code_puppy.messaging import emit_info, emit_success, emit_warning
 
     tokens = command.split()
@@ -73,8 +70,7 @@ def handle_session_command(command: str) -> bool:
     name="compact",
     description="Summarize and compact current chat history (uses compaction_strategy config)",
     usage="/compact",
-    category="session",
-)
+    category="session")
 def handle_compact_command(command: str) -> bool:
     """Compact message history using configured strategy."""
     from code_puppy.agents.agent_manager import get_current_agent
@@ -143,8 +139,7 @@ def handle_compact_command(command: str) -> bool:
     name="truncate",
     description="Truncate history to N most recent messages (e.g., /truncate 10)",
     usage="/truncate <N>",
-    category="session",
-)
+    category="session")
 def handle_truncate_command(command: str) -> bool:
     """Truncate message history to N most recent messages."""
     from code_puppy.agents.agent_manager import get_current_agent
@@ -191,8 +186,7 @@ def handle_truncate_command(command: str) -> bool:
     description="Load an autosave session interactively",
     usage="/autosave_load",
     aliases=["resume"],
-    category="session",
-)
+    category="session")
 def handle_autosave_load_command(command: str) -> bool:
     """Load an autosave session."""
     # Return a special marker to indicate we need to run async autosave loading
@@ -203,8 +197,7 @@ def handle_autosave_load_command(command: str) -> bool:
     name="dump_context",
     description="Save current message history to file",
     usage="/dump_context <name>",
-    category="session",
-)
+    category="session")
 def handle_dump_context_command(command: str) -> bool:
     """Dump message history to a file."""
     from code_puppy.agents.agent_manager import get_current_agent
@@ -230,8 +223,7 @@ def handle_dump_context_command(command: str) -> bool:
             base_dir=Path(CONTEXTS_DIR),
             timestamp=datetime.now().isoformat(),
             token_estimator=agent.estimate_tokens_for_message,
-            compacted_hashes=list(agent.get_compacted_message_hashes()),
-        )
+            compacted_hashes=list(agent.get_compacted_message_hashes()))
         emit_success(
             f"✅ Context saved: {metadata.message_count} messages ({metadata.total_tokens} tokens)\n"
             f"📁 Files: {metadata.pickle_path}, {metadata.metadata_path}"
@@ -247,8 +239,7 @@ def handle_dump_context_command(command: str) -> bool:
     name="load_context",
     description="Load message history from file",
     usage="/load_context <name>",
-    category="session",
-)
+    category="session")
 def handle_load_context_command(command: str) -> bool:
     """Load message history from a file."""
     from rich.text import Text

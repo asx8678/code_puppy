@@ -10,8 +10,7 @@ from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
 from pydantic_ai.models.openai import (
     OpenAIChatModel,
     OpenAIChatModelSettings,
-    OpenAIResponsesModel,
-)
+    OpenAIResponsesModel)
 from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.cerebras import CerebrasProvider
@@ -36,7 +35,7 @@ _MAX_OUTPUT_TOKENS = 65536
 logger = logging.getLogger(__name__)
 
 # Registry for custom model provider classes from plugins
-_CUSTOM_MODEL_PROVIDERS: Dict[str, type] = {}
+_CUSTOM_MODEL_PROVIDERS: dict[str, type] = {}
 
 
 def _load_plugin_model_providers():
@@ -85,8 +84,7 @@ CONTEXT_1M_BETA = "context-1m-2025-08-07"
 def _build_anthropic_beta_header(
     model_config: Dict,
     *,
-    interleaved_thinking: bool = False,
-) -> str | None:
+    interleaved_thinking: bool = False) -> str | None:
     """Build the anthropic-beta header value for an Anthropic model.
 
     Combines beta flags based on model capabilities:
@@ -146,8 +144,7 @@ def make_model_settings(
         get_effective_model_settings,
         get_openai_reasoning_effort,
         get_openai_verbosity,
-        model_supports_setting,
-    )
+        model_supports_setting)
 
     model_settings_dict: dict = {}
 
@@ -164,8 +161,7 @@ def make_model_settings(
         # min _MIN_OUTPUT_TOKENS, _OUTPUT_TOKEN_RATIO of context, max _MAX_OUTPUT_TOKENS
         max_tokens = max(
             _MIN_OUTPUT_TOKENS,
-            min(int(_OUTPUT_TOKEN_RATIO * context_length), _MAX_OUTPUT_TOKENS),
-        )
+            min(int(_OUTPUT_TOKEN_RATIO * context_length), _MAX_OUTPUT_TOKENS))
 
     model_settings_dict["max_tokens"] = max_tokens
     effective_settings = get_effective_model_settings(model_name)
@@ -362,8 +358,7 @@ def _build_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
     client = ClaudeCacheAsyncClient(
         verify=verify,
         timeout=180,
-        http2=http2_enabled,
-    )
+        http2=http2_enabled)
 
     from code_puppy.config import get_effective_model_settings
 
@@ -380,8 +375,7 @@ def _build_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
     anthropic_client = AsyncAnthropic(
         api_key=api_key,
         http_client=client,
-        default_headers=default_headers if default_headers else None,
-    )
+        default_headers=default_headers if default_headers else None)
 
     patch_anthropic_client_messages(anthropic_client)
 
@@ -406,8 +400,7 @@ def _build_custom_anthropic(model_name: str, model_config: dict, config: dict) -
         headers=headers,
         verify=verify,
         timeout=180,
-        http2=http2_enabled,
-    )
+        http2=http2_enabled)
 
     from code_puppy.config import get_effective_model_settings
 
@@ -425,8 +418,7 @@ def _build_custom_anthropic(model_name: str, model_config: dict, config: dict) -
         base_url=url,
         http_client=client,
         api_key=api_key,
-        default_headers=default_headers if default_headers else None,
-    )
+        default_headers=default_headers if default_headers else None)
 
     patch_anthropic_client_messages(anthropic_client)
 
@@ -487,8 +479,7 @@ def _build_azure_openai(model_name: str, model_config: dict, config: dict) -> An
         azure_endpoint=azure_endpoint,
         api_version=api_version,
         api_key=api_key,
-        max_retries=azure_max_retries,
-    )
+        max_retries=azure_max_retries)
     provider = OpenAIProvider(openai_client=azure_client)
     model = OpenAIChatModel(model_name=model_config["name"], provider=provider)
     model.provider = provider
@@ -500,8 +491,7 @@ def _build_custom_openai(model_name: str, model_config: dict, config: dict) -> A
     client = create_async_client(headers=headers, verify=verify)
     provider_args: dict = dict(
         base_url=url,
-        http_client=client,
-    )
+        http_client=client)
     if api_key:
         provider_args["api_key"] = api_key
     provider = OpenAIProvider(**provider_args)
@@ -522,12 +512,10 @@ def _build_zai_coding(model_name: str, model_config: dict, config: dict) -> Any:
         return None
     provider = OpenAIProvider(
         api_key=api_key,
-        base_url="https://api.z.ai/api/coding/paas/v4",
-    )
+        base_url="https://api.z.ai/api/coding/paas/v4")
     zai_model = ZaiChatModel(
         model_name=model_config["name"],
-        provider=provider,
-    )
+        provider=provider)
     zai_model.provider = provider
     return zai_model
 
@@ -541,12 +529,10 @@ def _build_zai_api(model_name: str, model_config: dict, config: dict) -> Any:
         return None
     provider = OpenAIProvider(
         api_key=api_key,
-        base_url="https://api.z.ai/api/paas/v4/",
-    )
+        base_url="https://api.z.ai/api/paas/v4/")
     zai_model = ZaiChatModel(
         model_name=model_config["name"],
-        provider=provider,
-    )
+        provider=provider)
     zai_model.provider = provider
     return zai_model
 
@@ -599,8 +585,7 @@ def _build_custom_gemini(model_name: str, model_config: dict, config: dict) -> A
         model_name=model_config["name"],
         api_key=api_key,
         base_url=url,
-        http_client=client,
-    )
+        http_client=client)
 
 
 def _build_cerebras(model_name: str, model_config: dict, config: dict) -> Any:
@@ -628,8 +613,7 @@ def _build_cerebras(model_name: str, model_config: dict, config: dict) -> Any:
     client = create_async_client(headers=headers, verify=verify, model_name="cerebras")
     provider = ZaiCerebrasProvider(
         api_key=api_key,
-        http_client=client,
-    )
+        http_client=client)
     model = OpenAIChatModel(model_name=model_config["name"], provider=provider)
     model.provider = provider
     return model
@@ -671,16 +655,13 @@ def _build_gemini_oauth(model_name: str, model_config: dict, config: dict) -> An
             from gemini_oauth.config import GEMINI_OAUTH_CONFIG
             from gemini_oauth.utils import (
                 get_project_id,
-                get_valid_access_token,
-            )
+                get_valid_access_token)
         except ImportError:
             from code_puppy.plugins.gemini_oauth.config import (
-                GEMINI_OAUTH_CONFIG,
-            )
+                GEMINI_OAUTH_CONFIG)
             from code_puppy.plugins.gemini_oauth.utils import (
                 get_project_id,
-                get_valid_access_token,
-            )
+                get_valid_access_token)
     except ImportError as exc:
         emit_warning(
             f"Gemini OAuth plugin not available; skipping model '{model_config.get('name')}'. "
@@ -711,8 +692,7 @@ def _build_gemini_oauth(model_name: str, model_config: dict, config: dict) -> An
         access_token=access_token,
         project_id=project_id,
         api_base_url=GEMINI_OAUTH_CONFIG["api_base_url"],
-        api_version=GEMINI_OAUTH_CONFIG["api_version"],
-    )
+        api_version=GEMINI_OAUTH_CONFIG["api_version"])
 
 
 # NOTE: 'chatgpt_oauth' model type is now handled by the chatgpt_oauth plugin
@@ -754,7 +734,7 @@ class ModelFactory:
     """A factory for creating and managing different AI models."""
 
     @staticmethod
-    def load_config() -> Dict[str, Any]:
+    def load_config() -> dict[str, Any]:
         load_model_config_callbacks = callbacks.get_callbacks("load_model_config")
         if len(load_model_config_callbacks) > 0:
             if len(load_model_config_callbacks) > 1:
@@ -775,8 +755,7 @@ class ModelFactory:
             ANTIGRAVITY_MODELS_FILE,
             CHATGPT_MODELS_FILE,
             CLAUDE_MODELS_FILE,
-            GEMINI_MODELS_FILE,
-        )
+            GEMINI_MODELS_FILE)
 
         # Build list of extra model sources
         extra_sources: list[tuple[pathlib.Path, str, bool]] = [
@@ -795,8 +774,7 @@ class ModelFactory:
                 if use_filtered:
                     try:
                         from code_puppy.plugins.claude_code_oauth.utils import (
-                            load_claude_models_filtered,
-                        )
+                            load_claude_models_filtered)
 
                         extra_config = load_claude_models_filtered()
                     except ImportError:
@@ -835,7 +813,7 @@ class ModelFactory:
         return config
 
     @staticmethod
-    def get_model(model_name: str, config: Dict[str, Any]) -> Any:
+    def get_model(model_name: str, config: dict[str, Any]) -> Any:
         """Returns a configured model instance based on the provided name and config.
 
         Raises ValueError if the model cannot be initialized (e.g. missing API

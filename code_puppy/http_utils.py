@@ -9,7 +9,7 @@ import os
 import socket
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -22,14 +22,14 @@ from code_puppy.config import get_http2
 class ProxyConfig:
     """Configuration for proxy and SSL settings."""
 
-    verify: Union[bool, str, None]
+    verify: bool | str | None
     trust_env: bool
     proxy_url: str | None
     disable_retry: bool
     http2_enabled: bool
 
 
-def _resolve_proxy_config(verify: Union[bool, str, None] = None) -> ProxyConfig:
+def _resolve_proxy_config(verify: bool | str | None = None) -> ProxyConfig:
     """Resolve proxy, SSL, and retry settings from environment.
 
     This centralizes the logic for detecting proxies, determining SSL verification,
@@ -77,8 +77,7 @@ def _resolve_proxy_config(verify: Union[bool, str, None] = None) -> ProxyConfig:
         trust_env=trust_env,
         proxy_url=proxy_url,
         disable_retry=disable_retry,
-        http2_enabled=http2_enabled,
-    )
+        http2_enabled=http2_enabled)
 
 
 try:
@@ -112,8 +111,7 @@ class RetryingAsyncClient(httpx.AsyncClient):
         retry_status_codes: tuple = (429, 502, 503, 504),
         max_retries: int = 5,
         model_name: str = "",
-        **kwargs,
-    ):
+        **kwargs):
         super().__init__(**kwargs)
         self.retry_status_codes = retry_status_codes
         self.max_retries = max_retries
@@ -207,10 +205,9 @@ def get_cert_bundle_path() -> str | None:
 
 def create_client(
     timeout: int = 180,
-    verify: Union[bool, str] = None,
-    headers: Optional[Dict[str, str]] = None,
-    retry_status_codes: tuple = (429, 502, 503, 504),
-) -> httpx.Client:
+    verify: bool | str = None,
+    headers: dict[str, str | None] = None,
+    retry_status_codes: tuple = (429, 502, 503, 504)) -> httpx.Client:
     if verify is None:
         verify = get_cert_bundle_path()
 
@@ -224,17 +221,15 @@ def create_client(
         verify=verify,
         headers=headers or {},
         timeout=timeout,
-        http2=http2_enabled,
-    )
+        http2=http2_enabled)
 
 
 def create_async_client(
     timeout: int = 180,
-    verify: Union[bool, str] = None,
-    headers: Optional[Dict[str, str]] = None,
+    verify: bool | str = None,
+    headers: dict[str, str | None] = None,
     retry_status_codes: tuple = (429, 502, 503, 504),
-    model_name: str = "",
-) -> httpx.AsyncClient:
+    model_name: str = "") -> httpx.AsyncClient:
     config = _resolve_proxy_config(verify)
 
     if not config.disable_retry:
@@ -246,8 +241,7 @@ def create_async_client(
             headers=headers or {},
             timeout=timeout,
             http2=config.http2_enabled,
-            trust_env=config.trust_env,
-        )
+            trust_env=config.trust_env)
     else:
         return httpx.AsyncClient(
             proxy=config.proxy_url,
@@ -255,15 +249,13 @@ def create_async_client(
             headers=headers or {},
             timeout=timeout,
             http2=config.http2_enabled,
-            trust_env=config.trust_env,
-        )
+            trust_env=config.trust_env)
 
 
 def create_requests_session(
     timeout: float = 5.0,
-    verify: Union[bool, str] = None,
-    headers: Optional[Dict[str, str]] = None,
-) -> "requests.Session":
+    verify: bool | str = None,
+    headers: dict[str, str | None] = None) -> "requests.Session":
     import requests
 
     session = requests.Session()
@@ -281,11 +273,11 @@ def create_requests_session(
 
 def create_auth_headers(
     api_key: str, header_name: str = "Authorization"
-) -> Dict[str, str]:
+) -> dict[str, str]:
     return {header_name: f"Bearer {api_key}"}
 
 
-def resolve_env_var_in_header(headers: Dict[str, str]) -> Dict[str, str]:
+def resolve_env_var_in_header(headers: dict[str, str]) -> dict[str, str]:
     resolved_headers = {}
 
     for key, value in headers.items():
@@ -303,11 +295,10 @@ def resolve_env_var_in_header(headers: Dict[str, str]) -> Dict[str, str]:
 
 def create_reopenable_async_client(
     timeout: int = 180,
-    verify: Union[bool, str] = None,
-    headers: Optional[Dict[str, str]] = None,
+    verify: bool | str = None,
+    headers: dict[str, str | None] = None,
     retry_status_codes: tuple = (429, 502, 503, 504),
-    model_name: str = "",
-) -> Union[ReopenableAsyncClient, httpx.AsyncClient]:
+    model_name: str = "") -> ReopenableAsyncClient | httpx.AsyncClient:
     config = _resolve_proxy_config(verify)
 
     base_kwargs = {
@@ -334,8 +325,7 @@ def create_reopenable_async_client(
             return RetryingAsyncClient(
                 retry_status_codes=retry_status_codes,
                 model_name=model_name,
-                **base_kwargs,
-            )
+                **base_kwargs)
         else:
             return httpx.AsyncClient(**base_kwargs)
 

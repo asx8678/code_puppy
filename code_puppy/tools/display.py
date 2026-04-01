@@ -4,7 +4,6 @@ This module provides non-streaming display functions for rendering
 agent results and other structured content using termflow for markdown.
 """
 
-from typing import Optional
 
 from rich.console import Console
 
@@ -14,10 +13,9 @@ from code_puppy.tools.subagent_context import is_subagent
 
 def display_non_streamed_result(
     content: str,
-    console: Optional[Console] = None,
+    console: Console | None = None,
     banner_text: str = "AGENT RESPONSE",
-    banner_name: str = "agent_response",
-) -> None:
+    banner_name: str = "agent_response") -> None:
     """Display a non-streamed result with markdown rendering via termflow.
 
     This function renders markdown content using termflow for beautiful

@@ -1,11 +1,9 @@
 """Token management for Antigravity OAuth."""
 
-from __future__ import annotations
 
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import requests
 
@@ -22,8 +20,8 @@ class RefreshParts:
     """Parsed components of a stored refresh token string."""
 
     refresh_token: str
-    project_id: Optional[str] = None
-    managed_project_id: Optional[str] = None
+    project_id: str | None = None
+    managed_project_id: str | None = None
 
 
 @dataclass
@@ -33,7 +31,7 @@ class OAuthTokens:
     access_token: str
     refresh_token: str  # Composite: "token|projectId|managedProjectId"
     expires_at: float  # Unix timestamp
-    email: Optional[str] = None
+    email: str | None = None
 
 
 class TokenRefreshError(Exception):
@@ -42,9 +40,8 @@ class TokenRefreshError(Exception):
     def __init__(
         self,
         message: str,
-        code: Optional[str] = None,
-        status: Optional[int] = None,
-    ):
+        code: str | None = None,
+        status: int | None = None):
         super().__init__(message)
         self.code = code
         self.status = status
@@ -56,8 +53,7 @@ def parse_refresh_parts(refresh: str) -> RefreshParts:
     return RefreshParts(
         refresh_token=parts[0] if len(parts) > 0 else "",
         project_id=parts[1] if len(parts) > 1 and parts[1] else None,
-        managed_project_id=parts[2] if len(parts) > 2 and parts[2] else None,
-    )
+        managed_project_id=parts[2] if len(parts) > 2 and parts[2] else None)
 
 
 def format_refresh_parts(parts: RefreshParts) -> str:
@@ -69,7 +65,7 @@ def format_refresh_parts(parts: RefreshParts) -> str:
     return base
 
 
-def is_token_expired(expires_at: Optional[float]) -> bool:
+def is_token_expired(expires_at: float | None) -> bool:
     """Check if a token is expired or missing, with buffer for clock skew."""
     if expires_at is None:
         return True
@@ -80,9 +76,8 @@ def is_token_expired(expires_at: Optional[float]) -> bool:
 
 def refresh_access_token(
     refresh_token_composite: str,
-    current_access: Optional[str] = None,
-    current_expires: Optional[float] = None,
-) -> Optional[OAuthTokens]:
+    current_access: str | None = None,
+    current_expires: float | None = None) -> OAuthTokens | None:
     """Refresh an Antigravity OAuth access token.
 
     Args:
@@ -111,8 +106,7 @@ def refresh_access_token(
                 "client_id": ANTIGRAVITY_CLIENT_ID,
                 "client_secret": ANTIGRAVITY_CLIENT_SECRET,
             },
-            timeout=30,
-        )
+            timeout=30)
 
         if not response.ok:
             error_data = {}
@@ -131,15 +125,13 @@ def refresh_access_token(
                 raise TokenRefreshError(
                     f"Token revoked: {error_desc}",
                     code="invalid_grant",
-                    status=response.status_code,
-                )
+                    status=response.status_code)
 
             logger.warning(
                 "Token refresh failed: %s %s - %s",
                 response.status_code,
                 error_code,
-                error_desc,
-            )
+                error_desc)
             return None
 
         payload = response.json()
@@ -151,14 +143,12 @@ def refresh_access_token(
         updated_parts = RefreshParts(
             refresh_token=new_refresh,
             project_id=parts.project_id,
-            managed_project_id=parts.managed_project_id,
-        )
+            managed_project_id=parts.managed_project_id)
 
         return OAuthTokens(
             access_token=new_access,
             refresh_token=format_refresh_parts(updated_parts),
-            expires_at=time.time() + expires_in,
-        )
+            expires_at=time.time() + expires_in)
 
     except TokenRefreshError:
         raise

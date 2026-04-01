@@ -6,7 +6,7 @@ import pickle
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -33,8 +33,7 @@ def _validate_session_id(session_id: str) -> str:
     if not _VALID_SESSION_ID_RE.match(session_id):
         raise HTTPException(
             status_code=400,
-            detail="Invalid session_id: must match ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$",
-        )
+            detail="Invalid session_id: must match ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
     return session_id
 
 
@@ -51,10 +50,10 @@ class SessionInfo(BaseModel):
     """Session metadata information."""
 
     session_id: str
-    agent_name: Optional[str] = None
-    initial_prompt: Optional[str] = None
-    created_at: Optional[str] = None
-    last_updated: Optional[str] = None
+    agent_name: str | None = None
+    initial_prompt: str | None = None
+    created_at: str | None = None
+    last_updated: str | None = None
     message_count: int = 0
 
 
@@ -63,13 +62,13 @@ class MessageContent(BaseModel):
 
     role: str
     content: Any
-    timestamp: Optional[str] = None
+    timestamp: str | None = None
 
 
 class SessionDetail(SessionInfo):
     """Session info with full message history."""
 
-    messages: List[Dict[str, Any]] = []
+    messages: list[dict[str, Any]] = []
 
 
 def _get_sessions_dir() -> Path:
@@ -83,7 +82,7 @@ def _get_sessions_dir() -> Path:
     return Path(DATA_DIR) / "subagent_sessions"
 
 
-def _serialize_message(msg: Any) -> Dict[str, Any]:
+def _serialize_message(msg: Any) -> dict[str, Any]:
     """Serialize a pydantic-ai message to a JSON-safe dict.
 
     Handles various pydantic-ai message types that may be stored
@@ -119,7 +118,7 @@ def _load_pickle_sync(file_path: Path) -> Any:
 
 
 @router.get("/")
-async def list_sessions() -> List[SessionInfo]:
+async def list_sessions() -> list[SessionInfo]:
     """List all available sessions.
 
     Returns:
@@ -138,8 +137,7 @@ async def list_sessions() -> List[SessionInfo]:
             # Run blocking I/O in thread pool with timeout
             metadata = await asyncio.wait_for(
                 loop.run_in_executor(_executor, _load_json_sync, txt_file),
-                timeout=FILE_IO_TIMEOUT,
-            )
+                timeout=FILE_IO_TIMEOUT)
             sessions.append(
                 SessionInfo(
                     session_id=session_id,
@@ -147,8 +145,7 @@ async def list_sessions() -> List[SessionInfo]:
                     initial_prompt=metadata.get("initial_prompt"),
                     created_at=metadata.get("created_at"),
                     last_updated=metadata.get("last_updated"),
-                    message_count=metadata.get("message_count", 0),
-                )
+                    message_count=metadata.get("message_count", 0))
             )
         except asyncio.TimeoutError:
             # Timed out reading file, include basic info
@@ -185,8 +182,7 @@ async def get_session(session_id: str) -> SessionInfo:
     try:
         metadata = await asyncio.wait_for(
             loop.run_in_executor(_executor, _load_json_sync, txt_file),
-            timeout=FILE_IO_TIMEOUT,
-        )
+            timeout=FILE_IO_TIMEOUT)
     except asyncio.TimeoutError:
         raise HTTPException(504, f"Timeout reading session '{session_id}'") from None
 
@@ -196,12 +192,11 @@ async def get_session(session_id: str) -> SessionInfo:
         initial_prompt=metadata.get("initial_prompt"),
         created_at=metadata.get("created_at"),
         last_updated=metadata.get("last_updated"),
-        message_count=metadata.get("message_count", 0),
-    )
+        message_count=metadata.get("message_count", 0))
 
 
 @router.get("/{session_id}/messages")
-async def get_session_messages(session_id: str) -> List[Dict[str, Any]]:
+async def get_session_messages(session_id: str) -> list[dict[str, Any]]:
     """Get the full message history for a session.
 
     Args:
@@ -225,8 +220,7 @@ async def get_session_messages(session_id: str) -> List[Dict[str, Any]]:
     try:
         messages = await asyncio.wait_for(
             loop.run_in_executor(_executor, _load_pickle_sync, pkl_file),
-            timeout=FILE_IO_TIMEOUT,
-        )
+            timeout=FILE_IO_TIMEOUT)
         return [_serialize_message(msg) for msg in messages]
     except asyncio.TimeoutError:
         raise HTTPException(
@@ -237,7 +231,7 @@ async def get_session_messages(session_id: str) -> List[Dict[str, Any]]:
 
 
 @router.delete("/{session_id}")
-async def delete_session(session_id: str) -> Dict[str, str]:
+async def delete_session(session_id: str) -> dict[str, str]:
     """Delete a session and its data.
 
     Args:

@@ -10,13 +10,11 @@ Usage:
         await agent.run(...)
 """
 
-from __future__ import annotations
 
 import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +40,10 @@ class TokenRefreshHeartbeat:
     def __init__(
         self,
         interval: float = HEARTBEAT_INTERVAL_SECONDS,
-        min_refresh_interval: float = MIN_REFRESH_INTERVAL_SECONDS,
-    ):
+        min_refresh_interval: float = MIN_REFRESH_INTERVAL_SECONDS):
         self._interval = interval
         self._min_refresh_interval = min_refresh_interval
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
         self._lock = asyncio.Lock()
         self._refresh_count = 0
@@ -77,8 +74,7 @@ class TokenRefreshHeartbeat:
         self._task = None
         logger.debug(
             "Token refresh heartbeat stopped (refreshed %d times)",
-            self._refresh_count,
-        )
+            self._refresh_count)
 
     async def _heartbeat_loop(self) -> None:
         """Main heartbeat loop that periodically checks token status."""
@@ -103,8 +99,7 @@ class TokenRefreshHeartbeat:
                     if now - _last_refresh_time < self._min_refresh_interval:
                         logger.debug(
                             "Skipping refresh - last refresh was %.1f seconds ago",
-                            now - _last_refresh_time,
-                        )
+                            now - _last_refresh_time)
                         continue
 
                     # Attempt the refresh
@@ -131,8 +126,7 @@ class TokenRefreshHeartbeat:
             from .utils import (
                 is_token_expired,
                 load_stored_tokens,
-                refresh_access_token,
-            )
+                refresh_access_token)
 
             tokens = await asyncio.to_thread(load_stored_tokens)
             if not tokens:
@@ -170,13 +164,12 @@ class TokenRefreshHeartbeat:
 
 
 # Global heartbeat instance for the current session
-_current_heartbeat: Optional[TokenRefreshHeartbeat] = None
+_current_heartbeat: TokenRefreshHeartbeat | None = None
 
 
 @asynccontextmanager
 async def token_refresh_heartbeat_context(
-    interval: float = HEARTBEAT_INTERVAL_SECONDS,
-):
+    interval: float = HEARTBEAT_INTERVAL_SECONDS):
     """Context manager that runs token refresh heartbeat during its scope.
 
     Use this around long-running agent operations to ensure tokens stay fresh.
@@ -206,7 +199,7 @@ def is_heartbeat_running() -> bool:
     return _current_heartbeat is not None and _current_heartbeat.is_running
 
 
-def get_current_heartbeat() -> Optional[TokenRefreshHeartbeat]:
+def get_current_heartbeat() -> TokenRefreshHeartbeat | None:
     """Get the currently running heartbeat instance, if any."""
     return _current_heartbeat
 

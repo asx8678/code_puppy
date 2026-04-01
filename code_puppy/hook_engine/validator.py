@@ -5,7 +5,7 @@ Validates hook configuration dictionaries and provides actionable error messages
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +24,14 @@ VALID_EVENT_TYPES = [
 VALID_HOOK_TYPES = ["command", "prompt"]
 
 
-def validate_hooks_config(config: Dict[str, Any]) -> Tuple[bool, List[str]]:
+def validate_hooks_config(config: dict[str, Any]) -> tuple[bool, list[str]]:
     """
     Validate a hooks configuration dictionary.
 
     Returns:
         Tuple of (is_valid, list_of_error_messages)
     """
-    errors: List[str] = []
+    errors: list[str] = []
 
     if not isinstance(config, dict):
         return False, ["Configuration must be a dictionary"]
@@ -78,8 +78,8 @@ def validate_hooks_config(config: Dict[str, Any]) -> Tuple[bool, List[str]]:
 
 def _validate_hook(
     event_type: str, group_idx: int, hook_idx: int, hook: Any
-) -> List[str]:
-    errors: List[str] = []
+) -> list[str]:
+    errors: list[str] = []
     prefix = f"'{event_type}[{group_idx}].hooks[{hook_idx}]'"
 
     if not isinstance(hook, dict):
@@ -109,7 +109,7 @@ def _validate_hook(
 
 
 def format_validation_report(
-    is_valid: bool, errors: List[str], suggestions: Optional[List[str]] = None
+    is_valid: bool, errors: list[str], suggestions: list[str | None] = None
 ) -> str:
     lines = []
     if is_valid:
@@ -127,8 +127,8 @@ def format_validation_report(
     return "\n".join(lines)
 
 
-def get_config_suggestions(config: Dict[str, Any], errors: List[str]) -> List[str]:
-    suggestions: List[str] = []
+def get_config_suggestions(config: dict[str, Any], errors: list[str]) -> list[str]:
+    suggestions: list[str] = []
 
     for error in errors:
         if "Unknown event type" in error:

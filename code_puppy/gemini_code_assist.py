@@ -6,7 +6,6 @@ Generative Language API. The Code Assist API supports OAuth authentication
 and has a different request/response format.
 """
 
-from __future__ import annotations
 
 import json
 import logging
@@ -14,7 +13,7 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any
 
 import httpx
 from pydantic_ai.messages import (
@@ -26,8 +25,7 @@ from pydantic_ai.messages import (
     TextPart,
     ToolCallPart,
     ToolReturnPart,
-    UserPromptPart,
-)
+    UserPromptPart)
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
@@ -49,8 +47,7 @@ class GeminiCodeAssistModel(Model):
         access_token: str,
         project_id: str,
         api_base_url: str = "https://cloudcode-pa.googleapis.com",
-        api_version: str = "v1internal",
-    ):
+        api_version: str = "v1internal"):
         self._model_name = model_name
         self.access_token = access_token
         self.project_id = project_id
@@ -69,8 +66,7 @@ class GeminiCodeAssistModel(Model):
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters,
-    ) -> ModelResponse:
+        model_request_parameters: ModelRequestParameters) -> ModelResponse:
         """Make a non-streaming request to the Code Assist API."""
         request_body = self._build_request(
             messages, model_settings, model_request_parameters
@@ -97,8 +93,7 @@ class GeminiCodeAssistModel(Model):
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters,
-    ) -> AsyncIterator[StreamedResponse]:
+        model_request_parameters: ModelRequestParameters) -> AsyncIterator[StreamedResponse]:
         """Make a streaming request to the Code Assist API."""
         request_body = self._build_request(
             messages, model_settings, model_request_parameters
@@ -119,7 +114,7 @@ class GeminiCodeAssistModel(Model):
 
                 yield StreamedResponse(response, self._model_name)
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """Get HTTP headers for the request."""
         return {
             "Authorization": f"Bearer {self.access_token}",
@@ -131,8 +126,7 @@ class GeminiCodeAssistModel(Model):
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters,
-    ) -> Dict[str, Any]:
+        model_request_parameters: ModelRequestParameters) -> dict[str, Any]:
         """Build the Code Assist API request body."""
         contents = []
         system_instruction = None
@@ -202,7 +196,7 @@ class GeminiCodeAssistModel(Model):
                     contents.append({"role": "model", "parts": parts})
 
         # Build the inner request (Vertex-style format)
-        inner_request: Dict[str, Any] = {
+        inner_request: dict[str, Any] = {
             "contents": contents,
         }
 
@@ -228,12 +222,12 @@ class GeminiCodeAssistModel(Model):
             "request": inner_request,
         }
 
-    def _build_tools(self, tools: list[ToolDefinition]) -> Dict[str, Any]:
+    def _build_tools(self, tools: list[ToolDefinition]) -> dict[str, Any]:
         """Build tool definitions for the API."""
         function_declarations = []
 
         for tool in tools:
-            func_decl: Dict[str, Any] = {
+            func_decl: dict[str, Any] = {
                 "name": tool.name,
                 "description": tool.description or "",
             }
@@ -247,12 +241,12 @@ class GeminiCodeAssistModel(Model):
 
     def _build_generation_config(
         self, model_settings: ModelSettings | None
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any | None]:
         """Build generation config from model settings."""
         if not model_settings:
             return None
 
-        config: Dict[str, Any] = {}
+        config: dict[str, Any] = {}
 
         if (
             hasattr(model_settings, "temperature")
@@ -271,7 +265,7 @@ class GeminiCodeAssistModel(Model):
 
         return config if config else None
 
-    def _parse_response(self, data: Dict[str, Any]) -> ModelResponse:
+    def _parse_response(self, data: dict[str, Any]) -> ModelResponse:
         """Parse the Code Assist API response."""
         # Unwrap the Code Assist response format
         inner_response = data.get("response", data)
@@ -295,16 +289,14 @@ class GeminiCodeAssistModel(Model):
                     ToolCallPart(
                         tool_name=func_call["name"],
                         args=func_call.get("args", {}),
-                        tool_call_id=str(uuid.uuid4()),
-                    )
+                        tool_call_id=str(uuid.uuid4()))
                 )
 
         # Extract usage metadata
         usage_meta = inner_response.get("usageMetadata", {})
         usage = RequestUsage(
             input_tokens=usage_meta.get("promptTokenCount", 0),
-            output_tokens=usage_meta.get("candidatesTokenCount", 0),
-        )
+            output_tokens=usage_meta.get("candidatesTokenCount", 0))
 
         return ModelResponse(
             parts=response_parts, model_name=self._model_name, usage=usage
@@ -317,7 +309,7 @@ class StreamedResponse:
     def __init__(self, response: httpx.Response, model_name: str):
         self._response = response
         self._model_name = model_name
-        self._usage: Optional[RequestUsage] = None
+        self._usage: RequestUsage | None = None
         self._timestamp = datetime.now(timezone.utc)
 
     def __aiter__(self) -> AsyncIterator[str]:
@@ -343,8 +335,7 @@ class StreamedResponse:
                         meta = inner["usageMetadata"]
                         self._usage = RequestUsage(
                             input_tokens=meta.get("promptTokenCount", 0),
-                            output_tokens=meta.get("candidatesTokenCount", 0),
-                        )
+                            output_tokens=meta.get("candidatesTokenCount", 0))
 
                     # Extract text from candidates
                     for candidate in inner.get("candidates", []):

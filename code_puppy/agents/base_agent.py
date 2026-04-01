@@ -19,8 +19,7 @@ from typing import (
     Set,
     Tuple,
     Type,
-    Union,
-)
+    Union)
 
 import mcp
 import pydantic
@@ -33,8 +32,7 @@ from pydantic_ai import (
     ImageUrl,
     RunContext,
     UsageLimitExceeded,
-    UsageLimits,
-)
+    UsageLimits)
 from pydantic_ai.durable_exec.dbos import DBOSAgent
 
 # Rust acceleration bridge (optional - falls back to Python)
@@ -47,8 +45,7 @@ if RUST_AVAILABLE:
         prune_and_filter,
         split_for_summarization as rust_split_for_summarization,
         truncation_indices as rust_truncation_indices,
-        serialize_messages_for_rust,
-    )
+        serialize_messages_for_rust)
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -59,8 +56,7 @@ from pydantic_ai.messages import (
     ToolCallPart,
     ToolCallPartDelta,
     ToolReturn,
-    ToolReturnPart,
-)
+    ToolReturnPart)
 from rich.text import Text
 
 from code_puppy.agents.event_stream_handler import event_stream_handler
@@ -69,8 +65,7 @@ from code_puppy.callbacks import (
     on_agent_run_end,
     on_agent_run_start,
     on_message_history_processor_end,
-    on_message_history_processor_start,
-)
+    on_message_history_processor_start)
 
 # Consolidated relative imports
 from code_puppy.config import (
@@ -81,27 +76,23 @@ from code_puppy.config import (
     get_message_limit,
     get_protected_token_count,
     get_use_dbos,
-    get_value,
-)
+    get_value)
 from code_puppy.error_logging import log_error
 from code_puppy.keymap import cancel_agent_uses_signal, get_cancel_agent_char_code
 from code_puppy.mcp_ import get_mcp_manager
 from code_puppy.messaging import (
     emit_error,
     emit_info,
-    emit_warning,
-)
+    emit_warning)
 from code_puppy.messaging.spinner import (
     SpinnerBase,
-    update_spinner_context,
-)
+    update_spinner_context)
 from code_puppy.model_factory import ModelFactory, make_model_settings
 from code_puppy.summarization_agent import run_summarization_sync, SummarizationError
 from code_puppy.token_utils import estimate_token_count as _estimate_token_count
 from code_puppy.tools.agent_tools import _active_subagent_tasks
 from code_puppy.tools.command_runner import (
-    is_awaiting_user_input,
-)
+    is_awaiting_user_input)
 
 
 def _rust_enabled() -> bool:
@@ -124,23 +115,23 @@ class BaseAgent(ABC):
 
     def __init__(self):
         self.id = str(uuid.uuid4())
-        self._message_history: List[Any] = []
-        self._compacted_message_hashes: Set[str] = set()
+        self._message_history: list[Any] = []
+        self._compacted_message_hashes: set[str] = set()
         # Agent construction cache
         self._code_generation_agent = None
-        self._last_model_name: Optional[str] = None
+        self._last_model_name: str | None = None
         # Puppy rules loaded lazily
-        self._puppy_rules: Optional[str] = None
+        self._puppy_rules: str | None = None
         self.cur_model: pydantic_ai.models.Model
         # Cache for MCP tool definitions (for token estimation)
         # This is populated after the first successful run when MCP tools are retrieved
-        self._mcp_tool_definitions_cache: List[Dict[str, Any]] = []
+        self._mcp_tool_definitions_cache: list[dict[str, Any]] = []
         # Cache for system prompt and tool defs used in message_history_processor.
         # These are intentionally session-scoped: populated once per run_with_mcp
         # entry and never invalidated, because the model and tool set are stable
         # within a single agent session.
-        self._cached_system_prompt: Optional[str] = None
-        self._cached_tool_defs: Optional[List[Dict[str, Any]]] = None
+        self._cached_system_prompt: str | None = None
+        self._cached_tool_defs: list[dict[str, Any | None]] = None
         # Per-instance flag for delayed compaction (not a module global — safe with parallel agents)
         self._delayed_compaction_requested: bool = False
 
@@ -199,7 +190,7 @@ class BaseAgent(ABC):
         pass
 
     @abstractmethod
-    def get_available_tools(self) -> List[str]:
+    def get_available_tools(self) -> list[str]:
         """Get list of tool names that this agent should have access to.
 
         Returns:
@@ -207,7 +198,7 @@ class BaseAgent(ABC):
         """
         pass
 
-    def get_tools_config(self) -> Optional[Dict[str, Any]]:
+    def get_tools_config(self) -> dict[str, Any | None]:
         """Get tool configuration for this agent.
 
         Returns:
@@ -215,7 +206,7 @@ class BaseAgent(ABC):
         """
         return None
 
-    def get_user_prompt(self) -> Optional[str]:
+    def get_user_prompt(self) -> str | None:
         """Get custom user prompt for this agent.
 
         Returns:
@@ -224,7 +215,7 @@ class BaseAgent(ABC):
         return None
 
     # Message history management methods
-    def get_message_history(self) -> List[Any]:
+    def get_message_history(self) -> list[Any]:
         """Get the message history for this agent.
 
         Returns:
@@ -232,7 +223,7 @@ class BaseAgent(ABC):
         """
         return self._message_history
 
-    def set_message_history(self, history: List[Any]) -> None:
+    def set_message_history(self, history: list[Any]) -> None:
         """Set the message history for this agent.
 
         Args:
@@ -253,7 +244,7 @@ class BaseAgent(ABC):
         """
         self._message_history.append(message)
 
-    def extend_message_history(self, history: List[Any]) -> None:
+    def extend_message_history(self, history: list[Any]) -> None:
         """Extend this agent's message history with multiple messages.
 
         Args:
@@ -261,7 +252,7 @@ class BaseAgent(ABC):
         """
         self._message_history.extend(history)
 
-    def get_compacted_message_hashes(self) -> Set[str]:
+    def get_compacted_message_hashes(self) -> set[str]:
         """Get the set of compacted message hashes for this agent.
 
         Returns:
@@ -286,7 +277,7 @@ class BaseAgent(ABC):
         """
         self._compacted_message_hashes = set(hashes)
 
-    def get_model_name(self) -> Optional[str]:
+    def get_model_name(self) -> str | None:
         """Get pinned model name for this agent, if specified.
 
         Returns:
@@ -297,7 +288,7 @@ class BaseAgent(ABC):
             return get_global_model_name()
         return pinned
 
-    def _clean_binaries(self, messages: List[ModelMessage]) -> List[ModelMessage]:
+    def _clean_binaries(self, messages: list[ModelMessage]) -> list[ModelMessage]:
         """Remove BinaryContent items from message parts.
 
         Note: This mutates the messages in-place by modifying part.content.
@@ -314,8 +305,8 @@ class BaseAgent(ABC):
         return messages
 
     def ensure_history_ends_with_request(
-        self, messages: List[ModelMessage]
-    ) -> List[ModelMessage]:
+        self, messages: list[ModelMessage]
+    ) -> list[ModelMessage]:
         """Ensure message history ends with a ModelRequest.
 
         pydantic_ai requires that processed message history ends with a ModelRequest.
@@ -349,7 +340,7 @@ class BaseAgent(ABC):
         emitted at different times. This prevents status updates from blowing up the
         history when they are repeated with new timestamps."""
 
-        attributes: List[str] = [part.__class__.__name__]
+        attributes: list[str] = [part.__class__.__name__]
 
         # Role/instructions help disambiguate parts that otherwise share content
         if hasattr(part, "role") and part.role:
@@ -389,7 +380,7 @@ class BaseAgent(ABC):
         """Create a stable hash for a model message that ignores timestamps."""
         role = getattr(message, "role", None)
         instructions = getattr(message, "instructions", None)
-        header_bits: List[str] = []
+        header_bits: list[str] = []
         if role:
             header_bits.append(f"role={role}")
         if instructions:
@@ -650,7 +641,7 @@ class BaseAgent(ABC):
         has_content_delta = getattr(part, "content_delta", None) is not None
         return bool(has_content or has_content_delta)
 
-    def filter_huge_messages(self, messages: List[ModelMessage]) -> List[ModelMessage]:
+    def filter_huge_messages(self, messages: list[ModelMessage]) -> list[ModelMessage]:
         if _rust_enabled():
             try:
                 serialized = serialize_messages_for_rust(messages)
@@ -665,7 +656,7 @@ class BaseAgent(ABC):
         return pruned
 
     def _find_safe_split_index(
-        self, messages: List[ModelMessage], initial_split_idx: int
+        self, messages: list[ModelMessage], initial_split_idx: int
     ) -> int:
         """
         Adjust split index to avoid breaking tool_use/tool_result pairs.
@@ -685,7 +676,7 @@ class BaseAgent(ABC):
             return initial_split_idx
 
         # Collect tool_call_ids from messages AFTER the split (protected zone)
-        protected_tool_return_ids: Set[str] = set()
+        protected_tool_return_ids: set[str] = set()
         for msg in messages[initial_split_idx:]:
             for part in getattr(msg, "parts", []) or []:
                 if getattr(part, "part_kind", None) == "tool-return":
@@ -723,8 +714,7 @@ class BaseAgent(ABC):
 
     def split_messages_for_protected_summarization(
         self,
-        messages: List[ModelMessage],
-    ) -> Tuple[List[ModelMessage], List[ModelMessage]]:
+        messages: list[ModelMessage]) -> tuple[list[ModelMessage], list[ModelMessage]]:
         """
         Split messages into two groups: messages to summarize and protected recent messages.
 
@@ -757,9 +747,9 @@ class BaseAgent(ABC):
                 per_message_tokens = result.per_message_tokens
 
                 # Build tool_call_ids_per_message: list of [(id, kind), ...] per message
-                tool_call_ids_per_message: List[List[Tuple[str, str]]] = []
+                tool_call_ids_per_message: list[list[tuple[str, str]]] = []
                 for msg in messages:
-                    ids_for_msg: List[Tuple[str, str]] = []
+                    ids_for_msg: list[tuple[str, str]] = []
                     for part in getattr(msg, "parts", []) or []:
                         tool_call_id = getattr(part, "tool_call_id", None)
                         if tool_call_id:
@@ -772,8 +762,7 @@ class BaseAgent(ABC):
                 split_result = rust_split_for_summarization(
                     per_message_tokens,
                     tool_call_ids_per_message,
-                    protected_tokens_limit,
-                )
+                    protected_tokens_limit)
 
                 # Convert indices back to message lists
                 messages_to_summarize = [
@@ -838,8 +827,8 @@ class BaseAgent(ABC):
         return messages_to_summarize, protected_messages
 
     def summarize_messages(
-        self, messages: List[ModelMessage], with_protection: bool = True
-    ) -> Tuple[List[ModelMessage], List[ModelMessage]]:
+        self, messages: list[ModelMessage], with_protection: bool = True
+    ) -> tuple[list[ModelMessage], list[ModelMessage]]:
         """
         Summarize messages while protecting recent messages up to PROTECTED_TOKENS.
 
@@ -848,8 +837,8 @@ class BaseAgent(ABC):
             where compacted_messages always preserves the original system message
             as the first entry.
         """
-        messages_to_summarize: List[ModelMessage]
-        protected_messages: List[ModelMessage]
+        messages_to_summarize: list[ModelMessage]
+        protected_messages: list[ModelMessage]
 
         if with_protection:
             messages_to_summarize, protected_messages = (
@@ -900,7 +889,7 @@ class BaseAgent(ABC):
                 )
                 new_messages = [ModelRequest([TextPart(str(new_messages))])]
 
-            compacted: List[ModelMessage] = [system_message] + list(new_messages)
+            compacted: list[ModelMessage] = [system_message] + list(new_messages)
 
             # Drop the system message from protected_messages because we already included it
             protected_tail = [
@@ -946,7 +935,7 @@ class BaseAgent(ABC):
             # Be safe; don't blow up status/compaction if model lookup fails
             return 128000
 
-    def has_pending_tool_calls(self, messages: List[ModelMessage]) -> bool:
+    def has_pending_tool_calls(self, messages: list[ModelMessage]) -> bool:
         """
         Check if there are any pending tool calls in the message history.
 
@@ -959,8 +948,8 @@ class BaseAgent(ABC):
         if not messages:
             return False
 
-        tool_call_ids: Set[str] = set()
-        tool_return_ids: Set[str] = set()
+        tool_call_ids: set[str] = set()
+        tool_return_ids: set[str] = set()
 
         # Collect all tool call and return IDs
         for msg in messages:
@@ -988,8 +977,7 @@ class BaseAgent(ABC):
         self._delayed_compaction_requested = True
         emit_info(
             "🔄 Delayed compaction requested - will attempt after tool calls complete",
-            message_group="token_context_status",
-        )
+            message_group="token_context_status")
 
     def should_attempt_delayed_compaction(self) -> bool:
         """
@@ -1010,8 +998,8 @@ class BaseAgent(ABC):
         return False
 
     def compact_messages(
-        self, messages: List[ModelMessage]
-    ) -> tuple[List[ModelMessage], dict]:
+        self, messages: list[ModelMessage]
+    ) -> tuple[list[ModelMessage], dict]:
         """Compact message history for delayed compaction.
 
         Called when delayed compaction is triggered after tool calls complete.
@@ -1040,7 +1028,7 @@ class BaseAgent(ABC):
             )
             return messages, {"method": "noop", "error": str(exc)}
 
-    def get_pending_tool_call_count(self, messages: List[ModelMessage]) -> int:
+    def get_pending_tool_call_count(self, messages: list[ModelMessage]) -> int:
         """
         Get the count of pending tool calls for debugging purposes.
 
@@ -1050,8 +1038,8 @@ class BaseAgent(ABC):
         if not messages:
             return 0
 
-        tool_call_ids: Set[str] = set()
-        tool_return_ids: Set[str] = set()
+        tool_call_ids: set[str] = set()
+        tool_return_ids: set[str] = set()
 
         for msg in messages:
             for part in getattr(msg, "parts", []) or []:
@@ -1068,8 +1056,8 @@ class BaseAgent(ABC):
         return len(pending_calls)
 
     def prune_interrupted_tool_calls(
-        self, messages: List[ModelMessage]
-    ) -> List[ModelMessage]:
+        self, messages: list[ModelMessage]
+    ) -> list[ModelMessage]:
         """
         Remove any messages that participate in mismatched tool call sequences.
 
@@ -1091,12 +1079,11 @@ class BaseAgent(ABC):
                 logger.debug(
                     "Rust fallback in prune_interrupted_tool_calls: %s",
                     exc,
-                    exc_info=True,
-                )
+                    exc_info=True)
 
         # Python fallback — original implementation
-        tool_call_ids: Set[str] = set()
-        tool_return_ids: Set[str] = set()
+        tool_call_ids: set[str] = set()
+        tool_return_ids: set[str] = set()
 
         # First pass: collect ids for calls vs returns
         for msg in messages:
@@ -1111,11 +1098,11 @@ class BaseAgent(ABC):
                 else:
                     tool_return_ids.add(tool_call_id)
 
-        mismatched: Set[str] = tool_call_ids.symmetric_difference(tool_return_ids)
+        mismatched: set[str] = tool_call_ids.symmetric_difference(tool_return_ids)
         if not mismatched:
             return messages
 
-        pruned: List[ModelMessage] = []
+        pruned: list[ModelMessage] = []
         dropped_count = 0
         for msg in messages:
             has_mismatched = False
@@ -1131,8 +1118,8 @@ class BaseAgent(ABC):
         return pruned
 
     def message_history_processor(
-        self, ctx: RunContext, messages: List[ModelMessage]
-    ) -> List[ModelMessage]:
+        self, ctx: RunContext, messages: list[ModelMessage]
+    ) -> list[ModelMessage]:
         # First, prune any interrupted/mismatched tool-call conversations
         model_max = self.get_model_context_length()
 
@@ -1213,8 +1200,7 @@ class BaseAgent(ABC):
                 emit_warning(
                     f"⚠️  Summarization deferred: {pending_count} pending tool call(s) detected. "
                     "Waiting for tool execution to complete before compaction.",
-                    message_group="token_context_status",
-                )
+                    message_group="token_context_status")
                 # Request delayed compaction for when tool calls complete
                 self.request_delayed_compaction()
                 # Return original messages without compaction
@@ -1229,8 +1215,7 @@ class BaseAgent(ABC):
                 result_messages = self.truncation(
                     filtered_messages,
                     protected_tokens,
-                    per_message_tokens=cached_tokens,
-                )
+                    per_message_tokens=cached_tokens)
                 # Track dropped messages by hash so message_history_accumulator
                 # won't re-inject them from pydantic-ai's full message list on
                 # subsequent calls within the same run (fixes ghost-task bug).
@@ -1263,10 +1248,9 @@ class BaseAgent(ABC):
 
     def truncation(
         self,
-        messages: List[ModelMessage],
+        messages: list[ModelMessage],
         protected_tokens: int,
-        per_message_tokens: Optional[List[int]] = None,
-    ) -> List[ModelMessage]:
+        per_message_tokens: list[int | None] = None) -> list[ModelMessage]:
         """
         Truncate message history to manage token usage.
 
@@ -1344,8 +1328,7 @@ class BaseAgent(ABC):
     def run_summarization_sync(
         self,
         instructions: str,
-        message_history: List[ModelMessage],
-    ) -> Union[List[ModelMessage], str]:
+        message_history: list[ModelMessage]) -> Union[list[ModelMessage], str]:
         """
         Run summarization synchronously using the configured summarization agent.
         This is exposed as a method so it can be overridden by subclasses if needed.
@@ -1360,7 +1343,7 @@ class BaseAgent(ABC):
         return run_summarization_sync(instructions, message_history)
 
     # ===== Agent wiring formerly in code_puppy/agent.py =====
-    def load_puppy_rules(self) -> Optional[str]:
+    def load_puppy_rules(self) -> str | None:
         """Load AGENT(S).md from both global config and project directory.
 
         Checks for AGENTS.md/AGENT.md/agents.md/agent.md in this order:
@@ -1400,7 +1383,7 @@ class BaseAgent(ABC):
         self._puppy_rules = "\n\n".join(rules) if rules else None
         return self._puppy_rules
 
-    def load_mcp_servers(self, extra_headers: Optional[Dict[str, str]] = None):
+    def load_mcp_servers(self, extra_headers: dict[str, str | None] = None):
         """Load MCP servers through the manager and return pydantic-ai compatible servers.
 
         Note: The manager automatically syncs from mcp_servers.json during initialization,
@@ -1431,9 +1414,8 @@ class BaseAgent(ABC):
     def _load_model_with_fallback(
         self,
         requested_model_name: str,
-        models_config: Dict[str, Any],
-        message_group: str,
-    ) -> Tuple[Any, str]:
+        models_config: dict[str, Any],
+        message_group: str) -> tuple[Any, str]:
         """Load the requested model, applying a friendly fallback when unavailable."""
         try:
             model = ModelFactory.get_model(requested_model_name, models_config)
@@ -1450,10 +1432,9 @@ class BaseAgent(ABC):
                     f"Model '{requested_model_name}' not found. "
                     f"Available models: {available_str}"
                 ),
-                message_group=message_group,
-            )
+                message_group=message_group)
 
-            fallback_candidates: List[str] = []
+            fallback_candidates: list[str] = []
             global_candidate = get_global_model_name()
             if global_candidate:
                 fallback_candidates.append(global_candidate)
@@ -1469,8 +1450,7 @@ class BaseAgent(ABC):
                     model = ModelFactory.get_model(candidate, models_config)
                     emit_info(
                         f"Using fallback model: {candidate}",
-                        message_group=message_group,
-                    )
+                        message_group=message_group)
                     return model, candidate
                 except ValueError:
                     continue
@@ -1481,17 +1461,15 @@ class BaseAgent(ABC):
             )
             emit_error(
                 friendly_message,
-                message_group=message_group,
-            )
+                message_group=message_group)
             raise ValueError(friendly_message) from exc
 
-    def reload_code_generation_agent(self, message_group: Optional[str] = None):
+    def reload_code_generation_agent(self, message_group: str | None = None):
         """Force-reload the pydantic-ai Agent based on current config and model."""
         from code_puppy.tools import (
             EXTENDED_THINKING_PROMPT_NOTE,
             has_extended_thinking_active,
-            register_tools_for_agent,
-        )
+            register_tools_for_agent)
 
         # Invalidate the project-local rules cache so a fresh read from the
         # current working directory is performed on the next load_puppy_rules()
@@ -1508,8 +1486,7 @@ class BaseAgent(ABC):
         model, resolved_model_name = self._load_model_with_fallback(
             model_name,
             models_config,
-            message_group,
-        )
+            message_group)
 
         instructions = self.get_full_system_prompt()
         puppy_rules = self.load_puppy_rules()
@@ -1541,8 +1518,7 @@ class BaseAgent(ABC):
             retries=3,
             toolsets=mcp_servers,
             history_processors=[self.message_history_accumulator],
-            model_settings=model_settings,
-        )
+            model_settings=model_settings)
 
         agent_tools = self.get_available_tools()
         register_tools_for_agent(p_agent, agent_tools, model_name=resolved_model_name)
@@ -1617,8 +1593,7 @@ class BaseAgent(ABC):
                 retries=3,
                 toolsets=[],  # Don't include MCP servers here
                 history_processors=[self.message_history_accumulator],
-                model_settings=model_settings,
-            )
+                model_settings=model_settings)
 
             # Register regular tools (non-MCP) on the new agent
             agent_tools = self.get_available_tools()
@@ -1631,8 +1606,7 @@ class BaseAgent(ABC):
             dbos_agent = DBOSAgent(
                 agent_without_mcp,
                 name=f"{self.name}-{_reload_count}",
-                event_stream_handler=event_stream_handler,
-            )
+                event_stream_handler=event_stream_handler)
             self.pydantic_agent = dbos_agent
             self._code_generation_agent = dbos_agent
 
@@ -1648,8 +1622,7 @@ class BaseAgent(ABC):
                 retries=3,
                 toolsets=filtered_mcp_servers,
                 history_processors=[self.message_history_accumulator],
-                model_settings=model_settings,
-            )
+                model_settings=model_settings)
             # Register regular tools on the agent
             agent_tools = self.get_available_tools()
             register_tools_for_agent(
@@ -1661,7 +1634,7 @@ class BaseAgent(ABC):
             self._mcp_servers = filtered_mcp_servers
         return self._code_generation_agent
 
-    def _create_agent_with_output_type(self, output_type: Type[Any]) -> PydanticAgent:
+    def _create_agent_with_output_type(self, output_type: type[Any]) -> PydanticAgent:
         """Create a temporary agent configured with a custom output_type.
 
         This is used when structured output is requested via run_with_mcp.
@@ -1678,8 +1651,7 @@ class BaseAgent(ABC):
         from code_puppy.tools import (
             EXTENDED_THINKING_PROMPT_NOTE,
             has_extended_thinking_active,
-            register_tools_for_agent,
-        )
+            register_tools_for_agent)
 
         model_name = self.get_model_name()
         models_config = ModelFactory.load_config()
@@ -1716,8 +1688,7 @@ class BaseAgent(ABC):
                 retries=3,
                 toolsets=[],
                 history_processors=[self.message_history_accumulator],
-                model_settings=model_settings,
-            )
+                model_settings=model_settings)
             agent_tools = self.get_available_tools()
             register_tools_for_agent(
                 temp_agent, agent_tools, model_name=resolved_model_name
@@ -1726,8 +1697,7 @@ class BaseAgent(ABC):
             dbos_agent = DBOSAgent(
                 temp_agent,
                 name=f"{self.name}-structured-{_reload_count}",
-                event_stream_handler=event_stream_handler,
-            )
+                event_stream_handler=event_stream_handler)
             return dbos_agent
         else:
             temp_agent = PydanticAgent(
@@ -1737,8 +1707,7 @@ class BaseAgent(ABC):
                 retries=3,
                 toolsets=mcp_servers,
                 history_processors=[self.message_history_accumulator],
-                model_settings=model_settings,
-            )
+                model_settings=model_settings)
             agent_tools = self.get_available_tools()
             register_tools_for_agent(
                 temp_agent, agent_tools, model_name=resolved_model_name
@@ -1747,7 +1716,7 @@ class BaseAgent(ABC):
 
     # It's okay to decorate it with DBOS.step even if not using DBOS; the decorator is a no-op in that case.
     @DBOS.step()
-    def message_history_accumulator(self, ctx: RunContext, messages: List[Any]):
+    def message_history_accumulator(self, ctx: RunContext, messages: list[Any]):
         _message_history = self.get_message_history()
 
         # Hook: on_message_history_processor_start - dump the message history before processing
@@ -1755,8 +1724,7 @@ class BaseAgent(ABC):
             agent_name=self.name,
             session_id=getattr(self, "session_id", None),
             message_history=list(_message_history),  # Copy to avoid mutation issues
-            incoming_messages=list(messages),
-        )
+            incoming_messages=list(messages))
         # Use Python hashing for dedup in the accumulator.
         # We must stay in the same hash domain as compacted_message_hashes
         # (which are accumulated over turns using Python hash()). Rust
@@ -1801,8 +1769,7 @@ class BaseAgent(ABC):
                         p
                         for p in msg.parts
                         if not (isinstance(p, ThinkingPart) and not p.content)
-                    ],
-                )
+                    ])
                 if not msg.parts:
                     filtered_count += 1
                     continue
@@ -1825,8 +1792,7 @@ class BaseAgent(ABC):
             session_id=getattr(self, "session_id", None),
             message_history=list(final_history),  # Copy to avoid mutation issues
             messages_added=messages_added,
-            messages_filtered=messages_filtered,
-        )
+            messages_filtered=messages_filtered)
 
         return final_history
 
@@ -1834,8 +1800,8 @@ class BaseAgent(ABC):
         self,
         stop_event: threading.Event,
         on_escape: Callable[[], None],
-        on_cancel_agent: Optional[Callable[[], None]] = None,
-    ) -> Optional[threading.Thread]:
+        on_cancel_agent: Callable[[], None] | None = None,
+    ) -> threading.Thread | None:
         """Start a keyboard listener thread for CLI sessions.
 
         Listens for Ctrl+X (shell command cancel) and optionally the configured
@@ -1886,12 +1852,12 @@ class BaseAgent(ABC):
         self,
         stop_event: threading.Event,
         on_escape: Callable[[], None],
-        on_cancel_agent: Optional[Callable[[], None]] = None,
+        on_cancel_agent: Callable[[], None] | None = None,
     ) -> None:
         import msvcrt
 
         # Get the cancel agent char code if we're using keyboard-based cancel
-        cancel_agent_char: Optional[str] = None
+        cancel_agent_char: str | None = None
         if on_cancel_agent is not None and not cancel_agent_uses_signal():
             cancel_agent_char = get_cancel_agent_char_code()
 
@@ -1926,7 +1892,7 @@ class BaseAgent(ABC):
         self,
         stop_event: threading.Event,
         on_escape: Callable[[], None],
-        on_cancel_agent: Optional[Callable[[], None]] = None,
+        on_cancel_agent: Callable[[], None] | None = None,
     ) -> None:
         import select
         import sys
@@ -1934,7 +1900,7 @@ class BaseAgent(ABC):
         import tty
 
         # Get the cancel agent char code if we're using keyboard-based cancel
-        cancel_agent_char: Optional[str] = None
+        cancel_agent_char: str | None = None
         if on_cancel_agent is not None and not cancel_agent_uses_signal():
             cancel_agent_char = get_cancel_agent_char_code()
 
@@ -1981,11 +1947,10 @@ class BaseAgent(ABC):
         self,
         prompt: str,
         *,
-        attachments: Optional[Sequence[BinaryContent]] = None,
-        link_attachments: Optional[Sequence[Union[ImageUrl, DocumentUrl]]] = None,
-        output_type: Optional[Type[Any]] = None,
-        **kwargs,
-    ) -> Any:
+        attachments: Sequence[BinaryContent | None] = None,
+        link_attachments: Sequence[ImageUrl | DocumentUrl | None] = None,
+        output_type: type[Any | None] = None,
+        **kwargs) -> Any:
         """Run the agent with MCP servers, attachments, and full cancellation support.
 
         Args:
@@ -2052,19 +2017,18 @@ class BaseAgent(ABC):
                 model_name=self.get_model_name(),
                 system_prompt=system_prompt,
                 user_prompt=prompt,
-                prepend_system_to_user=True,
-            )
+                prepend_system_to_user=True)
             prompt = prepared.user_prompt
 
         # Build combined prompt payload when attachments are provided.
-        attachment_parts: List[Any] = []
+        attachment_parts: list[Any] = []
         if attachments:
             attachment_parts.extend(list(attachments))
         if link_attachments:
             attachment_parts.extend(list(link_attachments))
 
         if attachment_parts:
-            prompt_payload: Union[str, List[Any]] = []
+            prompt_payload: Union[str, list[Any]] = []
             if prompt:
                 prompt_payload.append(prompt)
             prompt_payload.extend(attachment_parts)
@@ -2081,16 +2045,14 @@ class BaseAgent(ABC):
                 if self.should_attempt_delayed_compaction():
                     emit_info(
                         "🔄 Attempting delayed compaction (tool calls completed)",
-                        message_group="token_context_status",
-                    )
+                        message_group="token_context_status")
                     current_messages = self.get_message_history()
                     compacted_messages, _ = self.compact_messages(current_messages)
                     if compacted_messages != current_messages:
                         self.set_message_history(compacted_messages)
                         emit_info(
                             "✅ Delayed compaction completed successfully",
-                            message_group="token_context_status",
-                        )
+                            message_group="token_context_status")
 
                 usage_limits = UsageLimits(request_limit=get_message_limit())
 
@@ -2112,8 +2074,7 @@ class BaseAgent(ABC):
                                 message_history=self.get_message_history(),
                                 usage_limits=usage_limits,
                                 event_stream_handler=event_stream_handler,
-                                **kwargs,
-                            )
+                                **kwargs)
                             return result_
                     finally:
                         # Always restore original toolsets
@@ -2125,8 +2086,7 @@ class BaseAgent(ABC):
                             message_history=self.get_message_history(),
                             usage_limits=usage_limits,
                             event_stream_handler=event_stream_handler,
-                            **kwargs,
-                        )
+                            **kwargs)
                         return result_
                 else:
                     # Non-DBOS path (MCP servers are already included)
@@ -2135,15 +2095,13 @@ class BaseAgent(ABC):
                         message_history=self.get_message_history(),
                         usage_limits=usage_limits,
                         event_stream_handler=event_stream_handler,
-                        **kwargs,
-                    )
+                        **kwargs)
                     return result_
             except* UsageLimitExceeded as ule:
                 emit_info(f"Usage limit exceeded: {str(ule)}", group_id=group_id)
                 emit_info(
                     "The agent has reached its usage limit. You can ask it to continue by saying 'please continue' or similar.",
-                    group_id=group_id,
-                )
+                    group_id=group_id)
             except* mcp.shared.exceptions.McpError as mcp_error:
                 emit_info(f"MCP server error: {str(mcp_error)}", group_id=group_id)
                 emit_info(f"{str(mcp_error)}", group_id=group_id)
@@ -2176,8 +2134,7 @@ class BaseAgent(ABC):
                         log_error(
                             exc,
                             context=f"Agent run (group_id={group_id})",
-                            include_traceback=True,
-                        )
+                            include_traceback=True)
 
                 collect_non_cancelled_exceptions(other_error)
 
@@ -2215,8 +2172,7 @@ class BaseAgent(ABC):
             await on_agent_run_start(
                 agent_name=self.name,
                 model_name=self.get_model_name(),
-                session_id=group_id,
-            )
+                session_id=group_id)
         except Exception:
             pass  # Don't fail agent run if hook fails
 
@@ -2286,8 +2242,7 @@ class BaseAgent(ABC):
                 _key_listener_thread = self._spawn_ctrl_x_key_listener(
                     key_listener_stop_event,
                     on_escape=lambda: None,  # Ctrl+X handled by command_runner
-                    on_cancel_agent=schedule_agent_cancel,
-                )
+                    on_cancel_agent=schedule_agent_cancel)
 
             # Wait for the task to complete or be cancelled
             result = await agent_task
@@ -2346,8 +2301,7 @@ class BaseAgent(ABC):
                     success=_run_success,
                     error=_run_error,
                     response_text=_run_response_text,
-                    metadata={"model": self.get_model_name()},
-                )
+                    metadata={"model": self.get_model_name()})
             except Exception:
                 pass  # Don't fail cleanup if hook fails
 

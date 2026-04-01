@@ -1,6 +1,6 @@
 """Configuration management API endpoints."""
 
-from typing import Any, Dict, List
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -18,7 +18,7 @@ class ConfigUpdate(BaseModel):
 
 
 @router.get("/")
-async def list_config() -> Dict[str, Any]:
+async def list_config() -> dict[str, Any]:
     """List all configuration keys and their current values."""
     from code_puppy.config import get_config_keys, get_value
 
@@ -29,7 +29,7 @@ async def list_config() -> Dict[str, Any]:
 
 
 @router.get("/keys")
-async def get_config_keys_list() -> List[str]:
+async def get_config_keys_list() -> list[str]:
     """Get list of all valid configuration keys."""
     from code_puppy.config import get_config_keys
 
@@ -67,7 +67,7 @@ async def set_config_value(key: str, update: ConfigUpdate) -> ConfigValue:
 
 
 @router.delete("/{key}")
-async def reset_config_value(key: str) -> Dict[str, str]:
+async def reset_config_value(key: str) -> dict[str, str]:
     """Reset a configuration value to default (remove from config file)."""
     from code_puppy.config import reset_value
 

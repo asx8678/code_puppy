@@ -4,7 +4,6 @@ MCP Stop All Command - Stops all running MCP servers.
 
 import logging
 import time
-from typing import List, Optional
 
 from rich.text import Text
 
@@ -25,7 +24,7 @@ class StopAllCommand(MCPCommandBase):
     Stops all running MCP servers and provides a summary of results.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Stop all running MCP servers.
 
@@ -55,8 +54,7 @@ class StopAllCommand(MCPCommandBase):
 
             emit_info(
                 f"Stopping {len(running_servers)} running server(s)...",
-                message_group=group_id,
-            )
+                message_group=group_id)
 
             for server_info in running_servers:
                 server_id = server_info.id
@@ -102,8 +100,7 @@ class StopAllCommand(MCPCommandBase):
                         Text.from_markup(
                             "[dim]Agent reloaded with updated servers[/dim]"
                         ),
-                        message_group=group_id,
-                    )
+                        message_group=group_id)
                 except Exception as e:
                     logger.warning(f"Could not reload agent: {e}")
 

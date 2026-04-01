@@ -5,7 +5,6 @@ Provides visual status dashboard for MCP servers using Rich tables.
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional
 
 from rich import box
 from rich.console import Console
@@ -40,8 +39,7 @@ class MCPDashboard:
             box=box.ROUNDED,
             show_header=True,
             header_style="bold blue",
-            title_style="bold cyan",
-        )
+            title_style="bold cyan")
 
         # Define columns
         table.add_column("Name", style="white", no_wrap=True, min_width=10)
@@ -75,12 +73,11 @@ class MCPDashboard:
                 "-",
                 "-",
                 "-",
-                f"[red]{str(e)}[/red]",
-            )
+                f"[red]{str(e)}[/red]")
 
         return table
 
-    def render_server_row(self, server) -> List[str]:
+    def render_server_row(self, server) -> list[str]:
         """
         Render a single server row for the dashboard
 
@@ -88,7 +85,7 @@ class MCPDashboard:
             server: ServerInfo object with server details
 
         Returns:
-            List[str]: Formatted row data for the table
+            list[str]: Formatted row data for the table
         """
         # Server name
         name = server.name or server.id[:8]
@@ -121,7 +118,7 @@ class MCPDashboard:
             latency_str,
         ]
 
-    def render_health_indicator(self, health: Optional[Dict]) -> str:
+    def render_health_indicator(self, health: Dict | None) -> str:
         """
         Render health status indicator
 

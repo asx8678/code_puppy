@@ -42,8 +42,7 @@ CI_ENV_VARS: Final[tuple[str, ...]] = (
     "CIRCLECI",
     "BUILDKITE",
     "AZURE_PIPELINES",
-    "TEAMCITY_VERSION",
-)
+    "TEAMCITY_VERSION")
 
 # Terminal escape sequences for alternate screen buffer
 ENTER_ALT_SCREEN: Final[str] = "\033[?1049h"

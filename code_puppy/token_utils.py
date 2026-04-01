@@ -3,7 +3,6 @@
 Centralizes the token count heuristic so all parts of the codebase
 use the same formula: 1 token per 2.5 characters (rounded down).
 """
-from __future__ import annotations
 
 import math
 

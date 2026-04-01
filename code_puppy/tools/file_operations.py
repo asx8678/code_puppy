@@ -4,7 +4,6 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import List
 
 from pydantic import BaseModel, conint
 from pydantic_ai import RunContext
@@ -18,8 +17,7 @@ from code_puppy.messaging import (  # New structured messaging types
     FileListingMessage,
     GrepMatch,
     GrepResultMessage,
-    get_message_bus,
-)
+    get_message_bus)
 
 
 # Pydantic models for tool return types
@@ -49,7 +47,7 @@ class MatchInfo(BaseModel):
 
 
 class GrepOutput(BaseModel):
-    matches: List[MatchInfo]
+    matches: list[MatchInfo]
     error: str | None = None
 
 
@@ -204,8 +202,7 @@ def _list_files(
 
             # Add ignore patterns to the command via a temporary file
             from code_puppy.tools.common import (
-                DIR_IGNORE_PATTERNS,
-            )
+                DIR_IGNORE_PATTERNS)
 
             f = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".ignore")
             ignore_file = f.name
@@ -287,8 +284,7 @@ def _list_files(
                                             full_path=os.path.join(
                                                 directory, partial_path
                                             ),
-                                            depth=partial_path.count(os.sep),
-                                        )
+                                            depth=partial_path.count(os.sep))
                                     )
 
                     # Add the entry (file or directory)
@@ -298,8 +294,7 @@ def _list_files(
                             type=entry_type,
                             size=size,
                             full_path=full_path,
-                            depth=depth,
-                        )
+                            depth=depth)
                     )
                 except (FileNotFoundError, PermissionError, OSError):
                     # Skip files we can't access
@@ -326,8 +321,7 @@ def _list_files(
                                 type="directory",
                                 size=0,
                                 full_path=full_entry_path,
-                                depth=0,
-                            )
+                                depth=0)
                         )
                     elif os.path.isfile(full_entry_path):
                         # Include top-level files (including binaries)
@@ -341,8 +335,7 @@ def _list_files(
                                 type="file",
                                 size=size,
                                 full_path=full_entry_path,
-                                depth=0,
-                            )
+                                depth=0)
                         )
             except (FileNotFoundError, PermissionError, OSError):
                 # Skip entries we can't access
@@ -423,8 +416,7 @@ def _list_files(
                 path=item.path,
                 type="dir" if item.type == "directory" else "file",
                 size=item.size,
-                depth=item.depth or 0,
-            )
+                depth=item.depth or 0)
         )
 
     # Emit structured message for the UI
@@ -434,8 +426,7 @@ def _list_files(
         recursive=recursive,
         total_size=total_size,
         dir_count=dir_count,
-        file_count=file_count,
-    )
+        file_count=file_count)
     get_message_bus().emit(file_listing_msg)
 
     # Build plain text output for LLM consumption
@@ -462,8 +453,7 @@ def _read_file(
     context: RunContext,
     file_path: str,
     start_line: int | None = None,
-    num_lines: int | None = None,
-) -> ReadFileOutput:
+    num_lines: int | None = None) -> ReadFileOutput:
     file_path = os.path.abspath(os.path.expanduser(file_path))
 
     if not os.path.exists(file_path):
@@ -518,8 +508,7 @@ def _read_file(
                 return ReadFileOutput(
                     content=None,
                     error="The file is massive, greater than 10,000 tokens which is dangerous to read entirely. Please read this file in chunks.",
-                    num_tokens=0,
-                )
+                    num_tokens=0)
 
             # Count total lines for the message
             total_lines = content.count("\n") + (
@@ -540,8 +529,7 @@ def _read_file(
                 start_line=emit_start_line,
                 num_lines=emit_num_lines,
                 total_lines=total_lines,
-                num_tokens=num_tokens,
-            )
+                num_tokens=num_tokens)
             get_message_bus().emit(file_content_msg)
 
         return ReadFileOutput(content=content, num_tokens=num_tokens)
@@ -595,7 +583,7 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
     search_string = _sanitize_string(search_string)
 
     directory = os.path.abspath(os.path.expanduser(directory))
-    matches: List[MatchInfo] = []
+    matches: list[MatchInfo] = []
     error_message: str | None = None
 
     # Create a temporary ignore file with our ignore patterns
@@ -694,8 +682,7 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
                         match_info = MatchInfo(
                             file_path=_sanitize_string(file_path),
                             line_number=line_number,
-                            line_content=_sanitize_string(line_content.strip()),
-                        )
+                            line_content=_sanitize_string(line_content.strip()))
                         matches.append(match_info)
                         # Limit to 50 matches total, same as original implementation
                         if len(matches) >= 50:
@@ -722,8 +709,7 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
         GrepMatch(
             file_path=m.file_path or "",
             line_number=m.line_number or 1,
-            line_content=m.line_content or "",
-        )
+            line_content=m.line_content or "")
         for m in matches
     ]
 
@@ -736,8 +722,7 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
         directory=directory,
         matches=grep_matches,
         total_matches=len(matches),
-        files_searched=unique_files,
-    )
+        files_searched=unique_files)
     get_message_bus().emit(grep_result_msg)
 
     return GrepOutput(matches=matches, error=error_message)
@@ -779,8 +764,7 @@ def register_read_file(agent):
         context: RunContext,
         file_path: str = "",
         start_line: int | None = None,
-        num_lines: int | None = None,
-    ) -> ReadFileOutput:
+        num_lines: int | None = None) -> ReadFileOutput:
         """Read file contents with optional line-range selection and token safety.
 
         Use start_line/num_lines for large files to avoid overwhelming context.

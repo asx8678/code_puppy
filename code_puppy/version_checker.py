@@ -69,8 +69,7 @@ def default_version_mismatch_behavior(current_version):
     version_msg = VersionCheckMessage(
         current_version=current_version,
         latest_version=latest_version or current_version,
-        update_available=update_available,
-    )
+        update_available=update_available)
     get_message_bus().emit(version_msg)
 
     # Also emit plain text for legacy renderer

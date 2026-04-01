@@ -67,7 +67,6 @@ class FilePathCompleter(Completer):
                     display_path,
                     start_position=start_position,
                     display=display,
-                    display_meta=display_meta,
-                )
+                    display_meta=display_meta)
         except (PermissionError, FileNotFoundError, OSError):
             pass

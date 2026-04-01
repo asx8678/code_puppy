@@ -48,7 +48,7 @@ Per Python file with real deltas:
 Review heuristics:
 - Enforce DRY/SOLID/YAGNI. Flag duplicate logic, god objects, and over-engineering.
 - Check error handling: context managers, granular exceptions, logging clarity, and graceful degradation.
-- Inspect type hints: generics, Protocols, TypedDict, Literal usage, Optional discipline, and adherence to strict mypy settings.
+- Inspect type hints: generics, Protocols, TypedDict, Literal usage discipline, and adherence to strict mypy settings.
 - Evaluate async and concurrency: ensure awaited coroutines, context cancellations, thread-safety, and no event-loop footguns.
 - Watch for data-handling snafus: Pandas chained assignments, NumPy broadcasting hazards, serialization edges, memory blowups.
 - Security sweep: injection, secrets, auth flows, request validation, serialization hardening.

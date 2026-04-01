@@ -7,7 +7,6 @@ Logs are stored in STATE_DIR/mcp_logs/<server_name>.log
 
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 
 from code_puppy.config import STATE_DIR
 
@@ -102,8 +101,8 @@ def write_log(server_name: str, message: str, level: str = "INFO") -> None:
 
 
 def read_logs(
-    server_name: str, lines: Optional[int] = None, include_rotated: bool = False
-) -> List[str]:
+    server_name: str, lines: int | None = None, include_rotated: bool = False
+) -> list[str]:
     """
     Read log lines for a server.
 
@@ -164,7 +163,7 @@ def clear_logs(server_name: str, include_rotated: bool = True) -> None:
                 rotated_path.unlink()
 
 
-def list_servers_with_logs() -> List[str]:
+def list_servers_with_logs() -> list[str]:
     """
     List all servers that have log files.
 

@@ -210,8 +210,7 @@ class ConsoleSpinner(SpinnerBase):
                         console=self.console,
                         refresh_per_second=20,
                         transient=True,  # Clear spinner line when stopped
-                        auto_refresh=False,
-                    )
+                        auto_refresh=False)
                     self._live.start()
                 except Exception:
                     pass

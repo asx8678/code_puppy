@@ -10,7 +10,6 @@ Usage:
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -18,7 +17,7 @@ class WiggumState:
     """State container for wiggum loop mode."""
 
     active: bool = False
-    prompt: Optional[str] = None
+    prompt: str | None = None
     loop_count: int = 0
 
     def start(self, prompt: str) -> None:
@@ -53,7 +52,7 @@ def is_wiggum_active() -> bool:
     return _wiggum_state.active
 
 
-def get_wiggum_prompt() -> Optional[str]:
+def get_wiggum_prompt() -> str | None:
     """Get the current wiggum prompt, if active."""
     return _wiggum_state.prompt if _wiggum_state.active else None
 

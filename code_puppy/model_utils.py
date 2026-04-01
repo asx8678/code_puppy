@@ -10,7 +10,6 @@ callback to extend support for additional model types.
 import pathlib
 import threading
 from dataclasses import dataclass
-from typing import Optional
 
 # The instruction override used for claude-code models
 CLAUDE_CODE_INSTRUCTIONS = "You are Claude Code, Anthropic's official CLI for Claude."
@@ -21,7 +20,7 @@ _ANTIGRAVITY_PROMPT_PATH = (
 )
 
 # Cache for the loaded Antigravity prompt
-_antigravity_prompt_cache: Optional[str] = None
+_antigravity_prompt_cache: str | None = None
 _antigravity_prompt_lock = threading.Lock()
 
 
@@ -71,8 +70,7 @@ def prepare_prompt_for_model(
     model_name: str,
     system_prompt: str,
     user_prompt: str,
-    prepend_system_to_user: bool = True,
-) -> PreparedPrompt:
+    prepend_system_to_user: bool = True) -> PreparedPrompt:
     """Prepare instructions and prompt for a specific model.
 
     This function handles model-specific system prompt requirements. Plugins can
@@ -100,8 +98,7 @@ def prepare_prompt_for_model(
             return PreparedPrompt(
                 instructions=result.get("instructions", system_prompt),
                 user_prompt=result.get("user_prompt", user_prompt),
-                is_claude_code=result.get("is_claude_code", False),
-            )
+                is_claude_code=result.get("is_claude_code", False))
 
     # Handle Claude Code models
     if is_claude_code_model(model_name):
@@ -111,8 +108,7 @@ def prepare_prompt_for_model(
         return PreparedPrompt(
             instructions=CLAUDE_CODE_INSTRUCTIONS,
             user_prompt=modified_prompt,
-            is_claude_code=True,
-        )
+            is_claude_code=True)
 
     # Handle Antigravity models
     if is_antigravity_model(model_name):
@@ -130,14 +126,12 @@ def prepare_prompt_for_model(
         return PreparedPrompt(
             instructions=_load_antigravity_prompt(),
             user_prompt=modified_prompt,
-            is_claude_code=False,
-        )
+            is_claude_code=False)
 
     return PreparedPrompt(
         instructions=system_prompt,
         user_prompt=user_prompt,
-        is_claude_code=False,
-    )
+        is_claude_code=False)
 
 
 def get_claude_code_instructions() -> str:
