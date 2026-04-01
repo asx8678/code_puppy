@@ -2,7 +2,17 @@
 
 from unittest.mock import patch
 
-from code_puppy.command_line.command_handler import handle_command
+import pytest
+
+# The command_handler import chain pulls in pydantic_ai → mcp, which may not
+# be installed in all environments.  Skip the entire module if it can't import.
+try:
+    from code_puppy.command_line.command_handler import handle_command
+except ImportError as _imp_err:
+    pytest.skip(
+        f"Cannot import command_handler (missing dependency: {_imp_err})",
+        allow_module_level=True,
+    )
 
 
 def _run_unknown_command(cmd: str) -> list[str]:

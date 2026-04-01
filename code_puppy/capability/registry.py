@@ -21,7 +21,6 @@ non-async ``load_capability_sync`` helper), a new event-loop run is
 used to drive the coroutine.
 """
 
-from __future__ import annotations
 
 import asyncio
 import inspect

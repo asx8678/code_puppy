@@ -45,7 +45,7 @@ class ModelAvailabilityService:
         """Mark model as terminally unavailable (quota/capacity exhausted)."""
         with self._lock:
             self._health[model_id] = ("terminal", reason, False)
-            logger.info(f"Model '{model_id}' marked terminal: {reason}")
+            logger.info("Model '%s' marked terminal: %s", model_id, reason)
 
     def mark_healthy(self, model_id: str) -> None:
         """Mark model as healthy, clearing any failure state."""

@@ -5,6 +5,7 @@ Per XDG spec, logs are "state data" (actions history), not configuration.
 Because even good puppies make mistakes sometimes! 🐶
 """
 
+import sys
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -78,10 +79,14 @@ def log_error(
         with open(ERROR_LOG_FILE, "a", encoding="utf-8") as f:
             f.write(log_entry)
 
-    except Exception:
-        # If we can't log, we silently fail - don't want logging errors
-        # to cause more problems than they solve!
-        pass
+    except Exception as _log_exc:
+        # Last-resort: write to stderr so the failure isn't invisible.
+        try:
+            sys.stderr.write(
+                f"[code_puppy] error_logging.log_error() failed: {_log_exc}\n"
+            )
+        except Exception:
+            pass  # truly nothing we can do
 
 
 def log_error_message(
@@ -115,9 +120,14 @@ def log_error_message(
         with open(ERROR_LOG_FILE, "a", encoding="utf-8") as f:
             f.write(log_entry)
 
-    except Exception:
-        # Silent fail - same reasoning as above
-        pass
+    except Exception as _log_exc:
+        # Last-resort: write to stderr so the failure isn't invisible.
+        try:
+            sys.stderr.write(
+                f"[code_puppy] error_logging.log_error_message() failed: {_log_exc}\n"
+            )
+        except Exception:
+            pass  # truly nothing we can do
 
 
 def get_log_file_path() -> Path:

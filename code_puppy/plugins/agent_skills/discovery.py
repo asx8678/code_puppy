@@ -120,9 +120,9 @@ def discover_skills(directories: list[Path] | None = None) -> list[SkillInfo]:
             existing = skill_map.get(skill.name)
             if existing and existing.path.resolve() != skill.path.resolve():
                 logger.warning(
-                    f'Skill "{skill.name}" from {skill.path} '
-                    f'overrides {existing.path} '
-                    f'({existing.source_level} -> {source_level})'
+                    'Skill "%s" from %s overrides %s (%s -> %s)',
+                    skill.name, skill.path, existing.path,
+                    existing.source_level, source_level,
                 )
             skill_map[skill.name] = skill
 
@@ -130,8 +130,8 @@ def discover_skills(directories: list[Path] | None = None) -> list[SkillInfo]:
     _skill_cache = discovered_skills
 
     logger.info(
-        f"Discovered {len(discovered_skills)} skills "
-        f"(deduplicated by name) from {len(ordered_sources)} sources"
+        "Discovered %d skills (deduplicated by name) from %d sources",
+        len(discovered_skills), len(ordered_sources),
     )
     return discovered_skills
 

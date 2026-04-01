@@ -50,6 +50,7 @@ class TUIMessageBridge:
         self.app = app
         self._running = False
         self._task: asyncio.Task | None = None
+        self._stop_event: asyncio.Event | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -60,6 +61,7 @@ class TUIMessageBridge:
         if self._running:
             return
         self._running = True
+        self._stop_event = asyncio.Event()
         self._task = asyncio.create_task(self._run())
 
         # Subscribe to the structured MessageBus as well
@@ -73,6 +75,8 @@ class TUIMessageBridge:
     def stop(self) -> None:
         """Stop the bridge and clean up."""
         self._running = False
+        if self._stop_event:
+            self._stop_event.set()
         if self._task:
             self._task.cancel()
             self._task = None
@@ -107,8 +111,9 @@ class TUIMessageBridge:
             self._render_queue_message(msg)
 
         try:
-            while self._running:
-                await asyncio.sleep(0.1)
+            # Wait for the stop signal instead of polling.
+            if self._stop_event:
+                await self._stop_event.wait()
         except asyncio.CancelledError:
             pass
         finally:

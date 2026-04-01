@@ -142,13 +142,8 @@ class PolicyEngine:
         and returns the most restrictive explicit decision across sub-commands.
         Returns ``None`` if no explicit rule matched any sub-command.
         """
-        try:
-            from code_puppy.plugins.shell_safety.register_callbacks import (
-                split_compound_command,
-            )
-            sub_commands = split_compound_command(command)
-        except ImportError:
-            sub_commands = [command]
+        from code_puppy.utils.shell_split import split_compound_command
+        sub_commands = split_compound_command(command)
 
         most_restrictive: PermissionDecision | None = None
         for sub_cmd in sub_commands:
@@ -170,13 +165,8 @@ class PolicyEngine:
         For compound commands (&&, ||, ;), each sub-command is checked
         independently. The most restrictive decision wins (Deny > AskUser > Allow).
         """
-        try:
-            from code_puppy.plugins.shell_safety.register_callbacks import (
-                split_compound_command,
-            )
-            sub_commands = split_compound_command(command)
-        except ImportError:
-            sub_commands = [command]
+        from code_puppy.utils.shell_split import split_compound_command
+        sub_commands = split_compound_command(command)
 
         if len(sub_commands) <= 1:
             return self.check(

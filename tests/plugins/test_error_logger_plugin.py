@@ -14,9 +14,11 @@ import pytest
 @pytest.fixture
 def log_file(tmp_path):
     """Provide a temporary error log file path and patch error_logging to use it."""
-    log_path = str(tmp_path / "errors.log")
+    from pathlib import Path
+
+    log_path = Path(tmp_path / "errors.log")
     with (
-        patch("code_puppy.error_logging.LOGS_DIR", str(tmp_path)),
+        patch("code_puppy.error_logging.LOGS_DIR", Path(tmp_path)),
         patch("code_puppy.error_logging.ERROR_LOG_FILE", log_path),
     ):
         yield log_path

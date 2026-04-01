@@ -8,7 +8,6 @@ When the buffer is full, push() evicts the oldest item (head) and
 unshift() evicts the newest item (tail).
 """
 
-from __future__ import annotations
 
 from typing import Generic, Iterator, TypeVar, overload
 
