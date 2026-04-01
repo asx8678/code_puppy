@@ -129,6 +129,8 @@ class BaseAgent(ABC):
         self._delayed_compaction_requested: bool = False
         # Per-invocation cache for _collect_tool_call_ids (see method)
         self._tool_ids_cache = None
+        # Cached context overhead tokens (invalidated by reload_code_generation_agent)
+        self._cached_context_overhead: int | None = None
 
     def get_identity(self) -> str:
         """Get a unique identity for this agent instance.
@@ -468,7 +470,13 @@ class BaseAgent(ABC):
         Note: For Claude Code models, the system prompt is prepended to the first
         user message, so it's already counted in the message history tokens.
         We only count the short fixed instructions for Claude Code models.
+
+        Results are cached per-instance and invalidated when the agent is reloaded
+        (tool set and prompt change only on reload).
         """
+        if self._cached_context_overhead is not None:
+            return self._cached_context_overhead
+
         total_tokens = 0
 
         # 1. Estimate tokens for system prompt / instructions
@@ -560,6 +568,7 @@ class BaseAgent(ABC):
                 except Exception:
                     continue  # Skip tools we can't process
 
+        self._cached_context_overhead = total_tokens
         return total_tokens
 
     async def _update_mcp_tool_cache(self) -> None:
@@ -1458,6 +1467,8 @@ class BaseAgent(ABC):
         # call.  This is critical for /cd: the user may have switched to a
         # different project that has its own AGENT.md (or none at all).
         self._puppy_rules = None
+        # Invalidate context overhead cache since tools/prompt may change
+        self._cached_context_overhead = None
 
         if message_group is None:
             message_group = str(uuid.uuid4())
