@@ -13,6 +13,7 @@ from pydantic_ai import RunContext
 # ---------------------------------------------------------------------------
 import asyncio
 
+from code_puppy.concurrency_limits import FileOpsLimiter
 from code_puppy.messaging import (  # New structured messaging types
     FileContentMessage,
     FileEntry,
@@ -468,7 +469,7 @@ async def _read_file(
 def _read_file_sync(
     file_path: str,
     start_line: int | None = None,
-    num_lines: int | None = None) -> tuple[str, int, str | None]:
+    num_lines: int | None = None) -> tuple[str | None, int, str | None]:
     """Synchronous file reading - runs in thread pool."""
     file_path = os.path.abspath(os.path.expanduser(file_path))
 
@@ -522,10 +523,7 @@ def _read_file_sync(
             from code_puppy.token_utils import estimate_token_count as _etc
             num_tokens = _etc(content)
             if num_tokens > 10000:
-                return ReadFileOutput(
-                    content=None,
-                    error="The file is massive, greater than 10,000 tokens which is dangerous to read entirely. Please read this file in chunks.",
-                    num_tokens=0)
+                return None, 0, "The file is massive, greater than 10,000 tokens which is dangerous to read entirely. Please read this file in chunks."
 
             # Count total lines for the message
             total_lines = content.count("\n") + (
@@ -549,7 +547,7 @@ def _read_file_sync(
                 num_tokens=num_tokens)
             get_message_bus().emit(file_content_msg)
 
-        return ReadFileOutput(content=content, num_tokens=num_tokens)
+        return content, num_tokens, None
     except FileNotFoundError:
         error_msg = "FILE NOT FOUND"
         return "", 0, error_msg
@@ -558,7 +556,7 @@ def _read_file_sync(
         return "", 0, error_msg
     except Exception as e:
         message = f"An error occurred trying to read the file: {e}"
-        return ReadFileOutput(content=message, num_tokens=0, error=message)
+        return message, 0, message
 
 
 def _sanitize_string(text: str) -> str:
