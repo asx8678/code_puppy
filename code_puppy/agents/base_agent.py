@@ -110,7 +110,7 @@ class BaseAgent(ABC):
     def __init__(self):
         self.id = str(uuid.uuid7())  # time-sortable for chronological ordering
         self._message_history: list[Any] = []
-        self._compacted_message_hashes: set[str] = set()
+        self._compacted_message_hashes: set[str] = set()  # SHA-256 hex digests
         # Incremental hash set maintained alongside _message_history to avoid
         # O(n*p) rehashing in message_history_accumulator on every agent turn.
         self._message_history_hashes: set[int] = set()
@@ -382,8 +382,16 @@ class BaseAgent(ABC):
         result = "|".join(attributes)
         return result
 
-    def hash_message(self, message: Any) -> int:
-        """Create a stable hash for a model message that ignores timestamps."""
+    def hash_message(self, message: Any) -> str:
+        """Create a stable hash for a model message that ignores timestamps.
+
+        Uses SHA-256 (truncated to 16 hex chars) instead of Python's built-in
+        hash() which randomizes per-process via PYTHONHASHSEED. This ensures
+        hashes are stable across process restarts, which matters because
+        _compacted_message_hashes is persisted to disk.
+        """
+        import hashlib
+
         role = getattr(message, "role", None)
         instructions = getattr(message, "instructions", None)
         header_bits: list[str] = []
@@ -396,7 +404,7 @@ class BaseAgent(ABC):
             self._stringify_part(part) for part in getattr(message, "parts", [])
         ]
         canonical = "||".join(header_bits + part_strings)
-        return hash(canonical)
+        return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
     def stringify_message_part(self, part) -> str:
         """
