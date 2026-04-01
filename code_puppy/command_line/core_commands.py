@@ -5,6 +5,7 @@ discovered by the command registry system.
 """
 
 import os
+from pathlib import Path
 
 from code_puppy.command_line.agent_menu import interactive_agent_picker
 from code_puppy.command_line.command_registry import register_command
@@ -69,10 +70,10 @@ def handle_cd_command(command: str) -> bool:
         return True
     elif len(tokens) == 2:
         dirname = tokens[1]
-        target = os.path.expanduser(dirname)
-        if not os.path.isabs(target):
-            target = os.path.join(os.getcwd(), target)
-        if os.path.isdir(target):
+        target = Path(dirname).expanduser()
+        if not target.is_absolute():
+            target = Path.cwd() / target
+        if target.is_dir():
             os.chdir(target)
             emit_success(f"Changed directory to: {target}")
             # Reload the agent so the system prompt and project-local
