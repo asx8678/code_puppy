@@ -6,7 +6,7 @@ the global configuration.
 """
 
 
-from typing import TYPE_CHECKING, Mapping, NamedTuple, TypeVar
+from typing import TYPE_CHECKING, Mapping, NamedTuple
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -30,10 +30,7 @@ def _get_config_value(key: str) -> str | None:
     return _config_getter(key)
 
 
-_T = TypeVar("_T", bound=NamedTuple)
-
-
-def _apply_config_overrides(default: _T, config_map: Mapping[str, str]) -> _T:
+def _apply_config_overrides[T: NamedTuple](default: T, config_map: Mapping[str, str]) -> T:
     """Apply config overrides to a color scheme.
 
     Args:
