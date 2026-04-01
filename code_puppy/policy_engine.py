@@ -97,6 +97,71 @@ class PolicyEngine:
 
         return self._to_decision(self._default_decision)
 
+    def check_explicit(
+        self,
+        tool_name: str,
+        args: dict | None = None,
+    ) -> "PermissionDecision | None":
+        """Check only explicit rules; return None if no rule matched.
+
+        Unlike ``check()``, this method does **not** fall back to the
+        configured default decision.  It returns ``None`` when no rule
+        matches, signalling "I have no opinion" to the caller.
+
+        Use this in callbacks that have their own fallback logic (e.g.
+        the shell-safety LLM risk assessor) and only want to short-circuit
+        on an explicit allow/deny policy rule.
+        """
+        stringified = json.dumps(args, sort_keys=True) if args else None
+        command = (args or {}).get("command", "")
+
+        for rule in self._rules:
+            if not self._matches_tool(rule, tool_name):
+                continue
+            if rule._compiled_command and not rule._compiled_command.search(
+                str(command)
+            ):
+                continue
+            if (
+                rule._compiled_args
+                and stringified
+                and not rule._compiled_args.search(stringified)
+            ):
+                continue
+            return self._to_decision(rule.decision, rule)
+
+        return None  # no explicit rule matched
+
+    def check_shell_command_explicit(
+        self, command: str, cwd: str | None = None
+    ) -> "PermissionDecision | None":
+        """Check a shell command against explicit rules only; return None if no rule matched.
+
+        Like ``check_explicit()`` but handles compound commands the same way
+        ``check_shell_command()`` does: splits on ``&&``, ``||``, and ``;``
+        and returns the most restrictive explicit decision across sub-commands.
+        Returns ``None`` if no explicit rule matched any sub-command.
+        """
+        try:
+            from code_puppy.plugins.shell_safety.register_callbacks import (
+                split_compound_command,
+            )
+            sub_commands = split_compound_command(command)
+        except ImportError:
+            sub_commands = [command]
+
+        most_restrictive: PermissionDecision | None = None
+        for sub_cmd in sub_commands:
+            result = self.check_explicit(
+                "run_shell_command", {"command": sub_cmd.strip(), "cwd": cwd}
+            )
+            if isinstance(result, Deny):
+                return result
+            if isinstance(result, Allow) and not isinstance(most_restrictive, Deny):
+                most_restrictive = result
+
+        return most_restrictive  # None or Allow
+
     def check_shell_command(
         self, command: str, cwd: str | None = None
     ) -> PermissionDecision:
@@ -195,10 +260,11 @@ def get_policy_engine() -> PolicyEngine:
     global _engine
     if _engine is None:
         from code_puppy.config import get_yolo_mode
+        from code_puppy.policy_config import load_policy_rules
 
         default: Decision = "allow" if get_yolo_mode() else "ask_user"
         _engine = PolicyEngine(default_decision=default)
-        _engine.load_default_rules()
+        load_policy_rules(_engine)
     return _engine
 
 

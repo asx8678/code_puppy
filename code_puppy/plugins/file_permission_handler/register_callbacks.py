@@ -227,6 +227,8 @@ def prompt_for_file_permission(
     """Prompt the user for permission to perform a file operation.
 
     This function provides a unified permission prompt system for all file operations.
+    It first consults the PolicyEngine for an explicit allow/deny/ask_user decision,
+    then falls back to an interactive prompt when no explicit rule matches.
 
     Args:
         file_path: Path to the file being modified.
@@ -244,6 +246,25 @@ def prompt_for_file_permission(
     # Skip confirmation only if in yolo mode (removed TTY check for better compatibility)
     if yolo_mode:
         return True, None
+
+    # --- PolicyEngine decision -------------------------------------------
+    # Check explicit rules before showing an interactive prompt.
+    from code_puppy.permission_decision import Allow, Deny
+    from code_puppy.policy_engine import get_policy_engine
+
+    engine = get_policy_engine()
+    policy_result = engine.check_explicit(
+        "file_permission",
+        {"file_path": file_path, "operation": operation},
+    )
+
+    if isinstance(policy_result, Allow):
+        return True, None
+
+    if isinstance(policy_result, Deny):
+        return False, None
+
+    # None or AskUser (no explicit rule) — fall through to interactive prompt.
 
     # Try to acquire the lock to prevent multiple simultaneous prompts
     confirmation_lock_acquired = _FILE_CONFIRMATION_LOCK.acquire(blocking=False)

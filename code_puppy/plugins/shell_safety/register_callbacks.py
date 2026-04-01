@@ -276,7 +276,34 @@ async def shell_safety_callback(
     if is_oauth_model(current_model):
         return None
 
-    # Only check safety in yolo_mode - otherwise user is reviewing manually
+    # --- PolicyEngine fast-path ------------------------------------------
+    # Consult explicit policy rules before touching the LLM agent.
+    from code_puppy.permission_decision import Allow, Deny
+    from code_puppy.policy_engine import get_policy_engine
+
+    engine = get_policy_engine()
+    policy_result = engine.check_shell_command_explicit(command, cwd)
+
+    if isinstance(policy_result, Allow):
+        # Explicit allow rule — skip LLM assessment entirely.
+        return None
+
+    if isinstance(policy_result, Deny):
+        deny_msg = (
+            "\U0001f6d1 Command blocked by policy rule.\n"
+            f"Reason: {policy_result.reason}\n"
+            "Override: add an 'allow' rule to ~/.code_puppy/policy.json"
+        )
+        emit_info(deny_msg)
+        return {
+            "blocked": True,
+            "risk": "denied_by_policy",
+            "reasoning": policy_result.reason,
+            "error_message": deny_msg,
+        }
+
+    # AskUser (no explicit rule) — fall through to existing LLM assessment.
+    # Only run the LLM in yolo_mode; otherwise the user reviews manually.
     yolo_mode = get_yolo_mode()
     if not yolo_mode:
         return None

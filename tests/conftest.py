@@ -69,6 +69,14 @@ def isolate_config_between_tests(tmp_path_factory):
     # Clear session-local model cache (required for /model session sticky behavior)
     cp_config.reset_session_model()
 
+    # Reset the policy engine singleton so each test gets a fresh engine
+    # built from the test's (isolated) config, not from a prior test's config.
+    try:
+        from code_puppy.policy_engine import reset_policy_engine
+        reset_policy_engine()
+    except Exception:
+        pass  # Module may not be loaded in all test contexts
+
     yield
 
     # Restore original config paths
@@ -79,6 +87,13 @@ def isolate_config_between_tests(tmp_path_factory):
     cp_config.clear_model_cache()
     # Clear session-local model cache
     cp_config.reset_session_model()
+
+    # Reset policy engine after test too
+    try:
+        from code_puppy.policy_engine import reset_policy_engine
+        reset_policy_engine()
+    except Exception:
+        pass
 
     # Clean up the temp directory
     try:
