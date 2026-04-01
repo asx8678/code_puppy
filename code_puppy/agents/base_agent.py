@@ -1319,7 +1319,7 @@ class BaseAgent(ABC):
     def run_summarization_sync(
         self,
         instructions: str,
-        message_history: list[ModelMessage]) -> Union[list[ModelMessage], str]:
+        message_history: list[ModelMessage]) -> list[ModelMessage] | str:
         """
         Run summarization synchronously using the configured summarization agent.
         This is exposed as a method so it can be overridden by subclasses if needed.
@@ -2021,7 +2021,7 @@ class BaseAgent(ABC):
             attachment_parts.extend(list(link_attachments))
 
         if attachment_parts:
-            prompt_payload: Union[str, list[Any]] = []
+            prompt_payload: str | list[Any] = []
             if prompt:
                 prompt_payload.append(prompt)
             prompt_payload.extend(attachment_parts)
