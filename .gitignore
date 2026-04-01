@@ -46,6 +46,9 @@ code_puppy/bundled_skills/
 
 .json
 
+# Eval log output
+evals/logs/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

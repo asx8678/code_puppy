@@ -83,6 +83,9 @@ target-version = "py312"
 addopts = "--cov=code_puppy --cov-report=term-missing"
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "eval: LLM evaluation test (skipped unless RUN_EVALS=1 is set)",
+]
 
 [tool.coverage.run]
 omit = ["code_puppy/main.py"]
