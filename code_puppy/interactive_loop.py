@@ -69,6 +69,9 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
         from code_puppy.messaging import emit_warning
 
         emit_warning(f"MOTD error: {e}")
+        from code_puppy.error_logging import log_error
+
+        log_error(e, context="MOTD display error")
 
     # Print truecolor warning LAST so it's the most visible thing on startup
     # Big ugly red box should be impossible to miss! 🔴
@@ -135,6 +138,9 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
             from code_puppy.messaging import emit_error
 
             emit_error(f"Error processing initial command: {str(e)}")
+            from code_puppy.error_logging import log_error
+
+            log_error(e, context="Initial command processing error")
 
     # Check if prompt_toolkit is installed
     try:
@@ -163,6 +169,9 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
             from code_puppy.messaging import emit_error, emit_warning
 
             emit_error(f"Error installing prompt_toolkit: {e}")
+            from code_puppy.error_logging import log_error
+
+            log_error(e, context="prompt_toolkit installation error")
             emit_warning("Falling back to basic input without tab completion")
 
     # Autosave loading is now manual - use /autosave_load command
@@ -204,6 +213,9 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
         from code_puppy.messaging import emit_warning
 
         emit_warning(f"Tutorial auto-start failed: {e}")
+        from code_puppy.error_logging import log_error
+
+        log_error(e, context="Tutorial auto-start error")
 
     # Track the current agent task for cancellation on quit
     current_agent_task = None
@@ -343,6 +355,9 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 from code_puppy.messaging import emit_error
 
                 emit_error(f"Command error: {e}")
+                from code_puppy.error_logging import log_error
+
+                log_error(e, context="Slash command handling error")
                 # Continue interactive loop instead of exiting
                 continue
             if command_result is True:
@@ -426,6 +441,9 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                         from code_puppy.messaging import emit_error
 
                         emit_error(f"Failed to load autosave: {e}")
+                        from code_puppy.error_logging import log_error
+
+                        log_error(e, context="Autosave load error")
                     continue
                 else:
                     # Command returned a prompt to execute
@@ -499,10 +517,13 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                     0.1
                 )  # Brief pause to ensure all messages are rendered
 
-            except Exception:
+            except Exception as e:
                 from code_puppy.messaging.queue_console import get_queue_console
 
                 get_queue_console().print_exception()
+                from code_puppy.error_logging import log_error
+
+                log_error(e, context="Agent response rendering error")
 
             # Auto-save session if enabled (moved outside the try block to avoid being swallowed)
             from code_puppy.config import auto_save_session_if_enabled
@@ -587,6 +608,9 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                     from code_puppy.messaging import emit_error
 
                     emit_error(f"Wiggum loop error: {e}")
+                    from code_puppy.error_logging import log_error
+
+                    log_error(e, context="Wiggum loop error")
                     stop_wiggum()
                     break
 

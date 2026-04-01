@@ -130,10 +130,9 @@ def test_anthropic_missing_api_key(monkeypatch):
     config = {"anthropic": {"type": "anthropic", "name": "claude-v2"}}
     if "ANTHROPIC_API_KEY" in os.environ:
         monkeypatch.delenv("ANTHROPIC_API_KEY")
-    with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-        model = ModelFactory.get_model("anthropic", config)
-        assert model is None
-        mock_warn.assert_called_once()
+    with patch("code_puppy.model_factory.emit_warning"):
+        with pytest.raises(ValueError, match="could not be initialized"):
+            ModelFactory.get_model("anthropic", config)
 
 
 def test_azure_missing_endpoint():

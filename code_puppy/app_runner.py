@@ -227,6 +227,9 @@ class AppRunner:
                 raise
             except Exception as e:
                 emit_error(f"Error validating model: {str(e)}")
+                from code_puppy.error_logging import log_error
+
+                log_error(e, context="Model validation error")
                 sys.exit(1)
 
         if args.agent:
@@ -250,6 +253,9 @@ class AppRunner:
                 raise
             except Exception as e:
                 emit_error(f"Error setting agent: {str(e)}")
+                from code_puppy.error_logging import log_error
+
+                log_error(e, context="Agent setup error")
                 sys.exit(1)
 
     # ------------------------------------------------------------------
@@ -322,6 +328,9 @@ class AppRunner:
                 DBOS.launch()
             except Exception as e:
                 emit_error(f"Error initializing DBOS: {e}")
+                from code_puppy.error_logging import log_error
+
+                log_error(e, context="DBOS initialization error")
                 sys.exit(1)
 
         shutdown_flag = False
