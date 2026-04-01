@@ -6,6 +6,7 @@ import code_puppy.command_line.preset_commands  # noqa: F401
 import code_puppy.command_line.concurrency_commands  # noqa: F401
 import code_puppy.command_line.repl_commands  # noqa: F401
 import code_puppy.command_line.session_commands  # noqa: F401
+import code_puppy.command_line.staged_commands  # noqa: F401
 import code_puppy.command_line.workflow_commands  # noqa: F401
 import code_puppy.command_line.uc_menu  # noqa: F401
 
