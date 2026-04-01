@@ -311,6 +311,10 @@ class AppRunner:
 
         await callbacks.on_startup()
 
+        # Register workflow state callback handlers for tracking flags
+        from code_puppy.workflow_state import register_callback_handlers
+        register_callback_handlers()
+
         # Initialize DBOS if not disabled
         if get_use_dbos():
             dbos_app_version = os.environ.get(

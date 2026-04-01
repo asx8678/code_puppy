@@ -49,6 +49,7 @@ def handle_show_command(command: str) -> bool:
         get_cancel_agent_display_name)
     from code_puppy.messaging import emit_info
     from code_puppy.model_packs import get_current_pack
+    from code_puppy.workflow_state import get_workflow_state
 
     puppy_name = get_puppy_name()
     owner_name = get_owner_name()
@@ -80,6 +81,7 @@ def handle_show_command(command: str) -> bool:
 [bold]compaction_strategy:[/bold]   [cyan]{compaction_strategy}[/cyan] (summarization or truncation)
 [bold]model_pack:[/bold]            [cyan]{get_current_pack().name}[/cyan] ({get_current_pack().description})
 [bold]resume_message_count:[/bold] [cyan]{get_resume_message_count()}[/cyan] messages shown on /resume
+[bold]workflow_state:[/bold]       [cyan]{get_workflow_state().summary()}[/cyan] (use /flags for details)
 [bold]reasoning_effort:[/bold]      [cyan]{get_openai_reasoning_effort()}[/cyan]
 [bold]verbosity:[/bold]             [cyan]{get_openai_verbosity()}[/cyan]
 [bold]temperature:[/bold]           [cyan]{effective_temperature if effective_temperature is not None else "(model default)"}[/cyan]{" (per-model)" if effective_temperature != global_temperature and effective_temperature is not None else ""}
