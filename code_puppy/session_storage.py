@@ -233,8 +233,18 @@ def save_session(
     try:
         from pydantic_ai.messages import ModelMessagesTypeAdapter
 
+        # Sanitize messages to remove non-serializable objects (coroutines, etc.)
+        # that may have been captured in message metadata during tool execution.
+        # DBOS uses pickle for workflow durability, which cannot serialize coroutines.
+        try:
+            json_data = ModelMessagesTypeAdapter.dump_json(history)
+            sanitized_history = ModelMessagesTypeAdapter.validate_json(json_data)
+        except Exception:
+            # If sanitization fails, use original history
+            sanitized_history = history
+
         serializable_history = ModelMessagesTypeAdapter.dump_python(
-            history, mode="json"
+            sanitized_history, mode="json"
         )
     except Exception:
         # Fallback for non-pydantic history (e.g. tests with plain strings)

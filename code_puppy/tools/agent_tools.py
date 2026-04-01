@@ -66,6 +66,37 @@ def _generate_session_hash_suffix() -> str:
     return uuid.uuid4().hex[:8]
 
 
+def _sanitize_messages_for_dbos(messages: list[ModelMessage]) -> list[ModelMessage]:
+    """Sanitize messages to remove non-serializable objects before DBOS serialization.
+
+    DBOS uses pickle for workflow durability, which cannot serialize coroutines
+    or other async objects that may be captured in message metadata fields.
+    This function uses pydantic-ai's type adapter to serialize and deserialize
+    messages, which strips out non-serializable objects while preserving the
+    message structure.
+
+    Args:
+        messages: List of ModelMessage objects to sanitize.
+
+    Returns:
+        Sanitized list of ModelMessage objects safe for DBOS serialization.
+    """
+    if not messages:
+        return messages
+
+    try:
+        from pydantic_ai.messages import ModelMessagesTypeAdapter
+
+        # Serialize to JSON (this strips non-serializable objects)
+        json_data = ModelMessagesTypeAdapter.dump_json(messages)
+        # Deserialize back to messages (this creates clean message objects)
+        return ModelMessagesTypeAdapter.validate_json(json_data)
+    except Exception:
+        # If serialization fails, return original messages
+        # The error will be caught later during actual DBOS serialization
+        return messages
+
+
 # Regex pattern for kebab-case session IDs
 SESSION_ID_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 SESSION_ID_MAX_LENGTH = 128
@@ -564,6 +595,10 @@ def register_invoke_agent(agent):
             # Update the session history with the new messages from this interaction
             # The result contains all_messages which includes the full conversation
             updated_history = result.all_messages()
+
+            # Sanitize messages to remove non-serializable objects (coroutines, etc.)
+            # This is necessary because DBOS uses pickle for workflow durability
+            updated_history = _sanitize_messages_for_dbos(updated_history)
 
             # Save to filesystem (include initial prompt only for new sessions)
             _save_session_history(
