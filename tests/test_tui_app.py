@@ -1,7 +1,8 @@
 """Tests for the main CodePuppyApp shell."""
 
 import pytest
-from code_puppy.tui.app import CodePuppyApp, PuppyInput, StatusBar
+from code_puppy.tui.app import CodePuppyApp, PuppyInput
+from code_puppy.tui.widgets.info_bar import InfoBar
 
 
 def test_app_can_be_instantiated():
@@ -36,9 +37,9 @@ def test_puppy_input_empty_not_in_history():
     assert len(inp._history) == 0
 
 
-def test_status_bar_creation():
-    """Verify StatusBar can be instantiated."""
-    bar = StatusBar("Ready")
+def test_info_bar_creation():
+    """Verify InfoBar can be instantiated."""
+    bar = InfoBar()
     assert bar is not None
 
 
