@@ -65,6 +65,7 @@ from rich.text import Text
 
 from code_puppy.agents.event_stream_handler import event_stream_handler
 from code_puppy.callbacks import (
+    on_agent_exception,
     on_agent_run_end,
     on_agent_run_start,
     on_message_history_processor_end,
@@ -2180,6 +2181,15 @@ class BaseAgent(ABC):
 
                 collect_non_cancelled_exceptions(other_error)
 
+                # Fire agent_exception callback for each non-cancelled exception
+                for _exc in remaining_exceptions:
+                    try:
+                        await on_agent_exception(
+                            _exc, agent_name=self.name, group_id=group_id
+                        )
+                    except Exception:
+                        pass  # Don't let callback errors break error handling
+
                 # If there are CancelledError exceptions in the group, re-raise them
                 cancelled_exceptions = []
 
@@ -2317,6 +2327,11 @@ class BaseAgent(ABC):
             _run_success = False
             _run_error = e
             _run_response_text = ""
+            # Fire agent_exception callback
+            try:
+                await on_agent_exception(e, agent_name=self.name, group_id=group_id)
+            except Exception:
+                pass  # Don't let callback errors break error handling
             raise
         finally:
             # Fire agent_run_end hook - plugins can use this for:
