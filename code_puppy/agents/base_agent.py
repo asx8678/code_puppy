@@ -1463,13 +1463,85 @@ class BaseAgent(ABC):
                 message_group=message_group)
             raise ValueError(friendly_message) from exc
 
-    def reload_code_generation_agent(self, message_group: str | None = None):
-        """Force-reload the pydantic-ai Agent based on current config and model."""
+    def _build_agent(
+        self,
+        output_type: type = str,
+        message_group: str | None = None,
+        mcp_servers: list | None = None,
+    ) -> tuple[Any, str, list, Any, str, Any]:
+        """Build a configured PydanticAgent with the given output type.
+
+        This is the shared construction logic used by both
+        ``reload_code_generation_agent`` and ``_create_agent_with_output_type``.
+
+        Args:
+            output_type: The output type for the agent (default ``str``).
+            message_group: Optional message group for logging; auto-generated
+                if omitted.
+            mcp_servers: MCP server toolsets to use.  Pass ``None`` (default)
+                to reuse the cached ``self._mcp_servers``, or pass an explicit
+                list (e.g. freshly loaded servers for a reload).
+
+        Returns:
+            Tuple of ``(pydantic_agent, resolved_model_name, mcp_servers,
+            model, instructions, model_settings)``.
+        """
+        from code_puppy.model_utils import prepare_prompt_for_model
         from code_puppy.tools import (
             EXTENDED_THINKING_PROMPT_NOTE,
             has_extended_thinking_active,
-            register_tools_for_agent)
+            register_tools_for_agent,
+        )
 
+        if message_group is None:
+            message_group = str(uuid.uuid4())
+
+        model_name = self.get_model_name()
+        models_config = ModelFactory.load_config()
+        model, resolved_model_name = self._load_model_with_fallback(
+            model_name, models_config, message_group
+        )
+
+        instructions = self.get_full_system_prompt()
+        puppy_rules = self.load_puppy_rules()
+        if puppy_rules:
+            instructions += f"\n{puppy_rules}"
+
+        if mcp_servers is None:
+            mcp_servers = getattr(self, "_mcp_servers", []) or []
+
+        model_settings = make_model_settings(resolved_model_name)
+
+        # When extended thinking is active, nudge the model to think between
+        # tool calls (the share_your_reasoning tool is stripped in this case).
+        if has_extended_thinking_active(resolved_model_name):
+            instructions += EXTENDED_THINKING_PROMPT_NOTE
+
+        # Handle claude-code models: swap instructions (prompt prepending
+        # happens in run_with_mcp).
+        prepared = prepare_prompt_for_model(
+            model_name, instructions, "", prepend_system_to_user=False
+        )
+        instructions = prepared.instructions
+
+        p_agent = PydanticAgent(
+            model=model,
+            instructions=instructions,
+            output_type=output_type,
+            retries=3,
+            toolsets=[] if get_use_dbos() else mcp_servers,
+            history_processors=[self.message_history_accumulator],
+            model_settings=model_settings,
+        )
+
+        agent_tools = self.get_available_tools()
+        register_tools_for_agent(p_agent, agent_tools, model_name=resolved_model_name)
+
+        self.cur_model = model
+        return p_agent, resolved_model_name, mcp_servers, model, instructions, model_settings
+
+    def reload_code_generation_agent(self, message_group: str | None = None):
+        """Force-reload the pydantic-ai Agent based on current config and model."""
         # Invalidate the project-local rules cache so a fresh read from the
         # current working directory is performed on the next load_puppy_rules()
         # call.  This is critical for /cd: the user may have switched to a
@@ -1478,51 +1550,12 @@ class BaseAgent(ABC):
         # Invalidate context overhead cache since tools/prompt may change
         self._cached_context_overhead = None
 
-        if message_group is None:
-            message_group = str(uuid.uuid4())
-
-        model_name = self.get_model_name()
-
-        models_config = ModelFactory.load_config()
-        model, resolved_model_name = self._load_model_with_fallback(
-            model_name,
-            models_config,
-            message_group)
-
-        instructions = self.get_full_system_prompt()
-        puppy_rules = self.load_puppy_rules()
-        if puppy_rules:
-            instructions += f"\n{puppy_rules}"
-
-        mcp_servers = self.load_mcp_servers()
-
-        model_settings = make_model_settings(resolved_model_name)
-
-        # Handle claude-code models: swap instructions (prompt prepending happens in run_with_mcp)
-        from code_puppy.model_utils import prepare_prompt_for_model
-
-        # When extended thinking is active, nudge the model to think between
-        # tool calls (the share_your_reasoning tool is stripped in this case).
-        if has_extended_thinking_active(resolved_model_name):
-            instructions += EXTENDED_THINKING_PROMPT_NOTE
-
-        prepared = prepare_prompt_for_model(
-            model_name, instructions, "", prepend_system_to_user=False
+        # Build agent with freshly-loaded MCP servers so we can inspect its
+        # registered tool names for conflict filtering.
+        fresh_mcp = self.load_mcp_servers()
+        p_agent, resolved_model_name, mcp_servers, model, instructions, model_settings = self._build_agent(
+            output_type=str, message_group=message_group, mcp_servers=fresh_mcp
         )
-        instructions = prepared.instructions
-
-        self.cur_model = model
-        p_agent = PydanticAgent(
-            model=model,
-            instructions=instructions,
-            output_type=str,
-            retries=3,
-            toolsets=mcp_servers,
-            history_processors=[self.message_history_accumulator],
-            model_settings=model_settings)
-
-        agent_tools = self.get_available_tools()
-        register_tools_for_agent(p_agent, agent_tools, model_name=resolved_model_name)
 
         # Get existing tool names to filter out conflicts with MCP tools
         existing_tool_names = set()
@@ -1579,59 +1612,40 @@ class BaseAgent(ABC):
             )
 
         self._last_model_name = resolved_model_name
-        # expose for run_with_mcp
-        # Wrap it with DBOS, but handle MCP servers separately to avoid serialization issues
+        # Wrap with DBOS, but handle MCP servers separately to avoid
+        # serialization issues ("cannot pickle async_generator object").
         global _reload_count
         _reload_count += 1
         if get_use_dbos():
-            # Don't pass MCP servers to the agent constructor when using DBOS
-            # This prevents the "cannot pickle async_generator object" error
-            # MCP servers will be handled separately in run_with_mcp
-            agent_without_mcp = PydanticAgent(
-                model=model,
-                instructions=instructions,
-                output_type=str,
-                retries=3,
-                toolsets=[],  # Don't include MCP servers here
-                history_processors=[self.message_history_accumulator],
-                model_settings=model_settings)
-
-            # Register regular tools (non-MCP) on the new agent
-            agent_tools = self.get_available_tools()
-            register_tools_for_agent(
-                agent_without_mcp, agent_tools, model_name=resolved_model_name
-            )
-
-            # Wrap with DBOS - pass event_stream_handler at construction time
-            # so DBOSModel gets the handler for streaming output
+            # p_agent was built with toolsets=[] (DBOS path in _build_agent).
+            # Wrap with DBOS and store filtered MCP servers for runtime use.
             dbos_agent = DBOSAgent(
-                agent_without_mcp,
+                p_agent,
                 name=f"{self.name}-{_reload_count}",
                 event_stream_handler=event_stream_handler)
             self.pydantic_agent = dbos_agent
             self._code_generation_agent = dbos_agent
-
-            # Store filtered MCP servers separately for runtime use
             self._mcp_servers = filtered_mcp_servers
         else:
-            # Normal path without DBOS - include filtered MCP servers in the agent
-            # Re-create agent with filtered MCP servers
-            p_agent = PydanticAgent(
+            # Non-DBOS path: recreate agent with filtered MCP servers.
+            # Reuse model/instructions/model_settings from the first _build_agent
+            # call so _load_model_with_fallback is only called once.
+            from code_puppy.tools import register_tools_for_agent
+            final_agent = PydanticAgent(
                 model=model,
                 instructions=instructions,
                 output_type=str,
                 retries=3,
                 toolsets=filtered_mcp_servers,
                 history_processors=[self.message_history_accumulator],
-                model_settings=model_settings)
-            # Register regular tools on the agent
+                model_settings=model_settings,
+            )
             agent_tools = self.get_available_tools()
             register_tools_for_agent(
-                p_agent, agent_tools, model_name=resolved_model_name
+                final_agent, agent_tools, model_name=resolved_model_name
             )
-
-            self.pydantic_agent = p_agent
-            self._code_generation_agent = p_agent
+            self.pydantic_agent = final_agent
+            self._code_generation_agent = final_agent
             self._mcp_servers = filtered_mcp_servers
         return self._code_generation_agent
 
@@ -1642,78 +1656,34 @@ class BaseAgent(ABC):
         The agent is created fresh with the same configuration as the main agent
         but with the specified output_type instead of str.
 
+        Uses cached MCP servers (``self._mcp_servers``) so the set of tools
+        is consistent with the currently loaded code-generation agent.
+
         Args:
             output_type: The Pydantic model or type for structured output.
 
         Returns:
             A configured PydanticAgent (or DBOSAgent wrapper) with the custom output_type.
         """
-        from code_puppy.model_utils import prepare_prompt_for_model
-        from code_puppy.tools import (
-            EXTENDED_THINKING_PROMPT_NOTE,
-            has_extended_thinking_active,
-            register_tools_for_agent)
-
-        model_name = self.get_model_name()
-        models_config = ModelFactory.load_config()
-        model, resolved_model_name = self._load_model_with_fallback(
-            model_name, models_config, str(uuid.uuid4())
-        )
-
-        instructions = self.get_full_system_prompt()
-        puppy_rules = self.load_puppy_rules()
-        if puppy_rules:
-            instructions += f"\n{puppy_rules}"
-
+        # Reuse cached MCP servers from the last reload.
         mcp_servers = getattr(self, "_mcp_servers", []) or []
-        model_settings = make_model_settings(resolved_model_name)
-
-        prepared = prepare_prompt_for_model(
-            model_name, instructions, "", prepend_system_to_user=False
+        p_agent, resolved_model_name, _, _model, _instructions, _model_settings = self._build_agent(
+            output_type=output_type,
+            mcp_servers=mcp_servers,
         )
-        instructions = prepared.instructions
-
-        # When extended thinking is active, nudge the model to think between
-        # tool calls (the share_your_reasoning tool is stripped in this case).
-        if has_extended_thinking_active(resolved_model_name):
-            instructions += EXTENDED_THINKING_PROMPT_NOTE
 
         global _reload_count
         _reload_count += 1
 
         if get_use_dbos():
-            temp_agent = PydanticAgent(
-                model=model,
-                instructions=instructions,
-                output_type=output_type,
-                retries=3,
-                toolsets=[],
-                history_processors=[self.message_history_accumulator],
-                model_settings=model_settings)
-            agent_tools = self.get_available_tools()
-            register_tools_for_agent(
-                temp_agent, agent_tools, model_name=resolved_model_name
-            )
-            # Pass event_stream_handler at construction time for streaming output
+            # Pass event_stream_handler at construction time for streaming output.
             dbos_agent = DBOSAgent(
-                temp_agent,
+                p_agent,
                 name=f"{self.name}-structured-{_reload_count}",
                 event_stream_handler=event_stream_handler)
             return dbos_agent
         else:
-            temp_agent = PydanticAgent(
-                model=model,
-                instructions=instructions,
-                output_type=output_type,
-                retries=3,
-                toolsets=mcp_servers,
-                history_processors=[self.message_history_accumulator],
-                model_settings=model_settings)
-            agent_tools = self.get_available_tools()
-            register_tools_for_agent(
-                temp_agent, agent_tools, model_name=resolved_model_name
-            )
-            return temp_agent
+            return p_agent
 
     # It's okay to decorate it with DBOS.step even if not using DBOS; the decorator is a no-op in that case.
     @DBOS.step()
