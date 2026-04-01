@@ -6,7 +6,7 @@ to subscribed WebSocket handlers via the emitter module.
 
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.plugins.frontend_emitter.emitter import emit_event
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 async def on_pre_tool_call(
-    tool_name: str, tool_args: Dict[str, Any], context: Any = None
+    tool_name: str, tool_args: dict[str, Any], context: Any = None
 ) -> None:
     """Emit an event when a tool call starts.
 
@@ -31,8 +31,7 @@ async def on_pre_tool_call(
                 "tool_name": tool_name,
                 "tool_args": _sanitize_args(tool_args),
                 "start_time": time.time(),
-            },
-        )
+            })
         logger.debug(f"Emitted tool_call_start for {tool_name}")
     except Exception as e:
         logger.error(f"Failed to emit pre_tool_call event: {e}")
@@ -40,11 +39,10 @@ async def on_pre_tool_call(
 
 async def on_post_tool_call(
     tool_name: str,
-    tool_args: Dict[str, Any],
+    tool_args: dict[str, Any],
     result: Any,
     duration_ms: float,
-    context: Any = None,
-) -> None:
+    context: Any = None) -> None:
     """Emit an event when a tool call completes.
 
     Args:
@@ -63,8 +61,7 @@ async def on_post_tool_call(
                 "duration_ms": duration_ms,
                 "success": _is_successful_result(result),
                 "result_summary": _summarize_result(result),
-            },
-        )
+            })
         logger.debug(
             f"Emitted tool_call_complete for {tool_name} ({duration_ms:.2f}ms)"
         )
@@ -73,7 +70,7 @@ async def on_post_tool_call(
 
 
 async def on_stream_event(
-    event_type: str, event_data: Any, agent_session_id: Optional[str] = None
+    event_type: str, event_data: Any, agent_session_id: str | None = None
 ) -> None:
     """Emit streaming events from the agent.
 
@@ -89,8 +86,7 @@ async def on_stream_event(
                 "event_type": event_type,
                 "event_data": _sanitize_event_data(event_data),
                 "agent_session_id": agent_session_id,
-            },
-        )
+            })
         logger.debug(f"Emitted stream_event: {event_type}")
     except Exception as e:
         logger.error(f"Failed to emit stream_event: {e}")
@@ -110,8 +106,7 @@ async def on_invoke_agent(*args: Any, **kwargs: Any) -> None:
             "session_id": kwargs.get("session_id"),
             "prompt_preview": _truncate_string(
                 kwargs.get("prompt") or (args[1] if len(args) > 1 else None),
-                max_length=200,
-            ),
+                max_length=200),
         }
         emit_event("agent_invoked", agent_info)
         logger.debug(f"Emitted agent_invoked: {agent_info.get('agent_name')}")
@@ -119,7 +114,7 @@ async def on_invoke_agent(*args: Any, **kwargs: Any) -> None:
         logger.error(f"Failed to emit invoke_agent event: {e}")
 
 
-def _sanitize_args(args: Dict[str, Any]) -> Dict[str, Any]:
+def _sanitize_args(args: dict[str, Any]) -> dict[str, Any]:
     """Sanitize tool arguments for safe emission.
 
     Truncates large values and removes potentially sensitive data.
@@ -133,7 +128,7 @@ def _sanitize_args(args: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(args, dict):
         return {}
 
-    sanitized: Dict[str, Any] = {}
+    sanitized: dict[str, Any] = {}
     for key, value in args.items():
         if isinstance(value, str):
             sanitized[key] = _truncate_string(value, max_length=500)
@@ -229,7 +224,7 @@ def _summarize_result(result: Any) -> str:
     return _truncate_string(str(result), max_length=200)
 
 
-def _truncate_string(value: Any, max_length: int = 100) -> Optional[str]:
+def _truncate_string(value: Any, max_length: int = 100) -> str | None:
     """Truncate a string value if it exceeds max_length.
 
     Args:

@@ -3,14 +3,13 @@
 🐶 Lean, mean, ADHD-friendly slides. 5 slides max!
 """
 
-from typing import List, Tuple
 
 # ============================================================================
 # Slide Data Constants
 # ============================================================================
 
 # Model subscription options
-MODEL_OPTIONS: List[Tuple[str, str, str]] = [
+MODEL_OPTIONS: list[tuple[str, str, str]] = [
     ("chatgpt", "ChatGPT Plus/Pro/Max", "OAuth login - no API key needed"),
     ("claude", "Claude Code Pro/Max", "OAuth login - no API key needed"),
     ("api_keys", "API Keys", "OpenAI, Anthropic, Google, etc."),
@@ -78,7 +77,7 @@ def slide_welcome() -> str:
     return content
 
 
-def slide_models(selected_option: int, options: List[Tuple[str, str]]) -> str:
+def slide_models(selected_option: int, options: list[tuple[str, str]]) -> str:
     """Slide 2: Model selection."""
     content = "[bold cyan]📦 Pick Your Models[/bold cyan]\n\n"
     content += "[white]How do you want to access LLMs?[/white]\n\n"

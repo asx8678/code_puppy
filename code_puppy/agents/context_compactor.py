@@ -8,7 +8,7 @@ This module handles:
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -16,13 +16,11 @@ from pydantic_ai.messages import (
     ModelResponse,
     TextPart,
     ToolCallPart,
-    ToolReturnPart,
-)
+    ToolReturnPart)
 from rich.text import Text
 
 from code_puppy.config import (
-    get_model_context_length,
-)
+    get_model_context_length)
 from code_puppy.messaging import emit_info, emit_warning
 
 logger = logging.getLogger(__name__)
@@ -34,7 +32,7 @@ class ContextCompactorMixin:
     def __init__(self):
         self._delayed_compaction_requested: bool = False
         # Cache for MCP tool definitions (for token estimation)
-        self._mcp_tool_definitions_cache: List[Dict[str, Any]] = []
+        self._mcp_tool_definitions_cache: list[dict[str, Any]] = []
 
     def estimate_token_count(self, text: str) -> int:
         """Estimate the number of tokens in a text string.
@@ -109,7 +107,7 @@ class ContextCompactorMixin:
 
         return total
 
-    def _get_cached_tool_defs(self) -> List[Dict[str, Any]]:
+    def _get_cached_tool_defs(self) -> list[dict[str, Any]]:
         """Get cached tool definitions.
 
         Returns:
@@ -150,8 +148,8 @@ class ContextCompactorMixin:
         return 128000  # Default
 
     def filter_huge_messages(
-        self, messages: List[ModelMessage], max_tokens: int = 8000
-    ) -> List[ModelMessage]:
+        self, messages: list[ModelMessage], max_tokens: int = 8000
+    ) -> list[ModelMessage]:
         """Filter out extremely large messages that exceed token limits.
 
         Args:
@@ -195,7 +193,7 @@ class ContextCompactorMixin:
                 result.append(msg)
         return result
 
-    def has_pending_tool_calls(self, messages: List[ModelMessage]) -> bool:
+    def has_pending_tool_calls(self, messages: list[ModelMessage]) -> bool:
         """Check if there are pending tool calls in the message history.
 
         Args:
@@ -219,7 +217,7 @@ class ContextCompactorMixin:
 
         return bool(pending_calls - returned_tools)
 
-    def get_pending_tool_call_count(self, messages: List[ModelMessage]) -> int:
+    def get_pending_tool_call_count(self, messages: list[ModelMessage]) -> int:
         """Count the number of pending tool calls.
 
         Args:
@@ -244,8 +242,8 @@ class ContextCompactorMixin:
         return len(pending_calls - returned_tools)
 
     def prune_interrupted_tool_calls(
-        self, messages: List[ModelMessage]
-    ) -> List[ModelMessage]:
+        self, messages: list[ModelMessage]
+    ) -> list[ModelMessage]:
         """Remove incomplete tool call/return sequences.
 
         When an agent is interrupted mid-stream, there may be partial
@@ -258,7 +256,7 @@ class ContextCompactorMixin:
             Cleaned message history.
         """
         result = []
-        pending_calls: Dict[str, ToolCallPart] = {}
+        pending_calls: dict[str, ToolCallPart] = {}
 
         for msg in messages:
             if isinstance(msg, ModelResponse):
@@ -291,10 +289,9 @@ class ContextCompactorMixin:
     def truncation(
         self,
         ctx: Any,
-        messages: List[ModelMessage],
+        messages: list[ModelMessage],
         total_tokens: int,
-        max_tokens: int,
-    ) -> List[ModelMessage]:
+        max_tokens: int) -> list[ModelMessage]:
         """Truncate messages to fit within token limits.
 
         This is called when compaction is disabled or fails.

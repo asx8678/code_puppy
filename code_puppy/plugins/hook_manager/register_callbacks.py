@@ -10,14 +10,14 @@ Provides:
 """
 
 import logging
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 
 logger = logging.getLogger(__name__)
 
 _COMMAND_NAME = "hooks"
-_ALIASES = ("hook",)
+_ALIASES = ("hook")
 
 
 # ---------------------------------------------------------------------------
@@ -25,13 +25,12 @@ _ALIASES = ("hook",)
 # ---------------------------------------------------------------------------
 
 
-def _hooks_command_help() -> List[Tuple[str, str]]:
+def _hooks_command_help() -> list[tuple[str, str]]:
     """Advertise /hooks in the /help menu."""
     return [
         (
             "hooks",
-            "Manage Claude Code hooks (global + project) – browse, enable/disable, inspect",
-        ),
+            "Manage Claude Code hooks (global + project) – browse, enable/disable, inspect"),
         ("hook", "Alias for /hooks"),
     ]
 
@@ -41,7 +40,7 @@ def _hooks_command_help() -> List[Tuple[str, str]]:
 # ---------------------------------------------------------------------------
 
 
-def _handle_hooks_command(command: str, name: str) -> Optional[Any]:
+def _handle_hooks_command(command: str, name: str) -> Any | None:
     """Handle /hooks (and /hook) slash commands.
 
     Sub-commands
@@ -63,8 +62,7 @@ def _handle_hooks_command(command: str, name: str) -> Optional[Any]:
         _load_project_hooks_config,
         flatten_all_hooks,
         save_global_hooks_config,
-        save_hooks_config,
-    )
+        save_hooks_config)
 
     tokens = command.split()
     subcommand = tokens[1].lower() if len(tokens) > 1 else ""

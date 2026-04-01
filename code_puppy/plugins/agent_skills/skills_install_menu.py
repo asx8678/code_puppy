@@ -17,7 +17,6 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -60,7 +59,7 @@ def _format_bytes(num_bytes: int) -> str:
     return f"{size:.1f} GB"
 
 
-def _wrap_text(text: str, width: int) -> List[str]:
+def _wrap_text(text: str, width: int) -> list[str]:
     """Simple word-wrap for display in the details panel."""
 
     if not text:
@@ -100,21 +99,21 @@ class SkillsInstallMenu:
         """Initialize the skills install menu with catalog data."""
 
         self.catalog = catalog
-        self.categories: List[str] = []
-        self.current_category: Optional[str] = None
-        self.current_skills: List[SkillCatalogEntry] = []
+        self.categories: list[str] = []
+        self.current_category: str | None = None
+        self.current_skills: list[SkillCatalogEntry] = []
 
         # State
         self.view_mode = "categories"  # categories | skills
         self.selected_category_idx = 0
         self.selected_skill_idx = 0
         self.current_page = 0
-        self.result: Optional[str] = None
-        self.pending_entry: Optional[SkillCatalogEntry] = None
+        self.result: str | None = None
+        self.pending_entry: SkillCatalogEntry | None = None
 
         # UI controls
-        self.menu_control: Optional[FormattedTextControl] = None
-        self.preview_control: Optional[FormattedTextControl] = None
+        self.menu_control: FormattedTextControl | None = None
+        self.preview_control: FormattedTextControl | None = None
 
         self._initialize_catalog()
 
@@ -141,14 +140,14 @@ class SkillsInstallMenu:
         }
         return icons.get(_category_key(category), "📁")
 
-    def _get_current_category(self) -> Optional[str]:
+    def _get_current_category(self) -> str | None:
         """Get the currently highlighted category name."""
 
         if 0 <= self.selected_category_idx < len(self.categories):
             return self.categories[self.selected_category_idx]
         return None
 
-    def _get_current_skill(self) -> Optional[SkillCatalogEntry]:
+    def _get_current_skill(self) -> SkillCatalogEntry | None:
         """Get the currently highlighted skill entry."""
 
         if self.view_mode == "skills" and self.current_skills:
@@ -191,8 +190,7 @@ class SkillsInstallMenu:
             lines.append(
                 (
                     "fg:ansibrightblack",
-                    "  (Remote catalog unavailable or empty)\n",
-                )
+                    "  (Remote catalog unavailable or empty)\n")
             )
             self._render_navigation_hints(lines)
             return lines
@@ -365,15 +363,13 @@ class SkillsInstallMenu:
         lines.append(
             (
                 "fg:ansibrightblack",
-                f"    scripts: {'yes' if entry.has_scripts else 'no'}",
-            )
+                f"    scripts: {'yes' if entry.has_scripts else 'no'}")
         )
         lines.append(("", "\n"))
         lines.append(
             (
                 "fg:ansibrightblack",
-                f"    references: {'yes' if entry.has_references else 'no'}",
-            )
+                f"    references: {'yes' if entry.has_references else 'no'}")
         )
         lines.append(("", "\n"))
         lines.append(("fg:ansibrightblack", f"    files: {entry.file_count}"))
@@ -384,8 +380,7 @@ class SkillsInstallMenu:
         lines.append(
             (
                 "fg:ansibrightblack",
-                f"    size: {_format_bytes(entry.zip_size_bytes)}",
-            )
+                f"    size: {_format_bytes(entry.zip_size_bytes)}")
         )
         lines.append(("", "\n"))
         lines.append(("fg:ansibrightblack", f"    url: {entry.download_url}"))
@@ -559,8 +554,7 @@ class SkillsInstallMenu:
             layout=layout,
             key_bindings=kb,
             full_screen=False,
-            mouse_support=False,
-        )
+            mouse_support=False)
 
         set_awaiting_user_input(True)
 
@@ -636,8 +630,7 @@ def _prompt_and_install(entry: SkillCatalogEntry) -> bool:
         result = download_and_install_skill(
             skill_name=entry.id,
             download_url=entry.download_url,
-            force=force,
-        )
+            force=force)
     except Exception as e:
         logger.exception(f"Unexpected error during skill install: {e}")
         emit_error(f"Installation error: {e}")

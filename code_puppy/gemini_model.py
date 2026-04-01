@@ -5,7 +5,6 @@ Generative Language API directly via httpx, without the bloated google-genai
 SDK dependency.
 """
 
-from __future__ import annotations
 
 import base64
 import json
@@ -31,8 +30,7 @@ from pydantic_ai.messages import (
     ThinkingPart,
     ToolCallPart,
     ToolReturnPart,
-    UserPromptPart,
-)
+    UserPromptPart)
 from pydantic_ai.models import Model, ModelRequestParameters, StreamedResponse
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
@@ -218,8 +216,7 @@ def _sanitize_schema_for_gemini(schema: dict) -> dict:
                     "const",
                     "anyOf",  # Skip any remaining union types
                     "oneOf",
-                    "allOf",
-                ):
+                    "allOf"):
                     continue
 
                 result[key] = resolve_refs(value)
@@ -243,8 +240,7 @@ class GeminiModel(Model):
         model_name: str,
         api_key: str,
         base_url: str = "https://generativelanguage.googleapis.com/v1beta",
-        http_client: httpx.AsyncClient | None = None,
-    ):
+        http_client: httpx.AsyncClient | None = None):
         self._model_name = model_name
         self.api_key = api_key
         self._base_url = base_url.rstrip("/")
@@ -269,8 +265,7 @@ class GeminiModel(Model):
     def _get_instructions(
         self,
         messages: list,
-        model_request_parameters,
-    ) -> str | None:
+        model_request_parameters) -> str | None:
         """Get additional instructions to prepend to system prompt.
 
         This is a compatibility method for pydantic-ai interface.
@@ -281,8 +276,7 @@ class GeminiModel(Model):
     def prepare_request(
         self,
         model_settings: ModelSettings | None,
-        model_request_parameters,
-    ) -> tuple:
+        model_request_parameters) -> tuple:
         """Prepare request by normalizing settings.
 
         This is a compatibility method for pydantic-ai interface.
@@ -342,8 +336,7 @@ class GeminiModel(Model):
     async def _map_messages(
         self,
         messages: list[ModelMessage],
-        model_request_parameters: ModelRequestParameters,
-    ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+        model_request_parameters: ModelRequestParameters) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
         """Map pydantic-ai messages to Gemini API format."""
         contents: list[dict[str, Any]] = []
         system_parts: list[dict[str, Any]] = []
@@ -523,8 +516,7 @@ class GeminiModel(Model):
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters,
-    ) -> ModelResponse:
+        model_request_parameters: ModelRequestParameters) -> ModelResponse:
         """Make a non-streaming request to the Gemini API."""
         system_instruction, contents = await self._map_messages(
             messages, model_request_parameters
@@ -565,8 +557,7 @@ class GeminiModel(Model):
             return ModelResponse(
                 parts=[TextPart(content="")],
                 model_name=self._model_name,
-                usage=RequestUsage(),
-            )
+                usage=RequestUsage())
 
         candidate = candidates[0]
         content = candidate.get("content", {})
@@ -589,24 +580,21 @@ class GeminiModel(Model):
                     ToolCallPart(
                         tool_name=fc["name"],
                         args=fc.get("args", {}),
-                        tool_call_id=fc.get("id") or generate_tool_call_id(),
-                    )
+                        tool_call_id=fc.get("id") or generate_tool_call_id())
                 )
 
         # Extract usage
         usage_meta = data.get("usageMetadata", {})
         usage = RequestUsage(
             input_tokens=usage_meta.get("promptTokenCount", 0),
-            output_tokens=usage_meta.get("candidatesTokenCount", 0),
-        )
+            output_tokens=usage_meta.get("candidatesTokenCount", 0))
 
         return ModelResponse(
             parts=response_parts,
             model_name=self._model_name,
             usage=usage,
             provider_response_id=data.get("requestId"),
-            provider_name=self.system,
-        )
+            provider_name=self.system)
 
     @asynccontextmanager
     async def request_stream(
@@ -614,8 +602,7 @@ class GeminiModel(Model):
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
-        run_context: RunContext[Any] | None = None,
-    ) -> AsyncIterator[StreamedResponse]:
+        run_context: RunContext[Any] | None = None) -> AsyncIterator[StreamedResponse]:
         """Make a streaming request to the Gemini API."""
         system_instruction, contents = await self._map_messages(
             messages, model_request_parameters
@@ -668,8 +655,7 @@ class GeminiModel(Model):
             _chunks=stream_chunks(),
             _model_name_str=self._model_name,
             _provider_name_str=self.system,
-            _provider_url_str=self._base_url,
-        )
+            _provider_url_str=self._base_url)
 
 
 @dataclass
@@ -690,8 +676,7 @@ class GeminiStreamingResponse(StreamedResponse):
             if usage_meta:
                 self._usage = RequestUsage(
                     input_tokens=usage_meta.get("promptTokenCount", 0),
-                    output_tokens=usage_meta.get("candidatesTokenCount", 0),
-                )
+                    output_tokens=usage_meta.get("candidatesTokenCount", 0))
 
             # Extract response ID
             if chunk.get("responseId"):
@@ -710,8 +695,7 @@ class GeminiStreamingResponse(StreamedResponse):
                 if part.get("thought") and part.get("text") is not None:
                     for event in self._parts_manager.handle_thinking_delta(
                         vendor_part_id=None,
-                        content=part["text"],
-                    ):
+                        content=part["text"]):
                         yield event
 
                 # Handle regular text
@@ -721,8 +705,7 @@ class GeminiStreamingResponse(StreamedResponse):
                         continue
                     for event in self._parts_manager.handle_text_delta(
                         vendor_part_id=None,
-                        content=text,
-                    ):
+                        content=text):
                         yield event
 
                 # Handle function call
@@ -732,8 +715,7 @@ class GeminiStreamingResponse(StreamedResponse):
                         vendor_part_id=uuid.uuid4(),
                         tool_name=fc.get("name"),
                         args=fc.get("args"),
-                        tool_call_id=fc.get("id") or generate_tool_call_id(),
-                    )
+                        tool_call_id=fc.get("id") or generate_tool_call_id())
                     if event is not None:
                         yield event
 

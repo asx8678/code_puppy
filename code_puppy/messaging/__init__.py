@@ -47,8 +47,7 @@ from .bus import (
     get_message_bus,
     get_session_context,
     reset_message_bus,
-    set_session_context,
-)
+    set_session_context)
 from .bus import emit as bus_emit  # Convenience functions (new API versions)
 from .bus import emit_debug as bus_emit_debug
 from .bus import emit_error as bus_emit_error
@@ -64,8 +63,7 @@ from .commands import (  # Base; Agent control; User interaction responses; Unio
     ConfirmationResponse,
     InterruptShellCommand,
     SelectionResponse,
-    UserInputResponse,
-)
+    UserInputResponse)
 from .message_queue import (
     MessageQueue,
     MessageType,
@@ -85,8 +83,7 @@ from .message_queue import (
     emit_warning,
     get_buffered_startup_messages,
     get_global_queue,
-    provide_prompt_response,
-)
+    provide_prompt_response)
 
 # Message types and enums
 from .messages import (  # Enums, Base, Text, File ops, Diff, Shell, Agent, etc.
@@ -119,8 +116,7 @@ from .messages import (  # Enums, Base, Text, File ops, Diff, Shell, Agent, etc.
     SubAgentStatusMessage,
     TextMessage,
     UserInputRequest,
-    VersionCheckMessage,
-)
+    VersionCheckMessage)
 from .queue_console import QueueConsole, get_queue_console
 from .renderers import InteractiveRenderer, SynchronousInteractiveRenderer
 
@@ -129,18 +125,15 @@ from .rich_renderer import (
     DEFAULT_STYLES,
     DIFF_STYLES,
     RendererProtocol,
-    RichConsoleRenderer,
-)
+    RichConsoleRenderer)
 from .subagent_console import (
-    STATUS_STYLES as SUBAGENT_STATUS_STYLES,
-)
+    STATUS_STYLES as SUBAGENT_STATUS_STYLES)
 
 # Sub-agent console manager
 from .subagent_console import (
     AgentState,
     SubAgentConsoleManager,
-    get_subagent_console_manager,
-)
+    get_subagent_console_manager)
 
 # =============================================================================
 # New Structured Messaging API

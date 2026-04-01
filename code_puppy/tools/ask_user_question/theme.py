@@ -5,7 +5,6 @@ color configuration system. It allows the TUI to inherit colors from
 the global configuration.
 """
 
-from __future__ import annotations
 
 from typing import TYPE_CHECKING, Mapping, NamedTuple, TypeVar
 

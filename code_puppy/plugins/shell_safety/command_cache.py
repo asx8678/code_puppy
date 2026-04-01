@@ -9,7 +9,6 @@ while providing the performance benefits of caching.
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 # Maximum number of cached assessments (LRU eviction after this)
 MAX_CACHE_SIZE = 200
@@ -31,21 +30,21 @@ class CommandSafetyCache:
     """
 
     def __init__(self, max_size: int = MAX_CACHE_SIZE):
-        self._cache: OrderedDict[Tuple[str, Optional[str]], CachedAssessment] = (
+        self._cache: OrderedDict[tuple[str, str | None], CachedAssessment] = (
             OrderedDict()
         )
         self._max_size = max_size
         self._hits = 0
         self._misses = 0
 
-    def _make_key(self, command: str, cwd: Optional[str]) -> Tuple[str, Optional[str]]:
+    def _make_key(self, command: str, cwd: str | None) -> tuple[str, str | None]:
         """Create a cache key from command and cwd."""
         # Normalize command (strip whitespace)
         return (command.strip(), cwd)
 
     def get(
-        self, command: str, cwd: Optional[str] = None
-    ) -> Optional[CachedAssessment]:
+        self, command: str, cwd: str | None = None
+    ) -> CachedAssessment | None:
         """Get a cached assessment if it exists.
 
         Args:
@@ -65,7 +64,7 @@ class CommandSafetyCache:
         return None
 
     def put(
-        self, command: str, cwd: Optional[str], assessment: CachedAssessment
+        self, command: str, cwd: str | None, assessment: CachedAssessment
     ) -> None:
         """Store an assessment in the cache.
 
@@ -118,8 +117,8 @@ def get_cache_stats() -> dict:
 
 
 def get_cached_assessment(
-    command: str, cwd: Optional[str] = None
-) -> Optional[CachedAssessment]:
+    command: str, cwd: str | None = None
+) -> CachedAssessment | None:
     """Get a cached command safety assessment.
 
     Cache-only approach: use the LLM cache for speed, but let the LLM
@@ -136,7 +135,7 @@ def get_cached_assessment(
 
 
 def cache_assessment(
-    command: str, cwd: Optional[str], risk: str, reasoning: str
+    command: str, cwd: str | None, risk: str, reasoning: str
 ) -> None:
     """Cache an LLM assessment result.
 
@@ -151,6 +150,5 @@ def cache_assessment(
     """
     assessment = CachedAssessment(
         risk=risk,
-        reasoning=reasoning,
-    )
+        reasoning=reasoning)
     _cache.put(command, cwd, assessment)

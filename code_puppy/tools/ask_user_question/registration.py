@@ -1,6 +1,5 @@
 """Tool registration for ask_user_question."""
 
-from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
@@ -19,8 +18,7 @@ def register_ask_user_question(agent: Agent) -> None:
     @agent.tool
     def ask_user_question(
         context: RunContext,  # noqa: ARG001 - Required by framework
-        questions: list[dict[str, Any]],
-    ) -> AskUserQuestionOutput:
+        questions: list[dict[str, Any]]) -> AskUserQuestionOutput:
         """Ask the user multiple related questions in an interactive TUI."""
         # Handler returns AskUserQuestionOutput directly - no revalidation needed
         return _ask_user_question_impl(questions)

@@ -6,7 +6,7 @@ This module handles message history operations including:
 - History validation and cleanup
 """
 
-from typing import Any, List, Set
+from typing import Any
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -15,18 +15,17 @@ from pydantic_ai.messages import (
     TextPart,
     ThinkingPart,
     ToolCallPart,
-    ToolReturnPart,
-)
+    ToolReturnPart)
 
 
 class MessageHistoryMixin:
     """Mixin providing message history management functionality."""
 
     def __init__(self):
-        self._message_history: List[Any] = []
-        self._compacted_message_hashes: Set[str] = set()
+        self._message_history: list[Any] = []
+        self._compacted_message_hashes: set[str] = set()
 
-    def get_message_history(self) -> List[Any]:
+    def get_message_history(self) -> list[Any]:
         """Get the message history for this agent.
 
         Returns:
@@ -34,7 +33,7 @@ class MessageHistoryMixin:
         """
         return self._message_history
 
-    def set_message_history(self, history: List[Any]) -> None:
+    def set_message_history(self, history: list[Any]) -> None:
         """Set the message history for this agent.
 
         Args:
@@ -55,7 +54,7 @@ class MessageHistoryMixin:
         """
         self._message_history.append(message)
 
-    def extend_message_history(self, history: List[Any]) -> None:
+    def extend_message_history(self, history: list[Any]) -> None:
         """Extend this agent's message history with multiple messages.
 
         Args:
@@ -63,7 +62,7 @@ class MessageHistoryMixin:
         """
         self._message_history.extend(history)
 
-    def get_compacted_message_hashes(self) -> Set[str]:
+    def get_compacted_message_hashes(self) -> set[str]:
         """Get the set of hashes for messages that have been compacted.
 
         Returns:
@@ -111,7 +110,7 @@ class MessageHistoryMixin:
                     parts_str += f"{type(part).__name__}:"
         return hash(parts_str)
 
-    def _clean_binaries(self, messages: List[ModelMessage]) -> List[ModelMessage]:
+    def _clean_binaries(self, messages: list[ModelMessage]) -> list[ModelMessage]:
         """Remove binary content from messages for display/logging.
 
         Args:
@@ -148,8 +147,8 @@ class MessageHistoryMixin:
         return cleaned
 
     def ensure_history_ends_with_request(
-        self, messages: List[ModelMessage]
-    ) -> List[ModelMessage]:
+        self, messages: list[ModelMessage]
+    ) -> list[ModelMessage]:
         """Ensure message history ends with a ModelRequest.
 
         Anthropic API requires the last message to be a ModelRequest (user message).

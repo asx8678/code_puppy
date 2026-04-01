@@ -88,23 +88,19 @@ def register_scheduler_create_task(agent):
         prompt: str = Field(description="The prompt to execute"),
         agent: str = Field(
             default="code-puppy",
-            description="Agent to use (e.g., code-puppy, code-reviewer, security-auditor)",
-        ),
+            description="Agent to use (e.g., code-puppy, code-reviewer, security-auditor)"),
         model: str = Field(
             default="", description="Model to use (empty string for default)"
         ),
         schedule_type: str = Field(
             default="interval",
-            description="Schedule type: 'interval', 'hourly', or 'daily'",
-        ),
+            description="Schedule type: 'interval', 'hourly', or 'daily'"),
         schedule_value: str = Field(
             default="1h",
-            description="Schedule value (e.g., '30m', '2h', '1d' for intervals)",
-        ),
+            description="Schedule value (e.g., '30m', '2h', '1d' for intervals)"),
         working_directory: str = Field(
             default=".", description="Working directory for the task"
-        ),
-    ) -> str:
+        )) -> str:
         """Create a new scheduled task.
 
         Creates a task that will run automatically according to the specified schedule.
@@ -123,8 +119,7 @@ def register_scheduler_create_task(agent):
             model=model,
             schedule_type=schedule_type,
             schedule_value=schedule_value,
-            working_directory=working_directory,
-        )
+            working_directory=working_directory)
 
         add_task(task)
         emit_success(f"Created task: {name} ({task.id})", message_group=group_id)
@@ -160,8 +155,7 @@ def register_scheduler_delete_task(agent):
     """Register the scheduler_delete_task tool."""
 
     def scheduler_delete_task(
-        task_id: str = Field(description="The ID of the task to delete"),
-    ) -> str:
+        task_id: str = Field(description="The ID of the task to delete")) -> str:
         """Delete a scheduled task by its ID.
 
         Permanently removes the task from the schedule.
@@ -191,8 +185,7 @@ def register_scheduler_toggle_task(agent):
     """Register the scheduler_toggle_task tool."""
 
     def scheduler_toggle_task(
-        task_id: str = Field(description="The ID of the task to enable/disable"),
-    ) -> str:
+        task_id: str = Field(description="The ID of the task to enable/disable")) -> str:
         """Toggle a task's enabled/disabled state.
 
         Disabled tasks remain in the schedule but won't run until re-enabled.
@@ -323,8 +316,7 @@ def register_scheduler_run_task(agent):
     """Register the scheduler_run_task tool."""
 
     def scheduler_run_task(
-        task_id: str = Field(description="The ID of the task to run immediately"),
-    ) -> str:
+        task_id: str = Field(description="The ID of the task to run immediately")) -> str:
         """Run a scheduled task immediately.
 
         Executes the task right now, regardless of its schedule.
@@ -365,8 +357,7 @@ def register_scheduler_view_log(agent):
         task_id: str = Field(description="The ID of the task whose log to view"),
         lines: int = Field(
             default=50, description="Number of lines to show from the end of the log"
-        ),
-    ) -> str:
+        )) -> str:
         """View the log file for a scheduled task.
 
         Shows the most recent output from task executions.
@@ -377,8 +368,7 @@ def register_scheduler_view_log(agent):
         group_id = generate_group_id("scheduler_view_log", task_id)
         emit_info(
             f"📅 SCHEDULER VIEW LOG → {task_id} (last {lines} lines)",
-            message_group=group_id,
-        )
+            message_group=group_id)
 
         task = get_task(task_id)
         if not task:

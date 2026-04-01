@@ -23,8 +23,7 @@ def get_commands_help():
     name="show",
     description="Show puppy config key-values",
     usage="/show",
-    category="config",
-)
+    category="config")
 def handle_show_command(command: str) -> bool:
     """Show current puppy configuration."""
     from rich.text import Text
@@ -45,11 +44,9 @@ def handle_show_command(command: str) -> bool:
         get_resume_message_count,
         get_temperature,
         get_use_dbos,
-        get_yolo_mode,
-    )
+        get_yolo_mode)
     from code_puppy.keymap import (
-        get_cancel_agent_display_name,
-    )
+        get_cancel_agent_display_name)
     from code_puppy.messaging import emit_info
 
     puppy_name = get_puppy_name()
@@ -95,8 +92,7 @@ def handle_show_command(command: str) -> bool:
     name="reasoning",
     description="Set OpenAI reasoning effort for GPT-5 models (e.g., /reasoning high)",
     usage="/reasoning <minimal|low|medium|high|xhigh>",
-    category="config",
-)
+    category="config")
 def handle_reasoning_command(command: str) -> bool:
     """Set OpenAI reasoning effort level."""
     from code_puppy.messaging import emit_error, emit_success, emit_warning
@@ -133,8 +129,7 @@ def handle_reasoning_command(command: str) -> bool:
     name="verbosity",
     description="Set OpenAI verbosity for GPT-5 models (e.g., /verbosity high)",
     usage="/verbosity <low|medium|high>",
-    category="config",
-)
+    category="config")
 def handle_verbosity_command(command: str) -> bool:
     """Set OpenAI verbosity level.
 
@@ -175,8 +170,7 @@ def handle_verbosity_command(command: str) -> bool:
     name="set",
     description="Set puppy config (e.g., /set yolo_mode true)",
     usage="/set <key> <value>",
-    category="config",
-)
+    category="config")
 def handle_set_command(command: str) -> bool:
     """Set configuration values."""
     from rich.text import Text
@@ -280,8 +274,7 @@ def _get_json_agents_pinned_to_model(model_name: str) -> list:
     name="pin_model",
     description="Pin a specific model to an agent",
     usage="/pin_model <agent> <model>",
-    category="config",
-)
+    category="config")
 def handle_pin_model_command(command: str) -> bool:
     """Pin a specific model to an agent."""
     from code_puppy.agents.agent_manager import get_agent_descriptions
@@ -398,8 +391,7 @@ def handle_pin_model_command(command: str) -> bool:
     name="unpin",
     description="Unpin a model from an agent (resets to default)",
     usage="/unpin <agent>",
-    category="config",
-)
+    category="config")
 def handle_unpin_command(command: str) -> bool:
     """Unpin a model from an agent (resets to default)."""
     from code_puppy.agents.agent_manager import get_agent_descriptions
@@ -529,8 +521,7 @@ def handle_unpin_command(command: str) -> bool:
     name="diff",
     description="Configure diff highlighting colors (additions, deletions)",
     usage="/diff",
-    category="config",
-)
+    category="config")
 def handle_diff_command(command: str) -> bool:
     """Configure diff highlighting colors."""
     import asyncio
@@ -539,8 +530,7 @@ def handle_diff_command(command: str) -> bool:
     from code_puppy.command_line.diff_menu import interactive_diff_picker
     from code_puppy.config import (
         set_diff_addition_color,
-        set_diff_deletion_color,
-    )
+        set_diff_deletion_color)
     from code_puppy.messaging import emit_error
 
     # Show interactive picker for diff configuration
@@ -562,8 +552,7 @@ def handle_diff_command(command: str) -> bool:
     name="colors",
     description="Configure banner colors for tool outputs (THINKING, SHELL COMMAND, etc.)",
     usage="/colors",
-    category="config",
-)
+    category="config")
 def handle_colors_command(command: str) -> bool:
     """Configure banner colors via interactive TUI."""
     import asyncio

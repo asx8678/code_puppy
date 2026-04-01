@@ -5,8 +5,7 @@
 Usage:
     from code_puppy.command_line.onboarding_wizard import (
         run_onboarding_wizard,
-        reset_onboarding,
-    )
+        reset_onboarding)
 
     result = await run_onboarding_wizard()
     # result: "chatgpt", "claude", "completed", "skipped", or None
@@ -16,7 +15,6 @@ import asyncio
 import io
 import os
 import sys
-from typing import List, Optional, Tuple
 
 from prompt_toolkit import Application
 from prompt_toolkit.formatted_text import ANSI
@@ -34,8 +32,7 @@ from .onboarding_slides import (
     slide_mcp,
     slide_models,
     slide_use_cases,
-    slide_welcome,
-)
+    slide_welcome)
 
 # ============================================================================
 # State Tracking
@@ -98,9 +95,9 @@ class OnboardingWizard:
         """Initialize wizard state."""
         self.current_slide = 0
         self.selected_option = 0
-        self.trigger_oauth: Optional[str] = None
-        self.model_choice: Optional[str] = None
-        self.result: Optional[str] = None
+        self.trigger_oauth: str | None = None
+        self.model_choice: str | None = None
+        self.result: str | None = None
         self._should_exit = False
 
     def get_progress_indicator(self) -> str:
@@ -123,7 +120,7 @@ class OnboardingWizard:
         else:  # slide 4
             return slide_done(self.trigger_oauth)
 
-    def get_options_for_slide(self) -> List[Tuple[str, str]]:
+    def get_options_for_slide(self) -> list[tuple[str, str]]:
         """Get selectable options for current slide."""
         if self.current_slide == 1:  # Model selection
             return [(opt[0], opt[1]) for opt in MODEL_OPTIONS]
@@ -185,8 +182,7 @@ def _get_slide_panel_content(wizard: OnboardingWizard) -> ANSI:
         legacy_windows=False,
         color_system="truecolor",
         no_color=False,
-        force_interactive=True,
-    )
+        force_interactive=True)
 
     # Progress indicator
     progress = wizard.get_progress_indicator()
@@ -206,7 +202,7 @@ def _get_slide_panel_content(wizard: OnboardingWizard) -> ANSI:
 # ============================================================================
 
 
-async def run_onboarding_wizard() -> Optional[str]:
+async def run_onboarding_wizard() -> str | None:
     """Run the interactive tutorial.
 
     Returns:
@@ -299,8 +295,7 @@ async def run_onboarding_wizard() -> Optional[str]:
             key_bindings=kb,
             full_screen=False,
             mouse_support=False,
-            color_depth="DEPTH_24_BIT",
-        )
+            color_depth="DEPTH_24_BIT")
 
         sys.stdout.write("\033[2J\033[H")
         sys.stdout.flush()
@@ -335,7 +330,7 @@ async def run_onboarding_wizard() -> Optional[str]:
     return wizard.result
 
 
-async def run_onboarding_if_needed() -> Optional[str]:
+async def run_onboarding_if_needed() -> str | None:
     """Run tutorial if user hasn't seen it yet."""
     if should_show_onboarding():
         return await run_onboarding_wizard()

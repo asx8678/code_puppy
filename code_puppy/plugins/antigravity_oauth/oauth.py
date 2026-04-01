@@ -1,6 +1,5 @@
 """Core OAuth flow implementation for Antigravity authentication."""
 
-from __future__ import annotations
 
 import base64
 import hashlib
@@ -9,7 +8,6 @@ import logging
 import secrets
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional
 from urllib.parse import urlencode
 
 import requests
@@ -20,8 +18,7 @@ from .constants import (
     ANTIGRAVITY_ENDPOINT_FALLBACKS,
     ANTIGRAVITY_HEADERS,
     ANTIGRAVITY_LOAD_ENDPOINTS,
-    ANTIGRAVITY_SCOPES,
-)
+    ANTIGRAVITY_SCOPES)
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +30,7 @@ class OAuthContext:
     state: str
     code_verifier: str
     code_challenge: str
-    redirect_uri: Optional[str] = None
+    redirect_uri: str | None = None
 
 
 @dataclass
@@ -52,7 +49,7 @@ class TokenExchangeSuccess:
     refresh_token: str
     access_token: str
     expires_at: float  # Unix timestamp
-    email: Optional[str]
+    email: str | None
     project_id: str
 
 
@@ -126,8 +123,7 @@ def prepare_oauth_context() -> OAuthContext:
     return OAuthContext(
         state=state,
         code_verifier=code_verifier,
-        code_challenge=code_challenge,
-    )
+        code_challenge=code_challenge)
 
 
 def assign_redirect_uri(context: OAuthContext, port: int) -> str:
@@ -163,8 +159,7 @@ def build_authorization_url(context: OAuthContext, project_id: str = "") -> str:
 def _onboard_user(
     access_token: str,
     tier_id: str = "free-tier",
-    gcp_project_id: str = "",
-) -> str:
+    gcp_project_id: str = "") -> str:
     """Onboard user to get a managed project ID.
 
     Args:
@@ -199,15 +194,13 @@ def _onboard_user(
                     url,
                     headers=headers,
                     json=request_body,
-                    timeout=30,
-                )
+                    timeout=30)
 
                 if not response.ok:
                     logger.debug(
                         "onboardUser failed: %d %s",
                         response.status_code,
-                        response.text[:200],
-                    )
+                        response.text[:200])
                     break
 
                 data = response.json()
@@ -241,9 +234,9 @@ class AntigravityStatus:
 
     project_id: str = ""
     current_tier: str = ""
-    allowed_tiers: List[str] = field(default_factory=list)
+    allowed_tiers: list[str] = field(default_factory=list)
     is_onboarded: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
 
 def fetch_antigravity_status(access_token: str) -> AntigravityStatus:
@@ -273,8 +266,7 @@ def fetch_antigravity_status(access_token: str) -> AntigravityStatus:
                         "pluginType": "GEMINI",
                     }
                 },
-                timeout=30,
-            )
+                timeout=30)
 
             if not response.ok:
                 continue
@@ -309,8 +301,7 @@ def fetch_antigravity_status(access_token: str) -> AntigravityStatus:
                 project_id=project_id,
                 current_tier=current_tier,
                 allowed_tiers=allowed_tier_ids,
-                is_onboarded=bool(project_id),
-            )
+                is_onboarded=bool(project_id))
 
         except Exception:
             continue
@@ -320,7 +311,7 @@ def fetch_antigravity_status(access_token: str) -> AntigravityStatus:
 
 def _fetch_project_id(access_token: str) -> str:
     """Fetch project ID from Antigravity loadCodeAssist API."""
-    errors: List[str] = []
+    errors: list[str] = []
 
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -336,7 +327,7 @@ def _fetch_project_id(access_token: str) -> str:
     )
 
     # First, try to get existing project from loadCodeAssist
-    allowed_tiers: List[dict] = []
+    allowed_tiers: list[dict] = []
 
     for base_endpoint in endpoints:
         try:
@@ -351,8 +342,7 @@ def _fetch_project_id(access_token: str) -> str:
                         "pluginType": "GEMINI",
                     }
                 },
-                timeout=30,
-            )
+                timeout=30)
 
             if not response.ok:
                 errors.append(
@@ -411,8 +401,7 @@ def _fetch_project_id(access_token: str) -> str:
 def exchange_code_for_tokens(
     code: str,
     state: str,
-    redirect_uri: str,
-) -> TokenExchangeResult:
+    redirect_uri: str) -> TokenExchangeResult:
     """Exchange an authorization code for Antigravity OAuth tokens."""
     try:
         # Decode and verify state
@@ -430,8 +419,7 @@ def exchange_code_for_tokens(
                 "redirect_uri": redirect_uri,
                 "code_verifier": verifier,
             },
-            timeout=30,
-        )
+            timeout=30)
 
         if not response.ok:
             return TokenExchangeFailure(error=response.text)
@@ -445,13 +433,12 @@ def exchange_code_for_tokens(
             return TokenExchangeFailure(error="Missing refresh token in response")
 
         # Fetch user email
-        email: Optional[str] = None
+        email: str | None = None
         try:
             user_response = requests.get(
                 "https://www.googleapis.com/oauth2/v1/userinfo?alt=json",
                 headers={"Authorization": f"Bearer {access_token}"},
-                timeout=10,
-            )
+                timeout=10)
             if user_response.ok:
                 email = user_response.json().get("email")
         except Exception as e:
@@ -470,8 +457,7 @@ def exchange_code_for_tokens(
             access_token=access_token,
             expires_at=time.time() + expires_in,
             email=email,
-            project_id=effective_project_id or "",
-        )
+            project_id=effective_project_id or "")
 
     except Exception as e:
         logger.exception("Token exchange failed")

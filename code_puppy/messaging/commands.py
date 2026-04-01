@@ -21,7 +21,7 @@ NO Rich markup or formatting should be embedded in any string fields.
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Union
+from typing import Union
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -36,12 +36,10 @@ class BaseCommand(BaseModel):
 
     id: str = Field(
         default_factory=lambda: str(uuid4()),
-        description="Unique identifier for this command instance",
-    )
+        description="Unique identifier for this command instance")
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        description="When this command was created (UTC)",
-    )
+        description="When this command was created (UTC)")
 
     model_config = {"frozen": False, "extra": "forbid"}
 
@@ -58,10 +56,9 @@ class CancelAgentCommand(BaseCommand):
     and return control to the user. This is a soft cancellation.
     """
 
-    reason: Optional[str] = Field(
+    reason: str | None = Field(
         default=None,
-        description="Optional reason for cancellation (for logging/debugging)",
-    )
+        description="Optional reason for cancellation (for logging/debugging)")
 
 
 class InterruptShellCommand(BaseCommand):
@@ -72,10 +69,9 @@ class InterruptShellCommand(BaseCommand):
     too long or producing unwanted output.
     """
 
-    command_id: Optional[str] = Field(
+    command_id: str | None = Field(
         default=None,
-        description="ID of the specific shell command to interrupt (None = current)",
-    )
+        description="ID of the specific shell command to interrupt (None = current)")
 
 
 # =============================================================================
@@ -109,10 +105,9 @@ class ConfirmationResponse(BaseCommand):
     confirmed: bool = Field(
         description="Whether the user confirmed (True) or denied (False)"
     )
-    feedback: Optional[str] = Field(
+    feedback: str | None = Field(
         default=None,
-        description="Optional feedback text from the user",
-    )
+        description="Optional feedback text from the user")
 
 
 class SelectionResponse(BaseCommand):
@@ -127,8 +122,7 @@ class SelectionResponse(BaseCommand):
     )
     selected_index: int = Field(
         ge=0,
-        description="Zero-based index of the selected option",
-    )
+        description="Zero-based index of the selected option")
     selected_value: str = Field(description="The value of the selected option")
 
 
@@ -138,13 +132,7 @@ class SelectionResponse(BaseCommand):
 
 
 # All concrete command types (excludes BaseCommand itself)
-AnyCommand = Union[
-    CancelAgentCommand,
-    InterruptShellCommand,
-    UserInputResponse,
-    ConfirmationResponse,
-    SelectionResponse,
-]
+AnyCommand = CancelAgentCommand | InterruptShellCommand | UserInputResponse | ConfirmationResponse | SelectionResponse
 """Union of all command types for type checking."""
 
 

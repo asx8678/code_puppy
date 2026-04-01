@@ -4,7 +4,6 @@ Provides interactive menus with arrow-key navigation for selecting
 schedule type, agent, model, and other task parameters.
 """
 
-from typing import List, Optional, Tuple
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -18,13 +17,13 @@ class SelectionMenu:
     """Simple arrow-key selection menu."""
 
     def __init__(
-        self, title: str, choices: List[str], descriptions: Optional[List[str]] = None
+        self, title: str, choices: list[str], descriptions: list[str | None] = None
     ):
         self.title = title
         self.choices = choices
         self.descriptions = descriptions or [""] * len(choices)
         self.selected_idx = 0
-        self.result: Optional[str] = None
+        self.result: str | None = None
         self.cancelled = False
 
     def _render(self) -> List:
@@ -62,7 +61,7 @@ class SelectionMenu:
 
         return lines
 
-    def run(self) -> Optional[str]:
+    def run(self) -> str | None:
         """Run the selection menu. Returns selected choice or None if cancelled."""
         control = FormattedTextControl(text="")
         window = Window(content=control, wrap_lines=True)
@@ -117,7 +116,7 @@ class TextInputMenu:
         self.default = default
         self.placeholder = placeholder
 
-    def run(self) -> Optional[str]:
+    def run(self) -> str | None:
         """Run text input. Returns entered text or None if cancelled."""
         from code_puppy.command_line.utils import safe_input
 
@@ -141,7 +140,7 @@ class MultilineInputMenu:
     def __init__(self, title: str):
         self.title = title
 
-    def run(self) -> Optional[str]:
+    def run(self) -> str | None:
         """Run multiline input. Returns entered text or None if cancelled."""
         from code_puppy.command_line.utils import safe_input
 
@@ -162,7 +161,7 @@ class MultilineInputMenu:
         return "\n".join(lines) if lines else None
 
 
-def get_available_agents_list() -> List[Tuple[str, str]]:
+def get_available_agents_list() -> list[tuple[str, str]]:
     """Get list of available agents with descriptions."""
     try:
         from code_puppy.agents import get_agent_descriptions, get_available_agents
@@ -179,7 +178,7 @@ def get_available_agents_list() -> List[Tuple[str, str]]:
         return [("code-puppy", "Default agent")]
 
 
-def get_available_models_list() -> List[str]:
+def get_available_models_list() -> list[str]:
     """Get list of available models."""
     try:
         from code_puppy.command_line.model_picker_completion import load_model_names
@@ -190,7 +189,7 @@ def get_available_models_list() -> List[str]:
         return ["(default)"]
 
 
-def create_task_wizard() -> Optional[dict]:
+def create_task_wizard() -> dict | None:
     """Run the full task creation wizard.
 
     Returns:
@@ -227,8 +226,7 @@ def create_task_wizard() -> Optional[dict]:
             "Run 4 times per day",
             "Run once per day",
             "Specify custom interval like 45m, 3h, 2d",
-        ],
-    )
+        ])
     schedule_choice = schedule_menu.run()
     if not schedule_choice:
         print("\n  ❌ Cancelled.")

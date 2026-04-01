@@ -5,7 +5,6 @@ MCP Remove Command - Removes an MCP server.
 import json
 import logging
 import os
-from typing import List, Optional
 
 from code_puppy.messaging import emit_error, emit_info
 
@@ -23,7 +22,7 @@ class RemoveCommand(MCPCommandBase):
     Removes a specific MCP server from the manager and configuration.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Remove an MCP server.
 

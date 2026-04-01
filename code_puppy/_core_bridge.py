@@ -5,7 +5,6 @@ the dict format that Rust expects. The Rust module never touches pydantic-ai
 objects directly.
 """
 
-from __future__ import annotations
 
 import json
 from typing import Any
@@ -21,8 +20,7 @@ try:
         serialize_session,
         serialize_session_incremental,
         split_for_summarization,
-        truncation_indices,
-    )
+        truncation_indices)
 
     RUST_AVAILABLE = True
 except ImportError:
@@ -107,9 +105,9 @@ def serialize_message_for_rust(message: Any) -> dict:
         else:
             # Dicts, Pydantic models, other — serialize to JSON string
             try:
-                if hasattr(content, "model_dump"):
-                    part_dict["content_json"] = json.dumps(
-                        content.model_dump(), sort_keys=True
+                if hasattr(content, "model_dump_json"):
+                    part_dict["content_json"] = content.model_dump_json(
+                        sort_keys=True
                     )
                 elif isinstance(content, dict):
                     part_dict["content_json"] = json.dumps(content, sort_keys=True)

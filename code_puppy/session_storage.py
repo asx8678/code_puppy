@@ -6,7 +6,6 @@ us avoid duplication while staying inside the Zen-of-Python sweet spot: simple
 is better than complex, nested side effects are worse than deliberate helpers.
 """
 
-from __future__ import annotations
 
 import hashlib
 import hmac
@@ -18,7 +17,7 @@ import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable
 
 import msgpack
 
@@ -94,8 +93,7 @@ def _get_or_create_hmac_key() -> bytes:
             logger.warning(
                 "HMAC key file at %s is corrupted (%d bytes, expected 32), regenerating",
                 key_path,
-                len(key),
-            )
+                len(key))
             key = os.urandom(32)
             key_path.write_bytes(key)
             key_path.chmod(0o600)
@@ -139,8 +137,7 @@ def _load_raw_bytes(raw: bytes) -> Any:
                 "Re-save this session to add integrity protection. "
                 "Pre-HMAC msgpack support will be removed in a future version.",
                 DeprecationWarning,
-                stacklevel=2,
-            )
+                stacklevel=2)
             return data
         return msgpack.unpackb(msgpack_data, raw=False)
 
@@ -153,8 +150,7 @@ def _load_raw_bytes(raw: bytes) -> Any:
             "Re-save this session to migrate to the new MessagePack format. "
             "Legacy format support will be removed in a future version.",
             DeprecationWarning,
-            stacklevel=2,
-        )
+            stacklevel=2)
         return pickle.loads(pickle_data)  # noqa: S301
 
     # Plain pickle (original format) - with deprecation warning
@@ -163,12 +159,11 @@ def _load_raw_bytes(raw: bytes) -> Any:
         "Re-save this session to migrate to the MessagePack format. "
         "Pickle support will be removed in a future version.",
         DeprecationWarning,
-        stacklevel=2,
-    )
+        stacklevel=2)
     return pickle.loads(raw)  # noqa: S301
 
 
-SessionHistory = List[Any]
+SessionHistory = list[Any]
 TokenEstimator = Callable[[Any], int]
 
 
@@ -218,9 +213,8 @@ def save_session(
     timestamp: str,
     token_estimator: TokenEstimator,
     auto_saved: bool = False,
-    compacted_hashes: Optional[List] = None,
-    precomputed_total: Optional[int] = None,
-) -> SessionMetadata:
+    compacted_hashes: List | None = None,
+    precomputed_total: int | None = None) -> SessionMetadata:
     ensure_directory(base_dir)
     paths = build_session_paths(base_dir, session_name)
 
@@ -265,8 +259,7 @@ def save_session(
         total_tokens=total_tokens,
         pickle_path=paths.pickle_path,
         metadata_path=paths.metadata_path,
-        auto_saved=auto_saved,
-    )
+        auto_saved=auto_saved)
 
     tmp_metadata = paths.metadata_path.with_suffix(".tmp")
     with tmp_metadata.open("w", encoding="utf-8") as metadata_file:
@@ -276,7 +269,7 @@ def save_session(
     return metadata
 
 
-def _parse_session_payload(data: Any) -> Tuple[SessionHistory, List]:
+def _parse_session_payload(data: Any) -> tuple[SessionHistory]:
     """Parse session payload into ``(messages, compacted_hashes)``.
 
     Handles two on-disk formats:
@@ -318,7 +311,7 @@ def load_session(
 
 def load_session_with_hashes(
     session_name: str, base_dir: Path
-) -> Tuple[SessionHistory, List]:
+) -> tuple[SessionHistory]:
     """Load message history *and* compacted-message hashes from a session file.
 
     Returns:
@@ -341,11 +334,9 @@ def load_session_with_hashes(
             "Session '%s' could not be read from disk: %s: %s",
             session_name,
             type(exc).__name__,
-            exc,
-        )
+            exc)
         from code_puppy.messaging import (
-            emit_warning,
-        )  # lazy import – avoids circular deps
+            emit_warning)  # lazy import – avoids circular deps
 
         emit_warning(
             f"Session '{session_name}' could not be loaded: {type(exc).__name__}: {exc}"
@@ -360,8 +351,7 @@ def load_session_with_hashes(
             "Session '%s' deserialization failed: %s: %s",
             session_name,
             type(exc).__name__,
-            exc,
-        )
+            exc)
         from code_puppy.messaging import emit_warning
 
         emit_warning(
@@ -377,8 +367,7 @@ def load_session_with_hashes(
             "Session '%s' payload parse failed: %s: %s",
             session_name,
             type(exc).__name__,
-            exc,
-        )
+            exc)
         from code_puppy.messaging import emit_warning
 
         emit_warning(
@@ -387,13 +376,13 @@ def load_session_with_hashes(
         return [], []
 
 
-def list_sessions(base_dir: Path) -> List[str]:
+def list_sessions(base_dir: Path) -> list[str]:
     if not base_dir.exists():
         return []
     return sorted(path.stem for path in base_dir.glob("*.pkl"))
 
 
-def cleanup_sessions(base_dir: Path, max_sessions: int) -> List[str]:
+def cleanup_sessions(base_dir: Path, max_sessions: int) -> list[str]:
     if max_sessions <= 0:
         return []
 
@@ -406,11 +395,10 @@ def cleanup_sessions(base_dir: Path, max_sessions: int) -> List[str]:
 
     sorted_candidates = sorted(
         ((path.stat().st_mtime, path) for path in candidate_paths),
-        key=lambda item: item[0],
-    )
+        key=lambda item: item[0])
 
     stale_entries = sorted_candidates[:-max_sessions]
-    removed_sessions: List[str] = []
+    removed_sessions: list[str] = []
     for _, pickle_path in stale_entries:
         metadata_path = base_dir / f"{pickle_path.stem}_meta.json"
         try:
@@ -440,8 +428,7 @@ async def restore_autosave_interactively(base_dir: Path) -> None:
 
     from code_puppy.agents.agent_manager import get_current_agent
     from code_puppy.command_line.prompt_toolkit_completion import (
-        get_input_with_combined_completion,
-    )
+        get_input_with_combined_completion)
     from code_puppy.messaging import emit_success, emit_system_message, emit_warning
 
     entries = []
@@ -509,8 +496,7 @@ async def restore_autosave_interactively(base_dir: Path) -> None:
                     [
                         (
                             "class:prompt",
-                            "Pick 1-5 to load, 6 for next, or name/Enter: ",
-                        )
+                            "Pick 1-5 to load, 6 for next, or name/Enter: ")
                     ]
                 )
             )

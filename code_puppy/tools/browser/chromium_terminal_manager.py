@@ -7,7 +7,6 @@ terminal QA agents to run simultaneously without profile conflicts.
 
 import logging
 import uuid
-from typing import Optional
 
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
@@ -39,12 +38,12 @@ class ChromiumTerminalManager:
         await manager.close()
     """
 
-    _browser: Optional[Browser] = None
-    _context: Optional[BrowserContext] = None
-    _playwright: Optional[object] = None
+    _browser: Browser | None = None
+    _context: BrowserContext | None = None
+    _playwright: object | None = None
     _initialized: bool = False
 
-    def __init__(self, session_id: Optional[str] = None) -> None:
+    def __init__(self, session_id: str | None = None) -> None:
         """Initialize manager settings.
 
         Args:
@@ -89,8 +88,7 @@ class ChromiumTerminalManager:
 
             # Launch browser (not persistent - allows multiple instances)
             self._browser = await self._playwright.chromium.launch(
-                headless=self.headless,
-            )
+                headless=self.headless)
 
             # Create ephemeral context
             self._context = await self._browser.new_context()
@@ -108,7 +106,7 @@ class ChromiumTerminalManager:
             await self._cleanup()
             raise
 
-    async def get_current_page(self) -> Optional[Page]:
+    async def get_current_page(self) -> Page | None:
         """Get the currently active page, creating one if none exist.
 
         Lazily initializes the browser if not already initialized.
@@ -131,7 +129,7 @@ class ChromiumTerminalManager:
         logger.debug("No existing pages, creating new blank page")
         return await self._context.new_page()
 
-    async def new_page(self, url: Optional[str] = None) -> Page:
+    async def new_page(self, url: str | None = None) -> Page:
         """Create a new page, optionally navigating to a URL.
 
         Lazily initializes the browser if not already initialized.
@@ -232,8 +230,7 @@ class ChromiumTerminalManager:
 
 
 def get_chromium_terminal_manager(
-    session_id: Optional[str] = None,
-) -> ChromiumTerminalManager:
+    session_id: str | None = None) -> ChromiumTerminalManager:
     """Get or create a ChromiumTerminalManager instance.
 
     Args:

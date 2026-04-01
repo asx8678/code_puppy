@@ -9,19 +9,16 @@ Public API:
         SkillCatalog,
         SkillCatalogEntry,
         _format_display_name,
-        catalog,
-    )
+        catalog)
 
 If the remote catalog can't be fetched (and there's no cache), the catalog is
 empty by default (and we log a warning).
 """
 
-from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
 
 from code_puppy.plugins.agent_skills.remote_catalog import fetch_remote_catalog
 
@@ -112,8 +109,8 @@ class SkillCatalogEntry:
     display_name: str
     description: str
     category: str
-    tags: List[str] = field(default_factory=list)
-    source_path: Optional[Path] = None
+    tags: list[str] = field(default_factory=list)
+    source_path: Path | None = None
     has_scripts: bool = False
     has_references: bool = False
     file_count: int = 0
@@ -164,8 +161,7 @@ class SkillCatalog:
                 has_references=remote_entry.has_references,
                 file_count=remote_entry.file_count,
                 download_url=remote_entry.download_url,
-                zip_size_bytes=remote_entry.zip_size_bytes,
-            )
+                zip_size_bytes=remote_entry.zip_size_bytes)
             entries.append(entry)
 
         self._rebuild_indices(entries)
@@ -195,20 +191,20 @@ class SkillCatalog:
 
         self._entries.sort(key=lambda e: e.display_name.casefold())
 
-    def list_categories(self) -> List[str]:
+    def list_categories(self) -> list[str]:
         """List all categories."""
 
         categories = {e.category for e in self._entries if e.category}
         return sorted(categories, key=lambda c: c.casefold())
 
-    def get_by_category(self, category: str) -> List[SkillCatalogEntry]:
+    def get_by_category(self, category: str) -> list[SkillCatalogEntry]:
         """Return all entries in a category (case-insensitive)."""
 
         if not category:
             return []
         return list(self._by_category.get(category.casefold(), []))
 
-    def search(self, query: str) -> List[SkillCatalogEntry]:
+    def search(self, query: str) -> list[SkillCatalogEntry]:
         """Search by substring over id/name/display_name/description/tags/category."""
 
         q = (query or "").strip().casefold()
@@ -231,14 +227,14 @@ class SkillCatalog:
 
         return results
 
-    def get_by_id(self, skill_id: str) -> Optional[SkillCatalogEntry]:
+    def get_by_id(self, skill_id: str) -> SkillCatalogEntry | None:
         """Get a skill entry by id (case-sensitive exact match)."""
 
         if not skill_id:
             return None
         return self._by_id.get(skill_id)
 
-    def get_all(self) -> List[SkillCatalogEntry]:
+    def get_all(self) -> list[SkillCatalogEntry]:
         """Return all entries."""
 
         return list(self._entries)

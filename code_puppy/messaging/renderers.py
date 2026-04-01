@@ -8,7 +8,6 @@ appropriately for their respective interfaces.
 import asyncio
 import threading
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -78,7 +77,7 @@ class InteractiveRenderer(MessageRenderer):
     A future refactoring might consolidate these renderers.
     """
 
-    def __init__(self, queue: MessageQueue, console: Optional[Console] = None):
+    def __init__(self, queue: MessageQueue, console: Console | None = None):
         super().__init__(queue)
         self.console = console or Console()
 
@@ -175,7 +174,7 @@ class SynchronousInteractiveRenderer:
     - Registers as a direct listener to the message queue for immediate processing
     """
 
-    def __init__(self, queue: MessageQueue, console: Optional[Console] = None):
+    def __init__(self, queue: MessageQueue, console: Console | None = None):
         self.queue = queue
         self.console = console or Console()
         self._running = False

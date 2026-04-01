@@ -153,9 +153,7 @@ class StatusDisplay:
             str(self.spinner),
             Text(
                 f" {self.loading_messages[self.current_message_index]} ⏳",
-                style="bold yellow",
-            ),
-        )
+                style="bold yellow"))
 
         # Use expanded panel with more visible formatting
         return Panel(
@@ -163,8 +161,7 @@ class StatusDisplay:
             title="[bold blue]Code Puppy Status[/bold blue]",
             border_style="bright_blue",
             expand=False,
-            padding=(1, 2),
-        )
+            padding=(1, 2))
 
     def _get_status_text(self) -> Text:
         """Generate a status text with current rate and animated message"""
@@ -184,8 +181,7 @@ class StatusDisplay:
         # Create a highly visible status text
         return Text.assemble(
             Text(f"⏳ {rate_text} 🐾", style="bold cyan"),
-            Text(f" {message}", style="yellow"),
-        )
+            Text(f" {message}", style="yellow"))
 
     async def _update_display(self) -> None:
         """Update the display continuously while active using Rich Live display"""

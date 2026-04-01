@@ -4,19 +4,17 @@ This module registers a callback that intercepts shell commands in yolo_mode
 and assesses their safety risk before execution.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.config import (
     get_global_model_name,
     get_safety_permission_level,
-    get_yolo_mode,
-)
+    get_yolo_mode)
 from code_puppy.messaging import emit_info
 from code_puppy.plugins.shell_safety.command_cache import (
     cache_assessment,
-    get_cached_assessment,
-)
+    get_cached_assessment)
 from code_puppy.tools.command_runner import ShellSafetyAssessment
 
 # OAuth model prefixes - these models have their own safety mechanisms
@@ -47,7 +45,7 @@ def is_oauth_model(model_name: str | None) -> bool:
 # Risk level hierarchy for numeric comparison
 # Lower numbers = safer commands, higher numbers = more dangerous
 # This mapping allows us to compare risk levels as integers
-RISK_LEVELS: Dict[str, int] = {
+RISK_LEVELS: dict[str, int] = {
     "none": 0,
     "low": 1,
     "medium": 2,
@@ -56,7 +54,7 @@ RISK_LEVELS: Dict[str, int] = {
 }
 
 
-def compare_risk_levels(assessed_risk: Optional[str], threshold: str) -> bool:
+def compare_risk_levels(assessed_risk: str | None, threshold: str) -> bool:
     """Compare assessed risk against threshold.
 
     Args:
@@ -81,8 +79,8 @@ def compare_risk_levels(assessed_risk: Optional[str], threshold: str) -> bool:
 
 
 async def shell_safety_callback(
-    context: Any, command: str, cwd: Optional[str] = None, timeout: int = 60
-) -> Optional[Dict[str, Any]]:
+    context: Any, command: str, cwd: str | None = None, timeout: int = 60
+) -> dict[str, Any | None]:
     """Callback to assess shell command safety before execution.
 
     This callback is only active when yolo_mode is True. When yolo_mode is False,

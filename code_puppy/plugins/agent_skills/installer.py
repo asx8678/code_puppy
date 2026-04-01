@@ -6,11 +6,9 @@ installers (e.g. local installers, remote zip downloaders).
 It is intentionally small so other modules can depend on a stable result shape.
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,4 +17,4 @@ class InstallResult:
 
     success: bool
     message: str
-    installed_path: Optional[Path] = None
+    installed_path: Path | None = None

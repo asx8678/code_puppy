@@ -8,7 +8,6 @@ import traceback
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import List, Set
 
 from dbos import DBOS, SetWorkflowID
 from pydantic import BaseModel
@@ -21,8 +20,7 @@ from code_puppy.config import (
     DATA_DIR,
     get_message_limit,
     get_use_dbos,
-    get_value,
-)
+    get_value)
 from code_puppy.messaging import (
     SubAgentInvocationMessage,
     SubAgentResponseMessage,
@@ -31,13 +29,12 @@ from code_puppy.messaging import (
     emit_success,
     get_message_bus,
     get_session_context,
-    set_session_context,
-)
+    set_session_context)
 from code_puppy.tools.common import generate_group_id
 from code_puppy.tools.subagent_context import subagent_context
 
 # Set to track active subagent invocation tasks
-_active_subagent_tasks: Set[asyncio.Task] = set()
+_active_subagent_tasks: set[asyncio.Task] = set()
 
 # Atomic counter for DBOS workflow IDs - ensures uniqueness even in rapid back-to-back calls
 # itertools.count() is thread-safe for next() calls
@@ -122,10 +119,9 @@ def _get_subagent_sessions_dir() -> Path:
 
 def _save_session_history(
     session_id: str,
-    message_history: List[ModelMessage],
+    message_history: list[ModelMessage],
     agent_name: str,
-    initial_prompt: str | None = None,
-) -> None:
+    initial_prompt: str | None = None) -> None:
     """Save session history to filesystem.
 
     Args:
@@ -173,7 +169,7 @@ def _save_session_history(
             pass  # If we can't update metadata, no big deal
 
 
-def _load_session_history(session_id: str) -> List[ModelMessage]:
+def _load_session_history(session_id: str) -> list[ModelMessage]:
     """Load session history from filesystem.
 
     Args:
@@ -213,7 +209,7 @@ class AgentInfo(BaseModel):
 class ListAgentsOutput(BaseModel):
     """Output for the list_agents tool."""
 
-    agents: List[AgentInfo]
+    agents: list[AgentInfo]
     error: str | None = None
 
 
@@ -257,8 +253,7 @@ def register_list_agents(agent):
                 AgentInfo(
                     name=name,
                     display_name=display_name,
-                    description=descriptions_dict.get(name, "No description available"),
-                )
+                    description=descriptions_dict.get(name, "No description available"))
                 for name, display_name in agents_dict.items()
             ]
 
@@ -269,8 +264,7 @@ def register_list_agents(agent):
                     f"[bold white on {list_agents_color}] LIST AGENTS [/bold white on {list_agents_color}] "
                     f"[dim]Found {agent_count} agent(s).[/dim]"
                 ),
-                message_group=group_id,
-            )
+                message_group=group_id)
 
             return ListAgentsOutput(agents=agents)
 
@@ -349,8 +343,7 @@ def register_invoke_agent(agent):
                 session_id=session_id,
                 prompt=prompt,
                 is_new_session=is_new_session,
-                message_count=len(message_history),
-            )
+                message_count=len(message_history))
         )
 
         # Save current session context and set the new one for this sub-agent
@@ -361,16 +354,14 @@ def register_invoke_agent(agent):
         # This uses contextvars which properly propagate through async tasks
         from code_puppy.tools.browser.terminal_tools import (
             _terminal_session_var,
-            set_terminal_session,
-        )
+            set_terminal_session)
 
         terminal_session_token = set_terminal_session(f"terminal-{session_id}")
 
         # Set browser session for browser tools (qa-kitten, etc.)
         # This allows parallel agent invocations to each have their own browser
         from code_puppy.tools.browser.browser_manager import (
-            set_browser_session,
-        )
+            set_browser_session)
 
         browser_session_token = set_browser_session(f"browser-{session_id}")
 
@@ -454,8 +445,7 @@ def register_invoke_agent(agent):
                     retries=3,
                     toolsets=[],  # MCP servers added separately for DBOS
                     history_processors=[agent_config.message_history_accumulator],
-                    model_settings=model_settings,
-                )
+                    model_settings=model_settings)
 
                 # Register the tools that the agent needs
                 from code_puppy.tools import register_tools_for_agent
@@ -466,8 +456,7 @@ def register_invoke_agent(agent):
                 # Wrap with DBOS - no streaming for sub-agents
                 dbos_agent = DBOSAgent(
                     temp_agent,
-                    name=subagent_name,
-                )
+                    name=subagent_name)
                 temp_agent = dbos_agent
 
                 # Store MCP servers to add at runtime
@@ -481,8 +470,7 @@ def register_invoke_agent(agent):
                     retries=3,
                     toolsets=mcp_servers,
                     history_processors=[agent_config.message_history_accumulator],
-                    model_settings=model_settings,
-                )
+                    model_settings=model_settings)
 
                 # Register the tools that the agent needs
                 from code_puppy.tools import register_tools_for_agent
@@ -521,8 +509,7 @@ def register_invoke_agent(agent):
                                 usage_limits=UsageLimits(
                                     request_limit=get_message_limit()
                                 ),
-                                event_stream_handler=stream_handler,
-                            )
+                                event_stream_handler=stream_handler)
                         )
                         _active_subagent_tasks.add(task)
                 else:
@@ -531,8 +518,7 @@ def register_invoke_agent(agent):
                             prompt,
                             message_history=message_history,
                             usage_limits=UsageLimits(request_limit=get_message_limit()),
-                            event_stream_handler=stream_handler,
-                        )
+                            event_stream_handler=stream_handler)
                     )
                     _active_subagent_tasks.add(task)
 
@@ -556,8 +542,7 @@ def register_invoke_agent(agent):
                 session_id=session_id,
                 message_history=updated_history,
                 agent_name=agent_name,
-                initial_prompt=prompt if is_new_session else None,
-            )
+                initial_prompt=prompt if is_new_session else None)
 
             # Emit structured response message via MessageBus
             bus.emit(
@@ -565,8 +550,7 @@ def register_invoke_agent(agent):
                     agent_name=agent_name,
                     session_id=session_id,
                     response=response,
-                    message_count=len(updated_history),
-                )
+                    message_count=len(updated_history))
             )
 
             # Emit clean completion summary
@@ -590,8 +574,7 @@ def register_invoke_agent(agent):
                 response=None,
                 agent_name=agent_name,
                 session_id=session_id,
-                error=error_msg,
-            )
+                error=error_msg)
 
         finally:
             # Restore the previous session context
@@ -600,8 +583,7 @@ def register_invoke_agent(agent):
             _terminal_session_var.reset(terminal_session_token)
             # Reset browser session context
             from code_puppy.tools.browser.browser_manager import (
-                _browser_session_var,
-            )
+                _browser_session_var)
 
             _browser_session_var.reset(browser_session_token)
 

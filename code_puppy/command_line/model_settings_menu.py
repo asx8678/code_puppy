@@ -6,7 +6,6 @@ settings like temperature and seed on a per-model basis.
 
 import sys
 import time
-from typing import Dict, List, Optional
 
 from prompt_toolkit import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -22,8 +21,7 @@ from code_puppy.config import (
     model_supports_setting,
     set_model_setting,
     set_openai_reasoning_effort,
-    set_openai_verbosity,
-)
+    set_openai_verbosity)
 from code_puppy.messaging import emit_info
 from code_puppy.model_factory import ModelFactory
 from code_puppy.tools.command_runner import set_awaiting_user_input
@@ -33,7 +31,7 @@ MODELS_PER_PAGE = 15
 
 # Setting definitions with metadata
 # Numeric settings have min/max/step, choice settings have choices list
-SETTING_DEFINITIONS: Dict[str, Dict] = {
+SETTING_DEFINITIONS: dict[str] = {
     "temperature": {
         "name": "Temperature",
         "description": "Controls randomness (0.0-1.0). Lower = more deterministic, higher = more creative.",
@@ -130,15 +128,15 @@ SETTING_DEFINITIONS: Dict[str, Dict] = {
 }
 
 
-def _load_all_model_names() -> List[str]:
+def _load_all_model_names() -> list[str]:
     """Load all available model names from config."""
     models_config = ModelFactory.load_config()
     return list(models_config.keys())
 
 
 def _get_setting_choices(
-    setting_key: str, model_name: Optional[str] = None
-) -> List[str]:
+    setting_key: str, model_name: str | None = None
+) -> list[str]:
     """Get the available choices for a setting, filtered by model capabilities.
 
     For reasoning_effort, only codex models support 'xhigh' - regular GPT-5.2
@@ -201,12 +199,12 @@ class ModelSettingsMenu:
 
         # Editing state
         self.editing_mode = False
-        self.edit_value: Optional[float] = None
+        self.edit_value: float | None = None
         self.result_changed = False
 
         # Cache for selected model's settings
-        self.selected_model: Optional[str] = None
-        self.supported_settings: List[str] = []
+        self.selected_model: str | None = None
+        self.supported_settings: list[str] = []
         self.current_settings: Dict = {}
 
     @property
@@ -227,7 +225,7 @@ class ModelSettingsMenu:
         return min(self.page_start + self.page_size, len(self.all_models))
 
     @property
-    def models_on_page(self) -> List[str]:
+    def models_on_page(self) -> list[str]:
         """Get the models visible on the current page."""
         return self.all_models[self.page_start : self.page_end]
 
@@ -238,7 +236,7 @@ class ModelSettingsMenu:
         elif self.model_index >= self.page_end:
             self.page = self.model_index // self.page_size
 
-    def _get_supported_settings(self, model_name: str) -> List[str]:
+    def _get_supported_settings(self, model_name: str) -> list[str]:
         """Get list of settings supported by a model."""
         supported = []
         for setting_key in SETTING_DEFINITIONS:
@@ -297,8 +295,7 @@ class ModelSettingsMenu:
                 lines.append(
                     (
                         "fg:ansibrightblack",
-                        f"  (Page {self.page + 1}/{self.total_pages})",
-                    )
+                        f"  (Page {self.page + 1}/{self.total_pages})")
                 )
             lines.append(("", "\n\n"))
 
@@ -468,8 +465,7 @@ class ModelSettingsMenu:
                 lines.append(
                     (
                         "fg:ansibrightblack dim",
-                        f"  Model {self.model_index + 1} of {len(self.all_models)}",
-                    )
+                        f"  Model {self.model_index + 1} of {len(self.all_models)}")
                 )
                 lines.append(("", "\n"))
 
@@ -497,8 +493,7 @@ class ModelSettingsMenu:
                 lines.append(
                     (
                         "fg:ansiyellow",
-                        "  ⚠ Global setting (applies to all GPT-5 models)",
-                    )
+                        "  ⚠ Global setting (applies to all GPT-5 models)")
                 )
             lines.append(("", "\n\n"))
 
@@ -515,8 +510,7 @@ class ModelSettingsMenu:
                 lines.append(
                     (
                         "fg:ansibrightblack",
-                        f"    {' | '.join(choices)}",
-                    )
+                        f"    {' | '.join(choices)}")
                 )
             elif setting_def.get("type") == "boolean":
                 lines.append(("bold", "  Options:"))
@@ -524,8 +518,7 @@ class ModelSettingsMenu:
                 lines.append(
                     (
                         "fg:ansibrightblack",
-                        "    Enabled | Disabled",
-                    )
+                        "    Enabled | Disabled")
                 )
             else:
                 lines.append(("bold", "  Range:"))
@@ -533,8 +526,7 @@ class ModelSettingsMenu:
                 lines.append(
                     (
                         "fg:ansibrightblack",
-                        f"    Min: {setting_def['min']}  Max: {setting_def['max']}  Step: {setting_def['step']}",
-                    )
+                        f"    Min: {setting_def['min']}  Max: {setting_def['max']}  Step: {setting_def['step']}")
                 )
             lines.append(("", "\n\n"))
 
@@ -545,8 +537,7 @@ class ModelSettingsMenu:
                 lines.append(
                     (
                         "fg:ansicyan",
-                        f"    {self._format_value(setting_key, current_value)}",
-                    )
+                        f"    {self._format_value(setting_key, current_value)}")
                 )
             else:
                 lines.append(("fg:ansibrightblack dim", "    (using model default)"))
@@ -560,8 +551,7 @@ class ModelSettingsMenu:
                     lines.append(
                         (
                             "fg:ansicyan",
-                            f"    New value: {self._format_value(setting_key, self.edit_value)}",
-                        )
+                            f"    New value: {self._format_value(setting_key, self.edit_value)}")
                     )
                 else:
                     lines.append(
@@ -857,8 +847,7 @@ class ModelSettingsMenu:
             layout=layout,
             key_bindings=kb,
             full_screen=False,
-            mouse_support=False,
-        )
+            mouse_support=False)
 
         set_awaiting_user_input(True)
 
@@ -888,7 +877,7 @@ class ModelSettingsMenu:
         return self.result_changed
 
 
-def interactive_model_settings(model_name: Optional[str] = None) -> bool:
+def interactive_model_settings(model_name: str | None = None) -> bool:
     """Show interactive TUI to configure model settings.
 
     Args:
@@ -902,7 +891,7 @@ def interactive_model_settings(model_name: Optional[str] = None) -> bool:
     return menu.run()
 
 
-def show_model_settings_summary(model_name: Optional[str] = None) -> None:
+def show_model_settings_summary(model_name: str | None = None) -> None:
     """Print a summary of current model settings to the console.
 
     Args:

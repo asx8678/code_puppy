@@ -10,14 +10,12 @@ from code_puppy.config import (
     AUTOSAVE_DIR,
     COMMAND_HISTORY_FILE,
     finalize_autosave_session,
-    save_command_to_history,
-)
+    save_command_to_history)
 from code_puppy.keymap import get_cancel_agent_display_name
 from code_puppy.terminal_utils import (
     print_truecolor_warning,
     reset_windows_terminal_ansi,
-    reset_windows_terminal_full,
-)
+    reset_windows_terminal_full)
 
 from code_puppy.agents import get_current_agent  # noqa: F401
 from code_puppy.command_line.clipboard import get_clipboard_manager  # noqa: F401
@@ -58,8 +56,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
     )
     emit_system_message("To re-run the tutorial, use /tutorial.")
     emit_system_message(
-        "!<command> to run shell commands directly (e.g., !git status)",
-    )
+        "!<command> to run shell commands directly (e.g., !git status)")
     try:
         from code_puppy.command_line.motd import print_motd
         from code_puppy.tools.common import console
@@ -81,8 +78,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
     if initial_command:
         from code_puppy.command_line.shell_passthrough import (
             execute_shell_passthrough,
-            is_shell_passthrough,
-        )
+            is_shell_passthrough)
 
         if is_shell_passthrough(initial_command):
             execute_shell_passthrough(initial_command)
@@ -109,8 +105,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 agent,
                 initial_command,
                 spinner_console=display_console,
-                use_spinner=not awaiting_input,
-            )
+                use_spinner=not awaiting_input)
             if response is not None:
                 agent_response = response.output
 
@@ -125,8 +120,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
 
                 response_msg = AgentResponseMessage(
                     content=agent_response,
-                    is_markdown=True,
-                )
+                    is_markdown=True)
                 get_message_bus().emit(response_msg)
 
                 emit_success("🐶 Continuing in Interactive Mode")
@@ -146,8 +140,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
     try:
         from code_puppy.command_line.prompt_toolkit_completion import (
             get_input_with_combined_completion,
-            get_prompt_with_active_model,
-        )
+            get_prompt_with_active_model)
     except ImportError:
         from code_puppy.messaging import emit_warning
 
@@ -163,8 +156,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
             emit_success("Successfully installed prompt_toolkit")
             from code_puppy.command_line.prompt_toolkit_completion import (
                 get_input_with_combined_completion,
-                get_prompt_with_active_model,
-            )
+                get_prompt_with_active_model)
         except Exception as e:
             from code_puppy.messaging import emit_error, emit_warning
 
@@ -200,8 +192,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
             elif result == "claude":
                 emit_info("🔐 Starting Claude Code OAuth flow...")
                 from code_puppy.plugins.claude_code_oauth.register_callbacks import (
-                    _perform_authentication,
-                )
+                    _perform_authentication)
 
                 _perform_authentication()
                 set_model_name("claude-code-claude-opus-4-6")
@@ -261,8 +252,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
             # Stop wiggum mode on Ctrl+C
             from code_puppy.command_line.wiggum_state import (
                 is_wiggum_active,
-                stop_wiggum,
-            )
+                stop_wiggum)
             from code_puppy.messaging import emit_warning
 
             if is_wiggum_active():
@@ -291,8 +281,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
         # Shell pass-through: !<command> executes directly, bypassing the agent
         from code_puppy.command_line.shell_passthrough import (
             execute_shell_passthrough,
-            is_shell_passthrough,
-        )
+            is_shell_passthrough)
 
         if is_shell_passthrough(task):
             execute_shell_passthrough(task)
@@ -325,8 +314,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
             from code_puppy.messaging import (
                 emit_info,
                 emit_system_message,
-                emit_warning,
-            )
+                emit_warning)
 
             agent = get_current_agent()
             new_session_id = finalize_autosave_session()
@@ -379,23 +367,18 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                         if use_interactive_picker:
                             # Use interactive picker for terminal sessions
                             from code_puppy.agents.agent_manager import (
-                                get_current_agent,
-                            )
+                                get_current_agent)
                             from code_puppy.command_line.autosave_menu import (
-                                interactive_autosave_picker,
-                            )
+                                interactive_autosave_picker)
                             from code_puppy.config import (
-                                set_current_autosave_from_session_name,
-                            )
+                                set_current_autosave_from_session_name)
                             from code_puppy.messaging import (
                                 emit_error,
                                 emit_success,
-                                emit_warning,
-                            )
+                                emit_warning)
                             from code_puppy.session_storage import (
                                 load_session_with_hashes,
-                                restore_autosave_interactively,
-                            )
+                                restore_autosave_interactively)
 
                             chosen_session = await interactive_autosave_picker()
 
@@ -429,8 +412,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
 
                             # Display recent message history for context
                             from code_puppy.command_line.autosave_menu import (
-                                display_resumed_history,
-                            )
+                                display_resumed_history)
 
                             display_resumed_history(history)
                         else:
@@ -463,8 +445,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 result, current_agent_task = await run_prompt_with_attachments(
                     current_agent,
                     task,
-                    spinner_console=message_renderer.console,
-                )
+                    spinner_console=message_renderer.console)
                 # Check if the task was cancelled (but don't show message if we just killed processes)
                 if result is None:
                     # Windows-specific: Reset terminal state after cancellation
@@ -479,8 +460,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                     # Stop wiggum mode on cancellation
                     from code_puppy.command_line.wiggum_state import (
                         is_wiggum_active,
-                        stop_wiggum,
-                    )
+                        stop_wiggum)
 
                     if is_wiggum_active():
                         stop_wiggum()
@@ -497,8 +477,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
 
                 response_msg = AgentResponseMessage(
                     content=agent_response,
-                    is_markdown=True,
-                )
+                    is_markdown=True)
                 get_message_bus().emit(response_msg)
 
                 # Update the agent's message history with the complete conversation
@@ -537,8 +516,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 get_wiggum_prompt,
                 increment_wiggum_count,
                 is_wiggum_active,
-                stop_wiggum,
-            )
+                stop_wiggum)
 
             while is_wiggum_active():
                 wiggum_prompt = get_wiggum_prompt()
@@ -569,8 +547,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                     result, current_agent_task = await run_prompt_with_attachments(
                         current_agent,
                         wiggum_prompt,
-                        spinner_console=message_renderer.console,
-                    )
+                        spinner_console=message_renderer.console)
 
                     if result is None:
                         # Cancelled - stop wiggum mode
@@ -584,8 +561,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                     # Emit structured message for proper markdown rendering
                     response_msg = AgentResponseMessage(
                         content=agent_response,
-                        is_markdown=True,
-                    )
+                        is_markdown=True)
                     get_message_bus().emit(response_msg)
 
                     # Update message history

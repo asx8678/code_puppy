@@ -10,7 +10,6 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 
 # Import from existing config
 from code_puppy.config import DATA_DIR
@@ -35,9 +34,9 @@ class ScheduledTask:
     log_file: str = ""  # Auto-generated if empty
     enabled: bool = True
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    last_run: Optional[str] = None
-    last_status: Optional[str] = None  # "success", "failed", "running"
-    last_exit_code: Optional[int] = None
+    last_run: str | None = None
+    last_status: str | None = None  # "success", "failed", "running"
+    last_exit_code: int | None = None
 
     def __post_init__(self):
         if not self.log_file:
@@ -56,7 +55,7 @@ def ensure_scheduler_dirs() -> None:
     os.makedirs(SCHEDULER_LOG_DIR, mode=0o700, exist_ok=True)
 
 
-def load_tasks() -> List[ScheduledTask]:
+def load_tasks() -> list[ScheduledTask]:
     """Load all scheduled tasks from JSON file."""
     ensure_scheduler_dirs()
     if not os.path.exists(SCHEDULES_FILE):
@@ -69,7 +68,7 @@ def load_tasks() -> List[ScheduledTask]:
         return []
 
 
-def save_tasks(tasks: List[ScheduledTask]) -> None:
+def save_tasks(tasks: list[ScheduledTask]) -> None:
     """Save all scheduled tasks to JSON file."""
     ensure_scheduler_dirs()
     temp_path = Path(SCHEDULES_FILE).with_suffix(".tmp")
@@ -107,7 +106,7 @@ def delete_task(task_id: str) -> bool:
     return False
 
 
-def get_task(task_id: str) -> Optional[ScheduledTask]:
+def get_task(task_id: str) -> ScheduledTask | None:
     """Get a task by ID."""
     tasks = load_tasks()
     for t in tasks:
@@ -116,7 +115,7 @@ def get_task(task_id: str) -> Optional[ScheduledTask]:
     return None
 
 
-def toggle_task(task_id: str) -> Optional[bool]:
+def toggle_task(task_id: str) -> bool | None:
     """Toggle a task's enabled state. Returns new state or None if not found."""
     task = get_task(task_id)
     if task:

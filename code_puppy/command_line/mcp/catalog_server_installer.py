@@ -5,7 +5,6 @@ MCP servers from the catalog.
 """
 
 import os
-from typing import Dict, Optional
 
 from code_puppy.command_line.utils import safe_input
 from code_puppy.messaging import emit_info, emit_success, emit_warning
@@ -33,7 +32,7 @@ def get_env_var_hint(env_var: str) -> str:
     return ENV_VAR_HINTS.get(env_var, "")
 
 
-def prompt_for_server_config(manager, server) -> Optional[Dict]:
+def prompt_for_server_config(manager, server) -> Dict | None:
     """Prompt user for server configuration (env vars and cmd args).
 
     Args:

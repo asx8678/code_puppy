@@ -9,14 +9,12 @@ Security notes:
 This module never raises to callers; failures are returned as InstallResult.
 """
 
-from __future__ import annotations
 
 import logging
 import shutil
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Optional
 
 import httpx
 
@@ -102,7 +100,7 @@ def _is_within_directory(base_dir: Path, candidate: Path) -> bool:
         return False
 
 
-def _validate_zip_safety(zf: zipfile.ZipFile) -> Optional[str]:
+def _validate_zip_safety(zf: zipfile.ZipFile) -> str | None:
     """Return an error message if unsafe, otherwise None."""
 
     total_uncompressed = 0
@@ -169,7 +167,7 @@ def _safe_extract_zip(zf: zipfile.ZipFile, extract_dir: Path) -> bool:
         return False
 
 
-def _determine_extracted_root(extract_dir: Path) -> Optional[Path]:
+def _determine_extracted_root(extract_dir: Path) -> Path | None:
     """Determine where the skill files live inside an extracted zip.
 
     Supports:
@@ -206,7 +204,7 @@ def _determine_extracted_root(extract_dir: Path) -> Optional[Path]:
 
 def _stage_normalized_install(
     extracted_root: Path, skill_name: str, staging_base: Path
-) -> Optional[Path]:
+) -> Path | None:
     """Copy extracted content into staging_base/<skill_name>."""
 
     try:
@@ -232,9 +230,8 @@ def _stage_normalized_install(
 def download_and_install_skill(
     skill_name: str,
     download_url: str,
-    target_dir: Optional[Path] = None,
-    force: bool = False,
-) -> InstallResult:
+    target_dir: Path | None = None,
+    force: bool = False) -> InstallResult:
     """Download and install a remote skill zip.
 
     Args:
@@ -266,8 +263,7 @@ def download_and_install_skill(
                 return InstallResult(
                     success=False,
                     message=f"Skill already installed at {skill_dir} (use force=True to reinstall)",
-                    installed_path=skill_dir,
-                )
+                    installed_path=skill_dir)
 
             logger.info(
                 f"Force reinstall enabled; removing existing skill at {skill_dir}"
@@ -276,8 +272,7 @@ def download_and_install_skill(
                 return InstallResult(
                     success=False,
                     message=f"Failed to remove existing skill directory: {skill_dir}",
-                    installed_path=skill_dir,
-                )
+                    installed_path=skill_dir)
 
         base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -291,8 +286,7 @@ def download_and_install_skill(
             if not _download_to_file(download_url, tmp_zip):
                 return InstallResult(
                     success=False,
-                    message=f"Failed to download skill zip from {download_url}",
-                )
+                    message=f"Failed to download skill zip from {download_url}")
 
             try:
                 with zipfile.ZipFile(tmp_zip, "r") as zf:
@@ -303,14 +297,12 @@ def download_and_install_skill(
                         )
                         return InstallResult(
                             success=False,
-                            message=f"Rejected unsafe zip: {unsafe_reason}",
-                        )
+                            message=f"Rejected unsafe zip: {unsafe_reason}")
 
                     if not _safe_extract_zip(zf, extract_dir):
                         return InstallResult(
                             success=False,
-                            message="Failed to extract skill zip safely",
-                        )
+                            message="Failed to extract skill zip safely")
             except zipfile.BadZipFile:
                 logger.warning(f"Downloaded file is not a valid zip: {tmp_zip}")
                 return InstallResult(
@@ -328,19 +320,16 @@ def download_and_install_skill(
                 )
                 return InstallResult(
                     success=False,
-                    message="Extracted zip missing SKILL.md or has unexpected layout",
-                )
+                    message="Extracted zip missing SKILL.md or has unexpected layout")
 
             staged_skill_dir = _stage_normalized_install(
                 extracted_root=extracted_root,
                 skill_name=skill_name,
-                staging_base=staging_dir,
-            )
+                staging_base=staging_dir)
             if staged_skill_dir is None:
                 return InstallResult(
                     success=False,
-                    message="Failed to stage extracted skill (missing SKILL.md)",
-                )
+                    message="Failed to stage extracted skill (missing SKILL.md)")
 
             # Move staged install into final destination.
             try:
@@ -352,8 +341,7 @@ def download_and_install_skill(
                         return InstallResult(
                             success=False,
                             message=f"Skill directory already exists: {skill_dir}",
-                            installed_path=skill_dir,
-                        )
+                            installed_path=skill_dir)
 
                 shutil.move(str(staged_skill_dir), str(skill_dir))
             except Exception as e:
@@ -371,8 +359,7 @@ def download_and_install_skill(
             return InstallResult(
                 success=False,
                 message="Installed skill is missing SKILL.md",
-                installed_path=skill_dir,
-            )
+                installed_path=skill_dir)
 
         try:
             refresh_skill_cache()
@@ -384,8 +371,7 @@ def download_and_install_skill(
         return InstallResult(
             success=True,
             message=f"Installed skill '{skill_name}'",
-            installed_path=skill_dir,
-        )
+            installed_path=skill_dir)
 
     except Exception as e:
         logger.exception(f"Unexpected error installing skill {skill_name}: {e}")

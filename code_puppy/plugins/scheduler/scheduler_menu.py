@@ -7,7 +7,6 @@ Built with prompt_toolkit for proper interactive split-panel interface.
 import os
 import sys
 import time
-from typing import List, Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -21,13 +20,11 @@ from code_puppy.scheduler.config import (
     add_task,
     delete_task,
     load_tasks,
-    toggle_task,
-)
+    toggle_task)
 from code_puppy.scheduler.daemon import (
     get_daemon_pid,
     start_daemon_background,
-    stop_daemon,
-)
+    stop_daemon)
 from code_puppy.scheduler.executor import run_task_by_id
 from code_puppy.tools.command_runner import set_awaiting_user_input
 
@@ -39,12 +36,12 @@ class SchedulerMenu:
 
     def __init__(self):
         """Initialize the scheduler menu."""
-        self.tasks: List[ScheduledTask] = []
+        self.tasks: list[ScheduledTask] = []
         self.selected_idx = 0
         self.current_page = 0
         self.result = None
-        self.menu_control: Optional[FormattedTextControl] = None
-        self.preview_control: Optional[FormattedTextControl] = None
+        self.menu_control: FormattedTextControl | None = None
+        self.preview_control: FormattedTextControl | None = None
         self._refresh_data()
 
     def _refresh_data(self) -> None:
@@ -55,7 +52,7 @@ class SchedulerMenu:
             emit_error(f"Failed to load tasks: {e}")
             self.tasks = []
 
-    def _get_current_task(self) -> Optional[ScheduledTask]:
+    def _get_current_task(self) -> ScheduledTask | None:
         """Get the currently selected task."""
         if 0 <= self.selected_idx < len(self.tasks):
             return self.tasks[self.selected_idx]
@@ -205,7 +202,7 @@ class SchedulerMenu:
         if self.preview_control:
             self.preview_control.text = self._render_task_details()
 
-    def run(self) -> Optional[str]:
+    def run(self) -> str | None:
         """Run the interactive menu."""
         self.result = None
         self.menu_control = FormattedTextControl(text="")
@@ -330,7 +327,7 @@ class SchedulerMenu:
         return self.result
 
 
-def _create_new_task() -> Optional[ScheduledTask]:
+def _create_new_task() -> ScheduledTask | None:
     """Interactive TUI wizard to create a new task."""
     from code_puppy.plugins.scheduler.scheduler_wizard import create_task_wizard
 
@@ -345,8 +342,7 @@ def _create_new_task() -> Optional[ScheduledTask]:
         model=result["model"],
         schedule_type=result["schedule_type"],
         schedule_value=result["schedule_value"],
-        working_directory=result["working_directory"],
-    )
+        working_directory=result["working_directory"])
 
 
 def _tail_log_file(log_file: str) -> None:

@@ -10,7 +10,7 @@ import logging
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict
 
 from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP
 
@@ -22,7 +22,7 @@ class ManagedServerContext:
     """Represents a managed MCP server with its async context."""
 
     server_id: str
-    server: Union[MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP]
+    server: MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP
     exit_stack: AsyncExitStack
     start_time: datetime
     task: asyncio.Task  # The task that manages this server's lifecycle
@@ -38,15 +38,14 @@ class AsyncServerLifecycleManager:
 
     def __init__(self):
         """Initialize the async lifecycle manager."""
-        self._servers: Dict[str, ManagedServerContext] = {}
+        self._servers: dict[str, ManagedServerContext] = {}
         self._lock = asyncio.Lock()
         logger.info("AsyncServerLifecycleManager initialized")
 
     async def start_server(
         self,
         server_id: str,
-        server: Union[MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP],
-    ) -> bool:
+        server: MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP) -> bool:
         """
         Start an MCP server and maintain its context.
 
@@ -79,8 +78,7 @@ class AsyncServerLifecycleManager:
             # Create a task that will manage this server's lifecycle
             task = asyncio.create_task(
                 self._server_lifecycle_task(server_id, server, ready_event),
-                name=f"mcp_server_{server_id}",
-            )
+                name=f"mcp_server_{server_id}")
 
         # Release the lock while waiting for the server to become ready
         try:
@@ -108,9 +106,8 @@ class AsyncServerLifecycleManager:
     async def _server_lifecycle_task(
         self,
         server_id: str,
-        server: Union[MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP],
-        ready_event: asyncio.Event,
-    ) -> None:
+        server: MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP,
+        ready_event: asyncio.Event) -> None:
         """
         Task that manages a server's lifecycle.
 
@@ -139,8 +136,7 @@ class AsyncServerLifecycleManager:
                     server=server,
                     exit_stack=exit_stack,
                     start_time=datetime.now(),
-                    task=asyncio.current_task(),
-                )
+                    task=asyncio.current_task())
 
             # Signal that the server is registered and ready
             ready_event.set()
@@ -246,7 +242,7 @@ class AsyncServerLifecycleManager:
         context = self._servers.get(server_id)
         return context.server.is_running if context else False
 
-    def list_servers(self) -> Dict[str, Dict[str, Any]]:
+    def list_servers(self) -> dict[str, dict[str, Any]]:
         """
         List all running servers.
 
@@ -275,7 +271,7 @@ class AsyncServerLifecycleManager:
 
 
 # Global singleton instance
-_lifecycle_manager: Optional[AsyncServerLifecycleManager] = None
+_lifecycle_manager: AsyncServerLifecycleManager | None = None
 
 
 def get_lifecycle_manager() -> AsyncServerLifecycleManager:

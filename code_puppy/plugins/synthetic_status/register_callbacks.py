@@ -1,8 +1,6 @@
 """Slash commands for Synthetic provider subscription status."""
 
-from __future__ import annotations
 
-from typing import List, Optional, Tuple
 
 from rich.panel import Panel
 
@@ -24,14 +22,13 @@ _PROVIDER_ENV_KEYS = {
 }
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         ("synthetic-status", "Check Synthetic subscription quota and renewal time"),
         ("provider", "Provider utilities (usage: /provider synthetic status)"),
         (
             "status",
-            "Show provider status when only Synthetic appears configured",
-        ),
+            "Show provider status when only Synthetic appears configured"),
     ]
 
 
@@ -45,8 +42,7 @@ def _format_amount(value: float) -> str:
 def _render_synthetic_status_panel(
     limit: float,
     used: float,
-    renews_at_utc: str,
-) -> Panel:
+    renews_at_utc: str) -> Panel:
     remaining = max(limit - used, 0.0)
     body = "\n".join(
         [
@@ -74,8 +70,7 @@ def _handle_synthetic_status() -> None:
     panel = _render_synthetic_status_panel(
         limit=result.quota.limit,
         used=result.quota.requests_used,
-        renews_at_utc=renews_at_str,
-    )
+        renews_at_utc=renews_at_str)
     emit_info(panel)
 
 
@@ -88,7 +83,7 @@ def _is_synthetic_only_provider_configured() -> bool:
     return configured == {"synthetic"}
 
 
-def _handle_provider_command(command: str) -> Optional[bool]:
+def _handle_provider_command(command: str) -> bool | None:
     tokens = command.strip().split()
     if len(tokens) < 2:
         return None
@@ -105,7 +100,7 @@ def _handle_provider_command(command: str) -> Optional[bool]:
     return True
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[bool]:
+def _handle_custom_command(command: str, name: str) -> bool | None:
     if not name:
         return None
 

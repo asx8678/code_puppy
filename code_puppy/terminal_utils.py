@@ -7,13 +7,13 @@ import os
 import platform
 import subprocess
 import sys
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from rich.console import Console
 
 # Store the original console ctrl handler so we can restore it if needed
-_original_ctrl_handler: Optional[Callable] = None
+_original_ctrl_handler: Callable | None = None
 
 
 def reset_windows_terminal_ansi() -> None:
@@ -345,7 +345,7 @@ def detect_truecolor_support() -> bool:
     return False
 
 
-def print_truecolor_warning(console: Optional["Console"] = None) -> None:
+def print_truecolor_warning(console: "Console" | None = None) -> None:
     """Print a big fat red warning if truecolor is not supported.
 
     Args:

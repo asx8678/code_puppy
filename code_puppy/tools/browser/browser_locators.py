@@ -1,6 +1,6 @@
 """Browser element discovery tools using semantic locators and XPath."""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic_ai import RunContext
 
@@ -12,16 +12,14 @@ from .browser_manager import get_session_browser_manager
 
 async def find_by_role(
     role: str,
-    name: Optional[str] = None,
+    name: str | None = None,
     exact: bool = False,
-    timeout: int = 10000,
-) -> Dict[str, Any]:
+    timeout: int = 10000) -> dict[str, Any]:
     """Find elements by ARIA role."""
     group_id = generate_group_id("browser_find_by_role", f"{role}_{name or 'any'}")
     emit_info(
         f"BROWSER FIND BY ROLE 🎨 role={role} name={name}",
-        message_group=group_id,
-    )
+        message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -48,8 +46,7 @@ async def find_by_role(
 
         emit_success(
             f"Found {count} elements with role '{role}'",
-            message_group=group_id,
-        )
+            message_group=group_id)
 
         return {
             "success": True,
@@ -66,14 +63,12 @@ async def find_by_role(
 async def find_by_text(
     text: str,
     exact: bool = False,
-    timeout: int = 10000,
-) -> Dict[str, Any]:
+    timeout: int = 10000) -> dict[str, Any]:
     """Find elements containing specific text."""
     group_id = generate_group_id("browser_find_by_text", text[:50])
     emit_info(
         f"BROWSER FIND BY TEXT 🔍 text='{text}' exact={exact}",
-        message_group=group_id,
-    )
+        message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -100,8 +95,7 @@ async def find_by_text(
 
         emit_success(
             f"Found {count} elements containing text '{text}'",
-            message_group=group_id,
-        )
+            message_group=group_id)
 
         return {
             "success": True,
@@ -118,14 +112,12 @@ async def find_by_text(
 async def find_by_label(
     text: str,
     exact: bool = False,
-    timeout: int = 10000,
-) -> Dict[str, Any]:
+    timeout: int = 10000) -> dict[str, Any]:
     """Find form elements by their associated label text."""
     group_id = generate_group_id("browser_find_by_label", text[:50])
     emit_info(
         f"BROWSER FIND BY LABEL 🏷️ label='{text}' exact={exact}",
-        message_group=group_id,
-    )
+        message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -163,8 +155,7 @@ async def find_by_label(
 
         emit_success(
             f"Found {count} elements with label '{text}'",
-            message_group=group_id,
-        )
+            message_group=group_id)
 
         return {
             "success": True,
@@ -181,14 +172,12 @@ async def find_by_label(
 async def find_by_placeholder(
     text: str,
     exact: bool = False,
-    timeout: int = 10000,
-) -> Dict[str, Any]:
+    timeout: int = 10000) -> dict[str, Any]:
     """Find elements by placeholder text."""
     group_id = generate_group_id("browser_find_by_placeholder", text[:50])
     emit_info(
         f"BROWSER FIND BY PLACEHOLDER 📝 placeholder='{text}' exact={exact}",
-        message_group=group_id,
-    )
+        message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -222,8 +211,7 @@ async def find_by_placeholder(
 
         emit_success(
             f"Found {count} elements with placeholder '{text}'",
-            message_group=group_id,
-        )
+            message_group=group_id)
 
         return {
             "success": True,
@@ -239,14 +227,12 @@ async def find_by_placeholder(
 
 async def find_by_test_id(
     test_id: str,
-    timeout: int = 10000,
-) -> Dict[str, Any]:
+    timeout: int = 10000) -> dict[str, Any]:
     """Find elements by test ID attribute."""
     group_id = generate_group_id("browser_find_by_test_id", test_id)
     emit_info(
         f"BROWSER FIND BY TEST ID 🧪 test_id='{test_id}'",
-        message_group=group_id,
-    )
+        message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -279,8 +265,7 @@ async def find_by_test_id(
 
         emit_success(
             f"Found {count} elements with test-id '{test_id}'",
-            message_group=group_id,
-        )
+            message_group=group_id)
 
         return {
             "success": True,
@@ -295,14 +280,12 @@ async def find_by_test_id(
 
 async def run_xpath_query(
     xpath: str,
-    timeout: int = 10000,
-) -> Dict[str, Any]:
+    timeout: int = 10000) -> dict[str, Any]:
     """Find elements using XPath selector."""
     group_id = generate_group_id("browser_xpath_query", xpath[:100])
     emit_info(
         f"BROWSER XPATH QUERY 🔍 xpath='{xpath}'",
-        message_group=group_id,
-    )
+        message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -340,8 +323,7 @@ async def run_xpath_query(
 
         emit_success(
             f"Found {count} elements with XPath '{xpath}'",
-            message_group=group_id,
-        )
+            message_group=group_id)
 
         return {"success": True, "xpath": xpath, "count": count, "elements": elements}
 
@@ -350,14 +332,13 @@ async def run_xpath_query(
 
 
 async def find_buttons(
-    text_filter: Optional[str] = None, timeout: int = 10000
-) -> Dict[str, Any]:
+    text_filter: str | None = None, timeout: int = 10000
+) -> dict[str, Any]:
     """Find all button elements on the page."""
     group_id = generate_group_id("browser_find_buttons", text_filter or "all")
     emit_info(
         f"BROWSER FIND BUTTONS 🔘 filter='{text_filter or 'none'}'",
-        message_group=group_id,
-    )
+        message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -385,8 +366,7 @@ async def find_buttons(
         emit_success(
             f"Found {filtered_count} buttons"
             + (f" containing '{text_filter}'" if text_filter else ""),
-            message_group=group_id,
-        )
+            message_group=group_id)
 
         return {
             "success": True,
@@ -401,14 +381,13 @@ async def find_buttons(
 
 
 async def find_links(
-    text_filter: Optional[str] = None, timeout: int = 10000
-) -> Dict[str, Any]:
+    text_filter: str | None = None, timeout: int = 10000
+) -> dict[str, Any]:
     """Find all link elements on the page."""
     group_id = generate_group_id("browser_find_links", text_filter or "all")
     emit_info(
         f"BROWSER FIND LINKS 🔗 filter='{text_filter or 'none'}'",
-        message_group=group_id,
-    )
+        message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -438,8 +417,7 @@ async def find_links(
         emit_success(
             f"Found {filtered_count} links"
             + (f" containing '{text_filter}'" if text_filter else ""),
-            message_group=group_id,
-        )
+            message_group=group_id)
 
         return {
             "success": True,
@@ -461,10 +439,9 @@ def register_find_by_role(agent):
     async def browser_find_by_role(
         context: RunContext,
         role: str,
-        name: Optional[str] = None,
+        name: str | None = None,
         exact: bool = False,
-        timeout: int = 10000,
-    ) -> Dict[str, Any]:
+        timeout: int = 10000) -> dict[str, Any]:
         """
         Find elements by ARIA role (recommended for accessibility).
 
@@ -488,8 +465,7 @@ def register_find_by_text(agent):
         context: RunContext,
         text: str,
         exact: bool = False,
-        timeout: int = 10000,
-    ) -> Dict[str, Any]:
+        timeout: int = 10000) -> dict[str, Any]:
         """
         Find elements containing specific text content.
 
@@ -512,8 +488,7 @@ def register_find_by_label(agent):
         context: RunContext,
         text: str,
         exact: bool = False,
-        timeout: int = 10000,
-    ) -> Dict[str, Any]:
+        timeout: int = 10000) -> dict[str, Any]:
         """
         Find form elements by their associated label text.
 
@@ -536,8 +511,7 @@ def register_find_by_placeholder(agent):
         context: RunContext,
         text: str,
         exact: bool = False,
-        timeout: int = 10000,
-    ) -> Dict[str, Any]:
+        timeout: int = 10000) -> dict[str, Any]:
         """
         Find elements by placeholder text.
 
@@ -559,8 +533,7 @@ def register_find_by_test_id(agent):
     async def browser_find_by_test_id(
         context: RunContext,
         test_id: str,
-        timeout: int = 10000,
-    ) -> Dict[str, Any]:
+        timeout: int = 10000) -> dict[str, Any]:
         """
         Find elements by test ID attribute (data-testid).
 
@@ -581,8 +554,7 @@ def register_run_xpath_query(agent):
     async def browser_xpath_query(
         context: RunContext,
         xpath: str,
-        timeout: int = 10000,
-    ) -> Dict[str, Any]:
+        timeout: int = 10000) -> dict[str, Any]:
         """
         Find elements using XPath selector (fallback when semantic locators fail).
 
@@ -602,9 +574,8 @@ def register_find_buttons(agent):
     @agent.tool
     async def browser_find_buttons(
         context: RunContext,
-        text_filter: Optional[str] = None,
-        timeout: int = 10000,
-    ) -> Dict[str, Any]:
+        text_filter: str | None = None,
+        timeout: int = 10000) -> dict[str, Any]:
         """
         Find all button elements on the page.
 
@@ -624,9 +595,8 @@ def register_find_links(agent):
     @agent.tool
     async def browser_find_links(
         context: RunContext,
-        text_filter: Optional[str] = None,
-        timeout: int = 10000,
-    ) -> Dict[str, Any]:
+        text_filter: str | None = None,
+        timeout: int = 10000) -> dict[str, Any]:
         """
         Find all link elements on the page.
 

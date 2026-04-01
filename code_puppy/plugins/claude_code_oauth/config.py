@@ -1,10 +1,10 @@
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from code_puppy import config
 
 # Claude Code OAuth configuration
-CLAUDE_CODE_OAUTH_CONFIG: Dict[str, Any] = {
+CLAUDE_CODE_OAUTH_CONFIG: dict[str, Any] = {
     # OAuth endpoints inferred from official Claude Code OAuth flow
     "auth_url": "https://claude.ai/oauth/authorize",
     "token_url": "https://console.anthropic.com/v1/oauth/token",

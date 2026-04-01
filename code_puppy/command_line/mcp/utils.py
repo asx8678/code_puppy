@@ -4,7 +4,6 @@ MCP Command Utilities - Shared helper functions for MCP command handlers.
 Provides common utility functions used across multiple MCP command modules.
 """
 
-from typing import Optional
 
 from rich.text import Text
 
@@ -34,7 +33,7 @@ def format_state_indicator(state: ServerState) -> Text:
     return Text(display, style=color)
 
 
-def format_uptime(uptime_seconds: Optional[float]) -> str:
+def format_uptime(uptime_seconds: float | None) -> str:
     """
     Format uptime in a human-readable format.
 
@@ -60,7 +59,7 @@ def format_uptime(uptime_seconds: Optional[float]) -> str:
         return f"{hours}h {minutes}m"
 
 
-def find_server_id_by_name(manager, server_name: str) -> Optional[str]:
+def find_server_id_by_name(manager, server_name: str) -> str | None:
     """
     Find a server ID by its name.
 
@@ -87,7 +86,7 @@ def find_server_id_by_name(manager, server_name: str) -> Optional[str]:
 
 
 def suggest_similar_servers(
-    manager, server_name: str, group_id: Optional[str] = None
+    manager, server_name: str, group_id: str | None = None
 ) -> None:
     """
     Suggest similar server names when a server is not found.

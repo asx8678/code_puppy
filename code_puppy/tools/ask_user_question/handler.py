@@ -1,6 +1,5 @@
 """Main handler for ask_user_question tool."""
 
-from __future__ import annotations
 
 import asyncio
 import logging
@@ -18,8 +17,7 @@ from .models import (
     AskUserQuestionInput,
     AskUserQuestionOutput,
     Question,
-    QuestionAnswer,
-)
+    QuestionAnswer)
 from .terminal_ui import CancelledException, interactive_question_picker
 
 logger = logging.getLogger(__name__)
@@ -60,8 +58,7 @@ def is_interactive() -> bool:
 
 def ask_user_question(
     questions: list[dict[str, Any]],
-    timeout: int = DEFAULT_TIMEOUT_SECONDS,
-) -> AskUserQuestionOutput:
+    timeout: int = DEFAULT_TIMEOUT_SECONDS) -> AskUserQuestionOutput:
     """
     Ask the user one or more interactive multiple-choice questions.
 

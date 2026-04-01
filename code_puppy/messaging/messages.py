@@ -7,7 +7,7 @@ Renderers decide how to display these structured messages.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Literal, Optional, Union
+from typing import Literal, Union
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -47,19 +47,16 @@ class BaseMessage(BaseModel):
 
     id: str = Field(
         default_factory=lambda: str(uuid4()),
-        description="Unique identifier for this message instance",
-    )
+        description="Unique identifier for this message instance")
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        description="When this message was created (UTC)",
-    )
+        description="When this message was created (UTC)")
     category: MessageCategory = Field(
         description="Category for routing and rendering decisions"
     )
-    session_id: Optional[str] = Field(
+    session_id: str | None = Field(
         default=None,
-        description="Session ID of the agent that emitted this message (for multi-agent tracking)",
-    )
+        description="Session ID of the agent that emitted this message (for multi-agent tracking)")
 
     model_config = {"frozen": False, "extra": "forbid"}
 
@@ -100,10 +97,9 @@ class FileListingMessage(BaseMessage):
 
     category: MessageCategory = MessageCategory.TOOL_OUTPUT
     directory: str = Field(description="Root directory that was listed")
-    files: List[FileEntry] = Field(
+    files: list[FileEntry] = Field(
         default_factory=list,
-        description="List of file and directory entries found",
-    )
+        description="List of file and directory entries found")
     recursive: bool = Field(description="Whether the listing was recursive")
     total_size: int = Field(ge=0, description="Total size of all files in bytes")
     dir_count: int = Field(ge=0, description="Number of directories found")
@@ -116,16 +112,14 @@ class FileContentMessage(BaseMessage):
     category: MessageCategory = MessageCategory.TOOL_OUTPUT
     path: str = Field(description="Path to the file that was read")
     content: str = Field(description="The file content (plain text)")
-    start_line: Optional[int] = Field(
+    start_line: int | None = Field(
         default=None,
         ge=1,
-        description="Starting line number if partial read (1-based)",
-    )
-    num_lines: Optional[int] = Field(
+        description="Starting line number if partial read (1-based)")
+    num_lines: int | None = Field(
         default=None,
         ge=1,
-        description="Number of lines read if partial read",
-    )
+        description="Number of lines read if partial read")
     total_lines: int = Field(ge=0, description="Total lines in the file")
     num_tokens: int = Field(ge=0, description="Estimated token count of content")
 
@@ -146,16 +140,14 @@ class GrepResultMessage(BaseMessage):
     category: MessageCategory = MessageCategory.TOOL_OUTPUT
     search_term: str = Field(description="The search pattern used")
     directory: str = Field(description="Root directory that was searched")
-    matches: List[GrepMatch] = Field(
+    matches: list[GrepMatch] = Field(
         default_factory=list,
-        description="List of matches found",
-    )
+        description="List of matches found")
     total_matches: int = Field(ge=0, description="Total number of matches")
     files_searched: int = Field(ge=0, description="Number of files searched")
     verbose: bool = Field(
         default=False,
-        description="Whether to show verbose output with line content",
-    )
+        description="Whether to show verbose output with line content")
 
 
 # =============================================================================
@@ -181,18 +173,15 @@ class DiffMessage(BaseMessage):
     operation: Literal["create", "modify", "delete"] = Field(
         description="Type of file operation"
     )
-    old_content: Optional[str] = Field(
+    old_content: str | None = Field(
         default=None,
-        description="Previous file content (None for create)",
-    )
-    new_content: Optional[str] = Field(
+        description="Previous file content (None for create)")
+    new_content: str | None = Field(
         default=None,
-        description="New file content (None for delete)",
-    )
-    diff_lines: List[DiffLine] = Field(
+        description="New file content (None for delete)")
+    diff_lines: list[DiffLine] = Field(
         default_factory=list,
-        description="Individual diff lines for rendering",
-    )
+        description="Individual diff lines for rendering")
 
 
 # =============================================================================
@@ -205,7 +194,7 @@ class ShellStartMessage(BaseMessage):
 
     category: MessageCategory = MessageCategory.TOOL_OUTPUT
     command: str = Field(description="The shell command being executed")
-    cwd: Optional[str] = Field(
+    cwd: str | None = Field(
         default=None, description="Working directory for the command"
     )
     timeout: int = Field(default=60, description="Timeout in seconds")
@@ -234,8 +223,7 @@ class ShellOutputMessage(BaseMessage):
     exit_code: int = Field(description="Process exit code (0 = success)")
     duration_seconds: float = Field(
         ge=0,
-        description="How long the command took to execute",
-    )
+        description="How long the command took to execute")
 
 
 # =============================================================================
@@ -248,10 +236,9 @@ class AgentReasoningMessage(BaseMessage):
 
     category: MessageCategory = MessageCategory.AGENT
     reasoning: str = Field(description="The agent's current reasoning/thought process")
-    next_steps: Optional[str] = Field(
+    next_steps: str | None = Field(
         default=None,
-        description="Planned next actions (optional)",
-    )
+        description="Planned next actions (optional)")
 
 
 class AgentResponseMessage(BaseMessage):
@@ -261,8 +248,7 @@ class AgentResponseMessage(BaseMessage):
     content: str = Field(description="The response content")
     is_markdown: bool = Field(
         default=False,
-        description="Whether content should be rendered as markdown",
-    )
+        description="Whether content should be rendered as markdown")
 
 
 class SubAgentInvocationMessage(BaseMessage):
@@ -306,13 +292,13 @@ class SubAgentStatusMessage(BaseMessage):
         default=0, ge=0, description="Number of tools called so far"
     )
     token_count: int = Field(default=0, ge=0, description="Estimated tokens in context")
-    current_tool: Optional[str] = Field(
+    current_tool: str | None = Field(
         default=None, description="Name of tool currently being called"
     )
     elapsed_seconds: float = Field(
         default=0.0, ge=0, description="Time since agent started"
     )
-    error_message: Optional[str] = Field(
+    error_message: str | None = Field(
         default=None, description="Error message if status is 'error'"
     )
 
@@ -324,12 +310,12 @@ class UniversalConstructorMessage(BaseMessage):
     action: str = Field(
         description="The UC action performed (list/call/create/update/info)"
     )
-    tool_name: Optional[str] = Field(
+    tool_name: str | None = Field(
         default=None, description="Tool name if applicable"
     )
     success: bool = Field(description="Whether the operation succeeded")
     summary: str = Field(description="Brief summary of the result")
-    details: Optional[str] = Field(default=None, description="Additional details")
+    details: str | None = Field(default=None, description="Additional details")
 
 
 # =============================================================================
@@ -343,14 +329,12 @@ class UserInputRequest(BaseMessage):
     category: MessageCategory = MessageCategory.USER_INTERACTION
     prompt_id: str = Field(description="Unique ID for matching responses to requests")
     prompt_text: str = Field(description="The prompt to display to the user")
-    default_value: Optional[str] = Field(
+    default_value: str | None = Field(
         default=None,
-        description="Default value to use if user provides no input",
-    )
+        description="Default value to use if user provides no input")
     input_type: Literal["text", "password"] = Field(
         default="text",
-        description="Type of input field (password hides input)",
-    )
+        description="Type of input field (password hides input)")
 
 
 class ConfirmationRequest(BaseMessage):
@@ -362,14 +346,12 @@ class ConfirmationRequest(BaseMessage):
     description: str = Field(
         description="Detailed description of what's being confirmed"
     )
-    options: List[str] = Field(
+    options: list[str] = Field(
         default_factory=lambda: ["Yes", "No"],
-        description="Available options to choose from",
-    )
+        description="Available options to choose from")
     allow_feedback: bool = Field(
         default=False,
-        description="Whether to allow free-form feedback in addition to selection",
-    )
+        description="Whether to allow free-form feedback in addition to selection")
 
 
 class SelectionRequest(BaseMessage):
@@ -378,11 +360,10 @@ class SelectionRequest(BaseMessage):
     category: MessageCategory = MessageCategory.USER_INTERACTION
     prompt_id: str = Field(description="Unique ID for matching responses to requests")
     prompt_text: str = Field(description="Prompt text to display")
-    options: List[str] = Field(description="List of options to choose from")
+    options: list[str] = Field(description="List of options to choose from")
     allow_cancel: bool = Field(
         default=True,
-        description="Whether the user can cancel without selecting",
-    )
+        description="Whether the user can cancel without selecting")
 
 
 # =============================================================================
@@ -398,10 +379,9 @@ class SpinnerControl(BaseMessage):
         description="What action to take on the spinner"
     )
     spinner_id: str = Field(description="Unique identifier for this spinner")
-    text: Optional[str] = Field(
+    text: str | None = Field(
         default=None,
-        description="Text to display with the spinner (for start/update)",
-    )
+        description="Text to display with the spinner (for start/update)")
 
 
 class DividerMessage(BaseMessage):
@@ -410,8 +390,7 @@ class DividerMessage(BaseMessage):
     category: MessageCategory = MessageCategory.DIVIDER
     style: Literal["light", "heavy", "double"] = Field(
         default="light",
-        description="Visual style hint for the divider",
-    )
+        description="Visual style hint for the divider")
 
 
 # =============================================================================
@@ -424,10 +403,9 @@ class StatusPanelMessage(BaseMessage):
 
     category: MessageCategory = MessageCategory.SYSTEM
     title: str = Field(description="Title for the status panel")
-    fields: Dict[str, str] = Field(
+    fields: dict[str, str] = Field(
         default_factory=dict,
-        description="Key-value pairs to display",
-    )
+        description="Key-value pairs to display")
 
 
 class VersionCheckMessage(BaseMessage):
@@ -450,7 +428,7 @@ class SkillEntry(BaseModel):
     name: str = Field(description="Skill name")
     description: str = Field(description="Skill description")
     path: str = Field(description="Path to skill directory")
-    tags: List[str] = Field(default_factory=list, description="Skill tags")
+    tags: list[str] = Field(default_factory=list, description="Skill tags")
     enabled: bool = Field(default=True, description="Whether skill is enabled")
 
     model_config = {"frozen": True, "extra": "forbid"}
@@ -460,14 +438,12 @@ class SkillListMessage(BaseMessage):
     """Result of listing or searching skills."""
 
     category: MessageCategory = MessageCategory.TOOL_OUTPUT
-    skills: List[SkillEntry] = Field(
+    skills: list[SkillEntry] = Field(
         default_factory=list,
-        description="List of skills found",
-    )
-    query: Optional[str] = Field(
+        description="List of skills found")
+    query: str | None = Field(
         default=None,
-        description="Search query if filtered",
-    )
+        description="Search query if filtered")
     total_count: int = Field(ge=0, description="Total number of skills")
 
 
@@ -489,31 +465,7 @@ class SkillActivateMessage(BaseMessage):
 # =============================================================================
 
 # All concrete message types (excludes BaseMessage itself)
-AnyMessage = Union[
-    TextMessage,
-    FileListingMessage,
-    FileContentMessage,
-    GrepResultMessage,
-    DiffMessage,
-    ShellStartMessage,
-    ShellLineMessage,
-    ShellOutputMessage,
-    AgentReasoningMessage,
-    AgentResponseMessage,
-    SubAgentInvocationMessage,
-    SubAgentResponseMessage,
-    SubAgentStatusMessage,
-    UniversalConstructorMessage,
-    UserInputRequest,
-    ConfirmationRequest,
-    SelectionRequest,
-    SpinnerControl,
-    DividerMessage,
-    StatusPanelMessage,
-    VersionCheckMessage,
-    SkillListMessage,
-    SkillActivateMessage,
-]
+AnyMessage = TextMessage | FileListingMessage | FileContentMessage | GrepResultMessage | DiffMessage | ShellStartMessage | ShellLineMessage | ShellOutputMessage | AgentReasoningMessage | AgentResponseMessage | SubAgentInvocationMessage | SubAgentResponseMessage | SubAgentStatusMessage | UniversalConstructorMessage | UserInputRequest | ConfirmationRequest | SelectionRequest | SpinnerControl | DividerMessage | StatusPanelMessage | VersionCheckMessage | SkillListMessage | SkillActivateMessage
 """Union of all message types for type checking."""
 
 

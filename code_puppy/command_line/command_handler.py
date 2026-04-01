@@ -246,8 +246,7 @@ def handle_command(command: str):
             # Import the special result class for markdown commands
             try:
                 from code_puppy.plugins.customizable_commands.register_callbacks import (
-                    MarkdownCommandResult,
-                )
+                    MarkdownCommandResult)
             except ImportError:
                 MarkdownCommandResult = None
 

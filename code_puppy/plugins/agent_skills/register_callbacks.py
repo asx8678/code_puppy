@@ -8,14 +8,14 @@ This plugin:
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 
 logger = logging.getLogger(__name__)
 
 
-def _get_skills_prompt_section() -> Optional[str]:
+def _get_skills_prompt_section() -> str | None:
     """Build the skills section to inject into system prompts.
 
     Returns None if skills are disabled or no skills found.
@@ -40,7 +40,7 @@ def _get_skills_prompt_section() -> Optional[str]:
 
     # 3. Parse metadata for each and filter out disabled skills
     disabled_skills = get_disabled_skills()
-    skills_metadata: List[SkillMetadata] = []
+    skills_metadata: list[SkillMetadata] = []
 
     for skill_info in discovered:
         # Skip disabled skills
@@ -76,7 +76,7 @@ def _get_skills_prompt_section() -> Optional[str]:
 
 def _inject_skills_into_prompt(
     model_name: str, default_system_prompt: str, user_prompt: str
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any | None]:
     """Callback to inject skills into system prompt.
 
     This is registered with the 'get_model_system_prompt' callback phase.
@@ -96,7 +96,7 @@ def _inject_skills_into_prompt(
     }
 
 
-def _register_skills_tools() -> List[Dict[str, Any]]:
+def _register_skills_tools() -> list[dict[str, Any]]:
     """Callback to register skills tools.
 
     This is registered with the 'register_tools' callback phase.
@@ -104,8 +104,7 @@ def _register_skills_tools() -> List[Dict[str, Any]]:
     """
     from code_puppy.tools.skills_tools import (
         register_activate_skill,
-        register_list_or_search_skills,
-    )
+        register_list_or_search_skills)
 
     return [
         {"name": "activate_skill", "register_func": register_activate_skill},
@@ -121,10 +120,10 @@ def _register_skills_tools() -> List[Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 _COMMAND_NAME = "skills"
-_ALIASES = ("skill",)
+_ALIASES = ("skill")
 
 
-def _skills_command_help() -> List[Tuple[str, str]]:
+def _skills_command_help() -> list[tuple[str, str]]:
     """Advertise /skills in the /help menu."""
     return [
         ("skills", "Manage agent skills – browse, enable, disable, install"),
@@ -132,7 +131,7 @@ def _skills_command_help() -> List[Tuple[str, str]]:
     ]
 
 
-def _handle_skills_command(command: str, name: str) -> Optional[Any]:
+def _handle_skills_command(command: str, name: str) -> Any | None:
     """Handle /skills and /skill slash commands.
 
     Sub-commands:
@@ -149,8 +148,7 @@ def _handle_skills_command(command: str, name: str) -> Optional[Any]:
     from code_puppy.plugins.agent_skills.config import (
         get_disabled_skills,
         get_skills_enabled,
-        set_skills_enabled,
-    )
+        set_skills_enabled)
     from code_puppy.plugins.agent_skills.discovery import discover_skills
     from code_puppy.plugins.agent_skills.metadata import parse_skill_metadata
     from code_puppy.plugins.agent_skills.skills_menu import show_skills_menu
@@ -204,8 +202,7 @@ def _handle_skills_command(command: str, name: str) -> Optional[Any]:
 
         elif subcommand == "install":
             from code_puppy.plugins.agent_skills.skills_install_menu import (
-                run_skills_install_menu,
-            )
+                run_skills_install_menu)
 
             run_skills_install_menu()
             return True

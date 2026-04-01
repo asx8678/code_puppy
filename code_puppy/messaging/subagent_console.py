@@ -14,7 +14,6 @@ Usage:
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 from rich.console import Console, Group
 from rich.live import Live
@@ -59,9 +58,9 @@ class AgentState:
     status: str = "starting"
     tool_call_count: int = 0
     token_count: int = 0
-    current_tool: Optional[str] = None
+    current_tool: str | None = None
     start_time: float = field(default_factory=time.time)
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
     def elapsed_seconds(self) -> float:
         """Calculate elapsed time since agent started."""
@@ -87,8 +86,7 @@ class AgentState:
             token_count=self.token_count,
             current_tool=self.current_tool,
             elapsed_seconds=self.elapsed_seconds(),
-            error_message=self.error_message,
-        )
+            error_message=self.error_message)
 
 
 # =============================================================================
@@ -114,10 +112,10 @@ class SubAgentConsoleManager:
     Thread-safe: All operations are protected by locks.
     """
 
-    _instance: Optional["SubAgentConsoleManager"] = None
+    _instance: "SubAgentConsoleManager" | None = None
     _lock = threading.Lock()
 
-    def __init__(self, console: Optional[Console] = None):
+    def __init__(self, console: Console | None = None):
         """Initialize the manager.
 
         Args:
@@ -125,15 +123,15 @@ class SubAgentConsoleManager:
                     a new one will be created.
         """
         self.console = console or Console()
-        self._agents: Dict[str, AgentState] = {}
+        self._agents: dict[str, AgentState] = {}
         self._agents_lock = threading.RLock()  # Reentrant lock for agent operations
-        self._live: Optional[Live] = None
-        self._update_thread: Optional[threading.Thread] = None
+        self._live: Live | None = None
+        self._update_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 
     @classmethod
     def get_instance(
-        cls, console: Optional[Console] = None
+        cls, console: Console | None = None
     ) -> "SubAgentConsoleManager":
         """Get or create the singleton instance.
 
@@ -181,8 +179,7 @@ class SubAgentConsoleManager:
             self._agents[session_id] = AgentState(
                 session_id=session_id,
                 agent_name=agent_name,
-                model_name=model_name,
-            )
+                model_name=model_name)
 
             # Start display if this is the first agent
             if len(self._agents) == 1:
@@ -239,7 +236,7 @@ class SubAgentConsoleManager:
                 if not self._agents:
                     self._stop_display()
 
-    def get_agent_state(self, session_id: str) -> Optional[AgentState]:
+    def get_agent_state(self, session_id: str) -> AgentState | None:
         """Get the current state of an agent.
 
         Args:
@@ -251,7 +248,7 @@ class SubAgentConsoleManager:
         with self._agents_lock:
             return self._agents.get(session_id)
 
-    def get_all_agents(self) -> List[AgentState]:
+    def get_all_agents(self) -> list[AgentState]:
         """Get a list of all currently tracked agents.
 
         Returns:
@@ -410,8 +407,7 @@ class SubAgentConsoleManager:
             table,
             title=title,
             border_style=color,
-            padding=(0, 1),
-        )
+            padding=(0, 1))
 
     # =========================================================================
     # Context Manager Support
@@ -432,8 +428,7 @@ class SubAgentConsoleManager:
 
 
 def get_subagent_console_manager(
-    console: Optional[Console] = None,
-) -> SubAgentConsoleManager:
+    console: Console | None = None) -> SubAgentConsoleManager:
     """Get the singleton SubAgentConsoleManager instance.
 
     Convenience function for accessing the manager.

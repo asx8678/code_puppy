@@ -4,13 +4,12 @@ Provides OAuth authentication for Antigravity models and registers
 the 'antigravity' model type handler.
 """
 
-from __future__ import annotations
 
 import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict
 from urllib.parse import parse_qs, urlparse
 
 from code_puppy.callbacks import register_callback
@@ -22,8 +21,7 @@ from .accounts import AccountManager
 from .config import (
     ANTIGRAVITY_OAUTH_CONFIG,
     get_accounts_storage_path,
-    get_token_storage_path,
-)
+    get_token_storage_path)
 from .constants import ANTIGRAVITY_MODELS
 from .oauth import (
     TokenExchangeSuccess,
@@ -31,8 +29,7 @@ from .oauth import (
     build_authorization_url,
     exchange_code_for_tokens,
     fetch_antigravity_status,
-    prepare_oauth_context,
-)
+    prepare_oauth_context)
 from .storage import clear_accounts
 from .token import is_token_expired, refresh_access_token
 from .transport import create_antigravity_client
@@ -42,17 +39,16 @@ from .utils import (
     load_stored_tokens,
     reload_current_agent,
     remove_antigravity_models,
-    save_tokens,
-)
+    save_tokens)
 
 logger = logging.getLogger(__name__)
 
 
 class _OAuthResult:
     def __init__(self) -> None:
-        self.code: Optional[str] = None
-        self.state: Optional[str] = None
-        self.error: Optional[str] = None
+        self.code: str | None = None
+        self.state: str | None = None
+        self.error: str | None = None
 
 
 class _CallbackHandler(BaseHTTPRequestHandler):
@@ -63,7 +59,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         logger.info("Callback received: path=%s", self.path)
         parsed = urlparse(self.path)
-        params: Dict[str, List[str]] = parse_qs(parsed.query)
+        params: dict[str, list[str]] = parse_qs(parsed.query)
 
         code = params.get("code", [None])[0]
         state = params.get("state", [None])[0]
@@ -73,15 +69,13 @@ class _CallbackHandler(BaseHTTPRequestHandler):
             self.result.state = state
             success_html = oauth_success_html(
                 "Antigravity",
-                "You're connected to Antigravity! 🚀 Gemini & Claude models are now available.",
-            )
+                "You're connected to Antigravity! 🚀 Gemini & Claude models are now available.")
             self._write_response(200, success_html)
         else:
             self.result.error = "Missing code or state"
             failure_html = oauth_failure_html(
                 "Antigravity",
-                "Missing code or state parameter 🥺",
-            )
+                "Missing code or state parameter 🥺")
             self._write_response(400, failure_html)
 
         self.received_event.set()
@@ -97,8 +91,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 
 
 def _start_callback_server(
-    context: Any,
-) -> Optional[Tuple[HTTPServer, _OAuthResult, threading.Event, str]]:
+    context: Any) -> tuple[HTTPServer, _OAuthResult, threading.Event, str | None]:
     """Start local HTTP server for OAuth callback."""
     port_range = ANTIGRAVITY_OAUTH_CONFIG["callback_port_range"]
 
@@ -125,7 +118,7 @@ def _start_callback_server(
     return None
 
 
-def _await_callback(context: Any) -> Optional[Tuple[str, str, str]]:
+def _await_callback(context: Any) -> tuple[str, str, str | None]:
     """Wait for OAuth callback and return (code, state, redirect_uri)."""
     timeout = ANTIGRAVITY_OAUTH_CONFIG["callback_timeout"]
 
@@ -173,8 +166,7 @@ def _await_callback(context: Any) -> Optional[Tuple[str, str, str]]:
 
 def _perform_authentication(
     add_account: bool = False,
-    reload_agent: bool = True,
-) -> bool:
+    reload_agent: bool = True) -> bool:
     """Run the OAuth authentication flow.
 
     Args:
@@ -216,8 +208,7 @@ def _perform_authentication(
         manager.add_account(
             refresh_token=result.refresh_token,
             email=result.email,
-            project_id=result.project_id,
-        )
+            project_id=result.project_id)
         manager.save_to_disk()
 
         if add_account:
@@ -245,25 +236,21 @@ def _perform_authentication(
     return True
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     """Return help entries for Antigravity commands."""
     return [
         (
             "antigravity-auth",
-            "Authenticate with Google/Antigravity for Gemini & Claude models",
-        ),
+            "Authenticate with Google/Antigravity for Gemini & Claude models"),
         (
             "antigravity-add",
-            "Add another Google account for load balancing",
-        ),
+            "Add another Google account for load balancing"),
         (
             "antigravity-status",
-            "Check authentication status and account pool",
-        ),
+            "Check authentication status and account pool"),
         (
             "antigravity-logout",
-            "Remove all Antigravity OAuth tokens and models",
-        ),
+            "Remove all Antigravity OAuth tokens and models"),
     ]
 
 
@@ -379,7 +366,7 @@ def _handle_logout() -> None:
     emit_success("👋 Antigravity logout complete")
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[bool]:
+def _handle_custom_command(command: str, name: str) -> bool | None:
     """Handle Antigravity custom commands."""
     if not name:
         return None
@@ -485,8 +472,7 @@ def _create_antigravity_model(model_name: str, model_config: Dict, config: Dict)
         headers=headers,
         refresh_token=refresh_token,
         expires_at=expires_at,
-        on_token_refreshed=on_token_refreshed,
-    )
+        on_token_refreshed=on_token_refreshed)
 
     # Use custom model with direct httpx client
     if AntigravityModel:
@@ -494,20 +480,18 @@ def _create_antigravity_model(model_name: str, model_config: Dict, config: Dict)
             model_name=model_config["name"],
             api_key=api_key or "",  # Antigravity uses OAuth, key may be empty
             base_url=url,
-            http_client=client,
-        )
+            http_client=client)
     else:
         model = GeminiModel(
             model_name=model_config["name"],
             api_key=api_key or "",
             base_url=url,
-            http_client=client,
-        )
+            http_client=client)
 
     return model
 
 
-def _register_model_types() -> List[Dict[str, Any]]:
+def _register_model_types() -> list[dict[str, Any]]:
     """Register the antigravity model type handler."""
     return [{"type": "antigravity", "handler": _create_antigravity_model}]
 

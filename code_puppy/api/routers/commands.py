@@ -9,7 +9,7 @@ This router provides REST endpoints for:
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -34,9 +34,9 @@ class CommandInfo(BaseModel):
     name: str
     description: str
     usage: str
-    aliases: List[str] = []
+    aliases: list[str] = []
     category: str = "core"
-    detailed_help: Optional[str] = None
+    detailed_help: str | None = None
 
 
 class CommandExecuteRequest(BaseModel):
@@ -50,7 +50,7 @@ class CommandExecuteResponse(BaseModel):
 
     success: bool
     result: Any = None
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class AutocompleteRequest(BaseModel):
@@ -62,7 +62,7 @@ class AutocompleteRequest(BaseModel):
 class AutocompleteResponse(BaseModel):
     """Response with autocomplete suggestions."""
 
-    suggestions: List[str]
+    suggestions: list[str]
 
 
 # =============================================================================
@@ -71,7 +71,7 @@ class AutocompleteResponse(BaseModel):
 
 
 @router.get("/")
-async def list_commands() -> List[CommandInfo]:
+async def list_commands() -> list[CommandInfo]:
     """List all available slash commands.
 
     Returns a sorted list of all unique commands (no alias duplicates),
@@ -79,7 +79,7 @@ async def list_commands() -> List[CommandInfo]:
     category, and detailed help.
 
     Returns:
-        List[CommandInfo]: Sorted list of command information.
+        list[CommandInfo]: Sorted list of command information.
     """
     from code_puppy.command_line.command_registry import get_unique_commands
 
@@ -92,8 +92,7 @@ async def list_commands() -> List[CommandInfo]:
                 usage=cmd.usage,
                 aliases=cmd.aliases,
                 category=cmd.category,
-                detailed_help=cmd.detailed_help,
-            )
+                detailed_help=cmd.detailed_help)
         )
     return sorted(commands, key=lambda c: c.name)
 
@@ -125,8 +124,7 @@ async def get_command_info(name: str) -> CommandInfo:
         usage=cmd.usage,
         aliases=cmd.aliases,
         category=cmd.category,
-        detailed_help=cmd.detailed_help,
-    )
+        detailed_help=cmd.detailed_help)
 
 
 @router.post("/execute")
@@ -155,8 +153,7 @@ async def execute_command(request: CommandExecuteRequest) -> CommandExecuteRespo
         # Run blocking command in thread pool with timeout
         result = await asyncio.wait_for(
             loop.run_in_executor(_executor, handle_command, command),
-            timeout=COMMAND_TIMEOUT,
-        )
+            timeout=COMMAND_TIMEOUT)
         return CommandExecuteResponse(success=True, result=result)
     except asyncio.TimeoutError:
         return CommandExecuteResponse(
@@ -183,8 +180,7 @@ async def autocomplete_command(request: AutocompleteRequest) -> AutocompleteResp
     """
     from code_puppy.command_line.command_registry import (
         get_command,
-        get_unique_commands,
-    )
+        get_unique_commands)
 
     partial = request.partial.lstrip("/")
 

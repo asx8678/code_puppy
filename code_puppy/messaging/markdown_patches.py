@@ -28,8 +28,7 @@ class LeftJustifiedHeading(Heading):
             yield Panel(
                 text,
                 box=box.HEAVY,
-                style="markdown.h1.border",
-            )
+                style="markdown.h1.border")
         else:
             # Styled text for h2 and beyond (same as Rich default)
             if self.tag == "h2":

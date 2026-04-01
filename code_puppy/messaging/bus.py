@@ -34,15 +34,14 @@ It also handles request/response correlation for user interactions:
 
 import asyncio
 import threading
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from uuid import uuid4
 
 from .commands import (
     AnyCommand,
     ConfirmationResponse,
     SelectionResponse,
-    UserInputResponse,
-)
+    UserInputResponse)
 from .messages import (
     AnyMessage,
     ConfirmationRequest,
@@ -50,8 +49,7 @@ from .messages import (
     MessageLevel,
     SelectionRequest,
     TextMessage,
-    UserInputRequest,
-)
+    UserInputRequest)
 
 
 # Default timeout in seconds for user-facing request_* methods.
@@ -84,17 +82,17 @@ class MessageBus:
 
         # Event loop reference – set lazily the first time an async method
         # runs, then reused for call_soon_threadsafe cross-thread puts.
-        self._event_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._event_loop: asyncio.AbstractEventLoop | None = None
 
         # Startup buffering
-        self._startup_buffer: List[AnyMessage] = []
+        self._startup_buffer: list[AnyMessage] = []
         self._has_active_renderer = False
 
         # Request/Response correlation: prompt_id → Future (for async usage)
-        self._pending_requests: Dict[str, asyncio.Future[Any]] = {}
+        self._pending_requests: dict[str, asyncio.Future[Any]] = {}
 
         # Session context for multi-agent tracking
-        self._current_session_id: Optional[str] = None
+        self._current_session_id: str | None = None
 
     # =========================================================================
     # Outgoing Messages (Agent → UI)
@@ -149,8 +147,7 @@ class MessageBus:
         self,
         level: MessageLevel,
         text: str,
-        category: MessageCategory = MessageCategory.SYSTEM,
-    ) -> None:
+        category: MessageCategory = MessageCategory.SYSTEM) -> None:
         """Emit a text message with the specified level.
 
         Args:
@@ -225,7 +222,7 @@ class MessageBus:
     # Session Context (Multi-Agent Tracking)
     # =========================================================================
 
-    def set_session_context(self, session_id: Optional[str]) -> None:
+    def set_session_context(self, session_id: str | None) -> None:
         """Set the current session context for auto-tagging messages.
 
         When set, all messages emitted via emit() will be automatically tagged
@@ -237,7 +234,7 @@ class MessageBus:
         with self._lock:
             self._current_session_id = session_id
 
-    def get_session_context(self) -> Optional[str]:
+    def get_session_context(self) -> str | None:
         """Get the current session context.
 
         Returns:
@@ -253,9 +250,8 @@ class MessageBus:
     async def request_input(
         self,
         prompt_text: str,
-        default: Optional[str] = None,
-        input_type: str = "text",
-    ) -> str:
+        default: str | None = None,
+        input_type: str = "text") -> str:
         """Request text input from the user.
 
         Emits a UserInputRequest and blocks until the UI provides a response.
@@ -306,9 +302,8 @@ class MessageBus:
         self,
         title: str,
         description: str,
-        options: Optional[List[str]] = None,
-        allow_feedback: bool = False,
-    ) -> Tuple[bool, Optional[str]]:
+        options: list[str | None] = None,
+        allow_feedback: bool = False) -> tuple[bool, str | None]:
         """Request confirmation from the user.
 
         Emits a ConfirmationRequest and blocks until the UI provides a response.
@@ -320,14 +315,14 @@ class MessageBus:
             allow_feedback: Whether to allow free-form feedback.
 
         Returns:
-            Tuple of (confirmed: bool, feedback: Optional[str]).
+            Tuple of (confirmed: bool, feedback: str | None).
         """
         prompt_id = str(uuid4())
 
         loop = asyncio.get_running_loop()
         if self._event_loop is None:
             self._event_loop = loop
-        future: asyncio.Future[Tuple[bool, Optional[str]]] = loop.create_future()
+        future: asyncio.Future[tuple[bool, str | None]] = loop.create_future()
 
         with self._lock:
             self._pending_requests[prompt_id] = future
@@ -337,8 +332,7 @@ class MessageBus:
             title=title,
             description=description,
             options=options or ["Yes", "No"],
-            allow_feedback=allow_feedback,
-        )
+            allow_feedback=allow_feedback)
         self.emit(request)
 
         try:
@@ -354,9 +348,8 @@ class MessageBus:
     async def request_selection(
         self,
         prompt_text: str,
-        options: List[str],
-        allow_cancel: bool = True,
-    ) -> Tuple[int, str]:
+        options: list[str],
+        allow_cancel: bool = True) -> tuple[int, str]:
         """Request the user to select from a list of options.
 
         Emits a SelectionRequest and blocks until the UI provides a response.
@@ -375,7 +368,7 @@ class MessageBus:
         loop = asyncio.get_running_loop()
         if self._event_loop is None:
             self._event_loop = loop
-        future: asyncio.Future[Tuple[int, str]] = loop.create_future()
+        future: asyncio.Future[tuple[int, str]] = loop.create_future()
 
         with self._lock:
             self._pending_requests[prompt_id] = future
@@ -384,8 +377,7 @@ class MessageBus:
             prompt_id=prompt_id,
             prompt_text=prompt_text,
             options=options,
-            allow_cancel=allow_cancel,
-        )
+            allow_cancel=allow_cancel)
         self.emit(request)
 
         try:
@@ -489,7 +481,7 @@ class MessageBus:
             self._event_loop = asyncio.get_running_loop()
         return await self._outgoing.get()
 
-    def get_message_nowait(self) -> Optional[AnyMessage]:
+    def get_message_nowait(self) -> AnyMessage | None:
         """Get the next outgoing message without blocking.
 
         Returns:
@@ -518,7 +510,7 @@ class MessageBus:
     # Startup Buffering
     # =========================================================================
 
-    def get_buffered_messages(self) -> List[AnyMessage]:
+    def get_buffered_messages(self) -> list[AnyMessage]:
         """Get all messages buffered before renderer attached.
 
         Returns a copy of the buffer. Call clear_buffer() after processing.
@@ -582,7 +574,7 @@ class MessageBus:
 # Global Singleton
 # =============================================================================
 
-_global_bus: Optional[MessageBus] = None
+_global_bus: MessageBus | None = None
 _bus_lock = threading.Lock()
 
 
@@ -653,12 +645,12 @@ def emit_shell_line(line: str, stream: str = "stdout") -> None:
     get_message_bus().emit_shell_line(line, stream)
 
 
-def set_session_context(session_id: Optional[str]) -> None:
+def set_session_context(session_id: str | None) -> None:
     """Set the session context on the global bus."""
     get_message_bus().set_session_context(session_id)
 
 
-def get_session_context() -> Optional[str]:
+def get_session_context() -> str | None:
     """Get the session context from the global bus."""
     return get_message_bus().get_session_context()
 

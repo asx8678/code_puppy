@@ -3,7 +3,6 @@ MCP Search Command - Searches for pre-configured MCP servers in the registry.
 """
 
 import logging
-from typing import List, Optional
 
 from rich.table import Table
 from rich.text import Text
@@ -23,7 +22,7 @@ class SearchCommand(MCPCommandBase):
     Searches for pre-configured MCP servers with optional query terms.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Search for pre-configured MCP servers in the registry.
 
@@ -41,26 +40,22 @@ class SearchCommand(MCPCommandBase):
                 # Show popular servers if no query
                 emit_info(
                     "Popular MCP Servers:\n",
-                    message_group=group_id,
-                )
+                    message_group=group_id)
                 servers = catalog.get_popular(15)
             else:
                 query = " ".join(args)
                 emit_info(
                     f"Searching for: {query}\n",
-                    message_group=group_id,
-                )
+                    message_group=group_id)
                 servers = catalog.search(query)
 
             if not servers:
                 emit_warning(
                     "No servers found matching your search",
-                    message_group=group_id,
-                )
+                    message_group=group_id)
                 emit_info(
                     "Try: /mcp search database, /mcp search file, /mcp search git",
-                    message_group=group_id,
-                )
+                    message_group=group_id)
                 return
 
             # Create results table
@@ -93,31 +88,26 @@ class SearchCommand(MCPCommandBase):
                     server.description[:50] + "..."
                     if len(server.description) > 50
                     else server.description,
-                    tags,
-                )
+                    tags)
 
             # The first message established the group, subsequent messages will auto-group
             emit_system_message(table, message_group=group_id)
             emit_info("\n✓ = Verified  ⭐ = Popular", message_group=group_id)
             emit_info(
                 Text.from_markup("[yellow]To install:[/yellow] /mcp install <id>"),
-                message_group=group_id,
-            )
+                message_group=group_id)
             emit_info(
                 Text.from_markup(
                     "[yellow]For details:[/yellow] /mcp search <specific-term>"
                 ),
-                message_group=group_id,
-            )
+                message_group=group_id)
 
         except ImportError:
             emit_info(
                 Text.from_markup("[red]Server registry not available[/red]"),
-                message_group=group_id,
-            )
+                message_group=group_id)
         except Exception as e:
             logger.error(f"Error searching server registry: {e}")
             emit_info(
                 Text.from_markup(f"[red]Error searching servers: {e}[/red]"),
-                message_group=group_id,
-            )
+                message_group=group_id)

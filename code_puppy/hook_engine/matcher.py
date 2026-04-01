@@ -6,12 +6,12 @@ based on tool name, arguments, and other event data.
 """
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .aliases import get_aliases
 
 
-def matches(matcher: str, tool_name: str, tool_args: Dict[str, Any]) -> bool:
+def matches(matcher: str, tool_name: str, tool_args: dict[str, Any]) -> bool:
     """
     Evaluate if a matcher pattern matches the tool call.
 
@@ -39,7 +39,7 @@ def matches(matcher: str, tool_name: str, tool_args: Dict[str, Any]) -> bool:
     return _match_single(matcher.strip(), tool_name, tool_args)
 
 
-def _match_single(pattern: str, tool_name: str, tool_args: Dict[str, Any]) -> bool:
+def _match_single(pattern: str, tool_name: str, tool_args: dict[str, Any]) -> bool:
     if pattern == tool_name:
         return True
 
@@ -78,7 +78,7 @@ def _match_single(pattern: str, tool_name: str, tool_args: Dict[str, Any]) -> bo
     return False
 
 
-def _extract_file_path(tool_args: Dict[str, Any]) -> Optional[str]:
+def _extract_file_path(tool_args: dict[str, Any]) -> str | None:
     file_keys = [
         "file_path",
         "file",
@@ -122,7 +122,7 @@ def _is_regex_pattern(pattern: str) -> bool:
     return any(char in pattern for char in regex_chars)
 
 
-def extract_file_extension(file_path: str) -> Optional[str]:
+def extract_file_extension(file_path: str) -> str | None:
     if not file_path or "." not in file_path:
         return None
     if "/" in file_path:
@@ -138,7 +138,7 @@ def matches_tool(tool_name: str, *names: str) -> bool:
     return tool_name.lower() in [name.lower() for name in names]
 
 
-def matches_file_extension(tool_args: Dict[str, Any], *extensions: str) -> bool:
+def matches_file_extension(tool_args: dict[str, Any], *extensions: str) -> bool:
     file_path = _extract_file_path(tool_args)
     if not file_path:
         return False
@@ -146,7 +146,7 @@ def matches_file_extension(tool_args: Dict[str, Any], *extensions: str) -> bool:
     return ext in extensions
 
 
-def matches_file_pattern(tool_args: Dict[str, Any], pattern: str) -> bool:
+def matches_file_pattern(tool_args: dict[str, Any], pattern: str) -> bool:
     file_path = _extract_file_path(tool_args)
     if not file_path:
         return False

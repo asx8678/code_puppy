@@ -1,6 +1,5 @@
 """Utility helpers for the ChatGPT OAuth plugin."""
 
-from __future__ import annotations
 
 import base64
 import datetime
@@ -10,7 +9,7 @@ import logging
 import secrets
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import parse_qs as urllib_parse_qs
 from urllib.parse import urlencode, urlparse
 
@@ -19,8 +18,7 @@ import requests
 from .config import (
     CHATGPT_OAUTH_CONFIG,
     get_chatgpt_models_path,
-    get_token_storage_path,
-)
+    get_token_storage_path)
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +31,8 @@ class OAuthContext:
     code_verifier: str
     code_challenge: str
     created_at: float
-    redirect_uri: Optional[str] = None
-    expires_at: Optional[float] = None  # Add expiration time
+    redirect_uri: str | None = None
+    expires_at: float | None = None  # Add expiration time
 
     def is_expired(self) -> bool:
         """Check if this OAuth context has expired."""
@@ -71,8 +69,7 @@ def prepare_oauth_context() -> OAuthContext:
         code_verifier=code_verifier,
         code_challenge=code_challenge,
         created_at=time.time(),
-        expires_at=expires_at,
-    )
+        expires_at=expires_at)
 
 
 def assign_redirect_uri(context: OAuthContext, port: int) -> str:
@@ -110,7 +107,7 @@ def build_authorization_url(context: OAuthContext) -> str:
     return f"{CHATGPT_OAUTH_CONFIG['auth_url']}?{urlencode(params)}"
 
 
-def parse_authorization_error(url: str) -> Optional[str]:
+def parse_authorization_error(url: str) -> str | None:
     """Parse error from OAuth callback URL."""
     try:
         parsed = urlparse(url)
@@ -124,7 +121,7 @@ def parse_authorization_error(url: str) -> Optional[str]:
     return None
 
 
-def parse_jwt_claims(token: str) -> Optional[Dict[str, Any]]:
+def parse_jwt_claims(token: str) -> dict[str, Any | None]:
     """Parse JWT token to extract claims."""
     if not token or token.count(".") != 2:
         return None
@@ -138,7 +135,7 @@ def parse_jwt_claims(token: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def load_stored_tokens() -> Optional[Dict[str, Any]]:
+def load_stored_tokens() -> dict[str, Any | None]:
     try:
         token_path = get_token_storage_path()
         if token_path.exists():
@@ -149,7 +146,7 @@ def load_stored_tokens() -> Optional[Dict[str, Any]]:
     return None
 
 
-def get_valid_access_token() -> Optional[str]:
+def get_valid_access_token() -> str | None:
     """Get a valid access token, refreshing if expired.
 
     Returns:
@@ -182,7 +179,7 @@ def get_valid_access_token() -> Optional[str]:
     return access_token
 
 
-def refresh_access_token() -> Optional[str]:
+def refresh_access_token() -> str | None:
     """Refresh the access token using the refresh token.
 
     Returns:
@@ -212,8 +209,7 @@ def refresh_access_token() -> Optional[str]:
             CHATGPT_OAUTH_CONFIG["token_url"],
             data=payload,
             headers=headers,
-            timeout=30,
-        )
+            timeout=30)
 
         if response.status_code == 200:
             new_tokens = response.json()
@@ -241,7 +237,7 @@ def refresh_access_token() -> Optional[str]:
     return None
 
 
-def save_tokens(tokens: Dict[str, Any]) -> bool:
+def save_tokens(tokens: dict[str, Any]) -> bool:
     if tokens is None:
         raise TypeError("tokens cannot be None")
     try:
@@ -255,7 +251,7 @@ def save_tokens(tokens: Dict[str, Any]) -> bool:
     return False
 
 
-def load_chatgpt_models() -> Dict[str, Any]:
+def load_chatgpt_models() -> dict[str, Any]:
     try:
         models_path = get_chatgpt_models_path()
         if models_path.exists():
@@ -266,7 +262,7 @@ def load_chatgpt_models() -> Dict[str, Any]:
     return {}
 
 
-def save_chatgpt_models(models: Dict[str, Any]) -> bool:
+def save_chatgpt_models(models: dict[str, Any]) -> bool:
     try:
         models_path = get_chatgpt_models_path()
         with open(models_path, "w", encoding="utf-8") as handle:
@@ -279,7 +275,7 @@ def save_chatgpt_models(models: Dict[str, Any]) -> bool:
 
 def exchange_code_for_tokens(
     auth_code: str, context: OAuthContext
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any | None]:
     """Exchange authorization code for access tokens."""
     if not context.redirect_uri:
         raise RuntimeError("Redirect URI missing from OAuth context")
@@ -306,8 +302,7 @@ def exchange_code_for_tokens(
             CHATGPT_OAUTH_CONFIG["token_url"],
             data=payload,
             headers=headers,
-            timeout=30,
-        )
+            timeout=30)
         logger.info("Token exchange response: %s", response.status_code)
         if response.status_code == 200:
             token_data = response.json()
@@ -322,8 +317,7 @@ def exchange_code_for_tokens(
             logger.error(
                 "Token exchange failed: %s - %s",
                 response.status_code,
-                response.text,
-            )
+                response.text)
             # Try to parse OAuth error
             if response.headers.get("content-type", "").startswith("application/json"):
                 try:
@@ -331,8 +325,7 @@ def exchange_code_for_tokens(
                     if "error" in error_data:
                         logger.error(
                             "OAuth error: %s",
-                            error_data.get("error_description", error_data["error"]),
-                        )
+                            error_data.get("error_description", error_data["error"]))
                 except Exception:
                     pass
     except Exception as exc:
@@ -369,7 +362,7 @@ CODEX_MODEL_CONTEXT_LENGTHS = {
 }
 
 
-def _ensure_required_models(models: List[str]) -> List[str]:
+def _ensure_required_models(models: list[str]) -> list[str]:
     """Merge REQUIRED_CODEX_MODELS into the given list, preserving order.
 
     Any required model not already present is prepended so it appears first.
@@ -381,7 +374,7 @@ def _ensure_required_models(models: List[str]) -> List[str]:
     return missing + models
 
 
-def fetch_chatgpt_models(access_token: str, account_id: str) -> Optional[List[str]]:
+def fetch_chatgpt_models(access_token: str, account_id: str) -> list[str | None]:
     """Fetch available models from ChatGPT Codex API.
 
     Attempts to fetch models from the API, but falls back to a default list
@@ -450,8 +443,7 @@ def fetch_chatgpt_models(access_token: str, account_id: str) -> Optional[List[st
         # API didn't return valid models, use default list
         logger.info(
             "Models endpoint returned %d, using default model list",
-            response.status_code,
-        )
+            response.status_code)
 
     except requests.exceptions.Timeout:
         logger.warning("Timeout fetching models, using default list")
@@ -465,7 +457,7 @@ def fetch_chatgpt_models(access_token: str, account_id: str) -> Optional[List[st
     return DEFAULT_CODEX_MODELS
 
 
-def add_models_to_extra_config(models: List[str]) -> bool:
+def add_models_to_extra_config(models: list[str]) -> bool:
     """Add ChatGPT models to chatgpt_models.json configuration."""
     try:
         chatgpt_models = load_chatgpt_models()

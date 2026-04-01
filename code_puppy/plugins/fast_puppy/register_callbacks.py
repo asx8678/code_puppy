@@ -52,8 +52,7 @@ def _has_maturin() -> bool:
     try:
         subprocess.run(
             [sys.executable, "-m", "maturin", "--version"],
-            capture_output=True, timeout=10,
-        )
+            capture_output=True, timeout=10)
         return True
     except Exception:
         return False
@@ -75,8 +74,7 @@ def _build_rust_module(crate_dir: Path) -> bool:
             capture_output=True,
             text=True,
             timeout=300,  # 5 min max for compilation
-            cwd=str(crate_dir),
-        )
+            cwd=str(crate_dir))
         if result.returncode == 0:
             return True
         logger.debug("Rust build failed: %s", result.stderr)
@@ -110,8 +108,7 @@ def _try_auto_build() -> bool:
         try:
             subprocess.run(
                 [sys.executable, "-m", "pip", "install", "maturin"],
-                capture_output=True, timeout=60,
-            )
+                capture_output=True, timeout=60)
         except Exception:
             logger.debug("Could not install maturin")
             return False
@@ -212,8 +209,7 @@ def _handle_fast_puppy(command: str, name: str):
     from code_puppy._core_bridge import (
         RUST_AVAILABLE,
         get_rust_status,
-        set_rust_enabled,
-    )
+        set_rust_enabled)
 
     parts = command.strip().split()
     subcommand = parts[1] if len(parts) > 1 else "status"

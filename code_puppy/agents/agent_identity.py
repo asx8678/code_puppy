@@ -9,7 +9,7 @@ This module contains identity-related functionality for agents including:
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any
+from typing import Any
 
 from code_puppy.config import get_default_agent
 
@@ -75,7 +75,7 @@ class AgentIdentityMixin(ABC):
         pass
 
     @abstractmethod
-    def get_available_tools(self) -> List[str]:
+    def get_available_tools(self) -> list[str]:
         """Get list of tool names that this agent should have access to.
 
         Returns:
@@ -83,7 +83,7 @@ class AgentIdentityMixin(ABC):
         """
         pass
 
-    def get_tools_config(self) -> Optional[Dict[str, Any]]:
+    def get_tools_config(self) -> dict[str, Any | None]:
         """Get tool configuration for this agent.
 
         Returns:
@@ -91,7 +91,7 @@ class AgentIdentityMixin(ABC):
         """
         return None
 
-    def get_user_prompt(self) -> Optional[str]:
+    def get_user_prompt(self) -> str | None:
         """Get custom user prompt for this agent.
 
         Returns:

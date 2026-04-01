@@ -18,7 +18,7 @@ import logging
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .matcher import _extract_file_path
 from .models import EventData, ExecutionResult, HookConfig
@@ -72,8 +72,7 @@ def _build_stdin_payload(event_data: EventData) -> bytes:
 async def execute_hook(
     hook: HookConfig,
     event_data: EventData,
-    env_vars: Optional[Dict[str, str]] = None,
-) -> ExecutionResult:
+    env_vars: dict[str, str | None] = None) -> ExecutionResult:
     """
     Execute a hook command with timeout and variable substitution.
 
@@ -94,8 +93,7 @@ async def execute_hook(
             stdout=hook.command,
             exit_code=0,
             duration_ms=0.0,
-            hook_id=hook.id,
-        )
+            hook_id=hook.id)
 
     command = _substitute_variables(hook.command, event_data, env_vars or {})
     stdin_payload = _build_stdin_payload(event_data)
@@ -110,14 +108,12 @@ async def execute_hook(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=os.getcwd(),
-            env=env,
-        )
+            env=env)
 
         try:
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(input=stdin_payload),
-                timeout=hook.timeout / 1000.0,
-            )
+                timeout=hook.timeout / 1000.0)
         except asyncio.TimeoutError:
             try:
                 proc.kill()
@@ -134,8 +130,7 @@ async def execute_hook(
                 exit_code=-1,
                 duration_ms=duration_ms,
                 error=f"Hook execution timed out after {hook.timeout}ms",
-                hook_id=hook.id,
-            )
+                hook_id=hook.id)
 
         duration_ms = (time.perf_counter() - start_time) * 1000
         stdout_str = stdout.decode("utf-8", errors="replace") if stdout else ""
@@ -153,8 +148,7 @@ async def execute_hook(
             exit_code=exit_code,
             duration_ms=duration_ms,
             error=error,
-            hook_id=hook.id,
-        )
+            hook_id=hook.id)
 
     except Exception as e:
         duration_ms = (time.perf_counter() - start_time) * 1000
@@ -167,15 +161,13 @@ async def execute_hook(
             exit_code=-1,
             duration_ms=duration_ms,
             error=f"Hook execution error: {e}",
-            hook_id=hook.id,
-        )
+            hook_id=hook.id)
 
 
 def _substitute_variables(
     command: str,
     event_data: EventData,
-    env_vars: Dict[str, str],
-) -> str:
+    env_vars: dict[str, str]) -> str:
     substitutions = {
         "CLAUDE_PROJECT_DIR": os.getcwd(),
         "tool_name": event_data.tool_name,
@@ -199,8 +191,7 @@ def _substitute_variables(
 
 def _build_environment(
     event_data: EventData,
-    env_vars: Optional[Dict[str, str]] = None,
-) -> Dict[str, str]:
+    env_vars: dict[str, str | None] = None) -> dict[str, str]:
     env = os.environ.copy()
     env["CLAUDE_PROJECT_DIR"] = os.getcwd()
     env["CLAUDE_TOOL_INPUT"] = json.dumps(event_data.tool_args)
@@ -218,10 +209,9 @@ def _build_environment(
 
 
 async def execute_hooks_parallel(
-    hooks: List[HookConfig],
+    hooks: list[HookConfig],
     event_data: EventData,
-    env_vars: Optional[Dict[str, str]] = None,
-) -> List[ExecutionResult]:
+    env_vars: dict[str, str | None] = None) -> list[ExecutionResult]:
     if not hooks:
         return []
     tasks = [execute_hook(hook, event_data, env_vars) for hook in hooks]
@@ -238,8 +228,7 @@ async def execute_hooks_parallel(
                     exit_code=-1,
                     duration_ms=0.0,
                     error=f"Hook execution failed: {result}",
-                    hook_id=hooks[i].id,
-                )
+                    hook_id=hooks[i].id)
             )
         else:
             final_results.append(result)
@@ -247,11 +236,10 @@ async def execute_hooks_parallel(
 
 
 async def execute_hooks_sequential(
-    hooks: List[HookConfig],
+    hooks: list[HookConfig],
     event_data: EventData,
-    env_vars: Optional[Dict[str, str]] = None,
-    stop_on_block: bool = True,
-) -> List[ExecutionResult]:
+    env_vars: dict[str, str | None] = None,
+    stop_on_block: bool = True) -> list[ExecutionResult]:
     results = []
     for hook in hooks:
         result = await execute_hook(hook, event_data, env_vars)
@@ -262,18 +250,18 @@ async def execute_hooks_sequential(
     return results
 
 
-def get_blocking_result(results: List[ExecutionResult]) -> Optional[ExecutionResult]:
+def get_blocking_result(results: list[ExecutionResult]) -> ExecutionResult | None:
     for result in results:
         if result.blocked:
             return result
     return None
 
 
-def get_failed_results(results: List[ExecutionResult]) -> List[ExecutionResult]:
+def get_failed_results(results: list[ExecutionResult]) -> list[ExecutionResult]:
     return [result for result in results if not result.success]
 
 
-def format_execution_summary(results: List[ExecutionResult]) -> str:
+def format_execution_summary(results: list[ExecutionResult]) -> str:
     if not results:
         return "No hooks executed"
     total = len(results)

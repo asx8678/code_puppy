@@ -12,7 +12,7 @@ import threading
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable
 
 import httpx
 
@@ -27,7 +27,7 @@ class RetryStats:
     successful_retries: int = 0
     failed_retries: int = 0
     average_attempts: float = 0.0
-    last_retry: Optional[datetime] = None
+    last_retry: datetime | None = None
 
     def calculate_average(self, new_attempts: int) -> None:
         """Update the average attempts calculation."""
@@ -52,8 +52,8 @@ class RetryManager:
 
     def __init__(self):
         """Initialize the retry manager."""
-        self._stats: Dict[str, RetryStats] = defaultdict(RetryStats)
-        self._lock: Optional[asyncio.Lock] = None
+        self._stats: dict[str, RetryStats] = defaultdict(RetryStats)
+        self._lock: asyncio.Lock | None = None
 
     def _get_lock(self) -> asyncio.Lock:
         """Lazily create the asyncio.Lock to avoid issues with event loop timing."""
@@ -66,8 +66,7 @@ class RetryManager:
         func: Callable,
         max_attempts: int = 3,
         strategy: str = "exponential",
-        server_id: str = "unknown",
-    ) -> Any:
+        server_id: str = "unknown") -> Any:
         """
         Execute a function with retry logic and backoff strategy.
 
@@ -253,10 +252,9 @@ class RetryManager:
                 successful_retries=stats.successful_retries,
                 failed_retries=stats.failed_retries,
                 average_attempts=stats.average_attempts,
-                last_retry=stats.last_retry,
-            )
+                last_retry=stats.last_retry)
 
-    async def get_all_stats(self) -> Dict[str, RetryStats]:
+    async def get_all_stats(self) -> dict[str, RetryStats]:
         """
         Get retry statistics for all servers.
 
@@ -270,8 +268,7 @@ class RetryManager:
                     successful_retries=stats.successful_retries,
                     failed_retries=stats.failed_retries,
                     average_attempts=stats.average_attempts,
-                    last_retry=stats.last_retry,
-                )
+                    last_retry=stats.last_retry)
                 for server_id, stats in self._stats.items()
             }
 
@@ -294,7 +291,7 @@ class RetryManager:
 
 # Global retry manager instance
 _retry_manager_lock = threading.Lock()
-_retry_manager_instance: Optional[RetryManager] = None
+_retry_manager_instance: RetryManager | None = None
 
 
 def get_retry_manager() -> RetryManager:
@@ -317,8 +314,7 @@ async def retry_mcp_call(
     func: Callable,
     server_id: str,
     max_attempts: int = 3,
-    strategy: str = "exponential_jitter",
-) -> Any:
+    strategy: str = "exponential_jitter") -> Any:
     """
     Convenience function for retrying MCP calls with sensible defaults.
 

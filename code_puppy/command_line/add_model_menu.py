@@ -9,7 +9,6 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -56,10 +55,10 @@ class AddModelMenu:
 
     def __init__(self):
         """Initialize the model browser menu."""
-        self.registry: Optional[ModelsDevRegistry] = None
-        self.providers: List[ProviderInfo] = []
-        self.current_provider: Optional[ProviderInfo] = None
-        self.current_models: List[ModelInfo] = []
+        self.registry: ModelsDevRegistry | None = None
+        self.providers: list[ProviderInfo] = []
+        self.current_provider: ProviderInfo | None = None
+        self.current_models: list[ModelInfo] = []
 
         # State management
         self.view_mode = "providers"  # "providers" or "models"
@@ -69,12 +68,12 @@ class AddModelMenu:
         self.result = None  # Track if user added a model
 
         # Pending model for credential prompting
-        self.pending_model: Optional[ModelInfo] = None
-        self.pending_provider: Optional[ProviderInfo] = None
+        self.pending_model: ModelInfo | None = None
+        self.pending_provider: ProviderInfo | None = None
 
         # Custom model support
         self.is_custom_model_selected = False
-        self.custom_model_name: Optional[str] = None
+        self.custom_model_name: str | None = None
 
         # Initialize registry
         self._initialize_registry()
@@ -96,13 +95,13 @@ class AddModelMenu:
         except Exception as e:
             emit_error(f"Error loading models registry: {e}")
 
-    def _get_current_provider(self) -> Optional[ProviderInfo]:
+    def _get_current_provider(self) -> ProviderInfo | None:
         """Get the currently selected provider."""
         if 0 <= self.selected_provider_idx < len(self.providers):
             return self.providers[self.selected_provider_idx]
         return None
 
-    def _get_current_model(self) -> Optional[ModelInfo]:
+    def _get_current_model(self) -> ModelInfo | None:
         """Get the currently selected model.
 
         Returns None if "Custom model" option is selected (which is at index len(current_models)).
@@ -279,8 +278,7 @@ class AddModelMenu:
                 lines.append(
                     (
                         "fg:ansibrightblack",
-                        "  Models from this provider cannot be added.",
-                    )
+                        "  Models from this provider cannot be added.")
                 )
                 lines.append(("", "\n"))
 
@@ -393,24 +391,21 @@ class AddModelMenu:
                     lines.append(
                         (
                             "fg:ansibrightblack",
-                            f"    Input: ${model.cost_input:.6f}/token",
-                        )
+                            f"    Input: ${model.cost_input:.6f}/token")
                     )
                     lines.append(("", "\n"))
                 if model.cost_output is not None:
                     lines.append(
                         (
                             "fg:ansibrightblack",
-                            f"    Output: ${model.cost_output:.6f}/token",
-                        )
+                            f"    Output: ${model.cost_output:.6f}/token")
                     )
                     lines.append(("", "\n"))
                 if model.cost_cache_read is not None:
                     lines.append(
                         (
                             "fg:ansibrightblack",
-                            f"    Cache Read: ${model.cost_cache_read:.6f}/token",
-                        )
+                            f"    Cache Read: ${model.cost_cache_read:.6f}/token")
                     )
                     lines.append(("", "\n"))
             else:
@@ -426,16 +421,14 @@ class AddModelMenu:
                 lines.append(
                     (
                         "fg:ansibrightblack",
-                        f"    Context: {model.context_length:,} tokens",
-                    )
+                        f"    Context: {model.context_length:,} tokens")
                 )
                 lines.append(("", "\n"))
             if model.max_output > 0:
                 lines.append(
                     (
                         "fg:ansibrightblack",
-                        f"    Max Output: {model.max_output:,} tokens",
-                    )
+                        f"    Max Output: {model.max_output:,} tokens")
                 )
                 lines.append(("", "\n"))
 
@@ -449,16 +442,14 @@ class AddModelMenu:
                     lines.append(
                         (
                             "fg:ansibrightblack",
-                            f"    Input: {', '.join(model.input_modalities)}",
-                        )
+                            f"    Input: {', '.join(model.input_modalities)}")
                     )
                     lines.append(("", "\n"))
                 if model.output_modalities:
                     lines.append(
                         (
                             "fg:ansibrightblack",
-                            f"    Output: {', '.join(model.output_modalities)}",
-                        )
+                            f"    Output: {', '.join(model.output_modalities)}")
                     )
                     lines.append(("", "\n"))
 
@@ -705,7 +696,7 @@ class AddModelMenu:
             self.pending_provider = provider
             self.result = "pending_credentials"  # Signal to prompt for credentials
 
-    def _get_missing_env_vars(self, provider: ProviderInfo) -> List[str]:
+    def _get_missing_env_vars(self, provider: ProviderInfo) -> list[str]:
         """Check which required env vars are missing for a provider."""
         missing = []
         for env_var in provider.env:
@@ -777,10 +768,9 @@ class AddModelMenu:
                 16384, context_length // 4
             ),  # Reasonable default based on context
             input_modalities=["text"],
-            output_modalities=["text"],
-        )
+            output_modalities=["text"])
 
-    def _prompt_for_custom_model(self) -> Optional[tuple[str, int]]:
+    def _prompt_for_custom_model(self) -> tuple[str, int | None]:
         """Prompt user for custom model details.
 
         Returns:
@@ -979,8 +969,7 @@ class AddModelMenu:
             layout=layout,
             key_bindings=kb,
             full_screen=False,
-            mouse_support=False,
-        )
+            mouse_support=False)
 
         set_awaiting_user_input(True)
 
