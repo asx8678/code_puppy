@@ -801,8 +801,8 @@ class TestClaudeCodeModel:
                 with patch(
                     "code_puppy.config.get_effective_model_settings", return_value={}
                 ):
-                    model = ModelFactory.get_model("claude-code-test", config)
-                    assert model is None
+                    with pytest.raises(ValueError, match="could not be initialized"):
+                        ModelFactory.get_model("claude-code-test", config)
                     mock_warn.assert_called()
 
 
@@ -901,8 +901,8 @@ class TestCustomAnthropicModel:
             with patch(
                 "code_puppy.config.get_effective_model_settings", return_value={}
             ):
-                model = ModelFactory.get_model("custom-claude", config)
-                assert model is None
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("custom-claude", config)
                 mock_warn.assert_called()
 
 
@@ -944,8 +944,8 @@ class TestCustomGeminiModel:
         }
 
         with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-            model = ModelFactory.get_model("custom-gemini", config)
-            assert model is None
+            with pytest.raises(ValueError, match="could not be initialized"):
+                ModelFactory.get_model("custom-gemini", config)
             mock_warn.assert_called()
 
 
@@ -996,8 +996,8 @@ class TestCerebrasModel:
         }
 
         with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-            model = ModelFactory.get_model("cerebras-test", config)
-            assert model is None
+            with pytest.raises(ValueError, match="could not be initialized"):
+                ModelFactory.get_model("cerebras-test", config)
             mock_warn.assert_called()
 
     def test_cerebras_zai_model_profile(self):
@@ -1109,8 +1109,8 @@ class TestZaiApiModel:
 
         with patch("code_puppy.model_factory.get_api_key", return_value=None):
             with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-                model = ModelFactory.get_model("zai-api-test", config)
-                assert model is None
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("zai-api-test", config)
                 assert "ZAI_API_KEY" in mock_warn.call_args[0][0]
 
 
@@ -1177,8 +1177,8 @@ class TestAzureOpenAIExtended:
 
         with patch("code_puppy.model_factory.get_api_key", return_value=None):
             with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-                model = ModelFactory.get_model("azure-test", config)
-                assert model is None
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("azure-test", config)
                 mock_warn.assert_called()
 
 
@@ -1232,9 +1232,8 @@ class TestGeminiOAuthErrorPaths:
         try:
             with patch("code_puppy.model_factory.emit_warning") as mock_warn:
                 # This should fail gracefully
-                model = ModelFactory.get_model("gemini-oauth", config)
-                # Should return None and emit warning
-                assert model is None
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("gemini-oauth", config)
                 mock_warn.assert_called()
         except ImportError:
             # ImportError is also acceptable if not caught
@@ -1276,8 +1275,8 @@ class TestGeminiOAuthErrorPaths:
             },
         ):
             with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-                model = ModelFactory.get_model("gemini-oauth", config)
-                assert model is None
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("gemini-oauth", config)
                 mock_warn.assert_called()
 
     def test_gemini_oauth_missing_project_id(self):
@@ -1313,8 +1312,8 @@ class TestGeminiOAuthErrorPaths:
             },
         ):
             with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-                model = ModelFactory.get_model("gemini-oauth", config)
-                assert model is None
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("gemini-oauth", config)
                 mock_warn.assert_called()
 
 
@@ -1373,8 +1372,8 @@ class TestChatGPTOAuthErrorPaths:
                 with patch(
                     "code_puppy.plugins.chatgpt_oauth.register_callbacks.emit_warning"
                 ) as mock_warn:
-                    model = ModelFactory.get_model("chatgpt-oauth", config)
-                    assert model is None
+                    with pytest.raises(ValueError, match="could not be initialized"):
+                        ModelFactory.get_model("chatgpt-oauth", config)
                     mock_warn.assert_called()
 
     def test_chatgpt_oauth_missing_account_id(self):
@@ -1411,8 +1410,8 @@ class TestChatGPTOAuthErrorPaths:
                     with patch(
                         "code_puppy.plugins.chatgpt_oauth.register_callbacks.emit_warning"
                     ) as mock_warn:
-                        model = ModelFactory.get_model("chatgpt-oauth", config)
-                        assert model is None
+                        with pytest.raises(ValueError, match="could not be initialized"):
+                            ModelFactory.get_model("chatgpt-oauth", config)
                         mock_warn.assert_called()
 
 
@@ -1589,7 +1588,7 @@ class TestOpenRouterEnvVarMissing:
 
         with patch("code_puppy.model_factory.get_api_key", return_value=None):
             with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-                model = ModelFactory.get_model("openrouter-test", config)
-                assert model is None
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("openrouter-test", config)
                 mock_warn.assert_called()
                 assert "MISSING_OPENROUTER_KEY" in mock_warn.call_args[0][0]

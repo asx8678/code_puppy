@@ -218,10 +218,9 @@ class TestModelFactoryBasics:
 
         # Mock get_api_key to return None (simulating missing API key)
         with patch("code_puppy.model_factory.get_api_key", return_value=None):
-            with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-                model = ModelFactory.get_model("gpt-4", config)
-                assert model is None
-                mock_warn.assert_called_once()
+            with patch("code_puppy.model_factory.emit_warning"):
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("gpt-4", config)
 
     def test_get_model_not_found(self):
         """Test getting a model that doesn't exist in config."""

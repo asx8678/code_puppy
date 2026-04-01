@@ -838,8 +838,10 @@ class ModelFactory:
     def get_model(model_name: str, config: Dict[str, Any]) -> Any:
         """Returns a configured model instance based on the provided name and config.
 
-        API key validation happens naturally within each model type's initialization,
-        which emits warnings and returns None if keys are missing.
+        Raises ValueError if the model cannot be initialized (e.g. missing API
+        keys, bad configuration, or unsupported model type).  Callers such as
+        ``_load_model_with_fallback`` already catch ``ValueError`` and attempt
+        a fallback, so raising here enables automatic recovery.
         """
         model_config = config.get(model_name)
         if not model_config:
@@ -847,21 +849,37 @@ class ModelFactory:
 
         model_type = model_config.get("type")
 
+        def _check_result(result: Any, source: str) -> Any:
+            """Raise if a builder / provider returned None."""
+            if result is None:
+                raise ValueError(
+                    f"Model '{model_name}' (type='{model_type}') could not be "
+                    f"initialized by {source}. Check that required API keys and "
+                    f"configuration are set."
+                )
+            return result
+
         # Check for plugin-registered model provider classes first
         if model_type in _CUSTOM_MODEL_PROVIDERS:
             provider_class = _CUSTOM_MODEL_PROVIDERS[model_type]
             try:
-                return provider_class(
+                result = provider_class(
                     model_name=model_name, model_config=model_config, config=config
                 )
+                return _check_result(result, f"custom provider '{model_type}'")
+            except ValueError:
+                raise  # Re-raise ValueError from _check_result
             except Exception as e:
-                logger.error(f"Custom model provider '{model_type}' failed: {e}")
-                return None
+                raise ValueError(
+                    f"Model '{model_name}': custom provider '{model_type}' "
+                    f"failed: {e}"
+                ) from e
 
         # Look up the builder in the registry
         builder = _MODEL_BUILDERS.get(model_type)
         if builder is not None:
-            return builder(model_name, model_config, config)
+            result = builder(model_name, model_config, config)
+            return _check_result(result, f"builder '{model_type}'")
 
         # Fall back to plugin-registered model type handlers
         registered_handlers = callbacks.on_register_model_types()
@@ -880,11 +898,16 @@ class ModelFactory:
                     handler = handler_entry.get("handler")
                     if callable(handler):
                         try:
-                            return handler(model_name, model_config, config)
-                        except Exception as e:
-                            logger.error(
-                                f"Plugin handler for model type '{model_type}' failed: {e}"
+                            result = handler(model_name, model_config, config)
+                            return _check_result(
+                                result, f"plugin handler '{model_type}'"
                             )
-                            return None
+                        except ValueError:
+                            raise  # Re-raise ValueError from _check_result
+                        except Exception as e:
+                            raise ValueError(
+                                f"Model '{model_name}': plugin handler "
+                                f"'{model_type}' failed: {e}"
+                            ) from e
 
         raise ValueError(f"Unsupported model type: {model_type}")

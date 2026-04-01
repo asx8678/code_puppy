@@ -193,8 +193,8 @@ class TestModelFactoryErrors:
             }
         }
         with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-            result = ModelFactory.get_model("azure-env-bad", config1)
-            assert result is None
+            with pytest.raises(ValueError, match="could not be initialized"):
+                ModelFactory.get_model("azure-env-bad", config1)
             mock_warn.assert_called()
             warning_msg = mock_warn.call_args[0][0]
             assert "not found (check config or environment)" in warning_msg
@@ -251,14 +251,14 @@ class TestModelFactoryErrors:
             get_custom_config({"custom_endpoint": {"url": ""}})
 
     def test_model_instantiation_errors_missing_api_keys(self):
-        """Test various model instantiation errors when API keys are missing."""
+        """Test various model types raise ValueError when API keys are missing."""
         # Mock get_api_key to return None for all keys (simulating missing API keys)
         with patch("code_puppy.model_factory.get_api_key", return_value=None):
             # Test OpenAI without API key
             config_openai = {"openai-test": {"type": "openai", "name": "gpt-4"}}
             with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-                result = ModelFactory.get_model("openai-test", config_openai)
-                assert result is None
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("openai-test", config_openai)
                 mock_warn.assert_called_with(
                     "OPENAI_API_KEY is not set (check config or environment); skipping OpenAI model 'gpt-4'."
                 )
@@ -268,8 +268,8 @@ class TestModelFactoryErrors:
                 "anthropic-test": {"type": "anthropic", "name": "claude-3"}
             }
             with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-                result = ModelFactory.get_model("anthropic-test", config_anthropic)
-                assert result is None
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("anthropic-test", config_anthropic)
                 mock_warn.assert_called_with(
                     "ANTHROPIC_API_KEY is not set (check config or environment); skipping Anthropic model 'claude-3'."
                 )
@@ -277,8 +277,8 @@ class TestModelFactoryErrors:
             # Test Gemini without API key
             config_gemini = {"gemini-test": {"type": "gemini", "name": "gemini-pro"}}
             with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-                result = ModelFactory.get_model("gemini-test", config_gemini)
-                assert result is None
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("gemini-test", config_gemini)
                 mock_warn.assert_called_with(
                     "GEMINI_API_KEY is not set (check config or environment); skipping Gemini model 'gemini-pro'."
                 )
@@ -286,8 +286,8 @@ class TestModelFactoryErrors:
             # Test ZAI models without API key
             config_zai = {"zai-test": {"type": "zai_coding", "name": "zai-model"}}
             with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-                result = ModelFactory.get_model("zai-test", config_zai)
-                assert result is None
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("zai-test", config_zai)
                 mock_warn.assert_called_with(
                     "ZAI_API_KEY is not set (check config or environment); skipping ZAI coding model 'zai-model'."
                 )
@@ -297,8 +297,8 @@ class TestModelFactoryErrors:
                 "openrouter-test": {"type": "openrouter", "name": "anthropic/claude-3"}
             }
             with patch("code_puppy.model_factory.emit_warning") as mock_warn:
-                result = ModelFactory.get_model("openrouter-test", config_openrouter)
-                assert result is None
+                with pytest.raises(ValueError, match="could not be initialized"):
+                    ModelFactory.get_model("openrouter-test", config_openrouter)
                 mock_warn.assert_called_with(
                     "OPENROUTER_API_KEY is not set (check config or environment); skipping OpenRouter model 'anthropic/claude-3'."
                 )

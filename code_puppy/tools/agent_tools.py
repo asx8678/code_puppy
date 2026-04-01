@@ -391,6 +391,15 @@ def register_invoke_agent(agent):
 
             model = ModelFactory.get_model(model_name, models_config)
 
+            # Guard against None model (e.g. missing API keys) — get_model
+            # should raise ValueError in this case, but defend in depth since
+            # DBOSAgent will produce a confusing error if model is None.
+            if model is None:
+                raise ValueError(
+                    f"Failed to initialize model '{model_name}' for agent "
+                    f"'{agent_name}'. Check that required API keys are set."
+                )
+
             # Create a temporary agent instance to avoid interfering with current agent state
             instructions = agent_config.get_full_system_prompt()
 
