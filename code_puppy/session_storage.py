@@ -239,8 +239,9 @@ def save_session(
         try:
             json_data = ModelMessagesTypeAdapter.dump_json(history)
             sanitized_history = ModelMessagesTypeAdapter.validate_json(json_data)
-        except Exception:
-            # If sanitization fails, use original history
+        except Exception as e:
+            # Log the sanitization failure so we can track if this becomes a recurring issue
+            logger.warning(f"Message sanitization failed in save_session: {e}. Using original history.")
             sanitized_history = history
 
         serializable_history = ModelMessagesTypeAdapter.dump_python(

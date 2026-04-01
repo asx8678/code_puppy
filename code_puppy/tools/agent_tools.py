@@ -2,6 +2,7 @@
 import asyncio
 import itertools
 import json
+import logging
 import msgpack
 import re
 import traceback
@@ -91,7 +92,11 @@ def _sanitize_messages_for_dbos(messages: list[ModelMessage]) -> list[ModelMessa
         json_data = ModelMessagesTypeAdapter.dump_json(messages)
         # Deserialize back to messages (this creates clean message objects)
         return ModelMessagesTypeAdapter.validate_json(json_data)
-    except Exception:
+    except Exception as e:
+        # Log the sanitization failure so we can track if this becomes a recurring issue
+        logging.getLogger(__name__).warning(
+            f"Message sanitization failed: {e}. Falling back to original messages."
+        )
         # If serialization fails, return original messages
         # The error will be caught later during actual DBOS serialization
         return messages
