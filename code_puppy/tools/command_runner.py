@@ -1,3 +1,15 @@
+"""Shell command execution for agent tool calls.
+
+SECURITY NOTE: shell=True is intentionally used for all subprocess.Popen calls.
+Commands arrive as complete strings from the LLM (e.g. "cd /foo && make test"
+or "cat file | grep pattern") and REQUIRE shell interpretation for pipes,
+redirects, chains, and variable expansion. Removing shell=True would break
+all non-trivial commands.
+
+Security is enforced UPSTREAM by the shell_safety plugin, which classifies
+commands before execution and can block dangerous operations. The PolicyEngine
+provides additional rule-based command filtering.
+"""
 import asyncio
 import ctypes
 import os
@@ -985,7 +997,7 @@ async def run_shell_command(
                 creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
                 process = subprocess.Popen(
                     command,
-                    shell=True,
+                    shell=True,  # noqa: S602 — see module docstring
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
                     stdin=subprocess.DEVNULL,
@@ -994,7 +1006,7 @@ async def run_shell_command(
             else:
                 process = subprocess.Popen(
                     command,
-                    shell=True,
+                    shell=True,  # noqa: S602 — see module docstring
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
                     stdin=subprocess.DEVNULL,
@@ -1203,7 +1215,7 @@ def _run_command_sync(
 
     process = subprocess.Popen(
         command,
-        shell=True,
+        shell=True,  # noqa: S602 — see module docstring
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=cwd,
