@@ -304,7 +304,7 @@ def _on_delete_file(*args, **kwargs):
     set_flag(WorkflowFlag.DID_DELETE_FILE)
 
 
-def _on_run_shell_command(context, command, **kwargs):
+def _on_run_shell_command(context, command, cwd=None, timeout=60):
     set_flag(WorkflowFlag.DID_EXECUTE_SHELL)
     # Track specific tool usage
     if "test" in command.lower() or "pytest" in command.lower():
@@ -327,7 +327,7 @@ def _on_agent_run_end(*args, **kwargs):
     set_metadata("success", success)
 
 
-def _on_pre_tool_call(tool_name, tool_args, **kwargs):
+def _on_pre_tool_call(tool_name, tool_args, context=None):
     # Track context loading
     if tool_name in ["read_file", "list_files", "grep", "search_files"]:
         set_flag(WorkflowFlag.DID_LOAD_CONTEXT)
