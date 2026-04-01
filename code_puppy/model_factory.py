@@ -763,6 +763,52 @@ register_model_builder("gemini_oauth", _build_gemini_oauth)
 register_model_builder("round_robin", _build_round_robin)
 
 
+# ---------------------------------------------------------------------------
+# Quota / availability exception helpers
+# ---------------------------------------------------------------------------
+
+# HTTP status codes that indicate exhausted quota (terminal failure).
+_TERMINAL_STATUS_CODES: frozenset[int] = frozenset({402, 429})
+
+# Keywords that hint at capacity / quota exhaustion in exception messages.
+_TERMINAL_KEYWORDS: tuple[str, ...] = (
+    "quota",
+    "rate limit",
+    "ratelimit",
+    "resource_exhausted",
+    "resourceexhausted",
+    "too many requests",
+    "capacity",
+    "insufficient_quota",
+)
+
+
+def is_quota_exception(exc: BaseException) -> bool:
+    """Return True when *exc* looks like a terminal quota / rate-limit error.
+
+    Inspects:
+    * ``response.status_code`` / ``status_code`` attributes on the exception.
+    * The stringified exception message for well-known quota keywords.
+
+    This avoids hard dependencies on any specific SDK exception hierarchy and
+    therefore works across OpenAI, Anthropic, Gemini, and custom providers.
+    """
+    # Check for a status_code attribute (httpx, requests, pydantic-ai, openai ...)
+    for attr in ("status_code", "status"):
+        code = getattr(exc, attr, None)
+        if code is None:
+            # Some SDKs nest the response: exc.response.status_code
+            response_obj = getattr(exc, "response", None)
+            code = getattr(response_obj, "status_code", None) or getattr(
+                response_obj, "status", None
+            )
+        if isinstance(code, int) and code in _TERMINAL_STATUS_CODES:
+            return True
+
+    # Keyword scan on the string representation (covers gRPC ResourceExhausted etc.)
+    msg = str(exc).lower()
+    return any(kw in msg for kw in _TERMINAL_KEYWORDS)
+
 
 # --- Model config caching (eliminates repeated disk reads) ---
 _model_config_cache: dict[str, Any] | None = None
@@ -967,3 +1013,31 @@ class ModelFactory:
                             ) from e
 
         raise ValueError(f"Unsupported model type: {model_type}")
+
+
+# ── Routing Integration ─────────────────────────────────────────────────
+def route_model(model_name: str, config: dict) -> tuple:
+    """Route a model request through the composite strategy chain.
+
+    This is the preferred entry point for model creation — it consults
+    the availability circuit breaker and plugin strategies before
+    falling back to the default builder registry.
+
+    Args:
+        model_name: Requested model name.
+        config: Full models configuration dict.
+
+    Returns:
+        Tuple of (model_instance, resolved_model_name, metadata).
+
+    Raises:
+        ValueError: If no strategy could produce a model.
+    """
+    from code_puppy.routing.router import create_default_router
+    from code_puppy.routing.strategy import RoutingContext
+
+    router = create_default_router()
+    ctx = RoutingContext(model_name=model_name, config=config)
+
+    decision = router.route(ctx)
+    return decision.model, decision.model_name, decision.metadata

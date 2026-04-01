@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from code_puppy.agents import get_available_agents, refresh_agents
+from code_puppy.agents.agent_manager import _invalidate_agent_registry
 
 
 def test_refresh_agents_function():
@@ -55,6 +56,9 @@ def test_json_agent_discovery_refresh():
 
             with open(agent_file, "w") as f:
                 json.dump(test_agent_config, f)
+
+            # Invalidate cache so _discover_agents performs a full re-scan
+            _invalidate_agent_registry()
 
             # Refresh agents and check if the new agent is discovered
             refreshed_agents = get_available_agents()

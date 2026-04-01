@@ -1,5 +1,6 @@
 """Base agent configuration class for defining agent properties."""
 
+
 import asyncio
 import contextlib
 import dataclasses
@@ -48,6 +49,7 @@ from pydantic_ai.messages import (
     TextPart,
     ThinkingPart,
     ToolCallPart,
+
     ToolCallPartDelta,
     ToolReturn,
     ToolReturnPart)
@@ -99,18 +101,18 @@ def _rust_enabled() -> bool:
     return is_rust_enabled()
 
 
-logger = logging.getLogger(__name__)
-
 _reload_count = 0
 
 
+
+logger = logging.getLogger(__name__)
 class BaseAgent(ABC):
     """Base class for all agent configurations."""
 
     def __init__(self):
         self.id = str(uuid.uuid7())  # time-sortable for chronological ordering
         self._message_history: list[Any] = []
-        self._compacted_message_hashes: set[str] = set()
+        self._compacted_message_hashes: set[str] = set()  # SHA-256 hex digests
         # Incremental hash set maintained alongside _message_history to avoid
         # O(n*p) rehashing in message_history_accumulator on every agent turn.
         self._message_history_hashes: set[int] = set()
@@ -382,8 +384,16 @@ class BaseAgent(ABC):
         result = "|".join(attributes)
         return result
 
-    def hash_message(self, message: Any) -> int:
-        """Create a stable hash for a model message that ignores timestamps."""
+    def hash_message(self, message: Any) -> str:
+        """Create a stable hash for a model message that ignores timestamps.
+
+        Uses SHA-256 (truncated to 16 hex chars) instead of Python's built-in
+        hash() which randomizes per-process via PYTHONHASHSEED. This ensures
+        hashes are stable across process restarts, which matters because
+        _compacted_message_hashes is persisted to disk.
+        """
+        import hashlib
+
         role = getattr(message, "role", None)
         instructions = getattr(message, "instructions", None)
         header_bits: list[str] = []
@@ -396,7 +406,7 @@ class BaseAgent(ABC):
             self._stringify_part(part) for part in getattr(message, "parts", [])
         ]
         canonical = "||".join(header_bits + part_strings)
-        return hash(canonical)
+        return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
     def stringify_message_part(self, part) -> str:
         """
@@ -511,7 +521,7 @@ class BaseAgent(ABC):
             if prepared.instructions:
                 total_tokens += self.estimate_token_count(prepared.instructions)
         except Exception:
-            pass  # If we can't get system prompt, skip it
+            logger.debug("Failed to get system prompt for token estimation", exc_info=True)
 
         # 2. Estimate tokens for pydantic_agent tool definitions
         pydantic_agent = getattr(self, "pydantic_agent", None)
@@ -546,7 +556,8 @@ class BaseAgent(ABC):
                                     str(annotations)
                                 )
                     except Exception:
-                        continue  # Skip tools we can't process
+                        logger.debug("Failed to process tool for token counting", exc_info=True)
+                        continue
 
         # 3. Estimate tokens for MCP tool definitions from cache
         # MCP tools are fetched asynchronously, so we use a cache that's populated
@@ -575,7 +586,8 @@ class BaseAgent(ABC):
                         )
                         total_tokens += self.estimate_token_count(schema_str)
                 except Exception:
-                    continue  # Skip tools we can't process
+                    logger.debug("Failed to process tool for token counting", exc_info=True)
+                    continue
 
         self._cached_context_overhead = total_tokens
         return total_tokens
@@ -606,7 +618,7 @@ class BaseAgent(ABC):
                         }
                         tool_definitions.append(tool_def)
             except Exception:
-                # Server might not be running or accessible, skip it
+                logger.debug("MCP server not accessible, skipping", exc_info=True)
                 continue
 
         self._mcp_tool_definitions_cache = tool_definitions
@@ -795,8 +807,7 @@ class BaseAgent(ABC):
 
                 return messages_to_summarize, protected_messages
             except Exception:
-                # Fall through to Python path on any error
-                pass
+                logger.debug("Rust bridge failed, falling back to Python", exc_info=True)
         # ----------------------------------------------------------------
 
         # Calculate tokens for messages from most recent backwards (excluding system message)
@@ -946,7 +957,7 @@ class BaseAgent(ABC):
             context_length = model_config.get("context_length", 128000)
             return int(context_length)
         except Exception:
-            # Be safe; don't blow up status/compaction if model lookup fails
+            logger.debug("Model context lookup failed, using default 128000", exc_info=True)
             return 128000
 
     @staticmethod
@@ -1566,8 +1577,7 @@ class BaseAgent(ABC):
             if tools:
                 existing_tool_names = set(tools.keys())
         except Exception:
-            # If we can't get tool names, proceed without filtering
-            pass
+            logger.debug("Failed to get tool names for filtering", exc_info=True)
 
         # Filter MCP server toolsets to remove conflicting tools
         filtered_mcp_servers = []
@@ -1799,6 +1809,7 @@ class BaseAgent(ABC):
             if not stdin.isatty():
                 return None
         except Exception:
+            logger.debug("Failed in key listener setup", exc_info=True)
             return None
 
         def listener() -> None:
@@ -1886,6 +1897,7 @@ class BaseAgent(ABC):
         try:
             original_attrs = termios.tcgetattr(fd)
         except Exception:
+            logger.debug("Unix key listener setup failed", exc_info=True)
             return
 
         try:
@@ -1894,6 +1906,7 @@ class BaseAgent(ABC):
                 try:
                     read_ready, _, _ = select.select([stdin], [], [], 0.05)
                 except Exception:
+                    logger.debug("Key listener read failed", exc_info=True)
                     break
                 if not read_ready:
                     continue
@@ -1969,7 +1982,7 @@ class BaseAgent(ABC):
             try:
                 await self._update_mcp_tool_cache()
             except Exception:
-                pass  # Servers may not be connectable yet; cache stays empty
+                logger.debug("MCP server not connectable, cache stays empty", exc_info=True)
 
         # If a custom output_type is specified, create a temporary agent with that type
         if output_type is not None:
@@ -2111,7 +2124,7 @@ class BaseAgent(ABC):
                             _exc, agent_name=self.name, group_id=group_id
                         )
                     except Exception:
-                        pass  # Don't let callback errors break error handling
+                        logger.debug("agent_exception callback failed", exc_info=True)
 
                 # If there are CancelledError exceptions in the group, re-raise them
                 cancelled_exceptions = []
@@ -2140,7 +2153,7 @@ class BaseAgent(ABC):
                 model_name=self.get_model_name(),
                 session_id=group_id)
         except Exception:
-            pass  # Don't fail agent run if hook fails
+            logger.debug("agent_run_end hook failed", exc_info=True)
 
         loop = asyncio.get_running_loop()
 
@@ -2218,7 +2231,7 @@ class BaseAgent(ABC):
                 try:
                     await self._update_mcp_tool_cache()
                 except Exception:
-                    pass  # Don't fail the run if cache update fails
+                    logger.debug("Cache update failed", exc_info=True)
 
             # Extract response text for the callback
             _run_response_text = ""
@@ -2252,7 +2265,7 @@ class BaseAgent(ABC):
             try:
                 await on_agent_exception(e, agent_name=self.name, group_id=group_id)
             except Exception:
-                pass  # Don't let callback errors break error handling
+                logger.debug("Error path callback failed", exc_info=True)
             raise
         finally:
             # Fire agent_run_end hook - plugins can use this for:
@@ -2269,7 +2282,7 @@ class BaseAgent(ABC):
                     response_text=_run_response_text,
                     metadata={"model": self.get_model_name()})
             except Exception:
-                pass  # Don't fail cleanup if hook fails
+                logger.debug("Cleanup hook failed", exc_info=True)
 
             # Stop keyboard listener if it was started
             if key_listener_stop_event is not None:

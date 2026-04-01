@@ -388,6 +388,8 @@ Now go fetch those branches! *tail wagging intensifies* 🦮🎾
 """
 
         prompt_additions = callbacks.on_load_prompt()
-        if len(prompt_additions):
+        # Filter None — callbacks may return None or fail gracefully
+        prompt_additions = [p for p in prompt_additions if p is not None]
+        if prompt_additions:
             result += "\n".join(prompt_additions)
         return result

@@ -285,7 +285,7 @@ class TestBaseAgentComplexMethods:
         system_msg = ModelRequest(parts=[TextPart(content="You are code-puppy.")])
 
         # Old completed Task A message - big enough to be dropped by truncation
-        # estimate_token_count = floor(len / 2.5), so 500 chars = 200 tokens
+        # estimate_token_count ≈ int(len / 4.0), so 500 chars ≈ 125 tokens
         big_old_task_msg = ModelResponse(
             parts=[TextPart(content="old task result " + "x" * 500)]
         )

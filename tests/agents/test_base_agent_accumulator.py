@@ -270,7 +270,7 @@ class TestBaseAgentAccumulator:
         system_msg = ModelRequest(parts=[TextPart(content="You are code-puppy.")])
 
         # Task A completed response - big enough to exceed protected_tokens=50.
-        # estimate_token_count = floor(len / 2.5), so 500 chars = 200 tokens.
+        # estimate_token_count ≈ int(len / 4.0), so 500 chars ≈ 125 tokens.
         task_a_msg = ModelResponse(
             parts=[TextPart(content="Task A result " + "a" * 500)]
         )

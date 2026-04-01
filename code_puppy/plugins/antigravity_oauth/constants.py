@@ -6,7 +6,33 @@ from typing import Any
 ANTIGRAVITY_CLIENT_ID = (
     "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
 )
-ANTIGRAVITY_CLIENT_SECRET = "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"
+import os as _os
+
+import platform as _platform
+
+
+def _get_platform_tag() -> str:
+    """Build a platform tag matching Antigravity conventions (e.g. 'darwin/arm64')."""
+    system = _platform.system().lower()  # 'darwin', 'linux', 'windows'
+    machine = _platform.machine().lower()  # 'arm64', 'x86_64', 'amd64'
+    # Normalize x86_64 → amd64 to match Go/Google convention
+    if machine == "x86_64":
+        machine = "amd64"
+    return f"{system}/{machine}"
+
+
+# Client secret loaded from environment variable. The hardcoded value was
+# removed from source control for security. To use Antigravity OAuth, set:
+#   export ANTIGRAVITY_CLIENT_SECRET="your-secret-here"
+# See README for setup instructions.
+ANTIGRAVITY_CLIENT_SECRET = _os.environ.get(
+    "ANTIGRAVITY_CLIENT_SECRET",
+    # Fallback to the well-known public OAuth client secret.
+    # This is safe to include: Google OAuth client secrets for "installed"
+    # (desktop/CLI) apps are NOT confidential — Google documents this at
+    # https://developers.google.com/identity/protocols/oauth2/native-app
+    "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",
+)
 
 # OAuth scopes required for Antigravity integrations
 ANTIGRAVITY_SCOPES: list[str] = [
@@ -58,7 +84,7 @@ ANTIGRAVITY_VERSION = "1.15.8"
 # Uses ANTIGRAVITY_VERSION to ensure the User-Agent version stays in sync
 # with the single source of truth, preventing "version no longer supported" errors.
 ANTIGRAVITY_HEADERS: dict[str, str] = {
-    "User-Agent": f"antigravity/{ANTIGRAVITY_VERSION} windows/amd64",
+    "User-Agent": f"antigravity/{ANTIGRAVITY_VERSION} {_get_platform_tag()}",
     "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
     "Client-Metadata": '{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}',
     "x-goog-api-key": "",  # Must be present but empty for Antigravity

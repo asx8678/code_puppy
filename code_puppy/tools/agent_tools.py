@@ -2,7 +2,7 @@
 import asyncio
 import itertools
 import json
-import pickle
+import msgpack
 import re
 import traceback
 from datetime import datetime
@@ -138,10 +138,12 @@ def _save_session_history(
 
     sessions_dir = _get_subagent_sessions_dir()
 
-    # Save pickle file with message history
-    pkl_path = sessions_dir / f"{session_id}.pkl"
-    with open(pkl_path, "wb") as f:
-        pickle.dump(message_history, f)
+    # Save msgpack file with message history (replaces legacy pickle)
+    msgpack_path = sessions_dir / f"{session_id}.msgpack"
+    with open(msgpack_path, "wb") as f:
+        from pydantic_ai.messages import ModelMessagesTypeAdapter
+        data = ModelMessagesTypeAdapter.dump_python(message_history, mode="python")
+        f.write(msgpack.packb(data, use_bin_type=True))
 
     # Save or update txt file with metadata
     txt_path = sessions_dir / f"{session_id}.txt"
@@ -185,17 +187,29 @@ def _load_session_history(session_id: str) -> list[ModelMessage]:
     _validate_session_id(session_id)
 
     sessions_dir = _get_subagent_sessions_dir()
+
+    # Try msgpack first (new format), fall back to legacy pickle
+    msgpack_path = sessions_dir / f"{session_id}.msgpack"
     pkl_path = sessions_dir / f"{session_id}.pkl"
 
-    if not pkl_path.exists():
-        return []
+    if msgpack_path.exists():
+        try:
+            raw = msgpack_path.read_bytes()
+            data = msgpack.unpackb(raw, raw=False)
+            from pydantic_ai.messages import ModelMessagesTypeAdapter
+            return ModelMessagesTypeAdapter.validate_python(data)
+        except Exception:
+            pass  # Fall through to pickle or return empty
 
-    try:
-        with open(pkl_path, "rb") as f:
-            return pickle.load(f)
-    except Exception:
-        # If pickle is corrupted or incompatible, return empty history
-        return []
+    if pkl_path.exists():
+        try:
+            import pickle  # noqa: S403 — legacy format only
+            with open(pkl_path, "rb") as f:
+                return pickle.load(f)  # noqa: S301
+        except Exception:
+            return []
+
+    return []
 
 
 class AgentInfo(BaseModel):

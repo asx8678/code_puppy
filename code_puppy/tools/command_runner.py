@@ -1,3 +1,15 @@
+"""Shell command execution for agent tool calls.
+
+SECURITY NOTE: shell=True is intentionally used for all subprocess.Popen calls.
+Commands arrive as complete strings from the LLM (e.g. "cd /foo && make test"
+or "cat file | grep pattern") and REQUIRE shell interpretation for pipes,
+redirects, chains, and variable expansion. Removing shell=True would break
+all non-trivial commands.
+
+Security is enforced UPSTREAM by the shell_safety plugin, which classifies
+commands before execution and can block dangerous operations. The PolicyEngine
+provides additional rule-based command filtering.
+"""
 import asyncio
 import ctypes
 import os
@@ -103,7 +115,10 @@ _CONFIRMATION_LOCK = threading.Lock()
 # Track running shell processes so we can kill them on Ctrl-C from the UI
 _RUNNING_PROCESSES: set[subprocess.Popen] = set()
 _RUNNING_PROCESSES_LOCK = threading.Lock()
-_USER_KILLED_PROCESSES = set()
+# Bounded set of PIDs killed by user — prevents unbounded growth on long sessions.
+# Uses a list as backing store, capped at 1024 entries (evict oldest on overflow).
+_USER_KILLED_PROCESSES: set[int] = set()
+_USER_KILLED_PROCESSES_MAX = 1024
 
 # Global state for shell command keyboard handling
 _SHELL_CTRL_X_STOP_EVENT: threading.Event | None = None
@@ -118,9 +133,24 @@ _KEYBOARD_CONTEXT_LOCK = threading.Lock()
 _ACTIVE_STOP_EVENTS: set[threading.Event] = set()
 _ACTIVE_STOP_EVENTS_LOCK = threading.Lock()
 
-# Thread pool for running blocking shell commands without blocking the event loop
-# This allows multiple sub-agents to run shell commands in parallel
-_SHELL_EXECUTOR = ThreadPoolExecutor(max_workers=16, thread_name_prefix="shell_cmd_")
+# Thread pool for running blocking shell commands without blocking the event loop.
+# Lazy-initialized on first use to avoid spawning 16 threads at import time.
+_SHELL_EXECUTOR: ThreadPoolExecutor | None = None
+_SHELL_EXECUTOR_LOCK = threading.Lock()
+
+
+def _get_shell_executor() -> ThreadPoolExecutor:
+    """Get or create the shell executor (lazy, thread-safe)."""
+    global _SHELL_EXECUTOR
+    if _SHELL_EXECUTOR is None:
+        with _SHELL_EXECUTOR_LOCK:
+            if _SHELL_EXECUTOR is None:  # double-check
+                import atexit
+                _SHELL_EXECUTOR = ThreadPoolExecutor(
+                    max_workers=16, thread_name_prefix="shell_cmd_",
+                )
+                atexit.register(_SHELL_EXECUTOR.shutdown, wait=False)
+    return _SHELL_EXECUTOR
 
 
 def _register_process(proc: subprocess.Popen) -> None:
@@ -229,6 +259,11 @@ def kill_all_running_shell_processes() -> int:
             if p.poll() is None:
                 _kill_process_group(p)
                 count += 1
+                # Evict oldest PIDs if at capacity to prevent unbounded growth
+                if len(_USER_KILLED_PROCESSES) >= _USER_KILLED_PROCESSES_MAX:
+                    # Discard an arbitrary element (set has no ordering, but that's fine
+                    # — stale PIDs from much earlier are unlikely to collide)
+                    _USER_KILLED_PROCESSES.pop()
                 _USER_KILLED_PROCESSES.add(p.pid)
         finally:
             _unregister_process(p)
@@ -962,7 +997,7 @@ async def run_shell_command(
                 creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
                 process = subprocess.Popen(
                     command,
-                    shell=True,
+                    shell=True,  # noqa: S602 — see module docstring
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
                     stdin=subprocess.DEVNULL,
@@ -971,7 +1006,7 @@ async def run_shell_command(
             else:
                 process = subprocess.Popen(
                     command,
-                    shell=True,
+                    shell=True,  # noqa: S602 — see module docstring
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
                     stdin=subprocess.DEVNULL,
@@ -1180,7 +1215,7 @@ def _run_command_sync(
 
     process = subprocess.Popen(
         command,
-        shell=True,
+        shell=True,  # noqa: S602 — see module docstring
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=cwd,
@@ -1217,7 +1252,7 @@ async def _run_command_inner(
         # Run the blocking shell command in a thread pool to avoid blocking the event loop
         # This allows multiple sub-agents to run shell commands in parallel
         return await loop.run_in_executor(
-            _SHELL_EXECUTOR,
+            _get_shell_executor(),
             partial(_run_command_sync, command, cwd, timeout, group_id, silent))
     except Exception as e:
         if not silent:

@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-import pickle
+import msgpack
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -111,10 +111,23 @@ def _load_json_sync(file_path: Path) -> dict:
         return json.load(f)
 
 
-def _load_pickle_sync(file_path: Path) -> Any:
-    """Synchronous pickle file load (for use in executor)."""
+def _load_session_sync(file_path: Path) -> Any:
+    """Synchronous session load — tries msgpack then falls back to pickle."""
+    # Try msgpack sidecar first
+    msgpack_path = file_path.with_suffix(".msgpack")
+    if msgpack_path.exists():
+        try:
+            raw = msgpack_path.read_bytes()
+            data = msgpack.unpackb(raw, raw=False)
+            from pydantic_ai.messages import ModelMessagesTypeAdapter
+            return ModelMessagesTypeAdapter.validate_python(data)
+        except Exception:
+            pass  # Fall through to pickle
+
+    # Legacy pickle fallback
+    import pickle  # noqa: S403
     with open(file_path, "rb") as f:
-        return pickle.load(f)
+        return pickle.load(f)  # noqa: S301
 
 
 @router.get("/")
@@ -219,7 +232,7 @@ async def get_session_messages(session_id: str) -> list[dict[str, Any]]:
 
     try:
         messages = await asyncio.wait_for(
-            loop.run_in_executor(_executor, _load_pickle_sync, pkl_file),
+            loop.run_in_executor(_executor, _load_session_sync, pkl_file),
             timeout=FILE_IO_TIMEOUT)
         return [_serialize_message(msg) for msg in messages]
     except asyncio.TimeoutError:
