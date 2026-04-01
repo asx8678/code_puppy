@@ -201,7 +201,7 @@ async def test_get_messages_timeout(sessions_dir) -> None:
         patch("code_puppy.config.DATA_DIR", str(sessions_dir.parent), create=True),
         patch("code_puppy.api.routers.sessions.FILE_IO_TIMEOUT", 0.0001),
         patch(
-            "code_puppy.api.routers.sessions._load_pickle_sync",
+            "code_puppy.api.routers.sessions._load_session_sync",
             side_effect=lambda *a: __import__("time").sleep(1),
         ),
     ):

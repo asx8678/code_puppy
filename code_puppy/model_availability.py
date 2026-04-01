@@ -110,3 +110,4 @@ class ModelAvailabilityService:
 
 # Module-level singleton
 availability_service = ModelAvailabilityService()
+model_availability_service = availability_service  # alias for round_robin_model.py

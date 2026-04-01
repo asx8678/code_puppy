@@ -112,6 +112,8 @@ Important rules:
 """
 
         prompt_additions = callbacks.on_load_prompt()
-        if len(prompt_additions):
+        # Filter None values — callbacks may return None or fail gracefully
+        prompt_additions = [p for p in prompt_additions if p is not None]
+        if prompt_additions:
             result += "\n".join(prompt_additions)
         return result

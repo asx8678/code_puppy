@@ -140,6 +140,8 @@ Remember: Great prompts lead to great results, but perfect is the enemy of good 
 """
 
         prompt_additions = callbacks.on_load_prompt()
-        if len(prompt_additions):
+        # Filter None — callbacks may return None or fail gracefully
+        prompt_additions = [p for p in prompt_additions if p is not None]
+        if prompt_additions:
             result += "\n" + "\n".join(prompt_additions)
         return result
