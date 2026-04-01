@@ -18,9 +18,8 @@ class MenuScreen(Screen):
 
     def action_pop_screen(self) -> None:
         """Go back to the previous screen."""
-        if len(self.app.screen_stack) > 1:
-            self.app.pop_screen()
+        self.dismiss(None)
 
     def action_quit_screen(self) -> None:
         """Quit the menu (same as escape for overlay screens)."""
-        self.action_pop_screen()
+        self.dismiss(None)

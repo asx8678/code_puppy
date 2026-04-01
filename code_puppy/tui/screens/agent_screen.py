@@ -308,7 +308,7 @@ class AgentScreen(MenuScreen):
         current = get_current_agent()
         if current and current.name == agent_name:
             emit_info(f"Already using agent '{agent_name}'.")
-            self.app.pop_screen()
+            self.dismiss(agent_name)
             return
 
         try:
@@ -319,7 +319,7 @@ class AgentScreen(MenuScreen):
         except Exception as exc:
             emit_warning(f"Failed to switch agent: {exc}")
 
-        self.app.pop_screen()
+        self.dismiss(agent_name)
 
     def action_pin_model(self) -> None:
         """Show model picker to pin a model to the highlighted agent."""

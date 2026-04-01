@@ -223,9 +223,14 @@ class CodePuppyApp(App):
         # Refresh agent/model in case they changed
         bar.update_from_app_state()
 
-    def on_screen_resume(self, event) -> None:
-        """Refresh info bar whenever a screen is popped (agent/model may have changed)."""
-        self._update_info_bar()
+    def _on_screen_dismissed(self, _result=None) -> None:
+        """Universal callback for any screen dismiss — refreshes the info bar."""
+        try:
+            self.query_one("#info-bar", InfoBar).update_from_app_state()
+        except Exception:
+            pass
+
+
 
     # --- Completion overlay handlers ---
 
@@ -356,7 +361,7 @@ class CodePuppyApp(App):
         if cmd_name in ("/settings", "/model_settings"):
             from code_puppy.tui.screens.model_settings_screen import ModelSettingsScreen
 
-            self.push_screen(ModelSettingsScreen())
+            self.push_screen(ModelSettingsScreen(), callback=self._on_screen_dismissed)
             return
 
         # /diff → Textual diff screen
@@ -419,7 +424,7 @@ class CodePuppyApp(App):
         if cmd_name == "/add_model":
             from code_puppy.tui.screens.add_model_screen import AddModelScreen
 
-            self.push_screen(AddModelScreen())
+            self.push_screen(AddModelScreen(), callback=self._on_screen_dismissed)
             return
 
         # /mcp install → Textual MCP catalog screen
@@ -595,7 +600,7 @@ class CodePuppyApp(App):
         """Show model settings screen."""
         from code_puppy.tui.screens.model_settings_screen import ModelSettingsScreen
 
-        self.push_screen(ModelSettingsScreen())
+        self.push_screen(ModelSettingsScreen(), callback=self._on_screen_dismissed)
 
     def action_cancel_task(self) -> None:
         """Cancel the currently running task."""
