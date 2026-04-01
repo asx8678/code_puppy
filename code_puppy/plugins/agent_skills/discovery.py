@@ -1,12 +1,23 @@
-"""Skill discovery - scans directories for valid skills."""
+"""Skill discovery - scans directories for valid skills with layered precedence.
+
+Skills are loaded in precedence order (lowest to highest):
+  1. user-level: ~/.code_puppy/skills
+  2. project config: ./.code_puppy/skills
+  3. project workspace: ./skills (highest priority)
+
+When skills share the same name, higher-precedence sources override lower ones.
+"""
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from code_puppy.plugins.agent_skills.config import get_skill_directories
 
 logger = logging.getLogger(__name__)
+
+SourceLevel = Literal["builtin", "user", "project_config", "project"]
 
 
 @dataclass
@@ -16,10 +27,11 @@ class SkillInfo:
     name: str
     path: Path
     has_skill_md: bool
+    source_level: SourceLevel = "project"
 
 
 # Global cache for discovered skills
-_skill_cache: list[SkillInfo | None] = None
+_skill_cache: list[SkillInfo] | None = None
 
 
 def get_default_skill_directories() -> list[Path]:
@@ -38,98 +50,94 @@ def get_default_skill_directories() -> list[Path]:
 
 
 def is_valid_skill_directory(path: Path) -> bool:
-    """Check if a directory contains a valid SKILL.md file.
-
-    Args:
-        path: Directory path to check.
-
-    Returns:
-        True if the directory is a valid skill directory, False otherwise.
-    """
+    """Check if a directory contains a valid SKILL.md file."""
     if not path.is_dir():
         return False
-
-    skill_md_path = path / "SKILL.md"
-    return skill_md_path.is_file()
+    return (path / "SKILL.md").is_file()
 
 
-def discover_skills(directories: list[Path | None] = None) -> list[SkillInfo]:
-    """Scan directories for valid skills.
+def _scan_directory(directory: Path, source_level: SourceLevel) -> list[SkillInfo]:
+    """Scan a single directory for skills."""
+    skills = []
+    if not directory.exists() or not directory.is_dir():
+        return skills
+
+    for skill_dir in directory.iterdir():
+        if not skill_dir.is_dir() or skill_dir.name.startswith("."):
+            continue
+        has_skill_md = is_valid_skill_directory(skill_dir)
+        skills.append(SkillInfo(
+            name=skill_dir.name,
+            path=skill_dir,
+            has_skill_md=has_skill_md,
+            source_level=source_level,
+        ))
+    return skills
+
+
+def discover_skills(directories: list[Path] | None = None) -> list[SkillInfo]:
+    """Scan directories for valid skills with layered precedence.
+
+    When called without arguments, loads from standard directories in
+    precedence order (user → project_config → project). Higher-precedence
+    sources override lower ones when skills share the same name.
 
     Args:
-        directories: Directories to scan. If None, uses configured
-                     directories (which includes user-added ones from /skills menu).
+        directories: Explicit directories to scan (all treated as "project"
+                     level). If None, uses standard precedence ordering.
 
     Returns:
-        List of discovered SkillInfo objects.
+        Deduplicated list of SkillInfo objects (one per name, highest
+        precedence wins).
     """
     global _skill_cache
 
-    if directories is None:
-        # Use configured directories (respects user-added dirs from /skills menu)
-        # then merge with defaults to ensure we always check the standard locations
+    if directories is not None:
+        # Explicit directories — all "project" level, use dict for dedup
+        ordered_sources: list[tuple[Path, SourceLevel]] = [
+            (d, "project") for d in directories
+        ]
+    else:
+        # Standard precedence ordering: lowest to highest
+        ordered_sources = [
+            (Path.home() / ".code_puppy" / "skills", "user"),
+            (Path.cwd() / ".code_puppy" / "skills", "project_config"),
+            (Path.cwd() / "skills", "project"),
+        ]
+        # Merge with any additional configured directories
         configured = [Path(d) for d in get_skill_directories()]
-        defaults = get_default_skill_directories()
-        # Merge: configured first, then any defaults not already covered
-        seen = {p.resolve() for p in configured}
-        directories = list(configured)
-        for d in defaults:
-            if d.resolve() not in seen:
-                directories.append(d)
+        seen_resolved = {p.resolve() for p, _ in ordered_sources}
+        for d in configured:
+            if d.resolve() not in seen_resolved:
+                ordered_sources.append((d, "project"))
+                seen_resolved.add(d.resolve())
 
-    discovered_skills: list[SkillInfo] = []
+    # Build deduplicated map: later sources override earlier ones by name
+    skill_map: dict[str, SkillInfo] = {}
 
-    for directory in directories:
-        if not directory.exists():
-            logger.debug(f"Skill directory does not exist: {directory}")
-            continue
-
-        if not directory.is_dir():
-            logger.warning(f"Skill path is not a directory: {directory}")
-            continue
-
-        # Scan subdirectories within the skill directory
-        for skill_dir in directory.iterdir():
-            if not skill_dir.is_dir():
-                continue
-
-            # Skip hidden directories
-            if skill_dir.name.startswith("."):
-                continue
-
-            has_skill_md = is_valid_skill_directory(skill_dir)
-
-            # Include if it has SKILL.md (valid skill) or just for discovery
-            skill_info = SkillInfo(
-                name=skill_dir.name, path=skill_dir, has_skill_md=has_skill_md
-            )
-            discovered_skills.append(skill_info)
-
-            if has_skill_md:
-                logger.debug(f"Discovered valid skill: {skill_dir.name} at {skill_dir}")
-            else:
-                logger.debug(
-                    f"Found skill directory without SKILL.md: {skill_dir.name}"
+    for directory, source_level in ordered_sources:
+        for skill in _scan_directory(directory, source_level):
+            existing = skill_map.get(skill.name)
+            if existing and existing.path.resolve() != skill.path.resolve():
+                logger.warning(
+                    f'Skill "{skill.name}" from {skill.path} '
+                    f'overrides {existing.path} '
+                    f'({existing.source_level} -> {source_level})'
                 )
+            skill_map[skill.name] = skill
 
-    # Update cache
+    discovered_skills = list(skill_map.values())
     _skill_cache = discovered_skills
 
     logger.info(
-        f"Discovered {len(discovered_skills)} skills from {len(directories)} directories"
+        f"Discovered {len(discovered_skills)} skills "
+        f"(deduplicated by name) from {len(ordered_sources)} sources"
     )
     return discovered_skills
 
 
 def refresh_skill_cache() -> list[SkillInfo]:
-    """Force re-discovery of all skills.
-
-    This clears the cache and performs a fresh scan of all default
-    skill directories.
-
-    Returns:
-        List of freshly discovered SkillInfo objects.
-    """
+    """Force re-discovery of all skills."""
     global _skill_cache
     _skill_cache = None
     return discover_skills()
