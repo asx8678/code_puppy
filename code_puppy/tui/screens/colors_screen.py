@@ -32,10 +32,7 @@ from code_puppy.tui.widgets.split_panel import SplitPanel
 def _banner_markup(display_name: str, icon: str, color: str) -> str:
     """Return Rich markup string for a banner header."""
     icon_str = f" {icon}" if icon else ""
-    return (
-        f"[bold white on {color}] {display_name} "
-        f"[/bold white on {color}]{icon_str}"
-    )
+    return f"[bold white on {color}] {display_name} [/bold white on {color}]{icon_str}"
 
 
 # ---------------------------------------------------------------------------
@@ -55,8 +52,7 @@ class BannerListItem(ListItem):
         display_name, icon = BANNER_DISPLAY_INFO[self.banner_key]
         icon_str = f" {icon}" if icon else ""
         yield Label(
-            f"{display_name}{icon_str}  "
-            f"[[dim]{self.current_color}[/dim]]",
+            f"{display_name}{icon_str}  [[dim]{self.current_color}[/dim]]",
             markup=True,
         )
 
@@ -68,8 +64,7 @@ class BannerListItem(ListItem):
         icon_str = f" {icon}" if icon else ""
         self.mount(
             Label(
-                f"{display_name}{icon_str}  "
-                f"[[dim]{new_color}[/dim]]",
+                f"{display_name}{icon_str}  [[dim]{new_color}[/dim]]",
                 markup=True,
             )
         )
@@ -97,9 +92,7 @@ class BannerPreviewPanel(Widget):
     def compose(self) -> ComposeResult:
         yield Static("", id="preview-content", markup=True)
 
-    def render_all_banners(
-        self, config: ColorConfiguration, selected_key: str
-    ) -> None:
+    def render_all_banners(self, config: ColorConfiguration, selected_key: str) -> None:
         """Render all banners with their current colors."""
         lines: list[str] = []
         lines.append("[bold]━━━ Live Preview ━━━[/bold]\n")
@@ -110,20 +103,14 @@ class BannerPreviewPanel(Widget):
             sample = BANNER_SAMPLE_CONTENT[key]
             first_sample = sample.split("\n")[0]
 
-            marker = (
-                "[bold yellow]▶[/bold yellow] "
-                if key == selected_key
-                else "  "
-            )
+            marker = "[bold yellow]▶[/bold yellow] " if key == selected_key else "  "
             banner = _banner_markup(display_name, icon, color)
             lines.append(f"{marker}{banner}")
             lines.append(f"  [dim]{first_sample}[/dim]")
             lines.append("")
 
         try:
-            self.query_one("#preview-content", Static).update(
-                "\n".join(lines)
-            )
+            self.query_one("#preview-content", Static).update("\n".join(lines))
         except Exception:
             pass
 
@@ -144,9 +131,7 @@ class BannerPreviewPanel(Widget):
             lines.append(f"[dim]{line}[/dim]")
 
         try:
-            self.query_one("#preview-content", Static).update(
-                "\n".join(lines)
-            )
+            self.query_one("#preview-content", Static).update("\n".join(lines))
         except Exception:
             pass
 
@@ -215,9 +200,7 @@ class ColorPickerScreen(MenuScreen):
         )
         with SplitPanel(left_title="Colors", right_title="Preview"):
             yield ListView(id="color-list", classes="picker-left")
-            yield BannerPreviewPanel(
-                id="picker-preview", classes="picker-right"
-            )
+            yield BannerPreviewPanel(id="picker-preview", classes="picker-right")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -248,9 +231,7 @@ class ColorPickerScreen(MenuScreen):
         """Live-update preview as cursor moves through color list."""
         item = event.item
         if item and hasattr(item, "_color_value"):
-            self.config.current_colors[self.banner_key] = (
-                item._color_value  # type: ignore[attr-defined]
-            )
+            self.config.current_colors[self.banner_key] = item._color_value  # type: ignore[attr-defined]
             self._update_preview()
 
     def action_confirm_color(self) -> None:
@@ -323,9 +304,7 @@ class ColorsScreen(MenuScreen):
         yield Static("🎨  Banner Color Configuration", id="colors-title")
         with SplitPanel(left_title="Banners", right_title="Preview"):
             yield ListView(id="banner-list", classes="colors-left")
-            yield BannerPreviewPanel(
-                id="colors-preview", classes="colors-right"
-            )
+            yield BannerPreviewPanel(id="colors-preview", classes="colors-right")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -348,9 +327,7 @@ class ColorsScreen(MenuScreen):
     def _selected_key(self) -> str | None:
         """Return the banner key of the highlighted list item."""
         lv = self.query_one("#banner-list", ListView)
-        if lv.highlighted_child and isinstance(
-            lv.highlighted_child, BannerListItem
-        ):
+        if lv.highlighted_child and isinstance(lv.highlighted_child, BannerListItem):
             return lv.highlighted_child.banner_key
         return self._config.banner_keys[0] if self._config.banner_keys else None
 
@@ -383,9 +360,7 @@ class ColorsScreen(MenuScreen):
         """Push the color picker sub-screen for the highlighted banner."""
         key = self._selected_key()
         if key is not None:
-            self.app.push_screen(
-                ColorPickerScreen(banner_key=key, config=self._config)
-            )
+            self.app.push_screen(ColorPickerScreen(banner_key=key, config=self._config))
 
     def action_save_and_exit(self) -> None:
         """Persist all color changes to config and exit."""

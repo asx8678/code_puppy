@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import json
 from collections.abc import Generator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
 # ---------------------------------------------------------------------------
 # Low-level line parser
 # ---------------------------------------------------------------------------
+
 
 class StreamLineParser:
     """Buffer incoming text chunks and emit complete lines.
@@ -79,6 +80,7 @@ class StreamLineParser:
 # Server-Sent Events parser
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SSEEvent:
     """A single Server-Sent Event."""
@@ -128,7 +130,9 @@ class SSEParser:
                     event=self._current.get("event", "message"),
                     data=self._current.get("data", ""),
                     id=self._current.get("id"),
-                    retry=int(self._current["retry"]) if "retry" in self._current else None,
+                    retry=int(self._current["retry"])
+                    if "retry" in self._current
+                    else None,
                 )
                 self._current = {}
                 return evt
@@ -156,6 +160,7 @@ class SSEParser:
 # ---------------------------------------------------------------------------
 # JSONL / lenient JSON helpers
 # ---------------------------------------------------------------------------
+
 
 def parse_jsonl_lenient(text: str) -> list[Any]:
     """Parse a JSONL (JSON Lines) string, skipping malformed lines.

@@ -15,16 +15,16 @@ from textual.theme import Theme
 
 CODE_PUPPY_THEME = Theme(
     name="code-puppy",
-    primary="#005faf",       # deep_sky_blue4 — the signature CLI blue
-    secondary="#7878af",     # muted lavender — AI responses, previews
-    accent="#6a9fb5",        # dusty steel blue — selections, highlights
-    warning="#c0a36e",       # muted sand — warnings, token rate
-    error="#b05070",         # soft rose — errors (not screaming pink)
-    success="#87a987",       # sage green — success, agent name
-    foreground="#b0b0b0",    # soft gray — readable, not harsh
-    background="#000000",    # pure black — like the old terminal
-    surface="#121212",       # barely lifted from black
-    panel="#1c1c1c",         # subtle panel elevation
+    primary="#005faf",  # deep_sky_blue4 — the signature CLI blue
+    secondary="#7878af",  # muted lavender — AI responses, previews
+    accent="#6a9fb5",  # dusty steel blue — selections, highlights
+    warning="#c0a36e",  # muted sand — warnings, token rate
+    error="#b05070",  # soft rose — errors (not screaming pink)
+    success="#87a987",  # sage green — success, agent name
+    foreground="#b0b0b0",  # soft gray — readable, not harsh
+    background="#000000",  # pure black — like the old terminal
+    surface="#121212",  # barely lifted from black
+    panel="#1c1c1c",  # subtle panel elevation
     dark=True,
     luminosity_spread=0.15,
     text_alpha=0.9,

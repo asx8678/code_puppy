@@ -71,8 +71,6 @@ class SettingItem(ListItem):
         yield Label(f"{name}  {type_badge}  {value_str}")
 
 
-
-
 class SettingsPanel(Widget):
     """Right panel: shows configurable settings for a model.
 
@@ -123,17 +121,13 @@ class SettingsPanel(Widget):
         yield Static("Select a model from the left panel.", id="settings-title")
         yield Static("", id="settings-description")
         yield ListView(id="settings-list")
-        yield Static(
-            "◄/► adjust  d=reset  ↑↓ navigate  Esc=back", id="settings-hints"
-        )
+        yield Static("◄/► adjust  d=reset  ↑↓ navigate  Esc=back", id="settings-hints")
 
     def load_model(self, model_name: str) -> None:
         """Populate settings for the given model."""
         self._model_name = model_name
         self._setting_keys = [
-            k
-            for k in SETTING_DEFINITIONS
-            if model_supports_setting(model_name, k)
+            k for k in SETTING_DEFINITIONS if model_supports_setting(model_name, k)
         ]
 
         title = self.query_one("#settings-title", Static)
@@ -327,9 +321,7 @@ class ModelSettingsScreen(MenuScreen):
                 badge_parts.append("⚙")
             badge = " ".join(badge_parts)
             items.append(
-                SearchableListItem(
-                    label=model_name, item_id=model_name, badge=badge
-                )
+                SearchableListItem(label=model_name, item_id=model_name, badge=badge)
             )
         model_list.add_items(items)
         model_list.focus()

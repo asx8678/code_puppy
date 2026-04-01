@@ -3,7 +3,6 @@
 Inspired by oh-my-pi's capability registry pattern.
 """
 
-
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol, runtime_checkable
 

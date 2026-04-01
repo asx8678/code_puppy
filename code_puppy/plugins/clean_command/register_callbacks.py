@@ -4,7 +4,6 @@ Registers via the ``custom_command`` hook so it lives entirely outside
 ``code_puppy/command_line/``.  Run ``/clean help`` for usage.
 """
 
-
 import shutil
 from pathlib import Path
 from typing import Any
@@ -28,7 +27,8 @@ def _session_targets() -> list[tuple[str, Path, str]]:
         (
             "Terminal sessions",
             Path(config.STATE_DIR) / "terminal_sessions.json",
-            "file"),
+            "file",
+        ),
         ("Session HMAC key", Path(config.DATA_DIR) / ".session_hmac_key", "file"),
     ]
 
@@ -52,7 +52,8 @@ def _cache_targets() -> list[tuple[str, Path, str]]:
         (
             "Skills cache",
             Path.home() / ".code_puppy" / "cache" / "skills_catalog.json",
-            "file"),
+            "file",
+        ),
         ("API server PID", Path(config.STATE_DIR) / "api_server.pid", "file"),
     ]
 

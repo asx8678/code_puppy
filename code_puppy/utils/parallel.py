@@ -6,7 +6,6 @@ Provides a bounded-concurrency async map and a from-scratch counting semaphore.
 Inspired by oh-my-pi's parallel.ts.
 """
 
-
 import asyncio
 import collections
 from dataclasses import dataclass
@@ -54,17 +53,13 @@ class Semaphore:
 
     def __init__(self, max_concurrent: int) -> None:
         if max_concurrent < 1:
-            raise ValueError(
-                f"max_concurrent must be >= 1, got {max_concurrent}"
-            )
+            raise ValueError(f"max_concurrent must be >= 1, got {max_concurrent}")
         self._max = max_concurrent
         # Available slots (0 means fully occupied).
         self._available: int = max_concurrent
         # Queue of futures waiting for a slot; each future resolves to None
         # when a slot is granted.
-        self._waiters: collections.deque[asyncio.Future[None]] = (
-            collections.deque()
-        )
+        self._waiters: collections.deque[asyncio.Future[None]] = collections.deque()
 
     async def acquire(self) -> None:
         """Wait until a concurrency slot is available, then occupy it."""

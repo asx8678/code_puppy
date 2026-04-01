@@ -84,7 +84,10 @@ class SchedulerWizardScreen(MenuScreen):
             placeholder="e.g., Daily Code Review",
             id="field-name",
         )
-        yield Label("Schedule (interval like 15m, 1h, 2d  OR  cron: 0 9 * * *)", classes="field-label")
+        yield Label(
+            "Schedule (interval like 15m, 1h, 2d  OR  cron: 0 9 * * *)",
+            classes="field-label",
+        )
         yield Input(
             placeholder="e.g., 1h  or  0 9 * * *",
             id="field-schedule",

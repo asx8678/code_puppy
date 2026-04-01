@@ -101,7 +101,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str] | None:
         # Strip optional inline comments and surrounding quotes
         val = val.strip()
         # Remove inline comments (anything after a bare `#` that is not inside quotes)
-        val = re.sub(r'\s+#.*$', '', val)
+        val = re.sub(r"\s+#.*$", "", val)
         val = val.strip().strip('"').strip("'")
         fields[key.strip()] = val
 
@@ -151,9 +151,7 @@ def parse_rule_file(path: Path) -> TtsrRule | None:
     # ---- required: trigger -----------------------------------------------
     trigger_src = fields.get("trigger", "").strip()
     if not trigger_src:
-        logger.warning(
-            "ttsr: rule file %s has no 'trigger' field, skipping", path
-        )
+        logger.warning("ttsr: rule file %s has no 'trigger' field, skipping", path)
         return None
 
     try:
@@ -186,9 +184,7 @@ def parse_rule_file(path: Path) -> TtsrRule | None:
 
     # ---- body (content) --------------------------------------------------
     if not body:
-        logger.warning(
-            "ttsr: rule %r in %s has empty body content", name, path
-        )
+        logger.warning("ttsr: rule %r in %s has empty body content", name, path)
         # Allow empty-body rules; they'll inject an empty system-rule block.
 
     return TtsrRule(

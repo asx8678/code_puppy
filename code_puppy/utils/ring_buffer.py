@@ -8,7 +8,6 @@ When the buffer is full, push() evicts the oldest item (head) and
 unshift() evicts the newest item (tail).
 """
 
-
 from typing import Generic, Iterator, TypeVar, overload
 
 T = TypeVar("T")
@@ -220,10 +219,7 @@ class RingBuffer(Generic[T]):
         Returns:
             A new list; mutations do **not** affect the buffer.
         """
-        return [
-            self._buf[(self._head + i) % self._capacity]
-            for i in range(self._size)
-        ]
+        return [self._buf[(self._head + i) % self._capacity] for i in range(self._size)]
 
     # ------------------------------------------------------------------
     # Python data-model
@@ -264,4 +260,6 @@ class RingBuffer(Generic[T]):
 
     def __repr__(self) -> str:
         items = self.to_list()
-        return f"RingBuffer(capacity={self._capacity}, size={self._size}, items={items!r})"
+        return (
+            f"RingBuffer(capacity={self._capacity}, size={self._size}, items={items!r})"
+        )

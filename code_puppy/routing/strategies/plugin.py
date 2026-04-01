@@ -14,7 +14,10 @@ class PluginStrategy:
         return "plugin"
 
     def route(self, context: RoutingContext) -> RoutingDecision | None:
-        from code_puppy.model_factory import _CUSTOM_MODEL_PROVIDERS, _load_plugin_model_providers
+        from code_puppy.model_factory import (
+            _CUSTOM_MODEL_PROVIDERS,
+            _load_plugin_model_providers,
+        )
         from code_puppy import callbacks
 
         model_config = context.config.get(context.model_name)
@@ -48,19 +51,29 @@ class PluginStrategy:
         # Check plugin callback handlers
         registered = callbacks.on_register_model_types()
         for handler_info in registered:
-            handlers = handler_info if isinstance(handler_info, list) else [handler_info] if handler_info else []
+            handlers = (
+                handler_info
+                if isinstance(handler_info, list)
+                else [handler_info]
+                if handler_info
+                else []
+            )
             for entry in handlers:
                 if not isinstance(entry, dict) or entry.get("type") != model_type:
                     continue
                 handler = entry.get("handler")
                 if callable(handler):
                     try:
-                        result = handler(context.model_name, model_config, context.config)
+                        result = handler(
+                            context.model_name, model_config, context.config
+                        )
                         if result is not None:
                             return RoutingDecision(
                                 model=result,
                                 model_name=context.model_name,
-                                metadata={"reasoning": f"plugin handler '{model_type}'"},
+                                metadata={
+                                    "reasoning": f"plugin handler '{model_type}'"
+                                },
                             )
                     except Exception as e:
                         logger.debug("Plugin handler '%s' failed: %s", model_type, e)

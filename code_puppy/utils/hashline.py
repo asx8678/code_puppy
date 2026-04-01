@@ -18,7 +18,6 @@ falls back to a pure Python implementation that uses ``zlib.crc32``.
     one backend with a validator running the other backend.
 """
 
-
 import re
 import zlib
 
@@ -41,6 +40,7 @@ try:
         strip_hashline_prefixes as _rust_strip_hashline_prefixes,
         validate_hashline_anchor as _rust_validate_hashline_anchor,
     )
+
     _USING_RUST = True
 except ImportError:
     _rust_compute_line_hash = None

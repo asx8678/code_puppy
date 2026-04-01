@@ -141,9 +141,7 @@ def _on_agent_run_end(
     """
     watcher = _get_watcher()
     watcher.increment_turn()
-    logger.debug(
-        "ttsr: turn advanced to %d after agent_run_end", watcher.turn_count
-    )
+    logger.debug("ttsr: turn advanced to %d after agent_run_end", watcher.turn_count)
 
 
 # ---------------------------------------------------------------------------
@@ -172,11 +170,7 @@ def inject_triggered_rules() -> str | None:
     parts: list[str] = []
 
     for rule in pending:
-        block = (
-            f"\n\n<system-rule name=\"{rule.name}\">\n"
-            f"{rule.content}\n"
-            f"</system-rule>"
-        )
+        block = f'\n\n<system-rule name="{rule.name}">\n{rule.content}\n</system-rule>'
         parts.append(block)
         watcher.mark_injected(rule, current_turn)
         logger.info(
@@ -225,8 +219,9 @@ def handle_ttsr_command(command: str, name: str) -> bool | None:
         )
         return True
 
-    lines: list[str] = [f"🔭 **TTSR** — {len(rules)} rule(s) loaded  "
-                        f"(turn {watcher.turn_count})\n"]
+    lines: list[str] = [
+        f"🔭 **TTSR** — {len(rules)} rule(s) loaded  (turn {watcher.turn_count})\n"
+    ]
 
     for rule in rules:
         status_parts: list[str] = []

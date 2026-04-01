@@ -152,7 +152,9 @@ class SkillsScreen(MenuScreen):
         self.query_one("#skill-list", SearchableList).focus()
         details = self.query_one("#details-panel", RichLog)
         details.write("[dim]Select a skill to see details.[/dim]")
-        details.write("[dim]Enter=Toggle · t=Toggle System · i=Install · Esc=Back[/dim]")
+        details.write(
+            "[dim]Enter=Toggle · t=Toggle System · i=Install · Esc=Back[/dim]"
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -163,7 +165,9 @@ class SkillsScreen(MenuScreen):
         self._update_title()
 
     def _update_title(self) -> None:
-        status = "[green]ENABLED[/green]" if self._system_enabled else "[red]DISABLED[/red]"
+        status = (
+            "[green]ENABLED[/green]" if self._system_enabled else "[red]DISABLED[/red]"
+        )
         try:
             self.query_one("#screen-title", Static).update(
                 f"🎓  Skills Manager — System: {status}  ({len(self._skills)} skills)"

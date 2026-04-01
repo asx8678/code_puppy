@@ -185,7 +185,8 @@ def _command_help() -> list[tuple[str, str]]:
         (
             "pack-parallel",
             f"Get/set Pack Leader max parallel agents (current: {max_p}). "
-            f"Usage: /pack-parallel N"),
+            f"Usage: /pack-parallel N",
+        ),
         ("pack-par", "Alias for /pack-parallel"),
     ]
 

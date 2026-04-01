@@ -268,9 +268,7 @@ class AutosaveScreen(MenuScreen):
             except Exception:
                 pass
 
-            emit_success(
-                f"✅ Session loaded: {session_name} ({len(history)} messages)"
-            )
+            emit_success(f"✅ Session loaded: {session_name} ({len(history)} messages)")
 
             try:
                 from code_puppy.command_line.autosave_menu import (

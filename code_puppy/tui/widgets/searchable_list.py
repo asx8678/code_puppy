@@ -208,9 +208,7 @@ class SearchableList(Widget):
         elif event.key == "pagedown":
             # Jump down by ~10 items
             if list_view.index is not None:
-                list_view.index = min(
-                    list_view.index + 10, len(list_view.children) - 1
-                )
+                list_view.index = min(list_view.index + 10, len(list_view.children) - 1)
             else:
                 list_view.index = 0
             list_view.scroll_visible()

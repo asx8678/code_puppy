@@ -176,13 +176,13 @@ class QuestionScreen(Screen[QuestionResult]):
 
         if AUTO_ADD_OTHER_OPTION:
             other_idx = len(q.options)
-            other_text = state.get_other_text_for_question(
-                state.current_question_index
-            )
+            other_text = state.get_other_text_for_question(state.current_question_index)
             extra = f" — [italic]{other_text}[/italic]" if other_text else ""
             self._write_option_row(
-                log, other_idx,
-                f"{OTHER_OPTION_LABEL}{extra}", "",
+                log,
+                other_idx,
+                f"{OTHER_OPTION_LABEL}{extra}",
+                "",
                 q.multi_select,
             )
 
@@ -306,9 +306,7 @@ class QuestionScreen(Screen[QuestionResult]):
             self._refresh_all()
             return
 
-        is_last = (
-            self._state.current_question_index == len(self._state.questions) - 1
-        )
+        is_last = self._state.current_question_index == len(self._state.questions) - 1
         cursor_on_selected = self._state.is_option_selected(self._state.current_cursor)
 
         if not self._state.current_question.multi_select:
@@ -384,9 +382,6 @@ class QuestionScreen(Screen[QuestionResult]):
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Sync state buffer with Input widget value."""
-        if (
-            event.input.id == "q-other-input"
-            and self._state.entering_other_text
-        ):
+        if event.input.id == "q-other-input" and self._state.entering_other_text:
             self._state.other_text_buffer = event.value
             self._state.reset_activity_timer()

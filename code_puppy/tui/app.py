@@ -283,8 +283,6 @@ class CodePuppyApp(App):
         except Exception:
             pass
 
-
-
     # --- Completion overlay handlers ---
 
     def on_completion_overlay_completion_selected(
@@ -575,7 +573,10 @@ class CodePuppyApp(App):
         try:
             from code_puppy.agents import get_current_agent
             from code_puppy.agents.event_stream_handler import set_streaming_console
-            from code_puppy.config import auto_save_session_if_enabled, save_command_to_history
+            from code_puppy.config import (
+                auto_save_session_if_enabled,
+                save_command_to_history,
+            )
             from code_puppy.prompt_runner import run_prompt_with_attachments
             from code_puppy.tui.message_bridge import TUIConsole
 
@@ -625,7 +626,9 @@ class CodePuppyApp(App):
         """Handle !command shell passthrough."""
         chat = self.query_one("#chat-log", RichLog)
         try:
-            from code_puppy.command_line.shell_passthrough import execute_shell_passthrough
+            from code_puppy.command_line.shell_passthrough import (
+                execute_shell_passthrough,
+            )
 
             execute_shell_passthrough(text)
         except Exception as e:
@@ -656,7 +659,9 @@ class CodePuppyApp(App):
         def _on_model_selected(model_name: str | None) -> None:
             if model_name:
                 chat = self.query_one("#chat-log", RichLog)
-                chat.write(f"[green]✅ Active model set: [bold]{model_name}[/bold][/green]")
+                chat.write(
+                    f"[green]✅ Active model set: [bold]{model_name}[/bold][/green]"
+                )
                 # Refresh info bar to show new model
                 try:
                     self.query_one("#info-bar", InfoBar).update_from_app_state()
@@ -725,9 +730,7 @@ class CodePuppyApp(App):
             "cmd_args": {},
         }
 
-        chat.write(
-            f"[bold]⏳ Installing [cyan]{server.display_name}[/cyan]...[/bold]"
-        )
+        chat.write(f"[bold]⏳ Installing [cyan]{server.display_name}[/cyan]...[/bold]")
 
         def _do_install() -> None:
             try:

@@ -143,9 +143,7 @@ class SourceScreen(MenuScreen):
             from rich.syntax import Syntax
 
             source_code = Path(self._tool.source_path).read_text()
-            log.write(
-                Syntax(source_code, "python", line_numbers=True, theme="monokai")
-            )
+            log.write(Syntax(source_code, "python", line_numbers=True, theme="monokai"))
         except Exception as exc:
             log.write(f"[red]Error loading source: {exc}[/red]")
 

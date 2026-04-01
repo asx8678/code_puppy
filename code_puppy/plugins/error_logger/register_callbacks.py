@@ -8,10 +8,7 @@ slash command to inspect, tail, or clear the log.
 import os
 
 from code_puppy.callbacks import register_callback
-from code_puppy.error_logging import (
-    get_log_file_path,
-    log_error,
-    log_error_message)
+from code_puppy.error_logging import get_log_file_path, log_error, log_error_message
 
 # ---------------------------------------------------------------------------
 # 1. agent_exception hook
@@ -42,7 +39,8 @@ def _on_agent_run_end(
     success=True,
     error=None,
     response_text=None,
-    metadata=None):
+    metadata=None,
+):
     if success or error is None:
         return
 

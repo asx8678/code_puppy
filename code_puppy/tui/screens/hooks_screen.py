@@ -170,7 +170,9 @@ class HooksScreen(MenuScreen):
         details.write("[bold cyan]HOOK DETAILS[/bold cyan]")
         details.write("")
         details.write(f"  [bold]Status:[/bold]   {status_str}")
-        details.write(f"  [bold]Source:[/bold]   [{source_color}]{source_label}[/{source_color}]")
+        details.write(
+            f"  [bold]Source:[/bold]   [{source_color}]{source_label}[/{source_color}]"
+        )
         details.write(f"  [bold]Event:[/bold]    [cyan]{hook.event_type}[/cyan]")
         details.write("")
         details.write("[bold]Matcher[/bold]")

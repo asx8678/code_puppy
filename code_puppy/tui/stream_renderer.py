@@ -239,9 +239,7 @@ class StreamRenderer:
             color = "blue"
 
         icon_str = f" {icon}" if icon else ""
-        banner = (
-            f"[bold white on {color}] {label} [/bold white on {color}]{icon_str}"
-        )
+        banner = f"[bold white on {color}] {label} [/bold white on {color}]{icon_str}"
         self.app.write_to_chat("")  # Blank line before banner
         self.app.write_to_chat(banner)
 

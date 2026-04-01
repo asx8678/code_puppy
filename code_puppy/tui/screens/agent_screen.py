@@ -117,7 +117,9 @@ def _apply_pinned_model(agent_name: str, model_choice: str) -> None:
                     current.refresh_config()
                 current.reload_code_generation_agent()
                 if pinned_model:
-                    emit_info(f"Active agent reloaded with pinned model '{pinned_model}'")
+                    emit_info(
+                        f"Active agent reloaded with pinned model '{pinned_model}'"
+                    )
                 else:
                     emit_info("Active agent reloaded with default model")
             except Exception as exc:
@@ -196,14 +198,22 @@ class AgentScreen(MenuScreen):
     # --- Compose ---
 
     def compose(self) -> ComposeResult:
-        yield Static("🐶 Agent Picker — ↑↓ Navigate · Enter Select · P Pin · C Clone · D Delete", id="agent-title")
+        yield Static(
+            "🐶 Agent Picker — ↑↓ Navigate · Enter Select · P Pin · C Clone · D Delete",
+            id="agent-title",
+        )
         with SplitPanel():
             yield SearchableList(
                 placeholder="🔍 Search agents…",
                 id="agent-list",
                 classes="split-panel--left",
             )
-            yield RichLog(id="agent-preview", highlight=True, markup=True, classes="split-panel--right")
+            yield RichLog(
+                id="agent-preview",
+                highlight=True,
+                markup=True,
+                classes="split-panel--right",
+            )
         yield Footer()
 
     # --- Helpers ---
@@ -236,7 +246,10 @@ class AgentScreen(MenuScreen):
         try:
             list_view = self.query_one("#search-list", ListView)
             for i, child in enumerate(list_view._nodes):  # type: ignore[attr-defined]
-                if isinstance(child, SearchableListItem) and child.item_id == self._current_agent_name:
+                if (
+                    isinstance(child, SearchableListItem)
+                    and child.item_id == self._current_agent_name
+                ):
                     list_view.index = i
                     break
         except Exception:
@@ -272,16 +285,24 @@ class AgentScreen(MenuScreen):
         log.write(f"\n[bold]Description:[/bold]\n[dim]{description}[/dim]")
         log.write(
             "\n[bold]Status:[/bold] "
-            + ("[green bold]✓ Currently Active[/green bold]" if is_current else "[dim]Not active[/dim]")
+            + (
+                "[green bold]✓ Currently Active[/green bold]"
+                if is_current
+                else "[dim]Not active[/dim]"
+            )
         )
 
     # --- Message handlers ---
 
-    def on_searchable_list_item_highlighted(self, event: SearchableList.ItemHighlighted) -> None:
+    def on_searchable_list_item_highlighted(
+        self, event: SearchableList.ItemHighlighted
+    ) -> None:
         """Update preview when cursor moves."""
         self._show_preview(event.item.item_id)
 
-    def on_searchable_list_item_selected(self, event: SearchableList.ItemSelected) -> None:
+    def on_searchable_list_item_selected(
+        self, event: SearchableList.ItemSelected
+    ) -> None:
         """Select the agent when Enter is pressed in the list."""
         self._do_select_agent(event.item.item_id)
 
@@ -332,7 +353,9 @@ class AgentScreen(MenuScreen):
 
         async def _pick_and_pin() -> None:
             try:
-                from code_puppy.command_line.model_picker_completion import load_model_names
+                from code_puppy.command_line.model_picker_completion import (
+                    load_model_names,
+                )
 
                 model_names = load_model_names() or []
             except Exception:
@@ -346,7 +369,6 @@ class AgentScreen(MenuScreen):
 
             pinned = _get_pinned_model(agent_name)
 
-
             from code_puppy.tui.screens.model_pin_screen import ModelPinScreen
 
             def _on_dismiss(model_choice: str | None) -> None:
@@ -357,7 +379,9 @@ class AgentScreen(MenuScreen):
                     self._populate_list()
                     self._show_preview(agent_name)
 
-            self.app.push_screen(ModelPinScreen(agent_name, model_names, pinned), _on_dismiss)
+            self.app.push_screen(
+                ModelPinScreen(agent_name, model_names, pinned), _on_dismiss
+            )
 
         self.app.call_later(_pick_and_pin)
 
@@ -402,7 +426,9 @@ class AgentScreen(MenuScreen):
                 emit_warning("Only cloned agents can be deleted.")
                 return
             if agent_name == self._current_agent_name:
-                emit_warning("Cannot delete the active agent. Switch to another agent first.")
+                emit_warning(
+                    "Cannot delete the active agent. Switch to another agent first."
+                )
                 return
             if delete_clone_agent(agent_name):
                 emit_info(f"Deleted clone '{agent_name}'")

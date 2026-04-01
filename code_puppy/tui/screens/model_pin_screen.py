@@ -69,7 +69,9 @@ class ModelPinScreen(MenuScreen):
         # First choice is always "unpin"
         unpin_badge = "current" if self._current_pinned is None else ""
         items.append(
-            SearchableListItem(label="(unpin — use default)", item_id="(unpin)", badge=unpin_badge)
+            SearchableListItem(
+                label="(unpin — use default)", item_id="(unpin)", badge=unpin_badge
+            )
         )
 
         for name in self._model_names:
@@ -78,7 +80,9 @@ class ModelPinScreen(MenuScreen):
 
         model_list.add_items(items)
 
-    def on_searchable_list_item_selected(self, event: SearchableList.ItemSelected) -> None:
+    def on_searchable_list_item_selected(
+        self, event: SearchableList.ItemSelected
+    ) -> None:
         """Dismiss with the chosen model id."""
         self.dismiss(event.item.item_id)
 

@@ -56,9 +56,7 @@ class CompositeStrategy:
         try:
             decision = terminal.route(context)
             if decision is None:
-                raise RuntimeError(
-                    f"Terminal strategy '{terminal.name}' returned None"
-                )
+                raise RuntimeError(f"Terminal strategy '{terminal.name}' returned None")
             return self._finalize(decision, terminal.name, start)
         except Exception:
             logger.error(
@@ -69,7 +67,10 @@ class CompositeStrategy:
             raise
 
     def _finalize(
-        self, decision: RoutingDecision, source: str, start: float,
+        self,
+        decision: RoutingDecision,
+        source: str,
+        start: float,
     ) -> RoutingDecision:
         elapsed_ms = (time.monotonic() - start) * 1000
         decision.metadata["source"] = f"{self._name}/{source}"

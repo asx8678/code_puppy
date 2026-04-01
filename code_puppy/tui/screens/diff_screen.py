@@ -355,9 +355,7 @@ class DiffScreen(MenuScreen):
     def compose(self) -> ComposeResult:
         yield Static("🐾  Diff Color Configuration", id="screen-title")
         with SplitPanel(left_title="Settings", right_title="Preview"):
-            yield DiffSettingsPanel(
-                id="settings-panel", classes="split-panel--left"
-            )
+            yield DiffSettingsPanel(id="settings-panel", classes="split-panel--left")
             yield DiffPreviewPanel(
                 self._config,
                 id="preview-panel",

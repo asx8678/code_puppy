@@ -41,9 +41,7 @@ def _load_catalog_skills():
 
 def _is_installed(skill_id: str) -> bool:
     """Return True if the skill is already installed locally."""
-    return (
-        Path.home() / ".code_puppy" / "skills" / skill_id / "SKILL.md"
-    ).is_file()
+    return (Path.home() / ".code_puppy" / "skills" / skill_id / "SKILL.md").is_file()
 
 
 def _format_bytes(num_bytes: int) -> str:
@@ -148,9 +146,7 @@ class SkillsInstallScreen(MenuScreen):
         items: list[SearchableListItem] = []
         for entry in self._catalog_skills:
             installed = _is_installed(entry.id)
-            icon = CATEGORY_ICONS.get(
-                (entry.category or "").lower().strip(), "📁"
-            )
+            icon = CATEGORY_ICONS.get((entry.category or "").lower().strip(), "📁")
             badge = "✓ installed" if installed else entry.category or ""
             items.append(
                 SearchableListItem(
@@ -229,7 +225,11 @@ class SkillsInstallScreen(MenuScreen):
         details.write(f"[bold cyan]{icon} {entry.display_name}[/bold cyan]")
         details.write("")
 
-        status_str = "[green]✓ Installed[/green]" if installed else "[yellow]○ Not installed[/yellow]"
+        status_str = (
+            "[green]✓ Installed[/green]"
+            if installed
+            else "[yellow]○ Not installed[/yellow]"
+        )
         details.write(f"  {status_str}")
         details.write(f"  [dim]ID:[/dim] [cyan]{entry.id}[/cyan]")
         details.write(f"  [dim]Category:[/dim] {entry.category or 'Unknown'}")

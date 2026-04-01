@@ -196,11 +196,15 @@ class SchedulerScreen(MenuScreen):
         status_label = "Enabled" if task.enabled else "Disabled"
 
         details.write(f"[bold cyan]{task.name}[/bold cyan]")
-        details.write(f"  [bold]Status:[/bold] [{color}]{icon} {status_label}[/{color}]")
+        details.write(
+            f"  [bold]Status:[/bold] [{color}]{icon} {status_label}[/{color}]"
+        )
         details.write(f"  [bold]ID:[/bold]     [dim]{task.id}[/dim]")
         details.write("")
 
-        details.write(f"  [bold]Schedule:[/bold] {task.schedule_type} ({task.schedule_value})")
+        details.write(
+            f"  [bold]Schedule:[/bold] {task.schedule_type} ({task.schedule_value})"
+        )
         details.write(f"  [bold]Agent:[/bold]    [cyan]{task.agent}[/cyan]")
         if task.model:
             details.write(f"  [bold]Model:[/bold]    [cyan]{task.model}[/cyan]")
@@ -208,7 +212,9 @@ class SchedulerScreen(MenuScreen):
         details.write("")
 
         # Prompt preview
-        prompt_preview = task.prompt[:200] + "..." if len(task.prompt) > 200 else task.prompt
+        prompt_preview = (
+            task.prompt[:200] + "..." if len(task.prompt) > 200 else task.prompt
+        )
         details.write("[bold]Prompt[/bold]")
         for line in prompt_preview.split("\n")[:5]:
             details.write(f"  [dim]{line}[/dim]")
@@ -220,7 +226,9 @@ class SchedulerScreen(MenuScreen):
             details.write(f"  [dim]{task.last_run[:19]}[/dim]")
             if task.last_exit_code is not None:
                 exit_color = "green" if task.last_exit_code == 0 else "red"
-                details.write(f"  Exit code: [{exit_color}]{task.last_exit_code}[/{exit_color}]")
+                details.write(
+                    f"  Exit code: [{exit_color}]{task.last_exit_code}[/{exit_color}]"
+                )
             details.write("")
 
         # Created

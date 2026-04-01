@@ -91,7 +91,9 @@ def build_execution_waves(graph: dict[T, set[T]]) -> list[list[T]]:
     """
     cycles = detect_cycles(graph)
     if cycles:
-        raise ValueError(f"Dependency cycle detected involving: {sorted(str(n) for n in cycles)}")
+        raise ValueError(
+            f"Dependency cycle detected involving: {sorted(str(n) for n in cycles)}"
+        )
 
     # Kahn's algorithm
     in_degree: dict[T, int] = defaultdict(int)

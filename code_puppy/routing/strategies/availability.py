@@ -25,10 +25,7 @@ class AvailabilityStrategy:
             return None  # Model is fine, let other strategies handle
 
         # Model is down — find first available alternative
-        alternatives = [
-            name for name in context.config
-            if name != context.model_name
-        ]
+        alternatives = [name for name in context.config if name != context.model_name]
         result = availability_service.select_first_available(alternatives)
 
         if result.selected_model is None:
@@ -37,16 +34,21 @@ class AvailabilityStrategy:
 
         # Build the model via ModelFactory
         from code_puppy.model_factory import ModelFactory
+
         try:
             model = ModelFactory.get_model(result.selected_model, context.config)
             logger.info(
                 "Model '%s' unavailable (%s), routing to '%s'",
-                context.model_name, snap.reason, result.selected_model,
+                context.model_name,
+                snap.reason,
+                result.selected_model,
             )
             return RoutingDecision(
                 model=model,
                 model_name=result.selected_model,
-                metadata={"reasoning": f"fallback from {context.model_name} ({snap.reason})"},
+                metadata={
+                    "reasoning": f"fallback from {context.model_name} ({snap.reason})"
+                },
             )
         except ValueError:
             return None

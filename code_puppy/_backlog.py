@@ -7,8 +7,6 @@ module buffers those calls and replays them once listeners are available.
 Inspired by Gemini CLI's CoreEventEmitter._emitOrQueue() pattern.
 """
 
-from typing import Any
-
 # Lazy-import PhaseType to avoid circular deps at module scope
 _MAX_BACKLOG_PER_PHASE = 100
 

@@ -94,8 +94,10 @@ class ModelScreen(MenuScreen):
         self._entries: list[tuple[str, str, bool]] = []
 
     def compose(self) -> ComposeResult:
-        yield Static("🤖 Select a Model  [dim](↑↓ navigate, Enter select, Esc back)[/dim]",
-                     id="model-title")
+        yield Static(
+            "🤖 Select a Model  [dim](↑↓ navigate, Enter select, Esc back)[/dim]",
+            id="model-title",
+        )
         with SplitPanel(id="model-split"):
             yield SearchableList(placeholder="🔍 Search models...", id="model-list")
             yield RichLog(id="model-details", highlight=True, markup=True, wrap=True)

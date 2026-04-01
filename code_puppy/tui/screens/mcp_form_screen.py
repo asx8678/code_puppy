@@ -80,7 +80,9 @@ def _validate_name(name: str) -> str | None:
     if not name:
         return "Server name is required."
     if not re.match(_NAME_PATTERN, name):
-        return "Name must start with alphanumeric; only letters, digits, - and _ allowed."
+        return (
+            "Name must start with alphanumeric; only letters, digits, - and _ allowed."
+        )
     if len(name) > 64:
         return "Name too long (max 64 characters)."
     return None
@@ -94,9 +96,9 @@ def _validate_json(text: str, server_type: str) -> str | None:
         return f"Invalid JSON: {exc.msg} (line {exc.lineno})"
 
     if server_type == "stdio" and "command" not in data:
-        return "Missing required field: \"command\""
+        return 'Missing required field: "command"'
     if server_type in ("http", "sse") and "url" not in data:
-        return "Missing required field: \"url\""
+        return 'Missing required field: "url"'
     return None
 
 
@@ -332,7 +334,7 @@ class MCPFormScreen(MenuScreen):
         if lv.highlighted_child is not None:
             item_id: str = lv.highlighted_child.id or ""
             if item_id.startswith("type-"):
-                return item_id[len("type-"):]
+                return item_id[len("type-") :]
         return SERVER_TYPES[0]
 
     def _set_error(self, msg: str) -> None:

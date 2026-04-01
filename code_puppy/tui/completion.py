@@ -151,7 +151,9 @@ def _complete_agent_names(partial: str) -> list[CompletionItem]:
                     CompletionItem(
                         text=name,
                         display=name,
-                        description=display_name if isinstance(display_name, str) else str(display_name),
+                        description=display_name
+                        if isinstance(display_name, str)
+                        else str(display_name),
                     )
                 )
     except Exception:
@@ -185,7 +187,7 @@ def _complete_file_path(text: str) -> list[CompletionItem]:
     if at_pos == -1:
         return []
 
-    partial_path = text[at_pos + 1:]
+    partial_path = text[at_pos + 1 :]
     items = []
 
     try:

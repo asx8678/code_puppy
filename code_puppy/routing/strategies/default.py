@@ -22,7 +22,9 @@ class DefaultStrategy:
 
         model_config = context.config.get(context.model_name)
         if not model_config:
-            raise ValueError(f"Model '{context.model_name}' not found in configuration.")
+            raise ValueError(
+                f"Model '{context.model_name}' not found in configuration."
+            )
 
         model_type = model_config.get("type")
         builder = _MODEL_BUILDERS.get(model_type)

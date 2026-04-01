@@ -130,14 +130,8 @@ def _format_model_details(model, provider) -> str:
 # AddModelScreen
 # ---------------------------------------------------------------------------
 
-_TITLE_PROVIDERS = (
-    "📦  Add Model — Browse Providers  │  "
-    "Enter=open  Esc=exit"
-)
-_TITLE_MODELS = (
-    "📦  Add Model — {provider}  │  "
-    "Enter=add  Esc=back"
-)
+_TITLE_PROVIDERS = "📦  Add Model — Browse Providers  │  Enter=open  Esc=exit"
+_TITLE_MODELS = "📦  Add Model — {provider}  │  Enter=add  Esc=back"
 
 
 class AddModelScreen(MenuScreen):
@@ -232,7 +226,9 @@ class AddModelScreen(MenuScreen):
 
         if self._registry is None:
             self._write_details("[red]⚠ Failed to load models registry.[/red]\n")
-            self._write_details("[dim]Check your network connection and try again.[/dim]")
+            self._write_details(
+                "[dim]Check your network connection and try again.[/dim]"
+            )
             return
 
         providers = self._registry.get_providers()
@@ -272,7 +268,9 @@ class AddModelScreen(MenuScreen):
         models = self._registry.get_models(provider_id)
         if not models:
             self._clear_details()
-            self._write_details(f"[yellow]No models found for {provider.name}.[/yellow]")
+            self._write_details(
+                f"[yellow]No models found for {provider.name}.[/yellow]"
+            )
             return
 
         items = []
@@ -328,9 +326,7 @@ class AddModelScreen(MenuScreen):
                 self._clear_details()
                 self._write_details(_format_provider_details(provider))
         elif self._step == "models" and self._selected_provider:
-            model = self._registry.get_model(
-                self._selected_provider.id, item.item_id
-            )
+            model = self._registry.get_model(self._selected_provider.id, item.item_id)
             if model:
                 self._clear_details()
                 self._write_details(

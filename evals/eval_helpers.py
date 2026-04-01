@@ -8,7 +8,6 @@ This module provides the building blocks for writing evals:
 """
 
 import json
-import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
