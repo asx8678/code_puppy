@@ -219,6 +219,10 @@ def test_extra_models_exception_handling(tmp_path, monkeypatch, caplog):
         "code_puppy.model_factory.EXTRA_MODELS_FILE", str(extra_models_file)
     )
 
+    # Invalidate model config cache so patched path is picked up
+    from code_puppy.model_factory import invalidate_model_config_cache
+    invalidate_model_config_cache()
+
     # This should not raise an exception despite the error
     with caplog.at_level("WARNING"):
         config = ModelFactory.load_config()

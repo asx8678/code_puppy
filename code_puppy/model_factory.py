@@ -750,11 +750,12 @@ class ModelFactory:
         global _model_config_cache, _model_config_mtimes
 
         # Check if any source file has changed since last cache
+        # Use module-level imports for EXTRA_MODELS_FILE etc. (line 26)
+        # so that monkeypatch in tests can override them
         from code_puppy.config import (
             ANTIGRAVITY_MODELS_FILE,
             CHATGPT_MODELS_FILE,
             CLAUDE_MODELS_FILE,
-            EXTRA_MODELS_FILE,
             GEMINI_MODELS_FILE)
 
         source_files = [
