@@ -4,7 +4,7 @@ A curated collection of MCP servers that can be easily searched and installed.
 """
 
 from dataclasses import dataclass, field
-from typing import Union
+from typing import Any
 
 
 @dataclass
@@ -39,11 +39,11 @@ class MCPServerTemplate:
     category: str
     tags: list[str]
     type: str  # "stdio", "http", "sse"
-    config: Dict
+    config: dict[str, Any]
     author: str = "Community"
     verified: bool = False
     popular: bool = False
-    requires: Union[list[str], MCPServerRequirements] = field(
+    requires: list[str] | MCPServerRequirements = field(
         default_factory=list
     )  # Backward compatible
     example_usage: str = ""
@@ -70,7 +70,7 @@ class MCPServerTemplate:
 
         return env_vars
 
-    def get_command_line_args(self) -> list[Dict]:
+    def get_command_line_args(self) -> list[dict[str, str | bool]]:
         """Get list of configurable command line arguments."""
         return self.get_requirements().command_line_args
 
@@ -86,7 +86,7 @@ class MCPServerTemplate:
         """Get list of system requirements."""
         return self.get_requirements().system_requirements
 
-    def to_server_config(self, custom_name: str | None = None, **cmd_args) -> Dict:
+    def to_server_config(self, custom_name: str | None = None, **cmd_args) -> dict[str, Any]:
         """Convert template to server configuration with optional overrides.
 
         Replaces placeholders in the config with actual values.

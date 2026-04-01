@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from code_puppy.error_logging import (
@@ -19,15 +20,15 @@ class TestErrorLogging:
         """Test that get_logs_dir returns a valid path."""
         logs_dir = get_logs_dir()
         assert logs_dir is not None
-        assert isinstance(logs_dir, str)
-        assert "logs" in logs_dir
+        assert isinstance(logs_dir, Path)
+        assert "logs" in str(logs_dir)
 
     def test_get_log_file_path_returns_path(self):
         """Test that get_log_file_path returns a valid path."""
         log_path = get_log_file_path()
         assert log_path is not None
-        assert isinstance(log_path, str)
-        assert log_path.endswith("errors.log")
+        assert isinstance(log_path, Path)
+        assert log_path.name == "errors.log"
 
     def test_ensure_logs_dir_creates_directory(self):
         """Test that _ensure_logs_dir creates the logs directory."""
@@ -55,8 +56,8 @@ class TestErrorLogging:
 
             original_logs_dir = error_logging.LOGS_DIR
             original_log_file = error_logging.ERROR_LOG_FILE
-            error_logging.LOGS_DIR = test_logs_dir
-            error_logging.ERROR_LOG_FILE = test_log_file
+            error_logging.LOGS_DIR = Path(test_logs_dir)
+            error_logging.ERROR_LOG_FILE = Path(test_log_file)
 
             try:
                 # Create a test exception
@@ -87,8 +88,8 @@ class TestErrorLogging:
 
             original_logs_dir = error_logging.LOGS_DIR
             original_log_file = error_logging.ERROR_LOG_FILE
-            error_logging.LOGS_DIR = test_logs_dir
-            error_logging.ERROR_LOG_FILE = test_log_file
+            error_logging.LOGS_DIR = Path(test_logs_dir)
+            error_logging.ERROR_LOG_FILE = Path(test_log_file)
 
             try:
                 try:
@@ -116,8 +117,8 @@ class TestErrorLogging:
 
             original_logs_dir = error_logging.LOGS_DIR
             original_log_file = error_logging.ERROR_LOG_FILE
-            error_logging.LOGS_DIR = test_logs_dir
-            error_logging.ERROR_LOG_FILE = test_log_file
+            error_logging.LOGS_DIR = Path(test_logs_dir)
+            error_logging.ERROR_LOG_FILE = Path(test_log_file)
 
             try:
                 log_error_message("Simple error message", context="Simple context")
@@ -137,7 +138,7 @@ class TestErrorLogging:
 
         original_log_file = error_logging.ERROR_LOG_FILE
         # Point to an invalid path that can't be written
-        error_logging.ERROR_LOG_FILE = "/nonexistent/path/that/cant/exist/errors.log"
+        error_logging.ERROR_LOG_FILE = Path("/nonexistent/path/that/cant/exist/errors.log")
 
         try:
             # This should not raise an exception
@@ -153,7 +154,7 @@ class TestErrorLogging:
         from code_puppy import error_logging
 
         original_log_file = error_logging.ERROR_LOG_FILE
-        error_logging.ERROR_LOG_FILE = "/nonexistent/path/that/cant/exist/errors.log"
+        error_logging.ERROR_LOG_FILE = Path("/nonexistent/path/that/cant/exist/errors.log")
 
         try:
             # This should not raise an exception

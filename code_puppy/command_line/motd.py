@@ -3,7 +3,7 @@
 Stores seen versions in XDG_CONFIG_HOME/code_puppy/motd.txt - woof woof! 🐾
 """
 
-import os
+from pathlib import Path
 
 from code_puppy.config import CONFIG_DIR
 from code_puppy.messaging import emit_info
@@ -22,7 +22,7 @@ Reminder that Code Puppy supports three different OAuth subscriptions:
 ### Google Antigravity - `/antigravity-auth`
 - Gemini 3 Pro, Flash, and Anthropic models including Opus and Sonnet.
 """
-MOTD_TRACK_FILE = os.path.join(CONFIG_DIR, "motd.txt")
+MOTD_TRACK_FILE = Path(CONFIG_DIR) / "motd.txt"
 
 
 def get_motd_content() -> tuple[str, str]:
@@ -48,7 +48,7 @@ def get_motd_content() -> tuple[str, str]:
 
 
 def has_seen_motd(version: str) -> bool:  # 🐕 Check if puppy has seen this MOTD!
-    if not os.path.exists(MOTD_TRACK_FILE):
+    if not MOTD_TRACK_FILE.exists():
         return False
     with open(MOTD_TRACK_FILE, "r") as f:
         seen_versions = {line.strip() for line in f if line.strip()}
@@ -57,11 +57,11 @@ def has_seen_motd(version: str) -> bool:  # 🐕 Check if puppy has seen this MO
 
 def mark_motd_seen(version: str):  # 🐶 Mark MOTD as seen by this good puppy!
     # Create directory if it doesn't exist 🏠🐕
-    os.makedirs(os.path.dirname(MOTD_TRACK_FILE), exist_ok=True)
+    MOTD_TRACK_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     # Check if the version is already in the file 📋🐶
     seen_versions = set()
-    if os.path.exists(MOTD_TRACK_FILE):
+    if MOTD_TRACK_FILE.exists():
         with open(MOTD_TRACK_FILE, "r") as f:
             seen_versions = {line.strip() for line in f if line.strip()}
 
