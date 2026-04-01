@@ -12,7 +12,7 @@ import hmac
 import json
 import os
 import logging
-import pickle
+# pickle is lazy-imported inside _load_raw_bytes() for legacy format only
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
@@ -151,6 +151,7 @@ def _load_raw_bytes(raw: bytes) -> Any:
             "Legacy format support will be removed in a future version.",
             DeprecationWarning,
             stacklevel=2)
+        import pickle  # noqa: S403 — lazy import for legacy format only
         return pickle.loads(pickle_data)  # noqa: S301
 
     # Plain pickle (original format) - with deprecation warning
@@ -160,6 +161,7 @@ def _load_raw_bytes(raw: bytes) -> Any:
         "Pickle support will be removed in a future version.",
         DeprecationWarning,
         stacklevel=2)
+    import pickle  # noqa: S403 — lazy import for legacy format only
     return pickle.loads(raw)  # noqa: S301
 
 
@@ -346,7 +348,7 @@ def load_session_with_hashes(
     # --- 2. Deserialize bytes ---
     try:
         data = _load_raw_bytes(raw)
-    except (ValueError, pickle.UnpicklingError, Exception) as exc:
+    except (ValueError, Exception) as exc:  # Exception covers pickle.UnpicklingError
         logger.warning(
             "Session '%s' deserialization failed: %s: %s",
             session_name,
