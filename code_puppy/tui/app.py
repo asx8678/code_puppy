@@ -395,14 +395,16 @@ class CodePuppyApp(App):
         chat.write("[yellow]Model picker not yet migrated.[/yellow]")
 
     def action_show_agent_picker(self) -> None:
-        """Show agent picker screen (placeholder)."""
-        chat = self.query_one("#chat-log", RichLog)
-        chat.write("[yellow]Agent picker not yet migrated.[/yellow]")
+        """Show agent picker screen."""
+        from code_puppy.tui.screens.agent_screen import AgentScreen
+
+        self.push_screen(AgentScreen())
 
     def action_show_settings(self) -> None:
-        """Show settings screen (placeholder)."""
-        chat = self.query_one("#chat-log", RichLog)
-        chat.write("[yellow]Settings not yet migrated.[/yellow]")
+        """Show model settings screen."""
+        from code_puppy.tui.screens.model_settings_screen import ModelSettingsScreen
+
+        self.push_screen(ModelSettingsScreen())
 
     def action_cancel_task(self) -> None:
         """Cancel the currently running task."""
