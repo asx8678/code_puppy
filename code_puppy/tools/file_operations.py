@@ -11,6 +11,8 @@ from pydantic_ai import RunContext
 # ---------------------------------------------------------------------------
 # Module-level helper functions (exposed for unit tests _and_ used as tools)
 # ---------------------------------------------------------------------------
+import asyncio
+
 from code_puppy.messaging import (  # New structured messaging types
     FileContentMessage,
     FileEntry,
@@ -449,19 +451,33 @@ def _list_files(
     return ListFileOutput(content="\n".join(output_lines))
 
 
-def _read_file(
+async def _read_file(
     context: RunContext,
     file_path: str,
     start_line: int | None = None,
     num_lines: int | None = None) -> ReadFileOutput:
+    """Read file with concurrency limiting."""
+    async with FileOpsLimiter():
+        # Run blocking I/O in thread pool
+        content, num_tokens, error = await asyncio.to_thread(
+            _read_file_sync, file_path, start_line, num_lines
+        )
+        return ReadFileOutput(content=content, num_tokens=num_tokens, error=error)
+
+
+def _read_file_sync(
+    file_path: str,
+    start_line: int | None = None,
+    num_lines: int | None = None) -> tuple[str, int, str | None]:
+    """Synchronous file reading - runs in thread pool."""
     file_path = os.path.abspath(os.path.expanduser(file_path))
 
     if not os.path.exists(file_path):
         error_msg = f"File {file_path} does not exist"
-        return ReadFileOutput(content=error_msg, num_tokens=0, error=error_msg)
+        return "", 0, error_msg
     if not os.path.isfile(file_path):
         error_msg = f"{file_path} is not a file"
-        return ReadFileOutput(content=error_msg, num_tokens=0, error=error_msg)
+        return "", 0, error_msg
     try:
         # Use errors="surrogateescape" to handle files with invalid UTF-8 sequences
         # This is common on Windows when files contain emojis or were created by
@@ -469,10 +485,10 @@ def _read_file(
         with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
             if start_line is not None and start_line < 1:
                 error_msg = "start_line must be >= 1 (1-based indexing)"
-                return ReadFileOutput(content=error_msg, num_tokens=0, error=error_msg)
+                return "", 0, error_msg
             if num_lines is not None and num_lines < 1:
                 error_msg = "num_lines must be >= 1"
-                return ReadFileOutput(content=error_msg, num_tokens=0, error=error_msg)
+                return "", 0, error_msg
             if start_line is not None and num_lines is not None:
                 # Read only the specified lines efficiently using itertools.islice
                 # to avoid loading the entire file into memory
@@ -536,10 +552,10 @@ def _read_file(
         return ReadFileOutput(content=content, num_tokens=num_tokens)
     except FileNotFoundError:
         error_msg = "FILE NOT FOUND"
-        return ReadFileOutput(content=error_msg, num_tokens=0, error=error_msg)
+        return "", 0, error_msg
     except PermissionError:
         error_msg = "PERMISSION DENIED"
-        return ReadFileOutput(content=error_msg, num_tokens=0, error=error_msg)
+        return "", 0, error_msg
     except Exception as e:
         message = f"An error occurred trying to read the file: {e}"
         return ReadFileOutput(content=message, num_tokens=0, error=message)
