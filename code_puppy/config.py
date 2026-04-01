@@ -8,6 +8,42 @@ from typing import Optional
 from code_puppy.session_storage import save_session
 
 
+# --- Config caching (eliminates repeated disk reads) ---
+_config_cache: configparser.ConfigParser | None = None
+_config_mtime: float = 0.0
+
+
+def _get_config() -> configparser.ConfigParser:
+    """Return a cached ConfigParser, re-reading only when the file changes."""
+    global _config_cache, _config_mtime
+    try:
+        mtime = os.path.getmtime(CONFIG_FILE)
+    except OSError:
+        # File doesn't exist — return a fresh (uncached) parser each time
+        # so that tests which mock ConfigParser or CONFIG_FILE work correctly.
+        cfg = configparser.ConfigParser()
+        cfg.read(CONFIG_FILE)
+        return cfg
+    if _config_cache is None or mtime != _config_mtime:
+        _config_cache = configparser.ConfigParser()
+        _config_cache.read(CONFIG_FILE)
+        _config_mtime = mtime
+    return _config_cache
+
+
+def _invalidate_config() -> None:
+    """Force next _get_config() call to re-read from disk."""
+    global _config_cache
+    _config_cache = None
+
+
+def _is_truthy(val: str | None, default: bool = False) -> bool:
+    """Parse a config value as boolean. Recognizes 1/true/yes/on as True."""
+    if val is None:
+        return default
+    return str(val).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _get_xdg_dir(env_var: str, fallback: str) -> str:
     """
     Get directory for code_puppy files, defaulting to ~/.code_puppy.
@@ -70,10 +106,7 @@ DBOS_DATABASE_URL = os.environ.get(
 
 def get_use_dbos() -> bool:
     """Return True if DBOS should be used based on 'enable_dbos' (default True)."""
-    cfg_val = get_value("enable_dbos")
-    if cfg_val is None:
-        return True
-    return str(cfg_val).strip().lower() in {"1", "true", "yes", "on"}
+    return _is_truthy(get_value("enable_dbos"), default=True)
 
 
 def get_subagent_verbose() -> bool:
@@ -83,10 +116,7 @@ def get_subagent_verbose() -> bool:
     for parallel execution. When True, sub-agents produce full verbose output
     like the main agent (useful for debugging).
     """
-    cfg_val = get_value("subagent_verbose")
-    if cfg_val is None:
-        return False
-    return str(cfg_val).strip().lower() in {"1", "true", "yes", "on"}
+    return _is_truthy(get_value("subagent_verbose"), default=False)
 
 
 # Pack agents - the specialized sub-agents coordinated by Pack Leader
@@ -115,10 +145,7 @@ def get_pack_agents_enabled() -> bool:
 
     When True, pack agents are available for use.
     """
-    cfg_val = get_value("enable_pack_agents")
-    if cfg_val is None:
-        return False
-    return str(cfg_val).strip().lower() in {"1", "true", "yes", "on"}
+    return _is_truthy(get_value("enable_pack_agents"), default=False)
 
 
 def get_universal_constructor_enabled() -> bool:
@@ -130,10 +157,7 @@ def get_universal_constructor_enabled() -> bool:
 
     When False, the universal_constructor tool is not registered with agents.
     """
-    cfg_val = get_value("enable_universal_constructor")
-    if cfg_val is None:
-        return True  # Enabled by default
-    return str(cfg_val).strip().lower() in {"1", "true", "yes", "on"}
+    return _is_truthy(get_value("enable_universal_constructor"), default=True)
 
 
 def set_universal_constructor_enabled(enabled: bool) -> None:
@@ -152,10 +176,7 @@ def get_enable_streaming() -> bool:
     Returns True if streaming is enabled, False otherwise.
     Defaults to True.
     """
-    val = get_value("enable_streaming")
-    if val is None:
-        return True  # Default to True for better UX
-    return str(val).lower() in ("1", "true", "yes", "on")
+    return _is_truthy(get_value("enable_streaming"), default=True)
 
 
 DEFAULT_SECTION = "puppy"
@@ -217,14 +238,13 @@ def ensure_config_exists():
     if missing or not exists:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             config.write(f)
+        _invalidate_config()
     return config
 
 
 def get_value(key: str):
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
-    val = config.get(DEFAULT_SECTION, key, fallback=None)
-    return val
+    config = _get_config()
+    return config.get(DEFAULT_SECTION, key, fallback=None)
 
 
 def get_puppy_name():
@@ -245,10 +265,7 @@ def get_allow_recursion() -> bool:
     Get the allow_recursion configuration value.
     Returns True if recursion is allowed, False otherwise.
     """
-    val = get_value("allow_recursion")
-    if val is None:
-        return True  # Default to False for safety
-    return str(val).lower() in ("1", "true", "yes", "on")
+    return _is_truthy(get_value("allow_recursion"), default=True)
 
 
 def get_model_context_length() -> int:
@@ -315,8 +332,7 @@ def get_config_keys():
     # Add fast puppy (Rust acceleration) control key
     default_keys.append("enable_fast_puppy")
 
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
+    config = _get_config()
     keys = set(config[DEFAULT_SECTION].keys()) if DEFAULT_SECTION in config else set()
     keys.update(default_keys)
     return sorted(keys)
@@ -333,6 +349,7 @@ def set_config_value(key: str, value: str):
     config[DEFAULT_SECTION][key] = value
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         config.write(f)
+    _invalidate_config()
 
 
 # Alias for API compatibility
@@ -349,6 +366,7 @@ def reset_value(key: str) -> None:
         del config[DEFAULT_SECTION][key]
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             config.write(f)
+    _invalidate_config()
 
 
 # --- MODEL STICKY EXTENSION STARTS HERE ---
@@ -578,6 +596,7 @@ def set_model_name(model: str):
     config[DEFAULT_SECTION]["model"] = model or ""
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         config.write(f)
+    _invalidate_config()
 
     # Clear model cache when switching models to ensure fresh validation
     clear_model_cache()
@@ -743,13 +762,10 @@ def get_all_model_settings(model_name: str) -> dict:
     Returns:
         Dictionary of setting_name -> value for all configured settings.
     """
-    import configparser
-
     sanitized_name = _sanitize_model_name_for_key(model_name)
     prefix = f"model_settings_{sanitized_name}_"
 
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
+    config = _get_config()
 
     settings = {}
     if DEFAULT_SECTION in config:
@@ -782,8 +798,6 @@ def clear_model_settings(model_name: str) -> None:
     Args:
         model_name: The model name
     """
-    import configparser
-
     sanitized_name = _sanitize_model_name_for_key(model_name)
     prefix = f"model_settings_{sanitized_name}_"
 
@@ -799,6 +813,7 @@ def clear_model_settings(model_name: str) -> None:
 
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             config.write(f)
+        _invalidate_config()
 
 
 def get_effective_model_settings(model_name: Optional[str] = None) -> dict:
@@ -1039,13 +1054,7 @@ def get_yolo_mode():
     Defaults to True if not set.
     Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
     """
-    true_vals = {"1", "true", "yes", "on"}
-    cfg_val = get_value("yolo_mode")
-    if cfg_val is not None:
-        if str(cfg_val).strip().lower() in true_vals:
-            return True
-        return False
-    return True
+    return _is_truthy(get_value("yolo_mode"), default=True)
 
 
 def get_safety_permission_level():
@@ -1071,13 +1080,7 @@ def get_mcp_disabled():
     Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
     When enabled, Code Puppy will skip loading MCP servers entirely.
     """
-    true_vals = {"1", "true", "yes", "on"}
-    cfg_val = get_value("disable_mcp")
-    if cfg_val is not None:
-        if str(cfg_val).strip().lower() in true_vals:
-            return True
-        return False
-    return False
+    return _is_truthy(get_value("disable_mcp"), default=False)
 
 
 def get_grep_output_verbose():
@@ -1089,13 +1092,7 @@ def get_grep_output_verbose():
     When False (default): Shows only file names with match counts
     When True: Shows full output with line numbers and content
     """
-    true_vals = {"1", "true", "yes", "on"}
-    cfg_val = get_value("grep_output_verbose")
-    if cfg_val is not None:
-        if str(cfg_val).strip().lower() in true_vals:
-            return True
-        return False
-    return False
+    return _is_truthy(get_value("grep_output_verbose"), default=False)
 
 
 def get_protected_token_count():
@@ -1176,10 +1173,7 @@ def get_http2() -> bool:
     Get the http2 configuration value.
     Returns False if not set (default).
     """
-    val = get_value("http2")
-    if val is None:
-        return False
-    return str(val).lower() in ("1", "true", "yes", "on")
+    return _is_truthy(get_value("http2"), default=False)
 
 
 def set_http2(enabled: bool) -> None:
@@ -1318,13 +1312,7 @@ def get_auto_save_session() -> bool:
     Defaults to True if not set.
     Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
     """
-    true_vals = {"1", "true", "yes", "on"}
-    cfg_val = get_value("auto_save_session")
-    if cfg_val is not None:
-        if str(cfg_val).strip().lower() in true_vals:
-            return True
-        return False
-    return True
+    return _is_truthy(get_value("auto_save_session"), default=True)
 
 
 def set_auto_save_session(enabled: bool):
@@ -1609,13 +1597,7 @@ def get_suppress_thinking_messages() -> bool:
     Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
     When enabled, thinking messages (agent_reasoning, planned_next_steps) will be hidden.
     """
-    true_vals = {"1", "true", "yes", "on"}
-    cfg_val = get_value("suppress_thinking_messages")
-    if cfg_val is not None:
-        if str(cfg_val).strip().lower() in true_vals:
-            return True
-        return False
-    return False
+    return _is_truthy(get_value("suppress_thinking_messages"), default=False)
 
 
 def set_suppress_thinking_messages(enabled: bool):
@@ -1634,13 +1616,7 @@ def get_suppress_informational_messages() -> bool:
     Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
     When enabled, informational messages (info, success, warning) will be hidden.
     """
-    true_vals = {"1", "true", "yes", "on"}
-    cfg_val = get_value("suppress_informational_messages")
-    if cfg_val is not None:
-        if str(cfg_val).strip().lower() in true_vals:
-            return True
-        return False
-    return False
+    return _is_truthy(get_value("suppress_informational_messages"), default=False)
 
 
 def set_suppress_informational_messages(enabled: bool):
@@ -1745,10 +1721,7 @@ def set_default_agent(agent_name: str) -> None:
 # --- FRONTEND EMITTER CONFIGURATION ---
 def get_frontend_emitter_enabled() -> bool:
     """Check if frontend emitter is enabled."""
-    val = get_value("frontend_emitter_enabled")
-    if val is None:
-        return True  # Enabled by default
-    return str(val).lower() in ("1", "true", "yes", "on")
+    return _is_truthy(get_value("frontend_emitter_enabled"), default=True)
 
 
 def get_frontend_emitter_max_recent_events() -> int:
