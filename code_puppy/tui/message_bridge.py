@@ -93,6 +93,7 @@ class TUIMessageBridge:
         from code_puppy.messaging import get_global_queue
 
         queue = get_global_queue()
+        queue.start()  # Start the background thread that dispatches to listeners
 
         # Register listener *before* mark_renderer_active so messages that
         # arrive between the two calls are not dropped.
@@ -113,6 +114,7 @@ class TUIMessageBridge:
         finally:
             queue.remove_listener(self._on_queue_message_from_thread)
             queue.mark_renderer_inactive()
+            queue.stop()
 
     # ------------------------------------------------------------------
     # MessageQueue callbacks
