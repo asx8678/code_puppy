@@ -18,7 +18,8 @@ TOOL_META_REQUIRED_FIELDS = {"name", "description"}
 
 # Imports that might indicate dangerous operations
 DANGEROUS_IMPORTS: set[str] = {
-    # Execution/code generation
+    # System execution
+    "os",
     "subprocess",
     "os.system",
     "shutil.rmtree",
@@ -198,9 +199,10 @@ def _extract_single_function(
 def check_dangerous_patterns(code: str) -> ValidationResult:
     """Check for potentially dangerous patterns in code.
 
-    This is an advisory check - it warns about patterns that might
-    be dangerous but doesn't prevent tool execution. Users should
-    review warned code before trusting it.
+    When dangerous patterns are detected, sets valid=False to block
+    file writes. This prevents the UC from writing code that imports
+    dangerous modules (os, subprocess, pickle, etc.) or calls dangerous
+    functions (eval, exec, etc.) without explicit user approval.
 
     Args:
         code: Python source code to check.
@@ -246,8 +248,13 @@ def check_dangerous_patterns(code: str) -> ValidationResult:
                     line = getattr(node, "lineno", "?")
                     dangerous_found.append(f"open() with write mode at line {line}")
 
-    # Add warnings for dangerous patterns
+    # Block writes when dangerous patterns are found
     if dangerous_found:
+        result.valid = False
+        result.errors.append(
+            f"Dangerous patterns blocked: {', '.join(dangerous_found)}. "
+            f"If this code is safe, add it to an allowlist or write it manually."
+        )
         result.warnings.append(
             f"Potentially dangerous patterns found: {', '.join(dangerous_found)}"
         )
@@ -309,6 +316,9 @@ def full_validation(code: str) -> ValidationResult:
 
     # Check dangerous patterns
     safety_result = check_dangerous_patterns(code)
+    if not safety_result.valid:
+        result.valid = False
+        result.errors.extend(safety_result.errors)
     result.warnings.extend(safety_result.warnings)
 
     # Additional validation: ensure there's at least one function
@@ -474,6 +484,9 @@ def validate_tool_file(file_path: Path) -> ToolFileValidationResult:
 
     # Check dangerous patterns
     safety_result = check_dangerous_patterns(code)
+    if not safety_result.valid:
+        result.valid = False
+        result.errors.extend(safety_result.errors)
     result.warnings.extend(safety_result.warnings)
 
     return result
@@ -565,8 +578,11 @@ def validate_and_write_tool(
     else:
         result.main_function = main_func
 
-    # Check dangerous patterns (warnings only, don't fail)
+    # Check dangerous patterns — blocks write if dangerous code detected
     safety_result = check_dangerous_patterns(code)
+    if not safety_result.valid:
+        result.valid = False
+        result.errors.extend(safety_result.errors)
     result.warnings.extend(safety_result.warnings)
 
     # If we got here, validation passed - write the file
