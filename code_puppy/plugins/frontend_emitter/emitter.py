@@ -7,20 +7,19 @@ Events are JSON-serializable dicts with type, timestamp, and data.
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Set
+from typing import Any
 from uuid import uuid4
 
 from code_puppy.config import (
     get_frontend_emitter_enabled,
     get_frontend_emitter_max_recent_events,
-    get_frontend_emitter_queue_size,
-)
+    get_frontend_emitter_queue_size)
 
 logger = logging.getLogger(__name__)
 
 # Global state for event distribution
-_subscribers: Set[asyncio.Queue[Dict[str, Any]]] = set()
-_recent_events: List[Dict[str, Any]] = []  # Keep last N events for new subscribers
+_subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
+_recent_events: list[dict[str, Any]] = []  # Keep last N events for new subscribers
 
 
 def emit_event(event_type: str, data: Any = None) -> None:
@@ -37,7 +36,7 @@ def emit_event(event_type: str, data: Any = None) -> None:
     if not get_frontend_emitter_enabled():
         return
 
-    event: Dict[str, Any] = {
+    event: dict[str, Any] = {
         "id": str(uuid4()),
         "type": event_type,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -60,7 +59,7 @@ def emit_event(event_type: str, data: Any = None) -> None:
             logger.error(f"Failed to emit event to subscriber: {e}")
 
 
-def subscribe() -> asyncio.Queue[Dict[str, Any]]:
+def subscribe() -> asyncio.Queue[dict[str, Any]]:
     """Subscribe to events.
 
     Creates and returns a new async queue that will receive all future events.
@@ -71,13 +70,13 @@ def subscribe() -> asyncio.Queue[Dict[str, Any]]:
         An asyncio.Queue that will receive event dictionaries.
     """
     queue_size = get_frontend_emitter_queue_size()
-    queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue(maxsize=queue_size)
+    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=queue_size)
     _subscribers.add(queue)
     logger.debug(f"New subscriber added, total subscribers: {len(_subscribers)}")
     return queue
 
 
-def unsubscribe(queue: asyncio.Queue[Dict[str, Any]]) -> None:
+def unsubscribe(queue: asyncio.Queue[dict[str, Any]]) -> None:
     """Unsubscribe from events.
 
     Removes the queue from the subscriber set. Safe to call even if the queue
@@ -90,7 +89,7 @@ def unsubscribe(queue: asyncio.Queue[Dict[str, Any]]) -> None:
     logger.debug(f"Subscriber removed, remaining subscribers: {len(_subscribers)}")
 
 
-def get_recent_events() -> List[Dict[str, Any]]:
+def get_recent_events() -> list[dict[str, Any]]:
     """Get recent events for new subscribers.
 
     Returns a copy of the most recent events (up to frontend_emitter_max_recent_events).

@@ -12,7 +12,6 @@ This module also handles:
 - URL modifications (adding ?beta=true query param)
 """
 
-from __future__ import annotations
 
 import asyncio
 import base64
@@ -138,8 +137,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                 logger.info(
                     "JWT token is %.1f seconds old (>= %d), will refresh proactively",
                     age,
-                    TOKEN_MAX_AGE_SECONDS,
-                )
+                    TOKEN_MAX_AGE_SECONDS)
             return should_refresh
 
         # Strategy 2: Fall back to stored expires_at from token file
@@ -147,8 +145,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         if should_refresh:
             logger.info(
                 "Stored token expires within %d seconds, will refresh proactively",
-                TOKEN_MAX_AGE_SECONDS,
-            )
+                TOKEN_MAX_AGE_SECONDS)
         return should_refresh
 
     @staticmethod
@@ -161,8 +158,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         try:
             from code_puppy.plugins.claude_code_oauth.utils import (
                 is_token_expired,
-                load_stored_tokens,
-            )
+                load_stored_tokens)
 
             tokens = load_stored_tokens()
             if not tokens:
@@ -208,8 +204,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
 
     @staticmethod
     def _transform_headers_for_claude_code(
-        headers: MutableMapping[str, str],
-    ) -> None:
+        headers: MutableMapping[str, str]) -> None:
         """Transform headers for Claude Code OAuth compatibility.
 
         - Sets user-agent to claude-cli
@@ -285,8 +280,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                             method=request.method,
                             url=request.url,
                             headers=headers,
-                            content=body_bytes,
-                        )
+                            content=body_bytes)
                         request.extensions["claude_oauth_refresh_attempted"] = True
             except Exception as exc:
                 logger.debug("Error during proactive token refresh check: %s", exc)
@@ -327,8 +321,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                             method=request.method,
                             url=url,
                             headers=headers,
-                            content=body_bytes,
-                        )
+                            content=body_bytes)
 
                         # Copy core internals so httpx uses the modified body/stream
                         if hasattr(rebuilt, "_content"):
@@ -389,8 +382,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                             method=request.method,
                             url=request.url,
                             headers=headers,
-                            content=body_bytes,
-                        )
+                            content=body_bytes)
                         retry_request.extensions["claude_oauth_refresh_attempted"] = (
                             True
                         )
@@ -460,8 +452,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                     response.status_code,
                     wait_time,
                     attempt + 1,
-                    MAX_RETRIES,
-                )
+                    MAX_RETRIES)
                 await asyncio.sleep(wait_time)
 
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.PoolTimeout) as exc:
@@ -479,8 +470,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                     exc,
                     wait_time,
                     attempt + 1,
-                    MAX_RETRIES,
-                )
+                    MAX_RETRIES)
                 await asyncio.sleep(wait_time)
 
             except Exception:

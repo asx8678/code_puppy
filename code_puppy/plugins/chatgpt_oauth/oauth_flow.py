@@ -1,6 +1,5 @@
 """ChatGPT OAuth flow closely matching the ChatMock implementation."""
 
-from __future__ import annotations
 
 import datetime
 import threading
@@ -8,7 +7,7 @@ import time
 import urllib.parse
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Optional, Tuple
+from typing import Any
 
 import requests
 
@@ -22,8 +21,7 @@ from .utils import (
     load_stored_tokens,
     parse_jwt_claims,
     prepare_oauth_context,
-    save_tokens,
-)
+    save_tokens)
 
 REQUIRED_PORT = CHATGPT_OAUTH_CONFIG["required_port"]
 URL_BASE = f"http://localhost:{REQUIRED_PORT}"
@@ -39,7 +37,7 @@ class TokenData:
 
 @dataclass
 class AuthBundle:
-    api_key: Optional[str]
+    api_key: str | None
     token_data: TokenData
     last_refresh: str
 
@@ -49,8 +47,7 @@ class _OAuthServer(HTTPServer):
         self,
         *,
         client_id: str,
-        verbose: bool = False,
-    ) -> None:
+        verbose: bool = False) -> None:
         super().__init__(
             ("localhost", REQUIRED_PORT), _CallbackHandler, bind_and_activate=True
         )
@@ -79,7 +76,7 @@ class _OAuthServer(HTTPServer):
         }
         return f"{self.issuer}/oauth/authorize?" + urllib.parse.urlencode(params)
 
-    def exchange_code(self, code: str) -> Tuple[AuthBundle, str]:
+    def exchange_code(self, code: str) -> tuple[AuthBundle, str]:
         data = {
             "grant_type": "authorization_code",
             "code": code,
@@ -92,8 +89,7 @@ class _OAuthServer(HTTPServer):
             self.token_endpoint,
             data=data,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=30,
-        )
+            timeout=30)
         response.raise_for_status()
         payload = response.json()
 
@@ -112,8 +108,7 @@ class _OAuthServer(HTTPServer):
         if organizations:
             default_org = next(
                 (org for org in organizations if org.get("is_default")),
-                organizations[0],
-            )
+                organizations[0])
             org_id = default_org.get("id")
         # Fallback to top-level org_id if still not found
         if not org_id:
@@ -123,8 +118,7 @@ class _OAuthServer(HTTPServer):
             id_token=id_token,
             access_token=access_token,
             refresh_token=refresh_token,
-            account_id=chatgpt_account_id,
-        )
+            account_id=chatgpt_account_id)
 
         # Instead of exchanging for an API key, just use the access_token directly
         # This matches how ChatMock works - no token exchange, just OAuth tokens
@@ -160,8 +154,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         if path == "/success":
             success_html = oauth_success_html(
                 "ChatGPT",
-                "You can now close this window and return to Code Puppy.",
-            )
+                "You can now close this window and return to Code Puppy.")
             self._send_html(success_html)
             self._shutdown_after_delay(2.0)
             return

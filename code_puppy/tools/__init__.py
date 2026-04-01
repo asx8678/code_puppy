@@ -9,8 +9,7 @@ from code_puppy.tools.browser.browser_control import (
     register_create_new_page,
     register_get_browser_status,
     register_initialize_browser,
-    register_list_pages,
-)
+    register_list_pages)
 from code_puppy.tools.browser.browser_interactions import (
     register_browser_check,
     register_browser_uncheck,
@@ -20,8 +19,7 @@ from code_puppy.tools.browser.browser_interactions import (
     register_get_element_value,
     register_hover_element,
     register_select_option,
-    register_set_element_text,
-)
+    register_set_element_text)
 from code_puppy.tools.browser.browser_locators import (
     register_find_buttons,
     register_find_by_label,
@@ -30,19 +28,16 @@ from code_puppy.tools.browser.browser_locators import (
     register_find_by_test_id,
     register_find_by_text,
     register_find_links,
-    register_run_xpath_query,
-)
+    register_run_xpath_query)
 from code_puppy.tools.browser.browser_navigation import (
     register_browser_go_back,
     register_browser_go_forward,
     register_get_page_info,
     register_navigate_to_url,
     register_reload_page,
-    register_wait_for_load_state,
-)
+    register_wait_for_load_state)
 from code_puppy.tools.browser.browser_screenshot import (
-    register_take_screenshot_and_analyze,
-)
+    register_take_screenshot_and_analyze)
 from code_puppy.tools.browser.browser_scripts import (
     register_browser_clear_highlights,
     register_browser_highlight_element,
@@ -50,51 +45,42 @@ from code_puppy.tools.browser.browser_scripts import (
     register_scroll_page,
     register_scroll_to_element,
     register_set_viewport_size,
-    register_wait_for_element,
-)
+    register_wait_for_element)
 from code_puppy.tools.browser.browser_workflows import (
     register_list_workflows,
     register_read_workflow,
-    register_save_workflow,
-)
+    register_save_workflow)
 from code_puppy.tools.browser.terminal_command_tools import (
     register_run_terminal_command,
     register_send_terminal_keys,
-    register_wait_terminal_output,
-)
+    register_wait_terminal_output)
 from code_puppy.tools.browser.terminal_screenshot_tools import (
     register_load_image,
     register_terminal_compare_mockup,
     register_terminal_read_output,
-    register_terminal_screenshot,
-)
+    register_terminal_screenshot)
 
 # Terminal automation tools
 from code_puppy.tools.browser.terminal_tools import (
     register_check_terminal_server,
     register_close_terminal,
     register_open_terminal,
-    register_start_api_server,
-)
+    register_start_api_server)
 from code_puppy.tools.command_runner import (
     register_agent_run_shell_command,
-    register_agent_share_your_reasoning,
-)
+    register_agent_share_your_reasoning)
 from code_puppy.tools.display import (
-    display_non_streamed_result as display_non_streamed_result,
-)
+    display_non_streamed_result as display_non_streamed_result)
 from code_puppy.tools.file_modifications import (
     register_create_file,
     register_delete_file,
     register_delete_snippet,
     register_edit_file,
-    register_replace_in_file,
-)
+    register_replace_in_file)
 from code_puppy.tools.file_operations import (
     register_grep,
     register_list_files,
-    register_read_file,
-)
+    register_read_file)
 
 # Scheduler tools
 from code_puppy.tools.scheduler_tools import (
@@ -106,12 +92,10 @@ from code_puppy.tools.scheduler_tools import (
     register_scheduler_start_daemon,
     register_scheduler_stop_daemon,
     register_scheduler_toggle_task,
-    register_scheduler_view_log,
-)
+    register_scheduler_view_log)
 from code_puppy.tools.skills_tools import (
     register_activate_skill,
-    register_list_or_search_skills,
-)
+    register_list_or_search_skills)
 from code_puppy.tools.universal_constructor import register_universal_constructor
 
 # Map of tool names to their individual registration functions
@@ -454,8 +438,7 @@ def _register_uc_tool_wrapper(agent, uc_tool_name: str):
                     inspect.Parameter(
                         "context",
                         inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                        annotation=RunContext,
-                    )
+                        annotation=RunContext)
                 ]
                 for param in original_sig.parameters.values():
                     new_params.append(param)

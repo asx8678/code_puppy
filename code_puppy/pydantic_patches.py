@@ -85,8 +85,7 @@ def patch_process_message_history() -> None:
                 exceptions,
                 is_async_callable,
                 is_takes_ctx,
-                run_in_executor,
-            )
+                run_in_executor)
 
             for processor in processors:
                 takes_ctx = is_takes_ctx(processor)
@@ -143,8 +142,7 @@ def patch_tool_call_json_repair() -> None:
             allow_partial: bool,
             wrap_validation_errors: bool,
             approved: bool,
-            metadata: Any = None,
-        ):
+            metadata: Any = None):
             """Patched _call_tool that repairs malformed JSON before validation."""
             # Only attempt repair if args is a string (JSON)
             if isinstance(call.args, str) and call.args:
@@ -163,8 +161,7 @@ def patch_tool_call_json_repair() -> None:
                 allow_partial=allow_partial,
                 wrap_validation_errors=wrap_validation_errors,
                 approved=approved,
-                metadata=metadata,
-            )
+                metadata=metadata)
 
         # Apply the patch
         ToolManager._call_tool = _patched_call_tool
@@ -232,8 +229,7 @@ def patch_tool_call_callbacks() -> None:
             wrap_validation_errors: bool = True,
             *,
             approved: bool = False,
-            metadata: Any = None,
-        ):
+            metadata: Any = None):
             _normalize_call_tool_name(call)
             return await _original_handle_call(
                 self,
@@ -241,8 +237,7 @@ def patch_tool_call_callbacks() -> None:
                 allow_partial=allow_partial,
                 wrap_validation_errors=wrap_validation_errors,
                 approved=approved,
-                metadata=metadata,
-            )
+                metadata=metadata)
 
         # -- _call_tool wrapper with callbacks -----------------------------------
 
@@ -253,8 +248,7 @@ def patch_tool_call_callbacks() -> None:
             allow_partial: bool,
             wrap_validation_errors: bool,
             approved: bool,
-            metadata: Any = None,
-        ):
+            metadata: Any = None):
             tool_name, call = _normalize_call_tool_name(call)
 
             # Normalise args to a dict for the callback contract
@@ -316,8 +310,7 @@ def patch_tool_call_callbacks() -> None:
                     allow_partial=allow_partial,
                     wrap_validation_errors=wrap_validation_errors,
                     approved=approved,
-                    metadata=metadata,
-                )
+                    metadata=metadata)
                 return result
             except Exception as exc:
                 error = exc

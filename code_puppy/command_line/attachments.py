@@ -1,13 +1,12 @@
 """Helpers for parsing file attachments from interactive prompts."""
 
-from __future__ import annotations
 
 import mimetypes
 import os
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import Iterable, Sequence
 
 from pydantic_ai import BinaryContent, DocumentUrl, ImageUrl
 
@@ -51,9 +50,9 @@ class ProcessedPrompt:
     """Container for parsed input prompt and attachments."""
 
     prompt: str
-    attachments: List[PromptAttachment]
-    link_attachments: List[PromptLinkAttachment]
-    warnings: List[str]
+    attachments: list[PromptAttachment]
+    link_attachments: list[PromptLinkAttachment]
+    warnings: list[str]
 
 
 class AttachmentParsingError(RuntimeError):
@@ -146,8 +145,7 @@ def _strip_attachment_token(token: str) -> str:
 def _candidate_paths(
     tokens: Sequence[str],
     start: int,
-    max_span: int = 5,
-) -> Iterable[tuple[str, int]]:
+    max_span: int = 5) -> Iterable[tuple[str, int]]:
     """Yield space-joined token slices to reconstruct paths with spaces."""
 
     collected: list[str] = []
@@ -206,8 +204,7 @@ def _detect_path_tokens(prompt: str) -> tuple[list[_DetectedPath], list[str]]:
                     path=None,
                     start_index=index,
                     consumed_until=index + 1,
-                    link=link_attachment,
-                )
+                    link=link_attachment)
             )
             index += 1
             continue
@@ -292,8 +289,7 @@ def _detect_path_tokens(prompt: str) -> tuple[list[_DetectedPath], list[str]]:
                     path=path,
                     start_index=start_index,
                     consumed_until=consumed_until,
-                    unsupported=True,
-                )
+                    unsupported=True)
             )
             index = consumed_until
             continue
@@ -308,8 +304,7 @@ def _detect_path_tokens(prompt: str) -> tuple[list[_DetectedPath], list[str]]:
                 placeholder=candidate_placeholder,
                 path=path,
                 start_index=start_index,
-                consumed_until=consumed_until,
-            )
+                consumed_until=consumed_until)
         )
         index = consumed_until
 
@@ -319,10 +314,10 @@ def _detect_path_tokens(prompt: str) -> tuple[list[_DetectedPath], list[str]]:
 def parse_prompt_attachments(prompt: str) -> ProcessedPrompt:
     """Extract attachments from the prompt returning cleaned text and metadata."""
 
-    attachments: List[PromptAttachment] = []
+    attachments: list[PromptAttachment] = []
 
     detections, detection_warnings = _detect_path_tokens(prompt)
-    warnings: List[str] = list(detection_warnings)
+    warnings: list[str] = list(detection_warnings)
 
     link_attachments = [d.link for d in detections if d.link is not None]
 
@@ -344,8 +339,7 @@ def parse_prompt_attachments(prompt: str) -> ProcessedPrompt:
         attachments.append(
             PromptAttachment(
                 placeholder=detection.placeholder,
-                content=BinaryContent(data=data, media_type=media_type),
-            )
+                content=BinaryContent(data=data, media_type=media_type))
         )
 
     # Rebuild cleaned_prompt by skipping tokens consumed as file paths.
@@ -382,8 +376,7 @@ def parse_prompt_attachments(prompt: str) -> ProcessedPrompt:
         prompt=cleaned_prompt,
         attachments=attachments,
         link_attachments=link_attachments,
-        warnings=warnings,
-    )
+        warnings=warnings)
 
 
 __all__ = [

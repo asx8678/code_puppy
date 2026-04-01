@@ -14,7 +14,6 @@ Removes unsupported parameters:
 - "verbosity" - Not supported by Codex API
 """
 
-from __future__ import annotations
 
 import json
 import logging
@@ -66,8 +65,7 @@ class ChatGPTCodexAsyncClient(httpx.AsyncClient):
                                 method=request.method,
                                 url=request.url,
                                 headers=request.headers,
-                                content=updated,
-                            )
+                                content=updated)
 
                             # Copy core internals so httpx uses the modified body/stream
                             if hasattr(rebuilt, "_content"):
@@ -319,20 +317,17 @@ class ChatGPTCodexAsyncClient(httpx.AsyncClient):
             status_code=response.status_code,
             headers=response.headers,
             content=body_bytes,
-            request=response.request,
-        )
+            request=response.request)
         return new_response
 
 
 def create_codex_async_client(
     headers: dict[str, str] | None = None,
     verify: str | bool = True,
-    **kwargs: Any,
-) -> ChatGPTCodexAsyncClient:
+    **kwargs: Any) -> ChatGPTCodexAsyncClient:
     """Create a ChatGPT Codex async client with proper configuration."""
     return ChatGPTCodexAsyncClient(
         headers=headers,
         verify=verify,
         timeout=httpx.Timeout(300.0, connect=30.0),
-        **kwargs,
-    )
+        **kwargs)

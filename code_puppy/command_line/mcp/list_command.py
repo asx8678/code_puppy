@@ -3,7 +3,6 @@ MCP List Command - Lists all registered MCP servers in a formatted table.
 """
 
 import logging
-from typing import List, Optional
 
 from rich.table import Table
 from rich.text import Text
@@ -25,7 +24,7 @@ class ListCommand(MCPCommandBase):
     Displays all registered MCP servers in a formatted table with status information.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         List all registered MCP servers in a formatted table.
 
@@ -74,8 +73,7 @@ class ListCommand(MCPCommandBase):
                     state_display,
                     Text(enabled_display, style=enabled_style),
                     uptime_display,
-                    status_display,
-                )
+                    status_display)
 
             emit_info(table, message_group=group_id)
 
@@ -86,8 +84,7 @@ class ListCommand(MCPCommandBase):
             )
             emit_info(
                 f"\n📊 Summary: {running}/{total} servers running",
-                message_group=group_id,
-            )
+                message_group=group_id)
 
         except Exception as e:
             logger.error(f"Error listing MCP servers: {e}")

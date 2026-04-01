@@ -9,8 +9,7 @@ Usage:
         emit_event,
         subscribe,
         unsubscribe,
-        get_recent_events,
-    )
+        get_recent_events)
 
     # Subscribe to events
     queue = subscribe()

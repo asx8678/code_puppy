@@ -1,12 +1,12 @@
 """Configuration for the Antigravity OAuth plugin."""
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from code_puppy import config
 
 # Antigravity OAuth configuration
-ANTIGRAVITY_OAUTH_CONFIG: Dict[str, Any] = {
+ANTIGRAVITY_OAUTH_CONFIG: dict[str, Any] = {
     # OAuth endpoints
     "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
     "token_url": "https://oauth2.googleapis.com/token",

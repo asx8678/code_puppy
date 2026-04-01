@@ -5,13 +5,12 @@ Provides OAuth authentication for Claude Code models and registers
 the 'claude_code' model type handler.
 """
 
-from __future__ import annotations
 
 import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict
 from urllib.parse import parse_qs, urlparse
 
 from code_puppy.callbacks import register_callback
@@ -32,17 +31,16 @@ from .utils import (
     load_stored_tokens,
     prepare_oauth_context,
     remove_claude_code_models,
-    save_tokens,
-)
+    save_tokens)
 
 logger = logging.getLogger(__name__)
 
 
 class _OAuthResult:
     def __init__(self) -> None:
-        self.code: Optional[str] = None
-        self.state: Optional[str] = None
-        self.error: Optional[str] = None
+        self.code: str | None = None
+        self.state: str | None = None
+        self.error: str | None = None
 
 
 class _CallbackHandler(BaseHTTPRequestHandler):
@@ -52,7 +50,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         logger.info("Callback received: path=%s", self.path)
         parsed = urlparse(self.path)
-        params: Dict[str, List[str]] = parse_qs(parsed.query)
+        params: dict[str, list[str]] = parse_qs(parsed.query)
 
         code = params.get("code", [None])[0]
         state = params.get("state", [None])[0]
@@ -62,15 +60,13 @@ class _CallbackHandler(BaseHTTPRequestHandler):
             self.result.state = state
             success_html = oauth_success_html(
                 "Claude Code",
-                "You're totally synced with Claude Code now!",
-            )
+                "You're totally synced with Claude Code now!")
             self._write_response(200, success_html)
         else:
             self.result.error = "Missing code or state"
             failure_html = oauth_failure_html(
                 "Claude Code",
-                "Missing code or state parameter 🥺",
-            )
+                "Missing code or state parameter 🥺")
             self._write_response(400, failure_html)
 
         self.received_event.set()
@@ -86,8 +82,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 
 
 def _start_callback_server(
-    context: OAuthContext,
-) -> Optional[Tuple[HTTPServer, _OAuthResult, threading.Event]]:
+    context: OAuthContext) -> tuple[HTTPServer, _OAuthResult, threading.Event | None]:
     port_range = CLAUDE_CODE_OAUTH_CONFIG["callback_port_range"]
 
     for port in range(port_range[0], port_range[1] + 1):
@@ -112,7 +107,7 @@ def _start_callback_server(
     return None
 
 
-def _await_callback(context: OAuthContext) -> Optional[str]:
+def _await_callback(context: OAuthContext) -> str | None:
     timeout = CLAUDE_CODE_OAUTH_CONFIG["callback_timeout"]
 
     started = _start_callback_server(context)
@@ -171,16 +166,14 @@ def _await_callback(context: OAuthContext) -> Optional[str]:
     return result.code
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             "claude-code-auth",
-            "Authenticate with Claude Code via OAuth and import available models",
-        ),
+            "Authenticate with Claude Code via OAuth and import available models"),
         (
             "claude-code-status",
-            "Check Claude Code OAuth authentication status and configured models",
-        ),
+            "Check Claude Code OAuth authentication status and configured models"),
         ("claude-code-logout", "Remove Claude Code OAuth tokens and imported models"),
     ]
 
@@ -225,7 +218,7 @@ def _perform_authentication() -> None:
         )
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[bool]:
+def _handle_custom_command(command: str, name: str) -> bool | None:
     if not name:
         return None
 
@@ -292,8 +285,7 @@ def _create_claude_code_model(model_name: str, model_config: Dict, config: Dict)
 
     from code_puppy.claude_cache_client import (
         ClaudeCacheAsyncClient,
-        patch_anthropic_client_messages,
-    )
+        patch_anthropic_client_messages)
     from code_puppy.config import get_effective_model_settings
     from code_puppy.http_utils import get_cert_bundle_path
     from code_puppy.model_factory import get_custom_config
@@ -356,14 +348,12 @@ def _create_claude_code_model(model_name: str, model_config: Dict, config: Dict)
         headers=headers,
         verify=verify,
         timeout=180,
-        http2=False,
-    )
+        http2=False)
 
     anthropic_client = AsyncAnthropic(
         base_url=url,
         http_client=client,
-        auth_token=api_key,
-    )
+        auth_token=api_key)
     patch_anthropic_client_messages(anthropic_client)
     anthropic_client.api_key = None
     anthropic_client.auth_token = api_key
@@ -371,21 +361,20 @@ def _create_claude_code_model(model_name: str, model_config: Dict, config: Dict)
     return AnthropicModel(model_name=model_config["name"], provider=provider)
 
 
-def _register_model_types() -> List[Dict[str, Any]]:
+def _register_model_types() -> list[dict[str, Any]]:
     """Register the claude_code model type handler."""
     return [{"type": "claude_code", "handler": _create_claude_code_model}]
 
 
 # Global storage for the token refresh heartbeat
 # Using a dict to allow multiple concurrent agent runs (keyed by session_id)
-_active_heartbeats: Dict[str, Any] = {}
+_active_heartbeats: dict[str, Any] = {}
 
 
 async def _on_agent_run_start(
     agent_name: str,
     model_name: str,
-    session_id: Optional[str] = None,
-) -> None:
+    session_id: str | None = None) -> None:
     """Start token refresh heartbeat for Claude Code OAuth models.
 
     This callback is triggered when an agent run starts. If the model is a
@@ -408,8 +397,7 @@ async def _on_agent_run_start(
         logger.debug(
             "Started token refresh heartbeat for session %s (model: %s)",
             key,
-            model_name,
-        )
+            model_name)
     except ImportError:
         logger.debug("Token refresh heartbeat module not available")
     except Exception as exc:
@@ -419,12 +407,11 @@ async def _on_agent_run_start(
 async def _on_agent_run_end(
     agent_name: str,
     model_name: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     success: bool = True,
-    error: Optional[Exception] = None,
-    response_text: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-) -> None:
+    error: Exception | None = None,
+    response_text: str | None = None,
+    metadata: dict[str, Any | None] = None) -> None:
     """Stop token refresh heartbeat when agent run ends.
 
     This callback is triggered when an agent run completes (success or failure).
@@ -440,8 +427,7 @@ async def _on_agent_run_end(
             logger.debug(
                 "Stopped token refresh heartbeat for session %s (refreshed %d times)",
                 key,
-                heartbeat.refresh_count,
-            )
+                heartbeat.refresh_count)
         except Exception as exc:
             logger.debug("Error stopping token refresh heartbeat: %s", exc)
 

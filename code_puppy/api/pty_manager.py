@@ -11,7 +11,7 @@ import signal
 import struct
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +40,14 @@ class PTYSession:
     """Represents an active PTY session."""
 
     session_id: str
-    master_fd: Optional[int] = None  # Unix only
-    slave_fd: Optional[int] = None  # Unix only
-    pid: Optional[int] = None  # Unix only
+    master_fd: int | None = None  # Unix only
+    slave_fd: int | None = None  # Unix only
+    pid: int | None = None  # Unix only
     winpty_process: Any = None  # Windows only
     cols: int = 80
     rows: int = 24
-    on_output: Optional[Callable[[bytes], None]] = None
-    _reader_task: Optional[asyncio.Task] = None  # type: ignore
+    on_output: Callable[[bytes | None, None]] = None
+    _reader_task: asyncio.Task | None = None  # type: ignore
     _running: bool = field(default=False, init=False)
 
     def is_alive(self) -> bool:
@@ -97,9 +97,8 @@ class PTYManager:
         session_id: str,
         cols: int = 80,
         rows: int = 24,
-        on_output: Optional[Callable[[bytes], None]] = None,
-        shell: Optional[str] = None,
-    ) -> PTYSession:
+        on_output: Callable[[bytes | None, None]] = None,
+        shell: str | None = None) -> PTYSession:
         """Create a new PTY session.
 
         Args:
@@ -138,9 +137,8 @@ class PTYManager:
         session_id: str,
         cols: int,
         rows: int,
-        on_output: Optional[Callable[[bytes], None]],
-        shell: Optional[str],
-    ) -> PTYSession:
+        on_output: Callable[[bytes | None, None]],
+        shell: str | None) -> PTYSession:
         """Create a PTY session on Unix systems."""
         shell = shell or os.environ.get("SHELL", "/bin/bash")
 
@@ -165,8 +163,7 @@ class PTYManager:
                 pid=pid,
                 cols=cols,
                 rows=rows,
-                on_output=on_output,
-            )
+                on_output=on_output)
             session._running = True
 
             # Start reader task
@@ -179,9 +176,8 @@ class PTYManager:
         session_id: str,
         cols: int,
         rows: int,
-        on_output: Optional[Callable[[bytes], None]],
-        shell: Optional[str],
-    ) -> PTYSession:
+        on_output: Callable[[bytes | None, None]],
+        shell: str | None) -> PTYSession:
         """Create a PTY session on Windows systems."""
         if not HAS_WINPTY:
             raise RuntimeError(
@@ -194,16 +190,14 @@ class PTYManager:
         # Create winpty process
         winpty_process = winpty.PtyProcess.spawn(
             shell,
-            dimensions=(rows, cols),
-        )
+            dimensions=(rows, cols))
 
         session = PTYSession(
             session_id=session_id,
             winpty_process=winpty_process,
             cols=cols,
             rows=rows,
-            on_output=on_output,
-        )
+            on_output=on_output)
         session._running = True
 
         # Start reader task
@@ -421,7 +415,7 @@ class PTYManager:
                 await self._close_session_internal(session_id)
         logger.info("Closed all PTY sessions")
 
-    def get_session(self, session_id: str) -> Optional[PTYSession]:
+    def get_session(self, session_id: str) -> PTYSession | None:
         """Get a session by ID.
 
         Args:
@@ -442,7 +436,7 @@ class PTYManager:
 
 
 # Global PTY manager instance
-_pty_manager: Optional[PTYManager] = None
+_pty_manager: PTYManager | None = None
 
 
 def get_pty_manager() -> PTYManager:

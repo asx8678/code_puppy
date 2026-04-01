@@ -3,7 +3,6 @@ MCP Help Command - Shows help for all MCP commands.
 """
 
 import logging
-from typing import List, Optional
 
 from rich.text import Text
 
@@ -22,7 +21,7 @@ class HelpCommand(MCPCommandBase):
     Displays comprehensive help information for all available MCP commands.
     """
 
-    def execute(self, args: List[str], group_id: Optional[str] = None) -> None:
+    def execute(self, args: list[str], group_id: str | None = None) -> None:
         """
         Show help for MCP commands.
 

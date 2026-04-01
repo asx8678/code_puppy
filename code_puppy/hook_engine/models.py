@@ -6,7 +6,7 @@ safety and validation.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 
 @dataclass
@@ -30,7 +30,7 @@ class HookConfig:
     timeout: int = 5000
     once: bool = False
     enabled: bool = True
-    id: Optional[str] = None
+    id: str | None = None
 
     def __post_init__(self):
         """Validate hook configuration after initialization."""
@@ -69,8 +69,8 @@ class EventData:
 
     event_type: str
     tool_name: str
-    tool_args: Dict[str, Any] = field(default_factory=dict)
-    context: Dict[str, Any] = field(default_factory=dict)
+    tool_args: dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.event_type:
@@ -101,8 +101,8 @@ class ExecutionResult:
     stderr: str = ""
     exit_code: int = 0
     duration_ms: float = 0.0
-    error: Optional[str] = None
-    hook_id: Optional[str] = None
+    error: str | None = None
+    hook_id: str | None = None
 
     @property
     def success(self) -> bool:
@@ -125,7 +125,7 @@ class HookGroup:
     """A group of hooks that share the same matcher."""
 
     matcher: str
-    hooks: List[HookConfig] = field(default_factory=list)
+    hooks: list[HookConfig] = field(default_factory=list)
 
     def __post_init__(self):
         if not self.matcher:
@@ -136,19 +136,19 @@ class HookGroup:
 class HookRegistry:
     """Registry of all hooks organized by event type."""
 
-    pre_tool_use: List[HookConfig] = field(default_factory=list)
-    post_tool_use: List[HookConfig] = field(default_factory=list)
-    session_start: List[HookConfig] = field(default_factory=list)
-    session_end: List[HookConfig] = field(default_factory=list)
-    pre_compact: List[HookConfig] = field(default_factory=list)
-    user_prompt_submit: List[HookConfig] = field(default_factory=list)
-    notification: List[HookConfig] = field(default_factory=list)
-    stop: List[HookConfig] = field(default_factory=list)
-    subagent_stop: List[HookConfig] = field(default_factory=list)
+    pre_tool_use: list[HookConfig] = field(default_factory=list)
+    post_tool_use: list[HookConfig] = field(default_factory=list)
+    session_start: list[HookConfig] = field(default_factory=list)
+    session_end: list[HookConfig] = field(default_factory=list)
+    pre_compact: list[HookConfig] = field(default_factory=list)
+    user_prompt_submit: list[HookConfig] = field(default_factory=list)
+    notification: list[HookConfig] = field(default_factory=list)
+    stop: list[HookConfig] = field(default_factory=list)
+    subagent_stop: list[HookConfig] = field(default_factory=list)
 
     _executed_once_hooks: set = field(default_factory=set, repr=False)
 
-    def get_hooks_for_event(self, event_type: str) -> List[HookConfig]:
+    def get_hooks_for_event(self, event_type: str) -> list[HookConfig]:
         attr_name = self._normalize_event_type(event_type)
         if not hasattr(self, attr_name):
             return []
@@ -192,7 +192,7 @@ class HookRegistry:
                 return True
         return False
 
-    def count_hooks(self, event_type: Optional[str] = None) -> int:
+    def count_hooks(self, event_type: str | None = None) -> int:
         if event_type is None:
             total = 0
             for attr in [
@@ -220,8 +220,8 @@ class ProcessEventResult:
 
     blocked: bool
     executed_hooks: int
-    results: List[ExecutionResult]
-    blocking_reason: Optional[str] = None
+    results: list[ExecutionResult]
+    blocking_reason: str | None = None
     total_duration_ms: float = 0.0
 
     @property
@@ -229,7 +229,7 @@ class ProcessEventResult:
         return all(result.success for result in self.results)
 
     @property
-    def failed_hooks(self) -> List[ExecutionResult]:
+    def failed_hooks(self) -> list[ExecutionResult]:
         return [result for result in self.results if not result.success]
 
     def get_combined_output(self) -> str:

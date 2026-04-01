@@ -13,7 +13,6 @@ import threading
 import uuid
 from collections import deque
 from contextlib import asynccontextmanager
-from typing import List, Optional
 
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from pydantic_ai.mcp import MCPServerStdio
@@ -33,8 +32,7 @@ class StderrFileCapture:
         self,
         server_name: str,
         emit_to_user: bool = False,  # Disabled by default to reduce console noise
-        message_group: Optional[uuid.UUID] = None,
-    ):
+        message_group: uuid.UUID | None = None):
         self.server_name = server_name
         self.emit_to_user = emit_to_user
         self.message_group = message_group or uuid.uuid4()
@@ -100,8 +98,7 @@ class StderrFileCapture:
                                     if self.emit_to_user:
                                         emit_info(
                                             f"MCP {self.server_name}: {line}",
-                                            message_group=self.message_group,
-                                        )
+                                            message_group=self.message_group)
 
                 except Exception:
                     pass  # File might not exist yet or be deleted
@@ -143,8 +140,7 @@ class StderrFileCapture:
                             if self.emit_to_user:
                                 emit_info(
                                     f"MCP {self.server_name}: {line}",
-                                    message_group=self.message_group,
-                                )
+                                    message_group=self.message_group)
             except Exception:
                 pass
 
@@ -158,7 +154,7 @@ class StderrFileCapture:
             except Exception:
                 pass
 
-    def get_captured_lines(self) -> List[str]:
+    def get_captured_lines(self) -> list[str]:
         """Get all captured lines from this session."""
         return list(self.captured_lines)
 
@@ -175,9 +171,8 @@ class SimpleCapturedMCPServerStdio(MCPServerStdio):
         env=None,
         cwd=None,
         emit_stderr: bool = True,
-        message_group: Optional[uuid.UUID] = None,
-        **kwargs,
-    ):
+        message_group: uuid.UUID | None = None,
+        **kwargs):
         super().__init__(command=command, args=args, env=env, cwd=cwd, **kwargs)
         self.emit_stderr = emit_stderr
         self.message_group = message_group or uuid.uuid4()
@@ -200,13 +195,12 @@ class SimpleCapturedMCPServerStdio(MCPServerStdio):
         try:
             async with stdio_client(server=server, errlog=stderr_file) as (
                 read_stream,
-                write_stream,
-            ):
+                write_stream):
                 yield read_stream, write_stream
         finally:
             self._stderr_capture.stop()
 
-    def get_captured_stderr(self) -> List[str]:
+    def get_captured_stderr(self) -> list[str]:
         """Get captured stderr lines."""
         if self._stderr_capture:
             return self._stderr_capture.get_captured_lines()
@@ -224,7 +218,7 @@ class BlockingMCPServerStdio(SimpleCapturedMCPServerStdio):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._initialized = asyncio.Event()
-        self._init_error: Optional[Exception] = None
+        self._init_error: Exception | None = None
         self._initialization_task = None
 
     async def __aenter__(self):
@@ -264,8 +258,7 @@ class BlockingMCPServerStdio(SimpleCapturedMCPServerStdio):
             emit_info(
                 f"❌ MCP Server '{server_name}' failed to initialize: {error_details}",
                 style="red",
-                message_group=self.message_group,
-            )
+                message_group=self.message_group)
 
             raise
 
@@ -331,7 +324,7 @@ class StartupMonitor:
     and ensures all are ready before proceeding.
     """
 
-    def __init__(self, message_group: Optional[uuid.UUID] = None):
+    def __init__(self, message_group: uuid.UUID | None = None):
         self.servers = {}
         self.startup_times = {}
         self.message_group = message_group or uuid.uuid4()
@@ -364,23 +357,20 @@ class StartupMonitor:
                 emit_info(
                     f"   {name}: Ready in {self.startup_times[name]:.2f}s",
                     style="dim green",
-                    message_group=self.message_group,
-                )
+                    message_group=self.message_group)
             except Exception as e:
                 self.startup_times[name] = time.time() - start
                 results[name] = False
                 emit_info(
                     f"   {name}: Failed after {self.startup_times[name]:.2f}s - {e}",
                     style="dim red",
-                    message_group=self.message_group,
-                )
+                    message_group=self.message_group)
 
         # Wait for all servers in parallel
         emit_info(
             f"⏳ Waiting for {len(self.servers)} MCP servers to initialize...",
             style="cyan",
-            message_group=self.message_group,
-        )
+            message_group=self.message_group)
 
         tasks = [
             asyncio.create_task(wait_server(name, server))
@@ -397,14 +387,12 @@ class StartupMonitor:
             emit_info(
                 f"✅ All {total_count} servers ready!",
                 style="green bold",
-                message_group=self.message_group,
-            )
+                message_group=self.message_group)
         else:
             emit_info(
                 f"⚠️  {ready_count}/{total_count} servers ready",
                 style="yellow",
-                message_group=self.message_group,
-            )
+                message_group=self.message_group)
 
         return results
 
@@ -420,8 +408,7 @@ class StartupMonitor:
 async def start_servers_with_blocking(
     *servers: BlockingMCPServerStdio,
     timeout: float = 30.0,
-    message_group: Optional[uuid.UUID] = None,
-):
+    message_group: uuid.UUID | None = None):
     """
     Start multiple servers and wait for all to be ready.
 

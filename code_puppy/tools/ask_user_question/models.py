@@ -1,6 +1,5 @@
 """Pydantic models for the ask_user_question tool."""
 
-from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING, Annotated, Any
@@ -18,8 +17,7 @@ from .constants import (
     MAX_OTHER_TEXT_LENGTH,
     MAX_QUESTION_LENGTH,
     MAX_QUESTIONS_PER_CALL,
-    MIN_OPTIONS_PER_QUESTION,
-)
+    MIN_OPTIONS_PER_QUESTION)
 
 __all__ = [
     "AskUserQuestionInput",
@@ -94,8 +92,7 @@ class QuestionOption(BaseModel):
         Field(
             min_length=1,
             max_length=MAX_LABEL_LENGTH,
-            description="Short option name (1-5 words)",
-        ),
+            description="Short option name (1-5 words)"),
     ]
     description: Annotated[
         str,
@@ -103,8 +100,7 @@ class QuestionOption(BaseModel):
         Field(
             default="",
             max_length=MAX_DESCRIPTION_LENGTH,
-            description="Explanation of what this option means",
-        ),
+            description="Explanation of what this option means"),
     ]
 
 
@@ -125,8 +121,7 @@ class Question(BaseModel):
         Field(
             min_length=1,
             max_length=MAX_QUESTION_LENGTH,
-            description="The full question text to display",
-        ),
+            description="The full question text to display"),
     ]
     header: Annotated[
         str,
@@ -134,23 +129,20 @@ class Question(BaseModel):
         Field(
             min_length=1,
             max_length=MAX_HEADER_LENGTH,
-            description="Short label for compact display (max 12 chars)",
-        ),
+            description="Short label for compact display (max 12 chars)"),
     ]
     multi_select: Annotated[
         bool,
         Field(
             default=False,
-            description="If true, user can select multiple options",
-        ),
+            description="If true, user can select multiple options"),
     ]
     options: Annotated[
         list[QuestionOption],
         Field(
             min_length=MIN_OPTIONS_PER_QUESTION,
             max_length=MAX_OPTIONS_PER_QUESTION,
-            description="Array of 2-6 selectable options",
-        ),
+            description="Array of 2-6 selectable options"),
     ]
 
     @model_validator(mode="after")
@@ -173,8 +165,7 @@ class AskUserQuestionInput(BaseModel):
         Field(
             min_length=1,
             max_length=MAX_QUESTIONS_PER_CALL,
-            description="Array of 1-10 questions to ask",
-        ),
+            description="Array of 1-10 questions to ask"),
     ]
 
     @model_validator(mode="after")
@@ -202,16 +193,14 @@ class QuestionAnswer(BaseModel):
         list[str],
         Field(
             default_factory=list,
-            description="Labels of selected options",
-        ),
+            description="Labels of selected options"),
     ]
     other_text: Annotated[
         str | None,
         Field(
             default=None,
             max_length=MAX_OTHER_TEXT_LENGTH,
-            description="Custom text if 'Other' was selected",
-        ),
+            description="Custom text if 'Other' was selected"),
     ]
 
     @property
@@ -240,29 +229,25 @@ class AskUserQuestionOutput(BaseModel):
         list[QuestionAnswer],
         Field(
             default_factory=list,
-            description="Answers to all questions",
-        ),
+            description="Answers to all questions"),
     ]
     cancelled: Annotated[
         bool,
         Field(
             default=False,
-            description="True if user cancelled (Esc/Ctrl+C)",
-        ),
+            description="True if user cancelled (Esc/Ctrl+C)"),
     ]
     error: Annotated[
         str | None,
         Field(
             default=None,
-            description="Error message if interaction failed",
-        ),
+            description="Error message if interaction failed"),
     ]
     timed_out: Annotated[
         bool,
         Field(
             default=False,
-            description="True if interaction timed out",
-        ),
+            description="True if interaction timed out"),
     ]
 
     @property
@@ -287,16 +272,14 @@ class AskUserQuestionOutput(BaseModel):
             answers=[],
             cancelled=False,
             timed_out=True,
-            error=f"Interaction timed out after {timeout} seconds of inactivity",
-        )
+            error=f"Interaction timed out after {timeout} seconds of inactivity")
 
     def get_answer(self, header: str) -> QuestionAnswer | None:
         """Get answer by question header (case-insensitive)."""
         header_lower = header.lower()
         return next(
             (a for a in self.answers if a.question_header.lower() == header_lower),
-            None,
-        )
+            None)
 
     def get_selected(self, header: str) -> list[str]:
         """Get selected options for a question by header."""

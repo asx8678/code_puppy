@@ -8,13 +8,11 @@ import os
 import subprocess
 import sys
 from datetime import datetime
-from typing import Tuple
 
 from code_puppy.scheduler.config import (
     SCHEDULER_LOG_DIR,
     ScheduledTask,
-    update_task,
-)
+    update_task)
 
 
 def get_code_puppy_command() -> str:
@@ -28,7 +26,7 @@ def get_code_puppy_command() -> str:
         return "code-puppy"
 
 
-def execute_task(task: ScheduledTask) -> Tuple[bool, int, str]:
+def execute_task(task: ScheduledTask) -> tuple[bool, int, str]:
     """Execute a scheduled task.
 
     Args:
@@ -101,8 +99,7 @@ def execute_task(task: ScheduledTask) -> Tuple[bool, int, str]:
                 stdout=log_f,
                 stderr=subprocess.STDOUT,
                 shell=False,
-                env=os.environ.copy(),
-            )
+                env=os.environ.copy())
 
             # Wait for completion
             exit_code = process.wait()
@@ -135,7 +132,7 @@ def execute_task(task: ScheduledTask) -> Tuple[bool, int, str]:
         return (False, -1, error_msg)
 
 
-def run_task_by_id(task_id: str) -> Tuple[bool, str]:
+def run_task_by_id(task_id: str) -> tuple[bool, str]:
     """Run a task immediately by its ID.
 
     Returns:

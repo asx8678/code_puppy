@@ -1,10 +1,9 @@
 import os
-from typing import List, Tuple
 
 from rich.table import Table
 
 
-def list_directory(path: str = None) -> Tuple[List[str], List[str]]:
+def list_directory(path: str = None) -> tuple[list[str], list[str]]:
     """
     Returns (dirs, files) for the specified path, splitting out directories and files.
     """

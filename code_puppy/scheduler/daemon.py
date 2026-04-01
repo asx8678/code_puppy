@@ -12,20 +12,18 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timedelta
-from typing import Optional
 
 from code_puppy.scheduler.config import (
     SCHEDULER_PID_FILE,
     ScheduledTask,
-    load_tasks,
-)
+    load_tasks)
 from code_puppy.scheduler.executor import execute_task
 
 # Global flag for graceful shutdown
 _shutdown_requested = False
 
 
-def parse_interval(interval_str: str) -> Optional[timedelta]:
+def parse_interval(interval_str: str) -> timedelta | None:
     """Parse interval string like '30m', '1h', '2d' into timedelta."""
     match = re.match(r"^(\d+)([smhd])$", interval_str.lower())
     if not match:
@@ -179,7 +177,7 @@ def start_daemon(foreground: bool = False):
     run_scheduler_loop()
 
 
-def get_daemon_pid() -> Optional[int]:
+def get_daemon_pid() -> int | None:
     """Get the PID of the running daemon, or None if not running."""
     if not os.path.exists(SCHEDULER_PID_FILE):
         return None
@@ -236,15 +234,13 @@ def start_daemon_background() -> bool:
             cmd,
             creationflags=subprocess.CREATE_NO_WINDOW,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+            stderr=subprocess.DEVNULL)
     else:
         subprocess.Popen(
             cmd,
             start_new_session=True,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+            stderr=subprocess.DEVNULL)
 
     time.sleep(1)
     # Re-check to confirm daemon actually started (also catches race where

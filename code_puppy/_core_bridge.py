@@ -5,7 +5,6 @@ the dict format that Rust expects. The Rust module never touches pydantic-ai
 objects directly.
 """
 
-from __future__ import annotations
 
 import json
 from typing import Any
@@ -21,8 +20,7 @@ try:
         serialize_session,
         serialize_session_incremental,
         split_for_summarization,
-        truncation_indices,
-    )
+        truncation_indices)
 
     RUST_AVAILABLE = True
 except ImportError:

@@ -11,7 +11,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP
 
@@ -34,11 +34,11 @@ class ServerInfo:
     enabled: bool
     state: ServerState
     quarantined: bool
-    uptime_seconds: Optional[float]
-    error_message: Optional[str]
-    health: Optional[Dict[str, Any]] = None
-    start_time: Optional[datetime] = None
-    latency_ms: Optional[float] = None
+    uptime_seconds: float | None
+    error_message: str | None
+    health: dict[str, Any | None] = None
+    start_time: datetime | None = None
+    latency_ms: float | None = None
 
 
 class MCPManager:
@@ -76,7 +76,7 @@ class MCPManager:
         self.status_tracker = ServerStatusTracker()
 
         # Active managed servers (server_id -> ManagedMCPServer)
-        self._managed_servers: Dict[str, ManagedMCPServer] = {}
+        self._managed_servers: dict[str, ManagedMCPServer] = {}
 
         # Pending background tasks (server_id -> Task)
         self._pending_start_tasks: dict = {}
@@ -120,8 +120,7 @@ class MCPManager:
                         name=name,
                         type=conf.get("type", "sse"),
                         enabled=conf.get("enabled", True),
-                        config=conf,
-                    )
+                        config=conf)
 
                     # Check if server already exists by name
                     existing = self.registry.get_by_name(name)
@@ -178,8 +177,7 @@ class MCPManager:
                 self.status_tracker.record_event(
                     config.id,
                     "initialization_error",
-                    {"error": str(e), "message": f"Failed to initialize: {e}"},
-                )
+                    {"error": str(e), "message": f"Failed to initialize: {e}"})
 
         logger.info(f"Initialized {initialized_count} servers from registry")
 
@@ -217,8 +215,7 @@ class MCPManager:
                     "name": config.name,
                     "type": config.type,
                     "message": "Server registered successfully",
-                },
-            )
+                })
 
             logger.info(
                 f"Successfully registered server: {config.name} (ID: {server_id})"
@@ -232,8 +229,7 @@ class MCPManager:
             raise
 
     def get_servers_for_agent(
-        self,
-    ) -> List[Union[MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP]]:
+        self) -> list[MCPServerSSE | MCPServerStdio, MCPServerStreamableHTTP]:
         """
         Get pydantic-ai compatible servers for agent use.
 
@@ -276,14 +272,13 @@ class MCPManager:
                     {
                         "error": str(e),
                         "message": f"Error accessing server for agent: {e}",
-                    },
-                )
+                    })
                 continue
 
         logger.debug(f"Returning {len(servers)} servers for agent use")
         return servers
 
-    def get_server(self, server_id: str) -> Optional[ManagedMCPServer]:
+    def get_server(self, server_id: str) -> ManagedMCPServer | None:
         """
         Get managed server by ID.
 
@@ -295,7 +290,7 @@ class MCPManager:
         """
         return self._managed_servers.get(server_id)
 
-    def get_server_by_name(self, name: str) -> Optional[ServerConfig]:
+    def get_server_by_name(self, name: str) -> ServerConfig | None:
         """
         Get server configuration by name.
 
@@ -332,7 +327,7 @@ class MCPManager:
 
         return True
 
-    def list_servers(self) -> List[ServerInfo]:
+    def list_servers(self) -> list[ServerInfo]:
         """
         Get information about all registered servers.
 
@@ -370,8 +365,7 @@ class MCPManager:
                     error_message=status.get("error_message"),
                     health=health_info,
                     start_time=summary.get("start_time"),
-                    latency_ms=latency_ms,
-                )
+                    latency_ms=latency_ms)
 
                 server_infos.append(server_info)
 
@@ -391,8 +385,7 @@ class MCPManager:
                         error_message=str(e),
                         health={"is_healthy": False, "error": str(e)},
                         start_time=None,
-                        latency_ms=None,
-                    )
+                        latency_ms=None)
                     server_infos.append(server_info)
 
         return server_infos
@@ -438,8 +431,7 @@ class MCPManager:
                     self.status_tracker.record_event(
                         server_id,
                         "started",
-                        {"message": "Server started and process running"},
-                    )
+                        {"message": "Server started and process running"})
                 else:
                     logger.warning(
                         f"Could not start process for server {server_id}, but it's enabled"
@@ -447,16 +439,14 @@ class MCPManager:
                     self.status_tracker.record_event(
                         server_id,
                         "enabled",
-                        {"message": "Server enabled (process will start when used)"},
-                    )
+                        {"message": "Server enabled (process will start when used)"})
             except Exception as e:
                 # Process start failed, but server is still enabled
                 logger.warning(f"Could not start process for server {server_id}: {e}")
                 self.status_tracker.record_event(
                     server_id,
                     "enabled",
-                    {"message": "Server enabled (process will start when used)"},
-                )
+                    {"message": "Server enabled (process will start when used)"})
 
             return True
 
@@ -466,8 +456,7 @@ class MCPManager:
             self.status_tracker.record_event(
                 server_id,
                 "start_error",
-                {"error": str(e), "message": f"Error starting server: {e}"},
-            )
+                {"error": str(e), "message": f"Error starting server: {e}"})
             return False
 
     def start_server_sync(self, server_id: str) -> bool:
@@ -571,8 +560,7 @@ class MCPManager:
                     self.status_tracker.record_event(
                         server_id,
                         "stopped",
-                        {"message": "Server stopped and process terminated"},
-                    )
+                        {"message": "Server stopped and process terminated"})
                 else:
                     logger.info(f"Server {server_id} disabled (no process was running)")
                     self.status_tracker.record_event(
@@ -592,8 +580,7 @@ class MCPManager:
             self.status_tracker.record_event(
                 server_id,
                 "stop_error",
-                {"error": str(e), "message": f"Error stopping server: {e}"},
-            )
+                {"error": str(e), "message": f"Error stopping server: {e}"})
             return False
 
     def stop_server_sync(self, server_id: str) -> bool:
@@ -698,8 +685,7 @@ class MCPManager:
             self.status_tracker.record_event(
                 server_id,
                 "reload_error",
-                {"error": str(e), "message": f"Error reloading server: {e}"},
-            )
+                {"error": str(e), "message": f"Error reloading server: {e}"})
             return False
 
     def remove_server(self, server_id: str) -> bool:
@@ -736,7 +722,7 @@ class MCPManager:
             logger.warning(f"Attempted to remove non-existent server: {server_id}")
             return False
 
-    def get_server_status(self, server_id: str) -> Dict[str, Any]:
+    def get_server_status(self, server_id: str) -> dict[str, Any]:
         """
         Get comprehensive status for a server.
 
@@ -789,7 +775,7 @@ class MCPManager:
 
 
 # Singleton instance
-_manager_instance: Optional[MCPManager] = None
+_manager_instance: MCPManager | None = None
 
 
 def get_mcp_manager() -> MCPManager:

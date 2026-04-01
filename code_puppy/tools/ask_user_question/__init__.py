@@ -11,8 +11,7 @@ from .models import (
     AskUserQuestionOutput,
     Question,
     QuestionAnswer,
-    QuestionOption,
-)
+    QuestionOption)
 from .registration import register_ask_user_question
 
 __all__ = [

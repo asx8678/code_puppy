@@ -1,6 +1,5 @@
 """Utility helpers for the Claude Code OAuth plugin."""
 
-from __future__ import annotations
 
 import base64
 import hashlib
@@ -10,7 +9,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Union
 from urllib.parse import urlencode
 
 import requests
@@ -18,8 +17,7 @@ import requests
 from .config import (
     CLAUDE_CODE_OAUTH_CONFIG,
     get_claude_models_path,
-    get_token_storage_path,
-)
+    get_token_storage_path)
 
 # Proactive refresh buffer default (seconds). Actual buffer is dynamic
 # based on expires_in to avoid overly aggressive refreshes.
@@ -37,10 +35,10 @@ class OAuthContext:
     code_verifier: str
     code_challenge: str
     created_at: float
-    redirect_uri: Optional[str] = None
+    redirect_uri: str | None = None
 
 
-_oauth_context: Optional[OAuthContext] = None
+_oauth_context: OAuthContext | None = None
 
 
 def _urlsafe_b64encode(data: bytes) -> str:
@@ -66,12 +64,11 @@ def prepare_oauth_context() -> OAuthContext:
         state=state,
         code_verifier=code_verifier,
         code_challenge=code_challenge,
-        created_at=time.time(),
-    )
+        created_at=time.time())
     return _oauth_context
 
 
-def get_oauth_context() -> Optional[OAuthContext]:
+def get_oauth_context() -> OAuthContext | None:
     return _oauth_context
 
 
@@ -110,7 +107,7 @@ def build_authorization_url(context: OAuthContext) -> str:
     return f"{CLAUDE_CODE_OAUTH_CONFIG['auth_url']}?{urlencode(params)}"
 
 
-def parse_authorization_code(raw_input: str) -> Tuple[str, Optional[str]]:
+def parse_authorization_code(raw_input: str) -> tuple[str, str | None]:
     value = raw_input.strip()
     if not value:
         raise ValueError("Authorization code cannot be empty")
@@ -126,7 +123,7 @@ def parse_authorization_code(raw_input: str) -> Tuple[str, Optional[str]]:
     return value, None
 
 
-def load_stored_tokens() -> Optional[Dict[str, Any]]:
+def load_stored_tokens() -> dict[str, Any | None]:
     try:
         token_path = get_token_storage_path()
         if token_path.exists():
@@ -137,7 +134,7 @@ def load_stored_tokens() -> Optional[Dict[str, Any]]:
     return None
 
 
-def _calculate_expires_at(expires_in: Optional[float]) -> Optional[float]:
+def _calculate_expires_at(expires_in: float | None) -> float | None:
     if expires_in is None:
         return None
     try:
@@ -146,7 +143,7 @@ def _calculate_expires_at(expires_in: Optional[float]) -> Optional[float]:
         return None
 
 
-def _calculate_refresh_buffer(expires_in: Optional[float]) -> float:
+def _calculate_refresh_buffer(expires_in: float | None) -> float:
     default_buffer = float(TOKEN_REFRESH_BUFFER_SECONDS)
     if expires_in is None:
         return default_buffer
@@ -157,7 +154,7 @@ def _calculate_refresh_buffer(expires_in: Optional[float]) -> float:
     return min(default_buffer, max(MIN_REFRESH_BUFFER_SECONDS, expires_value * 0.1))
 
 
-def _get_expires_at_value(tokens: Dict[str, Any]) -> Optional[float]:
+def _get_expires_at_value(tokens: dict[str, Any]) -> float | None:
     expires_at = tokens.get("expires_at")
     if expires_at is None:
         return None
@@ -167,14 +164,14 @@ def _get_expires_at_value(tokens: Dict[str, Any]) -> Optional[float]:
         return None
 
 
-def _is_token_actually_expired(tokens: Dict[str, Any]) -> bool:
+def _is_token_actually_expired(tokens: dict[str, Any]) -> bool:
     expires_at_value = _get_expires_at_value(tokens)
     if expires_at_value is None:
         return False
     return time.time() >= expires_at_value
 
 
-def is_token_expired(tokens: Dict[str, Any]) -> bool:
+def is_token_expired(tokens: dict[str, Any]) -> bool:
     expires_at_value = _get_expires_at_value(tokens)
     if expires_at_value is None:
         return False
@@ -205,7 +202,7 @@ def update_claude_code_model_tokens(access_token: str) -> bool:
     return False
 
 
-def refresh_access_token(force: bool = False) -> Optional[str]:
+def refresh_access_token(force: bool = False) -> str | None:
     tokens = load_stored_tokens()
     if not tokens:
         return None
@@ -235,16 +232,14 @@ def refresh_access_token(force: bool = False) -> Optional[str]:
             CLAUDE_CODE_OAUTH_CONFIG["token_url"],
             json=payload,
             headers=headers,
-            timeout=30,
-        )
+            timeout=30)
         if response.status_code == 200:
             content_type = response.headers.get("content-type", "")
             if not content_type.startswith("application/json"):
                 logger.error(
                     "Token refresh returned non-JSON response (Content-Type: %s): %s",
                     content_type,
-                    response.text[:500],
-                )
+                    response.text[:500])
                 return None
             try:
                 new_tokens = response.json()
@@ -271,7 +266,7 @@ def refresh_access_token(force: bool = False) -> Optional[str]:
     return None
 
 
-def get_valid_access_token() -> Optional[str]:
+def get_valid_access_token() -> str | None:
     tokens = load_stored_tokens()
     if not tokens:
         logger.debug("No stored Claude Code OAuth tokens found")
@@ -298,7 +293,7 @@ def get_valid_access_token() -> Optional[str]:
     return access_token
 
 
-def save_tokens(tokens: Dict[str, Any]) -> bool:
+def save_tokens(tokens: dict[str, Any]) -> bool:
     try:
         token_path = get_token_storage_path()
         with open(token_path, "w", encoding="utf-8") as handle:
@@ -310,7 +305,7 @@ def save_tokens(tokens: Dict[str, Any]) -> bool:
         return False
 
 
-def load_claude_models() -> Dict[str, Any]:
+def load_claude_models() -> dict[str, Any]:
     try:
         models_path = get_claude_models_path()
         if models_path.exists():
@@ -321,7 +316,7 @@ def load_claude_models() -> Dict[str, Any]:
     return {}
 
 
-def load_claude_models_filtered() -> Dict[str, Any]:
+def load_claude_models_filtered() -> dict[str, Any]:
     """Load Claude models and filter to only the latest versions.
 
     This loads the stored models and applies the same filtering logic
@@ -359,8 +354,7 @@ def load_claude_models_filtered() -> Dict[str, Any]:
         logger.info(
             "Loaded %d models, filtered to %d latest models",
             len(all_models),
-            len(filtered_models),
-        )
+            len(filtered_models))
         return filtered_models
 
     except Exception as exc:  # pragma: no cover - defensive logging
@@ -368,7 +362,7 @@ def load_claude_models_filtered() -> Dict[str, Any]:
     return {}
 
 
-def save_claude_models(models: Dict[str, Any]) -> bool:
+def save_claude_models(models: dict[str, Any]) -> bool:
     try:
         models_path = get_claude_models_path()
         with open(models_path, "w", encoding="utf-8") as handle:
@@ -381,7 +375,7 @@ def save_claude_models(models: Dict[str, Any]) -> bool:
 
 def exchange_code_for_tokens(
     auth_code: str, context: OAuthContext
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any | None]:
     if not context.redirect_uri:
         raise RuntimeError("Redirect URI missing from OAuth context")
 
@@ -408,8 +402,7 @@ def exchange_code_for_tokens(
             CLAUDE_CODE_OAUTH_CONFIG["token_url"],
             json=payload,
             headers=headers,
-            timeout=30,
-        )
+            timeout=30)
         logger.info("Token exchange response: %s", response.status_code)
         logger.debug("Response body: %s", response.text)
         if response.status_code == 200:
@@ -418,8 +411,7 @@ def exchange_code_for_tokens(
                 logger.error(
                     "Token exchange returned non-JSON response (Content-Type: %s): %s",
                     content_type,
-                    response.text[:500],
-                )
+                    response.text[:500])
                 return None
             try:
                 token_data = response.json()
@@ -433,16 +425,15 @@ def exchange_code_for_tokens(
         logger.error(
             "Token exchange failed: %s - %s",
             response.status_code,
-            response.text,
-        )
+            response.text)
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Token exchange error: %s", exc)
     return None
 
 
 def filter_latest_claude_models(
-    models: List[str], max_per_family: Union[int, Dict[str, int]] = 2
-) -> List[str]:
+    models: list[str], max_per_family: Union[int, dict[str, int]] = 2
+) -> list[str]:
     """Filter models to keep the top N latest haiku, sonnet, and opus.
 
     Parses model names in the format claude-{family}-{major}-{minor}-{date}
@@ -457,7 +448,7 @@ def filter_latest_claude_models(
     """
     # Collect all parsed models per family
     # family -> list of (model_name, major, minor, date)
-    family_models: Dict[str, List[Tuple[str, int, int, int]]] = {}
+    family_models: dict[str, list[tuple[str, int, int, int]]] = {}
 
     for model_name in models:
         if model_name == "claude-opus-4-6":
@@ -486,7 +477,7 @@ def filter_latest_claude_models(
         family_models.setdefault(family, []).append((model_name, major, minor, date))
 
     # Sort each family descending and keep the top N
-    filtered: List[str] = []
+    filtered: list[str] = []
     for family, family_entries in family_models.items():
         if isinstance(max_per_family, dict):
             limit = max_per_family.get(family, max_per_family.get("default", 2))
@@ -501,12 +492,11 @@ def filter_latest_claude_models(
         len(models),
         len(filtered),
         max_per_family,
-        filtered,
-    )
+        filtered)
     return filtered
 
 
-def fetch_claude_code_models(access_token: str) -> Optional[List[str]]:
+def fetch_claude_code_models(access_token: str) -> list[str | None]:
     try:
         api_url = f"{CLAUDE_CODE_OAUTH_CONFIG['api_base_url']}/v1/models"
         headers = {
@@ -524,8 +514,7 @@ def fetch_claude_code_models(access_token: str) -> Optional[List[str]]:
                 logger.error(
                     "Models fetch returned non-JSON response (Content-Type: %s): %s",
                     content_type,
-                    response.text[:500],
-                )
+                    response.text[:500])
                 return None
             try:
                 data = response.json()
@@ -533,7 +522,7 @@ def fetch_claude_code_models(access_token: str) -> Optional[List[str]]:
                 logger.error("Failed to parse models response as JSON: %s", e)
                 return None
             if isinstance(data.get("data"), list):
-                models: List[str] = []
+                models: list[str] = []
                 for model in data["data"]:
                     name = model.get("id") or model.get("name")
                     if name:
@@ -543,8 +532,7 @@ def fetch_claude_code_models(access_token: str) -> Optional[List[str]]:
             logger.error(
                 "Failed to fetch models: %s - %s",
                 response.status_code,
-                response.text,
-            )
+                response.text)
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Error fetching Claude Code models: %s", exc)
     return None
@@ -582,7 +570,7 @@ def _build_model_entry(model_name: str, access_token: str, context_length: int) 
     }
 
 
-def add_models_to_extra_config(models: List[str]) -> bool:
+def add_models_to_extra_config(models: list[str]) -> bool:
     try:
         # Filter to only latest haiku, sonnet, and opus models
         filtered_models = filter_latest_claude_models(

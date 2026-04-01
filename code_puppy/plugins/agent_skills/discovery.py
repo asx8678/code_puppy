@@ -3,7 +3,6 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
 
 from code_puppy.plugins.agent_skills.config import get_skill_directories
 
@@ -20,10 +19,10 @@ class SkillInfo:
 
 
 # Global cache for discovered skills
-_skill_cache: Optional[List[SkillInfo]] = None
+_skill_cache: list[SkillInfo | None] = None
 
 
-def get_default_skill_directories() -> List[Path]:
+def get_default_skill_directories() -> list[Path]:
     """Return default directories to scan for skills.
 
     Returns:
@@ -54,7 +53,7 @@ def is_valid_skill_directory(path: Path) -> bool:
     return skill_md_path.is_file()
 
 
-def discover_skills(directories: Optional[List[Path]] = None) -> List[SkillInfo]:
+def discover_skills(directories: list[Path | None] = None) -> list[SkillInfo]:
     """Scan directories for valid skills.
 
     Args:
@@ -78,7 +77,7 @@ def discover_skills(directories: Optional[List[Path]] = None) -> List[SkillInfo]
             if d.resolve() not in seen:
                 directories.append(d)
 
-    discovered_skills: List[SkillInfo] = []
+    discovered_skills: list[SkillInfo] = []
 
     for directory in directories:
         if not directory.exists():
@@ -122,7 +121,7 @@ def discover_skills(directories: Optional[List[Path]] = None) -> List[SkillInfo]
     return discovered_skills
 
 
-def refresh_skill_cache() -> List[SkillInfo]:
+def refresh_skill_cache() -> list[SkillInfo]:
     """Force re-discovery of all skills.
 
     This clears the cache and performs a fresh scan of all default

@@ -2,7 +2,6 @@
 
 import json
 import os
-from typing import Dict, List, Optional
 
 from code_puppy.config import get_user_agents_directory
 from code_puppy.model_factory import ModelFactory
@@ -520,7 +519,7 @@ This is crucial for ensuring agents can properly use the tools they're given acc
 Your goal is to take users from idea to working agent in one smooth conversation!
 """
 
-    def get_available_tools(self) -> List[str]:
+    def get_available_tools(self) -> list[str]:
         """Get all tools needed for agent creation."""
         from code_puppy.config import get_universal_constructor_enabled
 
@@ -542,7 +541,7 @@ Your goal is to take users from idea to working agent in one smooth conversation
 
         return tools
 
-    def validate_agent_json(self, agent_config: Dict) -> List[str]:
+    def validate_agent_json(self, agent_config: Dict) -> list[str]:
         """Validate a JSON agent configuration.
 
         Args:
@@ -633,6 +632,6 @@ Your goal is to take users from idea to working agent in one smooth conversation
         except Exception as e:
             return False, f"Failed to create agent file: {e}"
 
-    def get_user_prompt(self) -> Optional[str]:
+    def get_user_prompt(self) -> str | None:
         """Get the initial user prompt."""
         return "Hi! I'm the Agent Creator 🏗️ Let's build an awesome agent together!"

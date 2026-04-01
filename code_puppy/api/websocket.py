@@ -28,8 +28,7 @@ def setup_websocket(app: FastAPI) -> None:
         from code_puppy.plugins.frontend_emitter.emitter import (
             get_recent_events,
             subscribe,
-            unsubscribe,
-        )
+            unsubscribe)
 
         event_queue = subscribe()
 
@@ -101,8 +100,7 @@ def setup_websocket(app: FastAPI) -> None:
             # Create PTY session
             session = await manager.create_session(
                 session_id=session_id,
-                on_output=on_output,
-            )
+                on_output=on_output)
 
             # Send session info
             await websocket.send_json({"type": "session", "id": session_id})

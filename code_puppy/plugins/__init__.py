@@ -111,8 +111,7 @@ def _load_user_plugins(user_plugins_dir: Path) -> list[str]:
                 except Exception as e:
                     logger.error(
                         f"Unexpected error loading user plugin {plugin_name}: {e}",
-                        exc_info=True,
-                    )
+                        exc_info=True)
             else:
                 # Check if there's an __init__.py - might be a simple plugin
                 init_file = item / "__init__.py"
@@ -133,8 +132,7 @@ def _load_user_plugins(user_plugins_dir: Path) -> list[str]:
                     except Exception as e:
                         logger.error(
                             f"Unexpected error loading user plugin {plugin_name}: {e}",
-                            exc_info=True,
-                        )
+                            exc_info=True)
 
     return loaded
 

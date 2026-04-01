@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Union
 
 import httpx
 from pydantic_ai import RunContext
@@ -19,8 +19,7 @@ from pydantic_ai.mcp import (
     MCPServerSSE,
     MCPServerStdio,
     MCPServerStreamableHTTP,
-    ToolResult,
-)
+    ToolResult)
 
 from code_puppy.http_utils import create_async_client
 from code_puppy.mcp_.blocking_startup import BlockingMCPServerStdio
@@ -77,8 +76,7 @@ async def process_tool_call(
     ctx: RunContext[Any],
     call_tool: CallToolFunc,
     name: str,
-    tool_args: dict[str, Any],
-) -> ToolResult:
+    tool_args: dict[str, Any]) -> ToolResult:
     """A tool call processor that passes along the deps."""
     from rich.console import Console
 
@@ -118,16 +116,14 @@ class ManagedMCPServer:
             server_config: Server configuration containing type, connection details, etc.
         """
         self.config = server_config
-        self._pydantic_server: Optional[
-            Union[MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP]
-        ] = None
+        self._pydantic_server: MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP | None = None
         self._state = ServerState.STOPPED
         # Always start disabled - servers must be explicitly started with /mcp start
         self._enabled = False
-        self._quarantine_until: Optional[datetime] = None
-        self._start_time: Optional[datetime] = None
-        self._stop_time: Optional[datetime] = None
-        self._error_message: Optional[str] = None
+        self._quarantine_until: datetime | None = None
+        self._start_time: datetime | None = None
+        self._stop_time: datetime | None = None
+        self._error_message: str | None = None
 
         # Initialize the pydantic server
         try:
@@ -140,7 +136,7 @@ class ManagedMCPServer:
 
     def get_pydantic_server(
         self,
-    ) -> Union[MCPServerSSE, MCPServerStdio, MCPServerStreamableHTTP]:
+    ) -> MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP:
         """
         Get the actual pydantic-ai server instance.
 
@@ -232,8 +228,7 @@ class ManagedMCPServer:
                     process_tool_call=process_tool_call,
                     tool_prefix=self.config.name,
                     emit_stderr=False,  # Logs go to file, not console (use /mcp logs to view)
-                    message_group=message_group,
-                )
+                    message_group=message_group)
 
             elif server_type == "http":
                 if "url" not in config:
@@ -390,7 +385,7 @@ class ManagedMCPServer:
         if isinstance(self._pydantic_server, BlockingMCPServerStdio):
             await self._pydantic_server.ensure_ready(timeout)
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """
         Return current status information.
 

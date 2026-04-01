@@ -12,7 +12,6 @@ Navigation:
 - Esc/Ctrl+C: Cancel
 """
 
-from __future__ import annotations
 
 import time
 
@@ -23,8 +22,7 @@ from .constants import (
     MAX_LEFT_PANEL_WIDTH,
     MIN_LEFT_PANEL_WIDTH,
     OTHER_OPTION_LABEL,
-    TIMEOUT_WARNING_SECONDS,
-)
+    TIMEOUT_WARNING_SECONDS)
 from .models import Question, QuestionAnswer
 
 
@@ -288,16 +286,14 @@ class QuestionUIState:
                 QuestionAnswer(
                     question_header=question.header,
                     selected_options=selected_labels,
-                    other_text=other_text,
-                )
+                    other_text=other_text)
             )
         return answers
 
 
 async def interactive_question_picker(
     questions: list[Question],
-    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
-) -> tuple[list[QuestionAnswer], bool, bool]:
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> tuple[list[QuestionAnswer], bool, bool]:
     """Show an interactive split-panel TUI for questions.
 
     Args:

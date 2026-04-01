@@ -10,7 +10,6 @@ import sys
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -37,7 +36,7 @@ def _get_session_metadata(base_dir: Path, session_name: str) -> dict:
         return {}
 
 
-def _get_session_entries(base_dir: Path) -> List[Tuple[str, dict]]:
+def _get_session_entries(base_dir: Path) -> list[tuple[str, dict]]:
     """Get all sessions with their metadata, sorted by timestamp."""
     try:
         sessions = list_sessions(base_dir)
@@ -87,7 +86,7 @@ def _extract_last_user_message(history: list) -> str:
     return "[No messages found]"
 
 
-def _extract_message_content(msg) -> Tuple[str, str]:
+def _extract_message_content(msg) -> tuple[str, str]:
     """Extract role and content from a message.
 
     Returns:
@@ -154,11 +153,10 @@ def _extract_message_content(msg) -> Tuple[str, str]:
 
 
 def _render_menu_panel(
-    entries: List[Tuple[str, dict]],
+    entries: list[tuple[str, dict]],
     page: int,
     selected_idx: int,
-    browse_mode: bool = False,
-) -> List:
+    browse_mode: bool = False) -> List:
     """Render the left menu panel with pagination."""
     lines = []
     total_pages = (len(entries) + PAGE_SIZE - 1) // PAGE_SIZE if entries else 1
@@ -232,8 +230,7 @@ def _render_menu_panel(
 def _render_message_browser_panel(
     history: list,
     message_idx: int,
-    session_name: str,
-) -> List:
+    session_name: str) -> List:
     """Render the message browser panel showing a single message.
 
     Args:
@@ -299,8 +296,7 @@ def _render_message_browser_panel(
                 legacy_windows=False,
                 no_color=False,
                 force_terminal=False,
-                width=72,
-            )
+                width=72)
             md = Markdown(content)
             console.print(md)
             rendered = console.file.getvalue()
@@ -326,7 +322,7 @@ def _render_message_browser_panel(
     return lines
 
 
-def _render_preview_panel(base_dir: Path, entry: Optional[Tuple[str, dict]]) -> List:
+def _render_preview_panel(base_dir: Path, entry: tuple[str, dict | None]) -> List:
     """Render the right preview panel with message content using rich markdown."""
     lines = []
 
@@ -376,8 +372,7 @@ def _render_preview_panel(base_dir: Path, entry: Optional[Tuple[str, dict]]) -> 
             legacy_windows=False,
             no_color=False,
             force_terminal=False,
-            width=76,
-        )
+            width=76)
         md = Markdown(last_message)
         console.print(md)
         rendered = console.file.getvalue()
@@ -404,8 +399,7 @@ DEFAULT_RESUME_DISPLAY_COUNT = 50
 
 def display_resumed_history(
     history: list,
-    num_messages: int | None = None,
-) -> None:
+    num_messages: int | None = None) -> None:
     """Display recent message history after resuming a session.
 
     Shows the last N messages from the conversation so users have context
@@ -458,8 +452,7 @@ def display_resumed_history(
         console.print(
             Rule(
                 f"{hidden_count} earlier messages",
-                style="dim",
-            )
+                style="dim")
         )
         console.print()
 
@@ -494,7 +487,7 @@ def display_resumed_history(
     console.print()
 
 
-async def interactive_autosave_picker() -> Optional[str]:
+async def interactive_autosave_picker() -> str | None:
     """Show interactive terminal UI to select an autosave session.
 
     Returns:
@@ -521,7 +514,7 @@ async def interactive_autosave_picker() -> Optional[str]:
 
     total_pages = (len(entries) + PAGE_SIZE - 1) // PAGE_SIZE
 
-    def get_current_entry() -> Optional[Tuple[str, dict]]:
+    def get_current_entry() -> tuple[str, dict | None]:
         if 0 <= selected_idx[0] < len(entries):
             return entries[selected_idx[0]]
         return None
@@ -667,8 +660,7 @@ async def interactive_autosave_picker() -> Optional[str]:
         layout=layout,
         key_bindings=kb,
         full_screen=False,
-        mouse_support=False,
-    )
+        mouse_support=False)
 
     set_awaiting_user_input(True)
 

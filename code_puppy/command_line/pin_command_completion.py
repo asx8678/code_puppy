@@ -108,8 +108,7 @@ def load_model_names():
     """Load model names from the config."""
     try:
         from code_puppy.command_line.model_picker_completion import (
-            load_model_names as load_models,
-        )
+            load_model_names as load_models)
 
         return load_models()
     except Exception:
@@ -161,8 +160,7 @@ class PinCompleter(Completer):
                     agent_name,
                     start_position=-len(command_part),
                     display=agent_name,
-                    display_meta=_get_agent_display_meta(agent_name),
-                )
+                    display_meta=_get_agent_display_meta(agent_name))
 
         # Case 2: Completing first argument (agent name)
         elif len(tokens) == 1:
@@ -183,15 +181,13 @@ class PinCompleter(Completer):
                     "(unpin)",
                     start_position=0,  # Insert at cursor position
                     display="(unpin)",
-                    display_meta="Reset to default",
-                )
+                    display_meta="Reset to default")
                 for model_name in model_names:
                     yield Completion(
                         model_name,
                         start_position=0,  # Insert at cursor position
                         display=model_name,
-                        display_meta=_get_model_display_meta(model_name),
-                    )
+                        display_meta=_get_model_display_meta(model_name))
             else:
                 # Still typing agent name, show agent completions
                 agent_names = load_agent_names()
@@ -203,8 +199,7 @@ class PinCompleter(Completer):
                             agent_name,
                             start_position=start_pos,
                             display=agent_name,
-                            display_meta=_get_agent_display_meta(agent_name),
-                        )
+                            display_meta=_get_agent_display_meta(agent_name))
 
         # Case 3: Completing second argument (model name)
         elif len(tokens) == 2:
@@ -219,16 +214,14 @@ class PinCompleter(Completer):
                     "(unpin)",
                     start_position=0,
                     display="(unpin)",
-                    display_meta="Reset to default",
-                )
+                    display_meta="Reset to default")
 
                 for model_name in model_names:
                     yield Completion(
                         model_name,
                         start_position=0,
                         display=model_name,
-                        display_meta=_get_model_display_meta(model_name),
-                    )
+                        display_meta=_get_model_display_meta(model_name))
             else:
                 # Filter based on what the user has typed
                 start_pos = -(len(partial_model))
@@ -239,8 +232,7 @@ class PinCompleter(Completer):
                         "(unpin)",
                         start_position=start_pos,
                         display="(unpin)",
-                        display_meta="Reset to default",
-                    )
+                        display_meta="Reset to default")
 
                 # Filter models based on what the user has typed (case-insensitive)
                 for model_name in model_names:
@@ -249,8 +241,7 @@ class PinCompleter(Completer):
                             model_name,
                             start_position=start_pos,
                             display=model_name,
-                            display_meta=_get_model_display_meta(model_name),
-                        )
+                            display_meta=_get_model_display_meta(model_name))
 
         # Case 4: Handle special case when user selected (unpin)
         elif len(tokens) >= 2 and tokens[1].lower() == "(unpin)".lower():
@@ -308,8 +299,7 @@ class UnpinCompleter(Completer):
                     agent_name,
                     start_position=-len(command_part),
                     display=agent_name,
-                    display_meta=_get_agent_display_meta(agent_name),
-                )
+                    display_meta=_get_agent_display_meta(agent_name))
         elif len(tokens) == 1:
             # Filter agent names based on partial input
             agent_names = load_agent_names()
@@ -322,8 +312,7 @@ class UnpinCompleter(Completer):
                         agent_name,
                         start_position=start_pos,
                         display=agent_name,
-                        display_meta=_get_agent_display_meta(agent_name),
-                    )
+                        display_meta=_get_agent_display_meta(agent_name))
         else:
             # No completion for additional arguments
             return

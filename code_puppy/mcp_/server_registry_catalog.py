@@ -4,26 +4,26 @@ A curated collection of MCP servers that can be easily searched and installed.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
+from typing import Union
 
 
 @dataclass
 class MCPServerRequirements:
     """Comprehensive requirements for an MCP server installation."""
 
-    environment_vars: List[str] = field(
+    environment_vars: list[str] = field(
         default_factory=list
     )  # ["GITHUB_TOKEN", "API_KEY"]
-    command_line_args: List[Dict[str, Union[str, bool]]] = field(
+    command_line_args: list[dict[str, str | bool]] = field(
         default_factory=list
     )  # [{"name": "port", "prompt": "Port number", "default": "3000", "required": False}]
-    required_tools: List[str] = field(
+    required_tools: list[str] = field(
         default_factory=list
     )  # ["node", "python", "npm", "npx"]
-    package_dependencies: List[str] = field(
+    package_dependencies: list[str] = field(
         default_factory=list
     )  # ["jupyter", "@modelcontextprotocol/server-discord"]
-    system_requirements: List[str] = field(
+    system_requirements: list[str] = field(
         default_factory=list
     )  # ["Docker installed", "Git configured"]
 
@@ -37,13 +37,13 @@ class MCPServerTemplate:
     display_name: str
     description: str
     category: str
-    tags: List[str]
+    tags: list[str]
     type: str  # "stdio", "http", "sse"
     config: Dict
     author: str = "Community"
     verified: bool = False
     popular: bool = False
-    requires: Union[List[str], MCPServerRequirements] = field(
+    requires: Union[list[str], MCPServerRequirements] = field(
         default_factory=list
     )  # Backward compatible
     example_usage: str = ""
@@ -55,7 +55,7 @@ class MCPServerTemplate:
             return MCPServerRequirements(required_tools=self.requires)
         return self.requires
 
-    def get_environment_vars(self) -> List[str]:
+    def get_environment_vars(self) -> list[str]:
         """Get list of required environment variables."""
         requirements = self.get_requirements()
         env_vars = requirements.environment_vars.copy()
@@ -70,23 +70,23 @@ class MCPServerTemplate:
 
         return env_vars
 
-    def get_command_line_args(self) -> List[Dict]:
+    def get_command_line_args(self) -> list[Dict]:
         """Get list of configurable command line arguments."""
         return self.get_requirements().command_line_args
 
-    def get_required_tools(self) -> List[str]:
+    def get_required_tools(self) -> list[str]:
         """Get list of required system tools."""
         return self.get_requirements().required_tools
 
-    def get_package_dependencies(self) -> List[str]:
+    def get_package_dependencies(self) -> list[str]:
         """Get list of package dependencies."""
         return self.get_requirements().package_dependencies
 
-    def get_system_requirements(self) -> List[str]:
+    def get_system_requirements(self) -> list[str]:
         """Get list of system requirements."""
         return self.get_requirements().system_requirements
 
-    def to_server_config(self, custom_name: Optional[str] = None, **cmd_args) -> Dict:
+    def to_server_config(self, custom_name: str | None = None, **cmd_args) -> Dict:
         """Convert template to server configuration with optional overrides.
 
         Replaces placeholders in the config with actual values.
@@ -133,7 +133,7 @@ class MCPServerTemplate:
 
 
 # Pre-configured MCP Server Registry
-MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
+MCP_SERVER_REGISTRY: list[MCPServerTemplate] = [
     MCPServerTemplate(
         id="serena",
         name="serena",
@@ -154,8 +154,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         verified=True,
         popular=True,
         example_usage="Agentic AI for writing programs",
-        requires=["uvx"],
-    ),
+        requires=["uvx"]),
     # ========== File System & Storage ==========
     MCPServerTemplate(
         id="filesystem",
@@ -173,8 +172,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         verified=True,
         popular=True,
         requires=["node", "npm"],
-        example_usage="Access and modify files in /tmp directory",
-    ),
+        example_usage="Access and modify files in /tmp directory"),
     MCPServerTemplate(
         id="filesystem-home",
         name="filesystem-home",
@@ -189,8 +187,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             "timeout": 30,
         },
         verified=True,
-        requires=["node", "npm"],
-    ),
+        requires=["node", "npm"]),
     # Enhanced server with comprehensive requirements
     MCPServerTemplate(
         id="gdrive",
@@ -226,12 +223,10 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             ],
             required_tools=["node", "npx", "npm"],
             package_dependencies=["@modelcontextprotocol/server-gdrive"],
-            system_requirements=["Internet connection for OAuth"],
-        ),
+            system_requirements=["Internet connection for OAuth"]),
         verified=True,
         popular=True,
-        example_usage="List files: 'Show me my Google Drive files'",
-    ),
+        example_usage="List files: 'Show me my Google Drive files'"),
     # Regular server (backward compatible)
     MCPServerTemplate(
         id="filesystem-simple",
@@ -259,9 +254,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
                 }
             ],
             required_tools=["node", "npm", "npx"],
-            package_dependencies=["@modelcontextprotocol/server-gdrive"],
-        ),
-    ),
+            package_dependencies=["@modelcontextprotocol/server-gdrive"])),
     # ========== Databases ==========
     MCPServerTemplate(
         id="postgres",
@@ -294,10 +287,8 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             ],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-postgres"],
-            system_requirements=["PostgreSQL server running"],
-        ),
-        example_usage="postgresql://user:password@localhost:5432/dbname",
-    ),
+            system_requirements=["PostgreSQL server running"]),
+        example_usage="postgresql://user:password@localhost:5432/dbname"),
     MCPServerTemplate(
         id="sqlite",
         name="sqlite",
@@ -323,9 +314,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
                 }
             ],
             required_tools=["node", "npm", "npx"],
-            package_dependencies=["@modelcontextprotocol/server-sqlite"],
-        ),
-    ),
+            package_dependencies=["@modelcontextprotocol/server-sqlite"])),
     MCPServerTemplate(
         id="mysql",
         name="mysql",
@@ -356,9 +345,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             ],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-mysql"],
-            system_requirements=["MySQL server running"],
-        ),
-    ),
+            system_requirements=["MySQL server running"])),
     MCPServerTemplate(
         id="mongodb",
         name="mongodb",
@@ -389,9 +376,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             ],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-mongodb"],
-            system_requirements=["MongoDB server running"],
-        ),
-    ),
+            system_requirements=["MongoDB server running"])),
     # ========== Development Tools ==========
     MCPServerTemplate(
         id="git",
@@ -411,9 +396,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         requires=MCPServerRequirements(
             required_tools=["node", "npm", "npx", "git"],
             package_dependencies=["@modelcontextprotocol/server-git"],
-            system_requirements=["Git repository initialized"],
-        ),
-    ),
+            system_requirements=["Git repository initialized"])),
     MCPServerTemplate(
         id="github",
         name="github",
@@ -434,9 +417,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             environment_vars=["GITHUB_TOKEN"],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-github"],
-            system_requirements=["GitHub account with personal access token"],
-        ),
-    ),
+            system_requirements=["GitHub account with personal access token"])),
     MCPServerTemplate(
         id="gitlab",
         name="gitlab",
@@ -456,9 +437,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             environment_vars=["GITLAB_TOKEN"],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-gitlab"],
-            system_requirements=["GitLab account with personal access token"],
-        ),
-    ),
+            system_requirements=["GitLab account with personal access token"])),
     # ========== Web & Browser ==========
     MCPServerTemplate(
         id="puppeteer",
@@ -486,9 +465,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             ],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-puppeteer"],
-            system_requirements=["Chrome/Chromium browser"],
-        ),
-    ),
+            system_requirements=["Chrome/Chromium browser"])),
     MCPServerTemplate(
         id="playwright",
         name="playwright",
@@ -514,9 +491,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             ],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-playwright"],
-            system_requirements=["Playwright browsers (will be installed)"],
-        ),
-    ),
+            system_requirements=["Playwright browsers (will be installed)"])),
     MCPServerTemplate(
         id="fetch",
         name="fetch",
@@ -533,9 +508,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         verified=True,
         requires=MCPServerRequirements(
             required_tools=["node", "npm", "npx"],
-            package_dependencies=["@modelcontextprotocol/server-fetch"],
-        ),
-    ),
+            package_dependencies=["@modelcontextprotocol/server-fetch"])),
     # ========== Communication ==========
     MCPServerTemplate(
         id="slack",
@@ -557,9 +530,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             environment_vars=["SLACK_TOKEN"],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-slack"],
-            system_requirements=["Slack app with bot token"],
-        ),
-    ),
+            system_requirements=["Slack app with bot token"])),
     MCPServerTemplate(
         id="discord",
         name="discord",
@@ -579,9 +550,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             environment_vars=["DISCORD_TOKEN"],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-discord"],
-            system_requirements=["Discord bot token"],
-        ),
-    ),
+            system_requirements=["Discord bot token"])),
     MCPServerTemplate(
         id="email",
         name="email",
@@ -599,9 +568,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         requires=MCPServerRequirements(
             environment_vars=["EMAIL_HOST", "EMAIL_PORT", "EMAIL_USER", "EMAIL_PASS"],
             required_tools=["node", "npm", "npx"],
-            package_dependencies=["@modelcontextprotocol/server-email"],
-        ),
-    ),
+            package_dependencies=["@modelcontextprotocol/server-email"])),
     # ========== AI & Machine Learning ==========
     MCPServerTemplate(
         id="openai",
@@ -622,9 +589,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         requires=MCPServerRequirements(
             environment_vars=["OPENAI_API_KEY"],
             required_tools=["node", "npm", "npx"],
-            package_dependencies=["@modelcontextprotocol/server-openai"],
-        ),
-    ),
+            package_dependencies=["@modelcontextprotocol/server-openai"])),
     MCPServerTemplate(
         id="anthropic",
         name="anthropic",
@@ -643,9 +608,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         requires=MCPServerRequirements(
             environment_vars=["ANTHROPIC_API_KEY"],
             required_tools=["node", "npm", "npx"],
-            package_dependencies=["@modelcontextprotocol/server-anthropic"],
-        ),
-    ),
+            package_dependencies=["@modelcontextprotocol/server-anthropic"])),
     # ========== Data Processing ==========
     MCPServerTemplate(
         id="pandas",
@@ -664,9 +627,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         popular=True,
         requires=MCPServerRequirements(
             required_tools=["python", "pip"],
-            package_dependencies=["pandas", "mcp-server-pandas"],
-        ),
-    ),
+            package_dependencies=["pandas", "mcp-server-pandas"])),
     MCPServerTemplate(
         id="jupyter",
         name="jupyter",
@@ -683,9 +644,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         verified=True,
         requires=MCPServerRequirements(
             required_tools=["python", "pip", "jupyter"],
-            package_dependencies=["jupyter", "mcp-server-jupyter"],
-        ),
-    ),
+            package_dependencies=["jupyter", "mcp-server-jupyter"])),
     # ========== Cloud Services ==========
     MCPServerTemplate(
         id="aws-s3",
@@ -718,9 +677,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             ],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-aws-s3"],
-            system_requirements=["AWS account with S3 access"],
-        ),
-    ),
+            system_requirements=["AWS account with S3 access"])),
     MCPServerTemplate(
         id="azure-storage",
         name="azure-storage",
@@ -742,9 +699,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             environment_vars=["AZURE_STORAGE_CONNECTION_STRING"],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-azure-storage"],
-            system_requirements=["Azure storage account"],
-        ),
-    ),
+            system_requirements=["Azure storage account"])),
     # ========== Security & Authentication ==========
     MCPServerTemplate(
         id="1password",
@@ -758,9 +713,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         verified=True,
         requires=MCPServerRequirements(
             required_tools=["op"],
-            system_requirements=["1Password CLI installed and authenticated"],
-        ),
-    ),
+            system_requirements=["1Password CLI installed and authenticated"])),
     MCPServerTemplate(
         id="vault",
         name="vault",
@@ -780,9 +733,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             environment_vars=["VAULT_TOKEN", "VAULT_ADDR"],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-vault"],
-            system_requirements=["HashiCorp Vault server accessible"],
-        ),
-    ),
+            system_requirements=["HashiCorp Vault server accessible"])),
     # ========== Documentation & Knowledge ==========
     MCPServerTemplate(
         id="context7",
@@ -799,10 +750,8 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         verified=True,
         popular=True,
         requires=MCPServerRequirements(
-            environment_vars=["CONTEXT7_API_KEY"],
-        ),
-        example_usage="Cloud-based service - no local setup required",
-    ),
+            environment_vars=["CONTEXT7_API_KEY"]),
+        example_usage="Cloud-based service - no local setup required"),
     MCPServerTemplate(
         id="sse-example",
         name="sse-example",
@@ -818,10 +767,8 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         verified=False,
         popular=False,
         requires=MCPServerRequirements(
-            environment_vars=["SSE_API_KEY"],
-        ),
-        example_usage="Example SSE server - for testing purposes",
-    ),
+            environment_vars=["SSE_API_KEY"]),
+        example_usage="Example SSE server - for testing purposes"),
     MCPServerTemplate(
         id="confluence",
         name="confluence",
@@ -841,9 +788,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             environment_vars=["CONFLUENCE_TOKEN", "CONFLUENCE_BASE_URL"],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-confluence"],
-            system_requirements=["Confluence API access"],
-        ),
-    ),
+            system_requirements=["Confluence API access"])),
     MCPServerTemplate(
         id="notion",
         name="notion",
@@ -864,9 +809,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             environment_vars=["NOTION_TOKEN"],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-notion"],
-            system_requirements=["Notion integration API key"],
-        ),
-    ),
+            system_requirements=["Notion integration API key"])),
     # ========== DevOps & Infrastructure ==========
     MCPServerTemplate(
         id="docker",
@@ -886,9 +829,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         requires=MCPServerRequirements(
             required_tools=["node", "npm", "npx", "docker"],
             package_dependencies=["@modelcontextprotocol/server-docker"],
-            system_requirements=["Docker daemon running"],
-        ),
-    ),
+            system_requirements=["Docker daemon running"])),
     MCPServerTemplate(
         id="kubernetes",
         name="kubernetes",
@@ -906,9 +847,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         requires=MCPServerRequirements(
             required_tools=["node", "npm", "npx", "kubectl"],
             package_dependencies=["@modelcontextprotocol/server-kubernetes"],
-            system_requirements=["Kubernetes cluster access (kubeconfig)"],
-        ),
-    ),
+            system_requirements=["Kubernetes cluster access (kubeconfig)"])),
     MCPServerTemplate(
         id="terraform",
         name="terraform",
@@ -926,9 +865,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         requires=MCPServerRequirements(
             required_tools=["node", "npm", "npx", "terraform"],
             package_dependencies=["@modelcontextprotocol/server-terraform"],
-            system_requirements=["Terraform configuration files"],
-        ),
-    ),
+            system_requirements=["Terraform configuration files"])),
     # ========== Monitoring & Observability ==========
     MCPServerTemplate(
         id="prometheus",
@@ -959,9 +896,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             ],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-prometheus"],
-            system_requirements=["Prometheus server accessible"],
-        ),
-    ),
+            system_requirements=["Prometheus server accessible"])),
     MCPServerTemplate(
         id="grafana",
         name="grafana",
@@ -981,9 +916,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
             environment_vars=["GRAFANA_TOKEN", "GRAFANA_URL"],
             required_tools=["node", "npm", "npx"],
             package_dependencies=["@modelcontextprotocol/server-grafana"],
-            system_requirements=["Grafana server with API access"],
-        ),
-    ),
+            system_requirements=["Grafana server with API access"])),
     # ========== Package Management ==========
     MCPServerTemplate(
         id="npm",
@@ -1001,9 +934,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         verified=True,
         requires=MCPServerRequirements(
             required_tools=["node", "npm", "npx"],
-            package_dependencies=["@modelcontextprotocol/server-npm"],
-        ),
-    ),
+            package_dependencies=["@modelcontextprotocol/server-npm"])),
     MCPServerTemplate(
         id="pypi",
         name="pypi",
@@ -1016,8 +947,7 @@ MCP_SERVER_REGISTRY: List[MCPServerTemplate] = [
         verified=True,
         requires=MCPServerRequirements(
             required_tools=["python", "pip"], package_dependencies=["mcp-server-pypi"]
-        ),
-    ),
+        )),
 ]
 
 
@@ -1050,7 +980,7 @@ class MCPServerCatalog:
                 self.by_category[server.category] = []
             self.by_category[server.category].append(server)
 
-    def search(self, query: str) -> List[MCPServerTemplate]:
+    def search(self, query: str) -> list[MCPServerTemplate]:
         """
         Search for servers by name, description, or tags.
 
@@ -1094,30 +1024,29 @@ class MCPServerCatalog:
             key=lambda s: (
                 not s.name.lower().startswith(query_lower),
                 not s.popular,
-                s.name,
-            )
+                s.name)
         )
 
         return results
 
-    def get_by_id(self, server_id: str) -> Optional[MCPServerTemplate]:
+    def get_by_id(self, server_id: str) -> MCPServerTemplate | None:
         """Get server template by ID."""
         return self.by_id.get(server_id)
 
-    def get_by_category(self, category: str) -> List[MCPServerTemplate]:
+    def get_by_category(self, category: str) -> list[MCPServerTemplate]:
         """Get all servers in a category."""
         return self.by_category.get(category, [])
 
-    def list_categories(self) -> List[str]:
+    def list_categories(self) -> list[str]:
         """List all available categories."""
         return sorted(self.by_category.keys())
 
-    def get_popular(self, limit: int = 10) -> List[MCPServerTemplate]:
+    def get_popular(self, limit: int = 10) -> list[MCPServerTemplate]:
         """Get popular servers."""
         popular = [s for s in self.servers if s.popular]
         return popular[:limit]
 
-    def get_verified(self) -> List[MCPServerTemplate]:
+    def get_verified(self) -> list[MCPServerTemplate]:
         """Get all verified servers."""
         return [s for s in self.servers if s.verified]
 

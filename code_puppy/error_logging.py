@@ -9,7 +9,6 @@ import os
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from code_puppy.config import STATE_DIR
 
@@ -39,9 +38,8 @@ def _ensure_logs_dir() -> None:
 
 def log_error(
     error: Exception,
-    context: Optional[str] = None,
-    include_traceback: bool = True,
-) -> None:
+    context: str | None = None,
+    include_traceback: bool = True) -> None:
     """Log an error to the error log file.
 
     Args:
@@ -89,8 +87,7 @@ def log_error(
 
 def log_error_message(
     message: str,
-    context: Optional[str] = None,
-) -> None:
+    context: str | None = None) -> None:
     """Log a simple error message without an exception object.
 
     Args:

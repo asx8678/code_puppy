@@ -1,10 +1,10 @@
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from code_puppy import config
 
 # ChatGPT OAuth configuration based on OpenAI's Codex CLI flow
-CHATGPT_OAUTH_CONFIG: Dict[str, Any] = {
+CHATGPT_OAUTH_CONFIG: dict[str, Any] = {
     # OAuth endpoints from OpenAI auth service
     "issuer": "https://auth.openai.com",
     "auth_url": "https://auth.openai.com/oauth/authorize",

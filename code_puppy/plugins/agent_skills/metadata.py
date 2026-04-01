@@ -4,7 +4,6 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +22,9 @@ class SkillMetadata:
     name: str
     description: str
     path: Path
-    version: Optional[str] = None
-    author: Optional[str] = None
-    tags: List[str] = field(default_factory=list)
+    version: str | None = None
+    author: str | None = None
+    tags: list[str] = field(default_factory=list)
 
 
 def _unquote(value: str) -> str:
@@ -58,8 +57,8 @@ def parse_yaml_frontmatter(content: str) -> dict:
 
     frontmatter = match.group(1)
     result: dict = {}
-    current_key: Optional[str] = None
-    current_list: List[str] = []
+    current_key: str | None = None
+    current_list: list[str] = []
 
     for line in frontmatter.split("\n"):
         stripped = line.strip()
@@ -101,7 +100,7 @@ def parse_yaml_frontmatter(content: str) -> dict:
     return result
 
 
-def parse_skill_metadata(skill_path: Path) -> Optional[SkillMetadata]:
+def parse_skill_metadata(skill_path: Path) -> SkillMetadata | None:
     """Parse metadata from a skill's SKILL.md file.
 
     Args:
@@ -146,7 +145,7 @@ def parse_skill_metadata(skill_path: Path) -> Optional[SkillMetadata]:
         return None
 
     # Handle tags - could be a list or a comma-separated string
-    tags: List[str] = []
+    tags: list[str] = []
     raw_tags = frontmatter.get("tags", [])
     if isinstance(raw_tags, list):
         tags = raw_tags
@@ -159,11 +158,10 @@ def parse_skill_metadata(skill_path: Path) -> Optional[SkillMetadata]:
         path=skill_path,
         version=frontmatter.get("version"),
         author=frontmatter.get("author"),
-        tags=tags,
-    )
+        tags=tags)
 
 
-def load_full_skill_content(skill_path: Path) -> Optional[str]:
+def load_full_skill_content(skill_path: Path) -> str | None:
     """Load the complete SKILL.md content for activation.
 
     Args:
@@ -188,7 +186,7 @@ def load_full_skill_content(skill_path: Path) -> Optional[str]:
         return None
 
 
-def get_skill_resources(skill_path: Path) -> List[Path]:
+def get_skill_resources(skill_path: Path) -> list[Path]:
     """List all resource files bundled with a skill.
 
     Returns paths to all non-SKILL.md files in the skill directory.
@@ -207,7 +205,7 @@ def get_skill_resources(skill_path: Path) -> List[Path]:
         logger.warning(f"Skill path is not a directory: {skill_path}")
         return []
 
-    resources: List[Path] = []
+    resources: list[Path] = []
     try:
         for item in skill_path.iterdir():
             if item.is_file() and item.name != "SKILL.md":

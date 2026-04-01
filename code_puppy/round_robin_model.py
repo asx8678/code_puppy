@@ -1,7 +1,7 @@
 import threading
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, List
+from typing import Any, AsyncIterator
 
 from pydantic_ai._run_context import RunContext
 from pydantic_ai.models import (
@@ -10,8 +10,7 @@ from pydantic_ai.models import (
     ModelRequestParameters,
     ModelResponse,
     ModelSettings,
-    StreamedResponse,
-)
+    StreamedResponse)
 
 try:
     from opentelemetry.context import get_current_span
@@ -36,7 +35,7 @@ class RoundRobinModel(Model):
     overcome rate limits or distribute load.
     """
 
-    models: List[Model]
+    models: list[Model]
     _current_index: int = field(default=0, repr=False)
     _model_name: str = field(repr=False)
     _rotate_every: int = field(default=1, repr=False)
@@ -47,8 +46,7 @@ class RoundRobinModel(Model):
         self,
         *models: Model,
         rotate_every: int = 1,
-        settings: ModelSettings | None = None,
-    ):
+        settings: ModelSettings | None = None):
         """Initialize a round-robin model instance.
 
         Args:
@@ -99,8 +97,7 @@ class RoundRobinModel(Model):
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters,
-    ) -> ModelResponse:
+        model_request_parameters: ModelRequestParameters) -> ModelResponse:
         """Make a request using the next model in the round-robin sequence."""
         current_model = self._get_next_model()
         # Use prepare_request to merge settings and customize parameters
@@ -125,8 +122,7 @@ class RoundRobinModel(Model):
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
-        run_context: RunContext[Any] | None = None,
-    ) -> AsyncIterator[StreamedResponse]:
+        run_context: RunContext[Any] | None = None) -> AsyncIterator[StreamedResponse]:
         """Make a streaming request using the next model in the round-robin sequence."""
         current_model = self._get_next_model()
         # Use prepare_request to merge settings and customize parameters

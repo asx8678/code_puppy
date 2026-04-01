@@ -13,8 +13,7 @@ from .error_isolation import (
     ErrorStats,
     MCPErrorIsolator,
     QuarantinedServerError,
-    get_error_isolator,
-)
+    get_error_isolator)
 from .managed_server import ManagedMCPServer, ServerConfig, ServerState
 from .manager import MCPManager, ServerInfo, get_mcp_manager
 from .mcp_logs import (
@@ -24,8 +23,7 @@ from .mcp_logs import (
     get_mcp_logs_dir,
     list_servers_with_logs,
     read_logs,
-    write_log,
-)
+    write_log)
 from .registry import ServerRegistry
 from .retry_manager import RetryManager, RetryStats, get_retry_manager, retry_mcp_call
 from .status_tracker import Event, ServerStatusTracker

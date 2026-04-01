@@ -4,11 +4,10 @@ Registers via the ``custom_command`` hook so it lives entirely outside
 ``code_puppy/command_line/``.  Run ``/clean help`` for usage.
 """
 
-from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from code_puppy import config
 from code_puppy.callbacks import register_callback
@@ -22,48 +21,46 @@ from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warni
 # kind is "dir" (clean contents) or "file" (unlink).
 
 
-def _session_targets() -> List[Tuple[str, Path, str]]:
+def _session_targets() -> list[tuple[str, Path, str]]:
     return [
         ("Autosave sessions", Path(config.AUTOSAVE_DIR), "dir"),
         ("Sub-agent sessions", Path(config.DATA_DIR) / "subagent_sessions", "dir"),
         (
             "Terminal sessions",
             Path(config.STATE_DIR) / "terminal_sessions.json",
-            "file",
-        ),
+            "file"),
         ("Session HMAC key", Path(config.DATA_DIR) / ".session_hmac_key", "file"),
     ]
 
 
-def _history_targets() -> List[Tuple[str, Path, str]]:
+def _history_targets() -> list[tuple[str, Path, str]]:
     return [
         ("Command history", Path(config.COMMAND_HISTORY_FILE), "file"),
     ]
 
 
-def _log_targets() -> List[Tuple[str, Path, str]]:
+def _log_targets() -> list[tuple[str, Path, str]]:
     return [
         ("Error logs", Path(config.STATE_DIR) / "logs", "dir"),
     ]
 
 
-def _cache_targets() -> List[Tuple[str, Path, str]]:
+def _cache_targets() -> list[tuple[str, Path, str]]:
     return [
         ("Browser profiles", Path(config.CACHE_DIR) / "browser_profiles", "dir"),
         ("Browser workflows", Path(config.DATA_DIR) / "browser_workflows", "dir"),
         (
             "Skills cache",
             Path.home() / ".code_puppy" / "cache" / "skills_catalog.json",
-            "file",
-        ),
+            "file"),
         ("API server PID", Path(config.STATE_DIR) / "api_server.pid", "file"),
     ]
 
 
-def _db_targets() -> List[Tuple[str, Path, str]]:
+def _db_targets() -> list[tuple[str, Path, str]]:
     """DBOS database and its WAL/SHM journal files."""
     db_path = Path(config.DATA_DIR) / "dbos_store.sqlite"
-    targets: List[Tuple[str, Path, str]] = [
+    targets: list[tuple[str, Path, str]] = [
         ("DBOS database", db_path, "file"),
     ]
     # Include WAL/SHM journal files when they exist (status + cleanup)
@@ -74,7 +71,7 @@ def _db_targets() -> List[Tuple[str, Path, str]]:
     return targets
 
 
-_CATEGORIES: Dict[str, Any] = {
+_CATEGORIES: dict[str, Any] = {
     "sessions": ("Sessions", _session_targets),
     "history": ("History", _history_targets),
     "logs": ("Logs", _log_targets),
@@ -87,7 +84,7 @@ _CATEGORIES: Dict[str, Any] = {
 # while DBOS holds an active connection causes
 # ``sqlite3.OperationalError: attempt to write a readonly database``.
 # Users must run "/clean db" explicitly (which destroys DBOS first).
-_SAFE_CATEGORY_KEYS: List[str] = [k for k in _CATEGORIES if k != "db"]
+_SAFE_CATEGORY_KEYS: list[str] = [k for k in _CATEGORIES if k != "db"]
 
 # ---------------------------------------------------------------------------
 # Size / cleanup helpers
@@ -105,7 +102,7 @@ def _human_size(nbytes: int) -> str:
     return f"{nbytes:.1f} GB"  # pragma: no cover
 
 
-def _dir_stats(path: Path) -> Tuple[int, int]:
+def _dir_stats(path: Path) -> tuple[int, int]:
     """Return ``(file_count, total_bytes)`` for a directory tree."""
     if not path.is_dir():
         return 0, 0
@@ -124,7 +121,7 @@ def _dir_stats(path: Path) -> Tuple[int, int]:
     return count, total
 
 
-def _file_stats(path: Path) -> Tuple[int, int]:
+def _file_stats(path: Path) -> tuple[int, int]:
     """Return ``(1, size)`` if file exists, else ``(0, 0)``."""
     if not path.is_file():
         return 0, 0
@@ -134,7 +131,7 @@ def _file_stats(path: Path) -> Tuple[int, int]:
         return 0, 0
 
 
-def _target_stats(targets: List[Tuple[str, Path, str]]) -> Tuple[int, int]:
+def _target_stats(targets: list[tuple[str, Path, str]]) -> tuple[int, int]:
     """Aggregate file count and byte total across all targets."""
     count = 0
     total = 0
@@ -148,7 +145,7 @@ def _target_stats(targets: List[Tuple[str, Path, str]]) -> Tuple[int, int]:
     return count, total
 
 
-def _clean_dir(path: Path, dry_run: bool) -> Tuple[int, int]:
+def _clean_dir(path: Path, dry_run: bool) -> tuple[int, int]:
     """Remove **contents** of *path* (not the dir itself).
 
     Returns ``(files_removed, bytes_freed)``.
@@ -167,7 +164,7 @@ def _clean_dir(path: Path, dry_run: bool) -> Tuple[int, int]:
     return count, total
 
 
-def _clean_file(path: Path, dry_run: bool) -> Tuple[int, int]:
+def _clean_file(path: Path, dry_run: bool) -> tuple[int, int]:
     """Remove a single file.  Returns ``(1, size)`` or ``(0, 0)``."""
     if not path.is_file():
         return 0, 0
@@ -186,8 +183,8 @@ def _clean_file(path: Path, dry_run: bool) -> Tuple[int, int]:
 
 
 def _clean_targets(
-    targets: List[Tuple[str, Path, str]], dry_run: bool
-) -> Tuple[int, int]:
+    targets: list[tuple[str, Path, str]], dry_run: bool
+) -> tuple[int, int]:
     """Clean all targets in a list, emitting per-target output.
 
     Returns ``(total_files, total_bytes)`` across all targets.
@@ -225,7 +222,7 @@ def _destroy_dbos() -> bool:
         return False
 
 
-def _clean_db(dry_run: bool) -> Tuple[int, int]:
+def _clean_db(dry_run: bool) -> tuple[int, int]:
     """Clean the DBOS database with safety handling.
 
     Unlike other categories, the ``db`` category must destroy the active DBOS
@@ -311,7 +308,7 @@ def _show_status() -> None:
     )
 
 
-def _run_clean(categories: List[str], dry_run: bool) -> None:
+def _run_clean(categories: list[str], dry_run: bool) -> None:
     """Execute a clean across the given category keys."""
     if dry_run:
         emit_info("🔍 Dry run — nothing will be deleted\n")
@@ -352,7 +349,7 @@ def _run_clean(categories: List[str], dry_run: bool) -> None:
 _VALID_SUBCMDS = {"help", "status", "all", "sessions", "history", "logs", "cache", "db"}
 
 
-def _handle_clean_command(command: str, name: str) -> Optional[bool]:
+def _handle_clean_command(command: str, name: str) -> bool | None:
     """Handle ``/clean`` and its subcommands.
 
     Returns ``True`` when the command was handled, ``None`` otherwise.
@@ -392,7 +389,7 @@ def _handle_clean_command(command: str, name: str) -> Optional[bool]:
 # ---------------------------------------------------------------------------
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     return [("clean", "Clean sessions, history, logs, and cache data")]
 
 

@@ -8,7 +8,6 @@ doesn't support.
 
 import asyncio
 import threading
-from typing import Optional, Union
 
 import httpx
 
@@ -38,9 +37,8 @@ class ReopenableAsyncClient:
             self,
             parent_client: "ReopenableAsyncClient",
             method: str,
-            url: Union[str, httpx.URL],
-            **kwargs,
-        ):
+            url: str | httpx.URL,
+            **kwargs):
             self.parent_client = parent_client
             self.method = method
             self.url = url
@@ -66,7 +64,7 @@ class ReopenableAsyncClient:
         """
         self._client_class = client_class or httpx.AsyncClient
         self._client_kwargs = kwargs.copy()
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
         self._is_closed = True
         self._lock = asyncio.Lock()
         self._sync_lock = threading.Lock()
@@ -123,43 +121,43 @@ class ReopenableAsyncClient:
 
     # Delegate all httpx.AsyncClient methods to the underlying client
 
-    async def get(self, url: Union[str, httpx.URL], **kwargs) -> httpx.Response:
+    async def get(self, url: str | httpx.URL, **kwargs) -> httpx.Response:
         """Make a GET request."""
         client = await self._ensure_client_open()
         return await client.get(url, **kwargs)
 
-    async def post(self, url: Union[str, httpx.URL], **kwargs) -> httpx.Response:
+    async def post(self, url: str | httpx.URL, **kwargs) -> httpx.Response:
         """Make a POST request."""
         client = await self._ensure_client_open()
         return await client.post(url, **kwargs)
 
-    async def put(self, url: Union[str, httpx.URL], **kwargs) -> httpx.Response:
+    async def put(self, url: str | httpx.URL, **kwargs) -> httpx.Response:
         """Make a PUT request."""
         client = await self._ensure_client_open()
         return await client.put(url, **kwargs)
 
-    async def patch(self, url: Union[str, httpx.URL], **kwargs) -> httpx.Response:
+    async def patch(self, url: str | httpx.URL, **kwargs) -> httpx.Response:
         """Make a PATCH request."""
         client = await self._ensure_client_open()
         return await client.patch(url, **kwargs)
 
-    async def delete(self, url: Union[str, httpx.URL], **kwargs) -> httpx.Response:
+    async def delete(self, url: str | httpx.URL, **kwargs) -> httpx.Response:
         """Make a DELETE request."""
         client = await self._ensure_client_open()
         return await client.delete(url, **kwargs)
 
-    async def head(self, url: Union[str, httpx.URL], **kwargs) -> httpx.Response:
+    async def head(self, url: str | httpx.URL, **kwargs) -> httpx.Response:
         """Make a HEAD request."""
         client = await self._ensure_client_open()
         return await client.head(url, **kwargs)
 
-    async def options(self, url: Union[str, httpx.URL], **kwargs) -> httpx.Response:
+    async def options(self, url: str | httpx.URL, **kwargs) -> httpx.Response:
         """Make an OPTIONS request."""
         client = await self._ensure_client_open()
         return await client.options(url, **kwargs)
 
     async def request(
-        self, method: str, url: Union[str, httpx.URL], **kwargs
+        self, method: str, url: str | httpx.URL, **kwargs
     ) -> httpx.Response:
         """Make a request with the specified HTTP method."""
         client = await self._ensure_client_open()
@@ -171,7 +169,7 @@ class ReopenableAsyncClient:
         return await client.send(request, **kwargs)
 
     def build_request(
-        self, method: str, url: Union[str, httpx.URL], **kwargs
+        self, method: str, url: str | httpx.URL, **kwargs
     ) -> httpx.Request:
         """
         Build a request without sending it.
@@ -189,7 +187,7 @@ class ReopenableAsyncClient:
                     temp_client.close()
             return self._client.build_request(method, url, **kwargs)
 
-    def stream(self, method: str, url: Union[str, httpx.URL], **kwargs):
+    def stream(self, method: str, url: str | httpx.URL, **kwargs):
         """Stream a request. Returns an async context manager."""
         return self._StreamWrapper(self, method, url, **kwargs)
 
@@ -205,7 +203,7 @@ class ReopenableAsyncClient:
 
     # Properties that don't require an active client
     @property
-    def timeout(self) -> Optional[httpx.Timeout]:
+    def timeout(self) -> httpx.Timeout | None:
         """Get the configured timeout."""
         return self._client_kwargs.get("timeout")
 

@@ -2,13 +2,11 @@ import asyncio
 import atexit
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import List
 
 from pydantic_ai import Agent
 
 from code_puppy.config import (
-    get_global_model_name,
-)
+    get_global_model_name)
 from code_puppy.model_factory import ModelFactory, make_model_settings
 
 # Keep a module-level agent reference to avoid rebuilding per call
@@ -66,8 +64,7 @@ def run_summarization_sync(prompt: str, message_history: List) -> List:
     except Exception as e:
         raise SummarizationError(
             f"Failed to initialize summarization agent: {type(e).__name__}: {e}",
-            original_error=e,
-        ) from e
+            original_error=e) from e
 
     # Handle claude-code models: prepend system prompt to user prompt
     from code_puppy.model_utils import prepare_prompt_for_model
@@ -114,8 +111,7 @@ def run_summarization_sync(prompt: str, message_history: List) -> List:
         error_msg = str(e) if str(e) else "(no details available)"
         raise SummarizationError(
             f"LLM call failed during summarization: [{error_type}] {error_msg}",
-            original_error=e,
-        ) from e
+            original_error=e) from e
 
 
 def _get_summarization_instructions() -> str:
@@ -156,8 +152,7 @@ def reload_summarization_agent():
         instructions=instructions,
         output_type=str,
         retries=1,  # Fewer retries for summarization
-        model_settings=model_settings,
-    )
+        model_settings=model_settings)
     # NOTE: We intentionally DON'T wrap in DBOSAgent here.
     # Summarization is a simple one-shot call that doesn't need durable execution,
     # and DBOSAgent causes async event loop conflicts with run_sync().

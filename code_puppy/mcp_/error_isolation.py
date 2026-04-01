@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +22,10 @@ class ErrorStats:
 
     total_errors: int = 0
     consecutive_errors: int = 0
-    last_error: Optional[datetime] = None
-    error_types: Dict[str, int] = field(default_factory=dict)
+    last_error: datetime | None = None
+    error_types: dict[str, int] = field(default_factory=dict)
     quarantine_count: int = 0
-    quarantine_until: Optional[datetime] = None
+    quarantine_until: datetime | None = None
 
 
 class ErrorCategory(Enum):
@@ -60,7 +60,7 @@ class MCPErrorIsolator:
         """
         self.quarantine_threshold = quarantine_threshold
         self.max_quarantine_duration = timedelta(minutes=max_quarantine_minutes)
-        self.server_stats: Dict[str, ErrorStats] = {}
+        self.server_stats: dict[str, ErrorStats] = {}
         self._lock = asyncio.Lock()
 
         logger.info(
@@ -391,7 +391,7 @@ class QuarantinedServerError(Exception):
 
 
 # Global isolator instance
-_isolator_instance: Optional[MCPErrorIsolator] = None
+_isolator_instance: MCPErrorIsolator | None = None
 
 
 def get_error_isolator() -> MCPErrorIsolator:

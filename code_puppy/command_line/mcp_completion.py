@@ -107,8 +107,7 @@ class MCPCompleter(Completer):
                     subcommand,
                     start_position=0,
                     display=subcommand,
-                    display_meta=description,
-                )
+                    display_meta=description)
             return
 
         # Parse what's been typed after /mcp
@@ -133,8 +132,7 @@ class MCPCompleter(Completer):
                             server_name,
                             start_position=start_position,
                             display=server_name,
-                            display_meta="MCP Server",
-                        )
+                            display_meta="MCP Server")
                     return
 
                 # Case 2: Subcommand + partial server name (require space after subcommand)
@@ -151,8 +149,7 @@ class MCPCompleter(Completer):
                                 server_name,
                                 start_position=start_position,
                                 display=server_name,
-                                display_meta="MCP Server",
-                            )
+                                display_meta="MCP Server")
                     return
 
         # If we only have one part and haven't returned above, show subcommand completions
@@ -166,8 +163,7 @@ class MCPCompleter(Completer):
                         subcommand,
                         start_position=-(len(partial_subcommand)),
                         display=subcommand,
-                        display_meta=description,
-                    )
+                        display_meta=description)
             return
 
         # For general subcommands, we don't provide argument completion

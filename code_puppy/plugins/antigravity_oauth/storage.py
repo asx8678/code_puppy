@@ -1,6 +1,5 @@
 """Account storage for multi-account Antigravity OAuth."""
 
-from __future__ import annotations
 
 import json
 import logging
@@ -8,7 +7,7 @@ import os
 import tempfile
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from .config import get_accounts_storage_path
 
@@ -23,13 +22,13 @@ QuotaKey = Literal["claude", "gemini-antigravity", "gemini-cli"]
 class RateLimitState:
     """Rate limit reset times per quota key."""
 
-    claude: Optional[float] = None
-    gemini_antigravity: Optional[float] = None
-    gemini_cli: Optional[float] = None
+    claude: float | None = None
+    gemini_antigravity: float | None = None
+    gemini_cli: float | None = None
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         """Convert to dictionary for JSON serialization."""
-        result: Dict[str, float] = {}
+        result: dict[str, float] = {}
         if self.claude is not None:
             result["claude"] = self.claude
         if self.gemini_antigravity is not None:
@@ -39,15 +38,14 @@ class RateLimitState:
         return result
 
     @classmethod
-    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "RateLimitState":
+    def from_dict(cls, data: dict[str, Any | None]) -> "RateLimitState":
         """Create from dictionary."""
         if not data:
             return cls()
         return cls(
             claude=data.get("claude"),
             gemini_antigravity=data.get("gemini-antigravity"),
-            gemini_cli=data.get("gemini-cli"),
-        )
+            gemini_cli=data.get("gemini-cli"))
 
 
 @dataclass
@@ -55,17 +53,17 @@ class AccountMetadata:
     """Stored metadata for a single account."""
 
     refresh_token: str
-    email: Optional[str] = None
-    project_id: Optional[str] = None
-    managed_project_id: Optional[str] = None
+    email: str | None = None
+    project_id: str | None = None
+    managed_project_id: str | None = None
     added_at: float = 0
     last_used: float = 0
-    last_switch_reason: Optional[Literal["rate-limit", "initial", "rotation"]] = None
+    last_switch_reason: Literal["rate-limit", "initial", "rotation" | None] = None
     rate_limit_reset_times: RateLimitState = field(default_factory=RateLimitState)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "refreshToken": self.refresh_token,
             "addedAt": self.added_at,
             "lastUsed": self.last_used,
@@ -86,7 +84,7 @@ class AccountMetadata:
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AccountMetadata":
+    def from_dict(cls, data: dict[str, Any]) -> "AccountMetadata":
         """Create from dictionary."""
         return cls(
             refresh_token=data.get("refreshToken", ""),
@@ -98,8 +96,7 @@ class AccountMetadata:
             last_switch_reason=data.get("lastSwitchReason"),
             rate_limit_reset_times=RateLimitState.from_dict(
                 data.get("rateLimitResetTimes")
-            ),
-        )
+            ))
 
 
 @dataclass
@@ -107,11 +104,11 @@ class AccountStorage:
     """V3 account storage format."""
 
     version: int = 3
-    accounts: List[AccountMetadata] = field(default_factory=list)
+    accounts: list[AccountMetadata] = field(default_factory=list)
     active_index: int = 0
-    active_index_by_family: Dict[str, int] = field(default_factory=dict)
+    active_index_by_family: dict[str, int] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "version": self.version,
@@ -121,24 +118,23 @@ class AccountStorage:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AccountStorage":
+    def from_dict(cls, data: dict[str, Any]) -> "AccountStorage":
         """Create from dictionary."""
         accounts = [AccountMetadata.from_dict(acc) for acc in data.get("accounts", [])]
         return cls(
             version=data.get("version", 3),
             accounts=accounts,
             active_index=data.get("activeIndex", 0),
-            active_index_by_family=data.get("activeIndexByFamily", {}),
-        )
+            active_index_by_family=data.get("activeIndexByFamily", {}))
 
 
-def _migrate_v1_to_v2(data: Dict[str, Any]) -> Dict[str, Any]:
+def _migrate_v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
     """Migrate V1 storage format to V2."""
     now = time.time() * 1000  # V1 used milliseconds
 
     accounts = []
     for acc in data.get("accounts", []):
-        rate_limits: Dict[str, float] = {}
+        rate_limits: dict[str, float] = {}
         if acc.get("isRateLimited") and acc.get("rateLimitResetTime"):
             reset_time = acc["rateLimitResetTime"]
             if reset_time > now:
@@ -165,13 +161,13 @@ def _migrate_v1_to_v2(data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _migrate_v2_to_v3(data: Dict[str, Any]) -> Dict[str, Any]:
+def _migrate_v2_to_v3(data: dict[str, Any]) -> dict[str, Any]:
     """Migrate V2 storage format to V3."""
     now = time.time() * 1000
 
     accounts = []
     for acc in data.get("accounts", []):
-        rate_limits: Dict[str, float] = {}
+        rate_limits: dict[str, float] = {}
         old_limits = acc.get("rateLimitResetTimes", {}) or {}
 
         if old_limits.get("claude") and old_limits["claude"] > now:
@@ -200,7 +196,7 @@ def _migrate_v2_to_v3(data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def load_accounts() -> Optional[AccountStorage]:
+def load_accounts() -> AccountStorage | None:
     """Load account storage from disk with automatic migration."""
     path = get_accounts_storage_path()
 

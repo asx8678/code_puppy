@@ -8,7 +8,7 @@ import atexit
 import contextvars
 import os
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Callable
 
 from playwright.async_api import Browser, BrowserContext, Page
 
@@ -16,7 +16,7 @@ from code_puppy import config
 from code_puppy.messaging import emit_info, emit_success, emit_warning
 
 # Registry for custom browser types from plugins (e.g., Camoufox for stealth browsing)
-_CUSTOM_BROWSER_TYPES: Dict[str, Callable] = {}
+_CUSTOM_BROWSER_TYPES: dict[str, Callable] = {}
 _BROWSER_TYPES_LOADED: bool = False
 
 
@@ -49,12 +49,12 @@ _active_managers: dict[str, "BrowserManager"] = {}
 
 # Context variable for browser session - properly inherits through async tasks
 # This allows parallel agent invocations to each have their own browser instance
-_browser_session_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+_browser_session_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "browser_session", default=None
 )
 
 
-def set_browser_session(session_id: Optional[str]) -> contextvars.Token:
+def set_browser_session(session_id: str | None) -> contextvars.Token:
     """Set the browser session ID for the current context.
 
     This must be called BEFORE any tool calls that use the browser.
@@ -69,7 +69,7 @@ def set_browser_session(session_id: Optional[str]) -> contextvars.Token:
     return _browser_session_var.set(session_id)
 
 
-def get_browser_session() -> Optional[str]:
+def get_browser_session() -> str | None:
     """Get the browser session ID for the current context.
 
     Returns:
@@ -103,12 +103,12 @@ class BrowserManager:
     Uses Chromium by default for maximum compatibility.
     """
 
-    _browser: Optional[Browser] = None
-    _context: Optional[BrowserContext] = None
+    _browser: Browser | None = None
+    _context: BrowserContext | None = None
     _initialized: bool = False
 
     def __init__(
-        self, session_id: Optional[str] = None, browser_type: Optional[str] = None
+        self, session_id: str | None = None, browser_type: str | None = None
     ):
         """Initialize manager settings.
 
@@ -192,7 +192,7 @@ class BrowserManager:
         self._browser = context.browser
         self._initialized = True
 
-    async def get_current_page(self) -> Optional[Page]:
+    async def get_current_page(self) -> Page | None:
         """Get the currently active page. Lazily creates one if none exist."""
         if not self._initialized or not self._context:
             await self.async_initialize()
@@ -207,7 +207,7 @@ class BrowserManager:
         # Lazily create a new blank page without navigation
         return await self._context.new_page()
 
-    async def new_page(self, url: Optional[str] = None) -> Page:
+    async def new_page(self, url: str | None = None) -> Page:
         """Create a new page and optionally navigate to URL."""
         if not self._initialized:
             await self.async_initialize()
@@ -275,7 +275,7 @@ class BrowserManager:
 
 
 def get_browser_manager(
-    session_id: Optional[str] = None, browser_type: Optional[str] = None
+    session_id: str | None = None, browser_type: str | None = None
 ) -> BrowserManager:
     """Get or create a BrowserManager instance.
 

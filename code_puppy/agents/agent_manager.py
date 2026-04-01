@@ -10,7 +10,7 @@ import threading
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable
 
 from pydantic_ai.messages import ModelMessage
 
@@ -34,7 +34,7 @@ class AgentInfo:
     description: str
     factory: Callable  # callable () -> BaseAgent instance
     # Present only for JSON-file agents; None for Python-class agents.
-    json_path: Optional[str] = None
+    json_path: str | None = None
 
 
 @dataclass
@@ -46,13 +46,13 @@ class AgentManagerState:
     reset in tests, and reason about.
     """
 
-    agent_registry: Dict[str, AgentInfo] = dataclasses.field(default_factory=dict)
-    agent_histories: Dict[str, List[ModelMessage]] = dataclasses.field(
+    agent_registry: dict[str, AgentInfo] = dataclasses.field(default_factory=dict)
+    agent_histories: dict[str, list[ModelMessage]] = dataclasses.field(
         default_factory=dict
     )
-    current_agent: Optional[BaseAgent] = None
+    current_agent: BaseAgent | None = None
     registry_populated: bool = False
-    session_agents_cache: Dict[str, str] = dataclasses.field(default_factory=dict)
+    session_agents_cache: dict[str, str] = dataclasses.field(default_factory=dict)
     session_file_loaded: bool = False
 
 
@@ -224,7 +224,7 @@ def _ensure_session_cache_loaded() -> None:
             _state.session_file_loaded = True
 
 
-def _discover_agents(message_group_id: Optional[str] = None):
+def _discover_agents(message_group_id: str | None = None):
     """Dynamically discover all agent classes and JSON agents."""
     if _state.registry_populated:
         return  # Already discovered, use cached registry
@@ -261,15 +261,13 @@ def _discover_agents(message_group_id: Optional[str] = None):
                         name=agent_instance.name,
                         display_name=agent_instance.display_name,
                         description=agent_instance.description,
-                        factory=attr,
-                    )
+                        factory=attr)
 
         except Exception as e:
             # Skip problematic modules
             emit_warning(
                 f"Warning: Could not load agent module {modname}: {e}",
-                message_group=message_group_id,
-            )
+                message_group=message_group_id)
             continue
 
     # 1b. Discover agents in sub-packages (like 'pack')
@@ -309,21 +307,18 @@ def _discover_agents(message_group_id: Optional[str] = None):
                                 name=agent_instance.name,
                                 display_name=agent_instance.display_name,
                                 description=agent_instance.description,
-                                factory=attr,
-                            )
+                                factory=attr)
 
                 except Exception as e:
                     emit_warning(
                         f"Warning: Could not load agent {subpkg_name}.{modname}: {e}",
-                        message_group=message_group_id,
-                    )
+                        message_group=message_group_id)
                     continue
 
         except Exception as e:
             emit_warning(
                 f"Warning: Could not load agent sub-package {subpkg_name}: {e}",
-                message_group=message_group_id,
-            )
+                message_group=message_group_id)
             continue
 
     # 2. Discover JSON agents in user directory
@@ -336,8 +331,7 @@ def _discover_agents(message_group_id: Optional[str] = None):
             if agent_name in _state.agent_registry:
                 emit_warning(
                     f"JSON agent '{agent_name}' skipped: builtin Python agent with the same name takes precedence.",
-                    message_group=message_group_id,
-                )
+                    message_group=message_group_id)
                 continue
             try:
                 _json_tmp = JSONAgent(json_path)
@@ -351,14 +345,12 @@ def _discover_agents(message_group_id: Optional[str] = None):
                 display_name=_json_display,
                 description=_json_desc,
                 factory=lambda _p=json_path: JSONAgent(_p),
-                json_path=json_path,
-            )
+                json_path=json_path)
 
     except Exception as e:
         emit_warning(
             f"Warning: Could not discover JSON agents: {e}",
-            message_group=message_group_id,
-        )
+            message_group=message_group_id)
 
     # 3. Discover agents registered by plugins
     try:
@@ -386,8 +378,7 @@ def _discover_agents(message_group_id: Optional[str] = None):
                                 name=_plugin_inst.name,
                                 display_name=_plugin_inst.display_name,
                                 description=_plugin_inst.description,
-                                factory=agent_class,
-                            )
+                                factory=agent_class)
                         except Exception:
                             pass  # skip problematic plugin agent
                 elif "json_path" in agent_def:
@@ -405,14 +396,12 @@ def _discover_agents(message_group_id: Optional[str] = None):
                             display_name=_pj_display,
                             description=_pj_desc,
                             factory=lambda _p=json_path: JSONAgent(_p),
-                            json_path=json_path,
-                        )
+                            json_path=json_path)
 
     except Exception as e:
         emit_warning(
             f"Warning: Could not load plugin agents: {e}",
-            message_group=message_group_id,
-        )
+            message_group=message_group_id)
 
     _state.registry_populated = True  # Mark registry as fully populated
 
@@ -422,7 +411,7 @@ def _invalidate_agent_registry() -> None:
     _state.registry_populated = False
 
 
-def get_available_agents() -> Dict[str, str]:
+def get_available_agents() -> dict[str, str]:
     """Get a dictionary of available agents with their display names.
 
     Returns:
@@ -432,8 +421,7 @@ def get_available_agents() -> Dict[str, str]:
         PACK_AGENT_NAMES,
         UC_AGENT_NAMES,
         get_pack_agents_enabled,
-        get_universal_constructor_enabled,
-    )
+        get_universal_constructor_enabled)
 
     # Generate a message group ID for this operation
     message_group_id = str(uuid.uuid4())
@@ -561,7 +549,7 @@ def load_agent(agent_name: str) -> BaseAgent:
     return agent_info.factory()
 
 
-def get_agent_descriptions() -> Dict[str, str]:
+def get_agent_descriptions() -> dict[str, str]:
     """Get descriptions for all available agents.
 
     Returns:
@@ -571,8 +559,7 @@ def get_agent_descriptions() -> Dict[str, str]:
         PACK_AGENT_NAMES,
         UC_AGENT_NAMES,
         get_pack_agents_enabled,
-        get_universal_constructor_enabled,
-    )
+        get_universal_constructor_enabled)
 
     # Generate a message group ID for this operation
     message_group_id = str(uuid.uuid4())
@@ -644,7 +631,7 @@ def _build_clone_display_name(display_name: str, clone_index: int) -> str:
     return f"{base_name} (Clone {clone_index})"
 
 
-def _filter_available_tools(tool_names: List[str]) -> List[str]:
+def _filter_available_tools(tool_names: list[str]) -> list[str]:
     """Filter a tool list to only available tool names."""
     from code_puppy.tools import get_available_tool_names
 
@@ -672,7 +659,7 @@ def _next_clone_index(
         next_index += 1
 
 
-def clone_agent(agent_name: str) -> Optional[str]:
+def clone_agent(agent_name: str) -> str | None:
     """Clone an agent definition into the user agents directory.
 
     Args:

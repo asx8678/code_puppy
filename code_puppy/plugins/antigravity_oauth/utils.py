@@ -1,22 +1,20 @@
 """Utility helpers for the Antigravity OAuth plugin."""
 
-from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .config import (
     ANTIGRAVITY_OAUTH_CONFIG,
     get_antigravity_models_path,
-    get_token_storage_path,
-)
+    get_token_storage_path)
 from .constants import ANTIGRAVITY_ENDPOINT, ANTIGRAVITY_HEADERS, ANTIGRAVITY_MODELS
 
 logger = logging.getLogger(__name__)
 
 
-def load_stored_tokens() -> Optional[Dict[str, Any]]:
+def load_stored_tokens() -> dict[str, Any | None]:
     """Load stored OAuth tokens from disk."""
     try:
         token_path = get_token_storage_path()
@@ -28,7 +26,7 @@ def load_stored_tokens() -> Optional[Dict[str, Any]]:
     return None
 
 
-def save_tokens(tokens: Dict[str, Any]) -> bool:
+def save_tokens(tokens: dict[str, Any]) -> bool:
     """Save OAuth tokens to disk."""
     try:
         token_path = get_token_storage_path()
@@ -41,7 +39,7 @@ def save_tokens(tokens: Dict[str, Any]) -> bool:
         return False
 
 
-def load_antigravity_models() -> Dict[str, Any]:
+def load_antigravity_models() -> dict[str, Any]:
     """Load configured Antigravity models from disk."""
     try:
         models_path = get_antigravity_models_path()
@@ -53,7 +51,7 @@ def load_antigravity_models() -> Dict[str, Any]:
     return {}
 
 
-def save_antigravity_models(models: Dict[str, Any]) -> bool:
+def save_antigravity_models(models: dict[str, Any]) -> bool:
     """Save Antigravity models configuration to disk."""
     try:
         models_path = get_antigravity_models_path()
@@ -68,7 +66,7 @@ def save_antigravity_models(models: Dict[str, Any]) -> bool:
 def add_models_to_config(access_token: str, project_id: str = "") -> bool:
     """Add all available Antigravity models to the configuration."""
     try:
-        models_config: Dict[str, Any] = {}
+        models_config: dict[str, Any] = {}
         prefix = ANTIGRAVITY_OAUTH_CONFIG["prefix"]
 
         for model_id, model_info in ANTIGRAVITY_MODELS.items():
@@ -130,9 +128,9 @@ def remove_antigravity_models() -> int:
     return 0
 
 
-def get_model_families_summary() -> Dict[str, List[str]]:
+def get_model_families_summary() -> dict[str, list[str]]:
     """Get a summary of available models by family."""
-    families: Dict[str, List[str]] = {
+    families: dict[str, list[str]] = {
         "gemini": [],
         "claude": [],
         "other": [],

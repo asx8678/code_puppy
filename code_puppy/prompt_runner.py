@@ -18,8 +18,7 @@ async def run_prompt_with_attachments(
     raw_prompt: str,
     *,
     spinner_console=None,
-    use_spinner: bool = True,
-):
+    use_spinner: bool = True):
     """Run the agent after parsing CLI attachments for image/document support.
 
     Returns:
@@ -81,8 +80,7 @@ async def run_prompt_with_attachments(
         agent.run_with_mcp(
             cleaned_prompt,  # Use cleaned prompt (clipboard placeholders removed)
             attachments=attachments,
-            link_attachments=link_attachments,
-        )
+            link_attachments=link_attachments)
     )
 
     if use_spinner and spinner_console is not None:
@@ -109,8 +107,7 @@ async def execute_single_prompt(prompt: str, message_renderer) -> None:
     # Shell pass-through: !<cmd> bypasses the agent even in -p mode
     from code_puppy.command_line.shell_passthrough import (
         execute_shell_passthrough,
-        is_shell_passthrough,
-    )
+        is_shell_passthrough)
 
     if is_shell_passthrough(prompt):
         execute_shell_passthrough(prompt)
@@ -126,8 +123,7 @@ async def execute_single_prompt(prompt: str, message_renderer) -> None:
         result, _agent_task = await run_prompt_with_attachments(
             agent,
             prompt,
-            spinner_console=message_renderer.console,
-        )
+            spinner_console=message_renderer.console)
         if result is None:
             return
 
@@ -139,8 +135,7 @@ async def execute_single_prompt(prompt: str, message_renderer) -> None:
 
         response_msg = AgentResponseMessage(
             content=agent_response,
-            is_markdown=True,
-        )
+            is_markdown=True)
         get_message_bus().emit(response_msg)
 
     except asyncio.CancelledError:

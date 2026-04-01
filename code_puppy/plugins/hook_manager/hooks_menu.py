@@ -10,7 +10,6 @@ Built with prompt_toolkit to match the existing skills_menu aesthetic exactly
 
 import sys
 import time
-from typing import List, Optional
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -28,8 +27,7 @@ from .config import (
     flatten_all_hooks,
     save_global_hooks_config,
     save_hooks_config,
-    toggle_hook_enabled,
-)
+    toggle_hook_enabled)
 
 PAGE_SIZE = 12
 
@@ -50,15 +48,15 @@ class HooksMenu:
     """Interactive TUI for managing hooks from both global and project sources."""
 
     def __init__(self) -> None:
-        self.entries: List[HookEntry] = []
+        self.entries: list[HookEntry] = []
         self.selected_idx: int = 0
         self.current_page: int = 0
-        self.result: Optional[str] = None
+        self.result: str | None = None
         self.status_message: str = ""
 
         # prompt_toolkit controls (set during run())
-        self.list_control: Optional[FormattedTextControl] = None
-        self.detail_control: Optional[FormattedTextControl] = None
+        self.list_control: FormattedTextControl | None = None
+        self.detail_control: FormattedTextControl | None = None
 
         self._refresh_data()
 
@@ -79,13 +77,13 @@ class HooksMenu:
             emit_error(f"Failed to refresh hooks data: {exc}")
             self.entries = []
 
-    def _current_entry(self) -> Optional[HookEntry]:
+    def _current_entry(self) -> HookEntry | None:
         if 0 <= self.selected_idx < len(self.entries):
             return self.entries[self.selected_idx]
         return None
 
     def _save_current_entry(
-        self, entry: HookEntry, new_enabled: Optional[bool] = None
+        self, entry: HookEntry, new_enabled: bool | None = None
     ) -> None:
         """Persist changes to the current entry's source file."""
         if entry.source == "global":
@@ -96,8 +94,7 @@ class HooksMenu:
                     entry.event_type,
                     entry._group_index,
                     entry._hook_index,
-                    new_enabled,
-                )
+                    new_enabled)
             save_global_hooks_config(global_config)
         else:  # project
             project_config = _load_project_hooks_config()
@@ -107,8 +104,7 @@ class HooksMenu:
                     entry.event_type,
                     entry._group_index,
                     entry._hook_index,
-                    new_enabled,
-                )
+                    new_enabled)
             save_hooks_config(project_config)
 
     # ------------------------------------------------------------------
@@ -140,8 +136,7 @@ class HooksMenu:
                 global_config,
                 entry.event_type,
                 entry._group_index,
-                entry._hook_index,
-            )
+                entry._hook_index)
             save_global_hooks_config(global_config)
         else:  # project
             project_config = _load_project_hooks_config()
@@ -149,8 +144,7 @@ class HooksMenu:
                 project_config,
                 entry.event_type,
                 entry._group_index,
-                entry._hook_index,
-            )
+                entry._hook_index)
             save_hooks_config(project_config)
 
         self._refresh_data()
@@ -394,7 +388,7 @@ class HooksMenu:
     # Main entry point
     # ------------------------------------------------------------------
 
-    def run(self) -> Optional[str]:
+    def run(self) -> str | None:
         """Launch the interactive TUI.  Returns the exit reason string."""
         self.result = None
 
@@ -492,8 +486,7 @@ class HooksMenu:
             layout=layout,
             key_bindings=kb,
             full_screen=False,
-            mouse_support=False,
-        )
+            mouse_support=False)
 
         try:
             from code_puppy.tools.command_runner import set_awaiting_user_input
@@ -538,11 +531,11 @@ class HooksMenu:
 # ---------------------------------------------------------------------------
 
 
-def _wrap(text: str, width: int) -> List[str]:
+def _wrap(text: str, width: int) -> list[str]:
     """Wrap text to *width* characters, splitting on whitespace."""
     words = text.split()
-    lines: List[str] = []
-    current: List[str] = []
+    lines: list[str] = []
+    current: list[str] = []
     length = 0
     for word in words:
         if length + len(word) + (1 if current else 0) <= width:

@@ -7,7 +7,7 @@ The renderer is responsible for ALL presentation decisions - the messages contai
 only structured data with no formatting hints.
 """
 
-from typing import Dict, Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -26,8 +26,7 @@ from .bus import MessageBus
 from .commands import (
     ConfirmationResponse,
     SelectionResponse,
-    UserInputResponse,
-)
+    UserInputResponse)
 from .messages import (
     AgentReasoningMessage,
     AgentResponseMessage,
@@ -52,8 +51,7 @@ from .messages import (
     TextMessage,
     UniversalConstructorMessage,
     UserInputRequest,
-    VersionCheckMessage,
-)
+    VersionCheckMessage)
 
 # Note: Text and Tree were removed - no longer used in this implementation
 
@@ -84,7 +82,7 @@ class RendererProtocol(Protocol):
 # Default Styles
 # =============================================================================
 
-DEFAULT_STYLES: Dict[MessageLevel, str] = {
+DEFAULT_STYLES: dict[MessageLevel, str] = {
     MessageLevel.ERROR: "bold red",
     MessageLevel.WARNING: "yellow",
     MessageLevel.SUCCESS: "green",
@@ -114,9 +112,8 @@ class RichConsoleRenderer:
     def __init__(
         self,
         bus: MessageBus,
-        console: Optional[Console] = None,
-        styles: Optional[Dict[MessageLevel, str]] = None,
-    ) -> None:
+        console: Console | None = None,
+        styles: dict[MessageLevel, str | None] = None) -> None:
         """Initialize the renderer.
 
         Args:
@@ -130,8 +127,8 @@ class RichConsoleRenderer:
         self._console = console or Console()
         self._styles = styles or DEFAULT_STYLES.copy()
         self._running = False
-        self._thread: Optional[threading.Thread] = None
-        self._spinners: Dict[str, object] = {}  # spinner_id -> status context
+        self._thread: threading.Thread | None = None
+        self._spinners: dict[str, object] = {}  # spinner_id -> status context
 
     @property
     def console(self) -> Console:
@@ -540,7 +537,7 @@ class RichConsoleRenderer:
             return
 
         # Group by file
-        by_file: Dict[str, list] = {}
+        by_file: dict[str, list] = {}
         for match in msg.matches:
             by_file.setdefault(match.file_path, []).append(match)
 
@@ -571,8 +568,7 @@ class RichConsoleRenderer:
                             f"({re.escape(search_term)})",
                             r"[bold yellow]\1[/bold yellow]",
                             line,
-                            flags=re.IGNORECASE,
-                        )
+                            flags=re.IGNORECASE)
                     else:
                         highlighted_line = line
 
@@ -885,8 +881,7 @@ class RichConsoleRenderer:
                     response = ConfirmationResponse(
                         prompt_id=msg.prompt_id,
                         confirmed=confirmed,
-                        feedback=feedback,
-                    )
+                        feedback=feedback)
                     self._bus.provide_response(response)
                     return
 
@@ -914,8 +909,7 @@ class RichConsoleRenderer:
                     response = SelectionResponse(
                         prompt_id=msg.prompt_id,
                         selected_index=-1,
-                        selected_value="",
-                    )
+                        selected_value="")
                     self._bus.provide_response(response)
                     return
 
@@ -923,8 +917,7 @@ class RichConsoleRenderer:
                     response = SelectionResponse(
                         prompt_id=msg.prompt_id,
                         selected_index=idx - 1,
-                        selected_value=msg.options[idx - 1],
-                    )
+                        selected_value=msg.options[idx - 1])
                     self._bus.provide_response(response)
                     return
             except ValueError:

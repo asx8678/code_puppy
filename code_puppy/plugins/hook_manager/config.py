@@ -13,7 +13,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def _find_settings_path() -> Path:
     return cwd / _SETTINGS_FILENAME
 
 
-def _load_global_hooks_config() -> Dict[str, Any]:
+def _load_global_hooks_config() -> dict[str, Any]:
     """Load hooks from ~/.code_puppy/hooks.json."""
     path = Path(_GLOBAL_HOOKS_FILE)
     if not path.exists():
@@ -49,7 +49,7 @@ def _load_global_hooks_config() -> Dict[str, Any]:
         return {}
 
 
-def _load_project_hooks_config() -> Dict[str, Any]:
+def _load_project_hooks_config() -> dict[str, Any]:
     """Load hooks from .claude/settings.json."""
     path = _find_settings_path()
     if not path.exists():
@@ -62,7 +62,7 @@ def _load_project_hooks_config() -> Dict[str, Any]:
         return {}
 
 
-def load_hooks_config() -> Dict[str, Any]:
+def load_hooks_config() -> dict[str, Any]:
     """Load raw hooks config from .claude/settings.json (project only).
 
     Returns the value of the top-level "hooks" key, or {} if absent/unreadable.
@@ -71,7 +71,7 @@ def load_hooks_config() -> Dict[str, Any]:
     return _load_project_hooks_config()
 
 
-def load_all_hooks_config() -> Dict[str, Any]:
+def load_all_hooks_config() -> dict[str, Any]:
     """Load and merge hooks from both global and project sources.
 
     Returns a merged configuration with all hooks.
@@ -106,14 +106,14 @@ def load_all_hooks_config() -> Dict[str, Any]:
     return merged
 
 
-def save_hooks_config(hooks: Dict[str, Any]) -> Path:
+def save_hooks_config(hooks: dict[str, Any]) -> Path:
     """Persist hooks config back to .claude/settings.json.
 
     Performs a read-modify-write so other top-level keys are preserved.
     Returns the path written.
     """
     path = _find_settings_path()
-    existing: Dict[str, Any] = {}
+    existing: dict[str, Any] = {}
     if path.exists():
         try:
             existing = json.loads(path.read_text(encoding="utf-8"))
@@ -126,7 +126,7 @@ def save_hooks_config(hooks: Dict[str, Any]) -> Path:
     return path
 
 
-def save_global_hooks_config(hooks: Dict[str, Any]) -> Path:
+def save_global_hooks_config(hooks: dict[str, Any]) -> Path:
     """Persist hooks config to ~/.code_puppy/hooks.json.
 
     Returns the path written.
@@ -151,8 +151,7 @@ class HookEntry:
         "hook_id",
         "source",
         "_group_index",
-        "_hook_index",
-    )
+        "_hook_index")
 
     def __init__(
         self,
@@ -162,11 +161,10 @@ class HookEntry:
         command: str,
         timeout: int = 5000,
         enabled: bool = True,
-        hook_id: Optional[str] = None,
+        hook_id: str | None = None,
         source: HookSource = "project",
         group_index: int = 0,
-        hook_index: int = 0,
-    ) -> None:
+        hook_index: int = 0) -> None:
         self.event_type = event_type
         self.matcher = matcher
         self.hook_type = hook_type
@@ -192,14 +190,14 @@ class HookEntry:
 
 
 def flatten_hooks(
-    hooks_config: Dict[str, Any], source: HookSource = "project"
-) -> List[HookEntry]:
+    hooks_config: dict[str, Any], source: HookSource = "project"
+) -> list[HookEntry]:
     """Convert nested hooks config into a flat list of HookEntry objects.
 
     Each entry remembers its group_index and hook_index for round-trip
     serialisation, and which source it came from.
     """
-    entries: List[HookEntry] = []
+    entries: list[HookEntry] = []
     for event_type, groups in hooks_config.items():
         if event_type.startswith("_"):
             # Skip comment keys
@@ -225,13 +223,12 @@ def flatten_hooks(
                         hook_id=hook.get("id"),
                         source=source,
                         group_index=g_idx,
-                        hook_index=h_idx,
-                    )
+                        hook_index=h_idx)
                 )
     return entries
 
 
-def flatten_all_hooks() -> List[HookEntry]:
+def flatten_all_hooks() -> list[HookEntry]:
     """Load and flatten hooks from both global and project sources.
 
     Returns a combined list with source information for each hook.
@@ -247,12 +244,11 @@ def flatten_all_hooks() -> List[HookEntry]:
 
 
 def toggle_hook_enabled(
-    hooks_config: Dict[str, Any],
+    hooks_config: dict[str, Any],
     event_type: str,
     group_index: int,
     hook_index: int,
-    enabled: bool,
-) -> Dict[str, Any]:
+    enabled: bool) -> dict[str, Any]:
     """Return a deep copy of hooks_config with the specified hook toggled.
 
     Does NOT write to disk – call save_hooks_config() afterwards.
@@ -267,11 +263,10 @@ def toggle_hook_enabled(
 
 
 def delete_hook(
-    hooks_config: Dict[str, Any],
+    hooks_config: dict[str, Any],
     event_type: str,
     group_index: int,
-    hook_index: int,
-) -> Dict[str, Any]:
+    hook_index: int) -> dict[str, Any]:
     """Return a deep copy of hooks_config with the specified hook removed.
 
     Empty groups and event keys are pruned automatically.

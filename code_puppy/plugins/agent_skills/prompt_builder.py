@@ -1,12 +1,12 @@
 """Build available_skills XML for system prompt injection."""
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .metadata import SkillMetadata
 
 
-def build_available_skills_xml(skills: List["SkillMetadata"]) -> str:
+def build_available_skills_xml(skills: list["SkillMetadata"]) -> str:
     """Build Claude-optimized XML listing available skills.
 
     Args:

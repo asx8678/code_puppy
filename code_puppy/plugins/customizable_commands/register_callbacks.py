@@ -1,12 +1,12 @@
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_error, emit_info
 
 # Global cache for loaded commands
-_custom_commands: Dict[str, str] = {}
-_command_descriptions: Dict[str, str] = {}
+_custom_commands: dict[str, str] = {}
+_command_descriptions: dict[str, str] = {}
 _commands_loaded: bool = False  # Sentinel to track if commands have been loaded
 
 # Directories to scan for commands (in priority order - later directories override earlier)
@@ -90,7 +90,7 @@ def _load_markdown_commands() -> None:
                 emit_error(f"Failed to load command from {md_file}: {e}")
 
 
-def _custom_help() -> List[Tuple[str, str]]:
+def _custom_help() -> list[tuple[str, str]]:
     """Return help entries for loaded markdown commands."""
     # Reload commands to pick up any changes
     _load_markdown_commands()
@@ -102,7 +102,7 @@ def _custom_help() -> List[Tuple[str, str]]:
     return help_entries
 
 
-def _handle_custom_command(command: str, name: str) -> Optional[Any]:
+def _handle_custom_command(command: str, name: str) -> Any | None:
     """Handle a markdown-based custom command.
 
     Args:

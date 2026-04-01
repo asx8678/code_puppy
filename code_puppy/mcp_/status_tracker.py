@@ -10,7 +10,7 @@ import threading
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .managed_server import ServerState
 
@@ -49,18 +49,18 @@ class ServerStatusTracker:
         self._lock = threading.RLock()
 
         # Server states (server_id -> ServerState)
-        self._server_states: Dict[str, ServerState] = {}
+        self._server_states: dict[str, ServerState] = {}
 
         # Server metadata (server_id -> key -> value)
-        self._server_metadata: Dict[str, Dict[str, Any]] = defaultdict(dict)
+        self._server_metadata: dict[str, dict[str, Any]] = defaultdict(dict)
 
         # Server events (server_id -> deque of events)
         # Using deque with maxlen for automatic size limiting
-        self._server_events: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
+        self._server_events: dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
 
         # Server timing information
-        self._start_times: Dict[str, datetime] = {}
-        self._stop_times: Dict[str, datetime] = {}
+        self._start_times: dict[str, datetime] = {}
+        self._stop_times: dict[str, datetime] = {}
 
         logger.info("ServerStatusTracker initialized")
 
@@ -84,8 +84,7 @@ class ServerStatusTracker:
                     "old_state": old_state.value if old_state else None,
                     "new_state": state.value,
                     "message": f"State changed from {old_state.value if old_state else 'unknown'} to {state.value}",
-                },
-            )
+                })
 
             logger.debug(f"Server {server_id} state changed: {old_state} -> {state}")
 
@@ -127,8 +126,7 @@ class ServerStatusTracker:
                     "old_value": old_value,
                     "new_value": value,
                     "message": f"Metadata '{key}' updated",
-                },
-            )
+                })
 
             logger.debug(f"Server {server_id} metadata updated: {key} = {value}")
 
@@ -162,15 +160,14 @@ class ServerStatusTracker:
                 details=details.copy()
                 if details
                 else {},  # Copy to prevent modification
-                server_id=server_id,
-            )
+                server_id=server_id)
 
             # Add to deque (automatically handles size limiting)
             self._server_events[server_id].append(event)
 
             logger.debug(f"Event recorded for server {server_id}: {event_type}")
 
-    def get_events(self, server_id: str, limit: int = 100) -> List[Event]:
+    def get_events(self, server_id: str, limit: int = 100) -> list[Event]:
         """
         Get recent events for a server.
 
@@ -200,7 +197,7 @@ class ServerStatusTracker:
                 self._server_events[server_id].clear()
                 logger.info(f"Cleared all events for server: {server_id}")
 
-    def get_uptime(self, server_id: str) -> Optional[timedelta]:
+    def get_uptime(self, server_id: str) -> timedelta | None:
         """
         Calculate uptime for a server based on start/stop times.
 
@@ -243,8 +240,7 @@ class ServerStatusTracker:
             self.record_event(
                 server_id,
                 "started",
-                {"start_time": start_time.isoformat(), "message": "Server started"},
-            )
+                {"start_time": start_time.isoformat(), "message": "Server started"})
 
             logger.info(f"Recorded start time for server: {server_id}")
 
@@ -273,12 +269,11 @@ class ServerStatusTracker:
                     "stop_time": stop_time.isoformat(),
                     "uptime_seconds": uptime.total_seconds() if uptime else None,
                     "message": "Server stopped",
-                },
-            )
+                })
 
             logger.info(f"Recorded stop time for server: {server_id}")
 
-    def get_all_server_ids(self) -> List[str]:
+    def get_all_server_ids(self) -> list[str]:
         """
         Get all server IDs that have been tracked.
 
@@ -296,7 +291,7 @@ class ServerStatusTracker:
 
             return sorted(list(all_ids))
 
-    def get_server_summary(self, server_id: str) -> Dict[str, Any]:
+    def get_server_summary(self, server_id: str) -> dict[str, Any]:
         """
         Get comprehensive summary of server status.
 
