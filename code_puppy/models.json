@@ -9,6 +9,56 @@
     "context_length": 200000,
     "supported_settings": ["temperature", "seed", "top_p"]
   },
+  "synthetic-MiniMax-M2.5": {
+    "type": "custom_openai",
+    "name": "hf:MiniMaxAI/MiniMax-M2.5",
+    "custom_endpoint": {
+      "url": "https://api.synthetic.new/openai/v1/",
+      "api_key": "$SYN_API_KEY"
+    },
+    "context_length": 195000,
+    "supported_settings": ["temperature", "seed", "top_p"]
+  },
+  "synthetic-qwen3.5-397b": {
+    "type": "custom_openai",
+    "name": "hf:Qwen/Qwen3.5-397B-A17B",
+    "custom_endpoint": {
+      "url": "https://api.synthetic.new/openai/v1/",
+      "api_key": "$SYN_API_KEY"
+    },
+    "context_length": 256000,
+    "supported_settings": ["temperature", "seed", "top_p"]
+  },
+  "synthetic-Kimi-K2.5-Thinking": {
+    "type": "custom_openai",
+    "name": "hf:moonshotai/Kimi-K2.5",
+    "custom_endpoint": {
+      "url": "https://api.synthetic.new/openai/v1/",
+      "api_key": "$SYN_API_KEY"
+    },
+    "context_length": 256000,
+    "supported_settings": ["temperature", "seed", "top_p"]
+  },
+  "synthetic-Kimi-K2.5-Thinking-NVFP4": {
+    "type": "custom_openai",
+    "name": "hf:nvidia/Kimi-K2.5-NVFP4",
+    "custom_endpoint": {
+      "url": "https://api.synthetic.new/openai/v1/",
+      "api_key": "$SYN_API_KEY"
+    },
+    "context_length": 256000,
+    "supported_settings": ["temperature", "seed", "top_p"]
+  },
+  "synthetic-NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4": {
+    "type": "custom_openai",
+    "name": "hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
+    "custom_endpoint": {
+      "url": "https://api.synthetic.new/openai/v1/",
+      "api_key": "$SYN_API_KEY"
+    },
+    "context_length": 131072,
+    "supported_settings": ["temperature", "seed", "top_p"]
+  },
   "firepass-kimi-k2p5-turbo": {
     "type": "custom_openai",
     "name": "accounts/fireworks/routers/kimi-k2p5-turbo",
