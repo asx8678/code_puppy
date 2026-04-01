@@ -2272,13 +2272,18 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         # Fire agent_run_start hook - plugins can use this to start background tasks
         # (e.g., token refresh heartbeats for OAuth models)
+        # Also creates a RunContext for hierarchical tracing
+        _run_context = None
         try:
-            await on_agent_run_start(
+            _start_results, _run_context = await on_agent_run_start(
                 agent_name=self.name,
                 model_name=self.get_model_name(),
-                session_id=group_id)
+                session_id=group_id,
+                tags=["agent_run"],
+                metadata={"agent_version": getattr(self, 'version', None)})
         except Exception:
-            logger.debug("agent_run_end hook failed", exc_info=True)
+            logger.debug("agent_run_start hook failed", exc_info=True)
+            _run_context = None
 
         loop = asyncio.get_running_loop()
 
@@ -2397,6 +2402,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             # - Stopping background tasks (token refresh heartbeats)
             # - Workflow orchestration (Ralph's autonomous loop)
             # - Logging/analytics
+            # - Completing RunContext tracing
             try:
                 await on_agent_run_end(
                     agent_name=self.name,
@@ -2405,7 +2411,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                     success=_run_success,
                     error=_run_error,
                     response_text=_run_response_text,
-                    metadata={"model": self.get_model_name()})
+                    metadata={"model": self.get_model_name()},
+                    run_context=_run_context)
             except Exception:
                 logger.debug("Cleanup hook failed", exc_info=True)
 

@@ -1,188 +1,262 @@
-"""Hierarchical run context for tracing agent, tool, and model interactions.
+"""RunContext for hierarchical tracing and execution context management.
 
-Each run context captures metadata about a single unit of work (e.g. an agent
-run, a tool invocation, a model call).  Contexts form a tree via
-``parent_run_id`` and are stored in a ``ContextVar`` so that async tasks
-naturally inherit the correct parent.
-
-Usage
------
-Inside a callback you can read the current context::
-
-    from code_puppy.run_context import get_current_run_context
-
-    ctx = get_current_run_context()
-    if ctx:
-        print(ctx.run_id, ctx.component_type)
-
-The *on_agent_run_start* / *on_agent_run_end* helpers in ``callbacks.py``
-automatically manage the lifecycle of root and child contexts.
+This module provides structured run context for tracking execution hierarchies
+in agent runs, tool calls, and other operations. It integrates with contextvars
+for safe async context propagation.
 """
 
 from __future__ import annotations
 
+import contextvars
 import time
 import uuid
-from contextvars import ContextVar, copy_context
 from dataclasses import dataclass, field
 from typing import Any
 
+# ContextVar for the current run context - thread/async safe
+_current_run_context: contextvars.ContextVar[RunContext | None] = contextvars.ContextVar(
+    "current_run_context", default=None
+)
 
-# ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
 
 @dataclass
 class RunContext:
-    """Immutable snapshot of a single unit of work.
-
-    Attributes
-    ----------
-    run_id:
-        Unique identifier for this run (UUID4).
-    parent_run_id:
-        The ``run_id`` of the parent context, or ``None`` for a root context.
-    session_id:
-        Optional session identifier forwarded from the agent run.
-    component_type:
-        Category of the component producing this context
-        (e.g. ``"agent"``, ``"tool"``, ``"model"``, ``"plugin"``).
-    component_name:
-        Human-readable name of the specific component
-        (e.g. ``"husky-019d4a"``, ``"read_file"``).
-    tags:
-        Arbitrary labels useful for filtering / grouping traces.
-    metadata:
-        Extensible dict for additional structured data.
-    start_time:
-        Monotonic timestamp (``time.monotonic()``) when the context was created.
-    end_time:
-        Monotonic timestamp when the context was closed, or ``None`` if still
-        active.
+    """Execution context for a single run/operation.
+    
+    RunContext tracks metadata for execution units like agent runs,
+    tool invocations, model calls, etc. It supports parent-child
+    relationships for tracing hierarchical operations.
+    
+    Attributes:
+        run_id: Unique identifier for this run
+        parent_run_id: Parent run ID if this is a child operation
+        session_id: Session identifier for grouping related runs
+        component_type: Type of component (agent/tool/model/plugin)
+        component_name: Name of the component being executed
+        tags: List of string tags for categorization
+        metadata: Additional key-value metadata
+        start_time: Unix timestamp when run started
+        end_time: Unix timestamp when run ended (None if ongoing)
+        success: Whether run completed successfully (None if ongoing)
+        error_type: Type of exception if failed (None if success or ongoing)
     """
-
     run_id: str
+    component_type: str
+    component_name: str
     parent_run_id: str | None = None
     session_id: str | None = None
-    component_type: str = "unknown"
-    component_name: str = ""
     tags: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
-    start_time: float = field(default_factory=time.monotonic)
+    start_time: float = field(default_factory=time.time)
     end_time: float | None = None
-
-    # -- helpers -------------------------------------------------------------
-
+    success: bool | None = None
+    error_type: str | None = None
+    
+    def end(self, success: bool = True, error: Exception | None = None) -> None:
+        """Mark the run as ended with status.
+        
+        Args:
+            success: Whether the run completed successfully
+            error: Exception if the run failed
+        """
+        self.end_time = time.time()
+        self.success = success
+        if error is not None:
+            self.error_type = type(error).__name__
+    
     @property
-    def duration(self) -> float | None:
-        """Elapsed time in seconds, or ``None`` if the context is still open."""
+    def duration_ms(self) -> float | None:
+        """Calculate duration in milliseconds.
+        
+        Returns:
+            Duration if run has ended, None otherwise
+        """
         if self.end_time is None:
             return None
-        return self.end_time - self.start_time
-
-    @property
-    def is_root(self) -> bool:
-        """``True`` when this context has no parent."""
-        return self.parent_run_id is None
-
-    def close(self) -> None:
-        """Mark the context as finished *now*."""
-        if self.end_time is None:
-            self.end_time = time.monotonic()
-
+        return (self.end_time - self.start_time) * 1000
+    
     def to_dict(self) -> dict[str, Any]:
-        """Serialise to a plain dict (useful for logging / JSON)."""
+        """Convert to dictionary representation.
+        
+        Returns:
+            Dict with all context fields
+        """
         return {
             "run_id": self.run_id,
             "parent_run_id": self.parent_run_id,
             "session_id": self.session_id,
             "component_type": self.component_type,
             "component_name": self.component_name,
-            "tags": list(self.tags),
-            "metadata": dict(self.metadata),
+            "tags": self.tags,
+            "metadata": self.metadata,
             "start_time": self.start_time,
             "end_time": self.end_time,
-            "duration": self.duration,
+            "duration_ms": self.duration_ms,
+            "success": self.success,
+            "error_type": self.error_type,
         }
-
-
-# ---------------------------------------------------------------------------
-# ContextVar integration
-# ---------------------------------------------------------------------------
-
-_current_run_context: ContextVar[RunContext | None] = ContextVar(
-    "current_run_context", default=None
-)
+    
+    @classmethod
+    def create_child(
+        cls,
+        parent: RunContext,
+        component_type: str,
+        component_name: str,
+        **kwargs: Any,
+    ) -> RunContext:
+        """Create a child run context from a parent.
+        
+        Args:
+            parent: Parent run context
+            component_type: Type of child component
+            component_name: Name of child component
+            **kwargs: Additional fields to set on child context
+            
+        Returns:
+            New child RunContext with parent_run_id set
+        """
+        # Inherit tags from parent if not explicitly provided
+        tags = kwargs.pop("tags", list(parent.tags))
+        # Start with empty metadata if not explicitly provided
+        metadata = kwargs.pop("metadata", {})
+        
+        return cls(
+            run_id=str(uuid.uuid4()),
+            parent_run_id=parent.run_id,
+            session_id=parent.session_id,
+            component_type=component_type,
+            component_name=component_name,
+            tags=tags,
+            metadata=metadata,
+            **kwargs,
+        )
 
 
 def get_current_run_context() -> RunContext | None:
-    """Return the active :class:`RunContext` for the current async context."""
+    """Get the current run context for this execution context.
+    
+    This is safe to use across async boundaries due to ContextVar.
+    
+    Returns:
+        Current RunContext or None if not set
+    """
     return _current_run_context.get()
 
 
-def set_current_run_context(ctx: RunContext | None) -> None:
-    """Set (or clear) the active :class:`RunContext` for the current async context."""
-    _current_run_context.set(ctx)
-
-
-# ---------------------------------------------------------------------------
-# Factory helpers
-# ---------------------------------------------------------------------------
-
-def create_child_run_context(
-    parent: RunContext,
-    component_type: str,
-    component_name: str,
-    *,
-    tags: list[str] | None = None,
-    metadata: dict[str, Any] | None = None,
-) -> RunContext:
-    """Create a new child :class:`RunContext` derived from *parent*.
-
-    The child inherits ``session_id`` and ``run_id`` as ``parent_run_id``.
-    Extra *tags* / *metadata* are merged with the parent's values (parent
-    values come first; child values override on conflict).
+def set_current_run_context(ctx: RunContext | None) -> contextvars.Token:
+    """Set the current run context.
+    
+    Args:
+        ctx: RunContext to set, or None to clear
+        
+    Returns:
+        Token for restoring previous context
     """
-    merged_tags = list(parent.tags)
-    if tags:
-        merged_tags.extend(t for t in tags if t not in merged_tags)
+    return _current_run_context.set(ctx)
 
-    merged_meta = dict(parent.metadata)
-    if metadata:
-        merged_meta.update(metadata)
 
-    return RunContext(
-        run_id=str(uuid.uuid4()),
-        parent_run_id=parent.run_id,
-        session_id=parent.session_id,
-        component_type=component_type,
-        component_name=component_name,
-        tags=merged_tags,
-        metadata=merged_meta,
-        start_time=time.monotonic(),
-    )
+def reset_run_context(token: contextvars.Token) -> None:
+    """Reset run context using token from set_current_run_context.
+    
+    Args:
+        token: Token returned by set_current_run_context
+    """
+    _current_run_context.reset(token)
 
 
 def create_root_run_context(
     component_type: str,
     component_name: str,
-    *,
     session_id: str | None = None,
     tags: list[str] | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> RunContext:
-    """Create a new root :class:`RunContext` (no parent).
-
-    Convenience wrapper for callers that know they are creating a top-level
-    context.
+    """Create a new root run context.
+    
+    This is typically called at the start of an agent run or top-level operation.
+    
+    Args:
+        component_type: Type of component (agent/tool/model/etc)
+        component_name: Name of the component
+        session_id: Optional session ID to group related runs
+        tags: Optional list of tags
+        metadata: Optional initial metadata
+        
+    Returns:
+        New RunContext with generated run_id
     """
     return RunContext(
         run_id=str(uuid.uuid4()),
-        parent_run_id=None,
-        session_id=session_id,
         component_type=component_type,
         component_name=component_name,
-        tags=list(tags or []),
-        metadata=dict(metadata or {}),
-        start_time=time.monotonic(),
+        session_id=session_id,
+        tags=tags or [],
+        metadata=metadata or {},
     )
+
+
+# Convenience function for creating child context and setting it
+@dataclass
+class RunContextManager:
+    """Context manager for run context lifecycle.
+    
+    Handles setting/restoring context and marking end state.
+    Works with both sync `with` and async `async with`.
+    
+    Example:
+        with RunContextManager("tool", "read_file", session_id="abc") as ctx:
+            result = read_file(...)
+            # ctx automatically marked as success on exit
+    """
+    component_type: str
+    component_name: str
+    session_id: str | None = None
+    parent_context: RunContext | None = None
+    tags: list[str] | None = None  # None means inherit from parent if available
+    metadata: dict[str, Any] = field(default_factory=dict)
+    _ctx: RunContext | None = field(init=False, default=None)
+    _token: contextvars.Token | None = field(init=False, default=None)
+    
+    def __enter__(self) -> RunContext:
+        """Enter context, create and set RunContext."""
+        if self.parent_context is not None:
+            # Inherit parent tags if no explicit tags provided
+            effective_tags = self.tags
+            if effective_tags is None:
+                effective_tags = list(self.parent_context.tags)
+            
+            self._ctx = RunContext.create_child(
+                self.parent_context,
+                self.component_type,
+                self.component_name,
+                tags=effective_tags,
+                metadata=self.metadata,
+            )
+        else:
+            self._ctx = create_root_run_context(
+                self.component_type,
+                self.component_name,
+                self.session_id,
+                self.tags or [],
+                self.metadata,
+            )
+        
+        self._token = set_current_run_context(self._ctx)
+        return self._ctx
+    
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit context, mark end state and restore previous context."""
+        if self._ctx is not None:
+            success = exc_val is None
+            self._ctx.end(success=success, error=exc_val)
+        
+        if self._token is not None:
+            reset_run_context(self._token)
+    
+    async def __aenter__(self) -> RunContext:
+        """Async enter - delegates to sync enter."""
+        return self.__enter__()
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Async exit - delegates to sync exit."""
+        return self.__exit__(exc_type, exc_val, exc_tb)
