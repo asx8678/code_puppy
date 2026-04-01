@@ -74,28 +74,28 @@ CACHE_DIR = _get_xdg_dir("XDG_CACHE_HOME", ".cache")
 STATE_DIR = _get_xdg_dir("XDG_STATE_HOME", ".local/state")
 
 # Configuration files (XDG_CONFIG_HOME)
-CONFIG_FILE = os.path.join(CONFIG_DIR, "puppy.cfg")
-MCP_SERVERS_FILE = os.path.join(CONFIG_DIR, "mcp_servers.json")
+CONFIG_FILE = pathlib.Path(CONFIG_DIR) / "puppy.cfg"
+MCP_SERVERS_FILE = pathlib.Path(CONFIG_DIR) / "mcp_servers.json"
 
 # Data files (XDG_DATA_HOME)
-MODELS_FILE = os.path.join(DATA_DIR, "models.json")
-EXTRA_MODELS_FILE = os.path.join(DATA_DIR, "extra_models.json")
-AGENTS_DIR = os.path.join(DATA_DIR, "agents")
-SKILLS_DIR = os.path.join(DATA_DIR, "skills")
-CONTEXTS_DIR = os.path.join(DATA_DIR, "contexts")
-_DEFAULT_SQLITE_FILE = os.path.join(DATA_DIR, "dbos_store.sqlite")
+MODELS_FILE = pathlib.Path(DATA_DIR) / "models.json"
+EXTRA_MODELS_FILE = pathlib.Path(DATA_DIR) / "extra_models.json"
+AGENTS_DIR = pathlib.Path(DATA_DIR) / "agents"
+SKILLS_DIR = pathlib.Path(DATA_DIR) / "skills"
+CONTEXTS_DIR = pathlib.Path(DATA_DIR) / "contexts"
+_DEFAULT_SQLITE_FILE = pathlib.Path(DATA_DIR) / "dbos_store.sqlite"
 
 # OAuth plugin model files (XDG_DATA_HOME)
-GEMINI_MODELS_FILE = os.path.join(DATA_DIR, "gemini_models.json")
-CHATGPT_MODELS_FILE = os.path.join(DATA_DIR, "chatgpt_models.json")
-CLAUDE_MODELS_FILE = os.path.join(DATA_DIR, "claude_models.json")
-ANTIGRAVITY_MODELS_FILE = os.path.join(DATA_DIR, "antigravity_models.json")
+GEMINI_MODELS_FILE = pathlib.Path(DATA_DIR) / "gemini_models.json"
+CHATGPT_MODELS_FILE = pathlib.Path(DATA_DIR) / "chatgpt_models.json"
+CLAUDE_MODELS_FILE = pathlib.Path(DATA_DIR) / "claude_models.json"
+ANTIGRAVITY_MODELS_FILE = pathlib.Path(DATA_DIR) / "antigravity_models.json"
 
 # Cache files (XDG_CACHE_HOME)
-AUTOSAVE_DIR = os.path.join(CACHE_DIR, "autosaves")
+AUTOSAVE_DIR = pathlib.Path(CACHE_DIR) / "autosaves"
 
 # State files (XDG_STATE_HOME)
-COMMAND_HISTORY_FILE = os.path.join(STATE_DIR, "command_history.txt")
+COMMAND_HISTORY_FILE = pathlib.Path(STATE_DIR) / "command_history.txt"
 DBOS_DATABASE_URL = os.environ.get(
     "DBOS_SYSTEM_DATABASE_URL", f"sqlite:///{_DEFAULT_SQLITE_FILE}"
 )

@@ -17,10 +17,6 @@ from code_puppy.terminal_utils import (
     reset_windows_terminal_ansi,
     reset_windows_terminal_full)
 
-from code_puppy.agents import get_current_agent  # noqa: F401
-from code_puppy.command_line.clipboard import get_clipboard_manager  # noqa: F401
-from code_puppy.prompt_runner import run_prompt_with_attachments  # noqa: F401
-
 
 async def interactive_mode(message_renderer, initial_command: str = None) -> None:
     """Run the agent in interactive mode."""

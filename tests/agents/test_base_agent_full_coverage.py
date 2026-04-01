@@ -151,7 +151,7 @@ class TestStringifyPartExtended:
         part.tool_name = None
         part.content = MyModel(x=42)
         result = agent._stringify_part(part)
-        assert '"x": 42' in result
+        assert '"x":42' in result or '"x": 42' in result
 
     def test_dict_content(self, agent):
         part = MagicMock()

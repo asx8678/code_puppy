@@ -14,6 +14,7 @@ Usage:
 import asyncio
 import io
 import os
+from pathlib import Path
 import sys
 
 from prompt_toolkit import Application
@@ -38,7 +39,7 @@ from .onboarding_slides import (
 # State Tracking
 # ============================================================================
 
-ONBOARDING_COMPLETE_FILE = os.path.join(CONFIG_DIR, "onboarding_complete")
+ONBOARDING_COMPLETE_FILE = Path(CONFIG_DIR) / "onboarding_complete"
 
 
 def has_completed_onboarding() -> bool:

@@ -730,11 +730,55 @@ register_model_builder("gemini_oauth", _build_gemini_oauth)
 register_model_builder("round_robin", _build_round_robin)
 
 
+
+# --- Model config caching (eliminates repeated disk reads) ---
+_model_config_cache: dict[str, Any] | None = None
+_model_config_mtimes: dict[str, float] = {}
+
+
+def invalidate_model_config_cache() -> None:
+    """Force next ModelFactory.load_config() call to re-read from disk."""
+    global _model_config_cache
+    _model_config_cache = None
+
+
 class ModelFactory:
     """A factory for creating and managing different AI models."""
 
     @staticmethod
     def load_config() -> dict[str, Any]:
+        global _model_config_cache, _model_config_mtimes
+
+        # Check if any source file has changed since last cache
+        # Use module-level imports for EXTRA_MODELS_FILE etc. (line 26)
+        # so that monkeypatch in tests can override them
+        from code_puppy.config import (
+            ANTIGRAVITY_MODELS_FILE,
+            CHATGPT_MODELS_FILE,
+            CLAUDE_MODELS_FILE,
+            GEMINI_MODELS_FILE)
+
+        source_files = [
+            pathlib.Path(__file__).parent / "models.json",
+            pathlib.Path(EXTRA_MODELS_FILE),
+            pathlib.Path(CHATGPT_MODELS_FILE),
+            pathlib.Path(CLAUDE_MODELS_FILE),
+            pathlib.Path(GEMINI_MODELS_FILE),
+            pathlib.Path(ANTIGRAVITY_MODELS_FILE),
+        ]
+
+        # Build current mtimes for existing files
+        current_mtimes: dict[str, float] = {}
+        for p in source_files:
+            try:
+                current_mtimes[str(p)] = p.stat().st_mtime
+            except OSError:
+                pass  # File doesn't exist
+
+        # Return cache if valid
+        if _model_config_cache is not None and current_mtimes == _model_config_mtimes:
+            return _model_config_cache.copy()
+
         load_model_config_callbacks = callbacks.get_callbacks("load_model_config")
         if len(load_model_config_callbacks) > 0:
             if len(load_model_config_callbacks) > 1:
@@ -749,13 +793,6 @@ class ModelFactory:
             bundled_models = pathlib.Path(__file__).parent / "models.json"
             with open(bundled_models, "r") as f:
                 config = json.load(f)
-
-        # Import OAuth model file paths from main config
-        from code_puppy.config import (
-            ANTIGRAVITY_MODELS_FILE,
-            CHATGPT_MODELS_FILE,
-            CLAUDE_MODELS_FILE,
-            GEMINI_MODELS_FILE)
 
         # Build list of extra model sources
         extra_sources: list[tuple[pathlib.Path, str, bool]] = [
@@ -809,6 +846,11 @@ class ModelFactory:
             logging.getLogger(__name__).debug(
                 f"Failed to load plugin models config: {exc}"
             )
+
+        # Populate cache
+        _model_config_cache = config.copy()
+        _model_config_mtimes.clear()
+        _model_config_mtimes.update(current_mtimes)
 
         return config
 

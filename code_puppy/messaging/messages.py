@@ -7,7 +7,7 @@ Renderers decide how to display these structured messages.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Literal, Union
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field

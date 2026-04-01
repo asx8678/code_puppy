@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, Union
+from typing import Any
 
 import httpx
 from pydantic_ai import RunContext
