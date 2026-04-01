@@ -348,24 +348,24 @@ class BaseAgent(ABC):
             attributes.append(f"tool_name={part.tool_name}")
 
         content = getattr(part, "content", None)
-        if content is None:
-            attributes.append("content=None")
-        elif isinstance(content, str):
-            attributes.append(f"content={content}")
-        elif isinstance(content, pydantic.BaseModel):
-            attributes.append(
-                f"content={content.model_dump_json()}"
-            )
-        elif isinstance(content, dict):
-            attributes.append(f"content={json.dumps(content, sort_keys=True)}")
-        elif isinstance(content, list):
-            for item in content:
-                if isinstance(item, str):
-                    attributes.append(f"content={item}")
-                if isinstance(item, BinaryContent):
-                    attributes.append(f"BinaryContent={hash(item.data)}")
-        else:
-            attributes.append(f"content={repr(content)}")
+        match content:
+            case None:
+                attributes.append("content=None")
+            case str() as s:
+                attributes.append(f"content={s}")
+            case pydantic.BaseModel():
+                attributes.append(f"content={content.model_dump_json()}")
+            case dict():
+                attributes.append(f"content={json.dumps(content, sort_keys=True)}")
+            case list():
+                for item in content:
+                    match item:
+                        case str():
+                            attributes.append(f"content={item}")
+                        case BinaryContent():
+                            attributes.append(f"BinaryContent={hash(item.data)}")
+            case _:
+                attributes.append(f"content={content!r}")
         result = "|".join(attributes)
         return result
 
@@ -403,22 +403,23 @@ class BaseAgent(ABC):
 
         # Handle content
         if hasattr(part, "content") and part.content:
-            # Handle different content types
-            if isinstance(part.content, str):
-                result = part.content
-            elif isinstance(part.content, pydantic.BaseModel):
-                result = part.content.model_dump_json()
-            elif isinstance(part.content, dict):
-                result = json.dumps(part.content)
-            elif isinstance(part.content, list):
-                result = ""
-                for item in part.content:
-                    if isinstance(item, str):
-                        result += item + "\n"
-                    if isinstance(item, BinaryContent):
-                        result += f"BinaryContent={hash(item.data)}\n"
-            else:
-                result = str(part.content)
+            match part.content:
+                case str() as s:
+                    result = s
+                case pydantic.BaseModel():
+                    result = part.content.model_dump_json()
+                case dict():
+                    result = json.dumps(part.content)
+                case list():
+                    result = ""
+                    for item in part.content:
+                        match item:
+                            case str():
+                                result += item + "\n"
+                            case BinaryContent():
+                                result += f"BinaryContent={hash(item.data)}\n"
+                case _:
+                    result = str(part.content)
 
         # Handle tool calls which may have additional token costs
         # If part also has content, we'll process tool calls separately
