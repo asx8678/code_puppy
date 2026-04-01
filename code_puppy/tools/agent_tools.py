@@ -7,6 +7,10 @@ import msgpack
 import re
 import traceback
 from datetime import datetime
+
+# Imports for streaming retry logic (transient HTTP error handling)
+import httpcore
+import httpx
 from functools import partial
 from pathlib import Path
 
@@ -58,6 +62,55 @@ def _generate_dbos_workflow_id(base_id: str) -> str:
     """
     counter = next(_dbos_workflow_counter)
     return f"{base_id}-wf-{counter}"
+
+# Constants for streaming retry logic
+# These match the test constants in tests/agents/test_streaming_retry.py
+MAX_STREAMING_RETRIES = 3
+STREAMING_RETRY_DELAYS = [1, 2, 4]
+_RETRYABLE_STREAMING_EXCEPTIONS = (
+    httpx.RemoteProtocolError,
+    httpx.ReadTimeout,
+    httpcore.RemoteProtocolError,
+)
+
+
+async def _run_with_streaming_retry(run_coro_factory):
+    """Wrap agent run with retry logic for transient HTTP errors during streaming.
+
+    Catches and retries transient network errors from LLM providers:
+    - httpx.RemoteProtocolError (peer closes connection mid-stream)
+    - httpx.ReadTimeout (read timeout during streaming)
+    - httpcore.RemoteProtocolError (lower-level connection close)
+
+    These errors occur when the LLM provider or an intermediary proxy drops
+    the connection during a streamed response. They are always safe to retry
+    since no application state has been mutated.
+
+    The retry uses exponential backoff (1s, 2s, 4s) with up to 3 attempts
+    before propagating the error.
+
+    Args:
+        run_coro_factory: A callable that returns a coroutine to run.
+
+    Returns:
+        The result of the coroutine.
+
+    Raises:
+        The last retryable exception if all retries are exhausted.
+    """
+    last_error = None
+    for attempt in range(MAX_STREAMING_RETRIES):
+        try:
+            return await run_coro_factory()
+        except _RETRYABLE_STREAMING_EXCEPTIONS as e:
+            last_error = e
+            if attempt < MAX_STREAMING_RETRIES - 1:
+                delay = STREAMING_RETRY_DELAYS[attempt]
+                await asyncio.sleep(delay)
+    raise last_error
+
+
+
 
 
 def _generate_session_hash_suffix() -> str:
@@ -567,22 +620,26 @@ def register_invoke_agent(agent):
 
                     with SetWorkflowID(workflow_id):
                         task = asyncio.create_task(
-                            temp_agent.run(
-                                prompt,
-                                message_history=message_history,
-                                usage_limits=UsageLimits(
-                                    request_limit=get_message_limit()
-                                ),
-                                event_stream_handler=stream_handler)
+                            _run_with_streaming_retry(
+                                lambda: temp_agent.run(
+                                    prompt,
+                                    message_history=message_history,
+                                    usage_limits=UsageLimits(
+                                        request_limit=get_message_limit()
+                                    ),
+                                    event_stream_handler=stream_handler)
+                            )
                         )
                         _active_subagent_tasks.add(task)
                 else:
                     task = asyncio.create_task(
-                        temp_agent.run(
-                            prompt,
-                            message_history=message_history,
-                            usage_limits=UsageLimits(request_limit=get_message_limit()),
-                            event_stream_handler=stream_handler)
+                        _run_with_streaming_retry(
+                            lambda: temp_agent.run(
+                                prompt,
+                                message_history=message_history,
+                                usage_limits=UsageLimits(request_limit=get_message_limit()),
+                                event_stream_handler=stream_handler)
+                        )
                     )
                     _active_subagent_tasks.add(task)
 
