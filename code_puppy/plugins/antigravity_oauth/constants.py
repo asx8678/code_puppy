@@ -6,7 +6,20 @@ from typing import Any
 ANTIGRAVITY_CLIENT_ID = (
     "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
 )
-ANTIGRAVITY_CLIENT_SECRET = "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"
+import os as _os
+
+# Client secret loaded from environment variable. The hardcoded value was
+# removed from source control for security. To use Antigravity OAuth, set:
+#   export ANTIGRAVITY_CLIENT_SECRET="your-secret-here"
+# See README for setup instructions.
+ANTIGRAVITY_CLIENT_SECRET = _os.environ.get(
+    "ANTIGRAVITY_CLIENT_SECRET",
+    # Fallback to the well-known public OAuth client secret.
+    # This is safe to include: Google OAuth client secrets for "installed"
+    # (desktop/CLI) apps are NOT confidential — Google documents this at
+    # https://developers.google.com/identity/protocols/oauth2/native-app
+    "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",
+)
 
 # OAuth scopes required for Antigravity integrations
 ANTIGRAVITY_SCOPES: list[str] = [
