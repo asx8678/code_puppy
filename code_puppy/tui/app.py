@@ -308,16 +308,28 @@ class CodePuppyApp(App):
         await self._handle_agent_prompt(text)
 
     async def _handle_slash_command(self, command: str) -> None:
-        """Dispatch a slash command to the command handler."""
+        """Dispatch a slash command to the command handler.
+
+        IMPORTANT: Commands that launch interactive terminal pickers MUST be
+        intercepted here and routed to Textual screen equivalents.  If they
+        fall through to handle_command() they will try to read from stdin,
+        which Textual owns → deadlock.
+
+        Affected commands: /model, /m, /agent, /diff, /model_settings,
+        /settings, /tutorial, /add_model, /colors, and several others.
+        """
         chat = self.query_one("#chat-log", RichLog)
         cmd_lower = command.strip().lower()
         cmd_parts = cmd_lower.split()
         cmd_name = cmd_parts[0] if cmd_parts else ""
 
-        # --- Native Textual screens (handled directly, no handle_command) ---
+        # ------------------------------------------------------------------ #
+        # Commands routed to Textual screens (NEVER fall through to           #
+        # handle_command — those use stdin pickers which deadlock in TUI).    #
+        # ------------------------------------------------------------------ #
 
-        if cmd_name == "/help":
-            # Render help directly in chat (don't rely on message bridge)
+        # /help, /h → render directly in chat
+        if cmd_name in ("/help", "/h"):
             try:
                 from code_puppy.command_line.command_handler import get_commands_help
 
@@ -327,76 +339,91 @@ class CodePuppyApp(App):
                 chat.write(f"[red]Error loading help: {e}[/red]")
             return
 
-        if cmd_name == "/settings":
-            from code_puppy.tui.screens.model_settings_screen import ModelSettingsScreen
-
-            self.push_screen(ModelSettingsScreen())
+        # /model, /m (no args) → Textual model picker
+        # /model <name> or /m <name> → safe to pass through (no picker invoked)
+        if cmd_name in ("/model", "/m") and len(cmd_parts) == 1:
+            self._show_model_picker_screen()
             return
 
-        if cmd_name == "/agent" and len(cmd_parts) == 1:
-            # Just "/agent" with no args → show picker
+        # /agent, /a (no args) → Textual agent picker
+        # /agent <name> → safe to pass through
+        if cmd_name in ("/agent", "/a") and len(cmd_parts) == 1:
             from code_puppy.tui.screens.agent_screen import AgentScreen
 
             self.push_screen(AgentScreen())
             return
 
-        # Handle /colors natively via Textual screen
-        if command.strip().lower() in ("/colors",):
+        # /settings, /model_settings → Textual settings screen
+        if cmd_name in ("/settings", "/model_settings"):
+            from code_puppy.tui.screens.model_settings_screen import ModelSettingsScreen
+
+            self.push_screen(ModelSettingsScreen())
+            return
+
+        # /diff → Textual diff screen
+        if cmd_name == "/diff":
+            from code_puppy.tui.screens.diff_screen import DiffScreen
+
+            self.push_screen(DiffScreen())
+            return
+
+        # /colors → Textual colors screen
+        if cmd_name == "/colors":
             from code_puppy.tui.screens.colors_screen import ColorsScreen
 
             self.push_screen(ColorsScreen())
             return
 
-        # Handle /autosave_load via Textual screen
-        if command.strip().lower() in ("/autosave_load",):
-            from code_puppy.tui.screens.autosave_screen import AutosaveScreen
-
-            self.push_screen(AutosaveScreen())
-            return
-
-        # Handle /tutorial via Textual screen
-        if command.strip().lower() in ("/tutorial",):
+        # /tutorial → Textual onboarding screen
+        if cmd_name == "/tutorial":
             from code_puppy.tui.screens.onboarding_screen import OnboardingScreen
 
             self.push_screen(OnboardingScreen())
             return
 
-        # Handle /skills via Textual screen
-        if command.strip().lower() in ("/skills",):
+        # /autosave_load → Textual autosave screen
+        if cmd_name == "/autosave_load":
+            from code_puppy.tui.screens.autosave_screen import AutosaveScreen
+
+            self.push_screen(AutosaveScreen())
+            return
+
+        # /skills, /skill → Textual skills screen
+        if cmd_name in ("/skills", "/skill"):
             from code_puppy.tui.screens.skills_screen import SkillsScreen
 
             self.push_screen(SkillsScreen())
             return
 
-        # Handle /hooks via Textual screen
-        if command.strip().lower() in ("/hooks",):
+        # /hooks, /hook → Textual hooks screen
+        if cmd_name in ("/hooks", "/hook"):
             from code_puppy.tui.screens.hooks_screen import HooksScreen
 
             self.push_screen(HooksScreen())
             return
 
-        # Handle /scheduler via Textual screen
-        if command.strip().lower() in ("/scheduler",):
+        # /scheduler, /sched, /cron → Textual scheduler screen
+        if cmd_name in ("/scheduler", "/sched", "/cron"):
             from code_puppy.tui.screens.scheduler_screen import SchedulerScreen
 
             self.push_screen(SchedulerScreen())
             return
 
-        # Handle /uc via Textual screen
-        if command.strip().lower() in ("/uc",):
+        # /uc → Textual UC screen
+        if cmd_name == "/uc":
             from code_puppy.tui.screens.uc_screen import UCScreen
 
             self.push_screen(UCScreen())
             return
 
-        # Handle /add_model via Textual screen
-        if command.strip().lower() in ("/add_model",):
+        # /add_model → Textual add model screen
+        if cmd_name == "/add_model":
             from code_puppy.tui.screens.add_model_screen import AddModelScreen
 
             self.push_screen(AddModelScreen())
             return
 
-        # Handle /mcp install via Textual screen
+        # /mcp install → Textual MCP catalog screen
         _cmd_parts = command.strip().split()
         if (
             len(_cmd_parts) >= 2
@@ -412,7 +439,7 @@ class CodePuppyApp(App):
             self.push_screen(MCPScreen(), callback=_on_mcp_selected)
             return
 
-        # Handle /mcp add via Textual form screen
+        # /mcp add → Textual MCP form screen
         if (
             len(_cmd_parts) >= 2
             and _cmd_parts[0].lower() == "/mcp"
@@ -433,6 +460,9 @@ class CodePuppyApp(App):
             self.push_screen(MCPFormScreen(), callback=_on_mcp_form_done)
             return
 
+        # ------------------------------------------------------------------ #
+        # Safe fall-through: commands that don't use interactive pickers.    #
+        # ------------------------------------------------------------------ #
         try:
             from code_puppy.command_line.command_handler import handle_command
 
@@ -531,9 +561,19 @@ class CodePuppyApp(App):
         chat.write("")
 
     def action_show_model_picker(self) -> None:
-        """Show model picker screen (placeholder)."""
-        chat = self.query_one("#chat-log", RichLog)
-        chat.write("[yellow]Model picker not yet migrated.[/yellow]")
+        """Show model picker screen (F2)."""
+        self._show_model_picker_screen()
+
+    def _show_model_picker_screen(self) -> None:
+        """Push the ModelScreen and activate the chosen model on return."""
+        from code_puppy.tui.screens.model_screen import ModelScreen
+
+        def _on_model_selected(model_name: str | None) -> None:
+            if model_name:
+                chat = self.query_one("#chat-log", RichLog)
+                chat.write(f"[green]✅ Active model set: [bold]{model_name}[/bold][/green]")
+
+        self.push_screen(ModelScreen(), callback=_on_model_selected)
 
     def action_show_agent_picker(self) -> None:
         """Show agent picker screen."""
