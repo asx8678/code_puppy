@@ -36,11 +36,16 @@ def _invalidate_config() -> None:
     _config_cache = None
 
 
+# Truthy string values recognized by _is_truthy() — module-level to avoid
+# recreating the set on every call (used by 20+ config getter functions).
+_TRUTHY_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
 def _is_truthy(val: str | None, default: bool = False) -> bool:
     """Parse a config value as boolean. Recognizes 1/true/yes/on as True."""
     if val is None:
         return default
-    return str(val).strip().lower() in {"1", "true", "yes", "on"}
+    return str(val).strip().lower() in _TRUTHY_VALUES
 
 
 def _get_xdg_dir(env_var: str, fallback: str) -> str:
