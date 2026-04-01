@@ -30,6 +30,7 @@ from code_puppy.messaging import (
     get_message_bus,
     get_session_context,
     set_session_context)
+from code_puppy.persistence import atomic_write_msgpack
 from code_puppy.tools.common import generate_group_id
 from code_puppy.tools.subagent_context import subagent_context
 
@@ -141,14 +142,13 @@ def _save_session_history(
     # Save msgpack file with JSON-serialized message history.
     # We store the pydantic-ai JSON payload inside msgpack so datetime-bearing
     # messages round-trip safely without relying on msgpack extension hooks.
+    from pydantic_ai.messages import ModelMessagesTypeAdapter
+    payload = {
+        "format": "pydantic-ai-json",
+        "payload": ModelMessagesTypeAdapter.dump_json(message_history),
+    }
     msgpack_path = sessions_dir / f"{session_id}.msgpack"
-    with open(msgpack_path, "wb") as f:
-        from pydantic_ai.messages import ModelMessagesTypeAdapter
-        payload = {
-            "format": "pydantic-ai-json",
-            "payload": ModelMessagesTypeAdapter.dump_json(message_history),
-        }
-        f.write(msgpack.packb(payload, use_bin_type=True))
+    atomic_write_msgpack(msgpack_path, payload)
 
     # Save or update txt file with metadata
     txt_path = sessions_dir / f"{session_id}.txt"
