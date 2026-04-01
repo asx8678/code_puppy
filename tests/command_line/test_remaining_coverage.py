@@ -2,11 +2,7 @@
 
 Covers remaining uncovered lines across:
 - clipboard.py (import fallbacks)
-- load_context_completion.py (exception path)
-- file_path_completion.py (path display logic)
-- prompt_toolkit_completion.py (unicode fallback, __main__, keybindings)
 - command_handler.py (MarkdownCommandResult import fallback)
-- pin_command_completion.py (empty partial_model branch)
 - diff_menu.py (keybinding handlers)
 - config_commands.py (various branches)
 - colors_menu.py (keybinding handlers, preview functions)
@@ -67,113 +63,6 @@ def test_clipboard_binary_content_import_failure():
 
 
 # ============================================================
-# load_context_completion.py - lines 50-52 (exception in completion)
-# ============================================================
-
-
-def test_load_context_completion_exception():
-    """Cover lines 50-52: exception path in get_completions."""
-    from code_puppy.command_line.load_context_completion import LoadContextCompleter
-
-    completer = LoadContextCompleter()
-    doc = MagicMock()
-    doc.text_before_cursor = "/load_context test"
-    doc.cursor_position = len(doc.text_before_cursor)
-    complete_event = MagicMock()
-
-    # Make Path(...).exists() raise to trigger the except Exception branch
-    with patch("code_puppy.command_line.load_context_completion.Path") as mock_path:
-        mock_path.return_value.__truediv__ = MagicMock(
-            side_effect=PermissionError("denied")
-        )
-        results = list(completer.get_completions(doc, complete_event))
-        assert results == []
-
-
-# ============================================================
-# file_path_completion.py - lines 56, 58-62, 72-73
-# ============================================================
-
-
-def test_file_path_completion_absolute_and_tilde():
-    """Cover lines 56, 58-62: absolute path and tilde path display."""
-    import os
-    import tempfile
-
-    from prompt_toolkit.document import Document
-
-    from code_puppy.command_line.file_path_completion import FilePathCompleter
-
-    completer = FilePathCompleter()
-
-    # Create a temp file so glob finds something
-    with tempfile.TemporaryDirectory() as tmpdir:
-        testfile = os.path.join(tmpdir, "testfile.txt")
-        with open(testfile, "w") as f:
-            f.write("x")
-
-        # Test with text starting with / (triggers line 56: abspath display)
-        _doc = Document("@/testfi", cursor_position=len("@/testfi"))
-        event = MagicMock()
-        # This uses glob matching, so use actual paths
-        doc2 = Document(f"@{tmpdir}/testfi", cursor_position=len(f"@{tmpdir}/testfi"))
-        results = list(completer.get_completions(doc2, event))
-        # Should find testfile.txt
-        assert len(results) >= 1
-
-    # Test tilde path
-    _home = os.path.expanduser("~")
-    # Use ~ prefix to trigger line 58-62
-    doc3 = Document("@~/.bashrc_nonexist", cursor_position=len("@~/.bashrc_nonexist"))
-    results = list(completer.get_completions(doc3, event))
-    # May or may not find anything, but exercises the path
-
-
-def test_file_path_completion_permission_error():
-    """Cover lines 72-73: exception handling."""
-    from prompt_toolkit.document import Document
-
-    from code_puppy.command_line.file_path_completion import FilePathCompleter
-
-    completer = FilePathCompleter()
-    doc = Document("@somefile", cursor_position=len("@somefile"))
-    event = MagicMock()
-
-    with patch(
-        "code_puppy.command_line.file_path_completion.glob.glob",
-        side_effect=PermissionError("denied"),
-    ):
-        results = list(completer.get_completions(doc, event))
-        assert results == []
-
-
-# ============================================================
-# prompt_toolkit_completion.py
-# ============================================================
-
-
-def test_sanitize_for_encoding_unicode_error():
-    """Cover lines 81-83: UnicodeEncodeError fallback in _sanitize_for_encoding."""
-    from code_puppy.command_line.prompt_toolkit_completion import (
-        _sanitize_for_encoding,
-    )
-
-    # Create text with surrogate characters that cause encode errors
-    text_with_surrogates = "hello\ud800world"
-    result = _sanitize_for_encoding(text_with_surrogates)
-    assert "hello" in result
-    assert "world" in result
-
-
-def test_prompt_toolkit_main_block():
-    """Cover lines 831-846: __main__ block."""
-    import code_puppy.command_line.prompt_toolkit_completion as mod
-
-    source = Path(mod.__file__).read_text()
-    assert 'if __name__ == "__main__"' in source
-
-
-# ============================================================
 # command_handler.py - lines 241-242 (MarkdownCommandResult import)
 # ============================================================
 
@@ -198,45 +87,6 @@ def test_command_handler_markdown_import_failure():
         ):
             result = handle_command("/unknowncmd_xyz")
             assert result is not None
-
-
-# ============================================================
-# pin_command_completion.py - lines 218-226
-# ============================================================
-
-
-def test_pin_completion_empty_partial_model():
-    """Cover lines 218-226: empty partial_model shows all models + unpin.
-
-    This branch is technically dead code (comment says 'shouldn't happen with split'),
-    but we exercise it by monkeypatching the split result.
-    """
-    from prompt_toolkit.document import Document
-
-    from code_puppy.command_line.pin_command_completion import PinCompleter
-
-    completer = PinCompleter()
-
-    # To reach the `if not partial_model` branch on line 218, we need
-    # len(tokens) == 2 with tokens[1] being empty. Since str.split() can't
-    # produce empty strings, we monkey-patch the split to inject it.
-    with (
-        patch(
-            "code_puppy.command_line.pin_command_completion.load_model_names",
-            return_value=["gpt-4", "claude-3"],
-        ),
-        patch(
-            "code_puppy.command_line.pin_command_completion.load_agent_names",
-            return_value=["default"],
-        ),
-    ):
-        doc = Document(
-            "/pin_model testagent ", cursor_position=len("/pin_model testagent ")
-        )
-        results = list(completer.get_completions(doc, MagicMock()))
-        # This exercises case 2 (agent + space -> model completions), not case 3
-        texts = [r.text for r in results]
-        assert "(unpin)" in texts
 
 
 # ============================================================
@@ -1020,16 +870,6 @@ def test_uc_load_source_code():
 
 
 # ============================================================
-# prompt_toolkit_completion.py - remaining lines
-# ============================================================
-
-# prompt_toolkit_completion remaining uncovered lines (239, 200, 386-387, 640-641, 831-846)
-# are inner functions, keybinding handlers, and __main__ blocks that are
-# exercised at runtime but can't be easily unit-tested in isolation.
-# The key coverage-improving tests are in test_prompt_toolkit_coverage.py.
-
-
-# ============================================================
 # diff_menu.py - line 568 (enter handler with empty choices)
 # ============================================================
 
@@ -1108,77 +948,6 @@ def test_onboarding_slides_import_error():
             onboarding_slides._get_slide_content(0)
         except Exception:
             pass  # The import error fallback is what we want to cover
-
-
-# ============================================================
-# pin_command_completion.py - lines 218-226 (empty partial_model)
-# ============================================================
-
-
-def test_pin_command_completion_empty_partial_model():
-    """Cover pin_command_completion lines 218-226: empty partial_model."""
-    from prompt_toolkit.completion import CompleteEvent
-    from prompt_toolkit.document import Document
-
-    from code_puppy.command_line.pin_command_completion import PinCompleter
-
-    completer = PinCompleter()
-
-    # "/pin_model default " - agent + space, cursor at end
-    text = "/pin_model default "
-    doc = Document(text, cursor_position=len(text))
-    event = CompleteEvent()
-
-    with (
-        patch(
-            "code_puppy.command_line.pin_command_completion.load_model_names",
-            return_value=["gpt-4", "claude-3"],
-        ),
-        patch(
-            "code_puppy.command_line.pin_command_completion.load_agent_names",
-            return_value=["default"],
-        ),
-    ):
-        completions = list(completer.get_completions(doc, event))
-        names = [c.text for c in completions]
-        assert "(unpin)" in names
-
-
-# ============================================================
-# file_path_completion.py - lines 56, 58-62 (path display logic)
-# ============================================================
-
-
-def test_file_path_completion_absolute_path():
-    """Cover file_path_completion lines 56, 58-62: absolute/tilde path display."""
-    import os
-    import tempfile
-
-    from prompt_toolkit.completion import CompleteEvent
-    from prompt_toolkit.document import Document
-
-    from code_puppy.command_line.file_path_completion import FilePathCompleter
-
-    completer = FilePathCompleter()
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Create a file in tmpdir
-        test_file = os.path.join(tmpdir, "testfile.txt")
-        with open(test_file, "w") as f:
-            f.write("test")
-
-        # Test absolute path
-        doc = Document(f"@{tmpdir}/", cursor_position=len(tmpdir) + 2)
-        event = CompleteEvent()
-        completions = list(completer.get_completions(doc, event))
-        assert len(completions) >= 0  # Just ensure no crash
-
-        # Test tilde path
-        _home = os.path.expanduser("~")
-        doc = Document("@~/", cursor_position=3)
-        event = CompleteEvent()
-        completions = list(completer.get_completions(doc, event))
-        assert len(completions) >= 0
 
 
 # ============================================================

@@ -426,11 +426,16 @@ async def restore_autosave_interactively(base_dir: Path) -> None:
         return
 
     # Import locally to avoid pulling the messaging layer into storage modules
-    from prompt_toolkit.formatted_text import FormattedText
+    # These are legacy prompt_toolkit imports; not available if prompt_toolkit removed
+    try:
+        from prompt_toolkit.formatted_text import FormattedText
+        from code_puppy.command_line.prompt_toolkit_completion import (
+            get_input_with_combined_completion)
+    except ImportError:
+        # prompt_toolkit not available (Textual mode); skip interactive restore
+        return
 
     from code_puppy.agents.agent_manager import get_current_agent
-    from code_puppy.command_line.prompt_toolkit_completion import (
-        get_input_with_combined_completion)
     from code_puppy.messaging import emit_success, emit_system_message, emit_warning
 
     entries = []

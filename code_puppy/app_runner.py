@@ -256,8 +256,20 @@ class AppRunner:
         global shutdown_flag
 
         args = self.parse_args()
-        message_renderer, bus_renderer, display_console = self.setup_renderers()
-        self.show_logo(args, display_console)
+
+        # Check TUI mode early to skip legacy renderers — Textual handles all output
+        from code_puppy.tui.launcher import is_tui_enabled
+
+        tui_mode = is_tui_enabled() and not args.prompt
+
+        if tui_mode:
+            # In TUI mode, don't start legacy renderer threads — they fight Textual for the terminal
+            message_renderer = None
+            bus_renderer = None
+            display_console = None
+        else:
+            message_renderer, bus_renderer, display_console = self.setup_renderers()
+            self.show_logo(args, display_console)
 
         initialize_command_history_file()
         from code_puppy.messaging import emit_error, emit_system_message
@@ -275,7 +287,8 @@ class AppRunner:
             emit_error(str(e))
             sys.exit(1)
 
-        self.setup_signals()
+        if not tui_mode:
+            self.setup_signals()
         self.load_api_keys()
         self.configure_agent(args)
 
@@ -335,6 +348,12 @@ class AppRunner:
 
             if prompt_only_mode:
                 await execute_single_prompt(initial_command, message_renderer)
+            elif tui_mode:
+                from code_puppy.tui.launcher import textual_interactive_mode
+
+                await textual_interactive_mode(
+                    message_renderer, initial_command=initial_command
+                )
             else:
                 # Default to interactive mode (no args = same as -i)
                 await interactive_mode(

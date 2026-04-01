@@ -8,7 +8,9 @@ This module targets the uncovered code paths in session_storage.py, especially:
 - Error handling for session loading
 """
 
+import sys
 import json
+from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -52,11 +54,15 @@ def mock_interactive_imports(
         warning_msgs = [] if capture_warning is None else capture_warning
         success_msgs = [] if capture_success is None else capture_success
 
+        # Create a mock prompt_toolkit_completion module (file was deleted, legacy path)
+        _PTK_KEY = "code_puppy.command_line.prompt_toolkit_completion"
+        mock_ptk_mod = ModuleType(_PTK_KEY)
+        mock_ptk_mod.get_input_with_combined_completion = mock_input
+        mock_ptk_mod.get_prompt_with_active_model = AsyncMock()
+        _ptk_prev = sys.modules.get(_PTK_KEY)
+        sys.modules[_PTK_KEY] = mock_ptk_mod
+
         patches = [
-            patch(
-                "code_puppy.command_line.prompt_toolkit_completion.get_input_with_combined_completion",
-                mock_input,
-            ),
             patch(
                 "code_puppy.messaging.emit_system_message",
                 side_effect=lambda msg: system_msgs.append(msg),
@@ -100,6 +106,11 @@ def mock_interactive_imports(
         finally:
             for p in patches:
                 p.stop()
+            # Restore sys.modules entry for prompt_toolkit_completion
+            if _ptk_prev is None:
+                sys.modules.pop(_PTK_KEY, None)
+            else:
+                sys.modules[_PTK_KEY] = _ptk_prev
 
     return _manager()
 

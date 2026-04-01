@@ -10,10 +10,12 @@ Covers the exception branches that the main test suite doesn't exercise:
 - restore_autosave_interactively exception paths
 """
 
+import sys
 import pickle
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import msgpack
 import pytest
@@ -231,11 +233,12 @@ class TestRestoreAutosaveErrors:
                 "code_puppy.session_storage.load_session_with_hashes",
                 side_effect=FileNotFoundError("gone"),
             ):
-                with patch(
-                    "code_puppy.command_line.prompt_toolkit_completion.get_input_with_combined_completion",
-                    side_effect=fake_prompt,
-                    create=True,
-                ):
+                _PTK_KEY = "code_puppy.command_line.prompt_toolkit_completion"
+                mock_ptk = ModuleType(_PTK_KEY)
+                mock_ptk.get_input_with_combined_completion = AsyncMock(side_effect=fake_prompt)
+                _prev = sys.modules.get(_PTK_KEY)
+                sys.modules[_PTK_KEY] = mock_ptk
+                try:
                     with patch(
                         "code_puppy.agents.agent_manager.get_current_agent",
                         create=True,
@@ -243,6 +246,11 @@ class TestRestoreAutosaveErrors:
                         with patch("code_puppy.messaging.emit_warning"):
                             with patch("code_puppy.messaging.emit_system_message"):
                                 await restore_autosave_interactively(tmp_path)
+                finally:
+                    if _prev is None:
+                        sys.modules.pop(_PTK_KEY, None)
+                    else:
+                        sys.modules[_PTK_KEY] = _prev
 
     @pytest.mark.asyncio
     async def test_restore_load_exception(self, tmp_path):
@@ -259,11 +267,12 @@ class TestRestoreAutosaveErrors:
                 "code_puppy.session_storage.load_session_with_hashes",
                 side_effect=ValueError("corrupt data"),
             ):
-                with patch(
-                    "code_puppy.command_line.prompt_toolkit_completion.get_input_with_combined_completion",
-                    side_effect=fake_prompt,
-                    create=True,
-                ):
+                _PTK_KEY = "code_puppy.command_line.prompt_toolkit_completion"
+                mock_ptk = ModuleType(_PTK_KEY)
+                mock_ptk.get_input_with_combined_completion = AsyncMock(side_effect=fake_prompt)
+                _prev = sys.modules.get(_PTK_KEY)
+                sys.modules[_PTK_KEY] = mock_ptk
+                try:
                     with patch(
                         "code_puppy.agents.agent_manager.get_current_agent",
                         create=True,
@@ -271,3 +280,8 @@ class TestRestoreAutosaveErrors:
                         with patch("code_puppy.messaging.emit_warning"):
                             with patch("code_puppy.messaging.emit_system_message"):
                                 await restore_autosave_interactively(tmp_path)
+                finally:
+                    if _prev is None:
+                        sys.modules.pop(_PTK_KEY, None)
+                    else:
+                        sys.modules[_PTK_KEY] = _prev

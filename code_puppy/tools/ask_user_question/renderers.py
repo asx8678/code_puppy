@@ -9,7 +9,12 @@ import io
 import shutil
 from typing import TYPE_CHECKING
 
-from prompt_toolkit.formatted_text import ANSI
+try:
+    from prompt_toolkit.formatted_text import ANSI
+    _HAS_PROMPT_TOOLKIT = True
+except ImportError:
+    ANSI = None  # type: ignore
+    _HAS_PROMPT_TOOLKIT = False
 from rich.console import Console
 from rich.markup import escape as rich_escape
 
