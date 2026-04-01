@@ -32,10 +32,16 @@ class PolicyRule:
     source: str = "default"
 
     _compiled_command: re.Pattern | None = field(
-        default=None, repr=False, init=False, compare=False,
+        default=None,
+        repr=False,
+        init=False,
+        compare=False,
     )
     _compiled_args: re.Pattern | None = field(
-        default=None, repr=False, init=False, compare=False,
+        default=None,
+        repr=False,
+        init=False,
+        compare=False,
     )
 
     def __post_init__(self) -> None:
@@ -143,6 +149,7 @@ class PolicyEngine:
         Returns ``None`` if no explicit rule matched any sub-command.
         """
         from code_puppy.utils.shell_split import split_compound_command
+
         sub_commands = split_compound_command(command)
 
         most_restrictive: PermissionDecision | None = None
@@ -166,12 +173,11 @@ class PolicyEngine:
         independently. The most restrictive decision wins (Deny > AskUser > Allow).
         """
         from code_puppy.utils.shell_split import split_compound_command
+
         sub_commands = split_compound_command(command)
 
         if len(sub_commands) <= 1:
-            return self.check(
-                "run_shell_command", {"command": command, "cwd": cwd}
-            )
+            return self.check("run_shell_command", {"command": command, "cwd": cwd})
 
         most_restrictive: PermissionDecision = Allow()
         for sub_cmd in sub_commands:
@@ -185,9 +191,7 @@ class PolicyEngine:
 
         return most_restrictive
 
-    def load_rules_from_file(
-        self, path: Path, source: str | None = None
-    ) -> int:
+    def load_rules_from_file(self, path: Path, source: str | None = None) -> int:
         """Load rules from a JSON file. Returns count loaded."""
         if not path.exists():
             return 0
@@ -198,14 +202,16 @@ class PolicyEngine:
             for r in rules_list:
                 if not isinstance(r, dict) or "tool_name" not in r:
                     continue
-                self.add_rule(PolicyRule(
-                    tool_name=r["tool_name"],
-                    decision=r.get("decision", "ask_user"),
-                    priority=r.get("priority", 0),
-                    command_pattern=r.get("command_pattern"),
-                    args_pattern=r.get("args_pattern"),
-                    source=source or str(path),
-                ))
+                self.add_rule(
+                    PolicyRule(
+                        tool_name=r["tool_name"],
+                        decision=r.get("decision", "ask_user"),
+                        priority=r.get("priority", 0),
+                        command_pattern=r.get("command_pattern"),
+                        args_pattern=r.get("args_pattern"),
+                        source=source or str(path),
+                    )
+                )
                 count += 1
             logger.info("Loaded %d policy rules from %s", count, path)
             return count

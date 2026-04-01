@@ -22,6 +22,7 @@ UnavailabilityReason = Literal["quota", "capacity", "retry_once_per_turn", "unkn
 @dataclass(frozen=True)
 class ModelAvailabilitySnapshot:
     """Point-in-time availability check for a model."""
+
     available: bool
     reason: UnavailabilityReason | None = None
 
@@ -29,6 +30,7 @@ class ModelAvailabilitySnapshot:
 @dataclass(frozen=True)
 class ModelSelectionResult:
     """Result of selecting the first available model from a list."""
+
     selected_model: str | None
     skipped: list[tuple[str, UnavailabilityReason]]
 
@@ -41,7 +43,9 @@ class ModelAvailabilityService:
         # model_id -> (status, reason, consumed)
         self._health: dict[str, tuple[HealthStatus, UnavailabilityReason, bool]] = {}
 
-    def mark_terminal(self, model_id: str, reason: UnavailabilityReason = "quota") -> None:
+    def mark_terminal(
+        self, model_id: str, reason: UnavailabilityReason = "quota"
+    ) -> None:
         """Mark model as terminally unavailable (quota/capacity exhausted)."""
         with self._lock:
             self._health[model_id] = ("terminal", reason, False)

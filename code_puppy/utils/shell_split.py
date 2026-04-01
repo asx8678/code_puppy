@@ -66,18 +66,14 @@ def split_compound_command(command: str) -> list[str]:
             elif c == '"':
                 in_double_quote = True
                 current.append(c)
-            elif (
-                c in ('&', '|')
-                and i + 1 < len(command)
-                and command[i + 1] == c
-            ):
+            elif c in ("&", "|") and i + 1 < len(command) and command[i + 1] == c:
                 part = "".join(current).strip()
                 if part:
                     parts.append(part)
                 current = []
                 i += 2
                 continue
-            elif c == ';':
+            elif c == ";":
                 part = "".join(current).strip()
                 if part:
                     parts.append(part)

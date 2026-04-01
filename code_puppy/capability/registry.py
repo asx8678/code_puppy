@@ -21,8 +21,6 @@ non-async ``load_capability_sync`` helper), a new event-loop run is
 used to drive the coroutine.
 """
 
-
-import asyncio
 import inspect
 import logging
 import threading
@@ -148,7 +146,6 @@ async def _call_provider(provider: Provider, ctx: LoadContext) -> LoadResult:
 
 def _default_ctx() -> LoadContext:
     """Build a default :class:`LoadContext` from the process environment."""
-    import os
 
     return LoadContext(
         cwd=str(Path.cwd()),

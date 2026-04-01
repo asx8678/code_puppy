@@ -28,7 +28,14 @@ Example – adding a custom models provider from a plugin::
     register_provider("models", MyModelsProvider())
 """
 
-from .registry import define_capability
+import json
+import logging
+from pathlib import Path
+
+from .registry import define_capability, register_provider
+from .types import LoadContext, LoadResult
+
+_logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Standard capabilities
@@ -65,15 +72,6 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Built-in providers (load from standard JSON config files)
 # ---------------------------------------------------------------------------
-
-import json
-import logging
-from pathlib import Path
-
-from .registry import register_provider
-from .types import LoadContext, LoadResult
-
-_logger = logging.getLogger(__name__)
 
 
 class _JsonFileModelsProvider:

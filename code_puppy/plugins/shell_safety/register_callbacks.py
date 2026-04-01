@@ -11,11 +11,13 @@ from code_puppy.callbacks import register_callback
 from code_puppy.config import (
     get_global_model_name,
     get_safety_permission_level,
-    get_yolo_mode)
+    get_yolo_mode,
+)
 from code_puppy.messaging import emit_info
 from code_puppy.plugins.shell_safety.command_cache import (
     cache_assessment,
-    get_cached_assessment)
+    get_cached_assessment,
+)
 from code_puppy.tools.command_runner import ShellSafetyAssessment
 
 # OAuth model prefixes - these models have their own safety mechanisms
@@ -63,6 +65,7 @@ def split_compound_command(command: str) -> list[str]:
         This re-export is kept for backward compatibility.
     """
     from code_puppy.utils.shell_split import split_compound_command as _split
+
     return _split(command)
 
 
@@ -255,7 +258,9 @@ async def shell_safety_callback(
                 return None
 
             # Cache miss — LLM assessment
-            from code_puppy.plugins.shell_safety.agent_shell_safety import ShellSafetyAgent
+            from code_puppy.plugins.shell_safety.agent_shell_safety import (
+                ShellSafetyAgent,
+            )
 
             agent = ShellSafetyAgent()
             prompt = f"Assess this shell command:\n\nCommand: {command}"

@@ -1,7 +1,6 @@
 """Tests for the ollama_setup plugin (code_puppy/plugins/ollama_setup)."""
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -138,7 +137,12 @@ class TestCloudModels:
     def test_expected_models_present(self):
         from code_puppy.plugins.ollama_setup.register_callbacks import CLOUD_MODELS
 
-        expected = {"kimi-k2.5:cloud", "glm-5:cloud", "minimax-m2.7:cloud", "qwen3.5:cloud"}
+        expected = {
+            "kimi-k2.5:cloud",
+            "glm-5:cloud",
+            "minimax-m2.7:cloud",
+            "qwen3.5:cloud",
+        }
         assert set(CLOUD_MODELS.keys()) == expected
 
     def test_all_have_context_length(self):

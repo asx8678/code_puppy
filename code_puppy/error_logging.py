@@ -21,10 +21,7 @@ MAX_LOG_SIZE = 5 * 1024 * 1024  # 5MB
 def _rotate_log_if_needed() -> None:
     """Rotate the error log file if it exceeds MAX_LOG_SIZE."""
     try:
-        if (
-            ERROR_LOG_FILE.exists()
-            and ERROR_LOG_FILE.stat().st_size > MAX_LOG_SIZE
-        ):
+        if ERROR_LOG_FILE.exists() and ERROR_LOG_FILE.stat().st_size > MAX_LOG_SIZE:
             rotated = ERROR_LOG_FILE.parent / (ERROR_LOG_FILE.name + ".1")
             ERROR_LOG_FILE.replace(rotated)
     except OSError:
@@ -37,9 +34,8 @@ def _ensure_logs_dir() -> None:
 
 
 def log_error(
-    error: Exception,
-    context: str | None = None,
-    include_traceback: bool = True) -> None:
+    error: Exception, context: str | None = None, include_traceback: bool = True
+) -> None:
     """Log an error to the error log file.
 
     Args:
@@ -89,9 +85,7 @@ def log_error(
             pass  # truly nothing we can do
 
 
-def log_error_message(
-    message: str,
-    context: str | None = None) -> None:
+def log_error_message(message: str, context: str | None = None) -> None:
     """Log a simple error message without an exception object.
 
     Args:

@@ -9,7 +9,7 @@ When skills share the same name, higher-precedence sources override lower ones.
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -66,12 +66,14 @@ def _scan_directory(directory: Path, source_level: SourceLevel) -> list[SkillInf
         if not skill_dir.is_dir() or skill_dir.name.startswith("."):
             continue
         has_skill_md = is_valid_skill_directory(skill_dir)
-        skills.append(SkillInfo(
-            name=skill_dir.name,
-            path=skill_dir,
-            has_skill_md=has_skill_md,
-            source_level=source_level,
-        ))
+        skills.append(
+            SkillInfo(
+                name=skill_dir.name,
+                path=skill_dir,
+                has_skill_md=has_skill_md,
+                source_level=source_level,
+            )
+        )
     return skills
 
 
@@ -121,8 +123,11 @@ def discover_skills(directories: list[Path] | None = None) -> list[SkillInfo]:
             if existing and existing.path.resolve() != skill.path.resolve():
                 logger.warning(
                     'Skill "%s" from %s overrides %s (%s -> %s)',
-                    skill.name, skill.path, existing.path,
-                    existing.source_level, source_level,
+                    skill.name,
+                    skill.path,
+                    existing.path,
+                    existing.source_level,
+                    source_level,
                 )
             skill_map[skill.name] = skill
 
@@ -131,7 +136,8 @@ def discover_skills(directories: list[Path] | None = None) -> list[SkillInfo]:
 
     logger.info(
         "Discovered %d skills (deduplicated by name) from %d sources",
-        len(discovered_skills), len(ordered_sources),
+        len(discovered_skills),
+        len(ordered_sources),
     )
     return discovered_skills
 
