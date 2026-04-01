@@ -1,6 +1,7 @@
 """Reusable Textual widgets for Code Puppy TUI."""
 
+from code_puppy.tui.widgets.completion_overlay import CompletionOverlay
 from code_puppy.tui.widgets.searchable_list import SearchableList
 from code_puppy.tui.widgets.split_panel import SplitPanel
 
-__all__ = ["SearchableList", "SplitPanel"]
+__all__ = ["CompletionOverlay", "SearchableList", "SplitPanel"]
