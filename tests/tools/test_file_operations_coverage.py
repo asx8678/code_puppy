@@ -396,35 +396,35 @@ class TestIsProjectDirectoryEdgeCases:
 class TestReadFileUnicodeHandling:
     """Test _read_file Unicode edge cases."""
 
-    def test_read_file_surrogate_cleanup_fallback(self, tmp_path):
+    async def test_read_file_surrogate_cleanup_fallback(self, tmp_path):
         """Test the fallback path for surrogate character cleanup."""
         test_file = tmp_path / "surrogate_test.txt"
         # Write content that might trigger surrogate handling
         test_file.write_bytes(b"Hello\xed\xa0\x80World")
 
-        result = _read_file(None, str(test_file))
+        result = await _read_file(None, str(test_file))
 
         # Should handle gracefully
         assert result is not None
         assert isinstance(result, ReadFileOutput)
 
-    def test_read_file_total_lines_calculation(self, tmp_path):
+    async def test_read_file_total_lines_calculation(self, tmp_path):
         """Test that total lines are calculated correctly."""
         test_file = tmp_path / "lines.txt"
         # File without trailing newline
         test_file.write_text("line1\nline2\nline3")
 
-        result = _read_file(None, str(test_file))
+        result = await _read_file(None, str(test_file))
 
         assert result.error is None
         assert result.content == "line1\nline2\nline3"
 
-    def test_read_file_with_trailing_newline(self, tmp_path):
+    async def test_read_file_with_trailing_newline(self, tmp_path):
         """Test reading file with trailing newline."""
         test_file = tmp_path / "trailing.txt"
         test_file.write_text("line1\nline2\n")
 
-        result = _read_file(None, str(test_file))
+        result = await _read_file(None, str(test_file))
 
         assert result.error is None
         assert result.content == "line1\nline2\n"
