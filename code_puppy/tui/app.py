@@ -306,6 +306,27 @@ class CodePuppyApp(App):
             self.push_screen(ColorsScreen())
             return
 
+        # Handle /autosave_load via Textual screen
+        if command.strip().lower() in ("/autosave_load",):
+            from code_puppy.tui.screens.autosave_screen import AutosaveScreen
+
+            self.push_screen(AutosaveScreen())
+            return
+
+        # Handle /tutorial via Textual screen
+        if command.strip().lower() in ("/tutorial",):
+            from code_puppy.tui.screens.onboarding_screen import OnboardingScreen
+
+            self.push_screen(OnboardingScreen())
+            return
+
+        # Handle /uc via Textual screen
+        if command.strip().lower() in ("/uc",):
+            from code_puppy.tui.screens.uc_screen import UCScreen
+
+            self.push_screen(UCScreen())
+            return
+
         try:
             from code_puppy.command_line.command_handler import handle_command
 
