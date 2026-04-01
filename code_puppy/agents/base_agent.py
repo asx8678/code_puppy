@@ -337,7 +337,7 @@ class BaseAgent(ABC):
 
         # Trim trailing ModelResponse messages
         while messages and isinstance(messages[-1], ModelResponse):
-            messages = messages[:-1]
+            messages.pop()
 
         return messages
 
@@ -1285,8 +1285,6 @@ class BaseAgent(ABC):
         Returns:
             Truncated list of messages
         """
-        import queue
-
         emit_info("Truncating message history to manage token usage")
 
         # Try Rust fast path
@@ -1325,7 +1323,7 @@ class BaseAgent(ABC):
                 skip_second = True
 
         num_tokens = 0
-        stack = queue.LifoQueue()
+        kept: list = []
         start_idx = 2 if skip_second else 1
         messages_to_scan = messages[start_idx:]
 
@@ -1333,10 +1331,9 @@ class BaseAgent(ABC):
             num_tokens += self.estimate_tokens_for_message(msg)
             if num_tokens > protected_tokens:
                 break
-            stack.put(msg)
+            kept.append(msg)
 
-        while not stack.empty():
-            result.append(stack.get())
+        result.extend(reversed(kept))
 
         result = self.prune_interrupted_tool_calls(result)
         return result
@@ -1762,7 +1759,7 @@ class BaseAgent(ABC):
         # (which are accumulated over turns using Python hash()). Rust
         # acceleration is applied in message_history_processor for token
         # estimation — that's where the big speedup lives.
-        message_history_hashes = set([self.hash_message(m) for m in _message_history])
+        message_history_hashes = {self.hash_message(m) for m in _message_history}
         messages_added = 0
         last_msg_index = len(messages) - 1
         for i, msg in enumerate(messages):

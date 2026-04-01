@@ -3,9 +3,6 @@
 Centralizes the token count heuristic so all parts of the codebase
 use the same formula: 1 token per 2.5 characters (rounded down).
 """
-from __future__ import annotations
-
-import math
 
 
 def estimate_token_count(text: str) -> int:
@@ -20,4 +17,4 @@ def estimate_token_count(text: str) -> int:
     Returns:
         Estimated token count, minimum 1.
     """
-    return max(1, math.floor(len(text) / 2.5))
+    return max(1, len(text) * 2 // 5)
