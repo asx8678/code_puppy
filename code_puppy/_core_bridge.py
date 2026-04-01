@@ -105,9 +105,9 @@ def serialize_message_for_rust(message: Any) -> dict:
         else:
             # Dicts, Pydantic models, other — serialize to JSON string
             try:
-                if hasattr(content, "model_dump"):
-                    part_dict["content_json"] = json.dumps(
-                        content.model_dump(), sort_keys=True
+                if hasattr(content, "model_dump_json"):
+                    part_dict["content_json"] = content.model_dump_json(
+                        sort_keys=True
                     )
                 elif isinstance(content, dict):
                     part_dict["content_json"] = json.dumps(content, sort_keys=True)
