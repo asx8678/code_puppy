@@ -1,33 +1,32 @@
 """Textual CSS theme for Code Puppy TUI.
 
-Color palette based on the original CLI jewel-tone banner colors:
-  - Deep sapphire blue (thinking/primary)
-  - Amethyst purple (AI responses)
-  - Amber/gold (shell commands, edits)
-  - Teal/cyan (UI chrome)
-  - Muted grays (dim text)
-
-Dark background, easy on the eyes, no garish neons.
+Color palette matches the original Code Puppy CLI exactly:
+  - Deep blue primary (deep_sky_blue4)
+  - Purple secondary (medium_purple4 / dark_violet)
+  - Cyan/teal accents (dark_cyan / dark_slate_gray3)
+  - Green success (sea_green3)
+  - Pink errors (deep_pink4)
+  - Black background, just like a terminal
 """
 
 from textual.theme import Theme
 
 # ---------------------------------------------------------------------------
-# Custom theme — matches the original Code Puppy CLI feel
+# Custom theme — exact match to the original Code Puppy CLI colors
 # ---------------------------------------------------------------------------
 
 CODE_PUPPY_THEME = Theme(
     name="code-puppy",
-    primary="#5f87af",       # Steel blue — panels, borders, primary UI
-    secondary="#875faf",     # Amethyst — AI responses, secondary accents
-    accent="#af875f",        # Warm amber — highlights, selections
-    warning="#d7af5f",       # Gold — warnings, token rate
-    error="#af5f5f",         # Muted red — errors (not screaming)
-    success="#5faf5f",       # Soft green — success, agent name
-    foreground="#c0c0c0",    # Light gray — main text (not pure white)
-    background="#1c1c1c",    # Near-black — like a terminal
-    surface="#262626",       # Dark gray — panels, elevated surfaces
-    panel="#303030",         # Slightly lighter — cards, overlays
+    primary="#005faf",       # deep_sky_blue4 — the main CLI color
+    secondary="#5f5f87",     # medium_purple4 — AI responses
+    accent="#00af87",        # dark_cyan — tools, highlights
+    warning="#d7af00",       # yellow — warnings (not brown)
+    error="#af005f",         # deep_pink4 — errors
+    success="#5fd787",       # sea_green3 — success, confirmations
+    foreground="#bcbcbc",    # grey74 — readable but not blinding
+    background="#000000",    # pure black — like the old terminal
+    surface="#121212",       # grey7 — barely lifted from black
+    panel="#1c1c1c",         # grey11 — subtle panel elevation
     dark=True,
     luminosity_spread=0.15,
     text_alpha=0.9,
@@ -55,7 +54,7 @@ SplitPanel {
 SplitPanel > .split-panel--left {
     width: 35%;
     min-width: 25;
-    border-right: solid $primary-darken-1;
+    border-right: solid $primary;
 }
 
 SplitPanel > .split-panel--right {
@@ -106,7 +105,7 @@ SearchableList > ListView {
     padding: 1;
     color: $text-muted;
     background: $surface;
-    border-top: solid $primary-darken-1;
+    border-top: solid $primary;
 }
 
 /* Preview panel content */
