@@ -39,6 +39,24 @@ except ImportError:
     serialize_session_incremental = None  # type: ignore[assignment]
 
 
+# --- Hashline acceleration --------------------------------------------------
+try:
+    from _code_puppy_core import (
+        compute_line_hash,
+        format_hashlines,
+        strip_hashline_prefixes,
+        validate_hashline_anchor,
+    )
+    HASHLINE_RUST_AVAILABLE = True
+except ImportError:
+    HASHLINE_RUST_AVAILABLE = False
+    compute_line_hash = None  # type: ignore[assignment]
+    format_hashlines = None  # type: ignore[assignment]
+    strip_hashline_prefixes = None  # type: ignore[assignment]
+    validate_hashline_anchor = None  # type: ignore[assignment]
+# ---------------------------------------------------------------------------
+
+
 # --- Fast Puppy toggle ---------------------------------------------------
 # When True (default), Rust acceleration is used at runtime if the module
 # is installed.  /fast_puppy disable flips this to False so every call
