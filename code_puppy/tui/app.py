@@ -11,27 +11,14 @@ from collections import deque
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.reactive import reactive
-from textual.widgets import Footer, Header, Input, RichLog, Static
+from textual.widgets import Header, Input, RichLog
 
 from code_puppy.tui.theme import APP_CSS
 from code_puppy.tui.widgets.completion_overlay import CompletionOverlay
+from code_puppy.tui.widgets.info_bar import InfoBar
 
 # Maximum number of history entries to keep
 MAX_HISTORY = 500
-
-
-class StatusBar(Static):
-    """Status bar showing token rate and current activity."""
-
-    DEFAULT_CSS = """
-    StatusBar {
-        dock: bottom;
-        height: 1;
-        background: $surface-darken-1;
-        color: $text-muted;
-        padding: 0 2;
-    }
-    """
 
 
 class PuppyInput(Input):
@@ -145,9 +132,8 @@ class CodePuppyApp(App):
         yield Header()
         yield RichLog(id="chat-log", highlight=True, markup=True, wrap=True)
         yield CompletionOverlay(id="completions")
-        yield StatusBar(id="status-bar")
         yield PuppyInput(id="input")
-        yield Footer()
+        yield InfoBar(id="info-bar")
 
     def on_mount(self) -> None:
         """Initialize the app after mounting."""
@@ -164,6 +150,10 @@ class CodePuppyApp(App):
         chat.write("[dim]Press F1 for help, Escape to quit.[/dim]")
         chat.write("")
         self.query_one("#input", PuppyInput).focus()
+
+        # Initialize info bar with current agent and model
+        info_bar = self.query_one("#info-bar", InfoBar)
+        info_bar.update_from_app_state()
 
         # Execute initial command if provided
         initial = getattr(self, "_initial_command", None)
@@ -198,41 +188,42 @@ class CodePuppyApp(App):
             input_widget.placeholder = ">>> Type a message or /command..."
             input_widget.disabled = False
             input_widget.focus()
+        self._update_info_bar()
 
     def watch_token_rate(self, rate: float) -> None:
-        """Update status bar with current token rate."""
-        self._update_status_bar()
+        """Update info bar with current token rate."""
+        self._update_info_bar()
 
     def watch_status_message(self, message: str) -> None:
-        """Update status bar text."""
-        self._update_status_bar()
+        """Update info bar text."""
+        self._update_info_bar()
 
-    def _update_status_bar(self) -> None:
-        """Refresh the status bar content."""
-        bar = self.query_one("#status-bar", StatusBar)
-        parts = []
+    def _update_info_bar(self) -> None:
+        """Refresh the info bar status text."""
+        try:
+            bar = self.query_one("#info-bar", InfoBar)
+        except Exception:
+            return
+
+        bar.is_working = self.is_working
 
         if self.is_working:
+            parts = []
             if self.token_rate > 0:
                 parts.append(f"⏳ {self.token_rate:.1f} t/s")
             if self.status_message:
-                parts.append(f"🐾 {self.status_message}")
+                parts.append(self.status_message)
             elif self.token_rate == 0:
                 parts.append("⏳ Working...")
+            bar.status_text = " │ ".join(parts) if parts else "⏳ Working..."
         else:
-            parts.append("Ready")
             if self.token_rate > 0:
-                parts.append(f"Last: {self.token_rate:.1f} t/s")
+                bar.status_text = f"Ready │ Last: {self.token_rate:.1f} t/s"
+            else:
+                bar.status_text = "Ready"
 
-        try:
-            from code_puppy.config import get_global_model_name
-
-            model = get_global_model_name()
-            parts.append(f"[{model}]")
-        except Exception:
-            pass
-
-        bar.update(" │ ".join(parts))
+        # Also refresh agent/model in case they changed
+        bar.update_from_app_state()
 
     # --- Completion overlay handlers ---
 
@@ -350,7 +341,13 @@ class CodePuppyApp(App):
         if cmd_name in ("/agent", "/a") and len(cmd_parts) == 1:
             from code_puppy.tui.screens.agent_screen import AgentScreen
 
-            self.push_screen(AgentScreen())
+            def _on_agent_selected_cmd(_result=None) -> None:
+                try:
+                    self.query_one("#info-bar", InfoBar).update_from_app_state()
+                except Exception:
+                    pass
+
+            self.push_screen(AgentScreen(), callback=_on_agent_selected_cmd)
             return
 
         # /settings, /model_settings → Textual settings screen
@@ -572,6 +569,11 @@ class CodePuppyApp(App):
             if model_name:
                 chat = self.query_one("#chat-log", RichLog)
                 chat.write(f"[green]✅ Active model set: [bold]{model_name}[/bold][/green]")
+                # Refresh info bar to show new model
+                try:
+                    self.query_one("#info-bar", InfoBar).update_from_app_state()
+                except Exception:
+                    pass
 
         self.push_screen(ModelScreen(), callback=_on_model_selected)
 
@@ -579,7 +581,13 @@ class CodePuppyApp(App):
         """Show agent picker screen."""
         from code_puppy.tui.screens.agent_screen import AgentScreen
 
-        self.push_screen(AgentScreen())
+        def _on_agent_selected(_result=None) -> None:
+            try:
+                self.query_one("#info-bar", InfoBar).update_from_app_state()
+            except Exception:
+                pass
+
+        self.push_screen(AgentScreen(), callback=_on_agent_selected)
 
     def action_show_settings(self) -> None:
         """Show model settings screen."""
