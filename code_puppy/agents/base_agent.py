@@ -158,16 +158,58 @@ class BaseAgent(ABC):
             "such as claiming task ownership or coordination with other agents."
         )
 
-    def get_full_system_prompt(self) -> str:
-        """Get the complete system prompt with identity automatically appended.
+    def get_platform_info(self) -> str:
+        """Return runtime platform context for the system prompt.
 
-        This wraps get_system_prompt() and appends the agent's identity,
-        so subclasses don't need to worry about it.
+        Includes OS, shell, date, language locale, git repo detection,
+        and current working directory.  Inspired by aider's
+        base_coder.get_platform_info().
+        """
+        import os
+        import platform as _platform
+        from datetime import datetime
+        from pathlib import Path
+
+        lines: list[str] = []
+
+        # OS / architecture
+        try:
+            lines.append(f"- Platform: {_platform.platform()}")
+        except Exception:
+            lines.append("- Platform: unknown")
+
+        # Shell
+        shell_var = "COMSPEC" if os.name == "nt" else "SHELL"
+        shell_val = os.environ.get(shell_var, "unknown")
+        lines.append(f"- Shell: {shell_var}={shell_val}")
+
+        # Current date
+        dt = datetime.now().astimezone().strftime("%Y-%m-%d")
+        lines.append(f"- Current date: {dt}")
+
+        # Working directory
+        lines.append(f"- Working directory: {os.getcwd()}")
+
+        # Git repo detection
+        if Path(".git").is_dir():
+            lines.append("- The user is working inside a git repository")
+
+        return "\n".join(lines) + "\n"
+
+    def get_full_system_prompt(self) -> str:
+        """Get the complete system prompt with platform info and identity.
+
+        Assembles: base prompt + platform context + agent identity.
+        Platform info gives the model awareness of OS, shell, date, and
+        environment so it can generate appropriate commands and advice.
 
         Returns:
-            The full system prompt including identity information.
+            The full system prompt including platform and identity information.
         """
-        return self.get_system_prompt() + self.get_identity_prompt()
+        prompt = self.get_system_prompt()
+        prompt += "\n\n# Environment\n" + self.get_platform_info()
+        prompt += self.get_identity_prompt()
+        return prompt
 
     @property
     @abstractmethod
