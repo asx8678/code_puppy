@@ -1,5 +1,6 @@
 import glob
 import os
+from pathlib import Path
 from collections.abc import Iterable
 
 from prompt_toolkit.completion import Completer, Completion
@@ -21,20 +22,19 @@ class FilePathCompleter(Completer):
         if self.symbol not in text_before_cursor:
             return
         symbol_pos = text_before_cursor.rfind(self.symbol)
-        text_after_symbol = text_before_cursor[symbol_pos + len(self.symbol) :]
+        text_after_symbol = text_before_cursor[symbol_pos + len(self.symbol):]
         start_position = -(len(text_after_symbol))
         try:
             pattern = text_after_symbol + "*"
             if not pattern.strip("*") or pattern.strip("*").endswith("/"):
-                base_path = pattern.strip("*")
-                if not base_path:
-                    base_path = "."
-                if base_path.startswith("~"):
-                    base_path = os.path.expanduser(base_path)
-                if os.path.isdir(base_path):
+                base_path_str = pattern.strip("*")
+                if not base_path_str:
+                    base_path_str = "."
+                base = Path(base_path_str).expanduser()
+                if base.is_dir():
                     paths = [
-                        os.path.join(base_path, f)
-                        for f in os.listdir(base_path)
+                        str(base / f)
+                        for f in os.listdir(base)
                         if not f.startswith(".") or text_after_symbol.endswith(".")
                     ]
                 else:
@@ -43,22 +43,23 @@ class FilePathCompleter(Completer):
                 paths = glob.glob(pattern)
                 if not pattern.startswith(".") and not pattern.startswith("*/."):
                     paths = [
-                        p for p in paths if not os.path.basename(p).startswith(".")
+                        p for p in paths if not Path(p).name.startswith(".")
                     ]
             paths.sort()
             for path in paths:
-                is_dir = os.path.isdir(path)
-                display = os.path.basename(path)
-                if os.path.isabs(path):
+                p = Path(path)
+                is_dir = p.is_dir()
+                display = p.name
+                if p.is_absolute():
                     display_path = path
                 else:
                     if text_after_symbol.startswith("/"):
-                        display_path = os.path.abspath(path)
+                        display_path = str(p.resolve())
                     elif text_after_symbol.startswith("~"):
-                        home = os.path.expanduser("~")
-                        if path.startswith(home):
-                            display_path = "~" + path[len(home) :]
-                        else:
+                        home = Path.home()
+                        try:
+                            display_path = "~/" + str(p.resolve().relative_to(home))
+                        except ValueError:
                             display_path = path
                     else:
                         display_path = path

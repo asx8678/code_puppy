@@ -5,7 +5,6 @@ Per XDG spec, logs are "state data" (actions history), not configuration.
 Because even good puppies make mistakes sometimes! 🐶
 """
 
-import os
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -22,11 +21,11 @@ def _rotate_log_if_needed() -> None:
     """Rotate the error log file if it exceeds MAX_LOG_SIZE."""
     try:
         if (
-            os.path.exists(ERROR_LOG_FILE)
-            and os.path.getsize(ERROR_LOG_FILE) > MAX_LOG_SIZE
+            ERROR_LOG_FILE.exists()
+            and ERROR_LOG_FILE.stat().st_size > MAX_LOG_SIZE
         ):
-            rotated = ERROR_LOG_FILE + ".1"
-            os.replace(ERROR_LOG_FILE, rotated)
+            rotated = ERROR_LOG_FILE.parent / (ERROR_LOG_FILE.name + ".1")
+            ERROR_LOG_FILE.replace(rotated)
     except OSError:
         pass
 
