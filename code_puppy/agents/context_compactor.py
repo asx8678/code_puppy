@@ -37,7 +37,8 @@ class ContextCompactorMixin:
     def estimate_token_count(self, text: str) -> int:
         """Estimate the number of tokens in a text string.
 
-        Uses a rough heuristic of ~4 characters per token.
+        Delegates to the shared token_utils.estimate_token_count() which
+        uses content-aware heuristics and line-sampling for large texts.
 
         Args:
             text: The text to estimate tokens for.
@@ -47,7 +48,8 @@ class ContextCompactorMixin:
         """
         if not text:
             return 0
-        return max(1, len(text) // 4)
+        from code_puppy.token_utils import estimate_token_count as _etc
+        return _etc(text)
 
     def estimate_tokens_for_message(self, message: ModelMessage) -> int:
         """Estimate the token count for a single message.
