@@ -171,7 +171,7 @@ TokenEstimator = Callable[[Any], int]
 
 @dataclass(slots=True)
 class SessionPaths:
-    pickle_path: Path
+    pickle_path: Path  # Historical name; now stores msgpack data (*.pkl extension kept for compat)
     metadata_path: Path
 
 
@@ -215,7 +215,7 @@ def save_session(
     timestamp: str,
     token_estimator: TokenEstimator,
     auto_saved: bool = False,
-    compacted_hashes: List | None = None,
+    compacted_hashes: list | None = None,
     precomputed_total: int | None = None) -> SessionMetadata:
     ensure_directory(base_dir)
     paths = build_session_paths(base_dir, session_name)
@@ -244,10 +244,10 @@ def save_session(
     # Compute HMAC for integrity using per-install secret key
     hmac_signature = _compute_hmac(_get_hmac_key(), msgpack_data)
 
-    tmp_pickle = paths.pickle_path.with_suffix(".tmp")
-    with tmp_pickle.open("wb") as pickle_file:
-        pickle_file.write(_MSGPACK_MAGIC + hmac_signature + msgpack_data)
-    tmp_pickle.replace(paths.pickle_path)
+    tmp_session = paths.pickle_path.with_suffix(".tmp")
+    with tmp_session.open("wb") as session_file:
+        session_file.write(_MSGPACK_MAGIC + hmac_signature + msgpack_data)
+    tmp_session.replace(paths.pickle_path)
 
     total_tokens = (
         precomputed_total

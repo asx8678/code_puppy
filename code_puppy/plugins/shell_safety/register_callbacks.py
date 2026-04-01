@@ -58,96 +58,12 @@ RISK_LEVELS: dict[str, int] = {
 def split_compound_command(command: str) -> list[str]:
     """Split a compound shell command into individual sub-commands.
 
-    Splits on ``&&``, ``||``, and ``;`` operators while respecting shell
-    quoting (single- and double-quoted strings are never split inside).
-    Does **not** split on ``|`` (pipe) — a pipeline is treated as a single
-    command.
-
-    Uses character-by-character scanning with quote-state tracking,
-    following the same quoting rules as :mod:`shlex`.
-
-    Args:
-        command: Shell command string to split.
-
-    Returns:
-        A list of stripped sub-command strings.  If no compound operators
-        are found outside of quotes the list contains only the original
-        command (stripped).
-
-    Examples::
-
-        >>> split_compound_command("git add . && git commit -m 'msg'")
-        ["git add .", "git commit -m 'msg'"]
-        >>> split_compound_command("echo 'hello && world'")
-        ["echo 'hello && world'"]
-        >>> split_compound_command("cat foo | grep bar")
-        ["cat foo | grep bar"]
+    .. deprecated::
+        Use :func:`code_puppy.utils.shell_split.split_compound_command` directly.
+        This re-export is kept for backward compatibility.
     """
-    parts: list[str] = []
-    current: list[str] = []
-    i = 0
-    in_single_quote = False
-    in_double_quote = False
-
-    while i < len(command):
-        c = command[i]
-
-        if in_single_quote:
-            # Inside single-quotes: only a closing ' ends the quote.
-            # No escape sequences are recognised (POSIX rule).
-            if c == "'":
-                in_single_quote = False
-            current.append(c)
-
-        elif in_double_quote:
-            # Inside double-quotes: \<any> escapes the next character.
-            if c == "\\" and i + 1 < len(command):
-                current.append(c)
-                current.append(command[i + 1])
-                i += 2
-                continue
-            if c == '"':
-                in_double_quote = False
-            current.append(c)
-
-        else:
-            # Outside quotes — watch for operators and quote starters.
-            if c == "'":
-                in_single_quote = True
-                current.append(c)
-            elif c == '"':
-                in_double_quote = True
-                current.append(c)
-            elif (
-                c in ('&', '|')
-                and i + 1 < len(command)
-                and command[i + 1] == c
-            ):
-                # && or || operator → flush the current token as a sub-command.
-                part = "".join(current).strip()
-                if part:
-                    parts.append(part)
-                current = []
-                i += 2  # consume both characters
-                continue
-            elif c == ';':
-                # ; operator → flush the current token.
-                part = "".join(current).strip()
-                if part:
-                    parts.append(part)
-                current = []
-            else:
-                current.append(c)
-
-        i += 1
-
-    # Flush whatever is left after the last operator.
-    last = "".join(current).strip()
-    if last:
-        parts.append(last)
-
-    # Guard: if nothing was split (or only empty parts), return the original.
-    return parts if parts else [command.strip()]
+    from code_puppy.utils.shell_split import split_compound_command as _split
+    return _split(command)
 
 
 # ---------------------------------------------------------------------------

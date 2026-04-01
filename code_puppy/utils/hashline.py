@@ -18,7 +18,6 @@ falls back to a pure Python implementation that uses ``zlib.crc32``.
     one backend with a validator running the other backend.
 """
 
-from __future__ import annotations
 
 import re
 import zlib

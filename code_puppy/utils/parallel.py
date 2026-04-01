@@ -6,7 +6,6 @@ Provides a bounded-concurrency async map and a from-scratch counting semaphore.
 Inspired by oh-my-pi's parallel.ts.
 """
 
-from __future__ import annotations
 
 import asyncio
 import collections

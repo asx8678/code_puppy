@@ -1015,13 +1015,17 @@ class ModelFactory:
         raise ValueError(f"Unsupported model type: {model_type}")
 
 
-# ── Routing Integration ─────────────────────────────────────────────────
+# ── Routing Integration (Foundation — not yet wired into production) ────
 def route_model(model_name: str, config: dict) -> tuple:
     """Route a model request through the composite strategy chain.
 
-    This is the preferred entry point for model creation — it consults
-    the availability circuit breaker and plugin strategies before
-    falling back to the default builder registry.
+    .. note:: **Foundation only** — this function is not yet called by any
+       production code path.  ``ModelFactory.get_model()`` remains the
+       active entry point.  Wire this in when the routing system is
+       ready for production use.
+
+    Consults the availability circuit breaker and plugin strategies
+    before falling back to the default builder registry.
 
     Args:
         model_name: Requested model name.
