@@ -109,6 +109,31 @@ DIR_IGNORE_PATTERNS = [
     "**/.svn/**",
     "**/.hg/**",
     "**/.bzr/**",
+    # Cross-language common patterns (shared across multiple ecosystems)
+    "**/target/**",      # Java, Rust, Scala, Clojure
+    "**/target",
+    "**/build/**",       # Node.js, Java, Dart/Flutter, Kotlin
+    "**/build",
+    "**/dist/**",        # Node.js, Python, Haskell
+    "**/dist",
+    "**/bin/**",         # .NET/C#, Java
+    "**/vendor/**",      # Go, Ruby, PHP
+    "**/deps/**",        # Elixir, Erlang
+    "**/coverage/**",    # Node.js, Ruby
+    "**/doc/**",         # Ruby, Elixir
+    "**/_build/**",      # Perl, Elixir
+    "**/.gradle/**",     # Java, Kotlin
+    "**/project/target/**",   # Java, Scala
+    "**/project/project/**",  # Java, Scala
+    "**/*.class",        # Java, Scala, Kotlin, Clojure
+    "**/*.jar",          # Java, Scala, Kotlin, Clojure
+    "**/*.dll",          # Go, .NET/C#, C/C++
+    "**/*.exe",          # Go, .NET/C#, C/C++
+    "**/*.so",           # Go, C/C++
+    "**/*.dylib",        # Go, C/C++
+    "**/*.pdb",          # Rust, .NET/C#
+    "**/*.o",            # C/C++, Haskell
+    "**/*.beam",         # Elixir, Erlang
     # Node.js / JavaScript / TypeScript
     "**/node_modules/**",
     "**/node_modules/**/*.js",
@@ -121,12 +146,7 @@ DIR_IGNORE_PATTERNS = [
     "**/.npm/**",
     "**/.yarn/**",
     "**/.pnpm-store/**",
-    "**/coverage/**",
     "**/.nyc_output/**",
-    "**/dist/**",
-    "**/dist",
-    "**/build/**",
-    "**/build",
     "**/.next/**",
     "**/.nuxt/**",
     "**/out/**",
@@ -159,18 +179,10 @@ DIR_IGNORE_PATTERNS = [
     "**/.env",
     "**/pip-wheel-metadata/**",
     "**/*.egg-info/**",
-    "**/dist/**",
     "**/wheels/**",
     "**/pytest-reports/**",
     # Java (Maven, Gradle, SBT)
-    "**/target/**",
-    "**/target",
-    "**/build/**",
-    "**/build",
-    "**/.gradle/**",
     "**/gradle-app.setting",
-    "**/*.class",
-    "**/*.jar",
     "**/*.war",
     "**/*.ear",
     "**/*.nar",
@@ -178,40 +190,26 @@ DIR_IGNORE_PATTERNS = [
     "**/.classpath",
     "**/.project",
     "**/.settings/**",
-    "**/bin/**",
-    "**/project/target/**",
-    "**/project/project/**",
     # Go
-    "**/vendor/**",
-    "**/*.exe",
     "**/*.exe~",
-    "**/*.dll",
-    "**/*.so",
-    "**/*.dylib",
     "**/*.test",
     "**/*.out",
     "**/go.work",
     "**/go.work.sum",
     # Rust
-    "**/target/**",
     "**/Cargo.lock",
-    "**/*.pdb",
     # Ruby
-    "**/vendor/**",
     "**/.bundle/**",
     "**/Gemfile.lock",
     "**/*.gem",
     "**/.rvm/**",
     "**/.rbenv/**",
-    "**/coverage/**",
     "**/.yardoc/**",
-    "**/doc/**",
     "**/rdoc/**",
     "**/.sass-cache/**",
     "**/.jekyll-cache/**",
     "**/_site/**",
     # PHP
-    "**/vendor/**",
     "**/composer.lock",
     "**/.phpunit.result.cache",
     "**/storage/logs/**",
@@ -221,27 +219,18 @@ DIR_IGNORE_PATTERNS = [
     "**/storage/framework/views/**",
     "**/bootstrap/cache/**",
     # .NET / C#
-    "**/bin/**",
     "**/obj/**",
     "**/packages/**",
     "**/*.cache",
-    "**/*.dll",
-    "**/*.exe",
-    "**/*.pdb",
     "**/*.user",
     "**/*.suo",
     "**/.vs/**",
     "**/TestResults/**",
     "**/BenchmarkDotNet.Artifacts/**",
     # C/C++
-    "**/*.o",
     "**/*.obj",
-    "**/*.so",
-    "**/*.dll",
     "**/*.a",
     "**/*.lib",
-    "**/*.dylib",
-    "**/*.exe",
     "**/CMakeFiles/**",
     "**/CMakeCache.txt",
     "**/cmake_install.cmake",
@@ -252,7 +241,6 @@ DIR_IGNORE_PATTERNS = [
     "**/autom4te.cache/**",
     # Perl
     "**/blib/**",
-    "**/_build/**",
     "**/Build",
     "**/Build.bat",
     "**/*.tmp",
@@ -265,21 +253,13 @@ DIR_IGNORE_PATTERNS = [
     "**/MYMETA.*",
     "**/.prove",
     # Scala
-    "**/target/**",
-    "**/project/target/**",
-    "**/project/project/**",
     "**/.bloop/**",
     "**/.metals/**",
     "**/.ammonite/**",
-    "**/*.class",
     # Elixir
-    "**/_build/**",
-    "**/deps/**",
-    "**/*.beam",
     "**/.fetch",
     "**/erl_crash.dump",
     "**/*.ez",
-    "**/doc/**",
     "**/.elixir_ls/**",
     # Swift
     "**/.build/**",
@@ -290,32 +270,22 @@ DIR_IGNORE_PATTERNS = [
     "**/xcuserdata/**",
     "**/*.dSYM/**",
     # Kotlin
-    "**/build/**",
-    "**/.gradle/**",
-    "**/*.class",
-    "**/*.jar",
     "**/*.kotlin_module",
     # Clojure
-    "**/target/**",
     "**/.lein-**",
     "**/.nrepl-port",
     "**/pom.xml.asc",
-    "**/*.jar",
-    "**/*.class",
     # Dart/Flutter
     "**/.dart_tool/**",
-    "**/build/**",
     "**/.packages",
     "**/pubspec.lock",
     "**/*.g.dart",
     "**/*.freezed.dart",
     "**/*.gr.dart",
     # Haskell
-    "**/dist/**",
     "**/dist-newstyle/**",
     "**/.stack-work/**",
     "**/*.hi",
-    "**/*.o",
     "**/*.prof",
     "**/*.aux",
     "**/*.hp",
@@ -324,13 +294,9 @@ DIR_IGNORE_PATTERNS = [
     # Erlang
     "**/ebin/**",
     "**/rel/**",
-    "**/deps/**",
-    "**/*.beam",
     "**/*.boot",
     "**/*.plt",
-    "**/erl_crash.dump",
     # Common cache and temp directories
-    "**/.cache/**",
     "**/cache/**",
     "**/tmp/**",
     "**/temp/**",
@@ -370,10 +336,7 @@ DIR_IGNORE_PATTERNS = [
     "**/.*.orig",
     "**/.*.rej",
     # Backup files
-    "**/*~",
-    "**/*.bak",
     "**/*.backup",
-    "**/*.old",
     "**/*.save",
     # Hidden files (but be careful with this one)
     "**/.*",  # Commented out as it might be too aggressive
