@@ -58,7 +58,7 @@ class AccountMetadata:
     managed_project_id: str | None = None
     added_at: float = 0
     last_used: float = 0
-    last_switch_reason: Literal["rate-limit", "initial", "rotation" | None] = None
+    last_switch_reason: Literal["rate-limit", "initial", "rotation"] | None = None
     rate_limit_reset_times: RateLimitState = field(default_factory=RateLimitState)
 
     def to_dict(self) -> dict[str, Any]:

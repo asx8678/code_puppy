@@ -32,7 +32,7 @@ class ManagedAccount:
     access_token: str | None = None
     expires_at: float | None = None
     rate_limit_reset_times: dict[str, float] = field(default_factory=dict)
-    last_switch_reason: Literal["rate-limit", "initial", "rotation" | None] = None
+    last_switch_reason: Literal["rate-limit", "initial", "rotation"] | None = None
 
 
 def _now_ms() -> float:
