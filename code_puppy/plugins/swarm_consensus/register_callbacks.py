@@ -274,7 +274,6 @@ def _register() -> None:
         # Import and register command handlers (for @register_command integration)
         try:
             from code_puppy.command_line.swarm_commands import (
-                get_swarm_help_entries,
                 handle_swarm_custom_command,
             )
 

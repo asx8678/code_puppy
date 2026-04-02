@@ -12,7 +12,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
-from .approaches import apply_approach, get_approaches_for_task, reset_agent_approach
+from .approaches import apply_approach, reset_agent_approach
 from .config import get_swarm_timeout_seconds
 from .consensus import detect_consensus, generate_debate_transcript, synthesize_results
 from .models import AgentResult, SwarmConfig, SwarmResult
@@ -287,7 +287,7 @@ class SwarmOrchestrator:
             full_prompt = self._build_agent_prompt(task_prompt, task_context)
 
             # Execute the agent
-            response = await agent.run(full_prompt)
+            response = await agent.run_with_mcp(full_prompt)
 
             execution_time_ms = (time.time() - start_time) * 1000
 

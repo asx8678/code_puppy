@@ -211,8 +211,23 @@ def _run_swarm_text(prompt: str) -> bool:
     emit_info(f"🤖 Running swarm consensus for: {prompt[:60]}...")
 
     try:
-        # Run swarm asynchronously
-        result = asyncio.run(_execute_swarm_async(prompt))
+        # Run swarm asynchronously, handling the case where an event loop
+        # is already running (e.g., TUI/REPL context).
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            # Already inside an async context — run in a separate thread
+            # with its own event loop to avoid "asyncio.run() cannot be
+            # called from a running event loop" crashes.
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                result = pool.submit(asyncio.run, _execute_swarm_async(prompt)).result()
+        else:
+            result = asyncio.run(_execute_swarm_async(prompt))
         _display_swarm_result(result)
         return True
 
