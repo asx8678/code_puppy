@@ -149,3 +149,33 @@ class TestWorkflowStateFunctions:
         set_flag("unknown_flag_xyz")
         # Should return False for has_flag
         assert not has_flag("unknown_flag_xyz")
+
+
+@pytest.mark.asyncio
+async def test_workflow_state_async_isolation():
+    """Regression test for code_puppy-5l1: workflow state must be isolated
+    across concurrent async tasks (ContextVar, not threading.local)."""
+    import asyncio
+    from code_puppy.workflow_state import _current_state, get_workflow_state
+
+    # Clear the ContextVar so each task starts with None and creates its own
+    # WorkflowState. Otherwise both tasks inherit the same object from the
+    # parent context (shallow copy).
+    _current_state.set(None)
+
+    results = {}
+
+    async def task(name, flag_value):
+        state = get_workflow_state()
+        state.metadata["test_flag"] = flag_value
+        await asyncio.sleep(0.01)  # Yield to other tasks
+        results[name] = state.metadata.get("test_flag")
+
+    await asyncio.gather(
+        task("task_a", True),
+        task("task_b", False),
+    )
+
+    # Each task should see its own flag value, not the other's
+    assert results["task_a"] is True, "Task A saw Task B's state!"
+    assert results["task_b"] is False, "Task B saw Task A's state!"
