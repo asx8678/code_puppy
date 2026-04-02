@@ -209,40 +209,6 @@ After logging in, you can use the model with:
 """
 
 
-def _run_ollama_login() -> bool:
-    """Run ``ollama login`` interactively in the user's terminal.
-
-    This will open a browser for OAuth flow. Returns True if login succeeded.
-    """
-    emit_info(
-        "🔐 Launching 'ollama login' — this will open your browser for authentication..."
-    )
-    emit_info("   (Press Ctrl+C here if you want to cancel and do it manually later)")
-    emit_info("")
-
-    try:
-        # Run ollama login with stdout/stderr connected to terminal
-        # so the user can see the browser-open message and any instructions
-        result = subprocess.run(
-            ["ollama", "login"],
-            capture_output=False,  # Let it flow to terminal
-            text=True,
-            timeout=120,  # 2 minutes — OAuth can take a while
-        )
-
-        if result.returncode == 0:
-            emit_success("✅ Login completed!")
-            return True
-        else:
-            emit_error(f"ollama login exited with code {result.returncode}")
-            return False
-    except subprocess.TimeoutExpired:
-        emit_error("ollama login timed out after 2 minutes")
-        return False
-    except Exception as exc:
-        emit_error(f"Failed to run ollama login: {exc}")
-        return False
-
 
 def _start_ollama_serve() -> Optional[subprocess.Popen]:
     """Start ``ollama serve`` as a background subprocess if not already running.
@@ -333,37 +299,12 @@ def _handle_ollama_setup(command: str, name: str) -> Any:
         emit_warning(msg)
         emit_info("")
         emit_info(
-            "💡 Want me to run 'ollama login' for you? (This will open your browser)"
+            f"📋 Model registered as '{_model_key(matched)}' but needs auth. "
+            f"To authenticate with Ollama, run:  ollama login"
         )
         emit_info(
-            "   Type 'yes' to proceed, or anything else to skip and do it manually later."
+            f"After logging in, switch to the model with:  /model {_model_key(matched)}"
         )
-
-        # We can't do interactive input here (custom commands shouldn't block)
-        # So we just run it — worst case it fails and they do it manually
-        login_ok = _run_ollama_login()
-
-        if login_ok:
-            # Re-test auth after login
-            emit_info("🔍 Re-testing accessibility after login...")
-            authorized, msg = _test_model_auth(matched)
-
-            if authorized:
-                emit_success(
-                    f"🎉 All set! Switch to the model with:  /model {_model_key(matched)}"
-                )
-            else:
-                emit_warning("Still not authorized after login.")
-                emit_info(
-                    f"📋 Model registered as '{_model_key(matched)}'. "
-                    f"You may need to subscribe to Ollama Cloud at https://ollama.com, "
-                    f"then use /model {_model_key(matched)}"
-                )
-        else:
-            emit_info(
-                f"📋 Model registered as '{_model_key(matched)}' but needs auth. "
-                f"Run 'ollama login' manually, then use /model {_model_key(matched)}"
-            )
 
     return True
 
