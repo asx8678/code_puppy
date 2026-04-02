@@ -9,7 +9,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from code_puppy.agent_types.base_agent import BaseAgent
+    from code_puppy.agents.base_agent import BaseAgent
 
 from .models import ApproachConfig
 

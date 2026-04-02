@@ -10,6 +10,7 @@ import asyncio
 import copy
 import logging
 import time
+import uuid
 from typing import TYPE_CHECKING, Any
 
 from .approaches import apply_approach, reset_agent_approach
@@ -181,6 +182,9 @@ class SwarmOrchestrator:
                 # Without this, concurrent swarm executions would race on
                 # system_prompt and temperature attributes.
                 agent = copy.deepcopy(agent)
+
+                # Assign a fresh ID so deepcopied agents don't share UUIDs.
+                agent.id = str(uuid.uuid7())
 
                 # Use a separate identity attribute instead of overwriting
                 # the read-only ``name`` property on BaseAgent.
