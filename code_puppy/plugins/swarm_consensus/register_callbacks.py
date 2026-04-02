@@ -134,6 +134,10 @@ def _register() -> None:
         register_callback("custom_command_help", _get_swarm_help)
         logger.debug("Registered help menu entries")
 
+        # Register tool (register_tools expects () -> list[dict])
+        register_callback("register_tools", lambda: [_register_swarm_tool()])
+        logger.debug("Registered run_swarm_consensus tool")
+
         # Import and register command handlers (for @register_command integration)
         try:
             from code_puppy.command_line.swarm_commands import (
