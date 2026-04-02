@@ -189,7 +189,7 @@ class TestConfigurationDisplay:
 
     def test_show_consensus_config_shows_leader_and_advisors(self):
         """Test _show_consensus_config displays leader and advisor models."""
-        from code_puppy.command_line.consensus_planner_commands import _show_consensus_config
+        from code_puppy.plugins.consensus_planner.commands import _show_consensus_config
 
         with patch(
             "code_puppy.plugins.consensus_planner.council_consensus._get_leader_model"
@@ -197,7 +197,7 @@ class TestConfigurationDisplay:
             with patch(
                 "code_puppy.plugins.consensus_planner.council_consensus._get_advisor_models"
             ) as mock_advisors:
-                with patch("code_puppy.command_line.consensus_planner_commands.emit_info") as mock_emit:
+                with patch("code_puppy.plugins.consensus_planner.commands.emit_info") as mock_emit:
                     mock_leader.return_value = "claude-sonnet-4"
                     mock_advisors.return_value = ["gpt-4.1", "gemini-2.5-pro"]
 

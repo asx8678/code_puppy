@@ -469,7 +469,7 @@ def _handle_consensus_command(command: str, name: str) -> str | bool | None:
 
     # Import and delegate to command handlers
     try:
-        from code_puppy.command_line.consensus_planner_commands import (
+        from code_puppy.plugins.consensus_planner.commands import (
             handle_compare_models_command,
             handle_consensus_plan_command,
             handle_consensus_subcommands,

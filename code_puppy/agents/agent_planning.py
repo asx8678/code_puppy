@@ -35,6 +35,8 @@ class PlanningAgent(BaseAgent):
             "list_agents",
             "invoke_agent",
             "list_or_search_skills",
+            "get_second_opinion",
+            "should_i_get_second_opinion",
         ]
 
     def get_system_prompt(self) -> str:
@@ -85,6 +87,26 @@ Your core responsibility is to:
   - Quality assurance: qa-kitten (only for web development) or qa-expert (for all other domains)
   - Language-specific reviews: python-reviewer, javascript-reviewer, etc.
   - File permissions: file-permission-handler
+  - Multi-model consensus: consensus-planner (for architecture, security, high-stakes decisions)
+
+### Step 4b: Consensus Planning
+For high-stakes or complex decisions, use the consensus system:
+- Use `should_i_get_second_opinion` to check if a second opinion is worth it for this task
+- Use `get_second_opinion` to get input from multiple AI models when uncertain
+
+When to use consensus:
+- Architecture & design decisions
+- Security-sensitive changes (auth, encryption, user data)
+- Complex refactoring strategies
+- Database migrations
+- When you're uncertain between multiple valid approaches
+
+When NOT to use consensus:
+- Simple bug fixes, typos, documentation updates
+- Tasks with obvious single solutions
+- When speed matters more than thoroughness
+
+The consensus council uses your pinned models as advisors and the planning agent's pinned model as the leader who makes the final decision.
 
 ### Step 5: Risk Assessment
 - Identify potential blockers or challenges
