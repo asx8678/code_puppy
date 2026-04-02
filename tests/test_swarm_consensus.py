@@ -609,19 +609,20 @@ class TestP1Regressions:
     - _run_agent calling run() instead of run_with_mcp()
     """
 
-    @pytest.mark.asyncio
-    async def test_handle_swarm_command_is_async(self):
-        """Regression test for code_puppy-064: _handle_swarm_command must be async,
-        not use asyncio.run() which crashes in running event loops."""
-        import inspect
+    def test_swarm_command_uses_sync_path(self):
+        """Regression test for code_puppy-064/6fn: /swarm must use the sync 
+        handle_swarm_custom_command path (not the deleted async _handle_swarm_command
+        which caused asyncio.run() crashes and had its results silently dropped)."""
+        from code_puppy.callbacks import get_callbacks
+        from code_puppy.command_line.swarm_commands import handle_swarm_custom_command
+        from code_puppy.plugins.swarm_consensus.register_callbacks import _register
 
-        from code_puppy.plugins.swarm_consensus.register_callbacks import (
-            _handle_swarm_command,
-        )
+        # Ensure the plugin is registered so callbacks are populated
+        _register()
 
-        assert inspect.iscoroutinefunction(_handle_swarm_command), (
-            "_handle_swarm_command must be async to avoid asyncio.run() crashes"
-        )
+        custom_cmd_callbacks = get_callbacks("custom_command")
+        assert handle_swarm_custom_command in custom_cmd_callbacks, \
+            "handle_swarm_custom_command must be registered as a custom_command callback"
 
     def test_spawn_agents_have_unique_ids(self):
         """Regression test for code_puppy-krl: deepcopied agents must get fresh UUIDs."""

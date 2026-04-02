@@ -25,8 +25,8 @@ Usage:
     set_flag("did_create_plan")
 """
 
+import contextvars
 import logging
-import threading
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any
@@ -159,19 +159,24 @@ class WorkflowState:
         return ", ".join(sorted(active))
 
 
-# Thread-local storage for per-run workflow state
-_thread_local = threading.local()
+# Context-local storage for per-run workflow state
+# ContextVar properly propagates across async tasks, unlike threading.local
+_current_state: contextvars.ContextVar[WorkflowState | None] = contextvars.ContextVar(
+    'workflow_state', default=None
+)
 
 
 def get_workflow_state() -> WorkflowState:
-    """Get the current thread's workflow state.
+    """Get the current context's workflow state.
     
     Returns:
-        WorkflowState for the current run, creating one if needed.
+        WorkflowState for the current async context, creating one if needed.
     """
-    if not hasattr(_thread_local, 'state'):
-        _thread_local.state = WorkflowState()
-    return _thread_local.state
+    state = _current_state.get()
+    if state is None:
+        state = WorkflowState()
+        _current_state.set(state)
+    return state
 
 
 def reset_workflow_state() -> WorkflowState:
@@ -180,8 +185,9 @@ def reset_workflow_state() -> WorkflowState:
     Returns:
         New WorkflowState instance.
     """
-    _thread_local.state = WorkflowState()
-    return _thread_local.state
+    state = WorkflowState()
+    _current_state.set(state)
+    return state
 
 
 def set_flag(flag: WorkflowFlag | str, value: bool = True) -> None:
