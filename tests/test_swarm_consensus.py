@@ -609,19 +609,18 @@ class TestP1Regressions:
     - _run_agent calling run() instead of run_with_mcp()
     """
 
-    @pytest.mark.asyncio
-    async def test_handle_swarm_command_is_async(self):
-        """Regression test for code_puppy-064: _handle_swarm_command must be async,
-        not use asyncio.run() which crashes in running event loops."""
-        import inspect
+    def test_swarm_command_uses_sync_path(self):
+        """Regression test for code_puppy-064/6fn: /swarm must use the sync 
+        handle_swarm_custom_command path."""
+        # Import the swarm plugin to trigger callback registration
+        import code_puppy.plugins.swarm_consensus.register_callbacks  # noqa: F401
 
-        from code_puppy.plugins.swarm_consensus.register_callbacks import (
-            _handle_swarm_command,
-        )
+        from code_puppy.callbacks import get_callbacks
+        from code_puppy.command_line.swarm_commands import handle_swarm_custom_command
 
-        assert inspect.iscoroutinefunction(_handle_swarm_command), (
-            "_handle_swarm_command must be async to avoid asyncio.run() crashes"
-        )
+        custom_cmd_callbacks = get_callbacks("custom_command")
+        assert handle_swarm_custom_command in custom_cmd_callbacks, \
+            "handle_swarm_custom_command must be registered as a custom_command callback"
 
     def test_spawn_agents_have_unique_ids(self):
         """Regression test for code_puppy-krl: deepcopied agents must get fresh UUIDs."""
@@ -745,6 +744,36 @@ class TestP1Regressions:
 
         agent.run_with_mcp.assert_called_once()
         assert "test response" in result.response_text
+
+
+# =============================================================================
+# Score By Structure Tests
+# =============================================================================
+
+
+class TestScoreByStructure:
+    """Tests for score_by_structure regex fix (code_puppy-38q)."""
+
+    def test_numbered_list_detected(self):
+        from code_puppy.plugins.swarm_consensus.scoring import score_by_structure
+        score = score_by_structure("1. First item\n2. Second item\n3. Third item")
+        assert score > 0, "Numbered list should increase structure score"
+
+    def test_bulleted_list_detected(self):
+        from code_puppy.plugins.swarm_consensus.scoring import score_by_structure
+        score = score_by_structure("- First bullet\n- Second bullet\n* Third bullet")
+        assert score > 0, "Bulleted list should increase structure score"
+
+    def test_multi_digit_numbers_detected(self):
+        from code_puppy.plugins.swarm_consensus.scoring import score_by_structure
+        score = score_by_structure("10. Tenth item\n11. Eleventh item\n12. Twelfth item")
+        assert score > 0, "Multi-digit numbered list should increase structure score"
+
+    def test_plain_text_low_structure(self):
+        from code_puppy.plugins.swarm_consensus.scoring import score_by_structure
+        score_plain = score_by_structure("This is just plain text without any structure.")
+        score_list = score_by_structure("1. First\n2. Second\n3. Third")
+        assert score_list > score_plain, "Structured text should score higher than plain"
 
 
 if __name__ == "__main__":

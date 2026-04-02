@@ -124,7 +124,6 @@ def score_by_certainty_markers(response_text: str) -> float:
         float: Score between 0.0 and 1.0
     """
     text = response_text.lower()
-    words = set(text.split())
 
     # Count high confidence markers
     high_count = sum(1 for marker in HIGH_CONFIDENCE_MARKERS if marker in text)
@@ -172,7 +171,7 @@ def score_by_structure(response_text: str) -> float:
     text = response_text
 
     # Has numbered or bulleted lists
-    if re.search(r"(^|\n)\s*[\d\-\*]\+[\.\)]?\s+", text, re.MULTILINE):
+    if re.search(r"(^|\n)\s*[\d\-\*]+[\.\)]?\s+", text, re.MULTILINE):
         score += 0.2
 
     # Has clear sections with headers
