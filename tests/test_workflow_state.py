@@ -151,6 +151,49 @@ class TestWorkflowStateFunctions:
         assert not has_flag("unknown_flag_xyz")
 
 
+class TestPreToolCallTracking:
+    """Tests for _on_pre_tool_call flag tracking (code_puppy-8e0)."""
+
+    def test_create_file_sets_flags(self):
+        """pre_tool_call with create_file sets DID_CREATE_FILE and DID_GENERATE_CODE."""
+        from code_puppy.workflow_state import (
+            _on_pre_tool_call,
+            reset_workflow_state,
+            WorkflowFlag,
+            has_flag,
+        )
+        reset_workflow_state()
+        _on_pre_tool_call("create_file", {})
+        assert has_flag(WorkflowFlag.DID_CREATE_FILE)
+        assert has_flag(WorkflowFlag.DID_GENERATE_CODE)
+
+    def test_replace_in_file_sets_flags(self):
+        """pre_tool_call with replace_in_file sets DID_EDIT_FILE and DID_GENERATE_CODE."""
+        from code_puppy.workflow_state import (
+            _on_pre_tool_call,
+            reset_workflow_state,
+            WorkflowFlag,
+            has_flag,
+        )
+        reset_workflow_state()
+        _on_pre_tool_call("replace_in_file", {})
+        assert has_flag(WorkflowFlag.DID_EDIT_FILE)
+        assert has_flag(WorkflowFlag.DID_GENERATE_CODE)
+
+    def test_unrelated_tool_no_file_flags(self):
+        """pre_tool_call with an unrelated tool doesn't set file flags."""
+        from code_puppy.workflow_state import (
+            _on_pre_tool_call,
+            reset_workflow_state,
+            WorkflowFlag,
+            has_flag,
+        )
+        reset_workflow_state()
+        _on_pre_tool_call("list_files", {})
+        assert not has_flag(WorkflowFlag.DID_CREATE_FILE)
+        assert not has_flag(WorkflowFlag.DID_EDIT_FILE)
+
+
 @pytest.mark.asyncio
 async def test_workflow_state_async_isolation():
     """Regression test for code_puppy-5l1: workflow state must be isolated
