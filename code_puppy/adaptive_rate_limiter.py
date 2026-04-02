@@ -543,7 +543,10 @@ async def record_rate_limit(model_name: str) -> None:
         await open_circuit(key)
 
 
-async def acquire_model_slot(model_name: str) -> None:
+async def acquire_model_slot(
+    model_name: str,
+    timeout: float | None = 300.0,
+) -> None:
     """Acquire an adaptive concurrency slot for *model_name*.
 
     Blocks until a slot is available.  The first call for any model
@@ -556,6 +559,15 @@ async def acquire_model_slot(model_name: str) -> None:
       elapses (circuit → HALF_OPEN → test request → CLOSED).
     * **HALF_OPEN** – the call is allowed only if the test-request
       budget has not been exhausted.
+
+    Args:
+        model_name: The model to acquire a slot for.
+        timeout: Maximum seconds to wait for a slot.  Pass ``None`` to
+            wait indefinitely (not recommended).  Defaults to 300 s.
+
+    Raises:
+        asyncio.TimeoutError: If a slot cannot be acquired within
+            *timeout* seconds.
     """
     key = model_name.lower().strip()
     if not key:
@@ -593,16 +605,25 @@ async def acquire_model_slot(model_name: str) -> None:
                         key,
                     )
 
-        # Wait OUTSIDE the lock to avoid deadlock with close_circuit()
+        # Wait using the condition lock — this avoids the TOCTOU race
+        # that occurred when state was checked under _lock but waited
+        # under a different lock (state.condition).  The condition lock
+        # serialises both the check and the wait so no state change can
+        # be missed.
         if need_wait_open:
             async with state.condition:
+                # Re-check under condition lock to close the TOCTOU gap
                 while state.circuit_state == CircuitState.OPEN:
-                    await state.condition.wait()
+                    await asyncio.wait_for(
+                        state.condition.wait(), timeout=timeout,
+                    )
 
         elif need_wait_half_open:
             async with state.condition:
                 while state.circuit_state == CircuitState.HALF_OPEN:
-                    await state.condition.wait()
+                    await asyncio.wait_for(
+                        state.condition.wait(), timeout=timeout,
+                    )
 
     # ── Normal slot acquisition ─────────────────────────────────────────
     async with lock:
@@ -612,7 +633,9 @@ async def acquire_model_slot(model_name: str) -> None:
 
     async with state.condition:
         while state.active_count >= int(state.current_limit):
-            await state.condition.wait()
+            await asyncio.wait_for(
+                state.condition.wait(), timeout=timeout,
+            )
         state.active_count += 1
 
 
