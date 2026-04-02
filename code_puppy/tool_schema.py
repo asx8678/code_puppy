@@ -8,6 +8,7 @@ manual schema definition.
 from __future__ import annotations
 
 import inspect
+import types
 import typing
 from dataclasses import dataclass, field
 from typing import Any, Callable, get_type_hints
@@ -365,9 +366,3 @@ def is_tool_function(func: Callable) -> bool:
     """
     return getattr(func, "_is_tool", False)
 
-
-# Import types for handling
-try:
-    import types
-except ImportError:
-    pass  # types module is built-in
