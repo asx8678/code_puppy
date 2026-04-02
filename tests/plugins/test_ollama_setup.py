@@ -194,3 +194,78 @@ class TestHelpCallback:
         assert len(result) >= 1
         name, desc = result[0]
         assert "ollama" in name
+
+
+# ---------------------------------------------------------------------------
+# Auth-fail regression: no automatic ollama login subprocess
+# ---------------------------------------------------------------------------
+
+
+class TestAuthFailNoAutoLogin:
+    """Regression: when auth fails, plugin must show manual instructions
+    and must NOT spawn an 'ollama login' subprocess."""
+
+    @patch(
+        "code_puppy.plugins.ollama_setup.register_callbacks.subprocess.run",
+    )
+    @patch(
+        "code_puppy.plugins.ollama_setup.register_callbacks.emit_info",
+    )
+    @patch(
+        "code_puppy.plugins.ollama_setup.register_callbacks.emit_warning",
+    )
+    @patch(
+        "code_puppy.plugins.ollama_setup.register_callbacks._register_model",
+        return_value=True,
+    )
+    @patch(
+        "code_puppy.plugins.ollama_setup.register_callbacks._pull_model",
+        return_value=True,
+    )
+    @patch(
+        "code_puppy.plugins.ollama_setup.register_callbacks._start_ollama_serve",
+        return_value=None,
+    )
+    @patch(
+        "code_puppy.plugins.ollama_setup.register_callbacks._ollama_available",
+        return_value=True,
+    )
+    @patch(
+        "code_puppy.plugins.ollama_setup.register_callbacks._test_model_auth",
+        return_value=(False, "🔐 Authentication Required for glm-5:cloud"),
+    )
+    def test_auth_fail_shows_manual_instructions_no_auto_login(
+        self,
+        mock_auth,
+        mock_available,
+        mock_serve,
+        mock_pull,
+        mock_register,
+        mock_warning,
+        mock_info,
+        mock_subprocess_run,
+    ):
+        from code_puppy.plugins.ollama_setup.register_callbacks import (
+            _handle_ollama_setup,
+        )
+
+        result = _handle_ollama_setup("/ollama-setup glm-5:cloud", "ollama-setup")
+
+        assert result is True
+
+        # 1. emit_warning must have been called with the auth guidance
+        mock_warning.assert_called_once()
+        warning_msg = str(mock_warning.call_args)
+        assert "Authentication Required" in warning_msg
+
+        # 2. emit_info must contain the manual "ollama login" instruction
+        info_calls = " ".join(str(c) for c in mock_info.call_args_list)
+        assert "ollama login" in info_calls
+
+        # 3. subprocess.run must NOT have been called with "ollama login"
+        #    (plugin should never auto-run login on auth failure)
+        for call in mock_subprocess_run.call_args_list:
+            args = call[0][0] if call[0] else []
+            assert (
+                "login" not in args
+            ), f"subprocess.run must not be called with 'ollama login'; got {args}"
