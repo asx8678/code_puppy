@@ -120,6 +120,23 @@ def _notify_adaptive_rate_limiter(model_name: str, status_code: int) -> None:
         logger.debug("adaptive_rate_limiter notification skipped", exc_info=True)
 
 
+def _notify_success(model_name: str) -> None:
+    """Fire-and-forget notification to the circuit breaker on success.
+
+    Called when a request completes without a 429, signalling the
+    circuit breaker that the API is healthy.
+    """
+    if not model_name:
+        return
+    try:
+        from code_puppy.adaptive_rate_limiter import record_success
+
+        asyncio.ensure_future(record_success(model_name))
+    except Exception:
+        logger = logging.getLogger(__name__)
+        logger.debug("circuit_breaker success notification skipped", exc_info=True)
+
+
 class RetryingAsyncClient(httpx.AsyncClient):
     """AsyncClient with built-in rate limit handling (429) and retries.
 
@@ -155,6 +172,9 @@ class RetryingAsyncClient(httpx.AsyncClient):
 
                 # Check for retryable status
                 if response.status_code not in self.retry_status_codes:
+                    # Notify circuit breaker of success (non-429)
+                    if self.model_name:
+                        _notify_success(self.model_name)
                     return response
 
                 # Notify adaptive rate limiter on 429
