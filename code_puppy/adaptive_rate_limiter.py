@@ -138,6 +138,29 @@ def _ensure_state(model_name: str) -> ModelRateLimitState:
     return _model_states[model_name]
 
 
+def _cleanup_old_states(max_age_seconds: float = 3600) -> int:
+    """Remove states that haven't seen 429s in a while.
+
+    Returns the number of states removed.  States that were never
+    rate-limited (``last_429_time is None``) are also eligible for
+    cleanup once they exceed the age threshold, keeping the state
+    dict from growing unboundedly as new models are encountered.
+    """
+    now = time.monotonic()
+    to_remove = [
+        k for k, s in _model_states.items()
+        if s.last_429_time is None or (now - s.last_429_time) > max_age_seconds
+    ]
+    for k in to_remove:
+        del _model_states[k]
+    if to_remove:
+        logger.debug(
+            "adaptive_rate_limiter: cleaned up %d stale model state(s)",
+            len(to_remove),
+        )
+    return len(to_remove)
+
+
 async def _recovery_loop() -> None:
     """Background coroutine that gradually restores rate limits.
 
@@ -145,6 +168,9 @@ async def _recovery_loop() -> None:
     been throttled, it increases the limit by ``_cfg_recovery_rate`` of
     the current value (or +1, whichever is larger), capped at
     ``_cfg_max_limit``.
+
+    Also periodically prunes stale model states to prevent unbounded
+    memory growth.
     """
     global _recovery_task
     logger.info("adaptive_rate_limiter: recovery loop started")
@@ -153,6 +179,16 @@ async def _recovery_loop() -> None:
             await asyncio.sleep(_cfg_cooldown_seconds)
             lock = _ensure_lock()
             async with lock:
+                # Periodically clean up stale model states
+                if len(_model_states) > 100:
+                    removed = _cleanup_old_states(max_age_seconds=3600)
+                    if removed:
+                        logger.info(
+                            "adaptive_rate_limiter: pruned %d stale state(s), "
+                            "%d remaining",
+                            removed,
+                            len(_model_states),
+                        )
                 now = time.monotonic()
                 for model_name, state in _model_states.items():
                     if state.last_429_time is None:
@@ -267,20 +303,23 @@ async def _process_queue(model_name: str, state: ModelRateLimitState) -> None:
         model_name,
         _cfg_release_rate,
     )
+    interval = (1.0 / _cfg_release_rate) if _cfg_release_rate > 0 else 0
     try:
-        while not queue.empty():
-            # Wake one waiter at a time
+        if total > 0:
+            # Batch-notify all waiters so they wake immediately,
+            # then rate-limit the actual processing pace.
             async with state.condition:
-                state.condition.notify_one()
-            released += 1
-            if _cfg_release_rate > 0:
-                await asyncio.sleep(1.0 / _cfg_release_rate)
-            logger.info(
-                "Released queued request %d/%d for %r",
-                released,
-                total,
-                model_name,
-            )
+                for _ in range(total):
+                    state.condition.notify_one()
+            for i in range(total):
+                if interval > 0:
+                    await asyncio.sleep(interval)
+                logger.info(
+                    "Released queued request %d/%d for %r",
+                    i + 1,
+                    total,
+                    model_name,
+                )
     except asyncio.CancelledError:
         pass
     except Exception:
