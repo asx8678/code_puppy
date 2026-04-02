@@ -171,6 +171,17 @@ def _ensure_lock() -> asyncio.Lock:
     return _state.lock
 
 
+def _normalize_model_name(model_name: str) -> str | None:
+    """Normalize model name to lowercase and strip whitespace.
+
+    Returns None if the model name is empty after normalization.
+    """
+    if not model_name:
+        return None
+    key = model_name.lower().strip()
+    return key if key else None
+
+
 def _ensure_state(model_name: str) -> ModelRateLimitState:
     """Get or create state for *model_name* (caller must hold ``_state.lock``)."""
     if model_name not in _state.model_states:
@@ -352,8 +363,8 @@ async def open_circuit(model_name: str) -> None:
     Queues all new ``acquire_model_slot`` calls until the cooldown
     elapses and the circuit enters HALF_OPEN.
     """
-    key = model_name.lower().strip()
-    if not key:
+    key = _normalize_model_name(model_name)
+    if key is None:
         return
 
     _ensure_recovery_task()
@@ -400,8 +411,8 @@ async def close_circuit(model_name: str) -> None:
 
     Resets cooldown multiplier and starts releasing queued requests.
     """
-    key = model_name.lower().strip()
-    if not key:
+    key = _normalize_model_name(model_name)
+    if key is None:
         return
 
     lock = _ensure_lock()
@@ -447,8 +458,8 @@ async def record_success(model_name: str) -> None:
 
     In CLOSED state this is a no-op.
     """
-    key = model_name.lower().strip()
-    if not key:
+    key = _normalize_model_name(model_name)
+    if key is None:
         return
 
     lock = _ensure_lock()
@@ -516,8 +527,8 @@ async def record_rate_limit(model_name: str) -> None:
     (but never below ``min_limit``).  The circuit breaker also opens,
     queuing all new requests until the cooldown elapses.
     """
-    key = model_name.lower().strip()
-    if not key:
+    key = _normalize_model_name(model_name)
+    if key is None:
         return
 
     _ensure_recovery_task()
@@ -569,8 +580,8 @@ async def acquire_model_slot(
         asyncio.TimeoutError: If a slot cannot be acquired within
             *timeout* seconds.
     """
-    key = model_name.lower().strip()
-    if not key:
+    key = _normalize_model_name(model_name)
+    if key is None:
         return
 
     _ensure_recovery_task()
@@ -646,8 +657,8 @@ def release_model_slot(model_name: str) -> None:
     notifies waiters.  It must be called exactly once for every
     successful ``acquire_model_slot`` call.
     """
-    key = model_name.lower().strip()
-    if not key:
+    key = _normalize_model_name(model_name)
+    if key is None:
         return
 
     state = _state.model_states.get(key)
@@ -669,7 +680,9 @@ def get_model_semaphore(model_name: str) -> ModelRateLimitState | None:
         Use :func:`get_status` for a clean snapshot, or access
         ``_state.model_states`` directly in tests.
     """
-    key = model_name.lower().strip()
+    key = _normalize_model_name(model_name)
+    if key is None:
+        return None
     return _state.model_states.get(key)
 
 
