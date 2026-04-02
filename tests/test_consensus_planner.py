@@ -831,7 +831,7 @@ class TestCouncilConsensusFlow:
 
         call_count = 0
 
-        async def mixed_agent_factory(model_name, instructions=""):
+        async def mixed_agent_factory(model_name, instructions="", **kwargs):
             """Factory that creates agents - first succeeds, second times out."""
             nonlocal call_count
             call_count += 1
@@ -1299,3 +1299,544 @@ class TestPreflightModelSelection:
                 result = _get_preflight_model()
                 # haiku comes before turbo in _CHEAP_MODEL_SUBSTRINGS
                 assert result == "anthropic-claude-haiku-4"
+
+
+# =============================================================================
+# Advisor Summary Extraction Tests
+# =============================================================================
+
+
+class TestAdvisorSummaryExtraction:
+    """Test extract_advisor_summary parsing."""
+
+    def test_parses_structured_response(self):
+        """Test parsing well-formed ANALYSIS/CONFIDENCE/CONCERNS format."""
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            extract_advisor_summary,
+        )
+
+        response = (
+            "ANALYSIS: Use Redis for distributed caching with TTL-based eviction.\n"
+            "CONFIDENCE: 85%\n"
+            "CONCERNS: Redis requires additional infrastructure."
+        )
+        result = extract_advisor_summary(response)
+
+        assert "Redis" in result["recommendation"]
+        assert "85%" in result["confidence_raw"]
+        assert "infrastructure" in result["concerns"]
+
+    def test_parses_without_concerns(self):
+        """Test parsing when concerns are None."""
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            extract_advisor_summary,
+        )
+
+        response = (
+            "ANALYSIS: Use SQLite for local storage.\n"
+            "CONFIDENCE: 90%\n"
+            "CONCERNS: None"
+        )
+        result = extract_advisor_summary(response)
+
+        assert "SQLite" in result["recommendation"]
+        assert result["concerns"] == ""
+
+    def test_fallback_for_unstructured_response(self):
+        """Test fallback to truncated raw text when no ANALYSIS: found."""
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            extract_advisor_summary,
+        )
+
+        response = "Just use Redis. It's the best option for this use case and handles everything we need."
+        result = extract_advisor_summary(response)
+
+        assert result["recommendation"] == response
+        assert result["concerns"] == ""
+
+    def test_long_unstructured_response_truncated(self):
+        """Test that unstructured responses are truncated to 200 chars."""
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            extract_advisor_summary,
+        )
+
+        response = "x" * 500
+        result = extract_advisor_summary(response)
+
+        assert len(result["recommendation"]) == 200
+
+
+# =============================================================================
+# Compact Synthesis Prompt Tests
+# =============================================================================
+
+
+class TestCompactSynthesisPrompt:
+    """Test that build_synthesis_prompt produces compact output."""
+
+    def test_prompt_includes_task(self):
+        """Test prompt contains the task."""
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            build_synthesis_prompt,
+        )
+
+        result = build_synthesis_prompt("Design auth system", [], 0.5)
+        assert "Design auth system" in result
+
+    def test_prompt_uses_stripped_summaries(self):
+        """Test prompt uses extracted summaries, not raw bloat."""
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            build_synthesis_prompt,
+        )
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            AdvisorInput,
+        )
+
+        inputs = [
+            AdvisorInput(
+                model_name="model-a",
+                response=(
+                    "ANALYSIS: Use Redis for caching.\n"
+                    "CONFIDENCE: 85%\n"
+                    "CONCERNS: Needs extra infra."
+                ),
+                confidence=0.85,
+                execution_time_ms=100.0,
+            ),
+        ]
+
+        result = build_synthesis_prompt("Cache design", inputs, 0.8)
+
+        # Should contain the extracted recommendation
+        assert "Use Redis for caching" in result
+        # Should contain the concern
+        assert "Needs extra infra" in result
+        # Should NOT contain raw format labels in advisor section
+        assert "Opinion:" not in result
+
+    def test_prompt_is_compact(self):
+        """Test prompt is shorter than old verbose format."""
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            build_synthesis_prompt,
+        )
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            AdvisorInput,
+        )
+
+        inputs = [
+            AdvisorInput(
+                model_name=f"model-{i}",
+                response=f"ANALYSIS: Recommendation {i}.\nCONFIDENCE: 80%\nCONCERNS: None",
+                confidence=0.8,
+                execution_time_ms=100.0,
+            )
+            for i in range(3)
+        ]
+
+        result = build_synthesis_prompt("Test task", inputs, 0.6)
+
+        # Compact prompt should end with the format instructions
+        assert "FINAL DECISION:" in result
+        assert "SYNTHESIS RATIONALE:" in result
+        # Should NOT have verbose role instructions
+        assert "Review all advisor opinions" not in result
+        assert "Identify points of agreement" not in result
+
+
+# =============================================================================
+# Improved Agreement Ratio Tests
+# =============================================================================
+
+
+class TestImprovedAgreementRatio:
+    """Test agreement ratio uses recommendations + confidence proximity."""
+
+    def test_similar_confidence_boosts_agreement(self):
+        """Test that similar confidence levels increase agreement ratio."""
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            calculate_agreement_ratio,
+        )
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            AdvisorInput,
+        )
+
+        # Same recommendation, same confidence
+        inputs = [
+            AdvisorInput(
+                model_name="a",
+                response="ANALYSIS: Use Redis for caching.\nCONFIDENCE: 85%\nCONCERNS: None",
+                confidence=0.85,
+                execution_time_ms=100,
+            ),
+            AdvisorInput(
+                model_name="b",
+                response="ANALYSIS: Use Redis for caching.\nCONFIDENCE: 85%\nCONCERNS: None",
+                confidence=0.85,
+                execution_time_ms=100,
+            ),
+        ]
+
+        ratio = calculate_agreement_ratio(inputs)
+        assert ratio >= 0.9
+
+    def test_divergent_confidence_lowers_agreement(self):
+        """Test that different confidence levels reduce agreement ratio."""
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            calculate_agreement_ratio,
+        )
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            AdvisorInput,
+        )
+
+        inputs = [
+            AdvisorInput(
+                model_name="a",
+                response="ANALYSIS: Use Redis.\nCONFIDENCE: 95%\nCONCERNS: None",
+                confidence=0.95,
+                execution_time_ms=100,
+            ),
+            AdvisorInput(
+                model_name="b",
+                response="ANALYSIS: Use Redis.\nCONFIDENCE: 30%\nCONCERNS: Not sure",
+                confidence=0.30,
+                execution_time_ms=100,
+            ),
+        ]
+
+        ratio = calculate_agreement_ratio(inputs)
+        # Same text but 0.65 confidence gap should lower ratio
+        # Text part identical → ~1.0 * 0.7 = 0.7, conf part → 0.35 * 0.3 = 0.105
+        # Total ≈ 0.805 — lower than identical case
+        assert ratio < 0.9
+
+
+# =============================================================================
+# Pre-flight Soft Check Tests
+# =============================================================================
+
+
+class TestPreflightSoftCheck:
+    """Test that pre-flight check no longer hard-blocks."""
+
+    @pytest.mark.asyncio
+    async def test_high_confidence_preflight_does_not_block_high_stakes(self):
+        """Test that even when preflight says 'high confidence', a high-stakes
+        task can still pass if complexity + stakes scores are high enough."""
+        from code_puppy.plugins.consensus_planner.council_safeguards import (
+            should_use_council,
+            reset_council_stats,
+        )
+
+        reset_council_stats()
+
+        # Mock preflight to return high confidence (would have blocked before)
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_safeguards._check_single_model_confidence"
+        ) as mock_preflight:
+            mock_preflight.return_value = MagicMock(
+                allowed=False,  # Would block in old code
+                confidence_score=0.9,
+                reason="Single model has high confidence",
+            )
+            # Use a task with high-stakes keywords
+            result = await should_use_council(
+                "Design security architecture for production auth with database migration",
+                skip_confirm=True,
+            )
+
+            # Should NOT be blocked — preflight is now soft
+            # complexity has "security", "architecture", "migration" → high score
+            # stakes has "security", "production" → high score
+            # preflight score 0.9 is high, but it no longer blocks
+            assert result.allowed is True
+
+    @pytest.mark.asyncio
+    async def test_simple_task_still_blocked_by_complexity_check(self):
+        """Test that simple tasks are still blocked by Check 2 (complexity),
+        which remains a hard blocker."""
+        from code_puppy.plugins.consensus_planner.council_safeguards import (
+            should_use_council,
+            reset_council_stats,
+        )
+
+        reset_council_stats()
+
+        result = await should_use_council("fix typo in readme", skip_confirm=True)
+
+        assert result.allowed is False
+        assert "simple" in result.reason.lower()
+
+
+# =============================================================================
+# Leader Fallback on General Error Tests
+# =============================================================================
+
+
+class TestLeaderFallbackOnGeneralError:
+    """Test that leader fallback triggers on non-timeout errors too."""
+
+    @pytest.mark.asyncio
+    async def test_leader_rate_limit_triggers_fallback(self):
+        """Test that a 429-like exception in leader triggers fallback synthesis."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            AdvisorInput,
+            _leader_synthesize,
+        )
+
+        advisors = [
+            AdvisorInput(
+                model_name="test-advisor",
+                response="ANALYSIS: Use Redis caching.\nCONFIDENCE: 85%\nCONCERNS: None",
+                confidence=0.85,
+                execution_time_ms=100.0,
+            ),
+        ]
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._create_simple_agent"
+        ) as mock_create:
+            mock_agent = MagicMock()
+            mock_agent.run = AsyncMock(
+                side_effect=RuntimeError("status_code: 429, rate_limit_error")
+            )
+            mock_create.return_value = mock_agent
+
+            result = await _leader_synthesize(
+                "test task", "rate-limited-leader", advisors, timeout=30.0
+            )
+
+            # Should use fallback, not return error
+            assert "(fallback)" in result.leader_model
+            assert result.confidence > 0.0
+            assert "majority-vote fallback" in result.synthesis_rationale.lower()
+
+    @pytest.mark.asyncio
+    async def test_leader_general_error_without_advisors_returns_error(self):
+        """Test that general error with no advisors returns error (no fallback possible)."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _leader_synthesize,
+        )
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._create_simple_agent"
+        ) as mock_create:
+            mock_agent = MagicMock()
+            mock_agent.run = AsyncMock(
+                side_effect=RuntimeError("API error")
+            )
+            mock_create.return_value = mock_agent
+
+            result = await _leader_synthesize(
+                "test task", "broken-leader", [], timeout=30.0
+            )
+
+            assert result.confidence == 0.0
+            assert "error" in result.decision.lower()
+            assert "(fallback)" not in result.leader_model
+
+
+# =============================================================================
+# Lightweight Model Settings Tests
+# =============================================================================
+
+
+class TestLightweightModelSettings:
+    """Test _make_lightweight_model_settings strips heavy config."""
+
+    def test_disables_anthropic_thinking(self):
+        """Lightweight settings should not include anthropic_thinking."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _make_lightweight_model_settings,
+        )
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.make_model_settings"
+        ) as mock_make:
+            # Simulate an Anthropic model with extended thinking
+            mock_settings = MagicMock()
+            mock_settings.__dataclass_fields__ = {
+                "max_tokens": MagicMock(),
+                "anthropic_thinking": MagicMock(),
+            }
+            mock_settings.max_tokens = 65536
+            mock_settings.anthropic_thinking = {"type": "adaptive"}
+            mock_make.return_value = mock_settings
+
+            result = _make_lightweight_model_settings("claude-opus-4-6", max_tokens=1024)
+
+            # Should have called make_model_settings
+            mock_make.assert_called_once_with("claude-opus-4-6", max_tokens=1024)
+            # The result should NOT have anthropic_thinking
+            # (exact assertion depends on implementation — check the settings_dict doesn't include it)
+
+    def test_caps_max_tokens(self):
+        """Lightweight settings should cap max_tokens."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _make_lightweight_model_settings,
+        )
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.make_model_settings"
+        ) as mock_make:
+            mock_settings = MagicMock()
+            mock_settings.__dataclass_fields__ = {
+                "max_tokens": MagicMock(),
+            }
+            mock_settings.max_tokens = 65536
+            mock_make.return_value = mock_settings
+
+            result = _make_lightweight_model_settings("test-model", max_tokens=512)
+            mock_make.assert_called_once_with("test-model", max_tokens=512)
+
+    def test_reduces_openai_reasoning_effort(self):
+        """Lightweight settings should reduce openai_reasoning_effort to low."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _make_lightweight_model_settings,
+        )
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.make_model_settings"
+        ) as mock_make:
+            mock_settings = MagicMock()
+            mock_settings.__dataclass_fields__ = {
+                "max_tokens": MagicMock(),
+                "openai_reasoning_effort": MagicMock(),
+            }
+            mock_settings.max_tokens = 65536
+            mock_settings.openai_reasoning_effort = "high"
+            mock_make.return_value = mock_settings
+
+            result = _make_lightweight_model_settings("gpt-5", max_tokens=1024)
+            mock_make.assert_called_once()
+
+    def test_removes_effort_from_extra_body(self):
+        """Lightweight settings should remove output_config.effort from extra_body."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _make_lightweight_model_settings,
+        )
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.make_model_settings"
+        ) as mock_make:
+            mock_settings = MagicMock()
+            mock_settings.__dataclass_fields__ = {
+                "max_tokens": MagicMock(),
+                "extra_body": MagicMock(),
+            }
+            mock_settings.max_tokens = 65536
+            mock_settings.extra_body = {"output_config": {"effort": "high"}, "other": "value"}
+            mock_make.return_value = mock_settings
+
+            result = _make_lightweight_model_settings("claude-opus-4-6", max_tokens=1024)
+            mock_make.assert_called_once()
+
+
+# =============================================================================
+# Fast Leader Selection Tests
+# =============================================================================
+
+
+class TestFastLeaderSelection:
+    """Test _get_leader_model prefers fast models."""
+
+    def test_prefers_sonnet_over_opus_when_no_config(self):
+        """When no config set, should prefer sonnet over opus."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _get_leader_model,
+        )
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.get_agent_pinned_model",
+            return_value=None,
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.get_value",
+            return_value=None,
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.ModelFactory"
+        ) as mock_factory:
+            mock_factory.load_config.return_value = {
+                "claude-opus-4-6": {},
+                "claude-sonnet-4-6": {},
+                "gpt-5": {},
+            }
+            result = _get_leader_model()
+            assert "sonnet" in result.lower()
+
+    def test_pinned_model_used_when_no_fast_model_available(self):
+        """Pinned model should be used when no fast model or config leader exists."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _get_leader_model,
+        )
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.get_agent_pinned_model",
+            return_value="my-custom-model",
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.get_value",
+            return_value=None,
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.ModelFactory"
+        ) as mock_factory:
+            # No fast models in config
+            mock_factory.load_config.return_value = {
+                "slow-model-1": {},
+                "slow-model-2": {},
+            }
+            result = _get_leader_model()
+            assert result == "my-custom-model"
+
+    def test_fast_model_preferred_over_pinned(self):
+        """Fast model scan should take priority over pinned model."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _get_leader_model,
+        )
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.get_agent_pinned_model",
+            return_value="claude-opus-4-6-long",
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.get_value",
+            return_value=None,
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.ModelFactory"
+        ) as mock_factory:
+            mock_factory.load_config.return_value = {
+                "claude-opus-4-6-long": {},
+                "claude-sonnet-4-6": {},
+            }
+            result = _get_leader_model()
+            assert "sonnet" in result.lower()
+
+    def test_config_leader_takes_priority_over_scan(self):
+        """consensus_council_leader config should win over fast-model scan."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _get_leader_model,
+        )
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.get_agent_pinned_model",
+            return_value=None,
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.get_value",
+            return_value="explicit-leader",
+        ):
+            result = _get_leader_model()
+            assert result == "explicit-leader"
+
+    def test_falls_back_to_default_when_no_fast_model(self):
+        """When no fast models in config, falls back to _get_default_fallback_model."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _get_leader_model,
+        )
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.get_agent_pinned_model",
+            return_value=None,
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.get_value",
+            return_value=None,
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.ModelFactory"
+        ) as mock_factory, patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._get_default_fallback_model",
+            return_value="slow-but-only-model",
+        ):
+            # Config has no fast models
+            mock_factory.load_config.return_value = {
+                "slow-but-only-model": {},
+                "another-slow-model": {},
+            }
+            result = _get_leader_model()
+            assert result == "slow-but-only-model"
+

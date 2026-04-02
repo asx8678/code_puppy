@@ -51,10 +51,64 @@ def estimate_confidence(response: str) -> float:
     return 0.7  # Default
 
 
+def extract_advisor_summary(response: str) -> dict[str, str]:
+    """Extract structured fields from an advisor response.
+
+    Parses ANALYSIS:/CONFIDENCE:/CONCERNS: format into a compact dict.
+    Falls back to truncating raw response if parsing fails.
+
+    Args:
+        response: Raw advisor response text
+
+    Returns:
+        dict with keys: recommendation, confidence_raw, concerns
+    """
+    result = {
+        "recommendation": "",
+        "confidence_raw": "",
+        "concerns": "",
+    }
+
+    # Try structured extraction
+    analysis_match = re.search(
+        r"ANALYSIS:\s*(.+?)(?=\nCONFIDENCE:|\nCONCERNS:|\Z)",
+        response,
+        re.IGNORECASE | re.DOTALL,
+    )
+    confidence_match = re.search(
+        r"CONFIDENCE:\s*(.+?)(?=\nANALYSIS:|\nCONCERNS:|\Z)",
+        response,
+        re.IGNORECASE | re.DOTALL,
+    )
+    concerns_match = re.search(
+        r"CONCERNS:\s*(.+?)(?=\nANALYSIS:|\nCONFIDENCE:|\Z)",
+        response,
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    if analysis_match:
+        result["recommendation"] = analysis_match.group(1).strip()
+    else:
+        # Fallback: first 200 chars of raw response
+        result["recommendation"] = response.strip()[:200]
+
+    if confidence_match:
+        result["confidence_raw"] = confidence_match.group(1).strip()
+
+    if concerns_match:
+        concern_text = concerns_match.group(1).strip()
+        if concern_text.lower() not in ("none", "none.", "n/a", ""):
+            result["concerns"] = concern_text
+
+    return result
+
+
 def calculate_agreement_ratio(advisor_inputs: list[AdvisorInput]) -> float:
     """Calculate how much advisors agree with each other.
 
-    Uses word overlap similarity between all pairs of advisor responses.
+    Uses a blend of:
+    - Word overlap on extracted recommendations (not raw bloat)
+    - Confidence proximity (similar confidence = more agreement)
 
     Returns:
         Agreement ratio from 0.0 (total disagreement) to 1.0 (total agreement)
@@ -62,18 +116,32 @@ def calculate_agreement_ratio(advisor_inputs: list[AdvisorInput]) -> float:
     if len(advisor_inputs) < 2:
         return 1.0  # Single advisor trivially agrees with itself
 
+    # Extract just the recommendation text for comparison
+    summaries = [
+        extract_advisor_summary(a.response)["recommendation"]
+        for a in advisor_inputs
+    ]
+
     from code_puppy.agents.consensus_planner.utils import calculate_text_similarity
 
-    pair_scores = []
+    text_scores = []
+    conf_scores = []
     for i in range(len(advisor_inputs)):
         for j in range(i + 1, len(advisor_inputs)):
-            similarity = calculate_text_similarity(
-                advisor_inputs[i].response,
-                advisor_inputs[j].response,
+            text_scores.append(
+                calculate_text_similarity(summaries[i], summaries[j])
             )
-            pair_scores.append(similarity)
+            # Confidence proximity: 1.0 when identical, 0.0 when 1.0 apart
+            conf_diff = abs(
+                advisor_inputs[i].confidence - advisor_inputs[j].confidence
+            )
+            conf_scores.append(1.0 - conf_diff)
 
-    return sum(pair_scores) / len(pair_scores) if pair_scores else 0.0
+    avg_text = sum(text_scores) / len(text_scores) if text_scores else 0.0
+    avg_conf = sum(conf_scores) / len(conf_scores) if conf_scores else 0.0
+
+    # Blend: 70% text similarity, 30% confidence proximity
+    return avg_text * 0.7 + avg_conf * 0.3
 
 
 def build_synthesis_prompt(
@@ -81,54 +149,40 @@ def build_synthesis_prompt(
     advisor_inputs: list[AdvisorInput],
     agreement_ratio: float = 0.0,
 ) -> str:
-    """Build prompt for leader to synthesize advisor inputs."""
+    """Build a compact synthesis prompt for the leader.
+
+    Feeds only stripped summaries so the leader context stays small.
+    """
     lines = [
         f"TASK: {task}",
         "",
     ]
 
-    # Agreement summary
+    # Agreement summary — one line
     if agreement_ratio >= 0.7:
-        lines.append(
-            f"AGREEMENT LEVEL: HIGH ({agreement_ratio:.0%}) — Advisors largely agree."
-        )
+        lines.append(f"AGREEMENT: HIGH ({agreement_ratio:.0%})")
     elif agreement_ratio >= 0.4:
-        lines.append(
-            f"AGREEMENT: MEDIUM ({agreement_ratio:.0%}) — "
-            "Advisors partially agree."
-        )
+        lines.append(f"AGREEMENT: MEDIUM ({agreement_ratio:.0%})")
     else:
-        lines.append(
-            f"AGREEMENT: LOW ({agreement_ratio:.0%}) — "
-            "Advisors significantly disagree."
-        )
+        lines.append(f"AGREEMENT: LOW ({agreement_ratio:.0%})")
     lines.append("")
 
-    lines.append("ADVISOR INPUTS:")
+    lines.append(f"ADVISORS ({len(advisor_inputs)}):")
     lines.append("")
 
     for i, advisor in enumerate(advisor_inputs, 1):
-        lines.extend([
-            f"--- Advisor {i}: {advisor.model_name} ---",
-            f"Confidence: {advisor.confidence:.0%}",
-            f"Opinion: {advisor.response}",
-            "",
-        ])
+        summary = extract_advisor_summary(advisor.response)
+        lines.append(f"[{i}] {advisor.model_name} ({advisor.confidence:.0%}):")
+        lines.append(f"  {summary['recommendation']}")
+        if summary["concerns"]:
+            lines.append(f"  ⚠ {summary['concerns']}")
+        lines.append("")
 
     lines.extend([
-        "YOUR ROLE:",
-        "1. Review all advisor opinions",
-        "2. Identify points of agreement and disagreement",
-        "3. Weigh the advisors' confidence levels",
-        "4. Make a FINAL DECISION that represents the best synthesis",
+        "Synthesize these inputs into ONE clear decision.",
         "",
-        "OUTPUT FORMAT:",
-        "FINAL DECISION: [Your clear, decisive recommendation]",
-        "",
-        "SYNTHESIS RATIONALE: [Explain how you weighed the advisors' inputs, "
-        "why you agree/disagree with certain points, and how you arrived at "
-        "your decision]",
-        "",
+        "FINAL DECISION: [your recommendation]",
+        "SYNTHESIS RATIONALE: [why, 2-3 sentences]",
         "CONFIDENCE: [0-100]%",
     ])
 

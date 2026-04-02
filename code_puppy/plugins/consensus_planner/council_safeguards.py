@@ -104,15 +104,15 @@ async def should_use_council(
     if not recency_check.allowed:
         return recency_check
 
-    # Check 4: Pre-flight confidence - is single model confident?
+    # Check 4: Pre-flight confidence — soft signal, NOT a hard blocker.
+    # Models tend to self-assess as "high confidence" even on hard tasks,
+    # so we let this contribute to the weighted score instead of vetoing.
     confidence_check = await _check_single_model_confidence(task)
-    if not confidence_check.allowed:
-        return confidence_check
 
     # Check 5: High-stakes detection
     stakes_check = _check_high_stakes(task, context)
 
-    # Combine all scores
+    # Combine all scores — confidence_check is now a soft contributor
     overall_score = _calculate_overall_score(
         [
             complexity_check.confidence_score,
