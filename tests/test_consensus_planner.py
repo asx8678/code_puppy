@@ -9,6 +9,7 @@ Tests the council consensus integration in the Consensus Planner Agent:
 
 from __future__ import annotations
 
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, call
 from dataclasses import dataclass, field
@@ -17,7 +18,7 @@ from code_puppy.plugins.consensus_planner.council_consensus import (
     AdvisorInput,
     CouncilDecision,
 )
-from code_puppy.agents.consensus_planner import ConsensusPlannerAgent
+from code_puppy.agents.consensus_planner import ConsensusPlannerAgent, Plan
 
 
 # =============================================================================
@@ -83,6 +84,30 @@ class TestCouncilConsensusInvocation:
             mock_run.assert_called_once_with("Design caching system", skip_safeguards=True)
             assert plan.used_consensus is True
             assert plan.confidence == 0.85
+
+    @pytest.mark.asyncio
+    async def test_plan_with_consensus_force_flag_skips_complexity_check(self):
+        """Test that force_consensus=True bypasses should_use_consensus check."""
+        agent = ConsensusPlannerAgent()
+
+        mock_decision = CouncilDecision(
+            leader_model="claude-sonnet-4",
+            decision="Forced consensus plan",
+            synthesis_rationale="User requested consensus",
+            confidence=0.85,
+            advisor_inputs=[],
+        )
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.run_council_consensus"
+        ) as mock_run:
+            mock_run.return_value = mock_decision
+
+            plan = await agent.plan_with_consensus("simple task", force_consensus=True)
+
+            # Should use consensus even though "simple task" has 0.00 complexity
+            mock_run.assert_called_once()
+            assert plan.used_consensus is True
 
 
 # =============================================================================
@@ -248,6 +273,25 @@ class TestEdgeCases:
 
         assert results == []
 
+    @pytest.mark.asyncio
+    async def test_create_plan_single_model_timeout_returns_fallback(self):
+        """Test that _create_plan_single_model returns fallback plan on timeout."""
+        agent = ConsensusPlannerAgent()
+
+        # Mock _create_simple_agent to return an agent whose run() hangs
+        mock_agent_instance = AsyncMock()
+        mock_agent_instance.run = AsyncMock(side_effect=asyncio.TimeoutError())
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._create_simple_agent",
+            new_callable=AsyncMock,
+            return_value=mock_agent_instance,
+        ):
+            plan = await agent._create_plan_single_model("test task")
+
+            assert plan.used_consensus is False
+            assert "Fallback" in plan.phases[0]["description"] or "timeout" in plan.phases[0]["description"].lower()
+
 
 # =============================================================================
 # Agent Tool Integration Tests
@@ -406,6 +450,83 @@ class TestAutoSpawnSuggestion:
             # Should NOT have called detect — skipped entirely
             mock_detect.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_auto_spawn_calls_plan_with_force_consensus(self):
+        """Test that auto_spawn_consensus_planner passes models through to council."""
+        from code_puppy.plugins.consensus_planner.auto_spawn import auto_spawn_consensus_planner
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            AdvisorInput,
+            CouncilDecision,
+        )
+
+        # Create a mock CouncilDecision instead of Plan
+        mock_decision = CouncilDecision(
+            decision="Test decision",
+            synthesis_rationale="Test rationale",
+            confidence=0.8,
+            leader_model="claude-sonnet-4",
+            advisor_inputs=[
+                AdvisorInput(
+                    model_name="claude-sonnet-4",
+                    response="Test response",
+                    confidence=0.8,
+                    execution_time_ms=100.0,
+                ),
+            ],
+        )
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.run_council_consensus",
+            new_callable=AsyncMock,
+            return_value=mock_decision,
+        ) as mock_council:
+            # Test without models override
+            result = await auto_spawn_consensus_planner("test task", "testing")
+
+            mock_council.assert_called_once()
+            call_kwargs = mock_council.call_args.kwargs
+            assert call_kwargs.get("skip_safeguards") is True
+            assert call_kwargs.get("advisor_models_override") is None
+            assert result["success"] is True
+            assert result["plan"]["used_consensus"] is True
+            assert result["plan"]["confidence"] == 0.8
+
+    @pytest.mark.asyncio
+    async def test_auto_spawn_passes_models_override(self):
+        """Test that auto_spawn_consensus_planner passes models through to council."""
+        from code_puppy.plugins.consensus_planner.auto_spawn import auto_spawn_consensus_planner
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            AdvisorInput,
+            CouncilDecision,
+        )
+
+        mock_decision = CouncilDecision(
+            decision="Test decision",
+            synthesis_rationale="Test rationale",
+            confidence=0.9,
+            leader_model="custom-model",
+            advisor_inputs=[
+                AdvisorInput(
+                    model_name="custom-model",
+                    response="Test response",
+                    confidence=0.9,
+                    execution_time_ms=150.0,
+                ),
+            ],
+        )
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus.run_council_consensus",
+            new_callable=AsyncMock,
+            return_value=mock_decision,
+        ) as mock_council:
+            models = ["model1", "model2"]
+            result = await auto_spawn_consensus_planner("test task", "testing", models=models)
+
+            call_kwargs = mock_council.call_args.kwargs
+            assert call_kwargs.get("advisor_models_override") == models
+            assert result["success"] is True
+
 
 # =============================================================================
 # Model Creation & Execution Tests
@@ -449,83 +570,83 @@ class TestConfidenceScoring:
 
     def test_structured_confidence_percentage(self):
         """Test parsing CONFIDENCE: 85% format."""
-        from code_puppy.plugins.consensus_planner.council_consensus import (
-            _estimate_confidence,
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            estimate_confidence,
         )
 
-        assert _estimate_confidence("CONFIDENCE: 85%") == 0.85
-        assert _estimate_confidence("CONFIDENCE: 100%") == 1.0
-        assert _estimate_confidence("CONFIDENCE: 0%") == 0.0
-        assert _estimate_confidence("CONFIDENCE: 42%") == 0.42
+        assert estimate_confidence("CONFIDENCE: 85%") == 0.85
+        assert estimate_confidence("CONFIDENCE: 100%") == 1.0
+        assert estimate_confidence("CONFIDENCE: 0%") == 0.0
+        assert estimate_confidence("CONFIDENCE: 42%") == 0.42
 
     def test_structured_confidence_decimal(self):
         """Test parsing CONFIDENCE: 0.85 format."""
-        from code_puppy.plugins.consensus_planner.council_consensus import (
-            _estimate_confidence,
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            estimate_confidence,
         )
 
-        assert _estimate_confidence("CONFIDENCE: 0.85") == 0.85
-        assert _estimate_confidence("CONFIDENCE: 0.5") == 0.5
+        assert estimate_confidence("CONFIDENCE: 0.85") == 0.85
+        assert estimate_confidence("CONFIDENCE: 0.5") == 0.5
 
     def test_structured_confidence_case_insensitive(self):
         """Test structured parsing is case-insensitive."""
-        from code_puppy.plugins.consensus_planner.council_consensus import (
-            _estimate_confidence,
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            estimate_confidence,
         )
 
-        assert _estimate_confidence("confidence: 75%") == 0.75
-        assert _estimate_confidence("Confidence: 90%") == 0.9
+        assert estimate_confidence("confidence: 75%") == 0.75
+        assert estimate_confidence("Confidence: 90%") == 0.9
 
     def test_keyword_fallback_high(self):
         """Test keyword fallback for high confidence."""
-        from code_puppy.plugins.consensus_planner.council_consensus import (
-            _estimate_confidence,
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            estimate_confidence,
         )
 
-        assert _estimate_confidence("I have high confidence in this approach") == 0.9
-        assert _estimate_confidence("I am very confident about this") == 0.9
+        assert estimate_confidence("I have high confidence in this approach") == 0.9
+        assert estimate_confidence("I am very confident about this") == 0.9
 
     def test_keyword_fallback_medium(self):
         """Test keyword fallback for medium confidence."""
-        from code_puppy.plugins.consensus_planner.council_consensus import (
-            _estimate_confidence,
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            estimate_confidence,
         )
 
-        assert _estimate_confidence("I have medium confidence here") == 0.7
+        assert estimate_confidence("I have medium confidence here") == 0.7
 
     def test_keyword_fallback_low(self):
         """Test keyword fallback for low confidence."""
-        from code_puppy.plugins.consensus_planner.council_consensus import (
-            _estimate_confidence,
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            estimate_confidence,
         )
 
-        assert _estimate_confidence("I have low confidence in this") == 0.4
+        assert estimate_confidence("I have low confidence in this") == 0.4
 
     def test_uncertainty_markers(self):
         """Test uncertainty markers reduce confidence."""
-        from code_puppy.plugins.consensus_planner.council_consensus import (
-            _estimate_confidence,
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            estimate_confidence,
         )
 
-        assert _estimate_confidence("I'm not sure about this approach") == 0.5
-        assert _estimate_confidence("This might be the right way") == 0.5
+        assert estimate_confidence("I'm not sure about this approach") == 0.5
+        assert estimate_confidence("This might be the right way") == 0.5
 
     def test_default_confidence(self):
         """Test default confidence when no markers found."""
-        from code_puppy.plugins.consensus_planner.council_consensus import (
-            _estimate_confidence,
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            estimate_confidence,
         )
 
-        assert _estimate_confidence("Use Redis for caching") == 0.7
+        assert estimate_confidence("Use Redis for caching") == 0.7
 
     def test_structured_takes_priority_over_keywords(self):
         """Test that structured format takes priority over keyword matching."""
-        from code_puppy.plugins.consensus_planner.council_consensus import (
-            _estimate_confidence,
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            estimate_confidence,
         )
 
         # Has both "low confidence" keyword AND structured 90%
-        result = _estimate_confidence("low confidence mention but CONFIDENCE: 90%")
+        result = estimate_confidence("low confidence mention but CONFIDENCE: 90%")
         assert result == 0.9  # Structured wins
 
 
@@ -539,9 +660,11 @@ class TestAgreementDetection:
 
     def test_identical_responses_high_agreement(self):
         """Test identical advisor responses produce high agreement."""
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            calculate_agreement_ratio,
+        )
         from code_puppy.plugins.consensus_planner.council_consensus import (
             AdvisorInput,
-            _calculate_agreement_ratio,
         )
 
         inputs = [
@@ -549,14 +672,16 @@ class TestAgreementDetection:
             AdvisorInput(model_name="b", response="Use Redis for caching", confidence=0.8, execution_time_ms=100),
         ]
 
-        ratio = _calculate_agreement_ratio(inputs)
+        ratio = calculate_agreement_ratio(inputs)
         assert ratio >= 0.9  # Near-identical responses
 
     def test_divergent_responses_low_agreement(self):
         """Test completely different responses produce low agreement."""
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            calculate_agreement_ratio,
+        )
         from code_puppy.plugins.consensus_planner.council_consensus import (
             AdvisorInput,
-            _calculate_agreement_ratio,
         )
 
         inputs = [
@@ -565,29 +690,31 @@ class TestAgreementDetection:
             AdvisorInput(model_name="c", response="Database migration strategy for PostgreSQL upgrade", confidence=0.7, execution_time_ms=100),
         ]
 
-        ratio = _calculate_agreement_ratio(inputs)
+        ratio = calculate_agreement_ratio(inputs)
         assert ratio < 0.5  # Very different topics
 
     def test_single_advisor_full_agreement(self):
         """Test single advisor trivially has full agreement."""
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            calculate_agreement_ratio,
+        )
         from code_puppy.plugins.consensus_planner.council_consensus import (
             AdvisorInput,
-            _calculate_agreement_ratio,
         )
 
         inputs = [
             AdvisorInput(model_name="a", response="Use Redis", confidence=0.9, execution_time_ms=100),
         ]
 
-        assert _calculate_agreement_ratio(inputs) == 1.0
+        assert calculate_agreement_ratio(inputs) == 1.0
 
     def test_empty_advisors(self):
         """Test empty advisor list."""
-        from code_puppy.plugins.consensus_planner.council_consensus import (
-            _calculate_agreement_ratio,
+        from code_puppy.plugins.consensus_planner.council_helpers import (
+            calculate_agreement_ratio,
         )
 
-        assert _calculate_agreement_ratio([]) == 1.0
+        assert calculate_agreement_ratio([]) == 1.0
 
     def test_agreement_ratio_in_council_decision(self):
         """Test agreement_ratio field exists on CouncilDecision."""
@@ -660,3 +787,189 @@ class TestToolRegistrationPattern:
             f"Tool name mismatch. Missing: {expected_names - actual_names}, "
             f"Extra: {actual_names - expected_names}"
         )
+
+
+# =============================================================================
+# Council Consensus Flow Tests
+# =============================================================================
+
+
+class TestCouncilConsensusFlow:
+    """Test the council consensus execution flow including timeouts and progress."""
+
+    @pytest.mark.asyncio
+    async def test_gather_advisor_inputs_individual_timeout(self):
+        """Test that individual advisor timeouts are handled gracefully."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _gather_advisor_inputs,
+        )
+
+        # Mock _create_simple_agent to return an agent that times out
+        async def slow_agent_run(prompt):
+            await asyncio.sleep(100)  # Will be cancelled by timeout
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._create_simple_agent"
+        ) as mock_create:
+            mock_agent = AsyncMock()
+            mock_agent.run = slow_agent_run
+            mock_create.return_value = mock_agent
+
+            # Short timeout should result in empty results
+            results = await _gather_advisor_inputs(
+                "test task", ["model1", "model2"], timeout=1.0
+            )
+
+            assert len(results) == 0  # All should have timed out
+
+    @pytest.mark.asyncio
+    async def test_gather_advisor_inputs_partial_results(self):
+        """Test that partial results are returned when some advisors fail."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _gather_advisor_inputs,
+        )
+
+        call_count = 0
+
+        async def mixed_agent_factory(model_name, instructions=""):
+            """Factory that creates agents - first succeeds, second times out."""
+            nonlocal call_count
+            call_count += 1
+            mock_agent = MagicMock()
+            if "fast" in model_name:
+                result = MagicMock()
+                result.output = "ANALYSIS: Good approach\nCONFIDENCE: 80%\nCONCERNS: None"
+                mock_agent.run = AsyncMock(return_value=result)
+            else:
+                async def slow_run(prompt):
+                    await asyncio.sleep(100)
+                mock_agent.run = slow_run
+            return mock_agent
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._create_simple_agent",
+            side_effect=mixed_agent_factory,
+        ):
+            results = await _gather_advisor_inputs(
+                "test task", ["fast-model", "slow-model"], timeout=5.0
+            )
+
+            # Should have at least the fast model's result
+            assert len(results) >= 1
+            assert results[0].model_name == "fast-model"
+
+    @pytest.mark.asyncio
+    async def test_leader_synthesize_timeout(self):
+        """Test that leader synthesis timeout is handled gracefully."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            AdvisorInput,
+            _leader_synthesize,
+        )
+
+        advisors = [
+            AdvisorInput(
+                model_name="test-model",
+                response="ANALYSIS: Test\nCONFIDENCE: 80%\nCONCERNS: None",
+                confidence=0.8,
+                execution_time_ms=100.0,
+            )
+        ]
+
+        async def slow_run(prompt):
+            await asyncio.sleep(100)
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._create_simple_agent"
+        ) as mock_create:
+            mock_agent = MagicMock()
+            mock_agent.run = slow_run
+            mock_create.return_value = mock_agent
+
+            result = await _leader_synthesize(
+                "test task", "leader-model", advisors, timeout=1.0
+            )
+
+            assert result.confidence == 0.0
+            assert "timed out" in result.decision.lower()
+            assert result.leader_model == "leader-model"
+
+    @pytest.mark.asyncio
+    async def test_run_council_no_advisors(self):
+        """Test run_council_consensus with no advisor models."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            run_council_consensus,
+        )
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._get_leader_model",
+            return_value="test-leader",
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._get_advisor_models",
+            return_value=[],
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._create_simple_agent"
+        ) as mock_create:
+            # Leader should still be called even with no advisors
+            result_mock = MagicMock()
+            result_mock.output = "FINAL DECISION: Just do it\nSYNTHESIS RATIONALE: No advisors to consult\nCONFIDENCE: 70%"
+            mock_agent = MagicMock()
+            mock_agent.run = AsyncMock(return_value=result_mock)
+            mock_create.return_value = mock_agent
+
+            result = await run_council_consensus(
+                "test task", skip_safeguards=True, timeout=30.0
+            )
+
+            assert result.leader_model == "test-leader"
+            assert len(result.advisor_inputs) == 0
+
+    @pytest.mark.asyncio
+    async def test_timeout_budgets_are_calculated_correctly(self):
+        """Test that timeout budgets respect the total timeout."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            run_council_consensus,
+        )
+
+        captured_advisor_timeout = None
+        captured_leader_timeout = None
+
+        original_gather = None
+        original_leader = None
+
+        async def capture_gather(task, models, timeout=100.0):
+            nonlocal captured_advisor_timeout
+            captured_advisor_timeout = timeout
+            return []  # Return empty so leader gets called
+
+        async def capture_leader(task, model, inputs, timeout=80.0):
+            nonlocal captured_leader_timeout
+            captured_leader_timeout = timeout
+            from code_puppy.plugins.consensus_planner.council_consensus import CouncilDecision
+            return CouncilDecision(
+                leader_model=model,
+                decision="test",
+                synthesis_rationale="test",
+                confidence=0.5,
+                advisor_inputs=[],
+            )
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._get_leader_model",
+            return_value="test-leader",
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._get_advisor_models",
+            return_value=["m1"],
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._gather_advisor_inputs",
+            side_effect=capture_gather,
+        ), patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._leader_synthesize",
+            side_effect=capture_leader,
+        ):
+            await run_council_consensus("test", skip_safeguards=True, timeout=100.0)
+
+            # 60% of 100 = 60 for advisors
+            assert captured_advisor_timeout == pytest.approx(60.0)
+            # 35% of 100 = 35 for leader
+            assert captured_leader_timeout == pytest.approx(35.0)
+            # Total is 95, leaving 5% overhead

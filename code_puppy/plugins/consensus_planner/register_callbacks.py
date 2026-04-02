@@ -11,22 +11,20 @@ Registers the consensus planner with Code Puppy's callback system:
 - Auto-spawn integration for automatic consensus triggering
 """
 
-import asyncio
 import logging
 from typing import Any
 
 from code_puppy.callbacks import register_callback
-from code_puppy.config import get_value
 from code_puppy.messaging import emit_info
 
 # Import council config helpers for re-export
 from code_puppy.plugins.consensus_planner.council_config import (
-    get_council_consensus_enabled,
-    get_council_safeguard_config,
-    get_council_usage_stats,
-    reset_council_usage_stats,
-    set_council_leader_model,
-    set_council_safeguard_config,
+    get_council_consensus_enabled,  # noqa: F401
+    get_council_safeguard_config,  # noqa: F401
+    get_council_usage_stats,  # noqa: F401
+    reset_council_usage_stats,  # noqa: F401
+    set_council_leader_model,  # noqa: F401
+    set_council_safeguard_config,  # noqa: F401
 )
 
 logger = logging.getLogger(__name__)
@@ -110,7 +108,11 @@ def _register_consensus_tools() -> list[dict[str, Any]]:
                     {
                         "model": r.model_name,
                         "confidence": r.confidence,
-                        "response": r.response[:200] + "..." if len(r.response) > 200 else r.response,
+                        "response": (
+                            r.response[:200] + "..."
+                            if len(r.response) > 200
+                            else r.response
+                        ),
                     }
                     for r in comparison
                 ],
@@ -149,13 +151,23 @@ def _register_consensus_tools() -> list[dict[str, Any]]:
                     }
                     for r in results
                 ],
-                "best_model": max(results, key=lambda x: x.confidence).model_name if results else None,
+                "best_model": (
+                    max(results, key=lambda x: x.confidence).model_name
+                    if results
+                    else None
+                ),
             }
 
     tools.extend([
         {"name": "plan_with_consensus", "register_func": _register_plan_with_consensus},
-        {"name": "select_model_for_task", "register_func": _register_select_model_for_task},
-        {"name": "compare_model_approaches", "register_func": _register_compare_model_approaches},
+        {
+            "name": "select_model_for_task",
+            "register_func": _register_select_model_for_task,
+        },
+        {
+            "name": "compare_model_approaches",
+            "register_func": _register_compare_model_approaches,
+        },
     ])
     def _register_get_second_opinion(agent):
         @agent.tool
@@ -165,7 +177,7 @@ def _register_consensus_tools() -> list[dict[str, Any]]:
             reason: str = "Uncertain about best approach",
             models: list[str] | None = None,
         ) -> dict[str, Any]:
-            """Get a second opinion from multiple AI models when you're uncertain or stuck.
+            """Get a second opinion from multiple AI models when uncertain.
 
             Sends the task to multiple AI models (advisors), collects their opinions,
             and has a leader model synthesize a final decision. Use for architecture,
@@ -179,7 +191,9 @@ def _register_consensus_tools() -> list[dict[str, Any]]:
             Returns:
                 dict: Consensus results including plan and recommendations
             """
-            from code_puppy.plugins.consensus_planner.auto_spawn import auto_spawn_consensus_planner
+            from code_puppy.plugins.consensus_planner.auto_spawn import (
+                auto_spawn_consensus_planner,
+            )
 
             return await auto_spawn_consensus_planner(task, reason, models)
     def _register_auto_spawn_consensus(agent):
@@ -215,7 +229,8 @@ def _register_consensus_tools() -> list[dict[str, Any]]:
 
             full_reason = f"Auto-detected: {reason}"
             if trigger_context:
-                full_reason += f" | Context: {trigger_context.get('trigger_type', 'unknown')}"
+                trigger_type = trigger_context.get("trigger_type", "unknown")
+                full_reason += f" | Context: {trigger_type}"
 
             return await auto_spawn_consensus_planner(task, full_reason)
     def _register_check_response_confidence(agent):
@@ -225,9 +240,9 @@ def _register_consensus_tools() -> list[dict[str, Any]]:
             agent_response: str,
             analysis_context: dict[str, Any] | None = None,
         ) -> dict[str, Any]:
-            """Analyze text for uncertainty, error, or complexity markers that suggest getting a second opinion would help.
+            """Analyze text for uncertainty/error markers.
 
-            Returns a confidence score and whether a second opinion is recommended.
+            Returns a confidence score and whether a second opinion helps.
 
             Args:
                 agent_response: The response text to analyze
@@ -236,7 +251,9 @@ def _register_consensus_tools() -> list[dict[str, Any]]:
             Returns:
                 dict: Analysis results with needs_consensus flag and details
             """
-            from code_puppy.plugins.consensus_planner.auto_spawn import detect_issue_need_consensus
+            from code_puppy.plugins.consensus_planner.auto_spawn import (
+                detect_issue_need_consensus,
+            )
 
             result = detect_issue_need_consensus(agent_response, analysis_context)
 
@@ -272,7 +289,9 @@ def _register_consensus_tools() -> list[dict[str, Any]]:
                 run_council_consensus as run_council,
             )
 
-            result = await run_council(task, leader_model, skip_safeguards=skip_safeguards)
+            result = await run_council(
+                task, leader_model=leader_model, skip_safeguards=skip_safeguards
+            )
 
             return {
                 "success": result.leader_model != "blocked",
@@ -291,7 +310,7 @@ def _register_consensus_tools() -> list[dict[str, Any]]:
             context: RunContext,
             task: str,
         ) -> dict[str, Any]:
-            """Check if getting a second opinion is appropriate and cost-effective for this task.
+            """Check if getting a second opinion is appropriate.
 
             Runs safeguard checks (usage limits, task complexity, cost estimate)
             without actually invoking the council. Call this before get_second_opinion.
@@ -304,7 +323,6 @@ def _register_consensus_tools() -> list[dict[str, Any]]:
             """
             from code_puppy.plugins.consensus_planner.council_safeguards import (
                 should_use_council,
-                get_council_usage_stats,
             )
             result = await should_use_council(task, skip_confirm=True)
             stats = get_council_usage_stats()
@@ -319,10 +337,22 @@ def _register_consensus_tools() -> list[dict[str, Any]]:
             }
     tools.extend([
         {"name": "get_second_opinion", "register_func": _register_get_second_opinion},
-        {"name": "auto_spawn_consensus", "register_func": _register_auto_spawn_consensus},
-        {"name": "check_response_confidence", "register_func": _register_check_response_confidence},
-        {"name": "run_council_consensus", "register_func": _register_run_council_consensus},
-        {"name": "should_i_get_second_opinion", "register_func": _register_should_i_get_second_opinion},
+        {
+            "name": "auto_spawn_consensus",
+            "register_func": _register_auto_spawn_consensus,
+        },
+        {
+            "name": "check_response_confidence",
+            "register_func": _register_check_response_confidence,
+        },
+        {
+            "name": "run_council_consensus",
+            "register_func": _register_run_council_consensus,
+        },
+        {
+            "name": "should_i_get_second_opinion",
+            "register_func": _register_should_i_get_second_opinion,
+        },
     ])
     return tools
 
@@ -370,7 +400,6 @@ async def _on_agent_run_end(
 
     try:
         from code_puppy.plugins.consensus_planner.auto_spawn import (
-            AutoSpawnConfig,
             detect_issue_need_consensus,
             get_consensus_auto_spawn_enabled,
         )

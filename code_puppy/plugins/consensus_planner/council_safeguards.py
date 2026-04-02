@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from code_puppy.config import get_value, set_config_value
-from code_puppy.messaging import emit_info, emit_warning, get_message_bus
+from code_puppy.messaging import get_message_bus
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +197,10 @@ def _check_usage_limits() -> CouncilGuardResult:
             confidence_score=0.0,
             recommendation="Wait or use single model",
             estimated_cost="N/A",
-            suggested_action=f"Try again in {int(3600 - (time.time() - _usage_tracker.last_hour_reset))} seconds",
+            suggested_action=(
+                f"Try again in "
+                f"{int(3600 - (time.time() - _usage_tracker.last_hour_reset))}s"
+            ),
         )
 
     return CouncilGuardResult(
@@ -274,7 +277,9 @@ def _check_task_complexity(task: str) -> CouncilGuardResult:
         reason=f"Complexity score: {score:.2f}"
         + (f" ({', '.join(matched_high)})" if matched_high else ""),
         confidence_score=score,
-        recommendation="Proceed with evaluation" if score > 0.6 else "Consider single model",
+        recommendation=(
+            "Proceed with evaluation" if score > 0.6 else "Consider single model"
+        ),
         estimated_cost="",
         suggested_action="",
     )
@@ -318,7 +323,22 @@ async def _check_single_model_confidence(task: str) -> CouncilGuardResult:
         from code_puppy.model_factory import ModelFactory, make_model_settings
 
         # Use a fast model for pre-check
-        model_name = get_value("council_preflight_model") or "claude-sonnet-4"
+        model_name = get_value("council_preflight_model")
+        if not model_name:
+            try:
+                from code_puppy.plugins.consensus_planner.council_consensus import (
+                    _get_default_fallback_model,
+                )
+                model_name = _get_default_fallback_model()
+            except RuntimeError:
+                return CouncilGuardResult(
+                    allowed=True,
+                    reason="Pre-flight check skipped: no fallback model available",
+                    confidence_score=0.5,
+                    recommendation="Proceed with caution",
+                    estimated_cost="",
+                    suggested_action="",
+                )
         models_config = ModelFactory.load_config()
         model = ModelFactory.get_model(model_name, models_config)
         model_settings = make_model_settings(model_name)

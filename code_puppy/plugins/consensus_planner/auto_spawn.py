@@ -15,14 +15,12 @@ This module provides:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from code_puppy.messaging import emit_info, emit_warning
-
-if TYPE_CHECKING:
-    from code_puppy.agents.consensus_planner import ConsensusPlannerAgent
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +142,9 @@ class AutoSpawnConfig:
     """
 
     enabled: bool = True
-    triggers: list[str] = field(default_factory=lambda: ["uncertainty", "error", "complexity"])
+    triggers: list[str] = field(
+        default_factory=lambda: ["uncertainty", "error", "complexity"]
+    )
     uncertainty_threshold: float = 0.6
     ask_before_spawn: bool = True
 
@@ -269,7 +269,9 @@ def should_auto_spawn_consensus(
     if "uncertainty" in config.triggers:
         for pattern, score in UNCERTAINTY_PATTERNS.items():
             if pattern in task_lower:
-                complexity_score = max(complexity_score, score * 0.8)  # Slightly lower weight
+                complexity_score = max(
+                    complexity_score, score * 0.8
+                )  # Slightly lower weight
                 matched_indicators.append(pattern)
 
     # Check agent history for error patterns
@@ -289,7 +291,8 @@ def should_auto_spawn_consensus(
     if complexity_score >= config.uncertainty_threshold:
         needs_consensus = True
         reason_parts.append(
-            f"complexity score {complexity_score:.2f} >= threshold {config.uncertainty_threshold}"
+            f"complexity score {complexity_score:.2f} >= threshold "
+            f"{config.uncertainty_threshold}"
         )
 
     if error_count >= 2:
@@ -297,7 +300,11 @@ def should_auto_spawn_consensus(
         reason_parts.append(f"detected {error_count} recent errors")
 
     if not needs_consensus:
-        return False, f"Task complexity {complexity_score:.2f} below threshold {config.uncertainty_threshold}"
+        return (
+            False,
+            f"Task complexity {complexity_score:.2f} below threshold "
+            f"{config.uncertainty_threshold}",
+        )
 
     return True, f"Auto-spawn triggered: {'; '.join(reason_parts)}"
 
@@ -306,46 +313,80 @@ async def auto_spawn_consensus_planner(
     task: str,
     reason: str,
     models: list[str] | None = None,
+    timeout: float = 180.0,
 ) -> dict[str, Any]:
     """Actually spawn the consensus planner and return results.
 
     Args:
         task: The task to get consensus on
         reason: Why consensus is being requested
-        models: Optional list of specific models to use
+        models: Optional list of specific models to use as advisors
+        timeout: Maximum time to wait for consensus (seconds)
 
     Returns:
         Dictionary with consensus results
     """
-    from code_puppy.agents.consensus_planner import ConsensusPlannerAgent
+    from code_puppy.plugins.consensus_planner.council_consensus import (
+        run_council_consensus,
+    )
 
     emit_info(f"🎯 Auto-spawning ConsensusPlanner: {reason}")
 
     try:
-        agent = ConsensusPlannerAgent()
+        # Use run_council_consensus directly so we can pass advisor_models_override
+        # Reserve 10s from timeout for overhead
+        council_timeout = max(30.0, timeout - 10.0)
 
-        # Use plan_with_consensus for complex tasks
-        plan = await agent.plan_with_consensus(task)
+        council_decision = await asyncio.wait_for(
+            run_council_consensus(
+                task,
+                skip_safeguards=True,
+                advisor_models_override=models,
+                timeout=council_timeout,
+            ),
+            timeout=timeout,
+        )
+
+        # Convert CouncilDecision to the expected dict format
+        conf_pct = f"{council_decision.confidence:.0%}"
+        emit_info(f"✅ Consensus complete (confidence: {conf_pct})")
 
         return {
-            "success": True,
+            "success": council_decision.leader_model != "blocked",
             "plan": {
-                "objective": plan.objective,
-                "phases": plan.phases,
-                "recommended_model": plan.recommended_model,
-                "confidence": plan.confidence,
-                "used_consensus": plan.used_consensus,
-                "alternative_approaches": plan.alternative_approaches,
-                "risks": plan.risks,
-                "markdown": plan.to_markdown(),
+                "objective": task,
+                "decision": council_decision.decision,
+                "synthesis_rationale": council_decision.synthesis_rationale,
+                "confidence": council_decision.confidence,
+                "used_consensus": True,
+                "advisor_count": len(council_decision.advisor_inputs),
+                "advisor_models": [
+                    a.model_name for a in council_decision.advisor_inputs
+                ],
+                "agreement_ratio": council_decision.agreement_ratio,
+                "dissenting_opinions": council_decision.dissenting_opinions,
+                "markdown": council_decision.to_markdown(),
             },
             "reason": reason,
             "agent_name": "consensus-planner",
         }
 
+    except asyncio.TimeoutError:
+        logger.warning(f"Consensus timed out after {timeout}s")
+        timeout_msg = f"⏱️ Consensus timed out after {timeout:.0f}s"
+        emit_warning(f"{timeout_msg} — returning partial results if available")
+
+        return {
+            "success": False,
+            "error": f"Consensus timed out after {timeout:.0f} seconds",
+            "reason": reason,
+            "agent_name": "consensus-planner",
+            "timeout": True,
+        }
+
     except Exception as e:
         logger.exception("Failed to auto-spawn consensus planner")
-        emit_warning(f"❌ Consensus planner auto-spawn failed: {e}")
+        emit_warning(f"❌ Consensus planner failed: {e}")
 
         return {
             "success": False,
@@ -387,7 +428,7 @@ def monitor_agent_execution(
             f"Consensus suggested for {agent_name}: {result.reason}"
         )
         emit_info(
-            f"💡 {agent_name} response suggests consensus might help: {result.trigger_type}"
+            f"💡 {agent_name} response suggests consensus: {result.trigger_type}"
         )
 
     return result

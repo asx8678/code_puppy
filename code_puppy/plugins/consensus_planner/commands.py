@@ -234,7 +234,8 @@ def _show_consensus_config() -> None:
         "- `consensus_planner_timeout`: 30-600 seconds (default 180)",
         "",
         "### How Models Are Selected",
-        "- **Leader**: Model pinned to consensus-planner agent, or `consensus_council_leader` config",
+        "- **Leader**: Model pinned to consensus-planner agent, or "
+        "`consensus_council_leader` config",
         "- **Advisors**: All models pinned to any agent + your active model",
     ])
 
@@ -359,7 +360,9 @@ def _display_model_comparison(results: list[Any]) -> None:
         emit_info(f"**Confidence**: {result.confidence:.0%}")
         emit_info(f"**Time**: {result.execution_time_ms:.0f}ms")
         emit_info("")
-        emit_info(result.response[:500] + "..." if len(result.response) > 500 else result.response)
+        resp = result.response
+        preview = resp[:500] + "..." if len(resp) > 500 else resp
+        emit_info(preview)
         emit_info("")
         emit_info("---")
         emit_info("")
@@ -367,7 +370,8 @@ def _display_model_comparison(results: list[Any]) -> None:
     # Summary
     if len(results) > 1:
         best = sorted_results[0]
-        emit_success(f"🏆 Best Model: {best.model_name} ({best.confidence:.0%} confidence)")
+        conf = f"({best.confidence:.0%} confidence)"
+        emit_success(f"🏆 Best Model: {best.model_name} {conf}")
 
 
 # =============================================================================

@@ -265,13 +265,22 @@ Remember: Know when to consult the council vs act decisively.
 
         return True  # Assume available if no key needed
 
-    async def plan_with_consensus(self, task: str) -> Plan:
-        """Create a plan through swarm debate."""
+    async def plan_with_consensus(self, task: str, force_consensus: bool = False) -> Plan:
+        """Create a plan through swarm debate.
+
+        Args:
+            task: The task to plan for
+            force_consensus: If True, skip complexity check and always use multi-model consensus
+        """
         # First, do a quick analysis to understand the task
         complexity_analysis = analyze_task_complexity(task)
 
-        # Decide on strategy
-        use_consensus, reason = self.should_use_consensus(task, complexity_analysis)
+        # Decide on strategy (skip check if force_consensus is True)
+        if force_consensus:
+            use_consensus = True
+            reason = "Forced consensus mode enabled"
+        else:
+            use_consensus, reason = self.should_use_consensus(task, complexity_analysis)
 
         emit_info(f"📊 Planning strategy: {'Multi-model consensus' if use_consensus else 'Single model'}")
         emit_info(f"   Reason: {reason}")
@@ -305,8 +314,11 @@ Remember: Know when to consult the council vs act decisively.
 
     async def _create_plan_single_model(self, task: str) -> Plan:
         """Create plan using single model (faster, for simpler tasks)."""
-        # Use the base agent's run method for single model
-        prompt = f"""Create a detailed execution plan for this task:
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _create_simple_agent,
+        )
+
+        prompt = """Create a detailed execution plan for this task:
 
 {task}
 
@@ -316,14 +328,36 @@ Structure your response with:
 3. Any risks or considerations
 4. Recommended approach
 
-Format as a structured plan."""
+Format as a structured plan.""".format(task=task)
 
-        response = await self.run(prompt)
+        # Use _create_simple_agent instead of self.run() which doesn't exist on BaseAgent
+        model_name = self.get_model_name()
+        if not model_name:
+            from code_puppy.plugins.consensus_planner.council_consensus import _get_default_fallback_model
+            try:
+                model_name = _get_default_fallback_model()
+            except RuntimeError:
+                logger.warning("No fallback model available for plan creation")
+                # Return a minimal fallback plan
+                return Plan(
+                    objective=task,
+                    phases=[{"name": "Error", "description": "No models available for planning. Check models.json configuration.", "tasks": []}],
+                    recommended_model="unavailable",
+                    confidence=0.0,
+                )
+        agent = await _create_simple_agent(model_name, instructions="You are a planning assistant. Create clear, actionable execution plans.")
+
+        try:
+            result = await asyncio.wait_for(agent.run(prompt), timeout=self._get_config_timeout())
+            response = result.output
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout creating plan with {model_name} after {self._get_config_timeout()}s. Returning fallback plan.")
+            response = f"Fallback plan: Execute task '{task}' with standard approach. (Model timeout occurred)"
 
         # Parse response into Plan structure
         plan = Plan(
             objective=task,
-            phases=[{"name": "Execution", "description": response, "tasks": []}],
+            phases=extract_phases_from_response(response) or [{"name": "Execution", "description": response, "tasks": []}],
             confidence=0.7,  # Default confidence for single model
             used_consensus=False,
         )
@@ -404,7 +438,14 @@ Format as a structured plan."""
 
         if len(all_models) < 2:
             # Not enough models for consensus, return default
-            return all_models[0] if all_models else "claude-sonnet-4"
+            if all_models:
+                return all_models[0]
+            from code_puppy.plugins.consensus_planner.council_consensus import _get_default_fallback_model
+            try:
+                return _get_default_fallback_model()
+            except RuntimeError:
+                logger.warning("No fallback model available for model selection")
+                return "unavailable"
 
         # Run a quick comparison on a subset of models
         comparison = await self.compare_model_approaches(task, models=all_models[:3])
@@ -442,12 +483,13 @@ Format as a structured plan."""
         if val:
             return [m.strip() for m in val.split(",") if m.strip()]
 
-        # Default models to use for consensus
-        return [
-            "claude-sonnet-4",
-            "gpt-4.1",
-            "gemini-2.5-pro",
-        ]
+        # Return models that actually exist in config
+        try:
+            from code_puppy.model_factory import ModelFactory
+            models_config = ModelFactory.load_config()
+            return list(models_config.keys())[:3]
+        except Exception:
+            return []
 
     async def compare_model_approaches(
         self, task: str, models: list[str] | None = None

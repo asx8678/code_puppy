@@ -960,18 +960,20 @@ def get_preferred_consensus_models() -> list[str]:
     These models will be used when running multi-model consensus.
 
     Returns:
-        List of model names (defaults to claude-sonnet-4, gpt-4.1, gemini-2.5-pro)
+        List of model names from config
     """
     val = get_value("preferred_consensus_models")
     if val:
         return [m.strip() for m in val.split(",") if m.strip()]
 
-    # Default preferred models for consensus
-    return [
-        "claude-sonnet-4",
-        "gpt-4.1",
-        "gemini-2.5-pro",
-    ]
+    # Return first 3 models that actually exist in config
+    try:
+        # Lazy import to avoid config <-> model_factory circular dependency
+        from code_puppy.model_factory import ModelFactory
+        models_config = ModelFactory.load_config()
+        return list(models_config.keys())[:3]
+    except Exception:
+        return []
 
 
 def get_consensus_planner_swarm_size() -> int:

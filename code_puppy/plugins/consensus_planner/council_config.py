@@ -59,8 +59,11 @@ def get_council_safeguard_config() -> dict[str, Any]:
         "council_threshold": float(get_value("council_threshold") or "0.65"),
         "council_max_per_session": int(get_value("council_max_per_session") or "10"),
         "council_max_per_hour": int(get_value("council_max_per_hour") or "20"),
-        "council_min_interval_seconds": int(get_value("council_min_interval_seconds") or "30"),
-        "council_preflight_model": get_value("council_preflight_model") or "claude-sonnet-4",
+        "council_min_interval_seconds": int(
+            get_value("council_min_interval_seconds") or "30"
+        ),
+        "council_preflight_model": get_value("council_preflight_model")
+        or "(active model)",
         "council_confirm": get_value("council_confirm") or "ask",
     }
 
