@@ -106,18 +106,25 @@ def _notify_adaptive_rate_limiter(model_name: str, status_code: int) -> None:
     """
     if status_code != 429 or not model_name:
         return
+    
+    # Import here to avoid circular imports
     try:
         from code_puppy.adaptive_rate_limiter import record_rate_limit
-
-        asyncio.ensure_future(record_rate_limit(model_name))
+    except ImportError:
+        return  # Rate limiter not available
+    
+    # Schedule the notification as a fire-and-forget task
+    try:
+        loop = asyncio.get_running_loop()
+        # Use create_task instead of ensure_future for cleaner handling
+        loop.create_task(record_rate_limit(model_name))
         emit_info(
             f"Adaptive rate limiter triggered for model '{model_name}' "
             f"(HTTP 429). Reducing concurrency."
         )
-    except Exception:
-        # Never let the rate limiter break normal operation
-        logger = logging.getLogger(__name__)
-        logger.debug("adaptive_rate_limiter notification skipped", exc_info=True)
+    except RuntimeError:
+        # No event loop running - ignore silently
+        pass
 
 
 def _notify_success(model_name: str) -> None:
@@ -128,13 +135,20 @@ def _notify_success(model_name: str) -> None:
     """
     if not model_name:
         return
+    
+    # Import here to avoid circular imports
     try:
         from code_puppy.adaptive_rate_limiter import record_success
-
-        asyncio.ensure_future(record_success(model_name))
-    except Exception:
-        logger = logging.getLogger(__name__)
-        logger.debug("circuit_breaker success notification skipped", exc_info=True)
+    except ImportError:
+        return  # Rate limiter not available
+    
+    # Schedule the notification as a fire-and-forget task
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(record_success(model_name))
+    except RuntimeError:
+        # No event loop running - ignore silently
+        pass
 
 
 class RetryingAsyncClient(httpx.AsyncClient):
