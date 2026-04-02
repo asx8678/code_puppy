@@ -9,7 +9,6 @@ Tests the core components of the swarm consensus system:
 
 from __future__ import annotations
 
-import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -336,7 +335,7 @@ class TestOrchestrator:
     @pytest.mark.asyncio
     async def test_orchestrator_with_mock_agents(self):
         """Test orchestrator with mocked agents."""
-        from code_puppy.plugins.swarm_consensus.models import AgentResult, SwarmConfig
+        from code_puppy.plugins.swarm_consensus.models import SwarmConfig
         from code_puppy.plugins.swarm_consensus.orchestrator import SwarmOrchestrator
 
         config = SwarmConfig(swarm_size=2)
@@ -345,11 +344,11 @@ class TestOrchestrator:
         # Create mock agents
         mock_agent1 = MagicMock()
         mock_agent1.name = "agent_1"
-        mock_agent1.run = AsyncMock(return_value="Response from agent 1")
+        mock_agent1.run_with_mcp = AsyncMock(return_value="Response from agent 1")
 
         mock_agent2 = MagicMock()
         mock_agent2.name = "agent_2"
-        mock_agent2.run = AsyncMock(return_value="Response from agent 2")
+        mock_agent2.run_with_mcp = AsyncMock(return_value="Response from agent 2")
 
         with patch.object(orchestrator, "_spawn_agents", return_value=[mock_agent1, mock_agent2]):
             with patch.object(orchestrator, "_cleanup_agents"):
@@ -360,6 +359,7 @@ class TestOrchestrator:
 
                 assert len(result.individual_results) == 2
                 assert result.execution_stats is not None
+                assert any("Response from agent" in r.response_text for r in result.individual_results)
 
 
 # =============================================================================
@@ -554,7 +554,7 @@ class TestIntegration:
         with patch.object(orchestrator, "_spawn_agents") as mock_spawn:
             mock_agent = MagicMock()
             mock_agent.name = "test_agent"
-            mock_agent.run = AsyncMock(return_value="Test response")
+            mock_agent.run_with_mcp = AsyncMock(return_value="Test response")
             mock_spawn.return_value = [mock_agent]
 
             with patch.object(orchestrator, "_cleanup_agents"):
