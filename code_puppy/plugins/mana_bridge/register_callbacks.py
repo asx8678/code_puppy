@@ -29,6 +29,7 @@ _client: BridgeClient | None = None
 # Activation check
 # ------------------------------------------------------------------
 
+
 def _is_enabled() -> bool:
     """Return whether the Mana bridge is enabled via environment variable."""
     return os.environ.get("CODE_PUPPY_BRIDGE", "") == "1"
@@ -37,6 +38,7 @@ def _is_enabled() -> bool:
 # ------------------------------------------------------------------
 # Startup / shutdown
 # ------------------------------------------------------------------
+
 
 def _on_startup() -> None:
     """Connect to Mana on startup (if bridge mode is enabled)."""
@@ -53,10 +55,14 @@ def _on_startup() -> None:
         # Send hello handshake
         try:
             from code_puppy import __version__
-            client.send_event("hello", {
-                "version": __version__,
-                "bridge_type": "code_puppy",
-            })
+
+            client.send_event(
+                "hello",
+                {
+                    "version": __version__,
+                    "bridge_type": "code_puppy",
+                },
+            )
         except Exception as exc:
             logger.warning("Failed to send bridge hello: %s", exc)
     else:
@@ -82,6 +88,7 @@ def _on_shutdown() -> None:
 # ------------------------------------------------------------------
 # Stream events  →  bridge messages
 # ------------------------------------------------------------------
+
 
 async def _on_stream_event(
     event_type: str,
@@ -132,6 +139,7 @@ async def _on_stream_event(
 # Agent lifecycle  →  bridge messages
 # ------------------------------------------------------------------
 
+
 async def _on_agent_run_start(
     agent_name: str,
     model_name: str,
@@ -141,12 +149,15 @@ async def _on_agent_run_start(
     if _client is None:
         return
     try:
-        _client.send_event("agent_run_start", {
-            "agent_name": agent_name,
-            "model_name": model_name,
-            "session_id": session_id,
-            "timestamp": time.time(),
-        })
+        _client.send_event(
+            "agent_run_start",
+            {
+                "agent_name": agent_name,
+                "model_name": model_name,
+                "session_id": session_id,
+                "timestamp": time.time(),
+            },
+        )
         logger.debug("Bridge forwarded agent_run_start: %s", agent_name)
     except Exception as exc:
         logger.error("Failed to forward agent_run_start: %s", exc)
@@ -190,6 +201,7 @@ async def _on_agent_run_end(
 # Tool calls  →  bridge messages
 # ------------------------------------------------------------------
 
+
 async def _on_pre_tool_call(
     tool_name: str,
     tool_args: dict[str, Any],
@@ -199,11 +211,14 @@ async def _on_pre_tool_call(
     if _client is None:
         return
     try:
-        _client.send_event("tool_call_start", {
-            "tool_name": tool_name,
-            "tool_args": _sanitize_args(tool_args),
-            "start_time": time.time(),
-        })
+        _client.send_event(
+            "tool_call_start",
+            {
+                "tool_name": tool_name,
+                "tool_args": _sanitize_args(tool_args),
+                "start_time": time.time(),
+            },
+        )
         logger.debug("Bridge forwarded tool_call_start: %s", tool_name)
     except Exception as exc:
         logger.error("Failed to forward pre_tool_call: %s", exc)
@@ -220,16 +235,20 @@ async def _on_post_tool_call(
     if _client is None:
         return
     try:
-        _client.send_event("tool_call_end", {
-            "tool_name": tool_name,
-            "tool_args": _sanitize_args(tool_args),
-            "duration_ms": duration_ms,
-            "success": _is_successful(result),
-            "result_summary": _summarize_result(result),
-        })
+        _client.send_event(
+            "tool_call_end",
+            {
+                "tool_name": tool_name,
+                "tool_args": _sanitize_args(tool_args),
+                "duration_ms": duration_ms,
+                "success": _is_successful(result),
+                "result_summary": _summarize_result(result),
+            },
+        )
         logger.debug(
             "Bridge forwarded tool_call_end: %s (%.2fms)",
-            tool_name, duration_ms,
+            tool_name,
+            duration_ms,
         )
     except Exception as exc:
         logger.error("Failed to forward post_tool_call: %s", exc)
@@ -238,6 +257,7 @@ async def _on_post_tool_call(
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
+
 
 def _sanitize_args(args: dict[str, Any]) -> dict[str, Any]:
     """Trim tool arguments to keep payloads small and msgpack-safe."""
@@ -291,6 +311,7 @@ def _summarize_result(result: Any) -> str:
 # ------------------------------------------------------------------
 # Registration
 # ------------------------------------------------------------------
+
 
 def register() -> None:
     """Register all Mana bridge callbacks."""

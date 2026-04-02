@@ -101,9 +101,7 @@ class BridgeClient:
             )
             self._sender_thread.start()
 
-            logger.info(
-                "Mana bridge connected to %s:%s", self._host, self._port
-            )
+            logger.info("Mana bridge connected to %s:%s", self._host, self._port)
             return True
 
         except OSError as exc:
@@ -111,7 +109,9 @@ class BridgeClient:
             logger.warning(
                 "Mana bridge failed to connect to %s:%s — %s. "
                 "Bridge events will be dropped until reconnection.",
-                self._host, self._port, exc,
+                self._host,
+                self._port,
+                exc,
             )
             return False
 
@@ -233,7 +233,8 @@ class BridgeClient:
 
         backoff = self._backoff
         logger.debug(
-            "Mana bridge reconnecting in %.1fs …", backoff,
+            "Mana bridge reconnecting in %.1fs …",
+            backoff,
         )
         time.sleep(min(backoff, _MAX_BACKOFF))
 

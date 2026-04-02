@@ -18,11 +18,11 @@ from code_puppy.config import (
     DBOS_DATABASE_URL,
     ensure_config_exists,
     get_use_dbos,
-    initialize_command_history_file)
+    initialize_command_history_file,
+)
 from code_puppy.http_utils import find_available_port
 from code_puppy.keymap import KeymapError, validate_cancel_agent_key
-from code_puppy.terminal_utils import (
-    reset_windows_terminal_full)
+from code_puppy.terminal_utils import reset_windows_terminal_full
 from code_puppy.version_checker import default_version_mismatch_behavior
 
 # Import these so main() can call them by name — tests patch at this module level
@@ -54,35 +54,39 @@ class AppRunner:
             "-v",
             action="version",
             version=f"{__version__}",
-            help="Show version and exit")
+            help="Show version and exit",
+        )
         parser.add_argument(
-            "--interactive",
-            "-i",
-            action="store_true",
-            help="Run in interactive mode")
+            "--interactive", "-i", action="store_true", help="Run in interactive mode"
+        )
         parser.add_argument(
             "--prompt",
             "-p",
             type=str,
-            help="Execute a single prompt and exit (no interactive mode)")
+            help="Execute a single prompt and exit (no interactive mode)",
+        )
         parser.add_argument(
             "--agent",
             "-a",
             type=str,
-            help="Specify which agent to use (e.g., --agent code-puppy)")
+            help="Specify which agent to use (e.g., --agent code-puppy)",
+        )
         parser.add_argument(
             "--model",
             "-m",
             type=str,
-            help="Specify which model to use (e.g., --model gpt-5)")
+            help="Specify which model to use (e.g., --model gpt-5)",
+        )
         parser.add_argument(
             "--bridge-mode",
             action="store_true",
-            help="Enable Mana LiveView TCP bridge (CODE_PUPPY_BRIDGE=1)")
+            help="Enable Mana LiveView TCP bridge (CODE_PUPPY_BRIDGE=1)",
+        )
         parser.add_argument(
             "command",
             nargs="*",
-            help="Run a single command (deprecated, use -p instead)")
+            help="Run a single command (deprecated, use -p instead)",
+        )
         return parser.parse_args()
 
     # ------------------------------------------------------------------
@@ -95,7 +99,8 @@ class AppRunner:
             RichConsoleRenderer,
             SynchronousInteractiveRenderer,
             get_global_queue,
-            get_message_bus)
+            get_message_bus,
+        )
 
         display_console = Console()
 
@@ -158,7 +163,8 @@ class AppRunner:
             if should_use_alternate_cancel_key():
                 from code_puppy.terminal_utils import (
                     disable_windows_ctrl_c,
-                    set_keep_ctrl_c_disabled)
+                    set_keep_ctrl_c_disabled,
+                )
 
                 disable_windows_ctrl_c()
                 set_keep_ctrl_c_disabled(True)
@@ -229,7 +235,8 @@ class AppRunner:
         if args.agent:
             from code_puppy.agents.agent_manager import (
                 get_available_agents,
-                set_current_agent)
+                set_current_agent,
+            )
 
             agent_name = args.agent.lower()
             try:
@@ -305,7 +312,8 @@ class AppRunner:
             "1",
             "true",
             "yes",
-            "on")
+            "on",
+        )
         if no_version_update:
             emit_system_message(f"Current version: {current_version}")
             emit_system_message(
@@ -321,6 +329,7 @@ class AppRunner:
 
         # Register workflow state callback handlers for tracking flags
         from code_puppy.workflow_state import register_callback_handlers
+
         register_callback_handlers()
 
         # Initialize DBOS if not disabled
