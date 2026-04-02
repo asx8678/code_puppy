@@ -120,9 +120,10 @@ async def run_council_consensus(
     Returns:
         CouncilDecision with leader's synthesis and advisor inputs
     """
-    # Calculate time budgets: 60% for advisors, 35% for leader, 5% overhead
+    # Advisor phase gets 60% of total budget
     advisor_budget = timeout * 0.6
-    leader_budget = timeout * 0.35
+    # Leader minimum is 45% of total, but can get more from unused advisor time
+    leader_min_budget = timeout * 0.45
 
     # Run safeguards first (unless skipped)
     if not skip_safeguards:
@@ -172,8 +173,22 @@ async def run_council_consensus(
     )
 
     # Step 3: Gather inputs from all advisors in parallel
+    advisor_start = asyncio.get_event_loop().time()
     advisor_inputs = await _gather_advisor_inputs(
         task, advisor_models, timeout=advisor_budget
+    )
+    advisor_elapsed = asyncio.get_event_loop().time() - advisor_start
+
+    # Step 4: Leader synthesizes — give it unused advisor budget too
+    advisor_saved = max(0.0, advisor_budget - advisor_elapsed)
+    leader_budget = leader_min_budget + advisor_saved
+    # Cap to remaining total time minus small overhead
+    remaining = timeout - advisor_elapsed - 5.0
+    leader_budget = min(leader_budget, max(30.0, remaining))
+
+    emit_info(
+        f"⏱️ Advisors took {advisor_elapsed:.1f}s, "
+        f"leader budget: {leader_budget:.0f}s"
     )
 
     # Step 4: Leader synthesizes all inputs and makes decision
@@ -410,6 +425,62 @@ async def _gather_advisor_inputs(
     return advisor_inputs
 
 
+def _fallback_synthesis(
+    advisor_inputs: list[AdvisorInput],
+) -> dict[str, Any]:
+    """Synthesize a best-effort decision from advisor inputs when leader times out.
+
+    Picks the highest-confidence advisor response as the decision and
+    notes any dissenting (low-confidence) opinions.
+
+    Args:
+        advisor_inputs: List of advisor inputs to synthesize from
+
+    Returns:
+        Dict with decision, rationale, confidence, and dissenting opinions
+    """
+    if not advisor_inputs:
+        return {
+            "decision": "No advisor inputs available",
+            "rationale": "Leader timed out and no advisors responded",
+            "confidence": 0.0,
+            "dissenting": [],
+        }
+
+    # Sort by confidence, highest first
+    ranked = sorted(advisor_inputs, key=lambda a: a.confidence, reverse=True)
+    best = ranked[0]
+
+    # Build rationale from all advisors
+    rationale_parts = [
+        f"Leader timed out — using advisor majority-vote fallback.",
+        f"Best advisor: {best.model_name} (confidence: {best.confidence:.0%}).",
+    ]
+    if len(ranked) > 1:
+        others = ", ".join(
+            f"{a.model_name} ({a.confidence:.0%})" for a in ranked[1:]
+        )
+        rationale_parts.append(f"Other advisors: {others}.")
+
+    # Average confidence, slightly discounted since leader didn't verify
+    avg_conf = sum(a.confidence for a in advisor_inputs) / len(advisor_inputs)
+    fallback_confidence = avg_conf * 0.85  # 15% discount for missing leader
+
+    # Dissenting opinions: advisors with confidence < 0.5
+    dissenting = [
+        f"{a.model_name} had concerns: {a.response[:100]}..."
+        for a in advisor_inputs
+        if a.confidence < 0.5
+    ]
+
+    return {
+        "decision": best.response,
+        "rationale": " ".join(rationale_parts),
+        "confidence": fallback_confidence,
+        "dissenting": dissenting,
+    }
+
+
 async def _leader_synthesize(
     task: str,
     leader_model: str,
@@ -488,9 +559,23 @@ async def _leader_synthesize(
         logger.warning(f"Leader {leader_model} timed out after {timeout}s")
         emit_warning(f"⚠️ Leader synthesis timed out after {timeout:.0f}s")
 
+        # Fallback: synthesize from advisor inputs directly
+        if advisor_inputs:
+            emit_info("🔄 Using advisor majority-vote fallback...")
+            fallback = _fallback_synthesis(advisor_inputs)
+            return CouncilDecision(
+                leader_model=f"{leader_model} (fallback)",
+                decision=fallback["decision"],
+                synthesis_rationale=fallback["rationale"],
+                confidence=fallback["confidence"],
+                advisor_inputs=advisor_inputs,
+                dissenting_opinions=fallback["dissenting"],
+                agreement_ratio=agreement_ratio,
+            )
+
         return CouncilDecision(
             leader_model=leader_model,
-            decision="Error: Leader synthesis timed out",
+            decision="Error: Leader synthesis timed out (no advisors to fall back on)",
             synthesis_rationale=f"Leader timed out after {timeout} seconds",
             confidence=0.0,
             advisor_inputs=advisor_inputs,

@@ -889,9 +889,10 @@ class TestCouncilConsensusFlow:
                 "test task", "leader-model", advisors, timeout=1.0
             )
 
-            assert result.confidence == 0.0
-            assert "timed out" in result.decision.lower()
-            assert result.leader_model == "leader-model"
+            # Fallback synthesis returns discounted confidence from advisors
+            assert result.confidence == 0.68  # 0.8 * 0.85 discount
+            assert "timed out" in result.synthesis_rationale.lower()
+            assert result.leader_model == "leader-model (fallback)"
 
     @pytest.mark.asyncio
     async def test_run_council_no_advisors(self):
@@ -970,9 +971,169 @@ class TestCouncilConsensusFlow:
 
             # 60% of 100 = 60 for advisors
             assert captured_advisor_timeout == pytest.approx(60.0)
-            # 35% of 100 = 35 for leader
-            assert captured_leader_timeout == pytest.approx(35.0)
-            # =============================================================================
+            # Adaptive: advisors returned instantly so leader gets
+            # min(45 + 60, max(30, 100 - 0 - 5)) ≈ 95
+            assert captured_leader_timeout == pytest.approx(95.0, abs=1.0)
+
+        # =============================================================================
+# Fallback Synthesis Tests
+# =============================================================================
+
+
+class TestFallbackSynthesis:
+    """Test fallback synthesis when leader times out."""
+
+    def test_fallback_picks_highest_confidence_advisor(self):
+        """Test _fallback_synthesis picks the advisor with highest confidence."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            AdvisorInput,
+            _fallback_synthesis,
+        )
+
+        advisors = [
+            AdvisorInput(
+                model_name="model-a",
+                response="Use Redis for caching",
+                confidence=0.7,
+                execution_time_ms=100.0,
+            ),
+            AdvisorInput(
+                model_name="model-b",
+                response="Use Memcached for caching",
+                confidence=0.9,
+                execution_time_ms=200.0,
+            ),
+        ]
+
+        result = _fallback_synthesis(advisors)
+
+        assert result["decision"] == "Use Memcached for caching"
+        assert "model-b" in result["rationale"]
+        # Average confidence (0.8) * 0.85 discount = 0.68
+        assert result["confidence"] == pytest.approx(0.68)
+        assert result["dissenting"] == []
+
+    def test_fallback_with_empty_advisors(self):
+        """Test _fallback_synthesis handles empty advisor list."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _fallback_synthesis,
+        )
+
+        result = _fallback_synthesis([])
+
+        assert result["confidence"] == 0.0
+        assert "No advisor" in result["decision"]
+
+    def test_fallback_includes_dissenting_opinions(self):
+        """Test _fallback_synthesis tracks low-confidence advisors as dissenting."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            AdvisorInput,
+            _fallback_synthesis,
+        )
+
+        advisors = [
+            AdvisorInput(
+                model_name="confident-model",
+                response="Use Redis",
+                confidence=0.9,
+                execution_time_ms=100.0,
+            ),
+            AdvisorInput(
+                model_name="unsure-model",
+                response="Maybe use SQLite? Not sure...",
+                confidence=0.3,
+                execution_time_ms=150.0,
+            ),
+        ]
+
+        result = _fallback_synthesis(advisors)
+
+        assert len(result["dissenting"]) == 1
+        assert "unsure-model" in result["dissenting"][0]
+
+    def test_fallback_confidence_is_discounted(self):
+        """Test that fallback confidence is 85% of average advisor confidence."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            AdvisorInput,
+            _fallback_synthesis,
+        )
+
+        advisors = [
+            AdvisorInput(
+                model_name="model-a",
+                response="Do X",
+                confidence=1.0,
+                execution_time_ms=100.0,
+            ),
+        ]
+
+        result = _fallback_synthesis(advisors)
+
+        # 1.0 * 0.85 = 0.85
+        assert result["confidence"] == pytest.approx(0.85)
+
+    @pytest.mark.asyncio
+    async def test_leader_timeout_triggers_fallback(self):
+        """Test that leader timeout in _leader_synthesize uses fallback synthesis."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            AdvisorInput,
+            _leader_synthesize,
+        )
+
+        advisors = [
+            AdvisorInput(
+                model_name="test-advisor",
+                response="ANALYSIS: Use Redis\nCONFIDENCE: 85%\nCONCERNS: None",
+                confidence=0.85,
+                execution_time_ms=100.0,
+            ),
+        ]
+
+        async def slow_run(prompt):
+            await asyncio.sleep(100)
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._create_simple_agent"
+        ) as mock_create:
+            mock_agent = MagicMock()
+            mock_agent.run = slow_run
+            mock_create.return_value = mock_agent
+
+            result = await _leader_synthesize(
+                "test task", "slow-leader", advisors, timeout=1.0
+            )
+
+            # Should use fallback instead of returning error
+            assert "(fallback)" in result.leader_model
+            assert result.confidence > 0.0
+            assert "majority-vote fallback" in result.synthesis_rationale
+
+    @pytest.mark.asyncio
+    async def test_leader_timeout_without_advisors_returns_error(self):
+        """Test that leader timeout with no advisors returns error (no fallback possible)."""
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _leader_synthesize,
+        )
+
+        async def slow_run(prompt):
+            await asyncio.sleep(100)
+
+        with patch(
+            "code_puppy.plugins.consensus_planner.council_consensus._create_simple_agent"
+        ) as mock_create:
+            mock_agent = MagicMock()
+            mock_agent.run = slow_run
+            mock_create.return_value = mock_agent
+
+            result = await _leader_synthesize(
+                "test task", "slow-leader", [], timeout=1.0
+            )
+
+            # No fallback possible — should be an error
+            assert result.confidence == 0.0
+            assert "no advisors" in result.decision.lower()
+
+        # =============================================================================
 # Pre-flight Model Selection Tests
 # =============================================================================
 
