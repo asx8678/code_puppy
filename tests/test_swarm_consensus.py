@@ -593,5 +593,159 @@ class TestIntegration:
             set_swarm_enabled(original)
 
 
+# =============================================================================
+# P1 Regression Tests
+# =============================================================================
+
+
+class TestP1Regressions:
+    """Regression tests for P1 swarm bug fixes.
+
+    These tests guard against re-introduction of critical bugs:
+    - code_puppy-064: asyncio.run() crash in running event loops
+    - code_puppy-krl: deepcopied agents sharing UUIDs
+    - code_puppy-36g: spawned agents mutating shared state
+    - _agent_identity not returning _swarm_identity
+    - _run_agent calling run() instead of run_with_mcp()
+    """
+
+    @pytest.mark.asyncio
+    async def test_handle_swarm_command_is_async(self):
+        """Regression test for code_puppy-064: _handle_swarm_command must be async,
+        not use asyncio.run() which crashes in running event loops."""
+        import inspect
+
+        from code_puppy.plugins.swarm_consensus.register_callbacks import (
+            _handle_swarm_command,
+        )
+
+        assert inspect.iscoroutinefunction(_handle_swarm_command), (
+            "_handle_swarm_command must be async to avoid asyncio.run() crashes"
+        )
+
+    def test_spawn_agents_have_unique_ids(self):
+        """Regression test for code_puppy-krl: deepcopied agents must get fresh UUIDs."""
+        import uuid
+        from unittest.mock import MagicMock, patch
+
+        from code_puppy.plugins.swarm_consensus.models import ApproachConfig, SwarmConfig
+        from code_puppy.plugins.swarm_consensus.orchestrator import SwarmOrchestrator
+
+        config = SwarmConfig(swarm_size=3)
+        orchestrator = SwarmOrchestrator(config)
+
+        approaches = [
+            ApproachConfig(
+                name="thorough",
+                system_prompt_modifier="Be thorough",
+                temperature_override=0.3,
+            ),
+            ApproachConfig(
+                name="creative",
+                system_prompt_modifier="Be creative",
+                temperature_override=0.9,
+            ),
+        ]
+
+        with patch(
+            "code_puppy.agents.agent_manager.load_agent"
+        ) as mock_load, patch(
+            "code_puppy.agents.agent_manager.get_current_agent_name",
+            return_value="code-puppy",
+        ):
+            mock_agent = MagicMock()
+            mock_agent.id = str(uuid.uuid7())
+            mock_agent.name = "test-agent"
+            mock_agent.system_prompt = "original prompt"
+            mock_agent.temperature = 0.5
+            mock_load.return_value = mock_agent
+
+            agents = orchestrator._spawn_agents(approaches)
+
+            # All agents should have unique IDs
+            ids = [a.id for a in agents]
+            assert len(set(ids)) == len(ids), f"Agent IDs must be unique, got: {ids}"
+
+    def test_spawn_agents_dont_mutate_original(self):
+        """Regression test for code_puppy-36g: spawned agents must not share state
+        with the original loaded agent."""
+        from unittest.mock import MagicMock, patch
+
+        from code_puppy.plugins.swarm_consensus.models import ApproachConfig, SwarmConfig
+        from code_puppy.plugins.swarm_consensus.orchestrator import SwarmOrchestrator
+
+        config = SwarmConfig(swarm_size=2)
+        orchestrator = SwarmOrchestrator(config)
+
+        approaches = [
+            ApproachConfig(
+                name="thorough",
+                system_prompt_modifier="Be thorough",
+                temperature_override=0.3,
+            ),
+        ]
+
+        with patch(
+            "code_puppy.agents.agent_manager.load_agent"
+        ) as mock_load, patch(
+            "code_puppy.agents.agent_manager.get_current_agent_name",
+            return_value="code-puppy",
+        ):
+            mock_agent = MagicMock()
+            mock_agent.name = "original-agent"
+            mock_agent.system_prompt = "original prompt"
+            mock_agent.temperature = 0.5
+            mock_load.return_value = mock_agent
+
+            orchestrator._spawn_agents(approaches)
+
+            # The original agent's attributes should NOT have been changed
+            assert mock_agent.system_prompt == "original prompt", (
+                "Original agent's system_prompt was mutated!"
+            )
+            assert mock_agent.temperature == 0.5, (
+                "Original agent's temperature was mutated!"
+            )
+
+    def test_agent_identity_uses_swarm_identity(self):
+        """Regression test: _agent_identity returns _swarm_identity when set."""
+        from unittest.mock import MagicMock
+
+        from code_puppy.plugins.swarm_consensus.orchestrator import SwarmOrchestrator
+
+        agent = MagicMock()
+        agent.name = "base-name"
+        agent._swarm_identity = "swarm_agent_0_thorough"
+
+        assert SwarmOrchestrator._agent_identity(agent) == "swarm_agent_0_thorough"
+
+        # Without _swarm_identity, falls back to name
+        agent3 = MagicMock(spec=[])
+        agent3.name = "fallback-name"
+        assert SwarmOrchestrator._agent_identity(agent3) == "fallback-name"
+
+    @pytest.mark.asyncio
+    async def test_run_agent_calls_run_with_mcp(self):
+        """Regression test: _run_agent must call run_with_mcp, not run."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from code_puppy.plugins.swarm_consensus.models import SwarmConfig
+        from code_puppy.plugins.swarm_consensus.orchestrator import SwarmOrchestrator
+
+        config = SwarmConfig(swarm_size=2)
+        orchestrator = SwarmOrchestrator(config)
+
+        agent = MagicMock()
+        agent.name = "test-agent"
+        agent.run_with_mcp = AsyncMock(return_value="test response")
+        agent._swarm_approach = "thorough"
+        agent._swarm_identity = "swarm_agent_0"
+
+        result = await orchestrator._run_agent(agent, "test prompt", {}, timeout=30)
+
+        agent.run_with_mcp.assert_called_once()
+        assert "test response" in result.response_text
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
