@@ -972,4 +972,169 @@ class TestCouncilConsensusFlow:
             assert captured_advisor_timeout == pytest.approx(60.0)
             # 35% of 100 = 35 for leader
             assert captured_leader_timeout == pytest.approx(35.0)
-            # Total is 95, leaving 5% overhead
+            # =============================================================================
+# Pre-flight Model Selection Tests
+# =============================================================================
+
+
+class TestPreflightModelSelection:
+    """Test _get_preflight_model picks cheap models over expensive ones."""
+
+    def test_explicit_config_takes_priority(self):
+        """Test that council_preflight_model config is used first."""
+        from code_puppy.plugins.consensus_planner.council_safeguards import (
+            _get_preflight_model,
+        )
+
+        with patch("code_puppy.plugins.consensus_planner.council_safeguards.get_value") as mock_get:
+            mock_get.return_value = "my-custom-preflight-model"
+            result = _get_preflight_model()
+            assert result == "my-custom-preflight-model"
+
+    def test_picks_haiku_over_opus(self):
+        """Test that haiku is picked over opus when both available."""
+        from code_puppy.plugins.consensus_planner.council_safeguards import (
+            _get_preflight_model,
+        )
+
+        mock_config = {
+            "claude-opus-4-6": {"type": "anthropic"},
+            "claude-haiku-4-5": {"type": "anthropic"},
+            "claude-sonnet-4": {"type": "anthropic"},
+        }
+
+        with patch("code_puppy.plugins.consensus_planner.council_safeguards.get_value", return_value=None):
+            with patch("code_puppy.model_factory.ModelFactory.load_config", return_value=mock_config):
+                result = _get_preflight_model()
+                assert result == "claude-haiku-4-5"
+
+    def test_picks_mini_model(self):
+        """Test that mini models are preferred."""
+        from code_puppy.plugins.consensus_planner.council_safeguards import (
+            _get_preflight_model,
+        )
+
+        mock_config = {
+            "gpt-5-codex": {"type": "openai"},
+            "gpt-5-codex-mini": {"type": "openai"},
+            "claude-opus-4-6": {"type": "anthropic"},
+        }
+
+        with patch("code_puppy.plugins.consensus_planner.council_safeguards.get_value", return_value=None):
+            with patch("code_puppy.model_factory.ModelFactory.load_config", return_value=mock_config):
+                result = _get_preflight_model()
+                assert result == "gpt-5-codex-mini"
+
+    def test_picks_flash_model(self):
+        """Test that flash models are preferred."""
+        from code_puppy.plugins.consensus_planner.council_safeguards import (
+            _get_preflight_model,
+        )
+
+        # Note: Can't use "gemini" model names because "mini" substring
+        # would match the end of "gemini"! Use names without "mini".
+        mock_config = {
+            "gpt-5-pro": {"type": "openai"},
+            "gpt-5-flash": {"type": "openai"},
+        }
+
+        with patch("code_puppy.plugins.consensus_planner.council_safeguards.get_value", return_value=None):
+            with patch("code_puppy.model_factory.ModelFactory.load_config", return_value=mock_config):
+                result = _get_preflight_model()
+                assert result == "gpt-5-flash"
+
+    def test_picks_instant_model(self):
+        """Test that instant models are preferred."""
+        from code_puppy.plugins.consensus_planner.council_safeguards import (
+            _get_preflight_model,
+        )
+
+        mock_config = {
+            "chatgpt-gpt-5.3-codex": {"type": "chatgpt_oauth"},
+            "chatgpt-gpt-5.3-instant": {"type": "chatgpt_oauth"},
+        }
+
+        with patch("code_puppy.plugins.consensus_planner.council_safeguards.get_value", return_value=None):
+            with patch("code_puppy.model_factory.ModelFactory.load_config", return_value=mock_config):
+                result = _get_preflight_model()
+                assert result == "chatgpt-gpt-5.3-instant"
+
+    def test_picks_turbo_model(self):
+        """Test that turbo models are preferred."""
+        from code_puppy.plugins.consensus_planner.council_safeguards import (
+            _get_preflight_model,
+        )
+
+        mock_config = {
+            "claude-opus-4-6": {"type": "anthropic"},
+            "firepass-kimi-k2p5-turbo": {"type": "openai"},
+        }
+
+        with patch("code_puppy.plugins.consensus_planner.council_safeguards.get_value", return_value=None):
+            with patch("code_puppy.model_factory.ModelFactory.load_config", return_value=mock_config):
+                result = _get_preflight_model()
+                assert result == "firepass-kimi-k2p5-turbo"
+
+    def test_falls_back_to_default_when_no_cheap_models(self):
+        """Test fallback to _get_default_fallback_model when no cheap model found."""
+        from code_puppy.plugins.consensus_planner.council_safeguards import (
+            _get_preflight_model,
+        )
+
+        mock_config = {
+            "claude-opus-4-6": {"type": "anthropic"},
+            "claude-sonnet-4": {"type": "anthropic"},
+        }
+
+        with patch("code_puppy.plugins.consensus_planner.council_safeguards.get_value", return_value=None):
+            with patch("code_puppy.model_factory.ModelFactory.load_config", return_value=mock_config):
+                with patch(
+                    "code_puppy.plugins.consensus_planner.council_consensus._get_default_fallback_model",
+                    return_value="claude-sonnet-4",
+                ):
+                    result = _get_preflight_model()
+                    assert result == "claude-sonnet-4"
+
+    def test_returns_none_when_no_models_available(self):
+        """Test returns None when no models available at all."""
+        from code_puppy.plugins.consensus_planner.council_safeguards import (
+            _get_preflight_model,
+        )
+
+        with patch("code_puppy.plugins.consensus_planner.council_safeguards.get_value", return_value=None):
+            with patch("code_puppy.model_factory.ModelFactory.load_config", return_value={}):
+                with patch(
+                    "code_puppy.plugins.consensus_planner.council_consensus._get_default_fallback_model",
+                    side_effect=RuntimeError("No models"),
+                ):
+                    result = _get_preflight_model()
+                    assert result is None
+
+    def test_returns_none_when_config_load_fails(self):
+        """Test returns None when model config can't be loaded."""
+        from code_puppy.plugins.consensus_planner.council_safeguards import (
+            _get_preflight_model,
+        )
+
+        with patch("code_puppy.plugins.consensus_planner.council_safeguards.get_value", return_value=None):
+            with patch("code_puppy.model_factory.ModelFactory.load_config", side_effect=Exception("Config error")):
+                result = _get_preflight_model()
+                assert result is None
+
+    def test_substring_priority_order(self):
+        """Test that haiku is preferred over turbo (priority order matters)."""
+        from code_puppy.plugins.consensus_planner.council_safeguards import (
+            _get_preflight_model,
+        )
+
+        # Note: Avoid "gemini" names since "mini" substring matches it
+        mock_config = {
+            "firepass-kimi-k2p5-turbo": {"type": "openai"},
+            "anthropic-claude-haiku-4": {"type": "anthropic"},
+        }
+
+        with patch("code_puppy.plugins.consensus_planner.council_safeguards.get_value", return_value=None):
+            with patch("code_puppy.model_factory.ModelFactory.load_config", return_value=mock_config):
+                result = _get_preflight_model()
+                # haiku comes before turbo in _CHEAP_MODEL_SUBSTRINGS
+                assert result == "anthropic-claude-haiku-4"

@@ -312,6 +312,60 @@ def _check_recency() -> CouncilGuardResult:
     )
 
 
+# Substrings that identify cheap/fast models suitable for pre-flight checks.
+# Order matters: first match wins.
+_CHEAP_MODEL_SUBSTRINGS = (
+    "haiku",
+    "mini",
+    "flash",
+    "instant",
+    "turbo",
+    "3.5",
+    "small",
+    "lite",
+)
+
+
+def _get_preflight_model() -> str | None:
+    """Pick the cheapest available model for the pre-flight confidence check.
+
+    Resolution order:
+    1. Explicit ``council_preflight_model`` config value
+    2. First model in the config whose name contains a cheap-model substring
+    3. The default fallback model (active model or first in config)
+
+    Returns the model name, or None if no models are available at all.
+    """
+    from code_puppy.model_factory import ModelFactory
+
+    # 1. Explicit config
+    explicit = get_value("council_preflight_model")
+    if explicit:
+        return explicit
+
+    # 2. Scan config for a cheap/fast model
+    try:
+        models_config = ModelFactory.load_config()
+    except Exception:
+        logger.debug("Cannot load model config for preflight model selection")
+        return None
+
+    for substring in _CHEAP_MODEL_SUBSTRINGS:
+        for model_name in models_config:
+            if substring in model_name.lower():
+                logger.debug("Preflight model selected by substring %r: %s", substring, model_name)
+                return model_name
+
+    # 3. Fall back to default (active model or first in config)
+    try:
+        from code_puppy.plugins.consensus_planner.council_consensus import (
+            _get_default_fallback_model,
+        )
+        return _get_default_fallback_model()
+    except RuntimeError:
+        return None
+
+
 async def _check_single_model_confidence(task: str) -> CouncilGuardResult:
     """Quick check with single model to see if it's confident.
 
@@ -322,23 +376,17 @@ async def _check_single_model_confidence(task: str) -> CouncilGuardResult:
 
         from code_puppy.model_factory import ModelFactory, make_model_settings
 
-        # Use a fast model for pre-check
-        model_name = get_value("council_preflight_model")
+        # Pick the cheapest available model for this throwaway check
+        model_name = _get_preflight_model()
         if not model_name:
-            try:
-                from code_puppy.plugins.consensus_planner.council_consensus import (
-                    _get_default_fallback_model,
-                )
-                model_name = _get_default_fallback_model()
-            except RuntimeError:
-                return CouncilGuardResult(
-                    allowed=True,
-                    reason="Pre-flight check skipped: no fallback model available",
-                    confidence_score=0.5,
-                    recommendation="Proceed with caution",
-                    estimated_cost="",
-                    suggested_action="",
-                )
+            return CouncilGuardResult(
+                allowed=True,
+                reason="Pre-flight check skipped: no model available",
+                confidence_score=0.5,
+                recommendation="Proceed with caution",
+                estimated_cost="",
+                suggested_action="",
+            )
         models_config = ModelFactory.load_config()
         model = ModelFactory.get_model(model_name, models_config)
         model_settings = make_model_settings(model_name)
