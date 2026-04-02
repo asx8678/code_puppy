@@ -13,8 +13,8 @@ circuit **CLOSES** and queued requests are gradually released; if the
 test triggers another 429 the cooldown is doubled and the circuit
 stays OPEN.
 
-The module is a **singleton** – all state lives at module level, matching
-the pattern used by ``concurrency_limits.py``.
+The module is a **singleton** – all state lives in a ``_RateLimiterState``
+instance, matching the pattern used by ``concurrency_limits.py``.
 """
 
 from __future__ import annotations
@@ -92,25 +92,73 @@ class ModelRateLimitState:
 
 # ── Singleton state ─────────────────────────────────────────────────────────
 
-_model_states: dict[str, ModelRateLimitState] = {}
-_lock: asyncio.Lock | None = None
-_recovery_task: asyncio.Task | None = None
-_recovery_started: bool = False
-_circuit_tasks: set[asyncio.Task] = set()  # track per-model cooldown tasks
 
-# Configurable knobs – may be overridden before first use via configure()
-_cfg_min_limit: int = DEFAULT_MIN_LIMIT
-_cfg_max_limit: int = DEFAULT_MAX_LIMIT
-_cfg_cooldown_seconds: float = DEFAULT_COOLDOWN_SECONDS
-_cfg_recovery_rate: float = DEFAULT_RECOVERY_RATE
-_cfg_initial_limit: int = DEFAULT_INITIAL_LIMIT
+class _RateLimiterState:
+    """Encapsulates all module-level mutable state for the rate limiter.
 
-# Circuit breaker config knobs
-_cfg_circuit_breaker_enabled: bool = DEFAULT_CIRCUIT_BREAKER_ENABLED
-_cfg_circuit_cooldown_seconds: float = DEFAULT_CIRCUIT_COOLDOWN_SECONDS
-_cfg_circuit_half_open_requests: int = DEFAULT_CIRCUIT_HALF_OPEN_REQUESTS
-_cfg_queue_max_size: int = DEFAULT_QUEUE_MAX_SIZE
-_cfg_release_rate: float = DEFAULT_RELEASE_RATE
+    A single ``_state`` instance is created at module load time.  All
+    internal functions read from and write to this object, eliminating
+    the need for ``global`` declarations.
+    """
+
+    __slots__ = (
+        "model_states",
+        "lock",
+        "recovery_task",
+        "recovery_started",
+        "circuit_tasks",
+        "cfg_min_limit",
+        "cfg_max_limit",
+        "cfg_cooldown_seconds",
+        "cfg_recovery_rate",
+        "cfg_initial_limit",
+        "cfg_circuit_breaker_enabled",
+        "cfg_circuit_cooldown_seconds",
+        "cfg_circuit_half_open_requests",
+        "cfg_queue_max_size",
+        "cfg_release_rate",
+    )
+
+    def __init__(self) -> None:
+        # Runtime state
+        self.model_states: dict[str, ModelRateLimitState] = {}
+        self.lock: asyncio.Lock | None = None
+        self.recovery_task: asyncio.Task | None = None
+        self.recovery_started: bool = False
+        self.circuit_tasks: set[asyncio.Task] = set()
+
+        # Configurable knobs – may be overridden before first use via configure()
+        self.cfg_min_limit: int = DEFAULT_MIN_LIMIT
+        self.cfg_max_limit: int = DEFAULT_MAX_LIMIT
+        self.cfg_cooldown_seconds: float = DEFAULT_COOLDOWN_SECONDS
+        self.cfg_recovery_rate: float = DEFAULT_RECOVERY_RATE
+        self.cfg_initial_limit: int = DEFAULT_INITIAL_LIMIT
+
+        # Circuit breaker config knobs
+        self.cfg_circuit_breaker_enabled: bool = DEFAULT_CIRCUIT_BREAKER_ENABLED
+        self.cfg_circuit_cooldown_seconds: float = DEFAULT_CIRCUIT_COOLDOWN_SECONDS
+        self.cfg_circuit_half_open_requests: int = DEFAULT_CIRCUIT_HALF_OPEN_REQUESTS
+        self.cfg_queue_max_size: int = DEFAULT_QUEUE_MAX_SIZE
+        self.cfg_release_rate: float = DEFAULT_RELEASE_RATE
+
+    def reset_to_defaults(self) -> None:
+        """Restore every knob to its compile-time default.
+
+        Called by the public :func:`reset` function.
+        """
+        self.cfg_min_limit = DEFAULT_MIN_LIMIT
+        self.cfg_max_limit = DEFAULT_MAX_LIMIT
+        self.cfg_cooldown_seconds = DEFAULT_COOLDOWN_SECONDS
+        self.cfg_recovery_rate = DEFAULT_RECOVERY_RATE
+        self.cfg_initial_limit = DEFAULT_INITIAL_LIMIT
+        self.cfg_circuit_breaker_enabled = DEFAULT_CIRCUIT_BREAKER_ENABLED
+        self.cfg_circuit_cooldown_seconds = DEFAULT_CIRCUIT_COOLDOWN_SECONDS
+        self.cfg_circuit_half_open_requests = DEFAULT_CIRCUIT_HALF_OPEN_REQUESTS
+        self.cfg_queue_max_size = DEFAULT_QUEUE_MAX_SIZE
+        self.cfg_release_rate = DEFAULT_RELEASE_RATE
+
+
+_state = _RateLimiterState()
 
 
 # ── Internal helpers ────────────────────────────────────────────────────────
@@ -118,60 +166,58 @@ _cfg_release_rate: float = DEFAULT_RELEASE_RATE
 
 def _ensure_lock() -> asyncio.Lock:
     """Return the module-level asyncio.Lock, creating it if needed."""
-    global _lock
-    if _lock is None:
-        _lock = asyncio.Lock()
-    return _lock
+    if _state.lock is None:
+        _state.lock = asyncio.Lock()
+    return _state.lock
 
 
 def _ensure_state(model_name: str) -> ModelRateLimitState:
-    """Get or create state for *model_name* (caller must hold ``_lock``)."""
-    if model_name not in _model_states:
-        _model_states[model_name] = ModelRateLimitState(
-            current_limit=float(_cfg_initial_limit),
+    """Get or create state for *model_name* (caller must hold ``_state.lock``)."""
+    if model_name not in _state.model_states:
+        _state.model_states[model_name] = ModelRateLimitState(
+            current_limit=float(_state.cfg_initial_limit),
         )
         logger.debug(
             "adaptive_rate_limiter: initialised model %r with limit %.0f",
             model_name,
-            _cfg_initial_limit,
+            _state.cfg_initial_limit,
         )
-    return _model_states[model_name]
+    return _state.model_states[model_name]
 
 
 async def _recovery_loop() -> None:
     """Background coroutine that gradually restores rate limits.
 
-    Runs once per ``_cfg_cooldown_seconds``.  For every model that has
-    been throttled, it increases the limit by ``_cfg_recovery_rate`` of
+    Runs once per ``_state.cfg_cooldown_seconds``.  For every model that has
+    been throttled, it increases the limit by ``_state.cfg_recovery_rate`` of
     the current value (or +1, whichever is larger), capped at
-    ``_cfg_max_limit``.
+    ``_state.cfg_max_limit``.
     """
-    global _recovery_task
     logger.info("adaptive_rate_limiter: recovery loop started")
     try:
         while True:
-            await asyncio.sleep(_cfg_cooldown_seconds)
+            await asyncio.sleep(_state.cfg_cooldown_seconds)
             lock = _ensure_lock()
             async with lock:
                 now = time.monotonic()
-                for model_name, state in _model_states.items():
-                    if state.last_429_time is None:
+                for model_name, st in _state.model_states.items():
+                    if st.last_429_time is None:
                         continue
-                    elapsed = now - state.last_429_time
-                    if elapsed < _cfg_cooldown_seconds:
+                    elapsed = now - st.last_429_time
+                    if elapsed < _state.cfg_cooldown_seconds:
                         continue  # still in cooldown
-                    old_limit = state.current_limit
-                    increment = max(1.0, state.current_limit * _cfg_recovery_rate)
+                    old_limit = st.current_limit
+                    increment = max(1.0, st.current_limit * _state.cfg_recovery_rate)
                     new_limit = min(
-                        state.current_limit + increment,
-                        float(_cfg_max_limit),
+                        st.current_limit + increment,
+                        float(_state.cfg_max_limit),
                     )
                     if abs(new_limit - old_limit) < 0.01:
                         continue  # already at max
-                    state.current_limit = new_limit
+                    st.current_limit = new_limit
                     # Wake any waiters that may now be unblocked
-                    async with state.condition:
-                        state.condition.notify_all()
+                    async with st.condition:
+                        st.condition.notify_all()
                     logger.info(
                         "adaptive_rate_limiter: %r limit recovered %.1f → %.0f "
                         "(after %.0fs cooldown)",
@@ -192,19 +238,18 @@ def _ensure_recovery_task() -> None:
     Safe to call from sync code; the task is scheduled on the running
     event loop.
     """
-    global _recovery_task, _recovery_started
-    if _recovery_started:
+    if _state.recovery_started:
         return
-    _recovery_started = True
+    _state.recovery_started = True
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = None
     if loop is not None and loop.is_running():
-        _recovery_task = loop.create_task(_recovery_loop())
+        _state.recovery_task = loop.create_task(_recovery_loop())
     else:
         # No running loop yet – will be started on next async call.
-        _recovery_started = False
+        _state.recovery_started = False
 
 
 # ── Circuit breaker internals ───────────────────────────────────────────────
@@ -217,7 +262,9 @@ async def _circuit_cooldown_loop(model_name: str, state: ModelRateLimitState) ->
     elapses, the circuit transitions to HALF_OPEN which allows test
     requests through.
     """
-    effective_cooldown = _cfg_circuit_cooldown_seconds * state.cooldown_multiplier
+    effective_cooldown = (
+        _state.cfg_circuit_cooldown_seconds * state.cooldown_multiplier
+    )
     logger.info(
         "Circuit OPEN for %r: holding requests for %.1fs "
         "(cooldown ×%.0f)",
@@ -236,7 +283,7 @@ async def _circuit_cooldown_loop(model_name: str, state: ModelRateLimitState) ->
                 logger.info(
                     "Circuit HALF_OPEN for %r: testing with %d request(s)",
                     model_name,
-                    _cfg_circuit_half_open_requests,
+                    _state.cfg_circuit_half_open_requests,
                 )
                 # Wake any waiters that might want to test the circuit
                 async with state.condition:
@@ -254,7 +301,7 @@ async def _process_queue(model_name: str, state: ModelRateLimitState) -> None:
     """Background task: gradually release queued requests.
 
     Called when the circuit transitions from HALF_OPEN → CLOSED.
-    Releases one request per second (configurable via ``_cfg_release_rate``).
+    Releases one request per second (configurable via ``_state.cfg_release_rate``).
     """
     queue = state.request_queue
     if queue is None:
@@ -265,7 +312,7 @@ async def _process_queue(model_name: str, state: ModelRateLimitState) -> None:
         "Releasing queued requests (%d pending) for %r at %.1f/s",
         total,
         model_name,
-        _cfg_release_rate,
+        _state.cfg_release_rate,
     )
     try:
         while not queue.empty():
@@ -273,8 +320,8 @@ async def _process_queue(model_name: str, state: ModelRateLimitState) -> None:
             async with state.condition:
                 state.condition.notify_one()
             released += 1
-            if _cfg_release_rate > 0:
-                await asyncio.sleep(1.0 / _cfg_release_rate)
+            if _state.cfg_release_rate > 0:
+                await asyncio.sleep(1.0 / _state.cfg_release_rate)
             logger.info(
                 "Released queued request %d/%d for %r",
                 released,
@@ -342,8 +389,8 @@ async def open_circuit(model_name: str) -> None:
     try:
         loop = asyncio.get_running_loop()
         task = loop.create_task(_circuit_cooldown_loop(key, state))
-        _circuit_tasks.add(task)
-        task.add_done_callback(_circuit_tasks.discard)
+        _state.circuit_tasks.add(task)
+        task.add_done_callback(_state.circuit_tasks.discard)
     except RuntimeError:
         pass
 
@@ -362,7 +409,7 @@ async def close_circuit(model_name: str) -> None:
     was_open: bool = False
 
     async with lock:
-        state = _model_states.get(key)
+        state = _state.model_states.get(key)
         if state is None or state.circuit_state == CircuitState.CLOSED:
             return
 
@@ -385,8 +432,8 @@ async def close_circuit(model_name: str) -> None:
         try:
             loop = asyncio.get_running_loop()
             task = loop.create_task(_process_queue(key, state))
-            _circuit_tasks.add(task)
-            task.add_done_callback(_circuit_tasks.discard)
+            _state.circuit_tasks.add(task)
+            task.add_done_callback(_state.circuit_tasks.discard)
         except RuntimeError:
             pass
 
@@ -407,7 +454,7 @@ async def record_success(model_name: str) -> None:
     lock = _ensure_lock()
     should_close = False
     async with lock:
-        state = _model_states.get(key)
+        state = _state.model_states.get(key)
         if state is not None and state.circuit_state == CircuitState.HALF_OPEN:
             should_close = True
 
@@ -437,35 +484,29 @@ def configure(
     Must be called *before* any model state is created (i.e. before the
     first ``record_rate_limit`` / ``acquire_model_slot`` call).
     """
-    global _cfg_min_limit, _cfg_max_limit, _cfg_cooldown_seconds
-    global _cfg_recovery_rate, _cfg_initial_limit
-    global _cfg_circuit_breaker_enabled, _cfg_circuit_cooldown_seconds
-    global _cfg_circuit_half_open_requests, _cfg_queue_max_size
-    global _cfg_release_rate
-
     if min_limit is not None:
-        _cfg_min_limit = max(1, min_limit)
+        _state.cfg_min_limit = max(1, min_limit)
     if max_limit is not None:
-        _cfg_max_limit = max(_cfg_min_limit, max_limit)
+        _state.cfg_max_limit = max(_state.cfg_min_limit, max_limit)
     if cooldown_seconds is not None:
-        _cfg_cooldown_seconds = max(1.0, cooldown_seconds)
+        _state.cfg_cooldown_seconds = max(1.0, cooldown_seconds)
     if recovery_rate is not None:
-        _cfg_recovery_rate = max(0.0, min(1.0, recovery_rate))
+        _state.cfg_recovery_rate = max(0.0, min(1.0, recovery_rate))
     if initial_limit is not None:
-        _cfg_initial_limit = max(
-            _cfg_min_limit, min(initial_limit, _cfg_max_limit)
+        _state.cfg_initial_limit = max(
+            _state.cfg_min_limit, min(initial_limit, _state.cfg_max_limit)
         )
 
     if circuit_breaker_enabled is not None:
-        _cfg_circuit_breaker_enabled = circuit_breaker_enabled
+        _state.cfg_circuit_breaker_enabled = circuit_breaker_enabled
     if circuit_cooldown_seconds is not None:
-        _cfg_circuit_cooldown_seconds = max(0.1, circuit_cooldown_seconds)
+        _state.cfg_circuit_cooldown_seconds = max(0.1, circuit_cooldown_seconds)
     if circuit_half_open_requests is not None:
-        _cfg_circuit_half_open_requests = max(1, circuit_half_open_requests)
+        _state.cfg_circuit_half_open_requests = max(1, circuit_half_open_requests)
     if queue_max_size is not None:
-        _cfg_queue_max_size = max(1, queue_max_size)
+        _state.cfg_queue_max_size = max(1, queue_max_size)
     if release_rate is not None:
-        _cfg_release_rate = max(0.0, release_rate)
+        _state.cfg_release_rate = max(0.0, release_rate)
 
 
 async def record_rate_limit(model_name: str) -> None:
@@ -486,7 +527,7 @@ async def record_rate_limit(model_name: str) -> None:
         state.last_429_time = time.monotonic()
         state.total_429_count += 1
         old_limit = state.current_limit
-        new_limit = max(float(_cfg_min_limit), state.current_limit * 0.5)
+        new_limit = max(float(_state.cfg_min_limit), state.current_limit * 0.5)
         state.current_limit = new_limit
         logger.warning(
             "adaptive_rate_limiter: %r rate-limited (429 #%d), "
@@ -498,7 +539,7 @@ async def record_rate_limit(model_name: str) -> None:
         )
 
     # Open the circuit breaker if enabled (outside the lock)
-    if _cfg_circuit_breaker_enabled:
+    if _state.cfg_circuit_breaker_enabled:
         await open_circuit(key)
 
 
@@ -524,7 +565,7 @@ async def acquire_model_slot(model_name: str) -> None:
     lock = _ensure_lock()
 
     # ── Check circuit state (only when circuit breaker enabled) ──────
-    if _cfg_circuit_breaker_enabled:
+    if _state.cfg_circuit_breaker_enabled:
         need_wait_open = False
         need_wait_half_open = False
 
@@ -541,14 +582,14 @@ async def acquire_model_slot(model_name: str) -> None:
                 need_wait_open = True
 
             elif state.circuit_state == CircuitState.HALF_OPEN:
-                if state.half_open_test_count >= _cfg_circuit_half_open_requests:
+                if state.half_open_test_count >= _state.cfg_circuit_half_open_requests:
                     need_wait_half_open = True
                 else:
                     state.half_open_test_count += 1
                     logger.info(
                         "Circuit HALF_OPEN test request %d/%d for %r",
                         state.half_open_test_count,
-                        _cfg_circuit_half_open_requests,
+                        _state.cfg_circuit_half_open_requests,
                         key,
                     )
 
@@ -565,7 +606,7 @@ async def acquire_model_slot(model_name: str) -> None:
 
     # ── Normal slot acquisition ─────────────────────────────────────────
     async with lock:
-        state = _model_states.get(key)
+        state = _state.model_states.get(key)
         if state is None:
             state = _ensure_state(key)
 
@@ -586,7 +627,7 @@ def release_model_slot(model_name: str) -> None:
     if not key:
         return
 
-    state = _model_states.get(key)
+    state = _state.model_states.get(key)
     if state is not None:
         # We need to notify waiters from an async context, but release()
         # is sync.  We schedule the notification on the running loop.
@@ -603,10 +644,10 @@ def get_model_semaphore(model_name: str) -> ModelRateLimitState | None:
 
     .. deprecated::
         Use :func:`get_status` for a clean snapshot, or access
-        ``_model_states`` directly in tests.
+        ``_state.model_states`` directly in tests.
     """
     key = model_name.lower().strip()
-    return _model_states.get(key)
+    return _state.model_states.get(key)
 
 
 def get_status() -> dict[str, dict[str, Any]]:
@@ -628,21 +669,21 @@ def get_status() -> dict[str, dict[str, Any]]:
     """
     now = time.monotonic()
     result: dict[str, dict[str, Any]] = {}
-    for model_name, state in _model_states.items():
+    for model_name, st in _state.model_states.items():
         in_cooldown = (
-            state.last_429_time is not None
-            and (now - state.last_429_time) < _cfg_cooldown_seconds
+            st.last_429_time is not None
+            and (now - st.last_429_time) < _state.cfg_cooldown_seconds
         )
         queue_depth = (
-            state.request_queue.qsize() if state.request_queue is not None else 0
+            st.request_queue.qsize() if st.request_queue is not None else 0
         )
         result[model_name] = {
-            "current_limit": state.current_limit,
-            "active_count": state.active_count,
-            "total_429_count": state.total_429_count,
-            "last_429_time": state.last_429_time,
+            "current_limit": st.current_limit,
+            "active_count": st.active_count,
+            "total_429_count": st.total_429_count,
+            "last_429_time": st.last_429_time,
             "in_cooldown": in_cooldown,
-            "circuit_state": state.circuit_state.value,
+            "circuit_state": st.circuit_state.value,
             "queue_depth": queue_depth,
         }
     return result
@@ -653,33 +694,17 @@ def reset() -> None:
 
     Intended for use in tests and interactive sessions.
     """
-    global _model_states, _recovery_task, _recovery_started
-    global _cfg_min_limit, _cfg_max_limit, _cfg_cooldown_seconds
-    global _cfg_recovery_rate, _cfg_initial_limit
-    global _cfg_circuit_breaker_enabled, _cfg_circuit_cooldown_seconds
-    global _cfg_circuit_half_open_requests, _cfg_queue_max_size
-    global _cfg_release_rate, _circuit_tasks
-
-    if _recovery_task is not None:
-        _recovery_task.cancel()
-        _recovery_task = None
-    for task in _circuit_tasks:
+    if _state.recovery_task is not None:
+        _state.recovery_task.cancel()
+        _state.recovery_task = None
+    for task in _state.circuit_tasks:
         task.cancel()
-    _circuit_tasks.clear()
-    _model_states.clear()
-    _recovery_started = False
+    _state.circuit_tasks.clear()
+    _state.model_states.clear()
+    _state.recovery_started = False
 
     # Restore defaults
-    _cfg_min_limit = DEFAULT_MIN_LIMIT
-    _cfg_max_limit = DEFAULT_MAX_LIMIT
-    _cfg_cooldown_seconds = DEFAULT_COOLDOWN_SECONDS
-    _cfg_recovery_rate = DEFAULT_RECOVERY_RATE
-    _cfg_initial_limit = DEFAULT_INITIAL_LIMIT
-    _cfg_circuit_breaker_enabled = DEFAULT_CIRCUIT_BREAKER_ENABLED
-    _cfg_circuit_cooldown_seconds = DEFAULT_CIRCUIT_COOLDOWN_SECONDS
-    _cfg_circuit_half_open_requests = DEFAULT_CIRCUIT_HALF_OPEN_REQUESTS
-    _cfg_queue_max_size = DEFAULT_QUEUE_MAX_SIZE
-    _cfg_release_rate = DEFAULT_RELEASE_RATE
+    _state.reset_to_defaults()
 
 
 # ── Context manager ─────────────────────────────────────────────────────────
@@ -701,7 +726,7 @@ class ModelAwareLimiter:
     async def __aenter__(self) -> ModelAwareLimiter:
         await acquire_model_slot(self._model_name)
         key = self._model_name.lower().strip()
-        self._state = _model_states.get(key)
+        self._state = _state.model_states.get(key)
         return self
 
     async def __aexit__(
@@ -715,3 +740,80 @@ class ModelAwareLimiter:
             async with self._state.condition:
                 self._state.condition.notify_all()
         return False
+
+
+# ── Backward compatibility ──────────────────────────────────────────────────
+#
+# Tests and external code reference legacy module-level names like
+# ``arl._cfg_min_limit``, ``arl._model_states``, and
+# ``arl._recovery_started = True``.  We replace the module object in
+# ``sys.modules`` with a thin wrapper that delegates those names to the
+# ``_state`` singleton, preserving full backward compatibility without
+# keeping any actual global variables.
+
+_STATE_ALIASES: dict[str, str] = {
+    "_model_states": "model_states",
+    "_lock": "lock",
+    "_recovery_task": "recovery_task",
+    "_recovery_started": "recovery_started",
+    "_circuit_tasks": "circuit_tasks",
+    "_cfg_min_limit": "cfg_min_limit",
+    "_cfg_max_limit": "cfg_max_limit",
+    "_cfg_cooldown_seconds": "cfg_cooldown_seconds",
+    "_cfg_recovery_rate": "cfg_recovery_rate",
+    "_cfg_initial_limit": "cfg_initial_limit",
+    "_cfg_circuit_breaker_enabled": "cfg_circuit_breaker_enabled",
+    "_cfg_circuit_cooldown_seconds": "cfg_circuit_cooldown_seconds",
+    "_cfg_circuit_half_open_requests": "cfg_circuit_half_open_requests",
+    "_cfg_queue_max_size": "cfg_queue_max_size",
+    "_cfg_release_rate": "cfg_release_rate",
+}
+
+import sys as _sys
+from types import ModuleType as _ModuleType
+
+
+class _BackCompatModule(_ModuleType):
+    """Module wrapper that delegates legacy global names to ``_state``."""
+
+    def __getattr__(self, name: str) -> Any:
+        if name in _STATE_ALIASES:
+            return getattr(_state, _STATE_ALIASES[name])
+        raise AttributeError(
+            f"module {self.__name__!r} has no attribute {name!r}"
+        )
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in _STATE_ALIASES:
+            setattr(_state, _STATE_ALIASES[name], value)
+        else:
+            _ModuleType.__setattr__(self, name, value)
+
+
+_old = _sys.modules[__name__]
+_new = _BackCompatModule(_old.__name__)
+_new.__file__ = getattr(_old, "__file__", None)
+_new.__loader__ = getattr(_old, "__loader__", None)
+_new.__package__ = getattr(_old, "__package__", None)
+_new.__spec__ = getattr(_old, "__spec__", None)
+_new.__doc__ = _old.__doc__
+
+# Copy every module-level definition into the new module wrapper,
+# except the backward-compat plumbing itself.
+_SKIP = frozenset(
+    {
+        "_BackCompatModule",
+        "_old",
+        "_new",
+        "_STATE_ALIASES",
+        "_SKIP",
+        "_sys",
+        "_ModuleType",
+    }
+)
+for _attr, _val in list(vars(_old).items()):
+    if _attr in _SKIP:
+        continue
+    _ModuleType.__setattr__(_new, _attr, _val)
+
+_sys.modules[__name__] = _new
