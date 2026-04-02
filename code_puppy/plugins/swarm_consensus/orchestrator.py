@@ -7,18 +7,19 @@ aggregating results, and synthesizing consensus.
 """
 
 import asyncio
+import copy
 import logging
 import time
 from typing import TYPE_CHECKING, Any
 
-from .approaches import get_approaches_for_task, reset_agent_approach
+from .approaches import apply_approach, get_approaches_for_task, reset_agent_approach
 from .config import get_swarm_timeout_seconds
 from .consensus import detect_consensus, generate_debate_transcript, synthesize_results
 from .models import AgentResult, SwarmConfig, SwarmResult
 from .scoring import calculate_confidence, score_by_consistency
 
 if TYPE_CHECKING:
-    from code_puppy.agent_types.base_agent import BaseAgent
+    from code_puppy.agents.base_agent import BaseAgent
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,15 @@ class SwarmOrchestrator:
 
         return get_approaches_for_task(task_type, self.config.swarm_size)
 
+    @staticmethod
+    def _agent_identity(agent: "BaseAgent") -> str:
+        """Get the swarm identity for an agent.
+
+        Returns the _swarm_identity attribute if set (for deepcopied
+        swarm agents), otherwise falls back to the agent's own name.
+        """
+        return getattr(agent, "_swarm_identity", agent.name)
+
     def _spawn_agents(self, approaches: list[Any]) -> list["BaseAgent"]:
         """Spawn agents with different reasoning approaches.
 
@@ -153,23 +163,42 @@ class SwarmOrchestrator:
         """
         agents: list["BaseAgent"] = []
 
-        # Import agent factory here to avoid circular imports
-        from code_puppy.agent_factory import create_agent
+        # Import agent loading functions here to avoid circular imports
+        from code_puppy.agents.agent_manager import get_current_agent_name, load_agent
+
+        # Get the current agent name to use as the base for swarm agents
+        try:
+            base_agent_name = get_current_agent_name()
+        except Exception:
+            base_agent_name = "code-puppy"  # Fallback to default agent
 
         for i, approach in enumerate(approaches):
             try:
-                agent = create_agent(f"swarm_agent_{i}")
+                # Load a fresh agent instance from the registry
+                agent = load_agent(base_agent_name)
+
+                # Deep copy to avoid mutating shared agent instances.
+                # Without this, concurrent swarm executions would race on
+                # system_prompt and temperature attributes.
+                agent = copy.deepcopy(agent)
+
+                # Use a separate identity attribute instead of overwriting
+                # the read-only ``name`` property on BaseAgent.
+                agent._swarm_identity = f"swarm_agent_{i}_{approach.name}"
 
                 # Apply approach configuration
-                from .approaches import apply_approach
-
                 apply_approach(agent, approach)
 
                 agents.append(agent)
-                logger.debug(f"Spawned agent {agent.name} with approach {approach.name}")
+                logger.debug(
+                    f"Spawned agent {self._agent_identity(agent)} "
+                    f"with approach {approach.name}"
+                )
 
             except Exception as e:
-                logger.warning(f"Failed to spawn agent {i} with approach {approach.name}: {e}")
+                logger.warning(
+                    f"Failed to spawn agent {i} with approach {approach.name}: {e}"
+                )
 
         self._agents = agents
         return agents
@@ -215,11 +244,12 @@ class SwarmOrchestrator:
         # Filter out exceptions
         agent_results: list[AgentResult] = []
         for i, result in enumerate(results):
+            identity = self._agent_identity(agents[i])
             if isinstance(result, Exception):
-                logger.warning(f"Agent {agents[i].name} failed: {result}")
+                logger.warning(f"Agent {identity} failed: {result}")
                 agent_results.append(
                     AgentResult(
-                        agent_name=agents[i].name,
+                        agent_name=identity,
                         response_text=f"Error: {result}",
                         confidence_score=0.0,
                         approach_used=getattr(agents[i], "_swarm_approach", "unknown"),
@@ -250,6 +280,7 @@ class SwarmOrchestrator:
         """
         start_time = time.time()
         approach = getattr(agent, "_swarm_approach", "default")
+        identity = self._agent_identity(agent)
 
         try:
             # Build the full prompt with context
@@ -262,7 +293,7 @@ class SwarmOrchestrator:
 
             # Create result with placeholder confidence (calculated later)
             result = AgentResult(
-                agent_name=agent.name,
+                agent_name=identity,
                 response_text=response,
                 confidence_score=0.0,  # Will be calculated in aggregation
                 approach_used=approach,
@@ -273,7 +304,7 @@ class SwarmOrchestrator:
             result.confidence_score = calculate_confidence(result)
 
             logger.debug(
-                f"Agent {agent.name} completed in {execution_time_ms:.0f}ms "
+                f"Agent {identity} completed in {execution_time_ms:.0f}ms "
                 f"(confidence: {result.confidence_score:.2f})"
             )
 
@@ -281,10 +312,10 @@ class SwarmOrchestrator:
 
         except Exception as e:
             execution_time_ms = (time.time() - start_time) * 1000
-            logger.warning(f"Agent {agent.name} failed after {execution_time_ms:.0f}ms: {e}")
+            logger.warning(f"Agent {identity} failed after {execution_time_ms:.0f}ms: {e}")
 
             return AgentResult(
-                agent_name=agent.name,
+                agent_name=identity,
                 response_text=f"Error during execution: {e}",
                 confidence_score=0.0,
                 approach_used=approach,
@@ -362,7 +393,9 @@ class SwarmOrchestrator:
             try:
                 reset_agent_approach(agent)
             except Exception as e:
-                logger.debug(f"Failed to reset agent {agent.name}: {e}")
+                logger.debug(
+                    f"Failed to reset agent {self._agent_identity(agent)}: {e}"
+                )
 
         self._agents = []
 

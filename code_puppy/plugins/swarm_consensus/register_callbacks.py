@@ -9,7 +9,6 @@ Registers the swarm consensus feature with Code Puppy's callback system:
 - Command handler integration via swarm_commands module
 """
 
-import asyncio
 import logging
 from typing import Any
 
@@ -49,7 +48,7 @@ def _get_orchestrator() -> SwarmOrchestrator:
 # =============================================================================
 
 
-def _handle_swarm_command(command: str, name: str) -> str | bool | None:
+async def _handle_swarm_command(command: str, name: str) -> str | bool | None:
     """Handle the /swarm slash command.
 
     Commands:
@@ -63,7 +62,13 @@ def _handle_swarm_command(command: str, name: str) -> str | bool | None:
         name: The command name
 
     Returns:
-        Response string, True if handled, or None if not our command
+        Response string, True if handled, or None if not our command.
+
+    Note:
+        This is an async callback. The callback system's ``_trigger_callbacks_sync``
+        detects whether a loop is already running and handles both contexts:
+        - Running loop → schedules as a Task via ``asyncio.ensure_future``
+        - No loop      → executes via ``asyncio.run``
     """
     parts = command.split(None, 1)
     if not parts:
@@ -72,7 +77,7 @@ def _handle_swarm_command(command: str, name: str) -> str | bool | None:
     subcommand = parts[0].lower()
     args = parts[1] if len(parts) > 1 else ""
 
-    # Handle subcommands
+    # Handle subcommands (these are synchronous, no await needed)
     if subcommand in ("enable", ":enable"):
         set_swarm_enabled(True)
         return "✅ Swarm consensus mode enabled. Critical tasks will use ensemble programming."
@@ -90,12 +95,8 @@ def _handle_swarm_command(command: str, name: str) -> str | bool | None:
         if not prompt:
             return "Usage: /swarm <task description> or /swarm:status"
 
-        # Run swarm (this is synchronous, so we need to handle async)
         try:
-            # Use asyncio.run for the async execution
-            result = asyncio.run(_run_swarm_for_command(prompt))
-
-            # Format the result
+            result = await _run_swarm_for_command(prompt)
             return _format_swarm_result(result)
 
         except Exception as e:
