@@ -20,6 +20,7 @@ from pydantic import BaseModel
 # Import Agent from pydantic_ai to create temporary agents for invocation
 from pydantic_ai import Agent, RunContext, UsageLimits
 from pydantic_ai.messages import ModelMessage
+from pydantic_ai.exceptions import ModelHTTPError
 
 from code_puppy.config import (
     DATA_DIR,
@@ -41,6 +42,9 @@ from code_puppy.tools.subagent_context import subagent_context
 
 # Set to track active subagent invocation tasks
 _active_subagent_tasks: set[asyncio.Task] = set()
+
+# Logger for this module
+logger = logging.getLogger(__name__)
 
 # Atomic counter for DBOS workflow IDs - ensures uniqueness even in rapid back-to-back calls
 # itertools.count() is thread-safe for next() calls
@@ -72,6 +76,18 @@ _RETRYABLE_STREAMING_EXCEPTIONS = (
     httpx.ReadTimeout,
     httpcore.RemoteProtocolError,
 )
+
+
+def _is_transient_model_error(error: ModelHTTPError) -> bool:
+    """Check if a ModelHTTPError is a transient infrastructure error.
+
+    Some API proxies return HTTP 400 when the upstream connection drops,
+    which is actually a transient infrastructure error, not a real client error.
+    """
+    if error.status_code == 400:
+        body_str = str(error.body or "").lower()
+        return "connection prematurely closed" in body_str
+    return False
 
 
 async def _run_with_streaming_retry(run_coro_factory):
@@ -107,6 +123,18 @@ async def _run_with_streaming_retry(run_coro_factory):
             if attempt < MAX_STREAMING_RETRIES - 1:
                 delay = STREAMING_RETRY_DELAYS[attempt]
                 await asyncio.sleep(delay)
+        except ModelHTTPError as e:
+            if _is_transient_model_error(e):
+                last_error = e
+                if attempt < MAX_STREAMING_RETRIES - 1:
+                    delay = STREAMING_RETRY_DELAYS[attempt]
+                    logger.warning(
+                        f"Transient ModelHTTPError (attempt {attempt + 1}/{MAX_STREAMING_RETRIES}): "
+                        f"status={e.status_code}, body={e.body}"
+                    )
+                    await asyncio.sleep(delay)
+            else:
+                raise
     raise last_error
 
 
