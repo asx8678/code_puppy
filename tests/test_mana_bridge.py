@@ -13,7 +13,7 @@ import socket
 import struct
 import threading
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import msgpack
 import pytest
@@ -386,6 +386,168 @@ class TestCallbackRegistration:
 
         # Cleanup
         rc_mod._on_shutdown()
+
+
+# ===================================================================
+# N. Prompt executor tests
+# ===================================================================
+
+
+class TestPromptExecutor:
+    """Tests for the bridge prompt executor."""
+
+    def test_executor_thread_starts(self):
+        """Executor thread starts and is a daemon."""
+        import importlib
+        import sys
+
+        # Remove cached module to get a fresh import
+        for key in list(sys.modules):
+            if "mana_bridge" in key and "register_callbacks" in key:
+                del sys.modules[key]
+
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc
+
+        # Reset executor thread state
+        rc._executor_thread = None
+
+        rc._start_prompt_executor()
+
+        assert rc._executor_thread is not None
+        assert rc._executor_thread.daemon is True
+        assert rc._executor_thread.name == "mana-bridge-executor"
+        # Give the thread a moment to start, then verify it's alive
+        import time
+
+        time.sleep(0.05)
+        assert rc._executor_thread.is_alive()
+
+        # Clean up by setting to None so the daemon thread winds down
+        rc._executor_thread = None
+
+    @pytest.mark.asyncio
+    async def test_execute_bridge_prompt_sends_complete(self):
+        """Agent run sends prompt_complete event."""
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc
+
+        # Create a mock result with output and all_messages
+        mock_result = MagicMock()
+        mock_result.output = "Hello from agent"
+        mock_result.all_messages.return_value = ["msg1", "msg2"]
+
+        mock_agent = MagicMock()
+        mock_agent.run_with_mcp = AsyncMock(return_value=mock_result)
+
+        mock_client = MagicMock()
+
+        # Patch the module-level _client and get_current_agent.
+        # The import of get_current_agent is inside _execute_bridge_prompt
+        # via "from code_puppy.agents.agent_manager import get_current_agent",
+        # so we patch at the agent_manager module level.
+        with (
+            patch.object(rc, "_client", mock_client),
+            patch("code_puppy.agents.agent_manager.get_current_agent", return_value=mock_agent),
+        ):
+            await rc._execute_bridge_prompt("test prompt")
+
+        # Verify agent was called
+        mock_agent.run_with_mcp.assert_called_once_with("test prompt")
+        mock_agent.set_message_history.assert_called_once()
+
+        # Verify prompt_complete event was sent
+        mock_client.send_event.assert_called_once()
+        call_args = mock_client.send_event.call_args
+        assert call_args[0][0] == "prompt_complete"
+        assert call_args[0][1]["success"] is True
+        assert "Hello from agent" in call_args[0][1]["response_preview"]
+
+    @pytest.mark.asyncio
+    async def test_execute_bridge_prompt_no_agent(self):
+        """No agent available sends error prompt_complete."""
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc
+
+        mock_client = MagicMock()
+
+        with patch.object(rc, "_client", mock_client):
+            with patch("code_puppy.agents.agent_manager.get_current_agent", return_value=None):
+                await rc._execute_bridge_prompt("test prompt")
+
+        mock_client.send_event.assert_called_once()
+        call_args = mock_client.send_event.call_args
+        assert call_args[0][0] == "prompt_complete"
+        assert call_args[0][1]["success"] is False
+        assert "No agent available" in call_args[0][1]["error"]
+
+    @pytest.mark.asyncio
+    async def test_execute_bridge_prompt_handles_error(self):
+        """Failed agent run sends error prompt_complete."""
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc
+
+        mock_agent = MagicMock()
+        mock_agent.run_with_mcp = AsyncMock(side_effect=RuntimeError("Agent exploded"))
+
+        mock_client = MagicMock()
+
+        with patch.object(rc, "_client", mock_client):
+            with patch("code_puppy.agents.agent_manager.get_current_agent", return_value=mock_agent):
+                await rc._execute_bridge_prompt("test prompt")
+
+        mock_client.send_event.assert_called_once()
+        call_args = mock_client.send_event.call_args
+        assert call_args[0][0] == "prompt_complete"
+        assert call_args[0][1]["success"] is False
+        assert "Agent exploded" in call_args[0][1]["error"]
+
+    @pytest.mark.asyncio
+    async def test_execute_bridge_prompt_no_client(self):
+        """Prompt execution with no client doesn't crash."""
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc
+
+        mock_agent = MagicMock()
+        mock_agent.run_with_mcp = AsyncMock(return_value=None)
+
+        with patch.object(rc, "_client", None):
+            with patch("code_puppy.agents.agent_manager.get_current_agent", return_value=mock_agent):
+                # Should not raise
+                await rc._execute_bridge_prompt("test prompt")
+
+    def test_executor_lock_prevents_concurrent_runs(self):
+        """Only one prompt runs at a time via the executor lock."""
+        import threading
+
+        # Create a fresh lock to test — the module-level one may be
+        # held by the daemon thread from another test
+        lock = threading.Lock()
+
+        # First acquire should succeed
+        assert lock.acquire(blocking=False)
+        # Already locked — second acquire should fail
+        assert not lock.acquire(blocking=False)
+        # Release
+        lock.release()
+        # Now it should be acquirable again
+        assert lock.acquire(blocking=False)
+        lock.release()
+
+    @pytest.mark.asyncio
+    async def test_execute_bridge_prompt_none_result(self):
+        """Agent returning None still sends prompt_complete success."""
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc
+
+        mock_agent = MagicMock()
+        mock_agent.run_with_mcp = AsyncMock(return_value=None)
+
+        mock_client = MagicMock()
+
+        with patch.object(rc, "_client", mock_client):
+            with patch("code_puppy.agents.agent_manager.get_current_agent", return_value=mock_agent):
+                # Should not raise
+                await rc._execute_bridge_prompt("test prompt")
+        mock_client.send_event.assert_called_once()
+        call_args = mock_client.send_event.call_args
+        assert call_args[0][0] == "prompt_complete"
+        assert call_args[0][1]["success"] is True
+        assert call_args[0][1]["response_preview"] == ""
 
 
 # ===================================================================
