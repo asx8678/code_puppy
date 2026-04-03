@@ -434,7 +434,7 @@ class RichConsoleRenderer:
                     count += get_recursive_file_count(sub)
                 return count
 
-            indent = "    " * depth
+            indent = "│   " * depth if depth > 0 else ""
 
             # For root level, just show contents
             if dir_path == root_key:
@@ -475,8 +475,9 @@ class RichConsoleRenderer:
                     parts.append(self._format_size(rec_size))
 
                 summary = f" [dim]({', '.join(parts)})[/dim]" if parts else ""
+                tree_prefix = "├── " if depth > 0 else ""
                 self._console.print(
-                    f"{indent}📁 [bold blue]{dir_name}/[/bold blue]{summary}"
+                    f"{indent}{tree_prefix}📁 [bold blue]{dir_name}/[/bold blue]{summary}"
                 )
 
                 # Recursively show subdirectories
