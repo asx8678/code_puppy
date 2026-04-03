@@ -1410,34 +1410,41 @@ def set_diff_deletion_color(color: str):
 # =============================================================================
 
 # Default banner colors (Rich color names)
-# A beautiful jewel-tone palette with semantic meaning:
-#   - Blues/Teals: Reading & navigation (calm, informational)
-#   - Warm tones: Actions & changes (edits, shell commands)
-#   - Purples: AI thinking & reasoning (the "brain" colors)
-#   - Greens: Completions & success
-#   - Neutrals: Search & listings
+# Semantic color mapping for better visual recognition:
+#   - WARM (amber/yellow/red): Thinking/reasoning/contemplation
+#   - COOL (blue/cyan): Commands/operations
+#   - GREEN: Success/results/reading
+#   - GOLD: Modifications/destructive operations
+#   - PURPLE/PINK: Agent interactions
+#   - TEAL: External/tools
+#   - NEUTRAL: Search
 DEFAULT_BANNER_COLORS = {
-    "thinking": "deep_sky_blue4",  # Sapphire - contemplation
-    "agent_response": "medium_purple4",  # Amethyst - main AI output
-    "shell_command": "dark_orange3",  # Amber - system commands
-    "read_file": "steel_blue",  # Steel - reading files
-    "edit_file": "dark_goldenrod",  # Gold - modifications (legacy)
-    "create_file": "dark_goldenrod",  # Gold - file creation
+    # WARM colors (amber/yellow/red) for thinking/reasoning/contemplation
+    "thinking": "dark_orange",  # Warm amber for contemplation
+    "agent_reasoning": "dark_orange",  # Same warm tone, reasoning = thinking
+    # COOL colors (blue/cyan) for commands/operations
+    "shell_command": "steel_blue",  # Cool blue for system commands
+    "shell_passthrough": "medium_sea_green",  # Green - user's own commands
+    "directory_listing": "steel_blue",  # Navigation is a command
+    # GREEN for success/results/reading
+    "read_file": "sea_green3",  # Green for reading/access
+    "create_file": "sea_green3",  # Green for creation = positive
+    "subagent_response": "sea_green3",  # Green for success
+    # PURPLE for distinctive AI output
+    "agent_response": "dark_violet",  # Distinctive AI output
+    # GOLD for modifications/destructive ops
+    "edit_file": "dark_goldenrod",  # Gold - modifications
     "replace_in_file": "dark_goldenrod",  # Gold - file modifications
     "delete_snippet": "dark_goldenrod",  # Gold - snippet removal
+    "terminal_tool": "dark_goldenrod",  # Gold - terminal operations
+    # NEUTRAL for search
     "grep": "grey37",  # Silver - search results
-    "directory_listing": "dodger_blue2",  # Sky - navigation
-    "agent_reasoning": "dark_violet",  # Violet - deep thought
+    # PURPLE/PINK for agent interactions
     "invoke_agent": "deep_pink4",  # Ruby - agent invocation
-    "subagent_response": "sea_green3",  # Emerald - sub-agent success
     "list_agents": "dark_slate_gray3",  # Slate - neutral listing
+    # TEAL for external/tools
     "universal_constructor": "dark_cyan",  # Teal - constructing tools
-    # Browser/Terminal tools - same color as edit_file (gold)
-    "terminal_tool": "dark_goldenrod",  # Gold - browser terminal operations
-    # MCP tools - distinct from builtin tools
     "mcp_tool_call": "dark_cyan",  # Teal - external MCP tool calls
-    # User-initiated shell pass-through (! prefix) - distinct from agent's shell_command
-    "shell_passthrough": "medium_sea_green",  # Green - user's own shell commands
 }
 
 
