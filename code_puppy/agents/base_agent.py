@@ -141,6 +141,9 @@ class BaseAgent(ABC, AgentPromptMixin):
         self._prune_cache: tuple[tuple[int, int], list[ModelMessage]] | None = None
         # Cached context overhead tokens (invalidated by reload_code_generation_agent)
         self._cached_context_overhead: int | None = None
+        # Cache for message part content stringification (keyed on id(content))
+        # This unifies caching between _stringify_part() and stringify_message_part()
+        self._content_stringify_cache: dict[int, str] = {}
 
 
 
@@ -328,13 +331,63 @@ class BaseAgent(ABC, AgentPromptMixin):
         return messages
 
     # Message history processing methods (moved from state_management.py and message_history_processor.py)
+    def _stringify_content_raw(self, content: Any) -> str:
+        """Create a raw string representation for message content with caching.
+
+        This is the shared implementation used by both _stringify_part() and
+        stringify_message_part(). Returns the raw stringified content without
+        the "content=" prefix. Caching is keyed on content object identity
+        (via id()) since message part contents are typically immutable pydantic
+        models or basic types.
+
+        Args:
+            content: The content to stringify (str, BaseModel, dict, list, or other)
+
+        Returns:
+            Raw string representation of the content (without "content=" prefix)
+        """
+        # Use object identity as cache key for O(1) lookup
+        # This is safe because content objects are typically immutable in practice
+        cache_key = id(content)
+        if cache_key in self._content_stringify_cache:
+            return self._content_stringify_cache[cache_key]
+
+        result: str
+        match content:
+            case None:
+                result = "None"
+            case str() as s:
+                result = s
+            case pydantic.BaseModel():
+                result = content.model_dump_json()
+            case dict():
+                # Note: sort_keys=True for consistent hashing in _stringify_part
+                result = json.dumps(content, sort_keys=True)
+            case list():
+                # Build string for list items - note that callers format this differently
+                parts: list[str] = []
+                for item in content:
+                    match item:
+                        case str():
+                            parts.append(item)
+                        case BinaryContent():
+                            parts.append(f"BinaryContent={hash(item.data)}")
+                result = "|".join(parts) if parts else "[]"
+            case _:
+                result = repr(content)
+
+        self._content_stringify_cache[cache_key] = result
+        return result
+
     def _stringify_part(self, part: Any) -> str:
         """Create a stable string representation for a message part.
 
         We deliberately ignore timestamps so identical content hashes the same even when
         emitted at different times. This prevents status updates from blowing up the
-        history when they are repeated with new timestamps."""
+        history when they are repeated with new timestamps.
 
+        Uses _stringify_content_raw() for content handling with caching.
+        """
         attributes: list[str] = [part.__class__.__name__]
 
         # Role/instructions help disambiguate parts that otherwise share content
@@ -350,24 +403,9 @@ class BaseAgent(ABC, AgentPromptMixin):
             attributes.append(f"tool_name={part.tool_name}")
 
         content = getattr(part, "content", None)
-        match content:
-            case None:
-                attributes.append("content=None")
-            case str() as s:
-                attributes.append(f"content={s}")
-            case pydantic.BaseModel():
-                attributes.append(f"content={content.model_dump_json()}")
-            case dict():
-                attributes.append(f"content={json.dumps(content, sort_keys=True)}")
-            case list():
-                for item in content:
-                    match item:
-                        case str():
-                            attributes.append(f"content={item}")
-                        case BinaryContent():
-                            attributes.append(f"BinaryContent={hash(item.data)}")
-            case _:
-                attributes.append(f"content={content!r}")
+        content_str = self._stringify_content_raw(content)
+        attributes.append(f"content={content_str}")
+
         result = "|".join(attributes)
         return result
 
@@ -399,6 +437,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         Convert a message part to a string representation for token estimation or other uses.
 
+        Uses _stringify_content_raw() for content handling with caching.
+
         Args:
             part: A message part that may contain content or be a tool call
 
@@ -411,18 +451,14 @@ class BaseAgent(ABC, AgentPromptMixin):
         else:
             result += str(type(part)) + ": "
 
-        # Handle content
+        # Handle content using shared cached method
         if hasattr(part, "content") and part.content:
-            match part.content:
-                case str() as s:
-                    result = s
-                case pydantic.BaseModel():
-                    result = part.content.model_dump_json()
-                case dict():
-                    result = json.dumps(part.content)
+            content = part.content
+            match content:
                 case list():
+                    # Build list content with newlines for token estimation
                     parts = []
-                    for item in part.content:
+                    for item in content:
                         match item:
                             case str():
                                 parts.append(item + "\n")
@@ -430,7 +466,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                                 parts.append(f"BinaryContent={hash(item.data)}\n")
                     result = "".join(parts)
                 case _:
-                    result = str(part.content)
+                    # Use shared cached stringifier for non-list content
+                    result = self._stringify_content_raw(content)
 
         # Handle tool calls which may have additional token costs
         # If part also has content, we'll process tool calls separately
