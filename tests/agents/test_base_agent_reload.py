@@ -118,6 +118,8 @@ class TestBaseAgentReload:
 
     def test_reload_puppy_rules_appended(self, agent):
         """Test that puppy rules are loaded and appended to instructions."""
+        from code_puppy.model_utils import PreparedPrompt
+
         base_prompt = "Be a good coding assistant."
         puppy_rules = "Always wag your tail when code compiles."
 
@@ -133,6 +135,17 @@ class TestBaseAgentReload:
             patch.object(agent, "get_model_name", return_value="test-model"),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch("code_puppy.agents.base_agent.PydanticAgent") as mock_agent_class,
+            # Isolate from plugin get_model_system_prompt callbacks (e.g.
+            # repo_compass, agent_skills) that may be registered by earlier tests
+            # and would append content after the puppy rules.
+            patch(
+                "code_puppy.model_utils.prepare_prompt_for_model",
+                side_effect=lambda model_name, system_prompt, user_prompt, **kw: PreparedPrompt(
+                    instructions=system_prompt,
+                    user_prompt=user_prompt,
+                    is_claude_code=False,
+                ),
+            ),
         ):
             mock_model = MagicMock()
             mock_load_fallback.return_value = (mock_model, "test-model")
