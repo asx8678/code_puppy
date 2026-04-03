@@ -12,6 +12,27 @@ use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
 
+/// Build a FileInfo from a path and its metadata
+fn metadata_to_file_info(path: &Path, metadata: &std::fs::Metadata) -> FileInfo {
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .and_then(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0))
+        .map(|dt| dt.to_rfc3339());
+    FileInfo {
+        path: path.to_string_lossy().to_string(),
+        name: path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
+        is_dir: metadata.is_dir(),
+        size: metadata.len(),
+        modified,
+    }
+}
+
 /// Execute list_files operation
 pub fn execute_list_files(args: &serde_json::Value) -> Result<serde_json::Value, String> {
     let directory = args
@@ -44,27 +65,7 @@ pub fn execute_list_files(args: &serde_json::Value) -> Result<serde_json::Value,
                 Err(_) => continue,
             };
 
-            let path_str = entry.path().to_string_lossy().to_string();
-            let name = entry
-                .file_name()
-                .to_string_lossy()
-                .to_string();
-
-            let modified = metadata
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0))
-                .flatten()
-                .map(|dt| dt.to_rfc3339());
-
-            files.push(FileInfo {
-                path: path_str,
-                name,
-                is_dir: metadata.is_dir(),
-                size: metadata.len(),
-                modified,
-            });
+            files.push(metadata_to_file_info(entry.path(), &metadata));
         }
     } else {
         // Non-recursive: just list immediate children
@@ -79,24 +80,7 @@ pub fn execute_list_files(args: &serde_json::Value) -> Result<serde_json::Value,
                 Err(_) => continue,
             };
 
-            let path_str = entry.path().to_string_lossy().to_string();
-            let name = entry.file_name().to_string_lossy().to_string();
-
-            let modified = metadata
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0))
-                .flatten()
-                .map(|dt| dt.to_rfc3339());
-
-            files.push(FileInfo {
-                path: path_str,
-                name,
-                is_dir: metadata.is_dir(),
-                size: metadata.len(),
-                modified,
-            });
+            files.push(metadata_to_file_info(&entry.path(), &metadata));
         }
     }
 

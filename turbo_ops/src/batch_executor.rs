@@ -59,7 +59,7 @@ pub fn execute_batch_parallel(operations: &[TurboOperation]) -> Vec<OperationRes
     // This is appropriate when operations are independent
     operations
         .par_iter()
-        .map(|op| execute_single_operation(op))
+        .map(execute_single_operation)
         .collect()
 }
 

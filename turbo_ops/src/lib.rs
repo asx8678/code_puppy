@@ -199,7 +199,7 @@ fn health_check<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
 
 fn convert_py_op_to_rust(py: Python, obj: &Bound<'_, PyAny>) -> PyResult<TurboOperation> {
     // Try to extract as a dict
-    let dict = obj.downcast::<PyDict>()?;
+    let dict = obj.cast::<PyDict>()?;
 
     // Get operation type
     let type_obj = dict.get_item("type")?.ok_or_else(|| {
