@@ -25,16 +25,10 @@ class TestTurboExecutorAgent:
         assert "batch file operations" in agent.description.lower()
         assert "1m context" in agent.description.lower()
 
-    def test_model_pinning(self):
-        """Test that the agent is pinned to xiaomi_v2_pro."""
-        agent = TurboExecutorAgent()
-
-        model_name = agent.get_model_name()
-        assert model_name == "xiaomi_v2_pro"
-
-    def test_pinned_model_constant(self):
-        """Test the PINNED_MODEL class constant."""
-        assert TurboExecutorAgent.PINNED_MODEL == "xiaomi_v2_pro"
+    def test_uses_config_based_model_pinning(self):
+        """Test that the agent uses config-based model pinning (not hardcoded)."""
+        # Agent should NOT override get_model_name - uses BaseAgent config-based pinning
+        assert not hasattr(TurboExecutorAgent, 'PINNED_MODEL')
 
     def test_available_tools(self):
         """Test that the agent has the expected tools."""

@@ -30,7 +30,6 @@ class TurboExecutorAgent(BaseAgent):
     """
 
     # Model pinning: Xiaomi V2 Pro with 1M context window
-    PINNED_MODEL = "xiaomi_v2_pro"
 
     @property
     def name(self) -> str:
@@ -45,14 +44,6 @@ class TurboExecutorAgent(BaseAgent):
         return (
             "High-performance batch file operations specialist with 1M context window"
         )
-
-    def get_model_name(self) -> str | None:
-        """Return the pinned model for this agent.
-
-        Overrides the default pinning mechanism to always use
-        Xiaomi V2 Pro for its 1M context window capability.
-        """
-        return self.PINNED_MODEL
 
     def get_available_tools(self) -> list[str]:
         """Get tools available to Turbo Executor.
