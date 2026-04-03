@@ -136,6 +136,9 @@ class BaseAgent(ABC, AgentPromptMixin):
         self._delayed_compaction_requested: bool = False
         # Per-invocation cache for _collect_tool_call_ids (see method)
         self._tool_ids_cache = None
+        # Cache for prune_interrupted_tool_calls results - keyed by (id(messages), len(messages))
+        # Invalidated when message history mutates via set/append/extend_message_history
+        self._prune_cache: tuple[tuple[int, int], list[ModelMessage]] | None = None
         # Cached context overhead tokens (invalidated by reload_code_generation_agent)
         self._cached_context_overhead: int | None = None
 
@@ -207,12 +210,18 @@ class BaseAgent(ABC, AgentPromptMixin):
         self._message_history = history
         # Rebuild hash set when history is replaced wholesale
         self._message_history_hashes = set(self.hash_message(m) for m in history)
+        # Invalidate prune cache since history mutated
+        self._prune_cache = None
+        self._tool_ids_cache = None
 
     def clear_message_history(self) -> None:
         """Clear the message history for this agent."""
         self._message_history = []
         self._compacted_message_hashes.clear()
         self._message_history_hashes.clear()
+        # Invalidate caches since history mutated
+        self._prune_cache = None
+        self._tool_ids_cache = None
 
     def append_to_message_history(self, message: Any) -> None:
         """Append a message to this agent's history.
@@ -222,6 +231,9 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         self._message_history.append(message)
         self._message_history_hashes.add(self.hash_message(message))
+        # Invalidate caches since history mutated
+        self._prune_cache = None
+        self._tool_ids_cache = None
 
     def extend_message_history(self, history: list[Any]) -> None:
         """Extend this agent's message history with multiple messages.
@@ -231,6 +243,9 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         self._message_history.extend(history)
         self._message_history_hashes.update(self.hash_message(m) for m in history)
+        # Invalidate caches since history mutated
+        self._prune_cache = None
+        self._tool_ids_cache = None
 
     def get_compacted_message_hashes(self) -> set[str]:
         """Get the set of compacted message hashes for this agent.
@@ -1219,9 +1234,17 @@ class BaseAgent(ABC, AgentPromptMixin):
         A mismatched tool call id is one that appears in a ToolCall (model/tool request)
         without a corresponding tool return, or vice versa. We preserve original order
         and only drop messages that contain parts referencing mismatched tool_call_ids.
+
+        Results are cached per message list identity to avoid redundant scans
+        when called multiple times per turn. Cache is invalidated when history mutates.
         """
         if not messages:
             return messages
+
+        # Check cache first (keyed by list identity and length)
+        cache_key = (id(messages), len(messages))
+        if self._prune_cache is not None and self._prune_cache[0] == cache_key:
+            return self._prune_cache[1]
 
         # Rust fast path — prune_and_filter handles mismatched tool-call pruning
         # in a single pass, plus filters empty thinking parts and trailing responses
@@ -1229,7 +1252,9 @@ class BaseAgent(ABC, AgentPromptMixin):
             try:
                 serialized = serialize_messages_for_rust(messages)
                 result = prune_and_filter(serialized, 999_999_999)
-                return [messages[i] for i in result.surviving_indices]
+                pruned = [messages[i] for i in result.surviving_indices]
+                self._prune_cache = (cache_key, pruned)
+                return pruned
             except Exception as exc:
                 logger.debug(
                     "Rust fallback in prune_interrupted_tool_calls: %s",
@@ -1240,6 +1265,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         tool_call_ids, tool_return_ids = self._collect_tool_call_ids(messages)
         mismatched: set[str] = tool_call_ids.symmetric_difference(tool_return_ids)
         if not mismatched:
+            self._prune_cache = (cache_key, messages)
             return messages
 
         pruned: list[ModelMessage] = []
@@ -1255,6 +1281,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                 dropped_count += 1
                 continue
             pruned.append(msg)
+        self._prune_cache = (cache_key, pruned)
         return pruned
 
     def message_history_processor(
