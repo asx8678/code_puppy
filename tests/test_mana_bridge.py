@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import importlib
 import os
-import queue
+import socket
 import struct
+import threading
+import time
 from unittest.mock import MagicMock, patch
 
 import msgpack
@@ -327,7 +329,7 @@ class TestCallbackRegistration:
         clear_callbacks()
         os.environ["CODE_PUPPY_BRIDGE"] = "1"
 
-        rc_mod = self._reload_register_callbacks()
+        self._reload_register_callbacks()
 
         # Trigger the startup callback
         # Since no Mana server is running, connect will return False
@@ -384,6 +386,607 @@ class TestCallbackRegistration:
 
         # Cleanup
         rc_mod._on_shutdown()
+
+
+# ===================================================================
+# 7. Receive loop tests
+# ===================================================================
+
+
+class TestReceiveLoop:
+    """Tests for the TCP receive loop and handler dispatch."""
+
+    def test_register_handler_stores_handler(self):
+        """register_handler should store a handler for a given name."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        handler = lambda msg: None  # noqa: E731
+        client.register_handler("test", handler)
+        assert client._request_handlers["test"] is handler
+
+    def test_register_handler_overwrites(self):
+        """Registering a handler for the same name should overwrite."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        handler1 = lambda msg: None  # noqa: E731
+        handler2 = lambda msg: None  # noqa: E731
+        client.register_handler("test", handler1)
+        client.register_handler("test", handler2)
+        assert client._request_handlers["test"] is handler2
+
+    def test_recv_exact_returns_bytes(self):
+        """_recv_exact should return exactly the requested number of bytes."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+
+        # Create a connected socket pair
+        server_sock, client_sock = socket.socketpair()
+        client._sock = client_sock
+
+        # Send data from server side
+        server_sock.sendall(b"hello world")
+
+        # Read exact bytes from client side
+        result = client._recv_exact(5)
+        assert result == b"hello"
+
+        result = client._recv_exact(6)
+        assert result == b" world"
+
+        server_sock.close()
+        client_sock.close()
+
+    def test_recv_exact_returns_none_on_disconnect(self):
+        """_recv_exact should return None when the peer closes."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+
+        server_sock, client_sock = socket.socketpair()
+        client._sock = client_sock
+
+        # Close the server side — recv will return empty bytes
+        server_sock.close()
+
+        result = client._recv_exact(4)
+        assert result is None
+
+        client_sock.close()
+
+    def test_recv_exact_returns_none_when_no_socket(self):
+        """_recv_exact should return None when no socket is set."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        client._sock = None
+
+        result = client._recv_exact(4)
+        assert result is None
+
+    def test_recv_exact_lock_not_held_during_recv(self):
+        """_recv_exact should not hold the lock during the actual recv() call.
+
+        We verify this by checking that another thread can acquire the lock
+        while recv_exact is blocked waiting for data.
+        """
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+
+        server_sock, client_sock = socket.socketpair()
+        client._sock = client_sock
+
+        # Block the client socket so recv() blocks
+        # (don't send any data yet)
+        lock_acquired_during_recv = threading.Event()
+        recv_started = threading.Event()
+
+        def try_acquire_lock():
+            # Wait until recv has started (it's blocked in recv())
+            recv_started.wait(timeout=2.0)
+            time.sleep(0.05)  # give recv time to enter the blocking call
+            # If we can acquire the lock here, recv_exact released it
+            acquired = client._lock.acquire(blocking=False)
+            if acquired:
+                lock_acquired_during_recv.set()
+                client._lock.release()
+
+        def do_recv():
+            recv_started.set()
+            # This will block because no data is sent
+            client._recv_exact(4)
+            # returns None because we close the socket
+
+        recv_thread = threading.Thread(target=do_recv, daemon=True)
+        recv_thread.start()
+
+        # Try to acquire the lock while recv is blocked
+        lock_thread = threading.Thread(target=try_acquire_lock, daemon=True)
+        lock_thread.start()
+
+        # Wait a bit for the lock thread to try
+        lock_thread.join(timeout=1.0)
+
+        # Now close the socket to unblock recv
+        server_sock.close()
+        recv_thread.join(timeout=2.0)
+
+        # If recv_exact held the lock during recv, lock_thread would not
+        # have been able to acquire it
+        assert lock_acquired_during_recv.is_set()
+
+        client_sock.close()
+
+    def test_reader_loop_dispatches_to_handler(self):
+        """Reader loop should dispatch decoded messages to registered handlers."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        client._msgpack = msgpack
+
+        server_sock, client_sock = socket.socketpair()
+        client._sock = client_sock
+        client._connected = True
+
+        received_messages = []
+
+        def handler(msg):
+            received_messages.append(msg)
+            # Stop the reader loop after one message
+            client._closed = True
+
+        client.register_handler("prompt", handler)
+
+        # Send a framed message from the server side
+        payload = msgpack.packb(
+            {"name": "prompt", "data": {"text": "hello from Mana"}},
+            use_bin_type=True,
+        )
+        frame = BridgeClient.encode_frame(payload)
+        server_sock.sendall(frame)
+
+        # Run the reader loop in a thread
+        reader_thread = threading.Thread(target=client._reader_loop)
+        reader_thread.start()
+        reader_thread.join(timeout=2.0)
+
+        assert len(received_messages) == 1
+        assert received_messages[0]["name"] == "prompt"
+        assert received_messages[0]["data"]["text"] == "hello from Mana"
+
+        server_sock.close()
+        client_sock.close()
+
+    def test_reader_loop_handles_unknown_request(self):
+        """Reader loop should not crash for messages with no handler."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        client._msgpack = msgpack
+
+        server_sock, client_sock = socket.socketpair()
+        client._sock = client_sock
+        client._connected = True
+
+        # No handler registered — should log and continue
+        payload = msgpack.packb(
+            {"name": "unknown_request", "data": {}},
+            use_bin_type=True,
+        )
+        frame = BridgeClient.encode_frame(payload)
+        server_sock.sendall(frame)
+
+        # Close the socket to make the reader loop exit after processing
+        time.sleep(0.05)  # let the send propagate
+        server_sock.close()
+
+        reader_thread = threading.Thread(target=client._reader_loop)
+        reader_thread.start()
+        reader_thread.join(timeout=2.0)
+
+        assert not reader_thread.is_alive()
+        client_sock.close()
+
+    def test_reader_loop_exits_on_socket_close(self):
+        """Reader loop should exit cleanly when the socket is closed."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        client._msgpack = msgpack
+
+        server_sock, client_sock = socket.socketpair()
+        client._sock = client_sock
+        client._connected = True
+
+        reader_thread = threading.Thread(target=client._reader_loop)
+        reader_thread.start()
+
+        # Close socket — reader should exit
+        time.sleep(0.05)
+        server_sock.close()
+
+        reader_thread.join(timeout=2.0)
+        assert not reader_thread.is_alive()
+        client_sock.close()
+
+    def test_reader_loop_handler_exception_does_not_crash(self):
+        """Reader loop should continue if a handler raises an exception."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        client._msgpack = msgpack
+
+        server_sock, client_sock = socket.socketpair()
+        client._sock = client_sock
+        client._connected = True
+
+        call_count = 0
+
+        def bad_handler(msg):
+            nonlocal call_count
+            call_count += 1
+            raise RuntimeError("handler error")
+
+        client.register_handler("prompt", bad_handler)
+
+        # Send a message — handler will raise, but reader loop should not crash
+        payload = msgpack.packb(
+            {"name": "prompt", "data": {"text": "test"}},
+            use_bin_type=True,
+        )
+        frame = BridgeClient.encode_frame(payload)
+        server_sock.sendall(frame)
+
+        # Close socket to let reader exit
+        time.sleep(0.05)
+        server_sock.close()
+
+        reader_thread = threading.Thread(target=client._reader_loop)
+        reader_thread.start()
+        reader_thread.join(timeout=2.0)
+
+        assert not reader_thread.is_alive()
+        assert call_count == 1
+
+        client_sock.close()
+
+    def test_reader_loop_multiple_messages(self):
+        """Reader loop should process multiple messages in sequence."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        client._msgpack = msgpack
+
+        server_sock, client_sock = socket.socketpair()
+        client._sock = client_sock
+        client._connected = True
+
+        received = []
+
+        def handler(msg):
+            received.append(msg)
+            if len(received) == 3:
+                client._closed = True
+
+        client.register_handler("test", handler)
+
+        # Send three messages
+        for i in range(3):
+            payload = msgpack.packb(
+                {"name": "test", "data": {"index": i}},
+                use_bin_type=True,
+            )
+            frame = BridgeClient.encode_frame(payload)
+            server_sock.sendall(frame)
+
+        reader_thread = threading.Thread(target=client._reader_loop)
+        reader_thread.start()
+        reader_thread.join(timeout=2.0)
+
+        assert len(received) == 3
+        assert received[0]["data"]["index"] == 0
+        assert received[1]["data"]["index"] == 1
+        assert received[2]["data"]["index"] == 2
+
+        server_sock.close()
+        client_sock.close()
+
+    def test_reader_loop_fragmented_reads(self):
+        """Reader loop should handle fragmented TCP reads correctly."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        client._msgpack = msgpack
+
+        # Use a mock socket that delivers data in small chunks
+        mock_sock = MagicMock(spec=socket.socket)
+
+        # Build a complete frame
+        payload = msgpack.packb(
+            {"name": "test", "data": {"key": "value"}},
+            use_bin_type=True,
+        )
+        frame = BridgeClient.encode_frame(payload)
+
+        # Feed data one byte at a time
+        byte_index = [0]
+
+        def fake_recv(n):
+            if byte_index[0] >= len(frame):
+                return b""  # EOF
+            chunk = frame[byte_index[0] : byte_index[0] + 1]
+            byte_index[0] += 1
+            return chunk
+
+        mock_sock.recv = fake_recv
+        client._sock = mock_sock
+        client._connected = True
+
+        received = []
+
+        def handler(msg):
+            received.append(msg)
+            client._closed = True
+
+        client.register_handler("test", handler)
+
+        reader_thread = threading.Thread(target=client._reader_loop)
+        reader_thread.start()
+        reader_thread.join(timeout=2.0)
+
+        assert len(received) == 1
+        assert received[0]["data"]["key"] == "value"
+
+
+# ===================================================================
+# 8. Request handler tests
+# ===================================================================
+
+
+class TestRequestHandlers:
+    """Tests for Mana→Python request handlers."""
+
+    def _reload_register_callbacks(self):
+        """Force re-import of the register_callbacks module."""
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc_mod
+
+        importlib.reload(rc_mod)
+        return rc_mod
+
+    def test_handle_prompt_request_stores_in_queue(self):
+        """_handle_prompt_request should store the prompt text."""
+        from code_puppy.plugins.mana_bridge.register_callbacks import (
+            _handle_prompt_request,
+            _pending_prompts,
+        )
+
+        # Clear the queue
+        while not _pending_prompts.empty():
+            _pending_prompts.get_nowait()
+
+        msg = {"name": "prompt", "data": {"text": "hello from Mana"}}
+        _handle_prompt_request(msg)
+
+        assert _pending_prompts.qsize() == 1
+        assert _pending_prompts.get_nowait() == "hello from Mana"
+
+    def test_handle_prompt_request_empty_text_ignored(self):
+        """_handle_prompt_request should ignore messages with empty text."""
+        from code_puppy.plugins.mana_bridge.register_callbacks import (
+            _handle_prompt_request,
+            _pending_prompts,
+        )
+
+        while not _pending_prompts.empty():
+            _pending_prompts.get_nowait()
+
+        _handle_prompt_request({"name": "prompt", "data": {"text": ""}})
+        _handle_prompt_request({"name": "prompt", "data": {}})
+
+        assert _pending_prompts.empty()
+
+    def test_handle_prompt_request_sends_ack(self):
+        """_handle_prompt_request should send a prompt_ack event."""
+        from code_puppy.plugins.mana_bridge.register_callbacks import (
+            _handle_prompt_request,
+        )
+
+        client = MagicMock()
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc_mod
+
+        rc_mod._client = client
+
+        _handle_prompt_request({"name": "prompt", "data": {"text": "test"}})
+
+        client.send_event.assert_called_once_with("prompt_ack", {"status": "queued"})
+
+        # Cleanup
+        rc_mod._client = None
+
+    def test_get_pending_bridge_prompts_returns_all(self):
+        """get_pending_bridge_prompts should drain and return all prompts."""
+        from code_puppy.plugins.mana_bridge.register_callbacks import (
+            _pending_prompts,
+            get_pending_bridge_prompts,
+        )
+
+        while not _pending_prompts.empty():
+            _pending_prompts.get_nowait()
+
+        _pending_prompts.put_nowait("first")
+        _pending_prompts.put_nowait("second")
+        _pending_prompts.put_nowait("third")
+
+        prompts = get_pending_bridge_prompts()
+        assert prompts == ["first", "second", "third"]
+        assert _pending_prompts.empty()
+
+    def test_get_pending_bridge_prompts_empty(self):
+        """get_pending_bridge_prompts should return empty list when nothing pending."""
+        from code_puppy.plugins.mana_bridge.register_callbacks import (
+            get_pending_bridge_prompts,
+            _pending_prompts,
+        )
+
+        while not _pending_prompts.empty():
+            _pending_prompts.get_nowait()
+
+        assert get_pending_bridge_prompts() == []
+
+    def test_handle_switch_agent_request_success(self):
+        """_handle_switch_agent_request should call set_current_agent and notify."""
+        from code_puppy.plugins.mana_bridge.register_callbacks import (
+            _handle_switch_agent_request,
+        )
+
+        client = MagicMock()
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc_mod
+
+        rc_mod._client = client
+
+        with patch(
+            "code_puppy.agents.set_current_agent",
+            return_value=True,
+        ):
+            _handle_switch_agent_request(
+                {"name": "switch_agent", "data": {"agent_name": "husky"}}
+            )
+
+        client.send_event.assert_called_once_with(
+            "agent_switched", {"agent_name": "husky"}
+        )
+
+        rc_mod._client = None
+
+    def test_handle_switch_agent_request_failure(self):
+        """_handle_switch_agent_request should send error on failure."""
+        from code_puppy.plugins.mana_bridge.register_callbacks import (
+            _handle_switch_agent_request,
+        )
+
+        client = MagicMock()
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc_mod
+
+        rc_mod._client = client
+
+        with patch(
+            "code_puppy.agents.set_current_agent",
+            return_value=False,
+        ):
+            _handle_switch_agent_request(
+                {"name": "switch_agent", "data": {"agent_name": "nonexistent"}}
+            )
+
+        client.send_event.assert_called_once()
+        assert client.send_event.call_args[0][0] == "error"
+
+        rc_mod._client = None
+
+    def test_handle_switch_agent_empty_name_ignored(self):
+        """_handle_switch_agent_request should ignore empty agent name."""
+        from code_puppy.plugins.mana_bridge.register_callbacks import (
+            _handle_switch_agent_request,
+        )
+
+        client = MagicMock()
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc_mod
+
+        rc_mod._client = client
+
+        _handle_switch_agent_request(
+            {"name": "switch_agent", "data": {"agent_name": ""}}
+        )
+        _handle_switch_agent_request({"name": "switch_agent", "data": {}})
+
+        client.send_event.assert_not_called()
+
+        rc_mod._client = None
+
+    def test_handle_switch_model_request(self):
+        """_handle_switch_model_request should reuse _on_switch_model."""
+        from code_puppy.plugins.mana_bridge.register_callbacks import (
+            _handle_switch_model_request,
+            _on_switch_model,
+        )
+
+        client = MagicMock()
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc_mod
+
+        rc_mod._client = client
+
+        # _on_switch_model returns usage hint for unknown model
+        result = _on_switch_model("model", "unknown-model")
+        assert result is not None
+
+        # The handler should call _on_switch_model and log (client.send_event
+        # is called inside _on_switch_model for model_changed, but unknown model
+        # won't trigger that)
+        _handle_switch_model_request(
+            {"name": "switch_model", "data": {"model_name": "unknown-model"}}
+        )
+
+        rc_mod._client = None
+
+    def test_handle_switch_model_empty_name_ignored(self):
+        """_handle_switch_model_request should ignore empty model name."""
+        from code_puppy.plugins.mana_bridge.register_callbacks import (
+            _handle_switch_model_request,
+        )
+
+        client = MagicMock()
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc_mod
+
+        rc_mod._client = client
+
+        _handle_switch_model_request(
+            {"name": "switch_model", "data": {"model_name": ""}}
+        )
+        _handle_switch_model_request({"name": "switch_model", "data": {}})
+
+        client.send_event.assert_not_called()
+
+        rc_mod._client = None
+
+    def test_handlers_registered_on_startup(self, _preserve_bridge_env):
+        """Handlers should be registered on the client after startup."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        clear_callbacks()
+        os.environ["CODE_PUPPY_BRIDGE"] = "1"
+
+        rc_mod = self._reload_register_callbacks()
+
+        with patch.object(BridgeClient, "connect", return_value=True):
+            startup_cbs = get_callbacks("startup")
+            for cb in startup_cbs:
+                cb()
+
+        assert rc_mod._client is not None
+        assert "prompt" in rc_mod._client._request_handlers
+        assert "switch_agent" in rc_mod._client._request_handlers
+        assert "switch_model" in rc_mod._client._request_handlers
+
+        # Cleanup
+        rc_mod._on_shutdown()
+
+    def test_init_includes_request_handlers_dict(self):
+        """BridgeClient.__init__ should initialize _request_handlers."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        assert hasattr(client, "_request_handlers")
+        assert isinstance(client._request_handlers, dict)
+        assert len(client._request_handlers) == 0
+
+    def test_init_includes_reader_thread(self):
+        """BridgeClient.__init__ should initialize _reader_thread as None."""
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        assert client._reader_thread is None
 
     def test_stream_event_callback_does_not_crash_without_client(self):
         """Stream event callback should be a no-op when no client exists."""
