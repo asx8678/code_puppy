@@ -53,6 +53,16 @@ code_puppy/bundled_skills/
 # Eval log output
 evals/logs/
 
+# Elixir/Mana build artifacts
+/_build/
+/cover/
+/deps/
+/doc/
+/.fetch
+erl_crash.dump
+*.ez
+mana-*.tar
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
