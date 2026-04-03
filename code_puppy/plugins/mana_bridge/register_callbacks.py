@@ -66,7 +66,9 @@ def _on_startup() -> None:
             # Send available models list
             model_data = _gather_model_list()
             client.send_event("model_list", model_data)
-            logger.debug("Bridge sent model_list: %d models", len(model_data.get("models", [])))
+            logger.debug(
+                "Bridge sent model_list: %d models", len(model_data.get("models", []))
+            )
         except Exception as exc:
             logger.warning("Failed to send bridge hello: %s", exc)
     else:
@@ -315,7 +317,6 @@ def _on_switch_model(command: str, name: str) -> bool | str | None:
 
     try:
         from code_puppy.model_switching import set_model_and_reload_agent
-        from code_puppy.config import get_value
         from code_puppy.model_factory import ModelFactory
 
         models_config = ModelFactory.load_config()
