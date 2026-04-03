@@ -53,7 +53,7 @@ def _format_brief_stats(op_type: str, data: dict) -> str:
         content = data.get("content", "")
         if isinstance(content, str):
             # Count lines (files/directories listed)
-            lines = [l for l in content.split("\n") if l.strip()]
+            lines = [line for line in content.split("\n") if line.strip()]
             return f"{len(lines)} items"
         return ""
 
@@ -142,7 +142,7 @@ def _on_post_tool_call(
         # Handle result as dict (expected format)
         if isinstance(result, dict):
             status = result.get("status", "unknown")
-            plan_id = result.get("plan_id", "unknown")
+
             success_count = result.get("success_count", 0)
             error_count = result.get("error_count", 0)
             total_duration = result.get("total_duration_ms", duration_ms)
@@ -164,7 +164,9 @@ def _on_post_tool_call(
 
             # If overall status indicates failure but no individual errors recorded
             if status == "failed" and error_count == 0:
-                emit_warning("   ❌ Turbo Plan failed with no specific operation errors")
+                emit_warning(
+                    "   ❌ Turbo Plan failed with no specific operation errors"
+                )
 
         else:
             # Unexpected result format - emit basic completion
@@ -228,14 +230,13 @@ def emit_operation_complete(
         duration_ms: Duration in milliseconds
         data: Result data from the operation
     """
-    emoji = _get_op_emoji(op_type)
     stats = _format_brief_stats(op_type, data)
-    emit_info(f"⚡ [{current}/{total}] ✅ {op_type} done ({duration_ms:.0f}ms, {stats})")
+    emit_info(
+        f"⚡ [{current}/{total}] ✅ {op_type} done ({duration_ms:.0f}ms, {stats})"
+    )
 
 
-def emit_operation_error(
-    current: int, total: int, op_type: str, error: str
-) -> None:
+def emit_operation_error(current: int, total: int, op_type: str, error: str) -> None:
     """Emit operation error progress line.
 
     This is called from the orchestrator when an operation fails.

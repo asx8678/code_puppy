@@ -25,6 +25,7 @@ from code_puppy.plugins.turbo_executor.models import (
 # Import notifications for progress emission
 try:
     from code_puppy.plugins.turbo_executor import notifications as _notifications
+
     _NOTIFICATIONS_AVAILABLE = True
 except ImportError:
     _NOTIFICATIONS_AVAILABLE = False
@@ -185,8 +186,12 @@ class TurboOrchestrator:
                     )
                 else:
                     _notifications.emit_operation_complete(
-                        current, total, op_type, operation.args,
-                        result.duration_ms, result.data
+                        current,
+                        total,
+                        op_type,
+                        operation.args,
+                        result.duration_ms,
+                        result.data,
                     )
 
         return results

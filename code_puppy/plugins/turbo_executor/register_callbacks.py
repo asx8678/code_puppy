@@ -18,6 +18,9 @@ from code_puppy.messaging import emit_info, emit_warning
 from code_puppy.plugins.turbo_executor.models import Plan
 from code_puppy.plugins.turbo_executor.orchestrator import TurboOrchestrator
 from code_puppy.plugins.turbo_executor.summarizer import summarize_plan_result
+from code_puppy.plugins.turbo_executor.notifications import (
+    register as register_notifications,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -452,7 +455,6 @@ register_callback("load_prompt", _load_turbo_prompt)
 register_callback("register_agents", _register_turbo_agents)
 
 # Register visual notifications for turbo_execute tool calls
-from code_puppy.plugins.turbo_executor.notifications import register as register_notifications
 
 register_notifications()
 
