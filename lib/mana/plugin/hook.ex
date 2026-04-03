@@ -149,14 +149,20 @@ defmodule Mana.Plugin.Hook do
   def callback_signature(:invoke_agent), do: "(args, kwargs) -> :ok | {:ok, result}"
   def callback_signature(:agent_exception), do: "(exception, args, kwargs) -> :ok"
   def callback_signature(:agent_run_start), do: "(agent_name, model_name, session_id) -> :ok"
-  def callback_signature(:agent_run_end), do: "(agent_name, model_name, session_id, success, error, response_text, metadata) -> :ok"
+
+  def callback_signature(:agent_run_end),
+    do: "(agent_name, model_name, session_id, success, error, response_text, metadata) -> :ok"
+
   def callback_signature(:pre_tool_call), do: "(tool_name, tool_args, context) -> {:ok, modified_args} | :ok"
   def callback_signature(:post_tool_call), do: "(tool_name, tool_args, result, duration_ms, context) -> :ok"
   def callback_signature(:stream_event), do: "(event_type, event_data, session_id) -> :ok"
   def callback_signature(:register_tools), do: "() -> [{name, register_func}]"
   def callback_signature(:register_agents), do: "() -> [{name, agent_class}]"
   def callback_signature(:load_prompt), do: "() -> prompt_string | nil"
-  def callback_signature(:file_permission), do: "(context, file_path, operation, preview, message_group, operation_data) -> true | false"
+
+  def callback_signature(:file_permission),
+    do: "(context, file_path, operation, preview, message_group, operation_data) -> true | false"
+
   def callback_signature(:run_shell_command), do: "(command, cwd, timeout) -> {:ok, result} | {:error, reason} | nil"
   def callback_signature(:custom_command), do: "(command, name) -> true | {:input, string} | nil"
   def callback_signature(:custom_command_help), do: "() -> [{name, description}]"
@@ -164,12 +170,20 @@ defmodule Mana.Plugin.Hook do
   def callback_signature(:load_model_config), do: "(args, kwargs) -> config | nil"
   def callback_signature(:load_models_config), do: "() -> %{model_name => config} | nil"
   def callback_signature(:register_model_type), do: "() -> [{type, handler}]"
-  def callback_signature(:get_model_system_prompt), do: "(model_name, default_prompt, user_prompt) -> %{instructions: _, user_prompt: _, handled: _} | nil"
+
+  def callback_signature(:get_model_system_prompt),
+    do: "(model_name, default_prompt, user_prompt) -> %{instructions: _, user_prompt: _, handled: _} | nil"
+
   def callback_signature(:register_mcp_catalog_servers), do: "() -> [server_template]"
   def callback_signature(:register_browser_types), do: "() -> %{type => init_func}"
   def callback_signature(:register_model_providers), do: "() -> %{provider_name => model_class}"
-  def callback_signature(:message_history_processor_start), do: "(agent_name, session_id, message_history, incoming_messages) -> :ok"
-  def callback_signature(:message_history_processor_end), do: "(agent_name, session_id, message_history, messages_added, messages_filtered) -> :ok"
+
+  def callback_signature(:message_history_processor_start),
+    do: "(agent_name, session_id, message_history, incoming_messages) -> :ok"
+
+  def callback_signature(:message_history_processor_end),
+    do: "(agent_name, session_id, message_history, messages_added, messages_filtered) -> :ok"
+
   def callback_signature(:version_check), do: "(args, kwargs) -> :ok"
   def callback_signature(:agent_reload), do: "(args, kwargs) -> :ok"
   def callback_signature(:edit_file), do: "(args, kwargs) -> :ok"

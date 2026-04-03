@@ -32,8 +32,6 @@ defmodule Mana.Plugins.Logger do
 
   require Logger
 
-
-
   @impl true
   def name, do: "logger"
 

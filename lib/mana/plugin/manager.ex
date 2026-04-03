@@ -152,7 +152,17 @@ defmodule Mana.Plugin.Manager do
   """
   @spec trigger(Hook.hook_phase(), [term()], keyword()) :: {:ok, [term()]} | {:error, term()}
   def trigger(hook, args \\ [], opts \\ []) do
-    GenServer.call(__MODULE__, {:trigger, hook, args, opts}, Keyword.get(opts, :timeout, 5000))
+    # Reentrancy guard: if called from within the GenServer itself, execute directly
+    # to avoid deadlock when callbacks try to trigger other hooks
+    if self() == GenServer.whereis(__MODULE__) do
+      # We're inside the GenServer process, execute directly
+      state = :sys.get_state(__MODULE__)
+      {results, _new_state} = do_trigger(hook, args, opts, state, :sync)
+      {:ok, results}
+    else
+      # Normal case: call through GenServer
+      GenServer.call(__MODULE__, {:trigger, hook, args, opts}, Keyword.get(opts, :timeout, 5000))
+    end
   end
 
   @doc """
@@ -325,11 +335,11 @@ defmodule Mana.Plugin.Manager do
     # Discover and load plugins
     case discover_and_load(state) do
       {:ok, loaded_state} ->
-        Logger.info("Plugin Manager initialized with \#{loaded_state.stats.plugins_loaded} plugins")
+        Logger.info("Plugin Manager initialized with #{loaded_state.stats.plugins_loaded} plugins")
         {:ok, loaded_state}
 
       {:error, reason} ->
-        Logger.error("Plugin Manager failed to initialize: \#{inspect(reason)}")
+        Logger.error("Plugin Manager failed to initialize: #{inspect(reason)}")
         {:stop, reason}
     end
   end
@@ -458,9 +468,7 @@ defmodule Mana.Plugin.Manager do
           apply(plugin.module, :terminate, [])
         catch
           _kind, _reason ->
-            Logger.warning(
-              "Plugin #{plugin.name} terminate failed during shutdown: error"
-            )
+            Logger.warning("Plugin #{plugin.name} terminate failed during shutdown: error")
         end
       end
     end)
@@ -497,7 +505,7 @@ defmodule Mana.Plugin.Manager do
 
         {:error, reason} ->
           if Keyword.get(state.config, :auto_dismiss_errors, true) do
-            Logger.error("Failed to load plugin \#{inspect(module)}: \#{inspect(reason)}")
+            Logger.error("Failed to load plugin #{inspect(module)}: #{inspect(reason)}")
             {:cont, {:ok, acc_state}}
           else
             {:halt, {:error, {module, reason}}}
@@ -583,7 +591,7 @@ defmodule Mana.Plugin.Manager do
           if Hook.valid?(hook) and is_function(func) do
             true
           else
-            Logger.warning("Invalid hook \#{inspect(hook)} from plugin \#{plugin_name}")
+            Logger.warning("Invalid hook #{inspect(hook)} from plugin #{plugin_name}")
             false
           end
         end)
@@ -605,7 +613,7 @@ defmodule Mana.Plugin.Manager do
           stats: %{state.stats | plugins_loaded: state.stats.plugins_loaded + 1}
       }
 
-      Logger.info("Loaded plugin: \#{plugin_name} (\#{length(valid_hooks)} hooks)")
+      Logger.info("Loaded plugin: #{plugin_name} (#{length(valid_hooks)} hooks)")
       {:ok, plugin_record, new_state}
     else
       true -> {:error, :already_loaded}
@@ -632,7 +640,7 @@ defmodule Mana.Plugin.Manager do
   defp do_trigger(hook, args, opts, state, mode) do
     # Validate hook
     if not Hook.valid?(hook) do
-      Logger.warning("Invalid hook triggered: \#{inspect(hook)}")
+      Logger.warning("Invalid hook triggered: #{inspect(hook)}")
       {[], state}
     else
       callbacks = Map.get(state.hooks, hook, [])
@@ -691,11 +699,11 @@ defmodule Mana.Plugin.Manager do
         Enum.map(callbacks, fn {func, plugin_name} ->
           try do
             result = apply_callback(func, args)
-            Logger.debug("Hook \#{plugin_name} succeeded")
+            Logger.debug("Hook #{plugin_name} succeeded")
             result
           catch
             kind, reason ->
-              Logger.error("Hook \#{plugin_name} failed: \#{kind} \#{inspect(reason)}")
+              Logger.error("Hook #{plugin_name} failed: #{kind} #{inspect(reason)}")
 
               if continue_on_error do
                 {:error, {kind, reason}}
@@ -756,7 +764,7 @@ defmodule Mana.Plugin.Manager do
     new_backlog = Map.put(final_state.backlog, hook, [])
     final_state = %{final_state | backlog: new_backlog}
 
-    Logger.info("Drained \#{hook} backlog: \#{length(valid_events)} events replayed")
+    Logger.info("Drained #{hook} backlog: #{length(valid_events)} events replayed")
     {results, final_state}
   end
 end

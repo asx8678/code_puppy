@@ -5,8 +5,6 @@ defmodule Mana.TestSupport.MockPlugin do
 
   @behaviour Mana.Plugin.Behaviour
 
-  defstruct [:name, :calls]
-
   @impl true
   def name, do: "mock_plugin"
 
@@ -40,7 +38,10 @@ defmodule Mana.TestSupport.MockPlugin do
   end
 
   def on_run_end(agent_name, model_name, session_id, success, error, response, metadata) do
-    send_test_event({:hook_called, :agent_run_end, [agent_name, model_name, session_id, success, error, response, metadata]})
+    send_test_event(
+      {:hook_called, :agent_run_end, [agent_name, model_name, session_id, success, error, response, metadata]}
+    )
+
     :ok
   end
 
@@ -49,6 +50,7 @@ defmodule Mana.TestSupport.MockPlugin do
     if Process.whereis(:test_collector) do
       send(:test_collector, event)
     end
+
     :ok
   end
 end

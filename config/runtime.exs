@@ -27,8 +27,12 @@ if config_env() == :prod do
   # Plugin configuration from environment
   plugin_list =
     case System.get_env("MANA_PLUGINS") do
-      nil -> [:discover]
-      "" -> [:discover]
+      nil ->
+        [:discover]
+
+      "" ->
+        [:discover]
+
       plugins ->
         plugins
         |> String.split(",")

@@ -30,14 +30,15 @@ config :mana, Mana.Plugin.Manager,
   auto_dismiss_errors: true,
 
   # Plugin-specific configurations
-  plugin_configs: %{
-    # Example:
-    # Mana.Plugins.Logger => %{
-    #   level: :info,
-    #   log_tool_calls: true,
-    #   log_stream_events: false
-    # }
-  }
+  plugin_configs:
+    %{
+      # Example:
+      # Mana.Plugins.Logger => %{
+      #   level: :info,
+      #   log_tool_calls: true,
+      #   log_stream_events: false
+      # }
+    }
 
 # Additional namespaces to search for plugins
 config :mana,
