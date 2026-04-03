@@ -419,18 +419,28 @@ invoke_agent("turbo-executor", "Find all files using the deprecated 'old_functio
 
 
 def _register_turbo_agents():
-    """Register the turbo-executor agent for discovery.
+    """Register the turbo-executor agent for discovery (optional).
 
-    Returns a list of agent definitions for the register_agents callback.
+    The turbo executor works as a tool with ANY agent — this registration
+    just adds a dedicated agent as a bonus. If the agent class isn't
+    available (e.g., missing dependency), we silently skip it.
+
+    Returns a list of agent definitions, or empty list if agent unavailable.
     """
-    from code_puppy.agents.agent_turbo_executor import TurboExecutorAgent
+    try:
+        from code_puppy.agents.agent_turbo_executor import TurboExecutorAgent
 
-    return [
-        {
-            "name": "turbo-executor",
-            "class": TurboExecutorAgent,
-        }
-    ]
+        return [
+            {
+                "name": "turbo-executor",
+                "class": TurboExecutorAgent,
+            }
+        ]
+    except ImportError:
+        logger.debug(
+            "TurboExecutorAgent not available — turbo_execute tool still works with any agent"
+        )
+        return []
 
 
 # Register all callbacks

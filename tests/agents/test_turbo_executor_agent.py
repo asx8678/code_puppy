@@ -23,7 +23,7 @@ class TestTurboExecutorAgent:
         assert agent.name == "turbo-executor"
         assert agent.display_name == "Turbo Executor 🚀"
         assert "batch file operations" in agent.description.lower()
-        assert "1m context" in agent.description.lower()
+        assert "any model" in agent.description.lower()
 
     def test_uses_config_based_model_pinning(self):
         """Test that the agent uses config-based model pinning (not hardcoded)."""
@@ -132,7 +132,7 @@ class TestTurboExecutorAgent:
         )
 
         with patch(
-            "code_puppy.agents.agent_turbo_executor.TurboOrchestrator"
+            "code_puppy.plugins.turbo_executor.register_callbacks._get_orchestrator"
         ) as mock_orchestrator_class:
             mock_orchestrator = MagicMock()
             mock_orchestrator.execute = AsyncMock(return_value=mock_result)

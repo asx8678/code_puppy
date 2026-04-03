@@ -1,7 +1,7 @@
 """Turbo Executor Agent — Batch file operations specialist.
 
 A specialized agent for high-performance batch file operations using
-the turbo executor plugin. Pinned to Xiaomi V2 Pro for its 1M context window.
+the turbo executor plugin. Works with any model — model pinning is config-driven.
 """
 
 from typing import Any
@@ -12,7 +12,6 @@ from code_puppy.plugins.turbo_executor import (
     OperationType,
     Plan,
     PlanResult,
-    TurboOrchestrator,
     summarize_plan_result,
     quick_summary,
 )
@@ -25,8 +24,9 @@ class TurboExecutorAgent(BaseAgent):
     high performance using the turbo orchestrator. Designed for large-scale
     codebase exploration and analysis tasks.
 
-    Pinned to Xiaomi V2 Pro model for its 1M context window capability,
-    enabling processing of large file batches in a single context.
+    Model-agnostic: works with any model. For best results with large batches,
+    configure this agent to use a model with a large context window via
+    agent_model_turbo-executor in puppy.cfg.
     """
 
     # Model pinning: Xiaomi V2 Pro with 1M context window
@@ -42,7 +42,7 @@ class TurboExecutorAgent(BaseAgent):
     @property
     def description(self) -> str:
         return (
-            "High-performance batch file operations specialist with 1M context window"
+            "High-performance batch file operations specialist — works with any model"
         )
 
     def get_available_tools(self) -> list[str]:
@@ -101,7 +101,11 @@ You work at turbo speed! ⚡
         Returns:
             PlanResult with all operation results
         """
-        orchestrator = TurboOrchestrator()
+        from code_puppy.plugins.turbo_executor.register_callbacks import (
+            _get_orchestrator,
+        )
+
+        orchestrator = _get_orchestrator()
         return await orchestrator.execute(plan)
 
     def summarize_result(

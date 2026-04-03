@@ -399,11 +399,6 @@ class TestPluginIntegration:
         """Test that all plugin modules can be imported."""
         from code_puppy.plugins.turbo_executor import (
             Operation,
-            OperationResult,
-            OperationType,
-            Plan,
-            PlanResult,
-            PlanStatus,
             TurboOrchestrator,
         )
 
