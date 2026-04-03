@@ -723,22 +723,23 @@ class RichConsoleRenderer:
     # =========================================================================
 
     def _render_agent_reasoning(self, msg: AgentReasoningMessage) -> None:
-        """Render agent reasoning matching old format."""
-        # Header matching old format
-        banner = self._format_banner("agent_reasoning", "AGENT REASONING")
+        """Render agent reasoning with dim styling to reduce scroll fatigue."""
+        # Use tier 2 banner (shorter, less prominent)
+        banner = self._format_banner("agent_reasoning", "THINKING")
         self._console.print(f"\n{banner}")
 
-        # Current reasoning
-        self._console.print("[bold cyan]Current reasoning:[/bold cyan]")
-        # Render reasoning as markdown
-        md = Markdown(msg.reasoning)
-        self._console.print(md)
+        # Render reasoning in dim style with left pipe border
+        lines = msg.reasoning.split("\n")
+        for line in lines:
+            self._console.print(f"  [dim]│[/dim] [dim]{escape_rich_markup(line)}[/dim]")
 
-        # Next steps (if any)
+        # Next steps (if any) - slightly brighter than reasoning
         if msg.next_steps and msg.next_steps.strip():
-            self._console.print("\n[bold cyan]Planned next steps:[/bold cyan]")
-            md_steps = Markdown(msg.next_steps)
-            self._console.print(md_steps)
+            self._console.print("  [dim]│[/dim]")
+            self._console.print("  [dim]│[/dim] [bold dim]Planned next steps:[/bold dim]")
+            step_lines = msg.next_steps.split("\n")
+            for line in step_lines:
+                self._console.print(f"  [dim]│[/dim] [dim]{escape_rich_markup(line)}[/dim]")
 
         # Trailing newline for spinner separation
         self._console.print()
