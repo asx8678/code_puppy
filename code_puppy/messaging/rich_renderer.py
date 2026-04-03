@@ -575,13 +575,21 @@ class RichConsoleRenderer:
                     ln = match.line_number
                     self._console.print(f"  [dim]{ln:4d}[/dim] │ {highlighted_line}")
         else:
-            # Concise mode (default): Show only file summaries
+            # Concise mode (default): Show file summaries with preview snippet
             self._console.print("")
             for file_path in sorted(by_file.keys()):
                 file_matches = by_file[file_path]
                 match_word = "match" if len(file_matches) == 1 else "matches"
+                # Show first match content as preview (truncated to 80 chars)
+                preview = ""
+                if file_matches:
+                    first_match = file_matches[0]
+                    content = first_match.line_content.strip()
+                    if len(content) > 80:
+                        content = content[:77] + "..."
+                    preview = f" — [dim]{escape_rich_markup(content)}[/dim]"
                 self._console.print(
-                    f"[dim]📄 {file_path} ({len(file_matches)} {match_word})[/dim]"
+                    f"[dim]📄 {file_path} ({len(file_matches)} {match_word}){preview}[/dim]"
                 )
 
         # Summary - subtle
