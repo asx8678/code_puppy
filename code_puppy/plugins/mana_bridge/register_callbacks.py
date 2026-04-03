@@ -71,11 +71,25 @@ def _on_startup() -> None:
         try:
             from code_puppy import __version__
 
+            # Get current agent and model info for hello handshake
+            agent_name = "code-puppy"
+            model_name = "unknown"
+            try:
+                from code_puppy.agents.agent_manager import get_current_agent_name
+                from code_puppy.config import get_value
+
+                agent_name = get_current_agent_name()
+                model_name = get_value("model") or "unknown"
+            except Exception:
+                pass
+
             client.send_event(
                 "hello",
                 {
                     "version": __version__,
                     "bridge_type": "code_puppy",
+                    "agent_name": agent_name,
+                    "model_name": model_name,
                 },
             )
             # Send available models list
