@@ -32,7 +32,11 @@ _pending_prompts: queue.Queue[str] = queue.Queue(maxsize=100)
 
 # Background executor thread that runs prompts through the agent
 _executor_thread: threading.Thread | None = None
-_executor_lock = threading.Lock()  # Prevent concurrent agent runs from bridge
+_current_prompt_task: asyncio.Task | None = None
+_executor_lock: asyncio.Lock | None = None  # Prevent concurrent agent runs from bridge
+
+# Shutdown flag for the bridge executor loop
+_bridge_shutdown = False
 
 
 # ------------------------------------------------------------------
@@ -66,6 +70,7 @@ def _on_startup() -> None:
         client.register_handler("prompt", _handle_prompt_request)
         client.register_handler("switch_agent", _handle_switch_agent_request)
         client.register_handler("switch_model", _handle_switch_model_request)
+        client.register_handler("cancel", _handle_cancel_request)
 
         # Send hello handshake
         try:
@@ -188,8 +193,11 @@ def _handle_prompt_request(msg: dict) -> None:
     except queue.Full:
         logger.warning("Bridge prompt queue full — dropping prompt from Mana")
 
-    # Acknowledge receipt
-    if _client is not None:
+    # Acknowledge receipt — reuse request id for correlation
+    request_id = msg.get("id")
+    if _client is not None and request_id:
+        _client.send_response("prompt_ack", {"status": "queued"}, request_id=request_id)
+    elif _client is not None:
         _client.send_event("prompt_ack", {"status": "queued"})
 
 
@@ -228,6 +236,24 @@ def _handle_switch_model_request(msg: dict) -> None:
         logger.info("Bridge switched model to: %s (result: %s)", model_name, result)
 
 
+def _handle_cancel_request(msg: dict) -> None:
+    """Handle cancel request from Mana.
+
+    Cancels the currently running prompt task if one is active.
+    """
+    global _current_prompt_task
+    task = _current_prompt_task
+    if task is not None and not task.done():
+        task.cancel()
+        logger.info("Bridge cancelled current prompt task")
+        if _client is not None:
+            _client.send_event("cancel_ack", {"status": "cancelled"})
+    else:
+        logger.debug("Bridge cancel requested but no active task")
+        if _client is not None:
+            _client.send_event("cancel_ack", {"status": "no_active_task"})
+
+
 def get_pending_bridge_prompts() -> list[str]:
     """Return all pending prompts received from Mana (non-blocking).
 
@@ -246,7 +272,9 @@ def get_pending_bridge_prompts() -> list[str]:
 
 def _on_shutdown() -> None:
     """Close the Mana bridge connection on shutdown."""
-    global _client, _executor_thread
+    global _client, _executor_thread, _bridge_shutdown
+
+    _bridge_shutdown = True
 
     # Signal executor to stop (closing client will cause it to wind down)
     _executor_thread = None
@@ -291,7 +319,9 @@ def _prompt_executor_run() -> None:
 
 async def _prompt_executor_async() -> None:
     """Async loop that polls the pending prompts queue and executes them."""
-    while True:
+    global _executor_lock
+    _executor_lock = asyncio.Lock()
+    while not _bridge_shutdown:
         try:
             text = _pending_prompts.get_nowait()
         except queue.Empty:
@@ -310,7 +340,7 @@ async def _execute_bridge_prompt(text: str) -> None:
     (stream_event, agent_run_start/end, tool calls) fire automatically
     and are forwarded to Mana by the existing bridge plumbing.
     """
-    with _executor_lock:
+    async with _executor_lock:
         try:
             from code_puppy.agents.agent_manager import get_current_agent
 
@@ -328,7 +358,13 @@ async def _execute_bridge_prompt(text: str) -> None:
                 return
 
             # Run the agent — callbacks fire during this call
-            result = await agent.run_with_mcp(text)
+            global _current_prompt_task
+            task = asyncio.ensure_future(agent.run_with_mcp(text))
+            _current_prompt_task = task
+            try:
+                result = await task
+            finally:
+                _current_prompt_task = None
 
             if result is not None:
                 response_text = result.output or ""

@@ -410,6 +410,7 @@ class TestPromptExecutor:
 
         # Reset executor thread state
         rc._executor_thread = None
+        rc._bridge_shutdown = False
 
         rc._start_prompt_executor()
 

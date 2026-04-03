@@ -190,6 +190,31 @@ class BridgeClient:
         except queue.Full:
             logger.debug("Mana bridge send queue full — dropping '%s'", name)
 
+    def send_response(self, name: str, data: Any = None, *, request_id: str) -> None:
+        """Enqueue a response message correlated to a specific request.
+
+        Unlike ``send_event``, this reuses the *request_id* so that Mana
+        can match the response to the originating request.
+
+        Args:
+            name: Response name (e.g. ``"prompt_ack"``).
+            data: Arbitrary msgpack-serializable payload.
+            request_id: The ``id`` from the original request message.
+        """
+        if self._closed:
+            return
+
+        msg: dict[str, Any] = {
+            "id": request_id,
+            "type": "response",
+            "name": name,
+            "data": data,
+        }
+        try:
+            self._send_queue.put_nowait(msg)
+        except queue.Full:
+            logger.debug("Mana bridge send queue full — dropping response '%s'", name)
+
     def register_handler(self, name: str, handler) -> None:
         """Register a handler for incoming requests from Mana.
 
