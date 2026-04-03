@@ -22,11 +22,7 @@ from pydantic_ai import Agent, RunContext, UsageLimits
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.exceptions import ModelHTTPError
 
-from code_puppy.config import (
-    DATA_DIR,
-    get_message_limit,
-    get_use_dbos,
-    get_value)
+from code_puppy.config import DATA_DIR, get_message_limit, get_use_dbos, get_value
 from code_puppy.messaging import (
     SubAgentInvocationMessage,
     SubAgentResponseMessage,
@@ -35,7 +31,8 @@ from code_puppy.messaging import (
     emit_success,
     get_message_bus,
     get_session_context,
-    set_session_context)
+    set_session_context,
+)
 from code_puppy.persistence import atomic_write_msgpack
 from code_puppy.tools.common import generate_group_id
 from code_puppy.tools.subagent_context import subagent_context
@@ -66,6 +63,7 @@ def _generate_dbos_workflow_id(base_id: str) -> str:
     """
     counter = next(_dbos_workflow_counter)
     return f"{base_id}-wf-{counter}"
+
 
 # Constants for streaming retry logic
 # These match the test constants in tests/agents/test_streaming_retry.py
@@ -136,9 +134,6 @@ async def _run_with_streaming_retry(run_coro_factory):
             else:
                 raise
     raise last_error
-
-
-
 
 
 def _generate_session_hash_suffix() -> str:
@@ -239,7 +234,8 @@ def _save_session_history(
     session_id: str,
     message_history: list[ModelMessage],
     agent_name: str,
-    initial_prompt: str | None = None) -> None:
+    initial_prompt: str | None = None,
+) -> None:
     """Save session history to filesystem.
 
     Args:
@@ -260,6 +256,7 @@ def _save_session_history(
     # We store the pydantic-ai JSON payload inside msgpack so datetime-bearing
     # messages round-trip safely without relying on msgpack extension hooks.
     from pydantic_ai.messages import ModelMessagesTypeAdapter
+
     payload = {
         "format": "pydantic-ai-json",
         "payload": ModelMessagesTypeAdapter.dump_json(message_history),
@@ -319,6 +316,7 @@ def _load_session_history(session_id: str) -> list[ModelMessage]:
             raw = msgpack_path.read_bytes()
             data = msgpack.unpackb(raw, raw=False)
             from pydantic_ai.messages import ModelMessagesTypeAdapter
+
             if isinstance(data, dict) and data.get("format") == "pydantic-ai-json":
                 payload = data.get("payload", b"[]")
                 if isinstance(payload, str):
@@ -331,6 +329,7 @@ def _load_session_history(session_id: str) -> list[ModelMessage]:
     if pkl_path.exists():
         try:
             import pickle  # noqa: S403 — legacy format only
+
             with open(pkl_path, "rb") as f:
                 return pickle.load(f)  # noqa: S301
         except Exception:
@@ -394,7 +393,8 @@ def register_list_agents(agent):
                 AgentInfo(
                     name=name,
                     display_name=display_name,
-                    description=descriptions_dict.get(name, "No description available"))
+                    description=descriptions_dict.get(name, "No description available"),
+                )
                 for name, display_name in agents_dict.items()
             ]
 
@@ -405,7 +405,8 @@ def register_list_agents(agent):
                     f"[bold white on {list_agents_color}] LIST AGENTS [/bold white on {list_agents_color}] "
                     f"[dim]Found {agent_count} agent(s).[/dim]"
                 ),
-                message_group=group_id)
+                message_group=group_id,
+            )
 
             return ListAgentsOutput(agents=agents)
 
@@ -486,7 +487,8 @@ def register_invoke_agent(agent):
                 session_id=session_id,
                 prompt=prompt,
                 is_new_session=is_new_session,
-                message_count=len(message_history))
+                message_count=len(message_history),
+            )
         )
 
         # Save current session context and set the new one for this sub-agent
@@ -497,14 +499,14 @@ def register_invoke_agent(agent):
         # This uses contextvars which properly propagate through async tasks
         from code_puppy.tools.browser.terminal_tools import (
             _terminal_session_var,
-            set_terminal_session)
+            set_terminal_session,
+        )
 
         terminal_session_token = set_terminal_session(f"terminal-{session_id}")
 
         # Set browser session for browser tools (qa-kitten, etc.)
         # This allows parallel agent invocations to each have their own browser
-        from code_puppy.tools.browser.browser_manager import (
-            set_browser_session)
+        from code_puppy.tools.browser.browser_manager import set_browser_session
 
         browser_session_token = set_browser_session(f"browser-{session_id}")
 
@@ -590,7 +592,8 @@ def register_invoke_agent(agent):
                     retries=3,
                     toolsets=[],  # MCP servers added separately for DBOS
                     history_processors=[agent_config.message_history_accumulator],
-                    model_settings=model_settings)
+                    model_settings=model_settings,
+                )
 
                 # Register the tools that the agent needs
                 from code_puppy.tools import register_tools_for_agent
@@ -599,9 +602,7 @@ def register_invoke_agent(agent):
                 register_tools_for_agent(temp_agent, agent_tools, model_name=model_name)
 
                 # Wrap with DBOS - no streaming for sub-agents
-                dbos_agent = DBOSAgent(
-                    temp_agent,
-                    name=subagent_name)
+                dbos_agent = DBOSAgent(temp_agent, name=subagent_name)
                 temp_agent = dbos_agent
 
                 # Store MCP servers to add at runtime
@@ -615,7 +616,8 @@ def register_invoke_agent(agent):
                     retries=3,
                     toolsets=mcp_servers,
                     history_processors=[agent_config.message_history_accumulator],
-                    model_settings=model_settings)
+                    model_settings=model_settings,
+                )
 
                 # Register the tools that the agent needs
                 from code_puppy.tools import register_tools_for_agent
@@ -655,7 +657,8 @@ def register_invoke_agent(agent):
                                     usage_limits=UsageLimits(
                                         request_limit=get_message_limit()
                                     ),
-                                    event_stream_handler=stream_handler)
+                                    event_stream_handler=stream_handler,
+                                )
                             )
                         )
                         _active_subagent_tasks.add(task)
@@ -665,8 +668,11 @@ def register_invoke_agent(agent):
                             lambda: temp_agent.run(
                                 prompt,
                                 message_history=message_history,
-                                usage_limits=UsageLimits(request_limit=get_message_limit()),
-                                event_stream_handler=stream_handler)
+                                usage_limits=UsageLimits(
+                                    request_limit=get_message_limit()
+                                ),
+                                event_stream_handler=stream_handler,
+                            )
                         )
                     )
                     _active_subagent_tasks.add(task)
@@ -695,7 +701,8 @@ def register_invoke_agent(agent):
                 session_id=session_id,
                 message_history=updated_history,
                 agent_name=agent_name,
-                initial_prompt=prompt if is_new_session else None)
+                initial_prompt=prompt if is_new_session else None,
+            )
 
             # Emit structured response message via MessageBus
             bus.emit(
@@ -703,7 +710,8 @@ def register_invoke_agent(agent):
                     agent_name=agent_name,
                     session_id=session_id,
                     response=response,
-                    message_count=len(updated_history))
+                    message_count=len(updated_history),
+                )
             )
 
             # Emit clean completion summary
@@ -727,7 +735,8 @@ def register_invoke_agent(agent):
                 response=None,
                 agent_name=agent_name,
                 session_id=session_id,
-                error=error_msg)
+                error=error_msg,
+            )
 
         finally:
             # Restore the previous session context
@@ -735,8 +744,7 @@ def register_invoke_agent(agent):
             # Reset terminal session context
             _terminal_session_var.reset(terminal_session_token)
             # Reset browser session context
-            from code_puppy.tools.browser.browser_manager import (
-                _browser_session_var)
+            from code_puppy.tools.browser.browser_manager import _browser_session_var
 
             _browser_session_var.reset(browser_session_token)
 

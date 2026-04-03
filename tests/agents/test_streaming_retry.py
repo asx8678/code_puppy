@@ -14,6 +14,8 @@ import httpcore
 import httpx
 import pytest
 
+from pydantic_ai.exceptions import ModelHTTPError
+
 
 # ---- Helpers to build the retry function in isolation ----
 # We extract the retry logic so tests don't need to instantiate the full agent.
@@ -27,8 +29,16 @@ RETRYABLE_EXCEPTIONS = (
 )
 
 
+def _is_transient_model_error(error: ModelHTTPError) -> bool:
+    """Mirror of the transient error detection helper for isolated testing."""
+    if error.status_code == 400:
+        body_str = str(error.body or "").lower()
+        return "connection prematurely closed" in body_str
+    return False
+
+
 async def _run_with_streaming_retry(run_coro_factory):
-    """Mirror of the retry logic in base_agent.py for isolated testing."""
+    """Mirror of the retry logic in agent_tools.py for isolated testing."""
     last_error = None
     for attempt in range(MAX_STREAMING_RETRIES):
         try:
@@ -38,6 +48,14 @@ async def _run_with_streaming_retry(run_coro_factory):
             if attempt < MAX_STREAMING_RETRIES - 1:
                 delay = STREAMING_RETRY_DELAYS[attempt]
                 await asyncio.sleep(delay)
+        except ModelHTTPError as e:
+            if _is_transient_model_error(e):
+                last_error = e
+                if attempt < MAX_STREAMING_RETRIES - 1:
+                    delay = STREAMING_RETRY_DELAYS[attempt]
+                    await asyncio.sleep(delay)
+            else:
+                raise
     raise last_error
 
 
@@ -172,6 +190,75 @@ class TestStreamingRetry:
             side_effect=[
                 httpx.RemoteProtocolError("peer closed"),
                 httpcore.RemoteProtocolError("peer closed again"),
+                "success",
+            ]
+        )
+
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await _run_with_streaming_retry(factory)
+
+        assert result == "success"
+        assert factory.await_count == 3
+
+    @pytest.mark.asyncio
+    async def test_retries_on_transient_modelhttperror(self):
+        """Retries when ModelHTTPError with transient body is raised."""
+        transient_error = ModelHTTPError(
+            status_code=400,
+            model_name="test-model",
+            body="Connection prematurely closed BEFORE response",
+        )
+        factory = AsyncMock(side_effect=[transient_error, "recovered"])
+
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await _run_with_streaming_retry(factory)
+
+        assert result == "recovered"
+        assert factory.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_non_transient_modelhttperror_propagates_immediately(self):
+        """Non-transient ModelHTTPError (e.g. real 400) propagates immediately."""
+        non_transient_error = ModelHTTPError(
+            status_code=400,
+            model_name="test-model",
+            body="Invalid API key",
+        )
+        factory = AsyncMock(side_effect=non_transient_error)
+
+        with pytest.raises(ModelHTTPError, match="Invalid API key"):
+            await _run_with_streaming_retry(factory)
+
+        assert factory.await_count == 1  # No retry
+
+    @pytest.mark.asyncio
+    async def test_transient_modelhttperror_exhausts_retries(self):
+        """Raises after exhausting retries for transient ModelHTTPError."""
+        transient_error = ModelHTTPError(
+            status_code=400,
+            model_name="test-model",
+            body="Connection prematurely closed BEFORE response",
+        )
+        factory = AsyncMock(side_effect=transient_error)
+
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(ModelHTTPError):
+                await _run_with_streaming_retry(factory)
+
+        assert factory.await_count == MAX_STREAMING_RETRIES
+
+    @pytest.mark.asyncio
+    async def test_mixed_transient_errors_protocol_and_model(self):
+        """Handles mix of RemoteProtocolError and transient ModelHTTPError."""
+        transient_model_error = ModelHTTPError(
+            status_code=400,
+            model_name="test-model",
+            body="Connection prematurely closed BEFORE response",
+        )
+        factory = AsyncMock(
+            side_effect=[
+                httpx.RemoteProtocolError("peer closed"),
+                transient_model_error,
                 "success",
             ]
         )
