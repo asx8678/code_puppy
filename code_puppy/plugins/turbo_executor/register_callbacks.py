@@ -451,4 +451,9 @@ register_callback("register_tools", _register_turbo_tools)
 register_callback("load_prompt", _load_turbo_prompt)
 register_callback("register_agents", _register_turbo_agents)
 
+# Register visual notifications for turbo_execute tool calls
+from code_puppy.plugins.turbo_executor.notifications import register as register_notifications
+
+register_notifications()
+
 logger.info("Turbo Executor plugin callbacks registered")

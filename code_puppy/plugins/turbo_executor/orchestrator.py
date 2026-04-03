@@ -22,6 +22,13 @@ from code_puppy.plugins.turbo_executor.models import (
     PlanStatus,
 )
 
+# Import notifications for progress emission
+try:
+    from code_puppy.plugins.turbo_executor import notifications as _notifications
+    _NOTIFICATIONS_AVAILABLE = True
+except ImportError:
+    _NOTIFICATIONS_AVAILABLE = False
+
 # Try to import Rust turbo_ops for accelerated file operations
 try:
     from turbo_ops import list_files as turbo_list_files
@@ -152,12 +159,35 @@ class TurboOrchestrator:
         )
 
     async def _execute_sequential(self, plan: Plan) -> list[OperationResult]:
-        """Execute operations sequentially in priority order."""
+        """Execute operations sequentially in priority order with progress emission."""
         results: list[OperationResult] = []
+        total = len(plan.operations)
 
-        for operation in plan.operations:
+        for i, operation in enumerate(plan.operations):
+            current = i + 1
+            op_type = operation.type.value
+
+            # Emit start progress
+            if _NOTIFICATIONS_AVAILABLE:
+                _notifications.emit_operation_start(
+                    current, total, op_type, operation.args
+                )
+
+            # Execute the operation
             result = await self._execute_operation(operation)
             results.append(result)
+
+            # Emit completion or error progress
+            if _NOTIFICATIONS_AVAILABLE:
+                if result.status == "error":
+                    _notifications.emit_operation_error(
+                        current, total, op_type, result.error or "Unknown error"
+                    )
+                else:
+                    _notifications.emit_operation_complete(
+                        current, total, op_type, operation.args,
+                        result.duration_ms, result.data
+                    )
 
         return results
 
