@@ -237,16 +237,14 @@ def save_session(
         # that may have been captured in message metadata during tool execution.
         # DBOS uses pickle for workflow durability, which cannot serialize coroutines.
         try:
-            json_data = ModelMessagesTypeAdapter.dump_json(history)
-            sanitized_history = ModelMessagesTypeAdapter.validate_json(json_data)
+            serializable_history = ModelMessagesTypeAdapter.dump_python(
+                history, mode="json"
+            )
         except Exception as e:
             # Log the sanitization failure so we can track if this becomes a recurring issue
             logger.warning(f"Message sanitization failed in save_session: {e}. Using original history.")
-            sanitized_history = history
+            serializable_history = history
 
-        serializable_history = ModelMessagesTypeAdapter.dump_python(
-            sanitized_history, mode="json"
-        )
     except Exception:
         # Fallback for non-pydantic history (e.g. tests with plain strings)
         serializable_history = history
