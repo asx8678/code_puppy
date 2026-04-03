@@ -677,10 +677,10 @@ class RichConsoleRenderer:
             safe_cwd = escape_rich_markup(msg.cwd)
             self._console.print(f"[dim]📂 Working directory: {safe_cwd}[/dim]")
 
-        # Show timeout or background status
+        # Show timeout only when non-default (hides clutter for normal commands)
         if msg.background:
             self._console.print("[dim]⏱ Runs detached (no timeout)[/dim]")
-        else:
+        elif msg.timeout != 60:
             self._console.print(f"[dim]⏱ Timeout: {msg.timeout}s[/dim]")
 
     def _render_shell_line(self, msg: ShellLineMessage) -> None:
