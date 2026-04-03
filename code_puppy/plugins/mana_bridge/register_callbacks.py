@@ -63,6 +63,12 @@ def _on_startup() -> None:
                     "bridge_type": "code_puppy",
                 },
             )
+            # Send available models list
+            model_data = _gather_model_list()
+            client.send_event("model_list", model_data)
+            logger.debug(
+                "Bridge sent model_list: %d models", len(model_data.get("models", []))
+            )
         except Exception as exc:
             logger.warning("Failed to send bridge hello: %s", exc)
 
@@ -316,6 +322,87 @@ async def _on_post_tool_call(
 
 
 # ------------------------------------------------------------------
+# Model list helper
+# ------------------------------------------------------------------
+
+
+def _gather_model_list() -> dict[str, Any]:
+    """Build a model_list payload from ModelFactory.load_config().
+
+    Returns a dict with ``models`` (list of model info dicts) and
+    ``current_model`` (the currently configured model name).
+    """
+    models: list[dict[str, Any]] = []
+    current_model: str | None = None
+
+    try:
+        from code_puppy.model_factory import ModelFactory
+
+        models_config = ModelFactory.load_config()
+        for name, cfg in models_config.items():
+            model_type = cfg.get("type", "unknown")
+            models.append({"name": name, "type": model_type})
+    except Exception as exc:
+        logger.warning("Failed to load model list for bridge: %s", exc)
+
+    # Sort by name for stable ordering
+    models.sort(key=lambda m: m["name"])
+
+    # Get current model from config
+    try:
+        from code_puppy.config import get_value
+
+        current_model = get_value("model")
+    except Exception as exc:
+        logger.warning("Failed to get current model for bridge: %s", exc)
+
+    return {"models": models, "current_model": current_model}
+
+
+# ------------------------------------------------------------------
+# Custom command: switch_model
+# ------------------------------------------------------------------
+
+
+def _on_switch_model(command: str, name: str) -> bool | str | None:
+    """Handle /model <name> slash command — switch active model.
+
+    This is registered as a ``custom_command`` callback so that the
+    CLI and the Mana bridge can both trigger model switches.
+    """
+    if command != "model":
+        return None  # not our command
+
+    if not name:
+        return "Usage: /model <model_name>"
+
+    try:
+        from code_puppy.model_switching import set_model_and_reload_agent
+        from code_puppy.model_factory import ModelFactory
+
+        models_config = ModelFactory.load_config()
+        if name not in models_config:
+            available = ", ".join(sorted(models_config.keys())[:10])
+            return f"Unknown model '{name}'. Available: {available}"
+
+        set_model_and_reload_agent(name)
+
+        # Notify Mana of the model change
+        if _client is not None:
+            _client.send_event("model_changed", {"model_name": name})
+
+        return f"Switched to model: {name}"
+    except Exception as exc:
+        logger.error("Failed to switch model: %s", exc)
+        return f"Failed to switch model: {exc}"
+
+
+def _on_switch_model_help() -> list[tuple[str, str]]:
+    """Provide help text for the /model command."""
+    return [("/model <name>", "Switch to a different AI model")]
+
+
+# ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
 
@@ -383,6 +470,8 @@ def register() -> None:
     register_callback("agent_run_end", _on_agent_run_end)
     register_callback("pre_tool_call", _on_pre_tool_call)
     register_callback("post_tool_call", _on_post_tool_call)
+    register_callback("custom_command", _on_switch_model)
+    register_callback("custom_command_help", _on_switch_model_help)
     logger.debug("Mana bridge callbacks registered")
 
 
