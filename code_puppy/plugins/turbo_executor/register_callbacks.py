@@ -36,7 +36,9 @@ def _on_startup():
     """Initialize the orchestrator on startup."""
     global _orchestrator
     _orchestrator = TurboOrchestrator()
-    ops_mode = "turbo_ops (Rust)" if _orchestrator._turbo_ops_available else "native Python"
+    ops_mode = (
+        "turbo_ops (Rust)" if _orchestrator._turbo_ops_available else "native Python"
+    )
     logger.info(f"Turbo Executor plugin initialized (using {ops_mode})")
 
 
@@ -123,18 +125,17 @@ def _handle_turbo_command(command: str, name: str) -> Any:
                 f"🚀 Executing turbo plan '{plan.id}' with {len(plan.operations)} operations..."
             )
 
-            # Execute (we need to run async in sync context)
-            import asyncio
+            # Execute in a dedicated thread to avoid nested event loops
+            import concurrent.futures
 
-            try:
-                asyncio.get_running_loop()
-                # We're in async context, create task
-                asyncio.ensure_future(orch.execute(plan))
-                emit_info("Plan execution started (async)")
-                return True
-            except RuntimeError:
-                # No running loop, use asyncio.run
-                result = asyncio.run(orch.execute(plan))
+            def _run_plan():
+                import asyncio
+
+                return asyncio.run(orch.execute(plan))
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(_run_plan)
+                result = future.result()
                 emit_info(f"✅ Plan completed: {result.status}")
                 emit_info(
                     f"   Operations: {result.success_count} success, {result.error_count} errors"
@@ -309,7 +310,9 @@ def _register_turbo_execute_tool(agent):
             # Add human-readable summary if requested
             if summarize:
                 response["summary"] = summarize_plan_result(result)
-                response["quick_summary"] = f"{result.success_count} success, {result.error_count} errors in {result.total_duration_ms:.0f}ms"
+                response["quick_summary"] = (
+                    f"{result.success_count} success, {result.error_count} errors in {result.total_duration_ms:.0f}ms"
+                )
 
             return response
 

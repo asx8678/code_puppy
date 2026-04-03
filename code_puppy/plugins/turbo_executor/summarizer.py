@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from collections.abc import Callable
+
 from code_puppy.plugins.turbo_executor.models import (
     OperationResult,
     OperationType,
@@ -23,7 +25,11 @@ DEFAULT_MAX_CONTENT_LINES = 100  # lines
 DEFAULT_MAX_GREP_MATCHES = 50  # matches to show before summarizing
 
 
-def _truncate_content(content: str, max_length: int = DEFAULT_MAX_CONTENT_LENGTH, max_lines: int = DEFAULT_MAX_CONTENT_LINES) -> str:
+def _truncate_content(
+    content: str,
+    max_length: int = DEFAULT_MAX_CONTENT_LENGTH,
+    max_lines: int = DEFAULT_MAX_CONTENT_LINES,
+) -> str:
     """Truncate content to reasonable limits for LLM consumption.
 
     Args:
@@ -129,16 +135,22 @@ def _summarize_grep(data: dict[str, Any]) -> str:
             matches_by_file[file_path] = []
         matches_by_file[file_path].append(match)
 
-    summary_parts = [f"🔍 **Search Results** ({total_matches} matches in {len(matches_by_file)} files)"]
+    summary_parts = [
+        f"🔍 **Search Results** ({total_matches} matches in {len(matches_by_file)} files)"
+    ]
     summary_parts.append("")
 
     # Show matches (limited)
     matches_shown = 0
     for file_path, file_matches in matches_by_file.items():
         if matches_shown >= DEFAULT_MAX_GREP_MATCHES:
-            remaining_files = len(matches_by_file) - list(matches_by_file.keys()).index(file_path)
+            remaining_files = len(matches_by_file) - list(matches_by_file.keys()).index(
+                file_path
+            )
             remaining_matches = total_matches - matches_shown
-            summary_parts.append(f"\n*... and {remaining_matches} more matches in {remaining_files} files*")
+            summary_parts.append(
+                f"\n*... and {remaining_matches} more matches in {remaining_files} files*"
+            )
             break
 
         summary_parts.append(f"**{file_path}** ({len(file_matches)} matches)")
@@ -173,7 +185,9 @@ def _summarize_read_files(data: dict[str, Any]) -> str:
     total_files = data.get("total_files", len(files))
     successful = data.get("successful_reads", sum(1 for f in files if f.get("success")))
 
-    summary_parts = [f"📄 **File Contents** ({successful}/{total_files} files read successfully)"]
+    summary_parts = [
+        f"📄 **File Contents** ({successful}/{total_files} files read successfully)"
+    ]
     summary_parts.append("")
 
     for file_info in files:
@@ -208,7 +222,7 @@ def _summarize_read_files(data: dict[str, Any]) -> str:
 
 
 # Mapping of operation types to their summarizers
-_OPERATION_SUMMARIZERS: dict[OperationType, callable] = {
+_OPERATION_SUMMARIZERS: dict[OperationType, Callable] = {
     OperationType.LIST_FILES: _summarize_list_files,
     OperationType.GREP: _summarize_grep,
     OperationType.READ_FILES: _summarize_read_files,
@@ -297,7 +311,9 @@ def summarize_plan_result(
         lines.append("")
 
         for op_result in plan_result.get_errors():
-            lines.append(f"- **{op_result.type.value}** (`{op_result.operation_id}`): {op_result.error}")
+            lines.append(
+                f"- **{op_result.type.value}** (`{op_result.operation_id}`): {op_result.error}"
+            )
 
     return "\n".join(lines)
 

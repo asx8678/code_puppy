@@ -10,6 +10,7 @@ import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Any
+from collections.abc import Callable
 
 from code_puppy.concurrency_limits import FileOpsLimiter
 from code_puppy.plugins.turbo_executor.models import (
@@ -63,7 +64,9 @@ class TurboOrchestrator:
         result = await orchestrator.execute(plan)
     """
 
-    def __init__(self, enable_parallel: bool = False, prefer_native_python: bool = False):
+    def __init__(
+        self, enable_parallel: bool = False, prefer_native_python: bool = False
+    ):
         """Initialize the orchestrator.
 
         Args:
@@ -74,7 +77,7 @@ class TurboOrchestrator:
         self.prefer_native_python = prefer_native_python
         self._turbo_ops_available = TURBO_OPS_AVAILABLE and not prefer_native_python
 
-        self._operation_handlers: dict[OperationType, callable] = {
+        self._operation_handlers: dict[OperationType, Callable] = {
             OperationType.LIST_FILES: self._execute_list_files,
             OperationType.GREP: self._execute_grep,
             OperationType.READ_FILES: self._execute_read_files,
@@ -251,9 +254,7 @@ class TurboOrchestrator:
         if self._turbo_ops_available and turbo_list_files is not None:
             try:
                 # Run in thread pool since turbo_ops is likely sync
-                result = await asyncio.to_thread(
-                    turbo_list_files, directory, recursive
-                )
+                result = await asyncio.to_thread(turbo_list_files, directory, recursive)
                 return {
                     "content": result,
                     "error": None,
@@ -281,9 +282,7 @@ class TurboOrchestrator:
         if self._turbo_ops_available and turbo_grep is not None:
             try:
                 # Run in thread pool since turbo_ops is likely sync
-                result = await asyncio.to_thread(
-                    turbo_grep, search_string, directory
-                )
+                result = await asyncio.to_thread(turbo_grep, search_string, directory)
                 return {
                     "matches": [
                         {
