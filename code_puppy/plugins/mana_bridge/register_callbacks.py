@@ -71,6 +71,8 @@ def _on_startup() -> None:
         client.register_handler("switch_agent", _handle_switch_agent_request)
         client.register_handler("switch_model", _handle_switch_model_request)
         client.register_handler("cancel", _handle_cancel_request)
+        client.register_handler("load_session", _handle_load_session_request)
+        client.register_handler("save_session", _handle_save_session_request)
 
         # Send hello handshake
         try:
@@ -103,6 +105,11 @@ def _on_startup() -> None:
             logger.debug(
                 "Bridge sent model_list: %d models", len(model_data.get("models", []))
             )
+            # Send round-robin status if active
+            rr_status = _gather_round_robin_status()
+            if rr_status:
+                client.send_event("model_rotation_status", rr_status)
+                logger.debug("Bridge sent model_rotation_status")
         except Exception as exc:
             logger.warning("Failed to send bridge hello: %s", exc)
 
@@ -111,6 +118,12 @@ def _on_startup() -> None:
             _send_agent_list(client)
         except Exception as exc:
             logger.warning("Failed to send agent_list event: %s", exc)
+
+        # Send available sessions
+        try:
+            _send_session_list(client)
+        except Exception as exc:
+            logger.warning("Failed to send session_list event: %s", exc)
 
         # Start the prompt executor thread
         _start_prompt_executor()
@@ -252,6 +265,106 @@ def _handle_cancel_request(msg: dict) -> None:
         logger.debug("Bridge cancel requested but no active task")
         if _client is not None:
             _client.send_event("cancel_ack", {"status": "no_active_task"})
+
+
+def _send_session_list(client: BridgeClient | None = None) -> None:
+    """Send the list of available sessions to Mana."""
+    if client is None:
+        client = _client
+    if client is None:
+        return
+
+    sessions: list[dict[str, Any]] = []
+    try:
+        from code_puppy.session_storage import SessionStore
+
+        store = SessionStore()
+        for info in store.list_sessions():
+            sessions.append({
+                "id": info.session_id,
+                "agent_name": info.agent_name or "unknown",
+                "model_name": info.model_name or "unknown",
+                "message_count": info.message_count or 0,
+                "updated_at": info.updated_at.isoformat() if info.updated_at else None,
+            })
+    except Exception as exc:
+        logger.warning("Failed to list sessions: %s", exc)
+
+    client.send_event("session_list", {"sessions": sessions})
+    logger.debug("Bridge sent session_list with %d sessions", len(sessions))
+
+
+def _handle_load_session_request(msg: dict) -> None:
+    """Handle load_session request from Mana."""
+    data = msg.get("data", {})
+    session_id = data.get("session_id", "")
+    if not session_id:
+        return
+
+    try:
+        from code_puppy.session_storage import SessionStore
+
+        store = SessionStore()
+        session_data = store.load_session(session_id)
+
+        if session_data is not None:
+            # Apply to current agent
+            from code_puppy.agents.agent_manager import get_current_agent
+            agent = get_current_agent()
+            if agent and hasattr(session_data, "messages"):
+                agent.set_message_history(session_data.messages)
+
+            if _client:
+                _client.send_event("session_loaded", {
+                    "session_id": session_id,
+                    "success": True,
+                    "message_count": len(session_data.messages) if hasattr(session_data, "messages") else 0,
+                })
+            logger.info("Bridge loaded session: %s", session_id)
+        else:
+            if _client:
+                _client.send_event("session_loaded", {
+                    "session_id": session_id,
+                    "success": False,
+                    "error": "Session not found",
+                })
+    except Exception as exc:
+        logger.error("Failed to load session via bridge: %s", exc)
+        if _client:
+            _client.send_event("session_loaded", {
+                "session_id": session_id,
+                "success": False,
+                "error": str(exc)[:200],
+            })
+
+
+def _handle_save_session_request(msg: dict) -> None:
+    """Handle save_session request from Mana."""
+    try:
+        from code_puppy.agents.agent_manager import get_current_agent
+        from code_puppy.session_storage import SessionStore
+
+        agent = get_current_agent()
+        if agent is None:
+            if _client:
+                _client.send_event("session_saved", {"success": False, "error": "No agent"})
+            return
+
+        store = SessionStore()
+        session_id = store.save_current_session(agent)
+
+        if _client:
+            _client.send_event("session_saved", {
+                "success": True,
+                "session_id": session_id,
+            })
+            # Refresh session list
+            _send_session_list()
+        logger.info("Bridge saved session: %s", session_id)
+    except Exception as exc:
+        logger.error("Failed to save session via bridge: %s", exc)
+        if _client:
+            _client.send_event("session_saved", {"success": False, "error": str(exc)[:200]})
 
 
 def get_pending_bridge_prompts() -> list[str]:
@@ -613,6 +726,60 @@ def _gather_model_list() -> dict[str, Any]:
 
 
 # ------------------------------------------------------------------
+# Round-robin status helper
+# ------------------------------------------------------------------
+
+
+def _gather_round_robin_status() -> dict[str, Any] | None:
+    """Build a model_rotation_status payload if round-robin is active.
+
+    Returns None if round-robin is not configured.
+    """
+    try:
+        from code_puppy.config import get_value
+
+        model_name = get_value("model") or ""
+
+        # Check if current model is a round-robin model
+        from code_puppy.model_factory import ModelFactory
+        models_config = ModelFactory.load_config()
+        model_cfg = models_config.get(model_name, {})
+
+        if model_cfg.get("type") != "round_robin":
+            return None
+
+        candidates = model_cfg.get("candidates", [])
+        rotate_every = model_cfg.get("rotate_every", 1)
+
+        # Try to get current index from the running model instance
+        current_index = 0
+        requests_until_rotation = rotate_every
+        try:
+            from code_puppy.agents.agent_manager import get_current_agent
+            agent = get_current_agent()
+            if agent and hasattr(agent, "_pydantic_agent"):
+                model = agent._pydantic_agent.model
+                if hasattr(model, "_current_index"):
+                    current_index = model._current_index
+                if hasattr(model, "_request_count"):
+                    requests_until_rotation = rotate_every - (model._request_count % rotate_every)
+        except Exception:
+            pass
+
+        return {
+            "active": True,
+            "model_name": model_name,
+            "candidates": candidates,
+            "rotate_every": rotate_every,
+            "current_index": current_index,
+            "requests_until_rotation": requests_until_rotation,
+        }
+    except Exception as exc:
+        logger.debug("Failed to gather round-robin status: %s", exc)
+        return None
+
+
+# ------------------------------------------------------------------
 # Custom command: switch_model
 # ------------------------------------------------------------------
 
@@ -643,6 +810,10 @@ def _on_switch_model(command: str, name: str) -> bool | str | None:
         # Notify Mana of the model change
         if _client is not None:
             _client.send_event("model_changed", {"model_name": name})
+            # Update round-robin status after model change
+            rr_status = _gather_round_robin_status()
+            if rr_status and _client is not None:
+                _client.send_event("model_rotation_status", rr_status)
 
         return f"Switched to model: {name}"
     except Exception as exc:
