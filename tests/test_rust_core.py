@@ -133,10 +133,10 @@ class TestMessageHashingCorrectness:
         msg2 = ModelRequest(parts=[TextPart(content="world")])
         assert agent.hash_message(msg1) != agent.hash_message(msg2)
 
-    def test_hash_is_int(self, agent):
+    def test_hash_is_str(self, agent):
         msg = ModelRequest(parts=[TextPart(content="test")])
         h = agent.hash_message(msg)
-        assert isinstance(h, int)
+        assert isinstance(h, str)
 
 
 class TestPruningCorrectness:
