@@ -39,8 +39,6 @@ class CodePuppyAgent(BaseAgent):
             "activate_skill",
             "list_or_search_skills",
             "load_image_for_analysis",
-            "get_second_opinion",
-            "check_response_confidence",
         ]
 
     def _has_extended_thinking(self) -> bool:
@@ -112,14 +110,7 @@ Important rules:
 {r["loop_rule"]}
 - Continue autonomously unless user input is definitively required
 
-## Consensus Escalation
-If you encounter a task involving architecture decisions, security concerns,
-or complex trade-offs where you're uncertain about the best approach:
-1. Use `check_response_confidence` to check if your response shows uncertainty
-2. If it recommends a second opinion, use `get_second_opinion` to get input from multiple AI models
-Only use this for genuinely high-stakes decisions — not for simple tasks.
 """
-
         prompt_additions = callbacks.on_load_prompt()
         # Filter None values — callbacks may return None or fail gracefully
         prompt_additions = [p for p in prompt_additions if p is not None]
