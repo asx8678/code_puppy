@@ -434,7 +434,7 @@ class RichConsoleRenderer:
                     count += get_recursive_file_count(sub)
                 return count
 
-            indent = "    " * depth
+            indent = "│   " * depth if depth > 0 else ""
 
             # For root level, just show contents
             if dir_path == root_key:
@@ -475,8 +475,9 @@ class RichConsoleRenderer:
                     parts.append(self._format_size(rec_size))
 
                 summary = f" [dim]({', '.join(parts)})[/dim]" if parts else ""
+                tree_prefix = "├── " if depth > 0 else ""
                 self._console.print(
-                    f"{indent}📁 [bold blue]{dir_name}/[/bold blue]{summary}"
+                    f"{indent}{tree_prefix}📁 [bold blue]{dir_name}/[/bold blue]{summary}"
                 )
 
                 # Recursively show subdirectories
@@ -575,13 +576,21 @@ class RichConsoleRenderer:
                     ln = match.line_number
                     self._console.print(f"  [dim]{ln:4d}[/dim] │ {highlighted_line}")
         else:
-            # Concise mode (default): Show only file summaries
+            # Concise mode (default): Show file summaries with preview snippet
             self._console.print("")
             for file_path in sorted(by_file.keys()):
                 file_matches = by_file[file_path]
                 match_word = "match" if len(file_matches) == 1 else "matches"
+                # Show first match content as preview (truncated to 80 chars)
+                preview = ""
+                if file_matches:
+                    first_match = file_matches[0]
+                    content = first_match.line_content.strip()
+                    if len(content) > 80:
+                        content = content[:77] + "..."
+                    preview = f" — [dim]{escape_rich_markup(content)}[/dim]"
                 self._console.print(
-                    f"[dim]📄 {file_path} ({len(file_matches)} {match_word})[/dim]"
+                    f"[dim]📄 {file_path} ({len(file_matches)} {match_word}){preview}[/dim]"
                 )
 
         # Summary - subtle
@@ -677,10 +686,10 @@ class RichConsoleRenderer:
             safe_cwd = escape_rich_markup(msg.cwd)
             self._console.print(f"[dim]📂 Working directory: {safe_cwd}[/dim]")
 
-        # Show timeout or background status
+        # Show timeout only when non-default (hides clutter for normal commands)
         if msg.background:
             self._console.print("[dim]⏱ Runs detached (no timeout)[/dim]")
-        else:
+        elif msg.timeout != 60:
             self._console.print(f"[dim]⏱ Timeout: {msg.timeout}s[/dim]")
 
     def _render_shell_line(self, msg: ShellLineMessage) -> None:
@@ -714,22 +723,23 @@ class RichConsoleRenderer:
     # =========================================================================
 
     def _render_agent_reasoning(self, msg: AgentReasoningMessage) -> None:
-        """Render agent reasoning matching old format."""
-        # Header matching old format
-        banner = self._format_banner("agent_reasoning", "AGENT REASONING")
+        """Render agent reasoning with dim styling to reduce scroll fatigue."""
+        # Use tier 2 banner (shorter, less prominent)
+        banner = self._format_banner("agent_reasoning", "THINKING")
         self._console.print(f"\n{banner}")
 
-        # Current reasoning
-        self._console.print("[bold cyan]Current reasoning:[/bold cyan]")
-        # Render reasoning as markdown
-        md = Markdown(msg.reasoning)
-        self._console.print(md)
+        # Render reasoning in dim style with left pipe border
+        lines = msg.reasoning.split("\n")
+        for line in lines:
+            self._console.print(f"  [dim]│[/dim] [dim]{escape_rich_markup(line)}[/dim]")
 
-        # Next steps (if any)
+        # Next steps (if any) - slightly brighter than reasoning
         if msg.next_steps and msg.next_steps.strip():
-            self._console.print("\n[bold cyan]Planned next steps:[/bold cyan]")
-            md_steps = Markdown(msg.next_steps)
-            self._console.print(md_steps)
+            self._console.print("  [dim]│[/dim]")
+            self._console.print("  [dim]│[/dim] [bold dim]Planned next steps:[/bold dim]")
+            step_lines = msg.next_steps.split("\n")
+            for line in step_lines:
+                self._console.print(f"  [dim]│[/dim] [dim]{escape_rich_markup(line)}[/dim]")
 
         # Trailing newline for spinner separation
         self._console.print()

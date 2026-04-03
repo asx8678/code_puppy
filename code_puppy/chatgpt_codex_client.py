@@ -104,15 +104,21 @@ class ChatGPTCodexAsyncClient(httpx.AsyncClient):
             content = request.content
             if content:
                 return content
-        except Exception:
-            pass
+        except (AttributeError, TypeError) as exc:
+            logger.debug(
+                "Could not extract request.content: %s: %s",
+                type(exc).__name__, exc,
+            )
 
         try:
             content = getattr(request, "_content", None)
             if content:
                 return content
-        except Exception:
-            pass
+        except (AttributeError, TypeError) as exc:
+            logger.debug(
+                "Could not extract request._content: %s: %s",
+                type(exc).__name__, exc,
+            )
 
         return None
 
@@ -125,7 +131,11 @@ class ChatGPTCodexAsyncClient(httpx.AsyncClient):
         """
         try:
             data = json.loads(body.decode("utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+            logger.debug(
+                "Could not decode request body for Codex field injection: %s: %s",
+                type(exc).__name__, exc,
+            )
             return None, False
 
         if not isinstance(data, dict):
