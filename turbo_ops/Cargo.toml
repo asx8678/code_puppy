@@ -1,0 +1,28 @@
+[package]
+name = "turbo_ops"
+version = "0.1.0"
+edition = "2021"
+authors = ["Code Puppy Team"]
+description = "High-performance batch file operations with PyO3 bindings"
+license = "MIT"
+
+[lib]
+name = "turbo_ops"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.28", features = ["extension-module", "serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rayon = "1.10"
+walkdir = "2"
+regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
