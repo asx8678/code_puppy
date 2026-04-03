@@ -11,9 +11,11 @@ without affecting the rest of Code Puppy.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import queue
+import threading
 import time
 from typing import Any
 
@@ -27,6 +29,10 @@ _client: BridgeClient | None = None
 
 # Thread-safe queue for prompts received from Mana (for REPL pickup)
 _pending_prompts: queue.Queue[str] = queue.Queue(maxsize=100)
+
+# Background executor thread that runs prompts through the agent
+_executor_thread: threading.Thread | None = None
+_executor_lock = threading.Lock()  # Prevent concurrent agent runs from bridge
 
 
 # ------------------------------------------------------------------
@@ -86,6 +92,9 @@ def _on_startup() -> None:
             _send_agent_list(client)
         except Exception as exc:
             logger.warning("Failed to send agent_list event: %s", exc)
+
+        # Start the prompt executor thread
+        _start_prompt_executor()
     else:
         logger.warning(
             "Mana bridge could not connect to Mana at startup. "
@@ -223,7 +232,10 @@ def get_pending_bridge_prompts() -> list[str]:
 
 def _on_shutdown() -> None:
     """Close the Mana bridge connection on shutdown."""
-    global _client
+    global _client, _executor_thread
+
+    # Signal executor to stop (closing client will cause it to wind down)
+    _executor_thread = None
 
     if _client is not None:
         try:
@@ -232,6 +244,115 @@ def _on_shutdown() -> None:
             pass
         _client.close()
         _client = None
+
+
+# ------------------------------------------------------------------
+# Background prompt executor
+# ------------------------------------------------------------------
+
+
+def _start_prompt_executor() -> None:
+    """Start the background thread that executes prompts from the Mana bridge."""
+    global _executor_thread
+    _executor_thread = threading.Thread(
+        target=_prompt_executor_run,
+        name="mana-bridge-executor",
+        daemon=True,
+    )
+    _executor_thread.start()
+    logger.info("Bridge prompt executor started")
+
+
+def _prompt_executor_run() -> None:
+    """Background thread: create event loop, poll prompts, run agent."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_prompt_executor_async())
+    except Exception as exc:
+        logger.error("Bridge prompt executor crashed: %s", exc)
+    finally:
+        loop.close()
+
+
+async def _prompt_executor_async() -> None:
+    """Async loop that polls the pending prompts queue and executes them."""
+    while True:
+        try:
+            text = _pending_prompts.get_nowait()
+        except queue.Empty:
+            await asyncio.sleep(0.3)
+            continue
+
+        logger.info("Bridge executing prompt: %s", text[:80])
+        await _execute_bridge_prompt(text)
+
+
+async def _execute_bridge_prompt(text: str) -> None:
+    """Execute a single prompt received from the Mana bridge.
+
+    Gets the current agent, runs it with the prompt, and sends
+    a prompt_complete event back to Mana. Agent lifecycle callbacks
+    (stream_event, agent_run_start/end, tool calls) fire automatically
+    and are forwarded to Mana by the existing bridge plumbing.
+    """
+    with _executor_lock:
+        try:
+            from code_puppy.agents.agent_manager import get_current_agent
+
+            agent = get_current_agent()
+            if agent is None:
+                logger.error("No agent available for bridge prompt")
+                if _client:
+                    _client.send_event(
+                        "prompt_complete",
+                        {
+                            "success": False,
+                            "error": "No agent available",
+                        },
+                    )
+                return
+
+            # Run the agent — callbacks fire during this call
+            result = await agent.run_with_mcp(text)
+
+            if result is not None:
+                response_text = result.output or ""
+
+                # Update agent message history
+                if hasattr(result, "all_messages"):
+                    agent.set_message_history(list(result.all_messages()))
+
+                # Send completion to Mana
+                if _client:
+                    _client.send_event(
+                        "prompt_complete",
+                        {
+                            "success": True,
+                            "response_preview": response_text[:500],
+                        },
+                    )
+                logger.info("Bridge prompt completed successfully")
+            else:
+                if _client:
+                    _client.send_event(
+                        "prompt_complete",
+                        {
+                            "success": True,
+                            "response_preview": "",
+                        },
+                    )
+
+        except Exception as exc:
+            logger.error("Bridge prompt execution failed: %s", exc)
+            if _client:
+                _client.send_event(
+                    "prompt_complete",
+                    {
+                        "success": False,
+                        "error": str(exc)[:200],
+                    },
+                )
 
 
 # ------------------------------------------------------------------
