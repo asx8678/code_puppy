@@ -20,6 +20,22 @@ from code_puppy.plugins.turbo_executor.models import (
     PlanResult,
     PlanStatus,
 )
+
+# Try to import Rust turbo_ops for accelerated file operations
+try:
+    from turbo_ops import list_files as turbo_list_files
+    from turbo_ops import grep as turbo_grep
+    from turbo_ops import read_file as turbo_read_file
+
+    TURBO_OPS_AVAILABLE = True
+except ImportError:
+    TURBO_OPS_AVAILABLE = False
+    turbo_list_files = None  # type: ignore
+    turbo_grep = None  # type: ignore
+    turbo_read_file = None  # type: ignore
+
+
+# Fallback: Import Python-native file operations when turbo_ops unavailable
 from code_puppy.tools.file_operations import (
     _grep,
     _list_files,
@@ -33,6 +49,8 @@ class TurboOrchestrator:
     Currently executes operations sequentially. Future versions will
     support parallel execution based on operation priorities and dependencies.
 
+    Falls back to native Python file operations when Rust turbo_ops is unavailable.
+
     Example:
         plan = Plan(
             id="my-plan",
@@ -45,18 +63,27 @@ class TurboOrchestrator:
         result = await orchestrator.execute(plan)
     """
 
-    def __init__(self, enable_parallel: bool = False):
+    def __init__(self, enable_parallel: bool = False, prefer_native_python: bool = False):
         """Initialize the orchestrator.
 
         Args:
             enable_parallel: Whether to enable parallel execution (future feature)
+            prefer_native_python: Force use of native Python operations even if turbo_ops available
         """
         self.enable_parallel = enable_parallel
+        self.prefer_native_python = prefer_native_python
+        self._turbo_ops_available = TURBO_OPS_AVAILABLE and not prefer_native_python
+
         self._operation_handlers: dict[OperationType, callable] = {
             OperationType.LIST_FILES: self._execute_list_files,
             OperationType.GREP: self._execute_grep,
             OperationType.READ_FILES: self._execute_read_files,
         }
+
+    @property
+    def using_native_ops(self) -> bool:
+        """Check if using native Python operations (fallback mode)."""
+        return not self._turbo_ops_available
 
     async def execute(self, plan: Plan) -> PlanResult:
         """Execute a plan and return results.
@@ -216,24 +243,65 @@ class TurboOrchestrator:
         return "success"
 
     async def _execute_list_files(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Execute list_files operation."""
+        """Execute list_files operation with fallback to native Python."""
         directory = args.get("directory", ".")
         recursive = args.get("recursive", True)
 
-        # Run in thread pool since _list_files is sync
+        # Try turbo_ops first if available
+        if self._turbo_ops_available and turbo_list_files is not None:
+            try:
+                # Run in thread pool since turbo_ops is likely sync
+                result = await asyncio.to_thread(
+                    turbo_list_files, directory, recursive
+                )
+                return {
+                    "content": result,
+                    "error": None,
+                    "source": "turbo_ops",
+                }
+            except Exception:
+                # Fall through to native Python on failure
+                pass
+
+        # Fallback to native Python implementation
         result = await asyncio.to_thread(_list_files, None, directory, recursive)
 
         return {
             "content": result.content,
             "error": result.error,
+            "source": "native_python",
         }
 
     async def _execute_grep(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Execute grep operation."""
+        """Execute grep operation with fallback to native Python."""
         search_string = args.get("search_string", "")
         directory = args.get("directory", ".")
 
-        # Run in thread pool since _grep is sync
+        # Try turbo_ops first if available
+        if self._turbo_ops_available and turbo_grep is not None:
+            try:
+                # Run in thread pool since turbo_ops is likely sync
+                result = await asyncio.to_thread(
+                    turbo_grep, search_string, directory
+                )
+                return {
+                    "matches": [
+                        {
+                            "file_path": m.get("file_path", ""),
+                            "line_number": m.get("line_number", 0),
+                            "line_content": m.get("line_content", ""),
+                        }
+                        for m in result.get("matches", [])
+                    ],
+                    "total_matches": result.get("total_matches", 0),
+                    "error": None,
+                    "source": "turbo_ops",
+                }
+            except Exception:
+                # Fall through to native Python on failure
+                pass
+
+        # Fallback to native Python implementation
         result = await asyncio.to_thread(_grep, None, search_string, directory)
 
         return {
@@ -247,16 +315,56 @@ class TurboOrchestrator:
             ],
             "total_matches": len(result.matches),
             "error": result.error,
+            "source": "native_python",
         }
 
     async def _execute_read_files(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Execute read_files operation (reads multiple files)."""
+        """Execute read_files operation with fallback to native Python."""
         file_paths = args.get("file_paths", [])
         start_line = args.get("start_line")
         num_lines = args.get("num_lines")
 
         files_data: list[dict[str, Any]] = []
 
+        # Try turbo_ops first if available
+        if self._turbo_ops_available and turbo_read_file is not None:
+            try:
+                for file_path in file_paths:
+                    try:
+                        result = await asyncio.to_thread(
+                            turbo_read_file, file_path, start_line or 0, num_lines or 0
+                        )
+                        files_data.append(
+                            {
+                                "file_path": file_path,
+                                "content": result.get("content"),
+                                "num_tokens": result.get("num_tokens", 0),
+                                "error": None,
+                                "success": True,
+                            }
+                        )
+                    except Exception as e:
+                        files_data.append(
+                            {
+                                "file_path": file_path,
+                                "content": None,
+                                "num_tokens": 0,
+                                "error": str(e),
+                                "success": False,
+                            }
+                        )
+
+                return {
+                    "files": files_data,
+                    "total_files": len(file_paths),
+                    "successful_reads": sum(1 for f in files_data if f["success"]),
+                    "source": "turbo_ops",
+                }
+            except Exception:
+                # Fall through to native Python on failure
+                files_data = []
+
+        # Fallback to native Python implementation
         for file_path in file_paths:
             try:
                 content, num_tokens, error = await asyncio.to_thread(
@@ -287,6 +395,7 @@ class TurboOrchestrator:
             "files": files_data,
             "total_files": len(file_paths),
             "successful_reads": sum(1 for f in files_data if f["success"]),
+            "source": "native_python",
         }
 
     def validate_plan(self, plan: Plan) -> list[str]:

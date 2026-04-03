@@ -13,6 +13,11 @@ from code_puppy.plugins.turbo_executor.models import (
     PlanStatus,
 )
 from code_puppy.plugins.turbo_executor.orchestrator import TurboOrchestrator
+from code_puppy.plugins.turbo_executor.summarizer import (
+    quick_summary,
+    summarize_operation_result,
+    summarize_plan_result,
+)
 
 __all__ = [
     "Operation",
@@ -22,4 +27,7 @@ __all__ = [
     "PlanResult",
     "PlanStatus",
     "TurboOrchestrator",
+    "summarize_plan_result",
+    "summarize_operation_result",
+    "quick_summary",
 ]

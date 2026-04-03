@@ -16,6 +16,7 @@ from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info, emit_warning
 from code_puppy.plugins.turbo_executor.models import Plan
 from code_puppy.plugins.turbo_executor.orchestrator import TurboOrchestrator
+from code_puppy.plugins.turbo_executor.summarizer import summarize_plan_result
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,8 @@ def _on_startup():
     """Initialize the orchestrator on startup."""
     global _orchestrator
     _orchestrator = TurboOrchestrator()
-    logger.info("Turbo Executor plugin initialized")
+    ops_mode = "turbo_ops (Rust)" if _orchestrator._turbo_ops_available else "native Python"
+    logger.info(f"Turbo Executor plugin initialized (using {ops_mode})")
 
 
 def _custom_help():
@@ -67,10 +69,14 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         emit_info("🚀 Turbo Executor Status:")
         emit_info(f"   Orchestrator ready: {orch is not None}")
         emit_info(f"   Parallel mode: {orch.enable_parallel}")
+        ops_source = "Rust turbo_ops" if orch._turbo_ops_available else "native Python"
+        emit_info(f"   Operations source: {ops_source}")
         emit_info("   Supported operations: list_files, grep, read_files")
         return True
 
     if subcommand == "help":
+        orch = _get_orchestrator()
+        ops_source = "Rust turbo_ops" if orch._turbo_ops_available else "native Python"
         emit_info("🚀 Turbo Executor — Batch File Operations")
         emit_info("")
         emit_info("Usage:")
@@ -89,6 +95,8 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         emit_info("")
         emit_info("Operations: list_files, grep, read_files")
         emit_info("Priority: lower numbers execute first (default 100)")
+        emit_info("")
+        emit_info(f"Backend: {ops_source}")
         return True
 
     if subcommand == "plan":
@@ -165,12 +173,34 @@ def _register_turbo_tools():
 
 
 def _register_turbo_execute_tool(agent):
-    """Register the turbo_execute tool with an agent."""
+    """Register the turbo_execute tool with an agent.
+
+    Tool JSON Schema:
+    {
+        "name": "turbo_execute",
+        "description": "Execute a batch of file operations via the turbo executor...",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "plan_json": {
+                    "type": "string",
+                    "description": "JSON string containing the plan with operations to execute"
+                },
+                "summarize": {
+                    "type": "boolean",
+                    "description": "Whether to return a human-readable summary instead of raw data"
+                }
+            },
+            "required": ["plan_json"]
+        }
+    }
+    """
 
     @agent.tool
     async def turbo_execute(
         context: RunContext,
         plan_json: str,
+        summarize: bool = True,
     ) -> dict:
         """Execute a batch of file operations via the turbo executor.
 
@@ -203,10 +233,13 @@ def _register_turbo_execute_tool(agent):
                     ],
                     "metadata": {"description": "Optional"}
                 }
+            summarize: If True (default), returns a human-readable markdown summary.
+                      If False, returns raw result data structure.
 
         Returns:
-            Dict with plan execution results including status, operation_results,
-            timing info, and error details.
+            Dict with plan execution results. When summarize=True, includes 'summary'
+            field with human-readable markdown. Always includes 'status', 'plan_id',
+            'success_count', 'error_count', and 'operation_results'.
         """
         try:
             plan_data = json.loads(plan_json)
@@ -239,8 +272,8 @@ def _register_turbo_execute_tool(agent):
         try:
             result = await orch.execute(plan)
 
-            # Convert to dict for return
-            return {
+            # Build response
+            response = {
                 "status": result.status.value,
                 "plan_id": result.plan_id,
                 "success_count": result.success_count,
@@ -259,17 +292,26 @@ def _register_turbo_execute_tool(agent):
                     }
                     for r in result.operation_results
                 ],
-                "errors": [
+            }
+
+            # Add errors if any
+            errors = result.get_errors()
+            if errors:
+                response["errors"] = [
                     {
                         "operation_id": e.operation_id,
                         "type": e.type.value,
                         "error": e.error,
                     }
-                    for e in result.get_errors()
+                    for e in errors
                 ]
-                if result.get_errors()
-                else [],
-            }
+
+            # Add human-readable summary if requested
+            if summarize:
+                response["summary"] = summarize_plan_result(result)
+                response["quick_summary"] = f"{result.success_count} success, {result.error_count} errors in {result.total_duration_ms:.0f}ms"
+
+            return response
 
         except Exception as e:
             logger.exception("Turbo execution failed")

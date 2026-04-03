@@ -20,6 +20,17 @@ from code_puppy.plugins.turbo_executor.models import (
 from code_puppy.plugins.turbo_executor.orchestrator import TurboOrchestrator
 
 
+@pytest.fixture
+def temp_dir_with_files():
+    """Create a temporary directory with some files."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create some test files
+        (Path(tmpdir) / "test1.py").write_text("def hello():\n    pass\n")
+        (Path(tmpdir) / "test2.py").write_text("def world():\n    return 42\n")
+        (Path(tmpdir) / "readme.md").write_text("# README\n\nThis is a test.\n")
+        yield tmpdir
+
+
 class TestPlanModels:
     """Test plan schema models."""
 
@@ -157,16 +168,6 @@ class TestOrchestratorValidation:
 
 class TestOrchestratorExecution:
     """Test plan execution."""
-
-    @pytest.fixture
-    def temp_dir_with_files(self):
-        """Create a temporary directory with some files."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Create some test files
-            (Path(tmpdir) / "test1.py").write_text("def hello():\n    pass\n")
-            (Path(tmpdir) / "test2.py").write_text("def world():\n    return 42\n")
-            (Path(tmpdir) / "readme.md").write_text("# README\n\nThis is a test.\n")
-            yield tmpdir
 
     @pytest.mark.asyncio
     async def test_execute_list_files(self, temp_dir_with_files):
@@ -437,3 +438,362 @@ class TestPluginIntegration:
 
         errors = orch.validate_plan(plan)
         assert len(errors) == 0
+
+
+class TestFallbackBehavior:
+    """Test fallback to native Python operations."""
+
+    def test_orchestrator_uses_native_fallback_by_default(self):
+        """Test that orchestrator uses native Python when turbo_ops unavailable."""
+        orch = TurboOrchestrator()
+        # Since turbo_ops is not installed, should use native fallback
+        assert orch.using_native_ops is True
+        assert orch._turbo_ops_available is False
+
+    def test_orchestrator_forces_native_python(self):
+        """Test forcing native Python mode."""
+        orch = TurboOrchestrator(prefer_native_python=True)
+        assert orch.using_native_ops is True
+        assert orch._turbo_ops_available is False
+
+    @pytest.mark.asyncio
+    async def test_native_list_files_execution(self, temp_dir_with_files):
+        """Test list_files via native Python fallback."""
+        orch = TurboOrchestrator(prefer_native_python=True)
+        plan = Plan(
+            id="native-list-test",
+            operations=[
+                Operation(
+                    type=OperationType.LIST_FILES,
+                    args={"directory": temp_dir_with_files, "recursive": False},
+                )
+            ],
+        )
+
+        result = await orch.execute(plan)
+
+        assert result.status == PlanStatus.COMPLETED
+        assert result.success_count == 1
+
+        # Check that native Python source is indicated in result
+        op_result = result.operation_results[0]
+        assert op_result.data.get("source") == "native_python"
+
+    @pytest.mark.asyncio
+    async def test_native_grep_execution(self, temp_dir_with_files):
+        """Test grep via native Python fallback."""
+        orch = TurboOrchestrator(prefer_native_python=True)
+        plan = Plan(
+            id="native-grep-test",
+            operations=[
+                Operation(
+                    type=OperationType.GREP,
+                    args={"search_string": "def ", "directory": temp_dir_with_files},
+                )
+            ],
+        )
+
+        result = await orch.execute(plan)
+
+        assert result.status == PlanStatus.COMPLETED
+        assert result.success_count == 1
+
+        # Check that native Python source is indicated
+        op_result = result.operation_results[0]
+        assert op_result.data.get("source") == "native_python"
+
+    @pytest.mark.asyncio
+    async def test_native_read_files_execution(self, temp_dir_with_files):
+        """Test read_files via native Python fallback."""
+        orch = TurboOrchestrator(prefer_native_python=True)
+        file_path = os.path.join(temp_dir_with_files, "test1.py")
+
+        plan = Plan(
+            id="native-read-test",
+            operations=[
+                Operation(
+                    type=OperationType.READ_FILES,
+                    args={"file_paths": [file_path]},
+                )
+            ],
+        )
+
+        result = await orch.execute(plan)
+
+        assert result.status == PlanStatus.COMPLETED
+        assert result.success_count == 1
+
+        # Check that native Python source is indicated
+        op_result = result.operation_results[0]
+        assert op_result.data.get("source") == "native_python"
+
+
+class TestResultSummarization:
+    """Test smart result summarization."""
+
+    def test_summarize_list_files_result(self):
+        """Test summarizing list_files operation result."""
+        from code_puppy.plugins.turbo_executor.summarizer import _summarize_list_files
+
+        data = {
+            "content": "file1.py (type=file)\nfile2.py (type=file)\ndir1/ (type=directory)",
+            "error": None,
+        }
+        summary = _summarize_list_files(data)
+
+        assert "Directory Listing" in summary
+        assert "files" in summary.lower()
+        assert "```" in summary  # Code block formatting
+
+    def test_summarize_list_files_error(self):
+        """Test summarizing list_files with error."""
+        from code_puppy.plugins.turbo_executor.summarizer import _summarize_list_files
+
+        data = {"error": "Directory not found", "content": ""}
+        summary = _summarize_list_files(data)
+
+        assert "Error" in summary
+        assert "Directory not found" in summary
+
+    def test_summarize_grep_result(self):
+        """Test summarizing grep operation result."""
+        from code_puppy.plugins.turbo_executor.summarizer import _summarize_grep
+
+        data = {
+            "matches": [
+                {"file_path": "test.py", "line_number": 1, "line_content": "def hello():"},
+                {"file_path": "test.py", "line_number": 5, "line_content": "def world():"},
+            ],
+            "total_matches": 2,
+            "error": None,
+        }
+        summary = _summarize_grep(data)
+
+        assert "Search Results" in summary
+        assert "2 matches" in summary
+        assert "test.py" in summary
+        assert "def hello()" in summary
+
+    def test_summarize_grep_empty(self):
+        """Test summarizing grep with no matches."""
+        from code_puppy.plugins.turbo_executor.summarizer import _summarize_grep
+
+        data = {"matches": [], "total_matches": 0, "error": None}
+        summary = _summarize_grep(data)
+
+        assert "No matches found" in summary
+
+    def test_summarize_read_files_result(self):
+        """Test summarizing read_files operation result."""
+        from code_puppy.plugins.turbo_executor.summarizer import _summarize_read_files
+
+        data = {
+            "files": [
+                {
+                    "file_path": "test.py",
+                    "content": "def hello():\n    pass\n",
+                    "num_tokens": 10,
+                    "error": None,
+                    "success": True,
+                }
+            ],
+            "total_files": 1,
+            "successful_reads": 1,
+        }
+        summary = _summarize_read_files(data)
+
+        assert "File Contents" in summary
+        assert "test.py" in summary
+        assert "def hello()" in summary
+        assert "```" in summary
+
+    def test_summarize_read_files_with_errors(self):
+        """Test summarizing read_files with some failures."""
+        from code_puppy.plugins.turbo_executor.summarizer import _summarize_read_files
+
+        data = {
+            "files": [
+                {
+                    "file_path": "exists.py",
+                    "content": "# exists",
+                    "num_tokens": 5,
+                    "error": None,
+                    "success": True,
+                },
+                {
+                    "file_path": "missing.py",
+                    "content": None,
+                    "num_tokens": 0,
+                    "error": "File not found",
+                    "success": False,
+                },
+            ],
+            "total_files": 2,
+            "successful_reads": 1,
+        }
+        summary = _summarize_read_files(data)
+
+        assert "1/2 files read successfully" in summary
+        assert "exists.py" in summary
+        assert "missing.py" in summary
+        assert "Error" in summary or "❌" in summary
+
+    def test_summarize_operation_result(self):
+        """Test summarizing an operation result object."""
+        from code_puppy.plugins.turbo_executor.summarizer import summarize_operation_result
+
+        result = OperationResult(
+            operation_id="test-op",
+            type=OperationType.GREP,
+            status="success",
+            data={
+                "matches": [{"file_path": "test.py", "line_number": 1, "line_content": "def test():"}],
+                "total_matches": 1,
+                "error": None,
+            },
+            duration_ms=50.0,
+        )
+        summary = summarize_operation_result(result)
+
+        assert "Search Results" in summary
+        assert "test.py" in summary
+
+    def test_summarize_operation_error(self):
+        """Test summarizing an errored operation result."""
+        from code_puppy.plugins.turbo_executor.summarizer import summarize_operation_result
+
+        result = OperationResult(
+            operation_id="test-op",
+            type=OperationType.LIST_FILES,
+            status="error",
+            error="Permission denied",
+            duration_ms=10.0,
+        )
+        summary = summarize_operation_result(result)
+
+        assert "Operation Failed" in summary or "❌" in summary
+        assert "Permission denied" in summary
+
+    def test_summarize_plan_result(self):
+        """Test generating a full plan result summary."""
+        from code_puppy.plugins.turbo_executor.summarizer import summarize_plan_result
+
+        plan_result = PlanResult(
+            plan_id="test-plan",
+            status=PlanStatus.COMPLETED,
+            operation_results=[
+                OperationResult(
+                    type=OperationType.LIST_FILES,
+                    status="success",
+                    data={"content": "file1.py", "error": None},
+                    duration_ms=100.0,
+                ),
+                OperationResult(
+                    type=OperationType.GREP,
+                    status="success",
+                    data={"matches": [], "total_matches": 0, "error": None},
+                    duration_ms=50.0,
+                ),
+            ],
+            total_duration_ms=150.0,
+        )
+        summary = summarize_plan_result(plan_result)
+
+        assert "test-plan" in summary
+        assert "completed" in summary.lower() or "✅" in summary
+        assert "2" in summary  # operation count
+        assert "150.0ms" in summary or "150ms" in summary
+
+    def test_summarize_plan_result_with_errors(self):
+        """Test generating summary for partial failure."""
+        from code_puppy.plugins.turbo_executor.summarizer import summarize_plan_result
+
+        plan_result = PlanResult(
+            plan_id="error-plan",
+            status=PlanStatus.PARTIAL,
+            operation_results=[
+                OperationResult(
+                    type=OperationType.LIST_FILES,
+                    status="success",
+                    data={"content": "file1.py", "error": None},
+                    duration_ms=100.0,
+                ),
+                OperationResult(
+                    type=OperationType.READ_FILES,
+                    status="error",
+                    error="File not found",
+                    duration_ms=10.0,
+                ),
+            ],
+            total_duration_ms=110.0,
+        )
+        summary = summarize_plan_result(plan_result)
+
+        assert "error-plan" in summary
+        assert "partial" in summary.lower() or "⚠️" in summary
+        assert "1 success" in summary.lower()
+        assert "1 errors" in summary.lower()
+        assert "Errors" in summary
+
+    def test_quick_summary(self):
+        """Test generating a quick one-line summary."""
+        from code_puppy.plugins.turbo_executor.summarizer import quick_summary
+
+        plan_result = PlanResult(
+            plan_id="quick-test",
+            status=PlanStatus.COMPLETED,
+            operation_results=[
+                OperationResult(type=OperationType.LIST_FILES, status="success"),
+                OperationResult(type=OperationType.GREP, status="success"),
+            ],
+            total_duration_ms=150.0,
+        )
+        summary = quick_summary(plan_result)
+
+        assert "quick-test" in summary
+        assert "2/2" in summary or "2" in summary
+        assert "150ms" in summary
+
+    def test_content_truncation(self):
+        """Test that long content gets truncated."""
+        from code_puppy.plugins.turbo_executor.summarizer import _truncate_content
+
+        long_content = "line\n" * 200  # 200 lines
+        truncated = _truncate_content(long_content, max_length=1000, max_lines=50)
+
+        assert "truncated" in truncated.lower() or "..." in truncated
+        assert truncated.count("\n") < 60  # Should be around 50 lines + indicator
+
+
+class TestSummarizerImports:
+    """Test that summarizer functions can be imported from the plugin."""
+
+    def test_import_summarizer_functions(self):
+        """Test importing summarizer functions from plugin root."""
+        from code_puppy.plugins.turbo_executor import (
+            quick_summary,
+            summarize_operation_result,
+            summarize_plan_result,
+        )
+
+        assert callable(summarize_plan_result)
+        assert callable(summarize_operation_result)
+        assert callable(quick_summary)
+
+    def test_import_from_summarizer_module(self):
+        """Test importing directly from summarizer module."""
+        from code_puppy.plugins.turbo_executor.summarizer import (
+            DEFAULT_MAX_CONTENT_LENGTH,
+            DEFAULT_MAX_GREP_MATCHES,
+            _summarize_grep,
+            _summarize_list_files,
+            _summarize_read_files,
+            _truncate_content,
+        )
+
+        assert DEFAULT_MAX_CONTENT_LENGTH > 0
+        assert DEFAULT_MAX_GREP_MATCHES > 0
+        assert callable(_truncate_content)
+        assert callable(_summarize_list_files)
+        assert callable(_summarize_grep)
+        assert callable(_summarize_read_files)
