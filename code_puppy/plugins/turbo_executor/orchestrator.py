@@ -11,7 +11,6 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from code_puppy.callbacks import on_pre_tool_call, on_post_tool_call
 from code_puppy.concurrency_limits import FileOpsLimiter
 from code_puppy.plugins.turbo_executor.models import (
     Operation,
@@ -115,7 +114,9 @@ class TurboOrchestrator:
             total_duration_ms=total_duration_ms,
             metadata={
                 "total_operations": len(plan.operations),
-                "successful_operations": sum(1 for r in results if r.status == "success"),
+                "successful_operations": sum(
+                    1 for r in results if r.status == "success"
+                ),
                 "failed_operations": sum(1 for r in results if r.status == "error"),
             },
         )
@@ -220,9 +221,7 @@ class TurboOrchestrator:
         recursive = args.get("recursive", True)
 
         # Run in thread pool since _list_files is sync
-        result = await asyncio.to_thread(
-            _list_files, None, directory, recursive
-        )
+        result = await asyncio.to_thread(_list_files, None, directory, recursive)
 
         return {
             "content": result.content,
@@ -235,9 +234,7 @@ class TurboOrchestrator:
         directory = args.get("directory", ".")
 
         # Run in thread pool since _grep is sync
-        result = await asyncio.to_thread(
-            _grep, None, search_string, directory
-        )
+        result = await asyncio.to_thread(_grep, None, search_string, directory)
 
         return {
             "matches": [
@@ -266,21 +263,25 @@ class TurboOrchestrator:
                     _read_file_sync, file_path, start_line, num_lines
                 )
 
-                files_data.append({
-                    "file_path": file_path,
-                    "content": content,
-                    "num_tokens": num_tokens,
-                    "error": error,
-                    "success": error is None,
-                })
+                files_data.append(
+                    {
+                        "file_path": file_path,
+                        "content": content,
+                        "num_tokens": num_tokens,
+                        "error": error,
+                        "success": error is None,
+                    }
+                )
             except Exception as e:
-                files_data.append({
-                    "file_path": file_path,
-                    "content": None,
-                    "num_tokens": 0,
-                    "error": str(e),
-                    "success": False,
-                })
+                files_data.append(
+                    {
+                        "file_path": file_path,
+                        "content": None,
+                        "num_tokens": 0,
+                        "error": str(e),
+                        "success": False,
+                    }
+                )
 
         return {
             "files": files_data,

@@ -14,7 +14,7 @@ from pydantic_ai import RunContext
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info, emit_warning
-from code_puppy.plugins.turbo_executor.models import Operation, OperationType, Plan
+from code_puppy.plugins.turbo_executor.models import Plan
 from code_puppy.plugins.turbo_executor.orchestrator import TurboOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,10 @@ def _on_startup():
 def _custom_help():
     """Provide help for the /turbo command."""
     return [
-        ("turbo", "Execute batch file operations via turbo executor (status/plan/help)"),
+        (
+            "turbo",
+            "Execute batch file operations via turbo executor (status/plan/help)",
+        ),
     ]
 
 
@@ -64,7 +67,7 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         emit_info("🚀 Turbo Executor Status:")
         emit_info(f"   Orchestrator ready: {orch is not None}")
         emit_info(f"   Parallel mode: {orch.enable_parallel}")
-        emit_info(f"   Supported operations: list_files, grep, read_files")
+        emit_info("   Supported operations: list_files, grep, read_files")
         return True
 
     if subcommand == "help":
@@ -76,9 +79,13 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         emit_info("")
         emit_info("Plan JSON format:")
         emit_info('  {"id": "my-plan", "operations": [')
-        emit_info('    {"type": "list_files", "args": {"directory": "."}, "priority": 1},')
-        emit_info('    {"type": "grep", "args": {"search_string": "def "}, "priority": 2}')
-        emit_info('  ]}')
+        emit_info(
+            '    {"type": "list_files", "args": {"directory": "."}, "priority": 1},'
+        )
+        emit_info(
+            '    {"type": "grep", "args": {"search_string": "def "}, "priority": 2}'
+        )
+        emit_info("  ]}")
         emit_info("")
         emit_info("Operations: list_files, grep, read_files")
         emit_info("Priority: lower numbers execute first (default 100)")
@@ -86,7 +93,7 @@ def _handle_turbo_command(command: str, name: str) -> Any:
 
     if subcommand == "plan":
         if len(parts) < 3:
-            emit_warning("Usage: /turbo plan '{\"id\": \"test\", \"operations\": [...]}'")
+            emit_warning('Usage: /turbo plan \'{"id": "test", "operations": [...]}\'')
             return True
 
         plan_json = parts[2]
@@ -104,25 +111,31 @@ def _handle_turbo_command(command: str, name: str) -> Any:
                     emit_warning(f"  - {error}")
                 return True
 
-            emit_info(f"🚀 Executing turbo plan '{plan.id}' with {len(plan.operations)} operations...")
+            emit_info(
+                f"🚀 Executing turbo plan '{plan.id}' with {len(plan.operations)} operations..."
+            )
 
             # Execute (we need to run async in sync context)
             import asyncio
 
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 # We're in async context, create task
-                future = asyncio.ensure_future(orch.execute(plan))
+                asyncio.ensure_future(orch.execute(plan))
                 emit_info("Plan execution started (async)")
                 return True
             except RuntimeError:
                 # No running loop, use asyncio.run
                 result = asyncio.run(orch.execute(plan))
                 emit_info(f"✅ Plan completed: {result.status}")
-                emit_info(f"   Operations: {result.success_count} success, {result.error_count} errors")
+                emit_info(
+                    f"   Operations: {result.success_count} success, {result.error_count} errors"
+                )
                 if result.error_count > 0:
                     for err in result.get_errors():
-                        emit_warning(f"   Error in {err.operation_id or err.type}: {err.error}")
+                        emit_warning(
+                            f"   Error in {err.operation_id or err.type}: {err.error}"
+                        )
                 return True
 
         except json.JSONDecodeError as e:
@@ -247,9 +260,15 @@ def _register_turbo_execute_tool(agent):
                     for r in result.operation_results
                 ],
                 "errors": [
-                    {"operation_id": e.operation_id, "type": e.type.value, "error": e.error}
+                    {
+                        "operation_id": e.operation_id,
+                        "type": e.type.value,
+                        "error": e.error,
+                    }
                     for e in result.get_errors()
-                ] if result.get_errors() else [],
+                ]
+                if result.get_errors()
+                else [],
             }
 
         except Exception as e:
