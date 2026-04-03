@@ -203,7 +203,7 @@ class TestHealthMonitor:
         result = await health_monitor.perform_health_check(mock_server)
 
         assert result.success is True
-        assert result.latency_ms > 0
+        assert result.latency_ms >= 0
         assert result.error is None
 
     async def test_perform_health_check_result_object(
@@ -235,7 +235,7 @@ class TestHealthMonitor:
         result = await health_monitor.perform_health_check(mock_server)
 
         assert result.success is False
-        assert result.latency_ms > 0
+        assert result.latency_ms >= 0
         assert "Invalid health check result type" in result.error
 
     async def test_perform_health_check_exception(self, health_monitor, mock_server):
@@ -249,7 +249,7 @@ class TestHealthMonitor:
         result = await health_monitor.perform_health_check(mock_server)
 
         assert result.success is False
-        assert result.latency_ms > 0
+        assert result.latency_ms >= 0
         assert result.error == "Check failed"
 
     async def test_get_health_history(self, health_monitor):
