@@ -10,8 +10,6 @@ Tests verify that:
 7. The fallback (RUST_AVAILABLE=False) doesn't break anything
 """
 
-import math
-
 import pytest
 from pydantic_ai.messages import (
     ModelRequest,
@@ -91,9 +89,10 @@ class TestTokenEstimationCorrectness:
         return CodePuppyAgent()
 
     def test_simple_text_matches_python(self, agent):
+        from code_puppy.token_utils import estimate_token_count
         text = "Hello, world! This is a test message."
         python_tokens = agent.estimate_token_count(text)
-        expected = max(1, math.floor(len(text) / 2.5))
+        expected = estimate_token_count(text)
         assert python_tokens == expected
 
     def test_message_token_estimation_matches(self, agent):
