@@ -220,8 +220,9 @@ class TestGetCurrentAgent:
         finally:
             am._state.session_agents_cache.pop(session_id, None)
 
+    @patch("code_puppy.plugins.remember_last_agent.get_last_agent", return_value=None)
     @patch("code_puppy.config.get_default_agent", return_value="default-agent")
-    def test_falls_back_to_config(self, mock_default):
+    def test_falls_back_to_config(self, mock_default, mock_last_agent):
         session_id = am.get_terminal_session_id()
         am._state.session_agents_cache.pop(session_id, None)
         result = am.get_current_agent_name()
@@ -351,7 +352,9 @@ class TestDiscoverAgents:
         am._discover_agents()
         assert "json-plugin" in am._state.agent_registry
         assert isinstance(am._state.agent_registry["json-plugin"], AgentInfo)
-        assert am._state.agent_registry["json-plugin"].json_path == "/path/to/agent.json"
+        assert (
+            am._state.agent_registry["json-plugin"].json_path == "/path/to/agent.json"
+        )
 
     @patch("code_puppy.agents.agent_manager.on_register_agents")
     @patch("code_puppy.agents.agent_manager.discover_json_agents", return_value={})
