@@ -485,3 +485,103 @@ class TestCallbackRegistration:
         assert _summarize_result({"a": 1, "b": 2}) == "<dict with 2 keys>"
         assert _summarize_result([1, 2, 3]) == "<list[3]>"
         assert _summarize_result(42) == "42"
+
+
+# ===================================================================
+# 4. Agent list event tests
+# ===================================================================
+
+
+class TestAgentListEvent:
+    """Tests for the agent_list bridge event."""
+
+    def test_send_agent_list_with_mock_client(self):
+        """_send_agent_list should send an agent_list event via the client."""
+        from code_puppy.plugins.mana_bridge.register_callbacks import _send_agent_list
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        sent_messages = []
+
+        # Monkey-patch send_event to capture messages
+        original_send = client.send_event
+
+        def capture_send(name, data):
+            sent_messages.append({"name": name, "data": data})
+            return original_send(name, data)
+
+        client.send_event = capture_send
+
+        # Mock get_available_agents to return test data
+        mock_agents = {
+            "code-puppy": "Code Puppy 🐶",
+            "husky": "Husky 🐺",
+        }
+        mock_descriptions = {
+            "code-puppy": "General-purpose coding assistant",
+            "husky": "Strong executor",
+        }
+
+        with patch(
+            "code_puppy.agents.get_available_agents",
+            return_value=mock_agents,
+        ), patch(
+            "code_puppy.agents.get_agent_descriptions",
+            return_value=mock_descriptions,
+        ):
+            _send_agent_list(client)
+
+        assert len(sent_messages) == 1
+        assert sent_messages[0]["name"] == "agent_list"
+        agents = sent_messages[0]["data"]["agents"]
+        assert len(agents) == 2
+        assert agents[0]["name"] == "code-puppy"
+        assert agents[0]["display_name"] == "Code Puppy 🐶"
+        assert agents[0]["description"] == "General-purpose coding assistant"
+        assert agents[1]["name"] == "husky"
+
+    def test_send_agent_list_falls_back_on_import_error(self):
+        """If agent imports fail, _send_agent_list should fall back to hardcoded list."""
+        from code_puppy.plugins.mana_bridge.register_callbacks import _send_agent_list
+        from code_puppy.plugins.mana_bridge.tcp_client import BridgeClient
+
+        client = BridgeClient()
+        sent_messages = []
+
+        original_send = client.send_event
+
+        def capture_send(name, data):
+            sent_messages.append({"name": name, "data": data})
+            return original_send(name, data)
+
+        client.send_event = capture_send
+
+        # Force import failure by patching the source module
+        with patch(
+            "code_puppy.agents.get_available_agents",
+            side_effect=ImportError("no module"),
+        ):
+            _send_agent_list(client)
+
+        assert len(sent_messages) == 1
+        assert sent_messages[0]["name"] == "agent_list"
+        agents = sent_messages[0]["data"]["agents"]
+        # Should have the fallback agent
+        assert len(agents) >= 1
+        assert agents[0]["name"] == "code-puppy"
+
+    def test_send_agent_list_noop_without_client(self):
+        """_send_agent_list should be a no-op when no client is available."""
+        import importlib
+
+        from code_puppy.plugins.mana_bridge import register_callbacks as rc_mod
+
+        # Ensure _client is None
+        rc_mod._client = None
+        _send_agent_list = rc_mod._send_agent_list
+
+        # Should not raise
+        _send_agent_list(None)
+
+        # Cleanup
+        importlib.reload(rc_mod)

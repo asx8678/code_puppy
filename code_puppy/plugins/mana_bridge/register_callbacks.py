@@ -65,11 +65,72 @@ def _on_startup() -> None:
             )
         except Exception as exc:
             logger.warning("Failed to send bridge hello: %s", exc)
+
+        # Send agent list so Mana can render the agent panel
+        try:
+            _send_agent_list(client)
+        except Exception as exc:
+            logger.warning("Failed to send agent_list event: %s", exc)
     else:
         logger.warning(
             "Mana bridge could not connect to Mana at startup. "
             "Events will be buffered for reconnection."
         )
+
+
+# ------------------------------------------------------------------
+# Agent list event
+# ------------------------------------------------------------------
+
+
+def _send_agent_list(client: BridgeClient | None = None) -> None:
+    """Send the list of available agents to Mana.
+
+    Collects agent metadata from the agent registry and sends an
+    ``agent_list`` event so the Mana UI can render the agent panel.
+    """
+    if client is None:
+        client = _client
+    if client is None:
+        return
+
+    agents: list[dict[str, str]] = []
+
+    try:
+        from code_puppy.agents import (
+            get_available_agents,
+            get_agent_descriptions,
+        )
+
+        available = get_available_agents()       # {name: display_name}
+        descriptions = get_agent_descriptions()   # {name: description}
+
+        for name, display_name in available.items():
+            agents.append({
+                "name": name,
+                "display_name": display_name,
+                "description": descriptions.get(name, ""),
+            })
+    except Exception as exc:
+        logger.debug("Could not load agents from registry: %s", exc)
+        # Fall back to a minimal hardcoded list so the panel still works
+        agents = [
+            {
+                "name": "code-puppy",
+                "display_name": "Code Puppy \U0001f436",
+                "description": "General-purpose coding assistant",
+            },
+        ]
+
+    client.send_event("agent_list", {"agents": agents})
+    logger.debug("Bridge sent agent_list with %d agents", len(agents))
+
+
+# TODO(bridge): Handle incoming ``switch_agent`` requests from Mana.
+# The TcpServer currently broadcasts to PubSub but the Python bridge
+# callback model has no receive path.  A future iteration should add
+# a lightweight TCP listener on the bridge client that processes
+# requests from Mana and calls ``set_current_agent()``.
 
 
 def _on_shutdown() -> None:
