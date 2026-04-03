@@ -276,17 +276,46 @@ def _send_session_list(client: BridgeClient | None = None) -> None:
 
     sessions: list[dict[str, Any]] = []
     try:
-        from code_puppy.session_storage import SessionStore
+        from pathlib import Path
+        from code_puppy.session_storage import list_sessions
+        from code_puppy.config import AUTOSAVE_DIR
+        import json
 
-        store = SessionStore()
-        for info in store.list_sessions():
-            sessions.append({
-                "id": info.session_id,
-                "agent_name": info.agent_name or "unknown",
-                "model_name": info.model_name or "unknown",
-                "message_count": info.message_count or 0,
-                "updated_at": info.updated_at.isoformat() if info.updated_at else None,
-            })
+        base_dir = Path(AUTOSAVE_DIR)
+        session_names = list_sessions(base_dir)
+
+        for name in session_names:
+            try:
+                # Read metadata from .meta.json file
+                meta_path = base_dir / f"{name}_meta.json"
+                if meta_path.exists():
+                    with meta_path.open("r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                    sessions.append({
+                        "id": name,
+                        "agent_name": "unknown",  # Not stored in current metadata format
+                        "model_name": "unknown",  # Not stored in current metadata format
+                        "message_count": meta.get("message_count", 0),
+                        "updated_at": meta.get("timestamp"),
+                    })
+                else:
+                    # No metadata file - basic entry
+                    sessions.append({
+                        "id": name,
+                        "agent_name": "unknown",
+                        "model_name": "unknown",
+                        "message_count": 0,
+                        "updated_at": None,
+                    })
+            except Exception as exc:
+                logger.debug("Failed to read metadata for session %s: %s", name, exc)
+                sessions.append({
+                    "id": name,
+                    "agent_name": "unknown",
+                    "model_name": "unknown",
+                    "message_count": 0,
+                    "updated_at": None,
+                })
     except Exception as exc:
         logger.warning("Failed to list sessions: %s", exc)
 
@@ -302,23 +331,27 @@ def _handle_load_session_request(msg: dict) -> None:
         return
 
     try:
-        from code_puppy.session_storage import SessionStore
+        from pathlib import Path
+        from code_puppy.session_storage import load_session_with_hashes
+        from code_puppy.config import AUTOSAVE_DIR
+        from code_puppy.agents.agent_manager import get_current_agent
 
-        store = SessionStore()
-        session_data = store.load_session(session_id)
+        base_dir = Path(AUTOSAVE_DIR)
+        messages, compacted_hashes = load_session_with_hashes(session_id, base_dir)
 
-        if session_data is not None:
+        if messages:
             # Apply to current agent
-            from code_puppy.agents.agent_manager import get_current_agent
             agent = get_current_agent()
-            if agent and hasattr(session_data, "messages"):
-                agent.set_message_history(session_data.messages)
+            if agent:
+                agent.set_message_history(messages)
+                if compacted_hashes:
+                    agent.restore_compacted_hashes(compacted_hashes)
 
             if _client:
                 _client.send_event("session_loaded", {
                     "session_id": session_id,
                     "success": True,
-                    "message_count": len(session_data.messages) if hasattr(session_data, "messages") else 0,
+                    "message_count": len(messages),
                 })
             logger.info("Bridge loaded session: %s", session_id)
         else:
@@ -326,8 +359,16 @@ def _handle_load_session_request(msg: dict) -> None:
                 _client.send_event("session_loaded", {
                     "session_id": session_id,
                     "success": False,
-                    "error": "Session not found",
+                    "error": "Session empty or not found",
                 })
+    except FileNotFoundError:
+        logger.warning("Session not found: %s", session_id)
+        if _client:
+            _client.send_event("session_loaded", {
+                "session_id": session_id,
+                "success": False,
+                "error": "Session not found",
+            })
     except Exception as exc:
         logger.error("Failed to load session via bridge: %s", exc)
         if _client:
@@ -341,8 +382,11 @@ def _handle_load_session_request(msg: dict) -> None:
 def _handle_save_session_request(msg: dict) -> None:
     """Handle save_session request from Mana."""
     try:
+        from pathlib import Path
+        from datetime import datetime, timezone
         from code_puppy.agents.agent_manager import get_current_agent
-        from code_puppy.session_storage import SessionStore
+        from code_puppy.session_storage import save_session
+        from code_puppy.config import AUTOSAVE_DIR
 
         agent = get_current_agent()
         if agent is None:
@@ -350,8 +394,33 @@ def _handle_save_session_request(msg: dict) -> None:
                 _client.send_event("session_saved", {"success": False, "error": "No agent"})
             return
 
-        store = SessionStore()
-        session_id = store.save_current_session(agent)
+        # Get current message history from agent
+        history = agent.get_message_history() if hasattr(agent, "get_message_history") else []
+        if not history:
+            # Try to get from agent's message history attribute
+            history = getattr(agent, "_message_history", []) or getattr(agent, "_history", [])
+
+        # Generate session name with timestamp
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        session_id = f"mana_{timestamp}"
+
+        base_dir = Path(AUTOSAVE_DIR)
+
+        # Get token estimator from agent
+        def token_estimator(msg):
+            if hasattr(agent, "estimate_tokens_for_message"):
+                return agent.estimate_tokens_for_message(msg)
+            return 0
+
+        # Save the session
+        metadata = save_session(
+            history=history,
+            session_name=session_id,
+            base_dir=base_dir,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            token_estimator=token_estimator,
+            auto_saved=False,
+        )
 
         if _client:
             _client.send_event("session_saved", {
