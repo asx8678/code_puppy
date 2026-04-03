@@ -1,3 +1,7 @@
+# User config directory — contains OAuth tokens, session keys, and local state
+# Must NEVER be committed (even if copied/symlinked into the repo)
+.code_puppy/
+
 # Python-generated files
 __pycache__/
 *.py[oc]
