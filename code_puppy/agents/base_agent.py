@@ -336,9 +336,10 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         This is the shared implementation used by both _stringify_part() and
         stringify_message_part(). Returns the raw stringified content without
-        the "content=" prefix. Caching is keyed on content object identity
-        (via id()) since message part contents are typically immutable pydantic
-        models or basic types.
+        the "content=" prefix. Caching is only used for immutable types
+        (str and pydantic.BaseModel) keyed by object id(). Mutable types
+        (dict, list) are computed directly without caching to avoid stale
+        data from object mutation and id() recycling after GC.
 
         Args:
             content: The content to stringify (str, BaseModel, dict, list, or other)
@@ -346,24 +347,30 @@ class BaseAgent(ABC, AgentPromptMixin):
         Returns:
             Raw string representation of the content (without "content=" prefix)
         """
-        # Use object identity as cache key for O(1) lookup
-        # This is safe because content objects are typically immutable in practice
-        cache_key = id(content)
-        if cache_key in self._content_stringify_cache:
-            return self._content_stringify_cache[cache_key]
-
         result: str
         match content:
             case None:
                 result = "None"
             case str() as s:
+                # Immutable - safe to cache by id()
+                cache_key = id(content)
+                if cache_key in self._content_stringify_cache:
+                    return self._content_stringify_cache[cache_key]
                 result = s
+                self._content_stringify_cache[cache_key] = result
             case pydantic.BaseModel():
+                # Immutable (frozen models) - safe to cache by id()
+                cache_key = id(content)
+                if cache_key in self._content_stringify_cache:
+                    return self._content_stringify_cache[cache_key]
                 result = content.model_dump_json()
+                self._content_stringify_cache[cache_key] = result
             case dict():
+                # Mutable - skip caching, compute directly
                 # Note: sort_keys=True for consistent hashing in _stringify_part
                 result = json.dumps(content, sort_keys=True)
             case list():
+                # Mutable - skip caching, compute directly
                 # Build string for list items - note that callers format this differently
                 parts: list[str] = []
                 for item in content:
@@ -376,7 +383,6 @@ class BaseAgent(ABC, AgentPromptMixin):
             case _:
                 result = repr(content)
 
-        self._content_stringify_cache[cache_key] = result
         return result
 
     def _stringify_part(self, part: Any) -> str:
