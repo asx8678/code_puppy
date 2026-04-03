@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import queue
 import time
 from typing import Any
 
@@ -23,6 +24,9 @@ logger = logging.getLogger(__name__)
 
 # Module-level singleton — created once on startup
 _client: BridgeClient | None = None
+
+# Thread-safe queue for prompts received from Mana (for REPL pickup)
+_pending_prompts: queue.Queue[str] = queue.Queue(maxsize=100)
 
 
 # ------------------------------------------------------------------
@@ -52,6 +56,11 @@ def _on_startup() -> None:
     _client = client
 
     if client.connect():
+        # Register request handlers from Mana (before sending events)
+        client.register_handler("prompt", _handle_prompt_request)
+        client.register_handler("switch_agent", _handle_switch_agent_request)
+        client.register_handler("switch_model", _handle_switch_model_request)
+
         # Send hello handshake
         try:
             from code_puppy import __version__
@@ -108,15 +117,17 @@ def _send_agent_list(client: BridgeClient | None = None) -> None:
             get_agent_descriptions,
         )
 
-        available = get_available_agents()       # {name: display_name}
-        descriptions = get_agent_descriptions()   # {name: description}
+        available = get_available_agents()  # {name: display_name}
+        descriptions = get_agent_descriptions()  # {name: description}
 
         for name, display_name in available.items():
-            agents.append({
-                "name": name,
-                "display_name": display_name,
-                "description": descriptions.get(name, ""),
-            })
+            agents.append(
+                {
+                    "name": name,
+                    "display_name": display_name,
+                    "description": descriptions.get(name, ""),
+                }
+            )
     except Exception as exc:
         logger.debug("Could not load agents from registry: %s", exc)
         # Fall back to a minimal hardcoded list so the panel still works
@@ -132,11 +143,82 @@ def _send_agent_list(client: BridgeClient | None = None) -> None:
     logger.debug("Bridge sent agent_list with %d agents", len(agents))
 
 
-# TODO(bridge): Handle incoming ``switch_agent`` requests from Mana.
-# The TcpServer currently broadcasts to PubSub but the Python bridge
-# callback model has no receive path.  A future iteration should add
-# a lightweight TCP listener on the bridge client that processes
-# requests from Mana and calls ``set_current_agent()``.
+# ------------------------------------------------------------------
+# Incoming request handlers (Mana → Python)
+# ------------------------------------------------------------------
+
+
+def _handle_prompt_request(msg: dict) -> None:
+    """Handle incoming prompt request from Mana.
+
+    Stores the prompt in a thread-safe queue so the REPL can pick it up.
+    Also sends an acknowledgment back to Mana.
+    """
+    data = msg.get("data", {})
+    text = data.get("text", "")
+    if not text:
+        return
+
+    try:
+        _pending_prompts.put_nowait(text)
+        logger.info("Bridge received prompt from Mana: %s", text[:80])
+    except queue.Full:
+        logger.warning("Bridge prompt queue full — dropping prompt from Mana")
+
+    # Acknowledge receipt
+    if _client is not None:
+        _client.send_event("prompt_ack", {"status": "queued"})
+
+
+def _handle_switch_agent_request(msg: dict) -> None:
+    """Handle switch_agent request from Mana."""
+    data = msg.get("data", {})
+    agent_name = data.get("agent_name", "")
+    if not agent_name:
+        return
+
+    try:
+        from code_puppy.agents import set_current_agent
+
+        success = set_current_agent(agent_name)
+        if success and _client:
+            _client.send_event("agent_switched", {"agent_name": agent_name})
+            logger.info("Bridge switched agent to: %s", agent_name)
+        elif _client:
+            _client.send_event(
+                "error", {"message": f"Failed to switch to agent: {agent_name}"}
+            )
+    except Exception as exc:
+        logger.error("Failed to switch agent via bridge: %s", exc)
+
+
+def _handle_switch_model_request(msg: dict) -> None:
+    """Handle switch_model request from Mana."""
+    data = msg.get("data", {})
+    model_name = data.get("model_name", "")
+    if not model_name:
+        return
+
+    # Reuse the existing /model command handler
+    result = _on_switch_model("model", model_name)
+    if result and _client:
+        logger.info("Bridge switched model to: %s (result: %s)", model_name, result)
+
+
+def get_pending_bridge_prompts() -> list[str]:
+    """Return all pending prompts received from Mana (non-blocking).
+
+    The REPL can poll this to pick up prompts that were injected
+    via the Mana bridge.  Returns an empty list if no prompts are
+    pending.
+    """
+    prompts: list[str] = []
+    while not _pending_prompts.empty():
+        try:
+            prompts.append(_pending_prompts.get_nowait())
+        except queue.Empty:
+            break
+    return prompts
 
 
 def _on_shutdown() -> None:

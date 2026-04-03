@@ -57,9 +57,11 @@ class BridgeClient:
         self._lock = threading.Lock()
         self._send_queue: queue.Queue[Any] = queue.Queue(maxsize=10_000)
         self._sender_thread: threading.Thread | None = None
+        self._reader_thread: threading.Thread | None = None
         self._connected = False
         self._closed = False
         self._backoff = _INITIAL_BACKOFF
+        self._request_handlers: dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # Connection lifecycle
@@ -100,6 +102,14 @@ class BridgeClient:
                 daemon=True,
             )
             self._sender_thread.start()
+
+            # Start background reader thread
+            self._reader_thread = threading.Thread(
+                target=self._reader_loop,
+                name="mana-bridge-reader",
+                daemon=True,
+            )
+            self._reader_thread.start()
 
             logger.info("Mana bridge connected to %s:%s", self._host, self._port)
             return True
@@ -142,6 +152,9 @@ class BridgeClient:
         if self._sender_thread and self._sender_thread.is_alive():
             self._sender_thread.join(timeout=3.0)
 
+        if self._reader_thread and self._reader_thread.is_alive():
+            self._reader_thread.join(timeout=3.0)
+
         logger.info("Mana bridge closed")
 
     @property
@@ -176,6 +189,15 @@ class BridgeClient:
             self._send_queue.put_nowait(msg)
         except queue.Full:
             logger.debug("Mana bridge send queue full — dropping '%s'", name)
+
+    def register_handler(self, name: str, handler) -> None:
+        """Register a handler for incoming requests from Mana.
+
+        Args:
+            name: Request name (e.g. "prompt", "switch_agent").
+            handler: Callable that accepts a single dict argument (the message).
+        """
+        self._request_handlers[name] = handler
 
     # ------------------------------------------------------------------
     # Internal sender loop
@@ -221,6 +243,69 @@ class BridgeClient:
         except (OSError, struct.error) as exc:
             logger.debug("Mana bridge send failed: %s", exc)
             return False
+
+    # ------------------------------------------------------------------
+    # Internal reader loop
+    # ------------------------------------------------------------------
+
+    def _reader_loop(self) -> None:
+        """Background thread that reads frames from Mana and dispatches."""
+        while not self._closed:
+            try:
+                # Read 4-byte header
+                header = self._recv_exact(4)
+                if header is None:
+                    break
+                length = struct.unpack(">I", header)[0]
+
+                # Read payload
+                payload = self._recv_exact(length)
+                if payload is None:
+                    break
+
+                # Decode
+                msg = self._msgpack.unpackb(payload, raw=False)
+
+                # Dispatch
+                name = msg.get("name", "")
+                handler = self._request_handlers.get(name)
+                if handler:
+                    try:
+                        handler(msg)
+                    except Exception as exc:
+                        logger.error("Handler for '%s' failed: %s", name, exc)
+                else:
+                    logger.debug("No handler for request: %s", name)
+
+            except OSError:
+                break
+            except Exception as exc:
+                logger.error("Reader loop error: %s", exc)
+                break
+
+        logger.debug("Mana bridge reader loop exited")
+
+    def _recv_exact(self, n: int) -> bytes | None:
+        """Read exactly *n* bytes from socket, returns None on disconnect.
+
+        The lock is held briefly to snapshot the socket reference, then
+        released so that the sender thread is not blocked during recv().
+        """
+        with self._lock:
+            sock = self._sock
+        if sock is None:
+            return None
+
+        buf = b""
+        while len(buf) < n:
+            try:
+                chunk = sock.recv(n - len(buf))
+                if not chunk:  # connection closed
+                    return None
+                buf += chunk
+            except OSError:
+                return None
+        return buf
 
     # ------------------------------------------------------------------
     # Reconnect
