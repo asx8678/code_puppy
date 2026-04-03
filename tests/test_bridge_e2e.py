@@ -131,6 +131,10 @@ class ManaMock:
                 self.server_sock.close()
             except OSError:
                 pass
+        if self._accept_thread and self._accept_thread.is_alive():
+            self._accept_thread.join(timeout=1.0)
+        if self._reader_thread and self._reader_thread.is_alive():
+            self._reader_thread.join(timeout=1.0)
 
 
 @pytest.fixture()
@@ -288,8 +292,8 @@ class TestBridgeRoundTrip:
         import code_puppy.plugins.mana_bridge.register_callbacks as rcb
 
         client = BridgeClient(host="127.0.0.1", port=mana_mock.port)
+        old_client = rcb._client
         try:
-            old_client = rcb._client
             rcb._client = client
 
             client.register_handler("prompt", _handle_prompt_request)
@@ -304,9 +308,8 @@ class TestBridgeRoundTrip:
 
             ack = mana_mock.wait_for_message("prompt_ack", timeout=3.0)
             assert ack is not None
-
-            rcb._client = old_client
         finally:
+            rcb._client = old_client
             client.close()
 
     def test_client_reconnect_after_disconnect(self, mana_mock: ManaMock) -> None:
