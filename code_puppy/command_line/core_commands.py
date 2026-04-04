@@ -13,6 +13,7 @@ from code_puppy.command_line.model_picker_completion import update_model_in_inpu
 from code_puppy.command_line.motd import print_motd
 from code_puppy.command_line.utils import make_directory_table
 from code_puppy.config import finalize_autosave_session
+from code_puppy.constants import TUI_TIMEOUT_SECONDS
 from code_puppy.messaging import emit_error, emit_info
 from code_puppy.tools.tools_content import tools_content
 
@@ -184,7 +185,7 @@ def handle_tutorial_command(command: str) -> bool:
     # Run the async wizard in a thread pool (same pattern as agent picker)
     with concurrent.futures.ThreadPoolExecutor() as executor:
         future = executor.submit(lambda: asyncio.run(run_onboarding_wizard()))
-        result = future.result(timeout=300)  # 5 min timeout
+        result = future.result(timeout=TUI_TIMEOUT_SECONDS)  # 2 min timeout
 
     if result == "chatgpt":
         emit_info("🔐 Starting ChatGPT OAuth flow...")
@@ -261,7 +262,7 @@ def handle_agent_command(command: str) -> bool:
                 future = executor.submit(
                     lambda: asyncio.run(interactive_agent_picker())
                 )
-                selected_agent = future.result(timeout=300)  # 5 min timeout
+                selected_agent = future.result(timeout=TUI_TIMEOUT_SECONDS)  # 2 min timeout
 
             if selected_agent:
                 current_agent = get_current_agent()
@@ -505,7 +506,7 @@ def handle_model_command(command: str) -> bool:
                 future = executor.submit(
                     lambda: asyncio.run(interactive_model_picker())
                 )
-                selected_model = future.result(timeout=300)  # 5 min timeout
+                selected_model = future.result(timeout=TUI_TIMEOUT_SECONDS)  # 2 min timeout
 
             if selected_model:
                 set_active_model(selected_model)

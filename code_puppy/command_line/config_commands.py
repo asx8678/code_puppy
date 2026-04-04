@@ -8,6 +8,7 @@ import json
 
 from code_puppy.command_line.command_registry import register_command
 from code_puppy.config import get_config_keys
+from code_puppy.constants import TUI_TIMEOUT_SECONDS
 
 
 # Import get_commands_help from command_handler to avoid circular imports
@@ -545,7 +546,7 @@ def handle_diff_command(command: str) -> bool:
     # Show interactive picker for diff configuration
     with concurrent.futures.ThreadPoolExecutor() as executor:
         future = executor.submit(lambda: asyncio.run(interactive_diff_picker()))
-        result = future.result(timeout=300)  # 5 min timeout
+        result = future.result(timeout=TUI_TIMEOUT_SECONDS)  # 2 min timeout
 
     if result:
         # Apply the changes silently (no console output)
@@ -574,7 +575,7 @@ def handle_colors_command(command: str) -> bool:
     # Show interactive picker for banner color configuration
     with concurrent.futures.ThreadPoolExecutor() as executor:
         future = executor.submit(lambda: asyncio.run(interactive_colors_picker()))
-        result = future.result(timeout=300)  # 5 min timeout
+        result = future.result(timeout=TUI_TIMEOUT_SECONDS)  # 2 min timeout
 
     if result:
         # Apply the changes

@@ -161,11 +161,12 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
 
             from code_puppy.command_line.onboarding_wizard import run_onboarding_wizard
             from code_puppy.config import set_model_name
+            from code_puppy.constants import TUI_TIMEOUT_SECONDS
             from code_puppy.messaging import emit_info
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(lambda: asyncio.run(run_onboarding_wizard()))
-                result = future.result(timeout=300)
+                result = future.result(timeout=TUI_TIMEOUT_SECONDS)
 
             if result == "chatgpt":
                 emit_info("🔐 Starting ChatGPT OAuth flow...")
