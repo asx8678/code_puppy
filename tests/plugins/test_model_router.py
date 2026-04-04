@@ -274,8 +274,12 @@ class TestRunWithMcpWrapper:
             result, original = self._run_wrapper(mock_agent, "hello")
         assert result == "ok"
         original.assert_called_once()
-        mock_set.assert_called_once_with("gpt-4o-mini")
-        mock_agent.reload_code_generation_agent.assert_called_once()
+        # Should switch to simple model, then restore original
+        assert mock_set.call_count == 2
+        mock_set.assert_any_call("gpt-4o-mini")
+        mock_set.assert_any_call("gpt-4o")
+        # Agent should be reloaded twice: after switch and after restore
+        assert mock_agent.reload_code_generation_agent.call_count == 2
 
     def test_complex_prompt_keeps_model(self, mock_agent):
         with patch(

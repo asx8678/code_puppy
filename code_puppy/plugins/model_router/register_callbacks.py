@@ -218,6 +218,10 @@ def _make_run_with_mcp_wrapper(original_fn):
     async def _wrapped_run_with_mcp(self, prompt: str, *args: Any, **kwargs: Any):
         config = _load_config()
 
+        # Track if we switched models and what the original was
+        original_model: str | None = None
+        switched = False
+
         if config["routing_enabled"] and prompt:
             target_model, score, reason = select_model(prompt, config)
 
@@ -236,6 +240,8 @@ def _make_run_with_mcp_wrapper(original_fn):
                     score,
                     reason,
                 )
+                original_model = current_model
+                switched = True
                 set_model_name(target_model)
                 # Force agent reload so the new model takes effect this turn
                 try:
@@ -243,7 +249,29 @@ def _make_run_with_mcp_wrapper(original_fn):
                 except Exception:
                     logger.debug("agent reload after model switch failed", exc_info=True)
 
-        return await original_fn(self, prompt, *args, **kwargs)
+        try:
+            return await original_fn(self, prompt, *args, **kwargs)
+        finally:
+            # Restore original model if we switched
+            if switched and original_model:
+                try:
+                    from code_puppy.config import set_model_name
+
+                    logger.debug(
+                        "🔀 Model routing: restoring %s → %s",
+                        target_model,
+                        original_model,
+                    )
+                    set_model_name(original_model)
+                    # Force agent reload so the original model takes effect
+                    try:
+                        self.reload_code_generation_agent()
+                    except Exception:
+                        logger.debug(
+                            "agent reload after model restore failed", exc_info=True
+                        )
+                except Exception:
+                    logger.debug("failed to restore original model", exc_info=True)
 
     return _wrapped_run_with_mcp
 
