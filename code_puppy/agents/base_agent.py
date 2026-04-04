@@ -1938,6 +1938,8 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         # Handle claude-code models: swap instructions (prompt prepending
         # happens in run_with_mcp).
+        # Also handle OpenAI reasoning models which get system prompt prepended
+        # to first user message for efficiency (similar to claude-code).
         prepared = prepare_prompt_for_model(
             model_name, instructions, "", prepend_system_to_user=False
         )

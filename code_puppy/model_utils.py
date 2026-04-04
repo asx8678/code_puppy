@@ -49,16 +49,40 @@ class PreparedPrompt:
         instructions: The system instructions to use for the agent
         user_prompt: The user prompt (possibly modified)
         is_claude_code: Whether this is a claude-code model
+        use_developer_role: Whether to use 'developer' role instead of 'system'
+            for OpenAI reasoning models (o1, o3, o4, gpt-5 series)
     """
 
     instructions: str
     user_prompt: str
     is_claude_code: bool
+    use_developer_role: bool = False
 
 
 def is_claude_code_model(model_name: str) -> bool:
     """Check if a model is a claude-code model."""
     return model_name.startswith("claude-code")
+
+
+def is_openai_reasoning_model(model_name: str) -> bool:
+    """Check if a model is an OpenAI reasoning model.
+
+    Reasoning models (o1, o3, o4, gpt-5 series) support the 'developer' role
+    as a persistent system context mechanism.
+
+    Args:
+        model_name: The model name to check.
+
+    Returns:
+        True if the model is an OpenAI reasoning model.
+    """
+    lower = model_name.lower()
+    return (
+        lower.startswith("o1")
+        or lower.startswith("o3")
+        or lower.startswith("o4")
+        or "gpt-5" in lower
+    )
 
 
 def is_antigravity_model(model_name: str) -> bool:
@@ -112,6 +136,7 @@ def prepare_prompt_for_model(
             instructions=effective_system_prompt,
             user_prompt=effective_user_prompt,
             is_claude_code=plugin_is_claude_code,
+            use_developer_role=False,
         )
 
     system_prompt = effective_system_prompt
@@ -125,7 +150,19 @@ def prepare_prompt_for_model(
         return PreparedPrompt(
             instructions=CLAUDE_CODE_INSTRUCTIONS,
             user_prompt=modified_prompt,
-            is_claude_code=True)
+            is_claude_code=True,
+            use_developer_role=False)
+
+    # Handle OpenAI reasoning models (o1, o3, o4, gpt-5 series)
+    # These models support the 'developer' role for persistent system context.
+    # We preserve the instructions for token counting but don't prepend to user prompt
+    # (unlike Claude Code, which prepends to achieve similar efficiency).
+    if is_openai_reasoning_model(model_name):
+        return PreparedPrompt(
+            instructions=system_prompt,
+            user_prompt=user_prompt,
+            is_claude_code=False,
+            use_developer_role=True)
 
     # Handle Antigravity models
     if is_antigravity_model(model_name):
@@ -143,12 +180,14 @@ def prepare_prompt_for_model(
         return PreparedPrompt(
             instructions=_load_antigravity_prompt(),
             user_prompt=modified_prompt,
-            is_claude_code=False)
+            is_claude_code=False,
+            use_developer_role=False)
 
     return PreparedPrompt(
         instructions=system_prompt,
         user_prompt=user_prompt,
-        is_claude_code=False)
+        is_claude_code=False,
+        use_developer_role=False)
 
 
 def get_claude_code_instructions() -> str:

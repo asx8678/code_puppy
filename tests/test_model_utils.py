@@ -19,6 +19,7 @@ from code_puppy.model_utils import (
     get_claude_code_instructions,
     get_default_extended_thinking,
     is_claude_code_model,
+    is_openai_reasoning_model,
     prepare_prompt_for_model,
 )
 
@@ -187,3 +188,86 @@ class TestGetDefaultExtendedThinking:
     def test_substring_match_in_longer_name(self):
         assert get_default_extended_thinking("anthropic-opus-4-6-preview") == "adaptive"
         assert get_default_extended_thinking("claude-4-6-opus-20250701") == "adaptive"
+
+
+class TestIsOpenAIReasoningModel:
+    """Tests for is_openai_reasoning_model function."""
+
+    def test_o1_models_return_true(self):
+        """Models starting with 'o1' should return True."""
+        assert is_openai_reasoning_model("o1-mini") is True
+        assert is_openai_reasoning_model("o1-preview") is True
+        assert is_openai_reasoning_model("o1-pro") is True
+
+    def test_o3_models_return_true(self):
+        """Models starting with 'o3' should return True."""
+        assert is_openai_reasoning_model("o3-mini") is True
+        assert is_openai_reasoning_model("o3") is True
+
+    def test_o4_models_return_true(self):
+        """Models starting with 'o4' should return True."""
+        assert is_openai_reasoning_model("o4-mini") is True
+        assert is_openai_reasoning_model("o4") is True
+
+    def test_gpt5_models_return_true(self):
+        """Models containing 'gpt-5' should return True."""
+        assert is_openai_reasoning_model("gpt-5") is True
+        assert is_openai_reasoning_model("gpt-5-turbo") is True
+        assert is_openai_reasoning_model("gpt-5-codex") is True
+        assert is_openai_reasoning_model("chatgpt-gpt-5") is True
+
+    def test_non_reasoning_models_return_false(self):
+        """Non-reasoning models should return False."""
+        assert is_openai_reasoning_model("gpt-4") is False
+        assert is_openai_reasoning_model("gpt-4o") is False
+        assert is_openai_reasoning_model("claude-3-sonnet") is False
+        assert is_openai_reasoning_model("gemini-pro") is False
+
+    def test_case_insensitive(self):
+        """Matching should be case-insensitive."""
+        assert is_openai_reasoning_model("O1-MINI") is True
+        assert is_openai_reasoning_model("GPT-5") is True
+        assert is_openai_reasoning_model("Gpt-5-Turbo") is True
+
+
+class TestPreparePromptForOpenAIReasoningModels:
+    """Tests for prepare_prompt_for_model with OpenAI reasoning models."""
+
+    def test_gpt5_preserves_instructions(self):
+        """GPT-5 models should preserve instructions for token counting."""
+        result = prepare_prompt_for_model(
+            "gpt-5", "You are a helpful assistant.", "Hello world"
+        )
+
+        assert result.instructions == "You are a helpful assistant."
+        assert result.user_prompt == "Hello world"
+        assert result.is_claude_code is False
+        assert result.use_developer_role is True
+
+    def test_o1_preserves_instructions(self):
+        """O1 models should preserve instructions for token counting."""
+        result = prepare_prompt_for_model(
+            "o1-mini", "System prompt here.", "User query"
+        )
+
+        assert result.instructions == "System prompt here."
+        assert result.user_prompt == "User query"
+        assert result.use_developer_role is True
+
+    def test_o3_preserves_instructions(self):
+        """O3 models should preserve instructions for token counting."""
+        result = prepare_prompt_for_model(
+            "o3", "System prompt here.", "User query"
+        )
+
+        assert result.instructions == "System prompt here."
+        assert result.user_prompt == "User query"
+        assert result.use_developer_role is True
+
+    def test_prepared_prompt_has_developer_role_flag(self):
+        """PreparedPrompt should have use_developer_role=True for reasoning models."""
+        result = prepare_prompt_for_model("gpt-5", "System", "User")
+
+        assert isinstance(result, PreparedPrompt)
+        assert hasattr(result, "use_developer_role")
+        assert result.use_developer_role is True
