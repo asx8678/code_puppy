@@ -36,6 +36,7 @@ from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
 
 if RUST_AVAILABLE:
     from code_puppy._core_bridge import (
+        collect_tool_call_ids as rust_collect_tool_call_ids,
         process_messages_batch,
         prune_and_filter,
         split_for_summarization as rust_split_for_summarization,
@@ -1214,7 +1215,17 @@ class BaseAgent(ABC, AgentPromptMixin):
     def _collect_tool_call_ids_uncached(
         messages: list[ModelMessage],
     ) -> tuple[set[str], set[str]]:
-        """Collect tool_call_ids and tool_return_ids from messages (no caching)."""
+        """Collect tool_call_ids and tool_return_ids from messages (no caching).
+        
+        Uses Rust implementation when available for performance, otherwise falls
+        back to pure Python implementation.
+        """
+        # Use Rust implementation when available for better performance
+        if RUST_AVAILABLE and is_rust_enabled():
+            dict_messages = serialize_messages_for_rust(messages)
+            return rust_collect_tool_call_ids(dict_messages)
+        
+        # Fallback to pure Python implementation
         call_ids: set[str] = set()
         return_ids: set[str] = set()
         for msg in messages:

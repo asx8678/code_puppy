@@ -14,6 +14,7 @@ try:
         ProcessResult,
         PruneResult,
         SplitResult,
+        collect_tool_call_ids,
         deserialize_session,
         process_messages_batch,
         prune_and_filter,
@@ -37,6 +38,7 @@ except ImportError:
     serialize_session = None  # type: ignore[assignment]
     deserialize_session = None  # type: ignore[assignment]
     serialize_session_incremental = None  # type: ignore[assignment]
+    collect_tool_call_ids = None  # type: ignore[assignment]
 
 
 # --- Hashline acceleration --------------------------------------------------

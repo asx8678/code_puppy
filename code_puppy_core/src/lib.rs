@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyList;
+use pyo3::types::PyAny;
 
 mod hashline;
 mod message_hashing;
@@ -14,7 +15,7 @@ use hashline::{
     strip_hashline_prefixes as strip_hashline_prefixes_impl,
     validate_hashline_anchor as validate_hashline_anchor_impl,
 };
-use pruning::{prune_and_filter_impl, split_for_summarization_impl, truncation_indices_impl};
+use pruning::{collect_tool_call_ids_impl, prune_and_filter_impl, split_for_summarization_impl, truncation_indices_impl};
 use serialization::{
     deserialize_session_impl, serialize_session_impl, serialize_session_incremental_impl,
 };
@@ -160,7 +161,12 @@ fn validate_hashline_anchor(idx: u32, line: &str, expected_hash: &str) -> bool {
     validate_hashline_anchor_impl(idx, line, expected_hash)
 }
 
-// ── Module registration ─────────────────────────────────────────────────────
+#[pyfunction]
+#[pyo3(signature = (messages,))]
+fn collect_tool_call_ids(messages: &Bound<'_, PyList>) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
+    let (call_set, return_set) = collect_tool_call_ids_impl(messages)?;
+    Ok((call_set.into_any(), return_set.into_any()))
+}
 
 #[pymodule]
 fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -174,6 +180,7 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(serialize_session, m)?)?;
     m.add_function(wrap_pyfunction!(deserialize_session, m)?)?;
     m.add_function(wrap_pyfunction!(serialize_session_incremental, m)?)?;
+    m.add_function(wrap_pyfunction!(collect_tool_call_ids, m)?)?;
     m.add_function(wrap_pyfunction!(compute_line_hash, m)?)?;
     m.add_function(wrap_pyfunction!(format_hashlines, m)?)?;
     m.add_function(wrap_pyfunction!(strip_hashline_prefixes, m)?)?;

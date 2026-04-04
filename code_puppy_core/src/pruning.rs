@@ -1,12 +1,44 @@
 //! Single-pass pruning, filtering, truncation, and summarization splitting.
 
 use pyo3::prelude::*;
-use pyo3::types::PyList;
+use pyo3::types::{PyList, PySet};
 use rustc_hash::FxHashSet;
 
 use crate::token_estimation::{estimate_tokens, stringify_part_for_tokens};
 use crate::types::Message;
 use crate::{PruneResult, SplitResult};
+
+/// Collect tool_call_ids and tool_return_ids from messages.
+/// Returns a tuple of (call_ids_set, return_ids_set) as Python sets.
+pub fn collect_tool_call_ids_impl(messages: &Bound<'_, PyList>) -> PyResult<(Py<PySet>, Py<PySet>)> {
+    let msgs: Vec<Message> = messages
+        .iter()
+        .map(|o| Message::from_py(&o))
+        .collect::<PyResult<_>>()?;
+
+    let mut call_ids = FxHashSet::default();
+    let mut return_ids = FxHashSet::default();
+    
+    for msg in &msgs {
+        for part in &msg.parts {
+            if let Some(ref id) = part.tool_call_id {
+                if !id.is_empty() {
+                    if part.part_kind == "tool-call" {
+                        call_ids.insert(id.clone());
+                    } else {
+                        return_ids.insert(id.clone());
+                    }
+                }
+            }
+        }
+    }
+    
+    let py = messages.py();
+    let call_set = PySet::new(py, &call_ids.iter().map(|s| s.as_str()).collect::<Vec<_>>())?;
+    let return_set = PySet::new(py, &return_ids.iter().map(|s| s.as_str()).collect::<Vec<_>>())?;
+    
+    Ok((call_set.unbind(), return_set.unbind()))
+}
 
 pub fn prune_and_filter_impl(
     messages: &Bound<'_, PyList>,
