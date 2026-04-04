@@ -76,18 +76,18 @@ defmodule Mana.Plugin.BehaviourTest do
     end
 
     test "on_run_end/7 sends event" do
-      assert :ok = MockPlugin.on_run_end(
-               "test_agent",
-               "gpt-4",
-               "session_123",
-               true,
-               nil,
-               "response",
-               %{}
-             )
+      assert :ok =
+               MockPlugin.on_run_end(
+                 "test_agent",
+                 "gpt-4",
+                 "session_123",
+                 true,
+                 nil,
+                 "response",
+                 %{}
+               )
 
-      assert_receive {:hook_called, :agent_run_end,
-                      ["test_agent", "gpt-4", "session_123", true, nil, "response", %{}]}
+      assert_receive {:hook_called, :agent_run_end, ["test_agent", "gpt-4", "session_123", true, nil, "response", %{}]}
     end
   end
 
