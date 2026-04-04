@@ -4,7 +4,9 @@ Registers via the ``custom_command`` hook so it lives entirely outside
 ``code_puppy/command_line/``.  Run ``/clean help`` for usage.
 """
 
+import re
 import shutil
+import time
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +90,49 @@ _CATEGORIES: dict[str, Any] = {
 # Users must run "/clean db" explicitly (which destroys DBOS first).
 _SAFE_CATEGORY_KEYS: list[str] = [k for k in _CATEGORIES if k != "db"]
 
+
+# ---------------------------------------------------------------------------
+# Duration parsing
+# ---------------------------------------------------------------------------
+
+
+def _parse_duration(s: str) -> int:
+    """Parse a duration string into seconds.
+
+    Supports formats like:
+        - 7d, 30d (days)
+        - 24h (hours)
+        - 1w (weeks = 7 days)
+        - 12m (minutes)
+        - 30s (seconds)
+
+    Args:
+        s: Duration string with number + unit suffix.
+
+    Returns:
+        Number of seconds as an integer.
+
+    Raises:
+        ValueError: If the format is invalid or unit is not recognized.
+    """
+    s = s.strip().lower()
+    match = re.match(r"^(\d+)\s*([dhwms])$", s)
+    if not match:
+        raise ValueError(
+            f"Invalid duration format: '{s}'. "
+            f"Use formats like: 7d, 24h, 1w, 12m, 30s"
+        )
+    num, unit = match.groups()
+    value = int(num)
+    multipliers = {
+        "s": 1,
+        "m": 60,
+        "h": 3600,
+        "d": 86400,
+        "w": 604800,  # 7 days
+    }
+    return value * multipliers[unit]
+
 # ---------------------------------------------------------------------------
 # Size / cleanup helpers
 # ---------------------------------------------------------------------------
@@ -104,8 +149,47 @@ def _human_size(nbytes: int) -> str:
     return f"{nbytes:.1f} GB"  # pragma: no cover
 
 
-def _dir_stats(path: Path) -> tuple[int, int]:
-    """Return ``(file_count, total_bytes)`` for a directory tree."""
+def _human_age(seconds: int) -> str:
+    """Format *seconds* as a human-friendly age string."""
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    if seconds < 86400:
+        return f"{seconds // 3600}h"
+    if seconds < 604800:
+        return f"{seconds // 86400}d"
+    return f"{seconds // 604800}w"
+
+
+def _is_older_than(path: Path, max_age_seconds: int) -> bool:
+    """Check if a file is older than the given age threshold.
+
+    Args:
+        path: Path to the file to check.
+        max_age_seconds: Maximum age in seconds. Files older than this
+            (based on mtime) will return True.
+
+    Returns:
+        True if the file exists and is older than max_age_seconds.
+    """
+    try:
+        mtime = path.stat().st_mtime
+        return (time.time() - mtime) > max_age_seconds
+    except OSError:
+        return False
+
+
+def _dir_stats(path: Path, max_age_seconds: int | None = None) -> tuple[int, int]:
+    """Return ``(file_count, total_bytes)`` for a directory tree.
+
+    Args:
+        path: Directory to scan.
+        max_age_seconds: If set, only count files older than this many seconds.
+
+    Returns:
+        Tuple of (file_count, total_bytes).
+    """
     if not path.is_dir():
         return 0, 0
     count = 0
@@ -114,6 +198,9 @@ def _dir_stats(path: Path) -> tuple[int, int]:
         for item in path.rglob("*"):
             if item.is_file():
                 try:
+                    if max_age_seconds is not None:
+                        if not _is_older_than(item, max_age_seconds):
+                            continue
                     total += item.stat().st_size
                     count += 1
                 except OSError:
@@ -123,53 +210,132 @@ def _dir_stats(path: Path) -> tuple[int, int]:
     return count, total
 
 
-def _file_stats(path: Path) -> tuple[int, int]:
-    """Return ``(1, size)`` if file exists, else ``(0, 0)``."""
+def _file_stats(path: Path, max_age_seconds: int | None = None) -> tuple[int, int]:
+    """Return ``(1, size)`` if file exists, else ``(0, 0)``.
+
+    Args:
+        path: File to check.
+        max_age_seconds: If set, only count file if older than this many seconds.
+
+    Returns:
+        Tuple of (1, size) if file exists and passes age filter, else (0, 0).
+    """
     if not path.is_file():
         return 0, 0
     try:
+        if max_age_seconds is not None:
+            if not _is_older_than(path, max_age_seconds):
+                return 0, 0
         return 1, path.stat().st_size
     except OSError:
         return 0, 0
 
 
-def _target_stats(targets: list[tuple[str, Path, str]]) -> tuple[int, int]:
-    """Aggregate file count and byte total across all targets."""
+def _target_stats(
+    targets: list[tuple[str, Path, str]], max_age_seconds: int | None = None
+) -> tuple[int, int]:
+    """Aggregate file count and byte total across all targets.
+
+    Args:
+        targets: List of (label, path, kind) tuples.
+        max_age_seconds: If set, only count files older than this many seconds.
+
+    Returns:
+        Tuple of (total_file_count, total_bytes).
+    """
     count = 0
     total = 0
     for _label, path, kind in targets:
         if kind == "dir":
-            c, t = _dir_stats(path)
+            c, t = _dir_stats(path, max_age_seconds)
         else:
-            c, t = _file_stats(path)
+            c, t = _file_stats(path, max_age_seconds)
         count += c
         total += t
     return count, total
 
 
-def _clean_dir(path: Path, dry_run: bool) -> tuple[int, int]:
+def _clean_dir(
+    path: Path, dry_run: bool, max_age_seconds: int | None = None
+) -> tuple[int, int]:
     """Remove **contents** of *path* (not the dir itself).
 
-    Returns ``(files_removed, bytes_freed)``.
+    Args:
+        path: Directory whose contents should be cleaned.
+        dry_run: If True, only report what would be done.
+        max_age_seconds: If set, only remove files older than this many seconds.
+
+    Returns:
+        Tuple of (files_removed, bytes_freed).
     """
     if not path.is_dir():
         return 0, 0
-    count, total = _dir_stats(path)
-    if dry_run or count == 0:
+
+    if max_age_seconds is not None:
+        # Age-filtered: remove individual files, leave directory structure
+        count = 0
+        total = 0
+        try:
+            for item in path.rglob("*"):
+                if item.is_file() and _is_older_than(item, max_age_seconds):
+                    try:
+                        size = item.stat().st_size
+                    except OSError:
+                        size = 0
+                    if dry_run:
+                        count += 1
+                        total += size
+                    else:
+                        try:
+                            item.unlink()
+                            count += 1
+                            total += size
+                        except OSError:
+                            pass
+                elif item.is_dir():
+                    # Try to remove empty directories
+                    if not dry_run:
+                        try:
+                            item.rmdir()  # Only succeeds if empty
+                        except OSError:
+                            pass
+        except OSError:
+            pass
         return count, total
-    try:
-        shutil.rmtree(path)
-    except OSError as exc:
-        emit_warning(f"  ⚠️  Could not fully clean {path}: {exc}")
-    finally:
-        path.mkdir(parents=True, exist_ok=True)
-    return count, total
+    else:
+        # Full clean: remove entire directory and recreate
+        count, total = _dir_stats(path)
+        if dry_run or count == 0:
+            return count, total
+        try:
+            shutil.rmtree(path)
+        except OSError as exc:
+            emit_warning(f"  ⚠️  Could not fully clean {path}: {exc}")
+        finally:
+            path.mkdir(parents=True, exist_ok=True)
+        return count, total
 
 
-def _clean_file(path: Path, dry_run: bool) -> tuple[int, int]:
-    """Remove a single file.  Returns ``(1, size)`` or ``(0, 0)``."""
+def _clean_file(
+    path: Path, dry_run: bool, max_age_seconds: int | None = None
+) -> tuple[int, int]:
+    """Remove a single file.  Returns ``(1, size)`` or ``(0, 0)``.
+
+    Args:
+        path: File to remove.
+        dry_run: If True, only report what would be done.
+        max_age_seconds: If set, only remove if file is older than this.
+
+    Returns:
+        Tuple of (files_removed, bytes_freed).
+    """
     if not path.is_file():
         return 0, 0
+
+    if max_age_seconds is not None:
+        if not _is_older_than(path, max_age_seconds):
+            return 0, 0
+
     try:
         size = path.stat().st_size
     except OSError:
@@ -185,23 +351,34 @@ def _clean_file(path: Path, dry_run: bool) -> tuple[int, int]:
 
 
 def _clean_targets(
-    targets: list[tuple[str, Path, str]], dry_run: bool
+    targets: list[tuple[str, Path, str]],
+    dry_run: bool,
+    max_age_seconds: int | None = None,
 ) -> tuple[int, int]:
     """Clean all targets in a list, emitting per-target output.
 
-    Returns ``(total_files, total_bytes)`` across all targets.
+    Args:
+        targets: List of (label, path, kind) tuples.
+        dry_run: If True, only report what would be done.
+        max_age_seconds: If set, only clean files older than this many seconds.
+
+    Returns:
+        Tuple of (total_files, total_bytes) across all targets.
     """
     total_files = 0
     total_bytes = 0
     for label, path, kind in targets:
         if kind == "dir":
-            c, b = _clean_dir(path, dry_run)
+            c, b = _clean_dir(path, dry_run, max_age_seconds)
         else:
-            c, b = _clean_file(path, dry_run)
+            c, b = _clean_file(path, dry_run, max_age_seconds)
         if c:
             prefix = "Would remove" if dry_run else "Removed"
+            age_info = ""
+            if max_age_seconds is not None:
+                age_info = f" (older than {max_age_seconds // 86400}d)"
             emit_info(
-                f"  🗑️  {prefix} {label}: {c} file{'s' if c != 1 else ''}, {_human_size(b)}"
+                f"  🗑️  {prefix} {label}{age_info}: {c} file{'s' if c != 1 else ''}, {_human_size(b)}"
             )
         total_files += c
         total_bytes += b
@@ -224,7 +401,7 @@ def _destroy_dbos() -> bool:
         return False
 
 
-def _clean_db(dry_run: bool) -> tuple[int, int]:
+def _clean_db(dry_run: bool, max_age_seconds: int | None = None) -> tuple[int, int]:
     """Clean the DBOS database with safety handling.
 
     Unlike other categories, the ``db`` category must destroy the active DBOS
@@ -232,7 +409,14 @@ def _clean_db(dry_run: bool) -> tuple[int, int]:
     DBOS holds an open connection causes
     ``sqlite3.OperationalError: attempt to write a readonly database``.
 
-    Returns ``(total_files, total_bytes)``.
+    Args:
+        dry_run: If True, only report what would be done.
+        max_age_seconds: If set, only clean files older than this many seconds.
+            Note: Database files are treated as a unit; the age check applies
+            to the main database file.
+
+    Returns:
+        Tuple of (total_files, total_bytes).
     """
     if not dry_run:
         if _destroy_dbos():
@@ -244,7 +428,7 @@ def _clean_db(dry_run: bool) -> tuple[int, int]:
 
     _, target_fn = _CATEGORIES["db"]
     targets = target_fn()
-    total_files, total_bytes = _clean_targets(targets, dry_run)
+    total_files, total_bytes = _clean_targets(targets, dry_run, max_age_seconds)
 
     if not dry_run and total_files > 0:
         emit_warning("  ⚠️  Please restart Code Puppy for DBOS to reinitialize.")
@@ -261,31 +445,42 @@ def _show_help() -> None:
     """Print help text for /clean."""
     emit_info("🧹 /clean — Clean Code Puppy session data, logs, and caches\n")
     emit_info("Usage:")
-    emit_info("  /clean help              Show this help message")
-    emit_info("  /clean status            Show disk usage per category")
+    emit_info("  /clean help                       Show this help message")
+    emit_info("  /clean status                     Show disk usage per category")
     emit_info(
-        "  /clean all               Clean everything except db (sessions, history, logs, cache)"
+        "  /clean all                        Clean everything except db (sessions, history, logs, cache)"
     )
     emit_info(
-        "  /clean sessions          Clean autosave + sub-agent + terminal sessions"
+        "  /clean sessions                   Clean autosave + sub-agent + terminal sessions"
     )
-    emit_info("  /clean history           Clean command history")
-    emit_info("  /clean logs              Clean error logs")
+    emit_info("  /clean history                    Clean command history")
+    emit_info("  /clean logs                       Clean error logs")
     emit_info(
-        "  /clean cache             Clean browser profiles, workflows, skills cache"
+        "  /clean cache                      Clean browser profiles, workflows, skills cache"
     )
     emit_info(
-        "  /clean db                Clean DBOS state database (⚠️ requires restart)"
+        "  /clean db                         Clean DBOS state database (⚠️ requires restart)"
     )
     emit_info("")
     emit_info("Options:")
     emit_info(
-        "  --dry-run                Preview what would be cleaned without deleting"
+        "  --dry-run                         Preview what would be cleaned without deleting"
     )
+    emit_info(
+        "  --older-than <duration>           Only clean files older than specified age"
+    )
+    emit_info("")
+    emit_info("Duration formats:")
+    emit_info("  7d, 30d  = days")
+    emit_info("  24h      = hours")
+    emit_info("  1w       = weeks (7 days)")
+    emit_info("  12m      = minutes")
     emit_info("")
     emit_info("Examples:")
     emit_info("  /clean sessions --dry-run")
     emit_info("  /clean --dry-run all")
+    emit_info("  /clean sessions --older-than 7d")
+    emit_info("  /clean logs --older-than 24h --dry-run")
     emit_info("")
     emit_info("⚠️  Config files (puppy.cfg, mcp_servers.json, models, OAuth tokens)")
     emit_info("   are never touched.")
@@ -310,23 +505,35 @@ def _show_status() -> None:
     )
 
 
-def _run_clean(categories: list[str], dry_run: bool) -> None:
-    """Execute a clean across the given category keys."""
+def _run_clean(
+    categories: list[str], dry_run: bool, max_age_seconds: int | None = None
+) -> None:
+    """Execute a clean across the given category keys.
+
+    Args:
+        categories: List of category keys to clean.
+        dry_run: If True, only report what would be done.
+        max_age_seconds: If set, only clean files older than this many seconds.
+    """
     if dry_run:
         emit_info("🔍 Dry run — nothing will be deleted\n")
     else:
         emit_info("🧹 Cleaning Code Puppy data...\n")
+
+    if max_age_seconds is not None:
+        age_desc = _human_age(max_age_seconds)
+        emit_info(f"📅 Age filter: only cleaning files older than {age_desc}\n")
 
     grand_files = 0
     grand_bytes = 0
     for key in categories:
         if key == "db":
             # db category requires special DBOS-safe handling
-            files, nbytes = _clean_db(dry_run)
+            files, nbytes = _clean_db(dry_run, max_age_seconds)
         else:
             display_name, target_fn = _CATEGORIES[key]
             targets = target_fn()
-            files, nbytes = _clean_targets(targets, dry_run)
+            files, nbytes = _clean_targets(targets, dry_run, max_age_seconds)
         grand_files += files
         grand_bytes += nbytes
 
@@ -351,6 +558,36 @@ def _run_clean(categories: list[str], dry_run: bool) -> None:
 _VALID_SUBCMDS = {"help", "status", "all", "sessions", "history", "logs", "cache", "db"}
 
 
+def _parse_args(parts: list[str]) -> tuple[list[str], bool, int | None]:
+    """Parse command arguments.
+
+    Args:
+        parts: List of argument strings (after the command name).
+
+    Returns:
+        Tuple of (remaining_args, dry_run, max_age_seconds).
+    """
+    dry_run = False
+    max_age_seconds: int | None = None
+    args: list[str] = []
+
+    i = 0
+    while i < len(parts):
+        arg = parts[i]
+        if arg == "--dry-run":
+            dry_run = True
+        elif arg == "--older-than":
+            if i + 1 >= len(parts):
+                raise ValueError("--older-than requires a duration argument (e.g., 7d, 24h)")
+            max_age_seconds = _parse_duration(parts[i + 1])
+            i += 1
+        else:
+            args.append(arg)
+        i += 1
+
+    return args, dry_run, max_age_seconds
+
+
 def _handle_clean_command(command: str, name: str) -> bool | None:
     """Handle ``/clean`` and its subcommands.
 
@@ -362,9 +599,11 @@ def _handle_clean_command(command: str, name: str) -> bool | None:
     # Parse arguments after "/clean"
     parts = command.split()[1:]  # drop "/clean" itself
 
-    # Detect --dry-run anywhere in args
-    dry_run = "--dry-run" in parts
-    args = [a for a in parts if a != "--dry-run"]
+    try:
+        args, dry_run, max_age_seconds = _parse_args(parts)
+    except ValueError as exc:
+        emit_error(f"Invalid argument: {exc}")
+        return True
 
     subcmd = args[0] if args else "help"
 
@@ -374,9 +613,9 @@ def _handle_clean_command(command: str, name: str) -> bool | None:
         elif subcmd == "status":
             _show_status()
         elif subcmd == "all":
-            _run_clean(_SAFE_CATEGORY_KEYS, dry_run)
+            _run_clean(_SAFE_CATEGORY_KEYS, dry_run, max_age_seconds)
         elif subcmd in _CATEGORIES:
-            _run_clean([subcmd], dry_run)
+            _run_clean([subcmd], dry_run, max_age_seconds)
         else:
             emit_warning(f"Unknown subcommand: {subcmd}")
             _show_help()
