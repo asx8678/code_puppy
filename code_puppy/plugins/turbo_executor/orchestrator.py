@@ -163,6 +163,7 @@ class TurboOrchestrator:
         """Execute operations sequentially in priority order with progress emission."""
         results: list[OperationResult] = []
         total = len(plan.operations)
+        plan_start_time = time.perf_counter()  # Track overall plan start time
 
         for i, operation in enumerate(plan.operations):
             current = i + 1
@@ -170,8 +171,9 @@ class TurboOrchestrator:
 
             # Emit start progress
             if _NOTIFICATIONS_AVAILABLE:
+                elapsed_ms = (time.perf_counter() - plan_start_time) * 1000
                 _notifications.emit_operation_start(
-                    current, total, op_type, operation.args
+                    current, total, op_type, operation.args, elapsed_ms
                 )
 
             # Execute the operation
@@ -180,9 +182,10 @@ class TurboOrchestrator:
 
             # Emit completion or error progress
             if _NOTIFICATIONS_AVAILABLE:
+                elapsed_ms = (time.perf_counter() - plan_start_time) * 1000
                 if result.status == "error":
                     _notifications.emit_operation_error(
-                        current, total, op_type, result.error or "Unknown error"
+                        current, total, op_type, result.error or "Unknown error", elapsed_ms
                     )
                 else:
                     _notifications.emit_operation_complete(
@@ -192,6 +195,7 @@ class TurboOrchestrator:
                         operation.args,
                         result.duration_ms,
                         result.data,
+                        elapsed_ms,
                     )
 
         return results
