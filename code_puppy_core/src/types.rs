@@ -66,7 +66,7 @@ impl MessagePart {
             Ok(content_obj) if !content_obj.is_none() => {
                 if let Ok(s) = content_obj.extract::<String>() {
                     content = Some(s);
-                } else if let Ok(list) = content_obj.downcast::<PyList>() {
+                } else if let Ok(list) = content_obj.cast::<PyList>() {
                     // Handle list content - join text parts
                     let mut text_parts = Vec::new();
                     for item in list.iter() {
@@ -82,7 +82,7 @@ impl MessagePart {
                     // It's a pydantic model - call model_dump_json()
                     let json_str = content_obj.call_method0("model_dump_json")?.extract::<String>()?;
                     content_json = Some(json_str);
-                } else if let Ok(_) = content_obj.downcast::<PyDict>() {
+                } else if let Ok(_) = content_obj.cast::<PyDict>() {
                     // It's a dict - serialize to JSON
                     let json_str = content_obj.repr()?.to_string();
                     content_json = Some(json_str);
@@ -115,7 +115,13 @@ impl Message {
         }
         
         // Fall back to dict parsing for backward compatibility
-        let dict = obj.cast::<PyDict>()?;
+        let dict = match obj.cast::<PyDict>() {
+            Ok(d) => d,
+            Err(_) => {
+                // Graceful fallback for non-message, non-dict inputs
+                return Ok(Message { kind: String::new(), role: None, instructions: None, parts: vec![] });
+            }
+        };
 
         let kind: String = match dict.get_item("kind")? {
             Some(v) => v.extract::<String>()?,
@@ -200,14 +206,14 @@ impl Message {
         // Access parts attribute directly
         match obj.getattr("parts") {
             Ok(parts_obj) if !parts_obj.is_none() => {
-                if let Ok(parts_list) = parts_obj.downcast::<PyList>() {
+                if let Ok(parts_list) = parts_obj.cast::<PyList>() {
                     for part_obj in parts_list.iter() {
                         // Try to extract part directly as object first
                         match MessagePart::from_py_object(&part_obj) {
                             Ok(part) => parts.push(part),
                             Err(_) => {
                                 // Fallback: try as dict
-                                if let Ok(pd) = part_obj.downcast::<PyDict>() {
+                                if let Ok(pd) = part_obj.cast::<PyDict>() {
                                     parts.push(MessagePart {
                                         part_kind: match pd.get_item("part_kind")? {
                                             Some(v) if !v.is_none() => v.extract::<String>()?,

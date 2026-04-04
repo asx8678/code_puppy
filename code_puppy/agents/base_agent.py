@@ -40,8 +40,7 @@ if RUST_AVAILABLE:
         process_messages_batch,
         prune_and_filter,
         split_for_summarization as rust_split_for_summarization,
-        truncation_indices as rust_truncation_indices,
-        serialize_messages_for_rust)  # Kept for non-Rust fallback paths
+        truncation_indices as rust_truncation_indices)
 
 from pydantic_ai.messages import (
     ModelMessage,
