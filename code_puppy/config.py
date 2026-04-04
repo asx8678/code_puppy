@@ -1556,6 +1556,13 @@ def auto_save_session_if_enabled() -> bool:
         session_name = get_current_autosave_session_name()
         autosave_dir = pathlib.Path(AUTOSAVE_DIR)
 
+        # Use precomputed token counts if available from Rust batch processing
+        cached_tokens = getattr(current_agent, "_rust_per_message_tokens", None)
+        if cached_tokens is not None and len(cached_tokens) == len(history):
+            precomputed_total = sum(t for t in cached_tokens if t is not None)
+        else:
+            precomputed_total = None
+
         metadata = save_session(
             history=history,
             session_name=session_name,
@@ -1563,7 +1570,9 @@ def auto_save_session_if_enabled() -> bool:
             timestamp=now.isoformat(),
             token_estimator=current_agent.estimate_tokens_for_message,
             auto_saved=True,
-            compacted_hashes=list(current_agent.get_compacted_message_hashes()))
+            compacted_hashes=list(current_agent.get_compacted_message_hashes()),
+            precomputed_total=precomputed_total,
+        )
 
         emit_info(
             f"🐾 Auto-saved session: {metadata.message_count} messages ({metadata.total_tokens} tokens)"

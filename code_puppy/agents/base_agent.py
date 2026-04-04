@@ -698,7 +698,22 @@ class BaseAgent(ABC, AgentPromptMixin):
         has_content_delta = getattr(part, "content_delta", None) is not None
         return bool(has_content or has_content_delta)
 
-    def filter_huge_messages(self, messages: list[ModelMessage]) -> list[ModelMessage]:
+    def filter_huge_messages(
+        self,
+        messages: list[ModelMessage],
+        per_message_tokens: list[int | None] | None = None,
+    ) -> list[ModelMessage]:
+        """Filter out messages exceeding 50000 tokens.
+
+        Args:
+            messages: List of messages to filter
+            per_message_tokens: Optional pre-computed token counts for each message.
+                If provided and Rust is not available, uses these instead of
+                re-computing token counts.
+
+        Returns:
+            List of messages that are under the token threshold
+        """
         if _rust_enabled():
             try:
                 serialized = serialize_messages_for_rust(messages)
@@ -708,7 +723,14 @@ class BaseAgent(ABC, AgentPromptMixin):
                 logger.debug(
                     "Rust fallback in filter_huge_messages: %s", exc, exc_info=True
                 )
-        filtered = [m for m in messages if self.estimate_tokens_for_message(m) < 50000]
+        # Use pre-computed tokens if available, otherwise compute on the fly
+        if per_message_tokens is not None:
+            filtered = [
+                m for i, m in enumerate(messages)
+                if (per_message_tokens[i] if i < len(per_message_tokens) else self.estimate_tokens_for_message(m)) < 50000
+            ]
+        else:
+            filtered = [m for m in messages if self.estimate_tokens_for_message(m) < 50000]
         pruned = self.prune_interrupted_tool_calls(filtered)
         return pruned
 
@@ -1419,9 +1441,11 @@ class BaseAgent(ABC, AgentPromptMixin):
             if compaction_strategy == "truncation":
                 # Use truncation instead of summarization
                 protected_tokens = get_protected_token_count()
-                filtered_messages = self.filter_huge_messages(messages)
                 # Pass cached per_message_tokens when available from Rust batch processing
                 cached_tokens = getattr(self, "_rust_per_message_tokens", None)
+                filtered_messages = self.filter_huge_messages(
+                    messages, per_message_tokens=cached_tokens
+                )
                 result_messages = self.truncation(
                     filtered_messages,
                     protected_tokens,
@@ -1437,8 +1461,10 @@ class BaseAgent(ABC, AgentPromptMixin):
                 ]
             else:
                 # Default to summarization (safe to proceed - no pending tool calls)
+                # Pass cached per_message_tokens when available from Rust batch processing
+                cached_tokens = getattr(self, "_rust_per_message_tokens", None)
                 result_messages, summarized_messages = self.summarize_messages(
-                    self.filter_huge_messages(messages)
+                    self.filter_huge_messages(messages, per_message_tokens=cached_tokens)
                 )
 
             final_token_count = sum(

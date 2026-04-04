@@ -85,9 +85,14 @@ def handle_compact_command(command: str) -> bool:
             return True
 
         current_agent = get_current_agent()
-        before_tokens = sum(
-            current_agent.estimate_tokens_for_message(m) for m in history
-        )
+        # Use precomputed token counts if available from Rust batch processing
+        cached_tokens = getattr(current_agent, "_rust_per_message_tokens", None)
+        if cached_tokens is not None and len(cached_tokens) == len(history):
+            before_tokens = sum(t for t in cached_tokens if t is not None)
+        else:
+            before_tokens = sum(
+                current_agent.estimate_tokens_for_message(m) for m in history
+            )
         compaction_strategy = get_compaction_strategy()
         protected_tokens = get_protected_token_count()
         emit_info(
@@ -96,7 +101,9 @@ def handle_compact_command(command: str) -> bool:
 
         current_agent = get_current_agent()
         if compaction_strategy == "truncation":
-            compacted = current_agent.truncation(history, protected_tokens)
+            # Pass cached per_message_tokens when available from Rust batch processing
+            cached_tokens = getattr(current_agent, "_rust_per_message_tokens", None)
+            compacted = current_agent.truncation(history, protected_tokens, per_message_tokens=cached_tokens)
             summarized_messages = []  # No summarization in truncation mode
         else:
             # Default to summarization
@@ -110,7 +117,7 @@ def handle_compact_command(command: str) -> bool:
 
         agent.set_message_history(compacted)
 
-        current_agent = get_current_agent()
+        # Compute after_tokens for the compacted result
         after_tokens = sum(
             current_agent.estimate_tokens_for_message(m) for m in compacted
         )
@@ -217,13 +224,22 @@ def handle_dump_context_command(command: str) -> bool:
         return True
 
     try:
+        # Use precomputed token counts if available from Rust batch processing
+        cached_tokens = getattr(agent, "_rust_per_message_tokens", None)
+        if cached_tokens is not None and len(cached_tokens) == len(history):
+            precomputed_total = sum(t for t in cached_tokens if t is not None)
+        else:
+            precomputed_total = None
+
         metadata = save_session(
             history=history,
             session_name=session_name,
             base_dir=Path(CONTEXTS_DIR),
             timestamp=datetime.now().isoformat(),
             token_estimator=agent.estimate_tokens_for_message,
-            compacted_hashes=list(agent.get_compacted_message_hashes()))
+            compacted_hashes=list(agent.get_compacted_message_hashes()),
+            precomputed_total=precomputed_total,
+        )
         emit_success(
             f"✅ Context saved: {metadata.message_count} messages ({metadata.total_tokens} tokens)\n"
             f"📁 Files: {metadata.pickle_path}, {metadata.metadata_path}"
@@ -272,7 +288,13 @@ def handle_load_context_command(command: str) -> bool:
     agent = get_current_agent()
     agent.set_message_history(history)
     agent.restore_compacted_hashes(compacted_hashes)
-    total_tokens = sum(agent.estimate_tokens_for_message(m) for m in history)
+
+    # Use precomputed token counts if available from Rust batch processing
+    cached_tokens = getattr(agent, "_rust_per_message_tokens", None)
+    if cached_tokens is not None and len(cached_tokens) == len(history):
+        total_tokens = sum(t for t in cached_tokens if t is not None)
+    else:
+        total_tokens = sum(agent.estimate_tokens_for_message(m) for m in history)
 
     # Rotate autosave id to avoid overwriting any existing autosave
     try:
