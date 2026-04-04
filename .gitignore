@@ -67,3 +67,5 @@ mana-*.tar
 .dolt/
 *.db
 .beads-credential-key
+
+mana/
