@@ -4,15 +4,23 @@ Registers via the ``custom_command`` hook so it lives entirely outside
 ``code_puppy/command_line/``.  Run ``/clean help`` for usage.
 """
 
-import os
 import shutil
-import time
 from pathlib import Path
 from typing import Any
 
 from code_puppy import config
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
+
+from ._auto_cleanup import _auto_cleanup
+from ._disk_usage import (
+    _check_disk_usage,
+    _dir_stats,
+    _file_stats,
+    _get_last_modified,
+    _human_size,
+)
+from ._orphan_detection import _count_orphans_in_dirs, _run_orphans
 
 # ---------------------------------------------------------------------------
 # Storage location definitions
@@ -54,7 +62,7 @@ def _cache_targets() -> list[tuple[str, Path, str]]:
         ("Browser workflows", Path(config.DATA_DIR) / "browser_workflows", "dir"),
         (
             "Skills cache",
-            Path.home() / ".code_puppy" / "cache" / "skills_catalog.json",
+            Path(config.DATA_DIR) / "cache" / "skills_catalog.json",
             "file",
         ),
         ("API server PID", Path(config.STATE_DIR) / "api_server.pid", "file"),
@@ -90,59 +98,10 @@ _CATEGORIES: dict[str, Any] = {
 # Users must run "/clean db" explicitly (which destroys DBOS first).
 _SAFE_CATEGORY_KEYS: list[str] = [k for k in _CATEGORIES if k != "db"]
 
+
 # ---------------------------------------------------------------------------
 # Size / cleanup helpers
 # ---------------------------------------------------------------------------
-
-# Disk usage warning thresholds (bytes)
-_WARNING_THRESHOLD_MB = 100 * 1024 * 1024  # 100 MB
-_CRITICAL_THRESHOLD_MB = 500 * 1024 * 1024  # 500 MB
-
-# Known file extensions for orphan detection
-_KNOWN_EXTENSIONS: set[str] = {
-    ".json", ".sqlite", ".db", ".log", ".txt", ".cfg", ".pid", 
-    ".key", ".wal", ".shm", ".md", ".py", ".html", ".css",
-}
-
-
-def _human_size(nbytes: int) -> str:
-    """Format *nbytes* as a human-friendly string."""
-    if nbytes < 1024:
-        return f"{nbytes} B"
-    for unit in ("KB", "MB", "GB"):
-        nbytes /= 1024.0
-        if nbytes < 1024.0 or unit == "GB":
-            return f"{nbytes:.1f} {unit}"
-    return f"{nbytes:.1f} GB"  # pragma: no cover
-
-
-def _dir_stats(path: Path) -> tuple[int, int]:
-    """Return ``(file_count, total_bytes)`` for a directory tree."""
-    if not path.is_dir():
-        return 0, 0
-    count = 0
-    total = 0
-    try:
-        for item in path.rglob("*"):
-            if item.is_file():
-                try:
-                    total += item.stat().st_size
-                    count += 1
-                except OSError:
-                    pass
-    except OSError:
-        pass
-    return count, total
-
-
-def _file_stats(path: Path) -> tuple[int, int]:
-    """Return ``(1, size)`` if file exists, else ``(0, 0)``."""
-    if not path.is_file():
-        return 0, 0
-    try:
-        return 1, path.stat().st_size
-    except OSError:
-        return 0, 0
 
 
 def _target_stats(targets: list[tuple[str, Path, str]]) -> tuple[int, int]:
@@ -220,175 +179,6 @@ def _clean_targets(
     return total_files, total_bytes
 
 
-def _check_disk_usage(path: Path) -> tuple[int, str | None]:
-    """Check disk usage for a path and return warning if thresholds exceeded.
-
-    Args:
-        path: The path to check (file or directory)
-
-    Returns:
-        Tuple of (bytes_used, warning_message_or_none).
-        Warning is shown for > 100MB, critical warning for > 500MB.
-    """
-    if path.is_dir():
-        count, total = _dir_stats(path)
-    elif path.is_file():
-        count, total = _file_stats(path)
-    else:
-        return 0, None
-
-    if total == 0:
-        return 0, None
-
-    warning = None
-    if total > _CRITICAL_THRESHOLD_MB:
-        warning = f"🔴 CRITICAL: {_human_size(total)} - very large!"
-    elif total > _WARNING_THRESHOLD_MB:
-        warning = f"🟡 Warning: {_human_size(total)} - consider cleaning"
-
-    return total, warning
-
-
-def _find_orphans(dir_path: Path, known_extensions: set[str] | None = None) -> list[Path]:
-    """Find orphaned files that don't match expected patterns.
-
-    Identifies:
-    - Files with unknown extensions
-    - Temporary files (starting with '.' or ending with '~', '.tmp', '.temp')
-    - Broken symlinks
-
-    Args:
-        dir_path: Directory to scan
-        known_extensions: Set of known extensions (defaults to _KNOWN_EXTENSIONS)
-
-    Returns:
-        List of orphaned file paths
-    """
-    if known_extensions is None:
-        known_extensions = _KNOWN_EXTENSIONS
-
-    orphans: list[Path] = []
-
-    if not dir_path.is_dir():
-        return orphans
-
-    try:
-        for item in dir_path.rglob("*"):
-            # Check for broken symlinks
-            if item.is_symlink() and not item.exists():
-                orphans.append(item)
-                continue
-
-            if not item.is_file():
-                continue
-
-            name = item.name
-            ext = item.suffix.lower()
-
-            # Temp file patterns
-            if name.startswith(".") or name.endswith("~"):
-                orphans.append(item)
-                continue
-
-            if name.endswith(".tmp") or name.endswith(".temp"):
-                orphans.append(item)
-                continue
-
-            # Unknown extensions
-            if ext and ext not in known_extensions:
-                orphans.append(item)
-                continue
-
-    except OSError:
-        pass
-
-    return orphans
-
-
-def _load_cleanup_config() -> dict:
-    """Load auto-cleanup preferences from puppy.cfg.
-
-    Looks for these keys in [cleanup] section:
-    - auto_clean_on_startup: bool (default: false)
-    - auto_clean_max_age_days: int (default: 30)
-    - auto_clean_categories: comma-separated list (default: cache,logs)
-
-    Returns:
-        Dict with keys: enabled, max_age_days, categories
-    """
-    cfg_path = Path.home() / ".code_puppy" / "puppy.cfg"
-    defaults = {
-        "enabled": False,
-        "max_age_days": 30,
-        "categories": ["cache", "logs"],
-    }
-
-    if not cfg_path.is_file():
-        return defaults
-
-    try:
-        import configparser
-        parser = configparser.ConfigParser()
-        parser.read(cfg_path)
-
-        if "cleanup" not in parser.sections():
-            return defaults
-
-        cleanup = parser["cleanup"]
-
-        # Parse enabled
-        enabled_str = cleanup.get("auto_clean_on_startup", "false").lower()
-        defaults["enabled"] = enabled_str in ("true", "1", "yes", "on")
-
-        # Parse max age
-        try:
-            defaults["max_age_days"] = int(
-                cleanup.get("auto_clean_max_age_days", "30")
-            )
-        except ValueError:
-            pass
-
-        # Parse categories
-        cats_str = cleanup.get("auto_clean_categories", "cache,logs")
-        if cats_str:
-            defaults["categories"] = [
-                c.strip() for c in cats_str.split(",") if c.strip()
-            ]
-
-    except Exception:
-        pass
-
-    return defaults
-
-
-def _get_last_modified(path: Path) -> str | None:
-    """Get the last modified timestamp for a path as a human-readable string.
-
-    Args:
-        path: The path to check
-
-    Returns:
-        Human-readable timestamp string, or None if path doesn't exist
-    """
-    if not path.exists():
-        return None
-
-    try:
-        mtime = path.stat().st_mtime
-        # Format as relative time if within last 24 hours, else as date
-        age_seconds = time.time() - mtime
-        if age_seconds < 86400:  # 24 hours
-            hours = int(age_seconds / 3600)
-            if hours < 1:
-                mins = int(age_seconds / 60)
-                return f"{mins}m ago"
-            return f"{hours}h ago"
-        else:
-            return time.strftime("%Y-%m-%d", time.localtime(mtime))
-    except OSError:
-        return None
-
-
 # ---------------------------------------------------------------------------
 # DBOS-safe database cleanup
 # ---------------------------------------------------------------------------
@@ -431,101 +221,6 @@ def _clean_db(dry_run: bool) -> tuple[int, int]:
         emit_warning("  ⚠️  Please restart Code Puppy for DBOS to reinitialize.")
 
     return total_files, total_bytes
-
-
-def _run_orphans(dry_run: bool = False, auto_clean: bool = False) -> None:
-    """Find and optionally clean orphan files.
-
-    Args:
-        dry_run: If True, only list orphans without removing
-        auto_clean: If True, automatically clean orphans (for auto-cleanup)
-    """
-    if dry_run and not auto_clean:
-        emit_info("🔍 Scanning for orphan files...\n")
-    elif not auto_clean:
-        emit_info("🧹 Cleaning orphan files...\n")
-
-    all_orphans: list[tuple[Path, str]] = []
-
-    # Scan main code_puppy directories
-    base_dir = Path.home() / ".code_puppy"
-
-    dirs_to_scan = [
-        (base_dir, "Root directory"),
-        (Path(config.CACHE_DIR), "Cache directory"),
-        (Path(config.DATA_DIR), "Data directory"),
-        (Path(config.STATE_DIR), "State directory"),
-    ]
-
-    for dir_path, label in dirs_to_scan:
-        if not dir_path.exists():
-            continue
-
-        orphans = _find_orphans(dir_path)
-        for orphan in orphans:
-            # Determine type
-            if orphan.is_symlink():
-                orphan_type = "broken symlink"
-            elif orphan.name.startswith("."):
-                orphan_type = "hidden file"
-            elif orphan.name.endswith("~"):
-                orphan_type = "backup file"
-            elif orphan.suffix.lower() in (".tmp", ".temp"):
-                orphan_type = "temp file"
-            else:
-                orphan_type = "unknown extension"
-
-            all_orphans.append((orphan, orphan_type))
-
-    if not all_orphans:
-        if not auto_clean:
-            emit_info("\n✨ No orphan files found!")
-        return
-
-    if not auto_clean:
-        emit_info(f"Found {len(all_orphans)} orphan file(s):\n")
-
-    total_bytes = 0
-    files_removed = 0
-
-    for orphan_path, orphan_type in all_orphans:
-        try:
-            size = orphan_path.stat().st_size if orphan_path.is_file() else 0
-        except OSError:
-            size = 0
-
-        if not auto_clean:
-            emit_info(f"  📄 {orphan_path.name} ({orphan_type})")
-
-        if dry_run:
-            total_bytes += size
-            files_removed += 1
-        else:
-            try:
-                if orphan_path.is_dir():
-                    shutil.rmtree(orphan_path)
-                else:
-                    orphan_path.unlink()
-                files_removed += 1
-                total_bytes += size
-                if not auto_clean:
-                    emit_info(f"     ✓ Removed ({_human_size(size)})")
-            except OSError as exc:
-                if not auto_clean:
-                    emit_warning(f"     ⚠️ Could not remove: {exc}")
-
-    if auto_clean:
-        emit_info(f"Auto-cleaned {files_removed} orphan files ({_human_size(total_bytes)})")
-    elif dry_run:
-        emit_info(
-            f"\n📋 Would remove {files_removed} orphan file{'s' if files_removed != 1 else ''}"
-            f" ({_human_size(total_bytes)})"
-        )
-    else:
-        emit_success(
-            f"\n✅ Removed {files_removed} orphan file{'s' if files_removed != 1 else ''}"
-            f" ({_human_size(total_bytes)})"
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -639,10 +334,11 @@ def _show_status() -> None:
             emit_info(f"   {category}: {warning}")
 
     # Show orphan count
-    base_dir = Path.home() / ".code_puppy"
-    orphan_count = len(_find_orphans(base_dir)) if base_dir.exists() else 0
+    orphan_count = _count_orphans_in_dirs()
     if orphan_count > 0:
-        emit_info(f"\n🔍 Found {orphan_count} orphan file(s). Run '/clean orphans' to remove.")
+        emit_info(
+            f"\n🔍 Found {orphan_count} orphan file(s). Run '/clean orphans' to remove."
+        )
 
     emit_info("\n💡 Run '/clean help' for available commands.")
 
@@ -685,7 +381,17 @@ def _run_clean(categories: list[str], dry_run: bool) -> None:
 # Command dispatcher
 # ---------------------------------------------------------------------------
 
-_VALID_SUBCMDS = {"help", "status", "all", "sessions", "history", "logs", "cache", "db", "orphans"}
+_VALID_SUBCMDS = {
+    "help",
+    "status",
+    "all",
+    "sessions",
+    "history",
+    "logs",
+    "cache",
+    "db",
+    "orphans",
+}
 
 
 def _handle_clean_command(command: str, name: str) -> bool | None:
@@ -725,44 +431,6 @@ def _handle_clean_command(command: str, name: str) -> bool | None:
     return True
 
 
-def _auto_cleanup() -> None:
-    """Run auto-cleanup on startup if configured in puppy.cfg.
-
-    Reads cleanup preferences from puppy.cfg [cleanup] section and
-    automatically cleans configured categories if auto_clean_on_startup
-    is enabled.
-    """
-    cfg = _load_cleanup_config()
-
-    if not cfg.get("enabled", False):
-        return
-
-    categories = cfg.get("categories", [])
-    if not categories:
-        return
-
-    emit_info("🤖 Auto-cleanup enabled — checking storage...")
-
-    # Clean configured categories
-    for cat in categories:
-        if cat in _CATEGORIES:
-            emit_info(f"  Auto-cleaning {cat}...")
-            display_name, target_fn = _CATEGORIES[cat]
-            targets = target_fn()
-            _clean_targets(targets, dry_run=False)
-
-    # Also clean orphans if requested
-    if "orphans" in categories:
-        _run_orphans(dry_run=False, auto_clean=True)
-
-    emit_success("Auto-cleanup complete.")
-
-
-# ---------------------------------------------------------------------------
-# Help callback
-# ---------------------------------------------------------------------------
-
-
 def _custom_help() -> list[tuple[str, str]]:
     return [("clean", "Clean sessions, history, logs, and cache data")]
 
@@ -771,6 +439,12 @@ def _custom_help() -> list[tuple[str, str]]:
 # Registration
 # ---------------------------------------------------------------------------
 
+
+def _startup_cleanup() -> None:
+    """Wrapper to run auto-cleanup on startup."""
+    _auto_cleanup(_CATEGORIES, _clean_targets)
+
+
 register_callback("custom_command", _handle_clean_command)
 register_callback("custom_command_help", _custom_help)
-register_callback("startup", _auto_cleanup)
+register_callback("startup", _startup_cleanup)
