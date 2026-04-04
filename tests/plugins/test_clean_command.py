@@ -83,6 +83,12 @@ def _populate_sessions(env):
     # HMAC key
     (env.data / ".session_hmac_key").write_bytes(b"k" * 32)
 
+    # REPL state
+    repl_state = env.cache / "repl_state"
+    repl_state.mkdir(exist_ok=True)
+    (repl_state / "current_session.json").write_text('{"session_id": "test"}')
+    (repl_state / "repl_history.jsonl").write_text('{"event": "test"}\n' * 50)
+
 
 def _populate_history(env):
     (env.state / "command_history.txt").write_text("line1\nline2\nline3\n")
@@ -238,6 +244,7 @@ class TestCleanSessions:
         # Verify files exist before
         assert (clean_env.autosave / "session_0.pkl").exists()
         assert (clean_env.data / ".session_hmac_key").exists()
+        assert (clean_env.cache / "repl_state" / "current_session.json").exists()
 
         handler("/clean sessions", "clean")
 
@@ -251,6 +258,10 @@ class TestCleanSessions:
         # Terminal sessions gone
         assert not (clean_env.state / "terminal_sessions.json").exists()
 
+        # REPL state dir recreated but empty
+        assert (clean_env.cache / "repl_state").is_dir()
+        assert list((clean_env.cache / "repl_state").iterdir()) == []
+
     def test_clean_sessions_dry_run(self, clean_env):
         _populate_sessions(clean_env)
         handler, *_ = _import_plugin()
@@ -260,6 +271,8 @@ class TestCleanSessions:
         # Files should still exist
         assert (clean_env.autosave / "session_0.pkl").exists()
         assert (clean_env.data / ".session_hmac_key").exists()
+        assert (clean_env.cache / "repl_state" / "current_session.json").exists()
+        assert (clean_env.cache / "repl_state" / "repl_history.jsonl").exists()
 
     def test_clean_sessions_empty(self, clean_env):
         handler, *_ = _import_plugin()

@@ -42,6 +42,7 @@ def _session_targets() -> list[tuple[str, Path, str]]:
         ),
         ("Session HMAC key", Path(config.DATA_DIR) / ".session_hmac_key", "file"),
         ("Last agent", Path(config.STATE_DIR) / "last_agent.json", "file"),
+        ("REPL state", Path(config.CACHE_DIR) / "repl_state", "dir"),
     ]
 
 
