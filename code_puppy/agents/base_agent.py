@@ -146,8 +146,250 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Cache for message part content stringification (keyed on id(content))
         # This unifies caching between _stringify_part() and stringify_message_part()
         self._content_stringify_cache: dict[int, str] = {}
+        # Per-invocation cache for message analysis results (single-pass pipeline)
+        self._message_analysis_cache: dict[tuple[int, int], Any] = {}
 
+    def _analyze_messages_single_pass(
+        self,
+        messages: list[ModelMessage],
+    ) -> dict:
+        """Analyze messages in a single pass, computing all needed metadata.
 
+        This is the first pass of the single-pass pipeline. It computes:
+        - Per-message token counts
+        - Tool call IDs (call_ids and return_ids sets)
+        - Message hashes
+        - Image TTL turn numbers (for image lifecycle)
+        - Binary content detection per message
+        - Total token count
+
+        Args:
+            messages: List of messages to analyze.
+
+        Returns:
+            Dict containing analysis results:
+            - per_message_tokens: List of token counts per message
+            - message_hashes: List of message hashes
+            - tool_call_ids: Set of tool call IDs
+            - tool_return_ids: Set of tool return IDs
+            - message_turns: List of turn numbers per message (for image TTL)
+            - has_binary_content: List of bools indicating binary content per message
+            - total_tokens: Total token count
+            - pending_tool_calls: Bool indicating if there are pending tool calls
+        """
+        n = len(messages)
+        per_message_tokens: list[int] = [0] * n
+        message_hashes: list[str] = [""] * n
+        message_turns: list[int] = [0] * n
+        has_binary_content: list[bool] = [False] * n
+
+        call_ids: set[str] = set()
+        return_ids: set[str] = set()
+        total_tokens = 0
+
+        # First pass: forward iteration for most computations
+        for i, msg in enumerate(messages):
+            # Token estimation
+            msg_tokens = self.estimate_tokens_for_message(msg)
+            per_message_tokens[i] = msg_tokens
+            total_tokens += msg_tokens
+
+            # Hash computation
+            message_hashes[i] = self.hash_message(msg)
+
+            # Binary content detection and tool ID collection
+            for part in getattr(msg, "parts", []) or []:
+                # Check for binary content
+                if isinstance(part, BinaryContent):
+                    has_binary_content[i] = True
+
+                # Tool call ID collection
+                tcid = getattr(part, "tool_call_id", None)
+                if tcid:
+                    part_kind = getattr(part, "part_kind", None)
+                    if part_kind == "tool-call":
+                        call_ids.add(tcid)
+                    elif part_kind in ("tool-return", "tool-result"):
+                        return_ids.add(tcid)
+
+        # Compute turn numbers for image lifecycle (reverse pass)
+        # This mimics the logic in _manage_image_lifecycle
+        current_turn = 0
+        prev_was_response = False
+        for i in range(n - 1, -1, -1):
+            msg = messages[i]
+            if isinstance(msg, ModelRequest):
+                if prev_was_response:
+                    current_turn += 1
+                    prev_was_response = False
+                message_turns[i] = current_turn
+            elif isinstance(msg, ModelResponse):
+                message_turns[i] = current_turn
+                prev_was_response = True
+            else:
+                message_turns[i] = current_turn
+
+        pending_tool_calls = bool(call_ids - return_ids)
+
+        return {
+            "per_message_tokens": per_message_tokens,
+            "message_hashes": message_hashes,
+            "tool_call_ids": call_ids,
+            "tool_return_ids": return_ids,
+            "message_turns": message_turns,
+            "has_binary_content": has_binary_content,
+            "total_tokens": total_tokens,
+            "pending_tool_calls": pending_tool_calls,
+        }
+
+    def _apply_image_lifecycle_single_pass(
+        self,
+        messages: list[ModelMessage],
+        analysis: dict,
+    ) -> tuple[list[ModelMessage], int, int]:
+        """Apply image lifecycle management in a single pass.
+
+        Uses pre-computed turn numbers from analysis pass.
+
+        Args:
+            messages: Original messages.
+            analysis: Analysis results from _analyze_messages_single_pass.
+
+        Returns:
+            Tuple of (processed_messages, images_replaced, tokens_saved).
+        """
+        image_ttl_turns = get_image_ttl_turns()
+        if image_ttl_turns <= 0 or not messages:
+            return messages, 0, 0
+
+        message_turns = analysis["message_turns"]
+        result: list[ModelMessage] = []
+        images_replaced = 0
+        tokens_saved = 0
+
+        for i, msg in enumerate(messages):
+            msg_turn = message_turns[i]
+            if msg_turn >= image_ttl_turns:
+                # This message is older than the TTL - replace images
+                if isinstance(msg, ModelRequest):
+                    new_parts = []
+                    for part in msg.parts:
+                        if isinstance(part, BinaryContent):
+                            estimated_tokens = max(
+                                1000, min(5000, len(part.data) // 100)
+                            )
+                            tokens_saved += estimated_tokens
+                            images_replaced += 1
+                            media_type = getattr(part, "media_type", "image/unknown")
+                            new_parts.append(
+                                TextPart(
+                                    content=f"[Image removed - was {msg_turn} turns ago, saved ~{estimated_tokens} tokens, type: {media_type}]"
+                                )
+                            )
+                        elif isinstance(part, (ImageUrl, DocumentUrl)):
+                            estimated_tokens = 1500
+                            tokens_saved += estimated_tokens
+                            images_replaced += 1
+                            url_type = "image URL" if isinstance(part, ImageUrl) else "document URL"
+                            new_parts.append(
+                                TextPart(
+                                    content=f"[{url_type.capitalize()} removed - was {msg_turn} turns ago, saved ~{estimated_tokens} tokens]"
+                                )
+                            )
+                        else:
+                            new_parts.append(part)
+                    if new_parts:
+                        result.append(ModelRequest(parts=new_parts))
+                    else:
+                        result.append(msg)
+                elif isinstance(msg, ModelResponse):
+                    new_parts = []
+                    for part in msg.parts:
+                        if isinstance(part, BinaryContent):
+                            estimated_tokens = max(
+                                1000, min(5000, len(part.data) // 100)
+                            )
+                            tokens_saved += estimated_tokens
+                            images_replaced += 1
+                            media_type = getattr(part, "media_type", "image/unknown")
+                            new_parts.append(
+                                TextPart(
+                                    content=f"[Image removed - was {msg_turn} turns ago, saved ~{estimated_tokens} tokens, type: {media_type}]"
+                                )
+                            )
+                        else:
+                            new_parts.append(part)
+                    if new_parts:
+                        result.append(ModelResponse(parts=new_parts))
+                    else:
+                        result.append(msg)
+                else:
+                    result.append(msg)
+            else:
+                # Message is within TTL - keep as is
+                result.append(msg)
+
+        if images_replaced == 0:
+            # No changes made - return original list for identity check compatibility
+            return messages, 0, 0
+
+        if images_replaced > 0:
+            emit_info(
+                f"🖼️  Image lifecycle: replaced {images_replaced} old image(s) with placeholders, "
+                f"saving ~{tokens_saved} tokens"
+            )
+
+        return result, images_replaced, tokens_saved
+
+    def _filter_huge_messages_single_pass(
+        self,
+        messages: list[ModelMessage],
+        analysis: dict,
+        max_tokens: int = 50000,
+    ) -> list[ModelMessage]:
+        """Filter out messages exceeding max_tokens using pre-computed token counts.
+
+        Args:
+            messages: List of messages to filter.
+            analysis: Analysis results containing per_message_tokens.
+            max_tokens: Maximum tokens allowed per message.
+
+        Returns:
+            Filtered messages with huge ones replaced with placeholders.
+        """
+        per_message_tokens = analysis["per_message_tokens"]
+        filtered: list[ModelMessage] = []
+
+        for i, msg in enumerate(messages):
+            msg_tokens = per_message_tokens[i] if i < len(per_message_tokens) else 0
+            if msg_tokens > max_tokens:
+                # Replace with a summary placeholder
+                if isinstance(msg, ModelRequest):
+                    filtered.append(
+                        ModelRequest(
+                            parts=[
+                                TextPart(
+                                    content=f"[Large message ({msg_tokens} tokens) - content omitted]"
+                                )
+                            ]
+                        )
+                    )
+                elif isinstance(msg, ModelResponse):
+                    filtered.append(
+                        ModelResponse(
+                            parts=[
+                                TextPart(
+                                    content=f"[Large response ({msg_tokens} tokens) - content omitted]"
+                                )
+                            ]
+                        )
+                    )
+                else:
+                    filtered.append(msg)
+            else:
+                filtered.append(msg)
+
+        return filtered
 
     @property
     @abstractmethod
@@ -1408,17 +1650,59 @@ class BaseAgent(ABC, AgentPromptMixin):
     def message_history_processor(
         self, ctx: RunContext, messages: list[ModelMessage]
     ) -> list[ModelMessage]:
-        # First, prune any interrupted/mismatched tool-call conversations
-        # Then manage image/attachment lifecycle (replace old images with placeholders)
-        messages, images_replaced, tokens_saved = self._manage_image_lifecycle(messages)
+        """Process message history with single-pass pipeline for optimal performance.
+
+        This method uses a two-pass architecture:
+        1. Analysis pass: Compute all metadata (tokens, hashes, tool IDs, turn numbers)
+        2. Mutation pass: Apply image lifecycle, filtering, and compaction
+
+        Args:
+            ctx: Run context.
+            messages: List of messages to process.
+
+        Returns:
+            Processed message list.
+        """
         model_max = self.get_model_context_length()
 
-        # Use Rust batch processing when available (single pass for tokens + hashes)
+        # Check cache first for identical message lists
+        cache_key = (id(messages), len(messages))
+        cached_analysis = self._message_analysis_cache.get(cache_key)
+
+        # =========================================================================
+        # PASS 1: ANALYSIS - Single pass computing all needed metadata
+        # =========================================================================
+        if cached_analysis is not None:
+            analysis = cached_analysis
+            # Still need to apply image lifecycle since messages may be mutated
+            messages, images_replaced, tokens_saved = self._apply_image_lifecycle_single_pass(
+                messages, analysis
+            )
+            total_message_tokens = analysis["total_tokens"]
+        else:
+            # First, apply image lifecycle using single-pass analysis
+            # This combines the turn counting + replacement into efficient passes
+            analysis = self._analyze_messages_single_pass(messages)
+
+            # Apply image lifecycle using pre-computed turn numbers
+            messages, images_replaced, tokens_saved = self._apply_image_lifecycle_single_pass(
+                messages, analysis
+            )
+
+            # If images were replaced, we need to re-analyze since tokens changed
+            if images_replaced > 0:
+                analysis = self._analyze_messages_single_pass(messages)
+
+            # Cache the analysis for this message list
+            self._message_analysis_cache = {cache_key: analysis}
+
+            total_message_tokens = analysis["total_tokens"]
+
+        # Use Rust batch processing when available for more accurate token counts
         if _rust_enabled():
             try:
                 serialized = serialize_messages_for_rust(messages)
-                # Extract actual tool definitions for accurate context overhead
-                # Use cached tool_defs (only computed once per agent lifecycle)
+                # Use cached tool defs (only computed once per agent lifecycle)
                 if self._cached_tool_defs is None:
                     _build_tool_defs = []
                     pydantic_agent = getattr(self, "pydantic_agent", None)
@@ -1439,7 +1723,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                     self._cached_tool_defs = _build_tool_defs
                 tool_defs = self._cached_tool_defs
                 mcp_defs = getattr(self, "_mcp_tool_definitions_cache", []) or []
-                # Use cached system prompt (only computed once per agent lifecycle)
+                # Use cached system prompt
                 if self._cached_system_prompt is None:
                     self._cached_system_prompt = (
                         self.get_full_system_prompt()
@@ -1450,24 +1734,21 @@ class BaseAgent(ABC, AgentPromptMixin):
                 batch_result = process_messages_batch(
                     serialized, tool_defs, mcp_defs, system_prompt
                 )
-                message_tokens = batch_result.total_message_tokens
+                total_message_tokens = batch_result.total_message_tokens
                 context_overhead = batch_result.context_overhead_tokens
+                # Store for downstream use
                 self._rust_per_message_tokens = batch_result.per_message_tokens
+                # Update analysis with Rust-accurate token counts
+                analysis["per_message_tokens"] = list(batch_result.per_message_tokens)
             except Exception as exc:
                 logger.debug(
                     "Rust fallback in message_history_processor: %s", exc, exc_info=True
                 )
-                # Fall back to Python on any Rust error
-                message_tokens = sum(
-                    self.estimate_tokens_for_message(msg) for msg in messages
-                )
                 context_overhead = self.estimate_context_overhead_tokens()
         else:
-            message_tokens = sum(
-                self.estimate_tokens_for_message(msg) for msg in messages
-            )
             context_overhead = self.estimate_context_overhead_tokens()
-        total_current_tokens = message_tokens + context_overhead
+
+        total_current_tokens = total_message_tokens + context_overhead
         proportion_used = total_current_tokens / model_max
 
         context_summary = SpinnerBase.format_context_info(
@@ -1475,70 +1756,80 @@ class BaseAgent(ABC, AgentPromptMixin):
         )
         update_spinner_context(context_summary)
 
-        # Get the configured compaction threshold
+        # Get compaction configuration
         compaction_threshold = get_compaction_threshold()
-
-        # Get the configured compaction strategy
         compaction_strategy = get_compaction_strategy()
 
-        if proportion_used > compaction_threshold:
-            # RACE CONDITION PROTECTION: Check for pending tool calls before summarization
-            if compaction_strategy == "summarization" and self.has_pending_tool_calls(
-                messages
-            ):
-                pending_count = self.get_pending_tool_call_count(messages)
-                emit_warning(
-                    f"⚠️  Summarization deferred: {pending_count} pending tool call(s) detected. "
-                    "Waiting for tool execution to complete before compaction.",
-                    message_group="token_context_status")
-                # Request delayed compaction for when tool calls complete
-                self.request_delayed_compaction()
-                # Return original messages without compaction
-                return messages, []
+        if proportion_used <= compaction_threshold:
+            return messages
 
-            if compaction_strategy == "truncation":
-                # Use truncation instead of summarization
-                protected_tokens = get_protected_token_count()
-                # Pass cached per_message_tokens when available from Rust batch processing
-                cached_tokens = getattr(self, "_rust_per_message_tokens", None)
-                filtered_messages = self.filter_huge_messages(
-                    messages, per_message_tokens=cached_tokens
-                )
-                result_messages = self.truncation(
-                    filtered_messages,
-                    protected_tokens,
-                    per_message_tokens=cached_tokens)
-                # Track dropped messages by hash so message_history_accumulator
-                # won't re-inject them from pydantic-ai's full message list on
-                # subsequent calls within the same run (fixes ghost-task bug).
-                result_hashes = {self.hash_message(m) for m in result_messages}
-                summarized_messages = [
-                    m
-                    for m in filtered_messages
-                    if self.hash_message(m) not in result_hashes
-                ]
-            else:
-                # Default to summarization (safe to proceed - no pending tool calls)
-                # Pass cached per_message_tokens when available from Rust batch processing
-                cached_tokens = getattr(self, "_rust_per_message_tokens", None)
-                result_messages, summarized_messages = self.summarize_messages(
-                    self.filter_huge_messages(messages, per_message_tokens=cached_tokens)
-                )
+        # =========================================================================
+        # COMPACTION NEEDED: Use pre-computed analysis for decision making
+        # =========================================================================
 
-            final_token_count = sum(
-                self.estimate_tokens_for_message(msg) for msg in result_messages
+        # RACE CONDITION PROTECTION: Check for pending tool calls before summarization
+        if compaction_strategy == "summarization" and analysis["pending_tool_calls"]:
+            pending_count = len(analysis["tool_call_ids"] - analysis["tool_return_ids"])
+            emit_warning(
+                f"⚠️  Summarization deferred: {pending_count} pending tool call(s) detected. "
+                "Waiting for tool execution to complete before compaction.",
+                message_group="token_context_status")
+            self.request_delayed_compaction()
+            return messages
+
+        # =========================================================================
+        # PASS 2 (if needed): MUTATION - Apply compaction using pre-computed data
+        # =========================================================================
+
+        if compaction_strategy == "truncation":
+            # Use truncation instead of summarization
+            protected_tokens = get_protected_token_count()
+            # Use pre-computed per_message_tokens
+            filtered_messages = self._filter_huge_messages_single_pass(
+                messages, analysis, max_tokens=50000
             )
-            # Update spinner with final token count
-            final_summary = SpinnerBase.format_context_info(
-                final_token_count, model_max, final_token_count / model_max
+            # Prune interrupted tool calls from filtered messages
+            filtered_messages = self.prune_interrupted_tool_calls(filtered_messages)
+            result_messages = self.truncation(
+                filtered_messages,
+                protected_tokens,
+                per_message_tokens=analysis["per_message_tokens"])
+            # Track dropped messages by hash
+            result_hashes = set(analysis["message_hashes"][i] for i, m in enumerate(filtered_messages)
+                               if m in result_messages)
+            summarized_messages = [
+                m for i, m in enumerate(filtered_messages)
+                if analysis["message_hashes"][i] not in result_hashes
+            ]
+        else:
+            # Default to summarization
+            filtered_messages = self._filter_huge_messages_single_pass(
+                messages, analysis, max_tokens=50000
             )
-            update_spinner_context(final_summary)
+            # Prune interrupted tool calls before summarization
+            filtered_messages = self.prune_interrupted_tool_calls(filtered_messages)
+            result_messages, summarized_messages = self.summarize_messages(filtered_messages)
 
-            self.set_message_history(result_messages)
-            for m in summarized_messages:
-                self.add_compacted_message_hash(self.hash_message(m))
-            return result_messages
-        return messages
+        # Final token count for result messages
+        final_token_count = sum(
+            analysis["per_message_tokens"][i]
+            for i, msg in enumerate(messages)
+            if msg in result_messages
+        ) if result_messages else 0
+
+        # Update spinner with final token count
+        final_summary = SpinnerBase.format_context_info(
+            final_token_count, model_max, final_token_count / model_max
+        )
+        update_spinner_context(final_summary)
+
+        # Update message history and compacted hashes
+        self.set_message_history(result_messages)
+        for m in summarized_messages:
+            self.add_compacted_message_hash(self.hash_message(m))
+
+        return result_messages
+
 
     def truncation(
         self,
