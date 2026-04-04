@@ -18,6 +18,7 @@ from code_puppy.messaging import emit_info, emit_warning
 from code_puppy.plugins.turbo_executor.models import Plan
 from code_puppy.plugins.turbo_executor.orchestrator import TurboOrchestrator
 from code_puppy.plugins.turbo_executor.summarizer import summarize_plan_result
+from code_puppy.plugins.turbo_executor.history import get_history
 from code_puppy.plugins.turbo_executor.notifications import (
     register as register_notifications,
 )
@@ -51,7 +52,7 @@ def _custom_help():
     return [
         (
             "turbo",
-            "Execute batch file operations via turbo executor (status/plan/help)",
+            "Execute batch file operations via turbo executor (status/history/plan/help)",
         ),
     ]
 
@@ -61,6 +62,7 @@ def _handle_turbo_command(command: str, name: str) -> Any:
 
     Usage:
         /turbo status     → Show turbo executor status
+        /turbo history    → Show execution history
         /turbo plan <json>→ Execute a plan from JSON string
         /turbo help       → Show usage instructions
     """
@@ -78,6 +80,18 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         ops_source = "Rust turbo_ops" if orch._turbo_ops_available else "native Python"
         emit_info(f"   Operations source: {ops_source}")
         emit_info("   Supported operations: list_files, grep, read_files")
+        history_len = len(get_history())
+        emit_info(f"   History entries: {history_len}")
+        return True
+
+    if subcommand == "history":
+        history = get_history()
+        if len(history) == 0:
+            emit_info("📜 Turbo Execution History: (no executions yet)")
+            emit_info("")
+            emit_info("Run a plan with '/turbo plan <json>' to see it in history.")
+        else:
+            history.display_history()
         return True
 
     if subcommand == "help":
@@ -87,6 +101,7 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         emit_info("")
         emit_info("Usage:")
         emit_info("  /turbo status           → Show orchestrator status")
+        emit_info("  /turbo history          → Show execution history")
         emit_info("  /turbo plan <json>      → Execute a plan from JSON")
         emit_info("")
         emit_info("Plan JSON format:")
@@ -160,7 +175,7 @@ def _handle_turbo_command(command: str, name: str) -> Any:
 
     # Unknown subcommand
     emit_warning(f"Unknown turbo command: {subcommand}")
-    emit_warning("Try: /turbo status, /turbo help, /turbo plan <json>")
+    emit_warning("Try: /turbo status, /turbo history, /turbo help, /turbo plan <json>")
     return True
 
 
