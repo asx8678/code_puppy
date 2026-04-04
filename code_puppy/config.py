@@ -336,6 +336,8 @@ def get_config_keys():
     default_keys.append("resume_message_count")
     # Add fast puppy (Rust acceleration) control key
     default_keys.append("enable_fast_puppy")
+    # Add image lifecycle management configuration
+    default_keys.append("image_ttl_turns")
 
     config = _get_config()
     keys = set(config[DEFAULT_SECTION].keys()) if DEFAULT_SECTION in config else set()
@@ -1193,6 +1195,29 @@ def get_compaction_strategy() -> str:
         return val.lower()
     # Default to summarization
     return "truncation"
+
+
+def get_image_ttl_turns() -> int:
+    """
+    Returns the number of turns after which images/attachments are replaced
+    with text placeholders to save tokens. Images are only useful for the turn
+    they were shared (1-5K tokens each in vision API pricing).
+
+    Defaults to 2 turns if unset or misconfigured.
+    Configurable by 'image_ttl_turns' key via /set command.
+
+    Example: /set image_ttl_turns=3
+
+    Returns:
+        Number of turns before images are replaced (clamped between 1 and 10)
+    """
+    val = get_value("image_ttl_turns")
+    try:
+        configured_value = int(val) if val else 2
+        # Enforce reasonable bounds: minimum 1, maximum 10
+        return max(1, min(configured_value, 10))
+    except (ValueError, TypeError):
+        return 2
 
 
 def get_http2() -> bool:

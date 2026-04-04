@@ -71,6 +71,7 @@ from code_puppy.config import (
     get_compaction_strategy,
     get_compaction_threshold,
     get_global_model_name,
+    get_image_ttl_turns,
     get_message_limit,
     get_protected_token_count,
     get_use_dbos,
@@ -1408,6 +1409,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         self, ctx: RunContext, messages: list[ModelMessage]
     ) -> list[ModelMessage]:
         # First, prune any interrupted/mismatched tool-call conversations
+        # Then manage image/attachment lifecycle (replace old images with placeholders)
+        messages, images_replaced, tokens_saved = self._manage_image_lifecycle(messages)
         model_max = self.get_model_context_length()
 
         # Use Rust batch processing when available (single pass for tokens + hashes)
@@ -1612,6 +1615,133 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         result = self.prune_interrupted_tool_calls(result)
         return result
+
+    def _manage_image_lifecycle(
+        self, messages: list[ModelMessage]
+    ) -> tuple[list[ModelMessage], int, int]:
+        """Manage image/attachment lifecycle by replacing old images with placeholders.
+
+        Images and binary attachments stay in message history but are only useful
+        for the turn they were shared. Each image can be 1-5K tokens (vision API
+        pricing). After N turns (configurable via image_ttl_turns, default 2),
+        replace image parts with text placeholders.
+
+        Args:
+            messages: List of messages to process.
+
+        Returns:
+            Tuple of (processed_messages, images_replaced, tokens_saved)
+        """
+        image_ttl_turns = get_image_ttl_turns()
+        if image_ttl_turns <= 0 or not messages:
+            return messages, 0, 0
+
+        # Count turns by tracking user/assistant exchanges
+        # A "turn" is a complete exchange: user message -> assistant response
+        # We count from the END (most recent) backwards
+        # Messages at the end are turn 0 (current), earlier messages are older turns
+
+        # First pass: determine the turn number for each message (counting from end)
+        # Process from most recent to oldest
+        message_turns: list[int] = []
+        current_turn = 0
+        prev_was_response = False
+
+        for msg in reversed(messages):
+            if isinstance(msg, ModelRequest):
+                # If previous message (more recent) was a response, we're starting a new turn
+                if prev_was_response:
+                    current_turn += 1
+                    prev_was_response = False
+                message_turns.append(current_turn)
+            elif isinstance(msg, ModelResponse):
+                message_turns.append(current_turn)
+                prev_was_response = True
+            else:
+                message_turns.append(current_turn)
+
+        # Reverse to match original message order
+        message_turns = list(reversed(message_turns))
+
+        # Second pass: replace images in messages older than image_ttl_turns
+        result: list[ModelMessage] = []
+        images_replaced = 0
+        tokens_saved = 0
+
+        for msg_idx, msg in enumerate(messages):
+            msg_turn = message_turns[msg_idx]
+            if msg_turn >= image_ttl_turns:
+                # This message is older than the TTL - replace images
+                if isinstance(msg, ModelRequest):
+                    new_parts = []
+                    for part in msg.parts:
+                        if isinstance(part, BinaryContent):
+                            # Estimate tokens for this image (rough estimate: 1-5K tokens)
+                            # Typical vision encoding is ~170 tokens per 512x512 tile
+                            # We estimate based on data size as a proxy
+                            estimated_tokens = max(
+                                1000, min(5000, len(part.data) // 100)
+                            )
+                            tokens_saved += estimated_tokens
+                            images_replaced += 1
+                            media_type = getattr(part, "media_type", "image/unknown")
+                            new_parts.append(
+                                TextPart(
+                                    content=f"[Image removed - was {msg_turn} turns ago, saved ~{estimated_tokens} tokens, type: {media_type}]"
+                                )
+                            )
+                        elif isinstance(part, (ImageUrl, DocumentUrl)):
+                            # URL-based images also get replaced
+                            estimated_tokens = 1500  # Conservative estimate for URL images
+                            tokens_saved += estimated_tokens
+                            images_replaced += 1
+                            url_type = "image URL" if isinstance(part, ImageUrl) else "document URL"
+                            new_parts.append(
+                                TextPart(
+                                    content=f"[{url_type.capitalize()} removed - was {msg_turn} turns ago, saved ~{estimated_tokens} tokens]"
+                                )
+                            )
+                        else:
+                            new_parts.append(part)
+                    if new_parts:
+                        result.append(ModelRequest(parts=new_parts))
+                    else:
+                        result.append(msg)
+                elif isinstance(msg, ModelResponse):
+                    new_parts = []
+                    for part in msg.parts:
+                        if isinstance(part, BinaryContent):
+                            # Assistant messages shouldn't have BinaryContent, but handle it
+                            estimated_tokens = max(
+                                1000, min(5000, len(part.data) // 100)
+                            )
+                            tokens_saved += estimated_tokens
+                            images_replaced += 1
+                            media_type = getattr(part, "media_type", "image/unknown")
+                            new_parts.append(
+                                TextPart(
+                                    content=f"[Image removed - was {msg_turn} turns ago, saved ~{estimated_tokens} tokens, type: {media_type}]"
+                                )
+                            )
+                        else:
+                            new_parts.append(part)
+                    if new_parts:
+                        result.append(ModelResponse(parts=new_parts))
+                    else:
+                        result.append(msg)
+                else:
+                    result.append(msg)
+            else:
+                # Message is within TTL - keep as is
+                result.append(msg)
+
+        if images_replaced > 0:
+            emit_info(
+                f"🖼️  Image lifecycle: replaced {images_replaced} old image(s) with placeholders, "
+                f"saving ~{tokens_saved} tokens"
+            )
+
+        return result, images_replaced, tokens_saved
 
     def run_summarization_sync(
         self,
