@@ -67,10 +67,10 @@ class TestCircuitStateEnum:
 class TestConfigureCircuitBreaker:
     """Test configure() with circuit breaker parameters."""
 
-    def test_default_circuit_breaker_disabled(self):
+    def test_default_circuit_breaker_enabled(self):
         from code_puppy import adaptive_rate_limiter as arl
 
-        assert arl._cfg_circuit_breaker_enabled is False
+        assert arl._cfg_circuit_breaker_enabled is True
 
     def test_enable_circuit_breaker(self):
         configure(circuit_breaker_enabled=True)
@@ -116,7 +116,7 @@ class TestConfigureCircuitBreaker:
 
     def test_reset_clears_circuit_breaker_config(self):
         configure(
-            circuit_breaker_enabled=True,
+            circuit_breaker_enabled=False,
             circuit_cooldown_seconds=30.0,
             circuit_half_open_requests=5,
             queue_max_size=200,
@@ -125,7 +125,7 @@ class TestConfigureCircuitBreaker:
         reset()
         from code_puppy import adaptive_rate_limiter as arl
 
-        assert arl._cfg_circuit_breaker_enabled is False
+        assert arl._cfg_circuit_breaker_enabled is True
         assert arl._cfg_circuit_cooldown_seconds == 10.0
         assert arl._cfg_circuit_half_open_requests == 1
         assert arl._cfg_queue_max_size == 100

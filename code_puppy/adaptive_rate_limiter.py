@@ -48,7 +48,7 @@ DEFAULT_RECOVERY_RATE: float = 0.5  # fraction of current limit to add per tick
 DEFAULT_INITIAL_LIMIT: int = 10  # starting concurrency for any new model
 
 # Circuit breaker defaults
-DEFAULT_CIRCUIT_BREAKER_ENABLED: bool = False
+DEFAULT_CIRCUIT_BREAKER_ENABLED: bool = True
 DEFAULT_CIRCUIT_COOLDOWN_SECONDS: float = 10.0
 DEFAULT_CIRCUIT_HALF_OPEN_REQUESTS: int = 1
 DEFAULT_QUEUE_MAX_SIZE: int = 100
