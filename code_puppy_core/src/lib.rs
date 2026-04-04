@@ -18,6 +18,8 @@ use hashline::{
 use pruning::{collect_tool_call_ids_impl, prune_and_filter_impl, split_for_summarization_impl, truncation_indices_impl};
 use serialization::{
     deserialize_session_impl, serialize_session_impl, serialize_session_incremental_impl,
+    serialize_messages_incremental_impl, serialize_session_incremental_new_impl,
+    get_incremental_message_count_impl, get_incremental_data_offset_impl,
 };
 use token_estimation::process_messages_batch_impl;
 
@@ -138,6 +140,38 @@ fn serialize_session_incremental(
     serialize_session_incremental_impl(new_messages, existing_data)
 }
 
+/// Serialize only new messages as length-prefixed bytes for appending.
+#[pyfunction]
+#[pyo3(signature = (new_messages,))]
+fn serialize_messages_incremental(
+    new_messages: &Bound<'_, PyList>,
+) -> PyResult<Vec<u8>> {
+    serialize_messages_incremental_impl(new_messages)
+}
+
+/// Create a new incremental format file with all messages.
+#[pyfunction]
+#[pyo3(signature = (messages,))]
+fn serialize_session_incremental_new(
+    messages: &Bound<'_, PyList>,
+) -> PyResult<Vec<u8>> {
+    serialize_session_incremental_new_impl(messages)
+}
+
+/// Get message count from incremental format file.
+#[pyfunction]
+#[pyo3(signature = (data,))]
+fn get_incremental_message_count(data: &[u8]) -> PyResult<usize> {
+    get_incremental_message_count_impl(data)
+}
+
+/// Get data offset after header in incremental format file.
+#[pyfunction]
+#[pyo3(signature = (data,))]
+fn get_incremental_data_offset(data: &[u8]) -> PyResult<usize> {
+    get_incremental_data_offset_impl(data)
+}
+
 // ── Hashline functions ──────────────────────────────────────────────────────
 
 #[pyfunction]
@@ -180,6 +214,10 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(serialize_session, m)?)?;
     m.add_function(wrap_pyfunction!(deserialize_session, m)?)?;
     m.add_function(wrap_pyfunction!(serialize_session_incremental, m)?)?;
+    m.add_function(wrap_pyfunction!(serialize_messages_incremental, m)?)?;
+    m.add_function(wrap_pyfunction!(serialize_session_incremental_new, m)?)?;
+    m.add_function(wrap_pyfunction!(get_incremental_message_count, m)?)?;
+    m.add_function(wrap_pyfunction!(get_incremental_data_offset, m)?)?;
     m.add_function(wrap_pyfunction!(collect_tool_call_ids, m)?)?;
     m.add_function(wrap_pyfunction!(compute_line_hash, m)?)?;
     m.add_function(wrap_pyfunction!(format_hashlines, m)?)?;

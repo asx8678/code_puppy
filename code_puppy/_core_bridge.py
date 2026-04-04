@@ -16,10 +16,14 @@ try:
         SplitResult,
         collect_tool_call_ids,
         deserialize_session,
+        get_incremental_data_offset,
+        get_incremental_message_count,
         process_messages_batch,
         prune_and_filter,
+        serialize_messages_incremental,
         serialize_session,
         serialize_session_incremental,
+        serialize_session_incremental_new,
         split_for_summarization,
         truncation_indices)
 
@@ -38,6 +42,10 @@ except ImportError:
     serialize_session = None  # type: ignore[assignment]
     deserialize_session = None  # type: ignore[assignment]
     serialize_session_incremental = None  # type: ignore[assignment]
+    serialize_messages_incremental = None  # type: ignore[assignment]
+    serialize_session_incremental_new = None  # type: ignore[assignment]
+    get_incremental_message_count = None  # type: ignore[assignment]
+    get_incremental_data_offset = None  # type: ignore[assignment]
     collect_tool_call_ids = None  # type: ignore[assignment]
 
 
