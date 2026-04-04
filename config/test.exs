@@ -7,5 +7,5 @@ config :logger,
 
 config :logger, :console, format: "$message\n"
 
-# Don't auto-start the manager in tests - we start it manually per test
-config :mana, :start_manager, false
+# Don't auto-start the supervision tree in tests - we start processes manually per test
+config :mana, :auto_start, false
