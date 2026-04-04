@@ -4,15 +4,19 @@ Registers via the ``custom_command`` hook so it lives entirely outside
 ``code_puppy/command_line/``.  Run ``/clean help`` for usage.
 """
 
-import re
 import shutil
-import time
 from pathlib import Path
 from typing import Any
 
 from code_puppy import config
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
+
+from ._age_filter import (
+    _human_age,
+    _is_older_than,
+    _parse_args,
+)
 
 # ---------------------------------------------------------------------------
 # Storage location definitions
@@ -92,48 +96,6 @@ _SAFE_CATEGORY_KEYS: list[str] = [k for k in _CATEGORIES if k != "db"]
 
 
 # ---------------------------------------------------------------------------
-# Duration parsing
-# ---------------------------------------------------------------------------
-
-
-def _parse_duration(s: str) -> int:
-    """Parse a duration string into seconds.
-
-    Supports formats like:
-        - 7d, 30d (days)
-        - 24h (hours)
-        - 1w (weeks = 7 days)
-        - 12m (minutes)
-        - 30s (seconds)
-
-    Args:
-        s: Duration string with number + unit suffix.
-
-    Returns:
-        Number of seconds as an integer.
-
-    Raises:
-        ValueError: If the format is invalid or unit is not recognized.
-    """
-    s = s.strip().lower()
-    match = re.match(r"^(\d+)\s*([dhwms])$", s)
-    if not match:
-        raise ValueError(
-            f"Invalid duration format: '{s}'. "
-            f"Use formats like: 7d, 24h, 1w, 12m, 30s"
-        )
-    num, unit = match.groups()
-    value = int(num)
-    multipliers = {
-        "s": 1,
-        "m": 60,
-        "h": 3600,
-        "d": 86400,
-        "w": 604800,  # 7 days
-    }
-    return value * multipliers[unit]
-
-# ---------------------------------------------------------------------------
 # Size / cleanup helpers
 # ---------------------------------------------------------------------------
 
@@ -147,37 +109,6 @@ def _human_size(nbytes: int) -> str:
         if nbytes < 1024.0 or unit == "GB":
             return f"{nbytes:.1f} {unit}"
     return f"{nbytes:.1f} GB"  # pragma: no cover
-
-
-def _human_age(seconds: int) -> str:
-    """Format *seconds* as a human-friendly age string."""
-    if seconds < 60:
-        return f"{seconds}s"
-    if seconds < 3600:
-        return f"{seconds // 60}m"
-    if seconds < 86400:
-        return f"{seconds // 3600}h"
-    if seconds < 604800:
-        return f"{seconds // 86400}d"
-    return f"{seconds // 604800}w"
-
-
-def _is_older_than(path: Path, max_age_seconds: int) -> bool:
-    """Check if a file is older than the given age threshold.
-
-    Args:
-        path: Path to the file to check.
-        max_age_seconds: Maximum age in seconds. Files older than this
-            (based on mtime) will return True.
-
-    Returns:
-        True if the file exists and is older than max_age_seconds.
-    """
-    try:
-        mtime = path.stat().st_mtime
-        return (time.time() - mtime) > max_age_seconds
-    except OSError:
-        return False
 
 
 def _dir_stats(path: Path, max_age_seconds: int | None = None) -> tuple[int, int]:
@@ -277,7 +208,9 @@ def _clean_dir(
         total = 0
         try:
             for item in path.rglob("*"):
-                if item.is_file() and _is_older_than(item, max_age_seconds):
+                if (item.is_file() or item.is_symlink()) and _is_older_than(
+                    item, max_age_seconds
+                ):
                     try:
                         size = item.stat().st_size
                     except OSError:
@@ -376,7 +309,7 @@ def _clean_targets(
             prefix = "Would remove" if dry_run else "Removed"
             age_info = ""
             if max_age_seconds is not None:
-                age_info = f" (older than {max_age_seconds // 86400}d)"
+                age_info = f" (older than {_human_age(max_age_seconds)})"
             emit_info(
                 f"  🗑️  {prefix} {label}{age_info}: {c} file{'s' if c != 1 else ''}, {_human_size(b)}"
             )
@@ -475,6 +408,7 @@ def _show_help() -> None:
     emit_info("  24h      = hours")
     emit_info("  1w       = weeks (7 days)")
     emit_info("  12m      = minutes")
+    emit_info("  30s      = seconds")
     emit_info("")
     emit_info("Examples:")
     emit_info("  /clean sessions --dry-run")
@@ -552,40 +486,10 @@ def _run_clean(
 
 
 # ---------------------------------------------------------------------------
-# Command dispatcher
+# Subcommand handlers
 # ---------------------------------------------------------------------------
 
 _VALID_SUBCMDS = {"help", "status", "all", "sessions", "history", "logs", "cache", "db"}
-
-
-def _parse_args(parts: list[str]) -> tuple[list[str], bool, int | None]:
-    """Parse command arguments.
-
-    Args:
-        parts: List of argument strings (after the command name).
-
-    Returns:
-        Tuple of (remaining_args, dry_run, max_age_seconds).
-    """
-    dry_run = False
-    max_age_seconds: int | None = None
-    args: list[str] = []
-
-    i = 0
-    while i < len(parts):
-        arg = parts[i]
-        if arg == "--dry-run":
-            dry_run = True
-        elif arg == "--older-than":
-            if i + 1 >= len(parts):
-                raise ValueError("--older-than requires a duration argument (e.g., 7d, 24h)")
-            max_age_seconds = _parse_duration(parts[i + 1])
-            i += 1
-        else:
-            args.append(arg)
-        i += 1
-
-    return args, dry_run, max_age_seconds
 
 
 def _handle_clean_command(command: str, name: str) -> bool | None:
