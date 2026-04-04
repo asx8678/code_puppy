@@ -20,6 +20,7 @@ class OperationType(str, Enum):
     GREP = "grep"
     READ_FILES = "read_files"
     RUN_TESTS = "run_tests"
+    DISCOVER_TESTS = "discover_tests"
 
 
 class PlanStatus(str, Enum):
@@ -79,6 +80,12 @@ class Operation(BaseModel):
             args.setdefault("runner", "pytest")
             args.setdefault("verbose", False)
             args.setdefault("extra_args", "")
+
+        elif op_type == OperationType.DISCOVER_TESTS:
+            # test_path is optional, defaults to current directory
+            args.setdefault("test_path", ".")
+            args.setdefault("runner", "pytest")
+            args.setdefault("pattern", "")
 
         return args
 

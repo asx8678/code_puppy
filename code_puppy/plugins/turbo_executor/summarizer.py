@@ -221,11 +221,201 @@ def _summarize_read_files(data: dict[str, Any]) -> str:
     return "\n".join(summary_parts)
 
 
+def _summarize_run_tests(data: dict[str, Any]) -> str:
+    """Summarize run_tests operation result.
+
+    Args:
+        data: The operation result data
+
+    Returns:
+        Markdown summary string
+    """
+    if data.get("error"):
+        return f"⚠️ **Error:** {data['error']}"
+
+    # Extract test counts
+    passed = data.get("passed", 0)
+    failed = data.get("failed", 0)
+    skipped = data.get("skipped", 0)
+    errors = data.get("errors", 0)
+    total = data.get("total", 0)
+    duration = data.get("duration_seconds", 0.0)
+    success = data.get("success", False)
+    exit_code = data.get("exit_code", 0)
+    runner = data.get("runner", "unknown")
+    test_path = data.get("test_path", ".")
+
+    # Status emoji based on results
+    if success and failed == 0 and errors == 0:
+        emoji = "✅"
+        status_text = "Passed"
+    elif failed > 0 or errors > 0:
+        emoji = "❌"
+        status_text = "Failed"
+    elif skipped > 0 and passed == 0:
+        emoji = "⏭️"
+        status_text = "Skipped"
+    else:
+        emoji = "⚠️"
+        status_text = "Partial"
+
+    summary_parts = [
+        f"{emoji} **Test Results** ({runner})",
+        f"*Path: {test_path}*",
+        "",
+        f"**Status:** {status_text} (exit code {exit_code})",
+        f"**Summary:** {passed} passed, {failed} failed, {skipped} skipped, {errors} errors",
+    ]
+
+    if total > 0:
+        summary_parts.append(f"**Total:** {total} tests")
+
+    if duration > 0:
+        summary_parts.append(f"**Duration:** {duration:.2f}s")
+
+    summary_parts.append("")
+
+    # Show failure preview if there are failures
+    if failed > 0 or errors > 0:
+        output = data.get("output", "")
+        if output:
+            summary_parts.append("**Failure Preview:**")
+            summary_parts.append("```")
+            # Extract the first failure traceback (limited lines)
+            failure_preview = _extract_failure_preview(output)
+            summary_parts.append(failure_preview)
+            summary_parts.append("```")
+            summary_parts.append("")
+
+    return "\n".join(summary_parts)
+
+
+def _extract_failure_preview(output: str, max_lines: int = 30) -> str:
+    """Extract a preview of the first failure from test output.
+
+    Args:
+        output: The full test output
+        max_lines: Maximum lines to include in preview
+
+    Returns:
+        Truncated failure preview
+    """
+    if not output:
+        return "No output available"
+
+    lines = output.split("\n")
+
+    # Look for failure patterns
+    # Common patterns: "FAILED", "ERROR", "= FAILURES =", "AssertionError"
+    failure_start = -1
+    for i, line in enumerate(lines):
+        line_upper = line.upper()
+        if any(
+            pattern in line_upper
+            for pattern in ["FAILED", "ERROR", "= FAILURES =", "= ERRORS ="]
+        ):
+            failure_start = i
+            break
+        # Also check for traceback patterns
+        if "Traceback (most recent call last)" in line:
+            failure_start = i
+            break
+
+    if failure_start == -1:
+        # No clear failure marker found, show last portion of output
+        return "\n".join(lines[-max_lines:]) if len(lines) > max_lines else output
+
+    # Get lines from failure start
+    preview_lines = lines[failure_start : failure_start + max_lines]
+    result = "\n".join(preview_lines)
+
+    # Add truncation indicator if there's more content
+    if failure_start + max_lines < len(lines):
+        result += "\n\n[... additional failures truncated ...]"
+
+    return result
+
+
+def _summarize_discover_tests(data: dict[str, Any]) -> str:
+    """Summarize discover_tests operation result.
+
+    Args:
+        data: The operation result data
+
+    Returns:
+        Markdown summary string
+    """
+    if data.get("error"):
+        return f"⚠️ **Error:** {data['error']}"
+
+    test_count = data.get("test_count", 0)
+    test_files = data.get("test_files", [])
+    test_modules = data.get("test_modules", [])
+    test_items = data.get("test_items", [])
+    test_path = data.get("test_path", ".")
+    runner = data.get("runner", "unknown")
+    pattern = data.get("pattern", "")
+    success = data.get("success", False)
+
+    # Status emoji
+    if test_count > 0:
+        emoji = "🔍"
+        status_text = f"Found {test_count} tests"
+    elif success:
+        emoji = "✅"
+        status_text = "No tests found (success)"
+    else:
+        emoji = "⚠️"
+        status_text = "Discovery failed"
+
+    summary_parts = [
+        f"{emoji} **Test Discovery** ({runner})",
+        f"*Path: {test_path}{f', pattern: {pattern}' if pattern else ''}*",
+        "",
+        f"**Status:** {status_text}",
+    ]
+
+    if test_count > 0:
+        summary_parts.append(f"**Total Tests:** {test_count}")
+
+    if test_files:
+        summary_parts.append(f"**Test Files:** {len(test_files)} files")
+        # Show first few test files
+        preview_files = test_files[:10]
+        summary_parts.append("```")
+        for f in preview_files:
+            summary_parts.append(f"  {f}")
+        if len(test_files) > 10:
+            summary_parts.append(f"  ... and {len(test_files) - 10} more")
+        summary_parts.append("```")
+
+    if test_modules and not test_files:
+        summary_parts.append(f"**Test Modules:** {len(test_modules)} directories")
+
+    if test_items and len(test_items) <= 20:
+        summary_parts.append("")
+        summary_parts.append("**Test Cases:**")
+        summary_parts.append("```")
+        for item in test_items[:20]:
+            item_type = item.get("type", "Test")
+            item_name = item.get("name", "unknown")
+            summary_parts.append(f"  {item_type}: {item_name}")
+        if len(test_items) > 20:
+            summary_parts.append(f"  ... and {len(test_items) - 20} more")
+        summary_parts.append("```")
+
+    summary_parts.append("")
+
+    return "\n".join(summary_parts)
+
+
 # Mapping of operation types to their summarizers
 _OPERATION_SUMMARIZERS: dict[OperationType, Callable] = {
     OperationType.LIST_FILES: _summarize_list_files,
     OperationType.GREP: _summarize_grep,
     OperationType.READ_FILES: _summarize_read_files,
+    OperationType.RUN_TESTS: _summarize_run_tests,
+    OperationType.DISCOVER_TESTS: _summarize_discover_tests,
 }
 
 

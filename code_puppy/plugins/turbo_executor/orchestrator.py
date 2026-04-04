@@ -103,6 +103,7 @@ class TurboOrchestrator:
             OperationType.GREP: self._execute_grep,
             OperationType.READ_FILES: self._execute_read_files,
             OperationType.RUN_TESTS: self._execute_run_tests,
+            OperationType.DISCOVER_TESTS: self._execute_discover_tests,
         }
 
     @property
@@ -307,13 +308,27 @@ class TurboOrchestrator:
             return "success"
 
         if op_type == OperationType.RUN_TESTS:
-            # run_tests reports errors in data["error"] or via exit code
+            # run_tests reports errors in data["error"] or via the success flag
             if data.get("error"):
                 return "error"
-            # Consider it an error if pytest had test failures and wasn't a success
-            if data.get("exit_code", 0) != 0 and not data.get("success", False):
+            # Consider it successful if the success flag is True or if there are no failed tests
+            failed = data.get("failed", 0)
+            errors = data.get("errors", 0)
+            success = data.get("success", False)
+            if failed == 0 and errors == 0 and (success or data.get("total", 0) > 0):
+                return "success"
+            return "error"
+
+        if op_type == OperationType.DISCOVER_TESTS:
+            # discover_tests reports errors in data["error"]
+            if data.get("error"):
                 return "error"
-            return "success"
+            # Consider it successful if we found test files or successfully determined no tests
+            test_files = data.get("test_files", [])
+            success = data.get("success", False)
+            if success or test_files is not None:
+                return "success"
+            return "error"
 
         return "success"
 
@@ -666,7 +681,6 @@ class TurboOrchestrator:
             cmd = f"{runner} {test_path}"
             if extra_args:
                 cmd += f" {extra_args}"
-
         try:
             # Import here to avoid circular imports
             from code_puppy.tools.command_runner import run_shell_command
@@ -680,10 +694,11 @@ class TurboOrchestrator:
             )
 
             # Parse the output for structured results
-            output = result.get("output", "")
-            stderr = result.get("stderr", "")
-            exit_code = result.get("exit_code", 1)
-            full_output = output + (f"\n{stderr}" if stderr else "")
+            # ShellCommandOutput is a Pydantic model with attributes, not a dict
+            stdout = result.stdout or ""
+            stderr = result.stderr or ""
+            exit_code = result.exit_code if result.exit_code is not None else 1
+            full_output = stdout + (f"\n{stderr}" if stderr else "")
 
             # Parse pytest output for test counts
             test_results = self._parse_pytest_output(full_output, exit_code)
@@ -715,7 +730,145 @@ class TurboOrchestrator:
                 "source": "native_python",
             }
 
-    def _parse_pytest_output(self, output: str, exit_code: int) -> dict[str, Any]:
+    async def _execute_discover_tests(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Execute discover_tests operation to find available tests without running them."""
+        test_path = args.get("test_path", ".")
+        runner = args.get("runner", "pytest")
+        pattern = args.get("pattern", "")
+
+        if runner == "pytest":
+            # Use pytest --collect-only to discover tests without running them
+            cmd_parts = ["pytest", test_path, "--collect-only"]
+
+            if pattern:
+                cmd_parts.extend(["-k", pattern])
+
+            cmd = " ".join(cmd_parts)
+        elif runner == "unittest":
+            # Use unittest discover to find tests
+            cmd_parts = ["python", "-m", "unittest", "discover", "-s", test_path]
+
+            if pattern:
+                cmd_parts.extend(["-p", pattern])
+
+            cmd = " ".join(cmd_parts)
+        else:
+            return {
+                "test_path": test_path,
+                "runner": runner,
+                "pattern": pattern,
+                "test_files": [],
+                "test_count": 0,
+                "error": f"Unsupported test runner: {runner}",
+                "success": False,
+                "source": "native_python",
+            }
+
+        try:
+            # Import here to avoid circular imports
+            from code_puppy.tools.command_runner import run_shell_command
+
+            # Run the discovery
+            result = await run_shell_command(
+                context=None,
+                command=cmd,
+                cwd=None,
+                timeout=60,  # 1 minute timeout for discovery
+            )
+
+            # Parse the output
+            stdout = result.stdout or ""
+            stderr = result.stderr or ""
+            exit_code = result.exit_code if result.exit_code is not None else 1
+            full_output = stdout + (f"\n{stderr}" if stderr else "")
+
+            # Parse discovery results
+            discovery_results = self._parse_pytest_discovery(full_output, exit_code)
+
+            return {
+                "test_path": test_path,
+                "runner": runner,
+                "pattern": pattern,
+                "command": cmd,
+                "exit_code": exit_code,
+                "output": full_output,
+                **discovery_results,
+                "success": discovery_results.get("test_count", 0) > 0 or exit_code == 0,
+                "source": "native_python",
+            }
+
+        except Exception as e:
+            return {
+                "test_path": test_path,
+                "runner": runner,
+                "pattern": pattern,
+                "command": cmd,
+                "exit_code": -1,
+                "output": "",
+                "error": str(e),
+                "test_files": [],
+                "test_count": 0,
+                "success": False,
+                "source": "native_python",
+            }
+
+    def _parse_pytest_discovery(self, output: str, exit_code: int) -> dict[str, Any]:
+        """Parse pytest --collect-only output to extract test discovery results.
+
+        Returns:
+            Dict with test_files, test_count, and test_modules.
+        """
+        import re
+
+        result = {
+            "test_files": [],
+            "test_modules": [],
+            "test_count": 0,
+            "test_items": [],
+        }
+
+        if not output:
+            return result
+
+        # Parse test files from output
+        # Pattern: <Module test_file.py> or <TestClass ClassName> or <Function test_name>
+        test_file_pattern = r"<Module\s+([^>]+)>"
+        test_module_matches = re.findall(test_file_pattern, output)
+
+        # Parse test functions/classes
+        test_item_pattern = r"<(Function|Test|UnitTestCase|TestCase)\s+([^>]+)>"
+        test_items = re.findall(test_item_pattern, output)
+
+        # Count collected tests
+        collected_pattern = r"collected\s+(\d+)\s+items?"
+        collected_match = re.search(collected_pattern, output, re.IGNORECASE)
+
+        if collected_match:
+            result["test_count"] = int(collected_match.group(1))
+        else:
+            # Fallback: count test items found
+            result["test_count"] = len(test_items)
+
+        # Extract unique test files/modules
+        seen_files = set()
+        for module in test_module_matches:
+            if module not in seen_files:
+                seen_files.add(module)
+                result["test_files"].append(module)
+
+        # Extract test items
+        for item_type, item_name in test_items:
+            result["test_items"].append({
+                "type": item_type,
+                "name": item_name,
+            })
+
+        # Extract test modules (directory names)
+        dir_pattern = r"<Dir\s+([^>]+)>"
+        dir_matches = re.findall(dir_pattern, output)
+        result["test_modules"] = list(set(dir_matches))
+
+        return result
         """Parse pytest output to extract test results.
 
         Handles various pytest output formats including:
@@ -804,8 +957,10 @@ class TurboOrchestrator:
                 result["passed"] = len(test_file_matches)
                 result["total"] = len(test_file_matches)
 
-        # Success means: exit code 0 AND no failures/errors
-        result["success"] = exit_code == 0 and result["failed"] == 0 and result["errors"] == 0
+        # Success means: no test failures/errors (even if exit code is non-zero due to coverage, etc.)
+        # Exit code 0 = all good, 1 = tests failed or other issue, 2 = pytest error, 5 = no tests collected
+        # We consider it successful if no actual tests failed, regardless of exit code
+        result["success"] = result["failed"] == 0 and result["errors"] == 0 and result["total"] > 0
 
         return result
 
@@ -847,6 +1002,11 @@ class TurboOrchestrator:
             if op.type == OperationType.RUN_TESTS:
                 runner = op.args.get("runner", "pytest")
                 if runner not in ("pytest", "unittest", "tox", "nox"):
+                    errors.append(f"{prefix}: unsupported test runner '{runner}'")
+
+            if op.type == OperationType.DISCOVER_TESTS:
+                runner = op.args.get("runner", "pytest")
+                if runner not in ("pytest", "unittest"):
                     errors.append(f"{prefix}: unsupported test runner '{runner}'")
 
         return errors

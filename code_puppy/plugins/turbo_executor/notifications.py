@@ -19,6 +19,7 @@ _OP_EMOJIS = {
     "grep": "🔍",
     "read_files": "📄",
     "run_tests": "🧪",
+    "discover_tests": "🔎",
 }
 
 # Operation type singular/plural forms for display
@@ -27,6 +28,7 @@ _OP_DISPLAY_NAMES = {
     "grep": "grep",
     "read_files": "read_files",
     "run_tests": "run_tests",
+    "discover_tests": "discover_tests",
 }
 
 
@@ -107,6 +109,15 @@ def _format_brief_args(op_type: str, args: dict) -> str:
         runner = args.get("runner", "pytest")
         return f"{runner} {test_path}"
 
+    if op_type == "discover_tests":
+        test_path = args.get("test_path", ".")
+        runner = args.get("runner", "pytest")
+        pattern = args.get("pattern", "")
+        brief = f"{runner} {test_path}"
+        if pattern:
+            brief += f" (pattern='{pattern}')"
+        return brief
+
     return ""
 
 
@@ -137,6 +148,14 @@ def _format_brief_stats(op_type: str, data: dict) -> str:
         total = data.get("total", 0)
         if total > 0:
             return f"{passed}✓ {failed}✗ {skipped}⊘ ({duration:.1f}s)"
+        return ""
+
+    if op_type == "discover_tests":
+        test_count = data.get("test_count", 0)
+        test_files = data.get("test_files", [])
+        file_count = len(test_files) if isinstance(test_files, list) else 0
+        if test_count > 0:
+            return f"{test_count} tests in {file_count} files"
         return ""
 
     return ""
@@ -294,6 +313,9 @@ def generate_accomplishment_summary(result_data: dict) -> str:
     test_passed = 0
     test_failed = 0
     test_skipped = 0
+    test_discoveries = 0
+    test_discovered_count = 0
+    test_discovered_files = 0
 
     for op in operation_results:
         if not isinstance(op, dict):
@@ -337,6 +359,13 @@ def generate_accomplishment_summary(result_data: dict) -> str:
             test_failed += op_data.get("failed", 0)
             test_skipped += op_data.get("skipped", 0)
 
+        elif op_type == "discover_tests":
+            test_discoveries += 1
+            test_discovered_count += op_data.get("test_count", 0)
+            test_files = op_data.get("test_files", [])
+            if isinstance(test_files, list):
+                test_discovered_files += len(test_files)
+
     # Build summary lines
     summary_parts: list[str] = []
 
@@ -351,6 +380,9 @@ def generate_accomplishment_summary(result_data: dict) -> str:
 
     if test_runs_total > 0:
         summary_parts.append(f"   🧪 Ran {test_passed + test_failed + test_skipped} tests ({test_passed}✓ {test_failed}✗ {test_skipped}⊘)")
+
+    if test_discoveries > 0:
+        summary_parts.append(f"   🔎 Discovered {test_discovered_count} tests in {test_discovered_files} files")
 
     if not summary_parts:
         return ""
