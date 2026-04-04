@@ -5,8 +5,8 @@ defmodule Mana.Tools.RegistryTest do
 
   use ExUnit.Case, async: false
 
-  alias Mana.Tools.Registry
   alias Mana.Tools.Behaviour
+  alias Mana.Tools.Registry
 
   # Test tool module
   defmodule TestTool do

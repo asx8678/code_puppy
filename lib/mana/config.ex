@@ -226,6 +226,8 @@ defmodule Mana.Config do
     - `MyApp.Config.enable_caching?/0` (note the `?` suffix for booleans)
     """
 
+    alias Mana.Config.Store
+
     defmacro __using__(opts) do
       # Evaluate the keys option to get the actual map
       {keys, _} =
@@ -252,7 +254,7 @@ defmodule Mana.Config do
             """
             @spec unquote(:"#{key}?")() :: boolean()
             def unquote(:"#{key}?")() do
-              Mana.Config.Store.get(unquote(key), unquote(default))
+              Store.get(unquote(key), unquote(default))
             end
           end
         end)
@@ -270,7 +272,7 @@ defmodule Mana.Config do
             """
             @spec unquote(key)() :: unquote(type_spec(type))
             def unquote(key)() do
-              Mana.Config.Store.get(unquote(key), unquote(default))
+              Store.get(unquote(key), unquote(default))
             end
           end
         end)

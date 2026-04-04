@@ -317,32 +317,32 @@ defmodule Mana.Session.Store do
       {:ok, files} ->
         files
         |> Enum.filter(&String.ends_with?(&1, ".json"))
-        |> Enum.map(fn file ->
-          id = String.replace_suffix(file, ".json", "")
-          file_path = Path.join(sessions_dir, file)
-
-          messages =
-            case File.read(file_path) do
-              {:ok, contents} ->
-                case Jason.decode(contents) do
-                  {:ok, data} when is_list(data) ->
-                    # Normalize keys to atoms
-                    Enum.map(data, &normalize_message_keys/1)
-
-                  _ ->
-                    []
-                end
-
-              _ ->
-                []
-            end
-
-          {id, messages}
-        end)
+        |> Enum.map(&load_session_entry(&1, sessions_dir))
         |> Map.new()
 
       _ ->
         %{}
+    end
+  end
+
+  defp load_session_entry(file, sessions_dir) do
+    id = String.replace_suffix(file, ".json", "")
+    file_path = Path.join(sessions_dir, file)
+    messages = load_session_messages(file_path)
+    {id, messages}
+  end
+
+  defp load_session_messages(file_path) do
+    case File.read(file_path) do
+      {:ok, contents} -> decode_messages(contents)
+      _ -> []
+    end
+  end
+
+  defp decode_messages(contents) do
+    case Jason.decode(contents) do
+      {:ok, data} when is_list(data) -> Enum.map(data, &normalize_message_keys/1)
+      _ -> []
     end
   end
 

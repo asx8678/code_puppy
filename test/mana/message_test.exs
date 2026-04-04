@@ -6,12 +6,12 @@ defmodule Mana.MessageTest do
   use ExUnit.Case, async: true
 
   alias Mana.Message
-  alias Mana.Message.Text
+  alias Mana.Message.Agent
+  alias Mana.Message.Control
   alias Mana.Message.File
   alias Mana.Message.Shell
-  alias Mana.Message.Agent
+  alias Mana.Message.Text
   alias Mana.Message.UserInteraction
-  alias Mana.Message.Control
 
   describe "generate_uuid/0" do
     test "generates a valid UUID v4 format" do

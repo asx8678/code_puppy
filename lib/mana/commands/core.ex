@@ -268,14 +268,14 @@ defmodule Mana.Commands.Core do
       if sessions == [] do
         {:ok, "No sessions available."}
       else
-        lines =
-          Enum.map(sessions, fn id ->
-            marker = if id == active, do: " (active)", else: ""
-            "  - #{id}#{marker}"
-          end)
-
+        lines = Enum.map(sessions, &format_session_line(&1, active))
         {:ok, ["Available sessions:" | lines] |> Enum.join("\n")}
       end
+    end
+
+    defp format_session_line(id, active) do
+      marker = if id == active, do: " (active)", else: ""
+      "  - #{id}#{marker}"
     end
   end
 

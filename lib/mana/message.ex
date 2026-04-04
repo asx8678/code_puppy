@@ -59,31 +59,38 @@ defmodule Mana.Message do
     }
 
     # Merge with type-specific fields and create the appropriate struct
-    case category do
-      :text ->
-        struct(Mana.Message.Text, Map.merge(common, attrs))
-
-      :file ->
-        struct(Mana.Message.File, Map.merge(common, attrs))
-
-      :shell ->
-        struct(Mana.Message.Shell, Map.merge(common, attrs))
-
-      :agent ->
-        struct(Mana.Message.Agent, Map.merge(common, attrs))
-
-      :user_interaction ->
-        struct(Mana.Message.UserInteraction, Map.merge(common, attrs))
-
-      :control ->
-        struct(Mana.Message.Control, Map.merge(common, attrs))
-
-      _ ->
-        raise ArgumentError, "Unknown message category: #{inspect(category)}"
-    end
+    create_struct(category, common, attrs)
   end
 
   def new(category, _attrs) do
+    raise ArgumentError, "Unknown message category: #{inspect(category)}"
+  end
+
+  defp create_struct(:text, common, attrs) do
+    struct(Mana.Message.Text, Map.merge(common, attrs))
+  end
+
+  defp create_struct(:file, common, attrs) do
+    struct(Mana.Message.File, Map.merge(common, attrs))
+  end
+
+  defp create_struct(:shell, common, attrs) do
+    struct(Mana.Message.Shell, Map.merge(common, attrs))
+  end
+
+  defp create_struct(:agent, common, attrs) do
+    struct(Mana.Message.Agent, Map.merge(common, attrs))
+  end
+
+  defp create_struct(:user_interaction, common, attrs) do
+    struct(Mana.Message.UserInteraction, Map.merge(common, attrs))
+  end
+
+  defp create_struct(:control, common, attrs) do
+    struct(Mana.Message.Control, Map.merge(common, attrs))
+  end
+
+  defp create_struct(category, _common, _attrs) do
     raise ArgumentError, "Unknown message category: #{inspect(category)}"
   end
 
@@ -141,8 +148,7 @@ defmodule Mana.Message do
         e11,
         e12
       ]
-      |> Enum.map(&Integer.to_string(&1, 16))
-      |> Enum.join()
+      |> Enum.map_join(&Integer.to_string(&1, 16))
       |> String.downcase()
 
     <<p1::binary-8, p2::binary-4, p3::binary-4, p4::binary-4, p5::binary-12>> = hex
