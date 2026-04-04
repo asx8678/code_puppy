@@ -146,8 +146,6 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Cache for message part content stringification (keyed on id(content))
         # This unifies caching between _stringify_part() and stringify_message_part()
         self._content_stringify_cache: dict[int, str] = {}
-        # Per-invocation cache for message analysis results (single-pass pipeline)
-        self._message_analysis_cache: dict[tuple[int, int], Any] = {}
 
     def _analyze_messages_single_pass(
         self,
@@ -160,7 +158,6 @@ class BaseAgent(ABC, AgentPromptMixin):
         - Tool call IDs (call_ids and return_ids sets)
         - Message hashes
         - Image TTL turn numbers (for image lifecycle)
-        - Binary content detection per message
         - Total token count
 
         Args:
@@ -173,7 +170,6 @@ class BaseAgent(ABC, AgentPromptMixin):
             - tool_call_ids: Set of tool call IDs
             - tool_return_ids: Set of tool return IDs
             - message_turns: List of turn numbers per message (for image TTL)
-            - has_binary_content: List of bools indicating binary content per message
             - total_tokens: Total token count
             - pending_tool_calls: Bool indicating if there are pending tool calls
         """
@@ -181,7 +177,6 @@ class BaseAgent(ABC, AgentPromptMixin):
         per_message_tokens: list[int] = [0] * n
         message_hashes: list[str] = [""] * n
         message_turns: list[int] = [0] * n
-        has_binary_content: list[bool] = [False] * n
 
         call_ids: set[str] = set()
         return_ids: set[str] = set()
@@ -197,12 +192,8 @@ class BaseAgent(ABC, AgentPromptMixin):
             # Hash computation
             message_hashes[i] = self.hash_message(msg)
 
-            # Binary content detection and tool ID collection
+            # Tool ID collection
             for part in getattr(msg, "parts", []) or []:
-                # Check for binary content
-                if isinstance(part, BinaryContent):
-                    has_binary_content[i] = True
-
                 # Tool call ID collection
                 tcid = getattr(part, "tool_call_id", None)
                 if tcid:
@@ -237,7 +228,6 @@ class BaseAgent(ABC, AgentPromptMixin):
             "tool_call_ids": call_ids,
             "tool_return_ids": return_ids,
             "message_turns": message_turns,
-            "has_binary_content": has_binary_content,
             "total_tokens": total_tokens,
             "pending_tool_calls": pending_tool_calls,
         }
@@ -1665,38 +1655,23 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         model_max = self.get_model_context_length()
 
-        # Check cache first for identical message lists
-        cache_key = (id(messages), len(messages))
-        cached_analysis = self._message_analysis_cache.get(cache_key)
-
         # =========================================================================
         # PASS 1: ANALYSIS - Single pass computing all needed metadata
         # =========================================================================
-        if cached_analysis is not None:
-            analysis = cached_analysis
-            # Still need to apply image lifecycle since messages may be mutated
-            messages, images_replaced, tokens_saved = self._apply_image_lifecycle_single_pass(
-                messages, analysis
-            )
-            total_message_tokens = analysis["total_tokens"]
-        else:
-            # First, apply image lifecycle using single-pass analysis
-            # This combines the turn counting + replacement into efficient passes
+        # First, apply image lifecycle using single-pass analysis
+        # This combines the turn counting + replacement into efficient passes
+        analysis = self._analyze_messages_single_pass(messages)
+
+        # Apply image lifecycle using pre-computed turn numbers
+        messages, images_replaced, tokens_saved = self._apply_image_lifecycle_single_pass(
+            messages, analysis
+        )
+
+        # If images were replaced, we need to re-analyze since tokens changed
+        if images_replaced > 0:
             analysis = self._analyze_messages_single_pass(messages)
 
-            # Apply image lifecycle using pre-computed turn numbers
-            messages, images_replaced, tokens_saved = self._apply_image_lifecycle_single_pass(
-                messages, analysis
-            )
-
-            # If images were replaced, we need to re-analyze since tokens changed
-            if images_replaced > 0:
-                analysis = self._analyze_messages_single_pass(messages)
-
-            # Cache the analysis for this message list
-            self._message_analysis_cache = {cache_key: analysis}
-
-            total_message_tokens = analysis["total_tokens"]
+        total_message_tokens = analysis["total_tokens"]
 
         # Use Rust batch processing when available for more accurate token counts
         if _rust_enabled():
@@ -1794,12 +1769,11 @@ class BaseAgent(ABC, AgentPromptMixin):
                 filtered_messages,
                 protected_tokens,
                 per_message_tokens=analysis["per_message_tokens"])
-            # Track dropped messages by hash
-            result_hashes = set(analysis["message_hashes"][i] for i, m in enumerate(filtered_messages)
-                               if m in result_messages)
+            # Track dropped messages by hash (compute directly from result)
+            result_hashes = {self.hash_message(m) for m in result_messages}
             summarized_messages = [
-                m for i, m in enumerate(filtered_messages)
-                if analysis["message_hashes"][i] not in result_hashes
+                m for m in filtered_messages
+                if self.hash_message(m) not in result_hashes
             ]
         else:
             # Default to summarization
@@ -1810,11 +1784,9 @@ class BaseAgent(ABC, AgentPromptMixin):
             filtered_messages = self.prune_interrupted_tool_calls(filtered_messages)
             result_messages, summarized_messages = self.summarize_messages(filtered_messages)
 
-        # Final token count for result messages
+        # Final token count for result messages (compute directly from result)
         final_token_count = sum(
-            analysis["per_message_tokens"][i]
-            for i, msg in enumerate(messages)
-            if msg in result_messages
+            self.estimate_tokens_for_message(msg) for msg in result_messages
         ) if result_messages else 0
 
         # Update spinner with final token count
@@ -1912,6 +1884,10 @@ class BaseAgent(ABC, AgentPromptMixin):
     ) -> tuple[list[ModelMessage], int, int]:
         """Manage image/attachment lifecycle by replacing old images with placeholders.
 
+        .. deprecated::
+            This method is deprecated. Use `_apply_image_lifecycle_single_pass()` instead.
+            This method is no longer called from the main message processing flow.
+
         Images and binary attachments stay in message history but are only useful
         for the turn they were shared. Each image can be 1-5K tokens (vision API
         pricing). After N turns (configurable via image_ttl_turns, default 2),
@@ -1923,6 +1899,12 @@ class BaseAgent(ABC, AgentPromptMixin):
         Returns:
             Tuple of (processed_messages, images_replaced, tokens_saved)
         """
+        import warnings
+        warnings.warn(
+            "_manage_image_lifecycle is deprecated. Use _apply_image_lifecycle_single_pass() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         image_ttl_turns = get_image_ttl_turns()
         if image_ttl_turns <= 0 or not messages:
             return messages, 0, 0
