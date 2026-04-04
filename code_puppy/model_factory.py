@@ -14,6 +14,7 @@ from code_puppy.messaging import emit_warning
 from . import callbacks
 from .config import EXTRA_MODELS_FILE, get_value, get_yolo_mode
 from .http_utils import create_async_client, get_cert_bundle_path, get_http2
+from .provider_identity import resolve_provider_identity
 
 # Heavy SDK imports are deferred to builder functions to reduce startup time.
 # See _build_anthropic(), _build_openai(), etc.
