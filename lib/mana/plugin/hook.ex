@@ -71,6 +71,50 @@ defmodule Mana.Plugin.Hook do
           | :version_check
           | :agent_reload
 
+  @hooks %{
+    startup: %{arity: 0, async: true},
+    shutdown: %{arity: 0, async: true},
+    invoke_agent: %{arity: 2, async: true},
+    agent_exception: %{arity: 3, async: true},
+    agent_run_start: %{arity: 3, async: true},
+    agent_run_end: %{arity: 7, async: true},
+    pre_tool_call: %{arity: 3, async: true},
+    post_tool_call: %{arity: 5, async: true},
+    stream_event: %{arity: 3, async: true},
+    register_tools: %{arity: 0, async: false},
+    register_agents: %{arity: 0, async: false},
+    load_prompt: %{arity: 0, async: false},
+    edit_file: %{arity: 3, async: false},
+    create_file: %{arity: 2, async: false},
+    replace_in_file: %{arity: 3, async: false},
+    delete_snippet: %{arity: 2, async: false},
+    delete_file: %{arity: 1, async: false},
+    file_permission: %{arity: 6, async: false},
+    run_shell_command: %{arity: 3, async: true},
+    custom_command: %{arity: 2, async: false},
+    custom_command_help: %{arity: 0, async: false},
+    get_motd: %{arity: 0, async: false},
+    load_model_config: %{arity: 2, async: false},
+    load_models_config: %{arity: 0, async: false},
+    register_model_type: %{arity: 0, async: false},
+    get_model_system_prompt: %{arity: 3, async: false},
+    register_mcp_catalog_servers: %{arity: 0, async: false},
+    register_browser_types: %{arity: 0, async: false},
+    register_model_providers: %{arity: 0, async: false},
+    message_history_processor_start: %{arity: 4, async: false},
+    message_history_processor_end: %{arity: 5, async: false},
+    version_check: %{arity: 0, async: false},
+    agent_reload: %{arity: 1, async: true}
+  }
+
+  @doc """
+  Returns the hook metadata map.
+  """
+  @spec hooks_metadata() :: %{atom() => %{arity: non_neg_integer(), async: boolean()}}
+  def hooks_metadata do
+    @hooks
+  end
+
   @doc """
   Returns all valid hook phases.
   """
