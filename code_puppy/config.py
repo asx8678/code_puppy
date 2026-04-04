@@ -347,6 +347,10 @@ def get_config_keys():
     default_keys.append("repo_compass_condensed_max_files")
     default_keys.append("repo_compass_condensed_max_symbols_per_file")
     default_keys.append("repo_compass_condensed_max_prompt_chars")
+    # Add model_router plugin configuration
+    default_keys.append("routing_enabled")
+    default_keys.append("simple_model")
+    default_keys.append("complexity_threshold")
 
     config = _get_config()
     keys = set(config[DEFAULT_SECTION].keys()) if DEFAULT_SECTION in config else set()
