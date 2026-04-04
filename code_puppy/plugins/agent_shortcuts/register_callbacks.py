@@ -25,9 +25,8 @@ def _get_agents_functions():
         get_current_agent,
         set_current_agent,
     )
-    from code_puppy.agents.base_agent import reload_code_generation_agent
 
-    return get_available_agents, get_current_agent, set_current_agent, reload_code_generation_agent
+    return get_available_agents, get_current_agent, set_current_agent
 
 
 def _get_custom_help() -> list[tuple[str, str]]:
@@ -48,7 +47,7 @@ def _switch_to_agent(agent_name: str, group_id: str) -> bool:
     Returns:
         True if handled (success or handled error)
     """
-    get_available_agents, get_current_agent, set_current_agent, reload_code_generation_agent = _get_agents_functions()
+    get_available_agents, get_current_agent, set_current_agent = _get_agents_functions()
 
     available_agents = get_available_agents()
 
@@ -79,9 +78,9 @@ def _switch_to_agent(agent_name: str, group_id: str) -> bool:
         return True
 
     # Reload the agent
-    reload_code_generation_agent()
-
     new_agent = get_current_agent()
+    new_agent.reload_code_generation_agent()
+
     emit_success(
         f"Switched to agent: {new_agent.display_name}",
         message_group=group_id,
