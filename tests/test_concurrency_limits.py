@@ -25,7 +25,7 @@ class TestConcurrencyConfig:
         """Test default configuration values."""
         config = ConcurrencyConfig()
         assert config.file_ops_limit == 4
-        assert config.api_calls_limit == 2
+        assert config.api_calls_limit == 4
         assert config.tool_calls_limit == 8
     
     def test_from_dict(self):

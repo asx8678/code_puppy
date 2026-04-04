@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Default concurrency limits
 DEFAULT_FILE_OPS_LIMIT = 4      # Max concurrent file read/write operations
-DEFAULT_API_CALLS_LIMIT = 2     # Max concurrent outbound API requests
+DEFAULT_API_CALLS_LIMIT = 4     # Max concurrent outbound API requests
 DEFAULT_TOOL_CALLS_LIMIT = 8    # Max concurrent tool executions
 
 _CONFIG_PATH = Path.home() / ".code_puppy" / "concurrency.toml"
@@ -248,7 +248,7 @@ file_ops_limit = 4
 
 # Maximum concurrent outbound API requests
 # Lower this if you're hitting rate limits from providers
-api_calls_limit = 2
+api_calls_limit = 4
 
 # Maximum concurrent tool executions (includes file ops + shell commands)
 # This is a broader limit for all tool calls
