@@ -21,6 +21,7 @@ from code_puppy.plugins.turbo_executor.models import (
     PlanResult,
     PlanStatus,
 )
+from code_puppy.plugins.turbo_executor.history import get_history
 
 # Import notifications for progress emission
 try:
@@ -143,7 +144,7 @@ class TurboOrchestrator:
         completed_at = datetime.now(timezone.utc).isoformat()
         total_duration_ms = (time.perf_counter() - start_time) * 1000
 
-        return PlanResult(
+        result = PlanResult(
             plan_id=plan.id,
             status=status,
             operation_results=results,
@@ -158,6 +159,16 @@ class TurboOrchestrator:
                 "failed_operations": sum(1 for r in results if r.status == "error"),
             },
         )
+
+        # Record execution in history
+        get_history().add_entry(
+            plan_id=plan.id,
+            num_ops=len(plan.operations),
+            duration_ms=result.total_duration_ms,
+            status=result.status.value,
+        )
+
+        return result
 
     async def _execute_sequential(self, plan: Plan) -> list[OperationResult]:
         """Execute operations sequentially in priority order with progress emission."""
