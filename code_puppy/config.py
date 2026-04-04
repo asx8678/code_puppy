@@ -304,6 +304,7 @@ def get_config_keys():
         "compaction_strategy",
         "protected_token_count",
         "compaction_threshold",
+        "tool_result_max_tokens",
         "message_limit",
         "allow_recursion",
         "openai_reasoning_effort",
@@ -1123,6 +1124,28 @@ def get_protected_token_count():
         model_context_length = get_model_context_length()
         max_protected_tokens = int(model_context_length * 0.75)
         return min(50000, max_protected_tokens)
+
+
+def get_tool_result_max_tokens() -> int:
+    """
+    Returns the maximum token count for individual tool results.
+    Tool results exceeding this limit are truncated before entering message history.
+    This prevents a single large file read or grep from consuming excessive context.
+    Defaults to 8000 if unset or misconfigured.
+    Configurable by 'tool_result_max_tokens' key via /set command.
+
+    Example: /set tool_result_max_tokens=5000
+
+    Returns:
+        Maximum tokens per tool result (clamped between 1000 and 50000)
+    """
+    val = get_value("tool_result_max_tokens")
+    try:
+        configured_value = int(val) if val else 8000
+        # Enforce reasonable bounds: minimum 1000, maximum 50000
+        return max(1000, min(configured_value, 50000))
+    except (ValueError, TypeError):
+        return 8000
 
 
 def get_resume_message_count() -> int:

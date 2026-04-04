@@ -43,6 +43,7 @@ def handle_show_command(command: str) -> bool:
         get_puppy_name,
         get_resume_message_count,
         get_temperature,
+        get_tool_result_max_tokens,
         get_use_dbos,
         get_yolo_mode)
     from code_puppy.keymap import (
@@ -60,6 +61,7 @@ def handle_show_command(command: str) -> bool:
     protected_tokens = get_protected_token_count()
     compaction_threshold = get_compaction_threshold()
     compaction_strategy = get_compaction_strategy()
+    tool_result_max_tokens = get_tool_result_max_tokens()
     global_temperature = get_temperature()
     effective_temperature = get_effective_temperature(model)
 
@@ -80,6 +82,7 @@ def handle_show_command(command: str) -> bool:
 [bold]protected_tokens:[/bold]      [cyan]{protected_tokens:,}[/cyan] recent tokens preserved
 [bold]compaction_threshold:[/bold]     [cyan]{compaction_threshold:.1%}[/cyan] context usage triggers compaction
 [bold]compaction_strategy:[/bold]   [cyan]{compaction_strategy}[/cyan] (summarization or truncation)
+[bold]tool_result_max_tokens:[/bold] [cyan]{tool_result_max_tokens:,}[/cyan] per tool result limit
 [bold]model_pack:[/bold]            [cyan]{get_current_pack().name}[/cyan] ({get_current_pack().description})
 [bold]resume_message_count:[/bold] [cyan]{get_resume_message_count()}[/cyan] messages shown on /resume
 [bold]workflow_state:[/bold]       [cyan]{get_workflow_state().summary()}[/cyan] (use /flags for details)
