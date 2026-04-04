@@ -95,7 +95,7 @@ defmodule Mana.Streaming.SilentHandler do
   def part_tracker(state), do: state.part_tracker
 
   @impl true
-  def handle_part_start(state, part_id, type, meta) do
+  def handle_part_start(%__MODULE__{} = state, part_id, type, meta) do
     tracker = PartTracker.start_part(state.part_tracker, part_id, type)
 
     {:ok,
@@ -116,7 +116,7 @@ defmodule Mana.Streaming.SilentHandler do
   end
 
   @impl true
-  def handle_part_end(state, part_id, meta) do
+  def handle_part_end(%__MODULE__{} = state, part_id, meta) do
     tracker = PartTracker.end_part(state.part_tracker, part_id)
 
     {:ok,

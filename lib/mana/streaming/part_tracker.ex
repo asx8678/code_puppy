@@ -70,7 +70,7 @@ defmodule Mana.Streaming.PartTracker do
   Updated PartTracker with the new part added to active_parts and counter incremented.
   """
   @spec start_part(t(), String.t(), atom()) :: t()
-  def start_part(tracker, part_id, type) do
+  def start_part(%__MODULE__{} = tracker, part_id, type) do
     part_info = %{
       type: type,
       started_at: System.monotonic_time(:millisecond)
@@ -96,7 +96,7 @@ defmodule Mana.Streaming.PartTracker do
   Updated PartTracker with the part removed from active_parts.
   """
   @spec end_part(t(), String.t()) :: t()
-  def end_part(tracker, part_id) do
+  def end_part(%__MODULE__{} = tracker, part_id) do
     %__MODULE__{
       tracker
       | active_parts: Map.delete(tracker.active_parts, part_id)
@@ -118,7 +118,7 @@ defmodule Mana.Streaming.PartTracker do
   Updated PartTracker with incremented token counts.
   """
   @spec update_tokens(t(), String.t(), non_neg_integer(), non_neg_integer()) :: t()
-  def update_tokens(tracker, part_id, input_delta, output_delta) do
+  def update_tokens(%__MODULE__{} = tracker, part_id, input_delta, output_delta) do
     current_counts = Map.get(tracker.token_counts, part_id, %{input: 0, output: 0})
 
     new_counts = %{
@@ -148,7 +148,7 @@ defmodule Mana.Streaming.PartTracker do
   Updated PartTracker with the tool name recorded.
   """
   @spec set_tool_name(t(), String.t(), String.t()) :: t()
-  def set_tool_name(tracker, part_id, tool_name) do
+  def set_tool_name(%__MODULE__{} = tracker, part_id, tool_name) do
     %__MODULE__{
       tracker
       | tool_names: Map.put(tracker.tool_names, part_id, tool_name)
