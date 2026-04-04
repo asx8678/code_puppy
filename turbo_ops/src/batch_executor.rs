@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use std::time::Instant;
 
 /// Execute a single operation and return its result
-fn execute_single_operation(op: &TurboOperation) -> OperationResult {
+pub fn execute_single_operation(op: &TurboOperation) -> OperationResult {
     let start = Instant::now();
     let op_type_str = match op.op_type {
         crate::models::OperationType::ListFiles => "list_files",

@@ -25,24 +25,100 @@ from code_puppy.plugins.turbo_executor.notifications import (
 
 logger = logging.getLogger(__name__)
 
-# Global orchestrator instance (initialized on startup)
-_orchestrator: TurboOrchestrator | None = None
+logger = logging.getLogger(__name__)
 
 
-def _get_orchestrator() -> TurboOrchestrator:
-    """Get or create the global orchestrator instance."""
-    global _orchestrator
-    if _orchestrator is None:
-        _orchestrator = TurboOrchestrator()
-    return _orchestrator
+class OrchestratorRegistry:
+    """Registry for managing multiple TurboOrchestrator instances.
+
+    Replaces the singleton pattern to support concurrent agent sessions.
+    Each invoke_agent('turbo-executor', ...) call gets its own orchestrator instance.
+
+    The registry maintains instances keyed by unique IDs (typically agent IDs).
+    When an instance is requested:
+    - If the ID exists in the registry, return the existing instance
+    - If the ID doesn't exist, create a new instance and store it
+    - If no ID is provided, return a shared default instance
+    """
+
+    def __init__(self):
+        self._instances: dict[str, TurboOrchestrator] = {}
+        self._default_instance: TurboOrchestrator | None = None
+
+    def get_orchestrator(self, instance_id: str | None = None) -> TurboOrchestrator:
+        """Get an orchestrator instance by ID.
+
+        Args:
+            instance_id: Unique identifier for the orchestrator instance.
+                        If None, returns the shared default instance.
+
+        Returns:
+            TurboOrchestrator instance (created if needed)
+        """
+        if instance_id is None:
+            # Return the shared default instance for backward compatibility
+            if self._default_instance is None:
+                self._default_instance = TurboOrchestrator()
+                logger.debug("Created default orchestrator instance")
+            return self._default_instance
+
+        # Return or create the instance for this ID
+        if instance_id not in self._instances:
+            self._instances[instance_id] = TurboOrchestrator()
+            logger.debug(f"Created new orchestrator instance for {instance_id}")
+
+        return self._instances[instance_id]
+
+    def remove_orchestrator(self, instance_id: str) -> bool:
+        """Remove an orchestrator instance from the registry.
+
+        Args:
+            instance_id: Unique identifier of the instance to remove
+
+        Returns:
+            True if an instance was removed, False if not found
+        """
+        if instance_id in self._instances:
+            del self._instances[instance_id]
+            logger.debug(f"Removed orchestrator instance for {instance_id}")
+            return True
+        return False
+
+    def get_instance_count(self) -> int:
+        """Get the number of managed orchestrator instances (excluding default)."""
+        return len(self._instances)
+
+    def clear_all_instances(self) -> None:
+        """Clear all managed instances and the default instance."""
+        self._instances.clear()
+        self._default_instance = None
+        logger.debug("Cleared all orchestrator instances")
+
+
+# Global registry instance
+_orchestrator_registry = OrchestratorRegistry()
+
+
+def _get_orchestrator(instance_id: str | None = None) -> TurboOrchestrator:
+    """Get an orchestrator instance from the registry.
+
+    Args:
+        instance_id: Unique identifier for the orchestrator instance.
+                    If None, returns the shared default instance.
+                    Each unique ID gets its own isolated instance.
+
+    Returns:
+        TurboOrchestrator instance
+    """
+    return _orchestrator_registry.get_orchestrator(instance_id)
 
 
 def _on_startup():
-    """Initialize the orchestrator on startup."""
-    global _orchestrator
-    _orchestrator = TurboOrchestrator()
+    """Initialize the orchestrator registry on startup."""
+    # Pre-initialize the default instance so it's ready when needed
+    default_orch = _orchestrator_registry.get_orchestrator(None)
     ops_mode = (
-        "turbo_ops (Rust)" if _orchestrator._turbo_ops_available else "native Python"
+        "turbo_ops (Rust)" if default_orch._turbo_ops_available else "native Python"
     )
     logger.info(f"Turbo Executor plugin initialized (using {ops_mode})")
 
@@ -80,6 +156,9 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         ops_source = "Rust turbo_ops" if orch._turbo_ops_available else "native Python"
         emit_info(f"   Operations source: {ops_source}")
         emit_info("   Supported operations: list_files, grep, read_files")
+        # Show registry info
+        instance_count = _orchestrator_registry.get_instance_count()
+        emit_info(f"   Active instances: {instance_count}")
         history_len = len(get_history())
         emit_info(f"   History entries: {history_len}")
         return True

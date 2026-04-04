@@ -105,7 +105,9 @@ You work at turbo speed! ⚡
             _get_orchestrator,
         )
 
-        orchestrator = _get_orchestrator()
+        # Use this agent's unique ID to get a dedicated orchestrator instance
+        # This ensures each agent instance has isolated execution state
+        orchestrator = _get_orchestrator(instance_id=self.id)
         return await orchestrator.execute(plan)
 
     def summarize_result(

@@ -23,6 +23,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
+mod async_batch_executor;
 mod batch_executor;
 mod models;
 mod operations;
