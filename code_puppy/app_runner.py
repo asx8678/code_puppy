@@ -8,17 +8,16 @@ configuration/validation, and the top-level run dispatch.
 import argparse
 import os
 import sys
-import time
 
-from dbos import DBOS, DBOSConfig
+from dbos import DBOS
 from rich.console import Console
 
 from code_puppy import __version__, callbacks
 from code_puppy.config import (
-    DBOS_DATABASE_URL,
     ensure_config_exists,
     get_use_dbos,
     initialize_command_history_file,
+    initialize_dbos,
 )
 from code_puppy.http_utils import find_available_port
 from code_puppy.keymap import KeymapError, validate_cancel_agent_key
@@ -325,25 +324,8 @@ class AppRunner:
 
         # Initialize DBOS if not disabled
         if get_use_dbos():
-            dbos_app_version = os.environ.get(
-                "DBOS_APP_VERSION", f"{current_version}-{int(time.time() * 1000)}"
-            )
-            dbos_config: DBOSConfig = {
-                "name": "dbos-code-puppy",
-                "system_database_url": DBOS_DATABASE_URL,
-                "run_admin_server": False,
-                "conductor_key": os.environ.get("DBOS_CONDUCTOR_KEY"),
-                "log_level": os.environ.get("DBOS_LOG_LEVEL", "ERROR"),
-                "application_version": dbos_app_version,
-            }
-            try:
-                DBOS(config=dbos_config)
-                DBOS.launch()
-            except Exception as e:
-                emit_error(f"Error initializing DBOS: {e}")
-                from code_puppy.error_logging import log_error
-
-                log_error(e, context="DBOS initialization error")
+            if not initialize_dbos():
+                emit_error("Error initializing DBOS")
                 sys.exit(1)
 
         shutdown_flag = False

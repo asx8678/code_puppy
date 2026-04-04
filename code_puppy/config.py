@@ -113,6 +113,37 @@ def get_use_dbos() -> bool:
     return _is_truthy(get_value("enable_dbos"), default=True)
 
 
+def initialize_dbos() -> bool:
+    """Initialize and launch DBOS.  Returns ``True`` on success.
+
+    Safe to call after :func:`DBOS.destroy` (e.g. after ``/clean db``).
+    Uses :data:`DBOS_DATABASE_URL` and environment variables for configuration.
+    """
+    try:
+        import time
+
+        from dbos import DBOS, DBOSConfig
+
+        from code_puppy import __version__
+
+        dbos_app_version = os.environ.get(
+            "DBOS_APP_VERSION", f"{__version__}-{int(time.time() * 1000)}"
+        )
+        dbos_config: DBOSConfig = {
+            "name": "dbos-code-puppy",
+            "system_database_url": DBOS_DATABASE_URL,
+            "run_admin_server": False,
+            "conductor_key": os.environ.get("DBOS_CONDUCTOR_KEY"),
+            "log_level": os.environ.get("DBOS_LOG_LEVEL", "ERROR"),
+            "application_version": dbos_app_version,
+        }
+        DBOS(config=dbos_config)
+        DBOS.launch()
+        return True
+    except Exception:
+        return False
+
+
 def get_subagent_verbose() -> bool:
     """Return True if sub-agent verbose output is enabled (default False).
 
@@ -1057,9 +1088,6 @@ def initialize_command_history_file():
 
                 shutil.copy2(Path(old_history_file), Path(COMMAND_HISTORY_FILE))
                 Path(old_history_file).unlink(missing_ok=True)
-
-                # Normalize the command history format if needed
-                normalize_command_history()
         except Exception as e:
             from code_puppy.messaging import emit_error
 

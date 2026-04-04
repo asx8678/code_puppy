@@ -320,7 +320,13 @@ def _clean_db(dry_run: bool, max_age_seconds: int | None = None) -> tuple[int, i
     total_files, total_bytes = _clean_targets(targets, dry_run, max_age_seconds)
 
     if not dry_run and total_files > 0:
-        emit_warning("  ⚠️  Please restart Code Puppy for DBOS to reinitialize.")
+        if config.get_use_dbos():
+            if config.initialize_dbos():
+                emit_success("  🔄 DBOS reinitialized successfully")
+            else:
+                emit_warning(
+                    "  ⚠️  Could not reinitialize DBOS — please restart Code Puppy"
+                )
 
     return total_files, total_bytes
 
@@ -348,7 +354,7 @@ def _show_help() -> None:
         "  /clean cache             Clean browser profiles, workflows, skills cache"
     )
     emit_info(
-        "  /clean db                Clean DBOS state database (⚠️ requires restart)"
+        "  /clean db                Clean DBOS state database (auto-reinitializes)"
     )
     emit_info("  /clean orphans           Find and clean orphaned/temp files")
     emit_info("")
@@ -375,7 +381,7 @@ def _show_help() -> None:
     emit_info("")
     emit_info("⚠️  Config files (puppy.cfg, mcp_servers.json, models, OAuth tokens)")
     emit_info("   are never touched.")
-    emit_info("💡 /clean all excludes db — use /clean db explicitly (needs restart).")
+    emit_info("💡 /clean all excludes db — use /clean db explicitly.")
     emit_info("")
     emit_info("🤖 Auto-cleanup Configuration (puppy.cfg):")
     emit_info("   [cleanup]")
