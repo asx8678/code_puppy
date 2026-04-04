@@ -213,9 +213,10 @@ class BaseAgent(ABC, AgentPromptMixin):
         self._message_history = history
         # Rebuild hash set when history is replaced wholesale
         self._message_history_hashes = set(self.hash_message(m) for m in history)
-        # Invalidate prune cache since history mutated
+        # Invalidate caches since history mutated
         self._prune_cache = None
         self._tool_ids_cache = None
+        self._rust_per_message_tokens = None
 
     def clear_message_history(self) -> None:
         """Clear the message history for this agent."""
@@ -225,6 +226,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Invalidate caches since history mutated
         self._prune_cache = None
         self._tool_ids_cache = None
+        self._rust_per_message_tokens = None
 
     def append_to_message_history(self, message: Any) -> None:
         """Append a message to this agent's history.
@@ -237,6 +239,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Invalidate caches since history mutated
         self._prune_cache = None
         self._tool_ids_cache = None
+        self._rust_per_message_tokens = None
 
     def extend_message_history(self, history: list[Any]) -> None:
         """Extend this agent's message history with multiple messages.
@@ -249,6 +252,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Invalidate caches since history mutated
         self._prune_cache = None
         self._tool_ids_cache = None
+        self._rust_per_message_tokens = None
 
     def get_compacted_message_hashes(self) -> set[str]:
         """Get the set of compacted message hashes for this agent.
@@ -723,8 +727,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                 logger.debug(
                     "Rust fallback in filter_huge_messages: %s", exc, exc_info=True
                 )
-        # Use pre-computed tokens if available, otherwise compute on the fly
-        if per_message_tokens is not None:
+        # Use pre-computed tokens if available and valid, otherwise compute on the fly
+        if per_message_tokens is not None and len(per_message_tokens) == len(messages):
             filtered = [
                 m for i, m in enumerate(messages)
                 if (per_message_tokens[i] if i < len(per_message_tokens) else self.estimate_tokens_for_message(m)) < 50000

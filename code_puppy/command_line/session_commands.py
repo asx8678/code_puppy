@@ -289,12 +289,8 @@ def handle_load_context_command(command: str) -> bool:
     agent.set_message_history(history)
     agent.restore_compacted_hashes(compacted_hashes)
 
-    # Use precomputed token counts if available from Rust batch processing
-    cached_tokens = getattr(agent, "_rust_per_message_tokens", None)
-    if cached_tokens is not None and len(cached_tokens) == len(history):
-        total_tokens = sum(t for t in cached_tokens if t is not None)
-    else:
-        total_tokens = sum(agent.estimate_tokens_for_message(m) for m in history)
+    # Compute total tokens (don't use cached tokens since history just changed)
+    total_tokens = sum(agent.estimate_tokens_for_message(m) for m in history)
 
     # Rotate autosave id to avoid overwriting any existing autosave
     try:
