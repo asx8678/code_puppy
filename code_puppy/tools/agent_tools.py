@@ -30,6 +30,7 @@ from code_puppy.messaging import (
     emit_error,
     emit_info,
     emit_success,
+    emit_warning,
     get_message_bus,
     get_session_context,
     set_session_context,
@@ -522,9 +523,24 @@ def register_invoke_agent(agent):
             model_name = agent_config.get_model_name()
             models_config = ModelFactory.load_config()
 
-            # Only proceed if we have a valid model configuration
+            # If the resolved model isn't available, fall back to the
+            # currently active global model and warn loudly so the user
+            # notices the misconfiguration.
             if model_name not in models_config:
-                raise ValueError(f"Model '{model_name}' not found in configuration")
+                from code_puppy.config import get_global_model_name
+                fallback_model = get_global_model_name()
+                if fallback_model and fallback_model != model_name and fallback_model in models_config:
+                    emit_warning(
+                        f"⚠️  MODEL FALLBACK ⚠️  Agent '{agent_name}' requested "
+                        f"model '{model_name}' which is not in configuration. "
+                        f"Falling back to '{fallback_model}'. "
+                        f"Fix with: /config agent_model_{agent_name}"
+                    )
+                    model_name = fallback_model
+                else:
+                    raise ValueError(
+                        f"Model '{model_name}' not found in configuration"
+                    )
 
             model = ModelFactory.get_model(model_name, models_config)
 
