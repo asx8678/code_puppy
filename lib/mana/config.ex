@@ -110,8 +110,15 @@ defmodule Mana.Config do
     provider_lower = String.downcase(provider)
 
     case Map.get(@api_key_env_vars, provider_lower) do
-      nil -> nil
-      env_var -> System.get_env(env_var)
+      nil ->
+        nil
+
+      env_var ->
+        case System.get_env(env_var) do
+          nil -> nil
+          "" -> nil
+          key -> key
+        end
     end
   end
 
@@ -120,12 +127,13 @@ defmodule Mana.Config do
 
   Only includes keys that are set in the environment.
   """
-  @spec api_keys() :: map()
+  @spec api_keys() :: %{optional(String.t()) => String.t()}
   def api_keys do
     @api_key_env_vars
     |> Enum.map(fn {provider, env_var} ->
       case System.get_env(env_var) do
         nil -> nil
+        "" -> nil
         key -> {provider, key}
       end
     end)

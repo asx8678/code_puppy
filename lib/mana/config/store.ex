@@ -28,6 +28,8 @@ defmodule Mana.Config.Store do
 
   use GenServer
 
+  require Logger
+
   alias Mana.Config.Paths
 
   @table :mana_config
@@ -120,9 +122,16 @@ defmodule Mana.Config.Store do
     # Load existing configuration
     config = load_from_file()
 
-    # Populate ETS
+    # Populate ETS with safe atom conversion
     Enum.each(config, fn {key, value} ->
-      :ets.insert(@table, {String.to_atom(key), value})
+      atom_key =
+        try do
+          String.to_existing_atom(key)
+        rescue
+          ArgumentError -> String.to_atom(key)
+        end
+
+      :ets.insert(@table, {atom_key, value})
     end)
 
     {:ok, %{config: config, dirty: false, flush_timer: nil}}
@@ -153,11 +162,18 @@ defmodule Mana.Config.Store do
   def handle_call(:load_config, _from, state) do
     config = load_from_file()
 
-    # Clear and repopulate ETS
+    # Clear and repopulate ETS with safe atom conversion
     :ets.delete_all_objects(@table)
 
     Enum.each(config, fn {key, value} ->
-      :ets.insert(@table, {String.to_atom(key), value})
+      atom_key =
+        try do
+          String.to_existing_atom(key)
+        rescue
+          ArgumentError -> String.to_atom(key)
+        end
+
+      :ets.insert(@table, {atom_key, value})
     end)
 
     {:reply, :ok, %{state | config: config, dirty: false}}
@@ -178,7 +194,11 @@ defmodule Mana.Config.Store do
 
   # Private Functions
 
-  defp schedule_flush(%{flush_timer: nil, dirty: true} = state) do
+  defp schedule_flush(%{dirty: true} = state) do
+    if state.flush_timer do
+      Process.cancel_timer(state.flush_timer)
+    end
+
     timer = Process.send_after(self(), :do_flush, @flush_interval_ms)
     %{state | flush_timer: timer}
   end
@@ -234,7 +254,6 @@ defmodule Mana.Config.Store do
   defp broadcast_change(key, value) do
     # Stub for Phoenix.PubSub - just log for now
     # In the future, this will broadcast via Phoenix.PubSub
-    require Logger
     Logger.debug("Config change: #{key} = #{inspect(value)} (topic: #{@pubsub_topic})")
     :ok
   end

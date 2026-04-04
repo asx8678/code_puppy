@@ -116,7 +116,10 @@ defmodule Mana.Config.PathsTest do
         File.rm_rf!(test_config)
         File.rm_rf!(test_data)
 
-        if original_config, do: System.put_env("XDG_CONFIG_HOME", original_config), else: System.delete_env("XDG_CONFIG_HOME")
+        if original_config,
+          do: System.put_env("XDG_CONFIG_HOME", original_config),
+          else: System.delete_env("XDG_CONFIG_HOME")
+
         if original_data, do: System.put_env("XDG_DATA_HOME", original_data), else: System.delete_env("XDG_DATA_HOME")
       end
     end
