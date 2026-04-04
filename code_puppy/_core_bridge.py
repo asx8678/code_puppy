@@ -147,5 +147,75 @@ def serialize_message_for_rust(message: Any) -> dict:
 
 
 def serialize_messages_for_rust(messages: list) -> list[dict]:
-    """Batch convert messages for Rust consumption."""
+    """Batch convert messages for Rust consumption.
+
+    DEPRECATED: Rust now accepts raw Python objects directly via PyO3.
+    This function is kept for backward compatibility and non-Rust paths.
+    """
     return [serialize_message_for_rust(m) for m in messages]
+
+
+# --- Raw Python Object Bridge (PyO3 direct access) -------------------------
+# These functions pass raw pydantic-ai message objects directly to Rust,
+# eliminating the serialization/deserialization round-trip.
+
+
+def process_messages_batch_raw(
+    messages: list,
+    tool_definitions: list,
+    mcp_tool_definitions: list,
+    system_prompt: str,
+):
+    """Process messages using raw Python object access (no serialization tax).
+
+    Passes raw pydantic-ai message objects directly to Rust which extracts
+    fields using PyO3's getattr. Eliminates the intermediate dict creation.
+    """
+    if not RUST_AVAILABLE:
+        raise RuntimeError("Rust module not available")
+    return process_messages_batch(
+        messages, tool_definitions, mcp_tool_definitions, system_prompt
+    )
+
+
+def prune_and_filter_raw(messages: list, max_tokens_per_message: int = 50000):
+    """Prune and filter messages using raw Python object access.
+
+    Passes raw pydantic-ai message objects directly to Rust.
+    """
+    if not RUST_AVAILABLE:
+        raise RuntimeError("Rust module not available")
+    return prune_and_filter(messages, max_tokens_per_message)
+
+
+def collect_tool_call_ids_raw(messages: list):
+    """Collect tool call IDs using raw Python object access.
+
+    Passes raw pydantic-ai message objects directly to Rust.
+    """
+    if not RUST_AVAILABLE:
+        raise RuntimeError("Rust module not available")
+    return collect_tool_call_ids(messages)
+
+
+def serialize_session_raw(messages: list) -> bytes:
+    """Serialize session using raw Python object access.
+
+    Passes raw pydantic-ai message objects directly to Rust.
+    """
+    if not RUST_AVAILABLE:
+        raise RuntimeError("Rust module not available")
+    return serialize_session(messages)
+
+
+def serialize_session_incremental_raw(
+    new_messages: list, existing_data: bytes | None = None
+) -> bytes:
+    """Serialize session incrementally using raw Python object access.
+
+    Passes raw pydantic-ai message objects directly to Rust.
+    """
+    if not RUST_AVAILABLE:
+        raise RuntimeError("Rust module not available")
+    return serialize_session_incremental(new_messages, existing_data)
+# --------------------------------------------------------------------------

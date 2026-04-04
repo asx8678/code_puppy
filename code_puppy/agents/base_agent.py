@@ -41,7 +41,7 @@ if RUST_AVAILABLE:
         prune_and_filter,
         split_for_summarization as rust_split_for_summarization,
         truncation_indices as rust_truncation_indices,
-        serialize_messages_for_rust)
+        serialize_messages_for_rust)  # Kept for non-Rust fallback paths
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -994,8 +994,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         if _rust_enabled():
             try:
-                serialized = serialize_messages_for_rust(messages)
-                result = prune_and_filter(serialized, 50000)
+                # Pass raw Python objects directly to Rust (PyO3 extracts fields)
+                result = prune_and_filter(messages, 50000)
                 return [messages[i] for i in result.surviving_indices]
             except Exception as exc:
                 logger.debug(
@@ -1098,9 +1098,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         # --- Rust fast path ------------------------------------------------
         if _rust_enabled():
             try:
-                # Serialize messages and get per-message token counts
-                serialized = serialize_messages_for_rust(messages)
-                result = process_messages_batch(serialized, [], [], "")
+                # Pass raw Python objects directly to Rust (PyO3 extracts fields)
+                result = process_messages_batch(messages, [], [], "")
                 per_message_tokens = result.per_message_tokens
 
                 # Build tool_call_ids_per_message: list of [(id, kind), ...] per message
@@ -1455,8 +1454,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         # Use Rust implementation when available for better performance
         if RUST_AVAILABLE and is_rust_enabled():
-            dict_messages = serialize_messages_for_rust(messages)
-            return rust_collect_tool_call_ids(dict_messages)
+            # Pass raw Python objects directly to Rust (PyO3 extracts fields)
+            return rust_collect_tool_call_ids(messages)
         
         # Fallback to pure Python implementation
         call_ids: set[str] = set()
@@ -1603,8 +1602,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         # in a single pass, plus filters empty thinking parts and trailing responses
         if _rust_enabled():
             try:
-                serialized = serialize_messages_for_rust(messages)
-                result = prune_and_filter(serialized, 999_999_999)
+                # Pass raw Python objects directly to Rust (PyO3 extracts fields)
+                result = prune_and_filter(messages, 999_999_999)
                 pruned = [messages[i] for i in result.surviving_indices]
                 self._prune_cache = (cache_key, pruned)
                 return pruned
@@ -1676,7 +1675,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Use Rust batch processing when available for more accurate token counts
         if _rust_enabled():
             try:
-                serialized = serialize_messages_for_rust(messages)
+                # Pass raw Python objects directly to Rust (PyO3 extracts fields)
                 # Use cached tool defs (only computed once per agent lifecycle)
                 if self._cached_tool_defs is None:
                     _build_tool_defs = []
@@ -1707,7 +1706,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                     )
                 system_prompt = self._cached_system_prompt
                 batch_result = process_messages_batch(
-                    serialized, tool_defs, mcp_defs, system_prompt
+                    messages, tool_defs, mcp_defs, system_prompt
                 )
                 total_message_tokens = batch_result.total_message_tokens
                 context_overhead = batch_result.context_overhead_tokens
@@ -1835,9 +1834,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                     # Reuse pre-computed tokens from caller (e.g., message_history_processor)
                     tokens = per_message_tokens
                 else:
-                    # Compute from scratch when not provided
-                    serialized = serialize_messages_for_rust(messages)
-                    batch = process_messages_batch(serialized, [], [], "")
+                    # Compute from scratch using raw Python objects
+                    batch = process_messages_batch(messages, [], [], "")
                     tokens = batch.per_message_tokens
                 second_has_thinking = len(messages) > 1 and any(
                     isinstance(p, ThinkingPart) for p in messages[1].parts
