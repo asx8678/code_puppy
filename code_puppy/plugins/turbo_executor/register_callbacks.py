@@ -356,7 +356,7 @@ def _register_turbo_execute_tool(agent):
                 "plan_id": None,
             }
 
-        orch = _get_orchestrator()
+        orch = _get_orchestrator(instance_id=context.agent_id)
 
         # Validate plan
         validation_errors = orch.validate_plan(plan)
