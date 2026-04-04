@@ -128,6 +128,7 @@ BANNER_TIERS: dict[str, int] = {
     "session_info": 3,
     "system_info": 3,
     "universal_constructor": 3,
+    "thinking": 3,
 }
 
 

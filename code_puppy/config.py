@@ -1499,41 +1499,27 @@ def set_diff_deletion_color(color: str):
 # =============================================================================
 
 # Default banner colors (Rich color names)
-# Semantic color mapping for better visual recognition:
-#   - WARM (amber/yellow/red): Thinking/reasoning/contemplation
-#   - COOL (blue/cyan): Commands/operations
-#   - GREEN: Success/results/reading
-#   - GOLD: Modifications/destructive operations
-#   - PURPLE/PINK: Agent interactions
-#   - TEAL: External/tools
-#   - NEUTRAL: Search
+# Simplified 3-color semantic palette for visual clarity:
+#   - Agent output (steel_blue): AI responses, reasoning, subagents
+#   - Mutations (dark_goldenrod): File modifications, destructive ops
+#   - Tool ops (grey50): Reading, searching, navigation, shell
 DEFAULT_BANNER_COLORS = {
-    # WARM colors (amber/yellow/red) for thinking/reasoning/contemplation
-    "thinking": "dark_orange",  # Warm amber for contemplation
-    "agent_reasoning": "dark_orange",  # Same warm tone, reasoning = thinking
-    # COOL colors (blue/cyan) for commands/operations
-    "shell_command": "steel_blue",  # Cool blue for system commands
-    "shell_passthrough": "medium_sea_green",  # Green - user's own commands
-    "directory_listing": "steel_blue",  # Navigation is a command
-    # GREEN for success/results/reading
-    "read_file": "sea_green3",  # Green for reading/access
-    "create_file": "sea_green3",  # Green for creation = positive
-    "subagent_response": "sea_green3",  # Green for success
-    # PURPLE for distinctive AI output
-    "agent_response": "dark_violet",  # Distinctive AI output
-    # GOLD for modifications/destructive ops
-    "edit_file": "dark_goldenrod",  # Gold - modifications
-    "replace_in_file": "dark_goldenrod",  # Gold - file modifications
-    "delete_snippet": "dark_goldenrod",  # Gold - snippet removal
-    "terminal_tool": "dark_goldenrod",  # Gold - terminal operations
-    # NEUTRAL for search
-    "grep": "grey37",  # Silver - search results
-    # PURPLE/PINK for agent interactions
-    "invoke_agent": "deep_pink4",  # Ruby - agent invocation
-    "list_agents": "dark_slate_gray3",  # Slate - neutral listing
-    # TEAL for external/tools
-    "universal_constructor": "dark_cyan",  # Teal - constructing tools
-    "mcp_tool_call": "dark_cyan",  # Teal - external MCP tool calls
+    # Agent output - steel_blue
+    "agent_response": "steel_blue",
+    "agent_reasoning": "steel_blue",
+    "subagent_response": "steel_blue",
+    "invoke_agent": "steel_blue",
+    # Mutations - dark_goldenrod
+    "create_file": "dark_goldenrod",
+    "edit_file": "dark_goldenrod",
+    "replace_in_file": "dark_goldenrod",
+    "delete_snippet": "dark_goldenrod",
+    # Tool ops - grey50
+    "read_file": "grey50",
+    "grep": "grey50",
+    "directory_listing": "grey50",
+    "shell_command": "grey50",
+    "thinking": "grey50",
 }
 
 
