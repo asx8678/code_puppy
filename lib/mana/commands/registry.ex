@@ -134,73 +134,21 @@ defmodule Mana.Commands.Registry do
 
   @impl true
   def handle_call({:register, command_module}, _from, state) do
-    # Verify the module implements the behaviour
-    if not behaviour_implemented?(command_module) do
-      {:reply, {:error, :invalid_behaviour}, state}
-    else
-      command_name = command_module.name()
-
-      # Validate command name starts with "/"
-      if not String.starts_with?(command_name, "/") do
-        {:reply, {:error, :invalid_name}, state}
-      else
-        # Check for duplicates
-        if :ets.member(@table, command_name) do
-          {:reply, {:error, :already_registered}, state}
-        else
-          # Store in ETS for public access
-          :ets.insert(@table, {
-            command_name,
-            %{
-              module: command_module,
-              description: command_module.description(),
-              usage: command_module.usage()
-            }
-          })
-
-          {:reply, :ok, state}
-        end
-      end
+    case validate_and_register(command_module, state) do
+      {:ok, reply, new_state} -> {:reply, reply, new_state}
+      {:error, reply} -> {:reply, reply, state}
     end
   end
 
   @impl true
   def handle_call({:dispatch, command_name, args, context}, _from, state) do
-    # Try exact match first
-    {module, resolved_name} =
-      case :ets.lookup(@table, command_name) do
-        [{^command_name, info}] ->
-          {info.module, command_name}
-
-        [] ->
-          # Try fuzzy matching
-          all_commands = :ets.select(@table, [{{:"$1", :_}, [], [:"$1"]}])
-
-          case find_closest_match(command_name, all_commands) do
-            {:ok, matched_name} ->
-              [{^matched_name, info}] = :ets.lookup(@table, matched_name)
-              {info.module, matched_name}
-
-            :error ->
-              {nil, command_name}
-          end
-      end
+    {module, resolved_name} = resolve_command(command_name)
 
     if module == nil do
       new_stats = %{state.stats | errors: state.stats.errors + 1}
       {:reply, {:error, :unknown_command}, %{state | stats: new_stats}}
     else
-      try do
-        result = module.execute(args, context)
-        new_dispatches = state.stats.dispatches + 1
-        new_stats = %{state.stats | dispatches: new_dispatches}
-        {:reply, result, %{state | stats: new_stats}}
-      rescue
-        error ->
-          Logger.error("Command execution error for #{resolved_name}: #{inspect(error)}")
-          new_stats = %{state.stats | errors: state.stats.errors + 1}
-          {:reply, {:error, :execution_failed}, %{state | stats: new_stats}}
-      end
+      execute_command(module, resolved_name, args, context, state)
     end
   end
 
@@ -216,6 +164,72 @@ defmodule Mana.Commands.Registry do
   end
 
   # Private Functions
+
+  defp validate_and_register(command_module, state) do
+    if behaviour_implemented?(command_module) do
+      command_name = command_module.name()
+
+      if String.starts_with?(command_name, "/") do
+        register_command(command_name, command_module, state)
+      else
+        {:error, {:error, :invalid_name}}
+      end
+    else
+      {:error, {:error, :invalid_behaviour}}
+    end
+  end
+
+  defp register_command(command_name, command_module, state) do
+    if :ets.member(@table, command_name) do
+      {:error, {:error, :already_registered}}
+    else
+      :ets.insert(@table, {
+        command_name,
+        %{
+          module: command_module,
+          description: command_module.description(),
+          usage: command_module.usage()
+        }
+      })
+
+      {:ok, :ok, state}
+    end
+  end
+
+  defp resolve_command(command_name) do
+    case :ets.lookup(@table, command_name) do
+      [{^command_name, info}] ->
+        {info.module, command_name}
+
+      [] ->
+        resolve_fuzzy(command_name)
+    end
+  end
+
+  defp resolve_fuzzy(command_name) do
+    all_commands = :ets.select(@table, [{{:"$1", :_}, [], [:"$1"]}])
+
+    case find_closest_match(command_name, all_commands) do
+      {:ok, matched_name} ->
+        [{^matched_name, info}] = :ets.lookup(@table, matched_name)
+        {info.module, matched_name}
+
+      :error ->
+        {nil, command_name}
+    end
+  end
+
+  defp execute_command(module, resolved_name, args, context, state) do
+    result = module.execute(args, context)
+    new_dispatches = state.stats.dispatches + 1
+    new_stats = %{state.stats | dispatches: new_dispatches}
+    {:reply, result, %{state | stats: new_stats}}
+  rescue
+    error ->
+      Logger.error("Command execution error for #{resolved_name}: #{inspect(error)}")
+      new_stats = %{state.stats | errors: state.stats.errors + 1}
+      {:reply, {:error, :execution_failed}, %{state | stats: new_stats}}
+  end
 
   defp behaviour_implemented?(module) do
     Code.ensure_loaded?(module) and
@@ -257,39 +271,45 @@ defmodule Mana.Commands.Registry do
     len1 = String.length(s1)
     len2 = String.length(s2)
 
-    if len1 == 0 do
-      len2
-    else
-      if len2 == 0 do
-        len1
-      else
-        # Use dynamic programming approach
-        prev_row = 0..len2 |> Enum.to_list()
-
-        s1_chars = String.graphemes(s1)
-        s2_chars = String.graphemes(s2)
-
-        {distance, _} =
-          Enum.reduce(s1_chars, {len2 + 1, prev_row}, fn c1, {_, prev} ->
-            curr = [length(prev)]
-
-            curr_row =
-              Enum.reduce(1..len2, curr, fn j, acc ->
-                cost = if c1 == Enum.at(s2_chars, j - 1), do: 0, else: 1
-
-                deletion = Enum.at(prev, j) + 1
-                insertion = List.last(acc) + 1
-                substitution = Enum.at(prev, j - 1) + cost
-
-                new_val = Enum.min([deletion, insertion, substitution])
-                acc ++ [new_val]
-              end)
-
-            {List.last(curr_row), curr_row}
-          end)
-
-        distance
-      end
+    cond do
+      len1 == 0 -> len2
+      len2 == 0 -> len1
+      true -> calculate_distance(s1, s2, len1, len2)
     end
+  end
+
+  defp calculate_distance(s1, s2, _len1, len2) do
+    prev_row = 0..len2 |> Enum.to_list()
+    s1_chars = String.graphemes(s1)
+    s2_chars = String.graphemes(s2)
+
+    {distance, _} =
+      Enum.reduce(s1_chars, {len2 + 1, prev_row}, fn c1, {_, prev} ->
+        build_distance_row(c1, s2_chars, prev, len2)
+      end)
+
+    distance
+  end
+
+  defp build_distance_row(c1, s2_chars, prev_row, len2) do
+    curr = [length(prev_row)]
+
+    curr_row =
+      Enum.reduce(1..len2, curr, fn j, acc ->
+        calc_cell_value(c1, s2_chars, prev_row, acc, j)
+      end)
+
+    {List.last(curr_row), curr_row}
+  end
+
+  defp calc_cell_value(c1, s2_chars, prev_row, acc, j) do
+    cost = if c1 == Enum.at(s2_chars, j - 1), do: 0, else: 1
+
+    deletion = Enum.at(prev_row, j) + 1
+    insertion = List.last(acc) + 1
+    substitution = Enum.at(prev_row, j - 1) + cost
+
+    new_val = Enum.min([deletion, insertion, substitution])
+    acc ++ [new_val]
   end
 end

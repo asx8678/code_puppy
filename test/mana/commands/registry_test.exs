@@ -5,8 +5,8 @@ defmodule Mana.Commands.RegistryTest do
 
   use ExUnit.Case, async: false
 
-  alias Mana.Commands.Registry
   alias Mana.Commands.Behaviour
+  alias Mana.Commands.Registry
 
   # Test command module
   defmodule TestCommand do

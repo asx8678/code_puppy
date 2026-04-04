@@ -233,32 +233,34 @@ defmodule Mana.RunContext do
   """
   @spec from_map(map()) :: t()
   def from_map(map) when is_map(map) do
-    started_at =
-      case map["started_at"] || map[:started_at] do
-        %DateTime{} = dt ->
-          dt
-
-        iso_string when is_binary(iso_string) ->
-          case DateTime.from_iso8601(iso_string) do
-            {:ok, dt, _} -> dt
-            _ -> DateTime.utc_now()
-          end
-
-        _ ->
-          DateTime.utc_now()
-      end
-
-    metadata = map["metadata"] || map[:metadata] || %{}
-
     %__MODULE__{
-      id: map["id"] || map[:id] || generate_id(),
-      parent_id: map["parent_id"] || map[:parent_id],
-      agent_name: map["agent_name"] || map[:agent_name] || "unknown",
-      model_name: map["model_name"] || map[:model_name] || "unknown",
-      session_id: map["session_id"] || map[:session_id],
-      started_at: started_at,
-      metadata: metadata
+      id: get_field(map, "id", :id) || generate_id(),
+      parent_id: get_field(map, "parent_id", :parent_id),
+      agent_name: get_field(map, "agent_name", :agent_name) || "unknown",
+      model_name: get_field(map, "model_name", :model_name) || "unknown",
+      session_id: get_field(map, "session_id", :session_id),
+      started_at: parse_started_at(map),
+      metadata: get_field(map, "metadata", :metadata) || %{}
     }
+  end
+
+  defp get_field(map, string_key, atom_key) do
+    map[string_key] || map[atom_key]
+  end
+
+  defp parse_started_at(map) do
+    case get_field(map, "started_at", :started_at) do
+      %DateTime{} = dt -> dt
+      iso_string when is_binary(iso_string) -> parse_datetime(iso_string)
+      _ -> DateTime.utc_now()
+    end
+  end
+
+  defp parse_datetime(iso_string) do
+    case DateTime.from_iso8601(iso_string) do
+      {:ok, dt, _} -> dt
+      _ -> DateTime.utc_now()
+    end
   end
 
   # Private Functions

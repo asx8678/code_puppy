@@ -371,7 +371,7 @@ defmodule Mana.Plugin.Manager do
         # Call terminate if implemented
         if function_exported?(plugin.module, :terminate, 0) do
           try do
-            apply(plugin.module, :terminate, [])
+            plugin.module.terminate()
           catch
             _kind, _reason ->
               Logger.warning("Plugin #{plugin_name} terminate failed: error during cleanup")
@@ -465,7 +465,7 @@ defmodule Mana.Plugin.Manager do
     Enum.each(state.plugins, fn {_name, plugin} ->
       if function_exported?(plugin.module, :terminate, 0) do
         try do
-          apply(plugin.module, :terminate, [])
+          plugin.module.terminate()
         catch
           _kind, _reason ->
             Logger.warning("Plugin #{plugin.name} terminate failed during shutdown: error")
@@ -496,22 +496,29 @@ defmodule Mana.Plugin.Manager do
 
     # Load each plugin
     Enum.reduce_while(modules, {:ok, state}, fn module, {:ok, acc_state} ->
-      # Get plugin-specific config
-      plugin_config = get_plugin_config(module, acc_state.config)
-
-      case load_plugin(module, plugin_config, acc_state) do
-        {:ok, _plugin, new_state} ->
-          {:cont, {:ok, new_state}}
-
-        {:error, reason} ->
-          if Keyword.get(state.config, :auto_dismiss_errors, true) do
-            Logger.error("Failed to load plugin #{inspect(module)}: #{inspect(reason)}")
-            {:cont, {:ok, acc_state}}
-          else
-            {:halt, {:error, {module, reason}}}
-          end
-      end
+      load_plugin_with_error_handling(module, acc_state, state.config)
     end)
+  end
+
+  defp load_plugin_with_error_handling(module, acc_state, config) do
+    plugin_config = get_plugin_config(module, acc_state.config)
+
+    case load_plugin(module, plugin_config, acc_state) do
+      {:ok, _plugin, new_state} ->
+        {:cont, {:ok, new_state}}
+
+      {:error, reason} ->
+        handle_load_error(module, reason, acc_state, config)
+    end
+  end
+
+  defp handle_load_error(module, reason, acc_state, config) do
+    if Keyword.get(config, :auto_dismiss_errors, true) do
+      Logger.error("Failed to load plugin #{inspect(module)}: #{inspect(reason)}")
+      {:cont, {:ok, acc_state}}
+    else
+      {:halt, {:error, {module, reason}}}
+    end
   end
 
   defp discover_plugins do
@@ -551,14 +558,12 @@ defmodule Mana.Plugin.Manager do
   end
 
   defp implements_behaviour?(module) do
-    try do
-      behaviours = module.module_info(:attributes)[:behaviour] || []
-      Mana.Plugin.Behaviour in behaviours
-    rescue
-      _ -> false
-    catch
-      _, _ -> false
-    end
+    behaviours = module.module_info(:attributes)[:behaviour] || []
+    Mana.Plugin.Behaviour in behaviours
+  rescue
+    _ -> false
+  catch
+    _, _ -> false
   end
 
   defp get_plugin_config(module, config) do
@@ -586,15 +591,7 @@ defmodule Mana.Plugin.Manager do
       hooks = module.hooks()
 
       # Validate hooks
-      valid_hooks =
-        Enum.filter(hooks, fn {hook, func} ->
-          if Hook.valid?(hook) and is_function(func) do
-            true
-          else
-            Logger.warning("Invalid hook #{inspect(hook)} from plugin #{plugin_name}")
-            false
-          end
-        end)
+      valid_hooks = filter_valid_hooks(hooks, plugin_name)
 
       plugin_record = %{
         module: module,
@@ -629,20 +626,27 @@ defmodule Mana.Plugin.Manager do
     end)
   end
 
+  defp filter_valid_hooks(hooks, plugin_name) do
+    Enum.filter(hooks, fn {hook, func} ->
+      valid? = Hook.valid?(hook) and is_function(func)
+      unless valid?, do: Logger.warning("Invalid hook #{inspect(hook)} from plugin #{plugin_name}")
+      valid?
+    end)
+  end
+
   defp remove_plugin_hooks(plugin, hooks) do
     Enum.reduce(plugin.hooks, hooks, fn {hook, _func}, acc ->
-      Map.update(acc, hook, [], fn funcs ->
-        Enum.reject(funcs, fn {_f, name} -> name == plugin.name end)
-      end)
+      Map.update(acc, hook, [], &reject_plugin_funcs(&1, plugin.name))
     end)
+  end
+
+  defp reject_plugin_funcs(funcs, plugin_name) do
+    Enum.reject(funcs, fn {_f, name} -> name == plugin_name end)
   end
 
   defp do_trigger(hook, args, opts, state, mode) do
     # Validate hook
-    if not Hook.valid?(hook) do
-      Logger.warning("Invalid hook triggered: #{inspect(hook)}")
-      {[], state}
-    else
+    if Hook.valid?(hook) do
       callbacks = Map.get(state.hooks, hook, [])
 
       if callbacks == [] do
@@ -652,6 +656,9 @@ defmodule Mana.Plugin.Manager do
         # Execute callbacks
         execute_callbacks(callbacks, args, opts, state, mode)
       end
+    else
+      Logger.warning("Invalid hook triggered: #{inspect(hook)}")
+      {[], state}
     end
   end
 
@@ -728,8 +735,9 @@ defmodule Mana.Plugin.Manager do
       {[], %{state | stats: %{state.stats | triggers: state.stats.triggers + 1, errors: state.stats.errors + 1}}}
   end
 
+  @spec apply_callback(fun(), list()) :: any()
   defp apply_callback(func, args) do
-    arity = :erlang.fun_info(func, :arity)[:arity]
+    {:arity, arity} = :erlang.fun_info(func, :arity)
     actual_args = Enum.take(args, arity)
     apply(func, actual_args)
   end

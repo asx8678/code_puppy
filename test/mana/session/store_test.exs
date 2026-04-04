@@ -5,8 +5,8 @@ defmodule Mana.Session.StoreTest do
 
   use ExUnit.Case, async: false
 
-  alias Mana.Session.Store
   alias Mana.Config.Paths
+  alias Mana.Session.Store
 
   setup do
     # Use temporary directory for tests

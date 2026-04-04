@@ -5,8 +5,8 @@ defmodule Mana.MessageBusTest do
 
   use ExUnit.Case, async: false
 
-  alias Mana.MessageBus
   alias Mana.Message
+  alias Mana.MessageBus
 
   setup do
     # Start the MessageBus for each test

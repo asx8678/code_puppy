@@ -130,9 +130,7 @@ defmodule Mana.Tools.Registry do
   @impl true
   def handle_call({:register, tool_module}, _from, state) do
     # Verify the module implements the behaviour
-    if not behaviour_implemented?(tool_module) do
-      {:reply, {:error, :invalid_behaviour}, state}
-    else
+    if behaviour_implemented?(tool_module) do
       tool_name = tool_module.name()
 
       # Check for duplicates
@@ -149,6 +147,8 @@ defmodule Mana.Tools.Registry do
         new_state = %{state | tools: new_tools}
         {:reply, :ok, new_state}
       end
+    else
+      {:reply, {:error, :invalid_behaviour}, state}
     end
   end
 
