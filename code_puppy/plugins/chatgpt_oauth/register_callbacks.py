@@ -81,7 +81,7 @@ def _handle_custom_command(command: str, name: str) -> bool | None:
 
     if name == "chatgpt-auth":
         run_oauth_flow()
-        set_model_and_reload_agent("chatgpt-gpt-5.3-codex")
+        set_model_and_reload_agent("chatgpt-gpt-5.4")
         return True
 
     if name == "chatgpt-status":

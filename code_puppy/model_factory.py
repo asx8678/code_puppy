@@ -136,12 +136,14 @@ def make_model_settings(
     from code_puppy.config import (
         get_effective_model_settings,
         get_openai_reasoning_effort,
+        get_openai_reasoning_summary,
         get_openai_verbosity,
         model_supports_setting)
 
     model_settings_dict: dict = {}
 
     # Calculate max_tokens if not explicitly provided
+    model_config: dict[str, Any] = {}
     if max_tokens is None:
         # Load model config to get context length
         try:
@@ -176,11 +178,28 @@ def make_model_settings(
 
     if "gpt-5" in model_name:
         model_settings_dict["openai_reasoning_effort"] = get_openai_reasoning_effort()
-        # Verbosity only applies to non-codex GPT-5 models (codex only supports "medium")
-        if "codex" not in model_name:
-            verbosity = get_openai_verbosity()
-            model_settings_dict["extra_body"] = {"verbosity": verbosity}
-        model_settings = OpenAIChatModelSettings(**model_settings_dict)
+
+        model_type = model_config.get("type")
+        uses_responses_api = (
+            model_type == "chatgpt_oauth"
+            or (model_type == "openai" and "codex" in model_name)
+            or (model_type == "custom_openai" and "codex" in model_name)
+        )
+
+        if uses_responses_api:
+            model_settings_dict["openai_reasoning_summary"] = (
+                get_openai_reasoning_summary()
+            )
+            if "codex" not in model_name:
+                model_settings_dict["openai_text_verbosity"] = get_openai_verbosity()
+            model_settings = OpenAIResponsesModelSettings(**model_settings_dict)
+        else:
+            # Chat Completions models don't support configurable reasoning summaries.
+            # Keep the old verbosity injection path for non-Responses GPT-5 models.
+            if "codex" not in model_name:
+                verbosity = get_openai_verbosity()
+                model_settings_dict["extra_body"] = {"verbosity": verbosity}
+            model_settings = OpenAIChatModelSettings(**model_settings_dict)
     elif model_name.startswith("claude-") or model_name.startswith("anthropic-"):
         # Handle Anthropic extended thinking settings
         # Remove top_p as Anthropic doesn't support it with extended thinking
@@ -947,6 +966,7 @@ class ModelFactory:
             raise ValueError(f"Model '{model_name}' not found in configuration.")
 
         model_type = model_config.get("type")
+        provider_identity = resolve_provider_identity(model_name, model_config)
 
         def _check_result(result: Any, source: str) -> Any:
             """Raise if a builder / provider returned None."""

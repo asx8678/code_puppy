@@ -1650,7 +1650,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         model_settings = make_model_settings(resolved_model_name)
 
         # When extended thinking is active, nudge the model to think between
-        # tool calls (the share_your_reasoning tool is stripped in this case).
+        # tool calls so it uses native reasoning before choosing next actions.
         if has_extended_thinking_active(resolved_model_name):
             instructions += EXTENDED_THINKING_PROMPT_NOTE
 
