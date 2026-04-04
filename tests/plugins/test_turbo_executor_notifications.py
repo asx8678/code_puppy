@@ -55,17 +55,22 @@ class TestOnPreToolCall:
         with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
             _on_pre_tool_call("turbo_execute", {"plan_json": json.dumps(plan_data)})
 
-            # Should be called twice: once for banner, once for summary
-            assert mock_emit.call_count == 2
+            # Should be called three times: banner, preview, and type summary
+            assert mock_emit.call_count == 3
 
             # First call should have the startup banner
             first_call = mock_emit.call_args_list[0]
             assert "🚀 Turbo Plan 'test-plan-1' starting" in first_call[0][0]
             assert "1 operations" in first_call[0][0]
 
-            # Second call should have the summary with emoji
+            # Second call should have the plan preview
             second_call = mock_emit.call_args_list[1]
-            assert "📂 1 list_files" in second_call[0][0]
+            assert "📋 Plan preview:" in second_call[0][0]
+            assert "1× list_files" in second_call[0][0]
+
+            # Third call should have the summary with emoji
+            third_call = mock_emit.call_args_list[2]
+            assert "📂 1 list_files" in third_call[0][0]
 
     def test_emits_banner_for_turbo_execute_multiple_operations(self):
         """Test that _on_pre_tool_call emits correct banner with multiple operation types."""
@@ -81,14 +86,24 @@ class TestOnPreToolCall:
         with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
             _on_pre_tool_call("turbo_execute", {"plan_json": json.dumps(plan_data)})
 
-            assert mock_emit.call_count == 2
+            # Should be called three times: banner, preview, and type summary
+            assert mock_emit.call_count == 3
 
             first_call = mock_emit.call_args_list[0]
             assert "🚀 Turbo Plan 'multi-op-plan' starting" in first_call[0][0]
             assert "3 operations" in first_call[0][0]
 
+            # Second call should have the plan preview
             second_call = mock_emit.call_args_list[1]
-            summary = second_call[0][0]
+            assert "📋 Plan preview:" in second_call[0][0]
+            preview = second_call[0][0]
+            assert "1× list_files" in preview
+            assert "1× grep" in preview
+            assert "1× read_files" in preview
+
+            # Third call should have the summary with emoji
+            third_call = mock_emit.call_args_list[2]
+            summary = third_call[0][0]
             assert "📂 1 list_files" in summary
             assert "🔍 1 grep" in summary
             assert "📄 1 read_files" in summary
@@ -103,9 +118,17 @@ class TestOnPreToolCall:
         with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
             _on_pre_tool_call("turbo_execute", {"plan_json": json.dumps(plan_data)})
 
-            assert mock_emit.call_count == 2
+            # Should be called three times: banner, preview, and type summary
+            assert mock_emit.call_count == 3
+
+            # Second call should indicate no operations in preview
             second_call = mock_emit.call_args_list[1]
+            assert "📋 Plan preview:" in second_call[0][0]
             assert "no operations" in second_call[0][0]
+
+            # Third call should also indicate no operations
+            third_call = mock_emit.call_args_list[2]
+            assert "no operations" in third_call[0][0]
 
 
 class TestOnPostToolCall:
