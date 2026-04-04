@@ -1,8 +1,8 @@
-"""Agent shortcuts plugin - provides /plan and /leader slash commands.
+"""Agent shortcuts plugin - provides /plan and /lead slash commands.
 
 This plugin adds convenient shortcuts for quickly switching to commonly used agents:
 - /plan → switches to planning-agent
-- /leader → switches to pack-leader
+- /lead → switches to pack-leader
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def _get_custom_help() -> list[tuple[str, str]]:
     """Return help entries for custom commands."""
     return [
         ("plan", "Switch to the planning agent"),
-        ("leader", "Switch to the pack-leader agent (requires pack agents enabled)"),
+        ("lead", "Switch to the pack-leader agent (requires pack agents enabled)"),
     ]
 
 
@@ -99,8 +99,8 @@ def _handle_plan_command() -> bool:
     return _switch_to_agent(PLANNING_AGENT, group_id)
 
 
-def _handle_leader_command() -> bool:
-    """Handle /leader command - switch to pack-leader."""
+def _handle_lead_command() -> bool:
+    """Handle /lead command - switch to pack-leader."""
     group_id = str(uuid.uuid4())
 
     # Check if pack agents are enabled
@@ -130,8 +130,8 @@ def _handle_custom_command(command: str, name: str) -> bool | None:
     if name == "plan":
         return _handle_plan_command()
 
-    if name == "leader":
-        return _handle_leader_command()
+    if name == "lead":
+        return _handle_lead_command()
 
     return None
 

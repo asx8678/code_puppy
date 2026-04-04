@@ -1,6 +1,6 @@
 """Tests for agent_shortcuts plugin.
 
-Tests for /plan and /pack slash commands that provide quick agent switching.
+Tests for /plan and /lead slash commands that provide quick agent switching.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from code_puppy.plugins.agent_shortcuts.register_callbacks import (
     PLANNING_AGENT,
     _get_custom_help,
     _handle_custom_command,
-    _handle_pack_command,
+    _handle_lead_command,
     _handle_plan_command,
     _switch_to_agent,
 )
@@ -29,6 +29,7 @@ def _make_mock_agent(name: str, display_name: str, description: str) -> MagicMoc
     agent.name = name
     agent.display_name = display_name
     agent.description = description
+    agent.reload_code_generation_agent = MagicMock()
     return agent
 
 
@@ -41,7 +42,6 @@ def _patch_agents_functions(**kwargs):
         "get_available_agents": MagicMock(return_value={}),
         "get_current_agent": MagicMock(return_value=_make_mock_agent("code-puppy", "Code Puppy", "")),
         "set_current_agent": MagicMock(return_value=True),
-        "reload_code_generation_agent": MagicMock(),
     }
     mocks.update(kwargs)
 
@@ -50,7 +50,6 @@ def _patch_agents_functions(**kwargs):
             mocks["get_available_agents"],
             mocks["get_current_agent"],
             mocks["set_current_agent"],
-            mocks["reload_code_generation_agent"],
         )
 
     return patch(f"{_MOCK_PATH}._get_agents_functions", _mock_get_agents_functions), mocks
@@ -59,14 +58,14 @@ def _patch_agents_functions(**kwargs):
 class TestCustomHelp:
     """Tests for the custom_command_help callback."""
 
-    def test_returns_plan_and_pack_commands(self):
-        """Should return help entries for both /plan and /pack."""
+    def test_returns_plan_and_lead_commands(self):
+        """Should return help entries for both /plan and /lead."""
         help_entries = _get_custom_help()
 
         assert len(help_entries) == 2
         names = [entry[0] for entry in help_entries]
         assert "plan" in names
-        assert "pack" in names
+        assert "lead" in names
 
     def test_plan_description(self):
         """/plan should have appropriate description."""
@@ -75,12 +74,12 @@ class TestCustomHelp:
         assert plan_entry is not None
         assert "planning" in plan_entry[1].lower()
 
-    def test_pack_description(self):
-        """/pack should mention pack agents requirement."""
+    def test_lead_description(self):
+        """/lead should mention pack-leader requirement."""
         help_entries = _get_custom_help()
-        pack_entry = next((e for e in help_entries if e[0] == "pack"), None)
-        assert pack_entry is not None
-        assert "pack-leader" in pack_entry[1].lower() or "pack" in pack_entry[1].lower()
+        lead_entry = next((e for e in help_entries if e[0] == "lead"), None)
+        assert lead_entry is not None
+        assert "pack-leader" in lead_entry[1].lower() or "pack" in lead_entry[1].lower()
 
 
 class TestHandleCustomCommandRouting:
@@ -94,13 +93,13 @@ class TestHandleCustomCommandRouting:
         assert result is True
         mock_plan.assert_called_once()
 
-    @patch(f"{_MOCK_PATH}._handle_pack_command")
-    def test_routes_pack_command(self, mock_pack):
-        """Should route /pack to _handle_pack_command."""
-        mock_pack.return_value = True
-        result = _handle_custom_command("/pack", "pack")
+    @patch(f"{_MOCK_PATH}._handle_lead_command")
+    def test_routes_lead_command(self, mock_lead):
+        """Should route /lead to _handle_lead_command."""
+        mock_lead.return_value = True
+        result = _handle_custom_command("/lead", "lead")
         assert result is True
-        mock_pack.assert_called_once()
+        mock_lead.assert_called_once()
 
     def test_returns_none_for_unknown_command(self):
         """Should return None for unknown commands."""
@@ -144,7 +143,7 @@ class TestSwitchToAgent:
 
         assert result is True
         mocks["set_current_agent"].assert_called_once_with(PLANNING_AGENT)
-        mocks["reload_code_generation_agent"].assert_called_once()
+        new_agent.reload_code_generation_agent.assert_called_once()
         mock_emit_success.assert_called_once()
 
     @patch(f"{_MOCK_PATH}.emit_error")
@@ -229,8 +228,8 @@ class TestPlanCommand:
         assert call_args[0][0] == PLANNING_AGENT
 
 
-class TestPackCommand:
-    """Tests for /pack command."""
+class TestLeadCommand:
+    """Tests for /lead command."""
 
     @patch(f"{_MOCK_PATH}.get_pack_agents_enabled")
     @patch(f"{_MOCK_PATH}.emit_error")
@@ -240,7 +239,7 @@ class TestPackCommand:
         """Should show error when pack agents are disabled."""
         mock_pack_enabled.return_value = False
 
-        result = _handle_pack_command()
+        result = _handle_lead_command()
 
         assert result is True
         mock_emit_error.assert_called_once()
@@ -253,7 +252,7 @@ class TestPackCommand:
         mock_pack_enabled.return_value = True
         mock_switch.return_value = True
 
-        result = _handle_pack_command()
+        result = _handle_lead_command()
 
         assert result is True
         mock_switch.assert_called_once()
