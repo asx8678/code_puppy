@@ -7,6 +7,17 @@ import pytest
 
 # Import the module under test
 from code_puppy.plugins.cost_tracker import register_callbacks as cost_tracker
+from code_puppy.plugins.cost_tracker.commands import (
+    check_budget_thresholds,
+    get_alert_state,
+    reset_alert_state,
+)
+from code_puppy.plugins.cost_tracker.extraction import extract_tokens_from_result
+from code_puppy.plugins.cost_tracker.pricing import (
+    DEFAULT_PRICING,
+    calculate_cost,
+    get_pricing_for_model,
+)
 
 
 class TestCostCalculation:
@@ -14,7 +25,7 @@ class TestCostCalculation:
 
     def test_calculate_cost_gpt4o(self):
         """Test cost calculation for GPT-4o."""
-        cost = cost_tracker._calculate_cost("gpt-4o", 1000, 500)
+        cost = calculate_cost("gpt-4o", 1000, 500)
         # Input: 1000/1000 * 0.0025 = 0.0025
         # Output: 500/1000 * 0.010 = 0.005
         # Total: 0.0075
@@ -22,7 +33,7 @@ class TestCostCalculation:
 
     def test_calculate_cost_claude(self):
         """Test cost calculation for Claude."""
-        cost = cost_tracker._calculate_cost("claude-3-5-sonnet", 2000, 1000)
+        cost = calculate_cost("claude-3-5-sonnet", 2000, 1000)
         # Input: 2000/1000 * 0.003 = 0.006
         # Output: 1000/1000 * 0.015 = 0.015
         # Total: 0.021
@@ -30,7 +41,7 @@ class TestCostCalculation:
 
     def test_calculate_cost_gemini(self):
         """Test cost calculation for Gemini."""
-        cost = cost_tracker._calculate_cost("gemini-1.5-pro", 3000, 1500)
+        cost = calculate_cost("gemini-1.5-pro", 3000, 1500)
         # Input: 3000/1000 * 0.0035 = 0.0105
         # Output: 1500/1000 * 0.0105 = 0.01575
         # Total: 0.02625
@@ -39,25 +50,25 @@ class TestCostCalculation:
     def test_calculate_cost_prefix_match(self):
         """Test that model variants use prefix matching."""
         # "gpt-4o-2024-08-06" should match "gpt-4o" pricing
-        cost = cost_tracker._calculate_cost("gpt-4o-2024-08-06", 1000, 500)
+        cost = calculate_cost("gpt-4o-2024-08-06", 1000, 500)
         assert cost == pytest.approx(0.0075, abs=0.0001)
 
     def test_calculate_cost_unknown_model(self):
         """Test fallback pricing for unknown models."""
-        cost = cost_tracker._calculate_cost("unknown-model", 1000, 500)
+        cost = calculate_cost("unknown-model", 1000, 500)
         # Uses default: input 0.001, output 0.003 per 1K
         # 1 * 0.001 + 0.5 * 0.003 = 0.001 + 0.0015 = 0.0025
         assert cost == pytest.approx(0.0025, abs=0.0001)
 
     def test_calculate_cost_zero_tokens(self):
         """Test cost calculation with zero tokens."""
-        cost = cost_tracker._calculate_cost("gpt-4o", 0, 0)
+        cost = calculate_cost("gpt-4o", 0, 0)
         assert cost == 0.0
 
     def test_calculate_cost_rounding(self):
         """Test that costs are rounded appropriately."""
         # Small cost should be rounded to 6 decimal places
-        cost = cost_tracker._calculate_cost("gpt-4o", 1, 1)
+        cost = calculate_cost("gpt-4o", 1, 1)
         # Input: 0.001/1000 * 0.0025 = 0.0000025
         # Output: 0.001/1000 * 0.010 = 0.00001
         # Total: ~0.0000125
@@ -76,7 +87,7 @@ class TestTokenExtraction:
                 "completion_tokens": 50,
             }
         }
-        tokens = cost_tracker._extract_tokens_from_result(result)
+        tokens = extract_tokens_from_result(result)
         assert tokens == {"input": 100, "output": 50}
 
     def test_extract_anthropic_format(self):
@@ -87,7 +98,7 @@ class TestTokenExtraction:
                 "output_tokens": 100,
             }
         }
-        tokens = cost_tracker._extract_tokens_from_result(result)
+        tokens = extract_tokens_from_result(result)
         assert tokens == {"input": 200, "output": 100}
 
     def test_extract_openai_usage_object(self):
@@ -98,7 +109,7 @@ class TestTokenExtraction:
                 "completion_tokens": 50,
             }
         }
-        tokens = cost_tracker._extract_tokens_from_result(result)
+        tokens = extract_tokens_from_result(result)
         assert tokens == {"input": 100, "output": 50}
 
     def test_extract_direct_fields(self):
@@ -107,11 +118,12 @@ class TestTokenExtraction:
             "input_tokens": 150,
             "output_tokens": 75,
         }
-        tokens = cost_tracker._extract_tokens_from_result(result)
+        tokens = extract_tokens_from_result(result)
         assert tokens == {"input": 150, "output": 75}
 
     def test_extract_with_object_usage(self):
         """Test extraction from object-style usage."""
+
         class MockUsage:
             prompt_tokens = 300
             completion_tokens = 150
@@ -119,29 +131,29 @@ class TestTokenExtraction:
         class MockResult:
             usage = MockUsage()
 
-        tokens = cost_tracker._extract_tokens_from_result(MockResult())
+        tokens = extract_tokens_from_result(MockResult())
         assert tokens == {"input": 300, "output": 150}
 
     def test_extract_no_tokens_returns_none(self):
         """Test extraction returns None when no token info present."""
         result = {"text": "some response"}
-        tokens = cost_tracker._extract_tokens_from_result(result)
+        tokens = extract_tokens_from_result(result)
         assert tokens is None
 
     def test_extract_usage_with_no_token_fields(self):
         """Test extraction from usage dict without token fields returns None."""
         result = {"usage": {"some_other_field": 123}}
-        tokens = cost_tracker._extract_tokens_from_result(result)
+        tokens = extract_tokens_from_result(result)
         assert tokens is None
 
     def test_extract_none_result(self):
         """Test extraction with None result."""
-        tokens = cost_tracker._extract_tokens_from_result(None)
+        tokens = extract_tokens_from_result(None)
         assert tokens is None
 
     def test_extract_string_result(self):
         """Test extraction with string result."""
-        tokens = cost_tracker._extract_tokens_from_result("just a string")
+        tokens = extract_tokens_from_result("just a string")
         assert tokens is None
 
 
@@ -200,50 +212,54 @@ class TestBudgetAlerts:
     def setup_method(self):
         """Reset costs and alert state before each test."""
         cost_tracker.reset_all_costs_for_testing()
-        cost_tracker.reset_alert_state()
+        reset_alert_state()
 
     def test_check_budget_threshold_75_percent(self, capsys):
         """Test 75% budget alert."""
         # Simulate 75% usage
         cost_tracker._cost_state.daily_cost_usd = 7.5
-        cost_tracker._check_budget_thresholds(7.5, 10.0, "daily")
+        check_budget_thresholds(7.5, 10.0, "daily")
 
         # Alert should have been triggered
-        assert cost_tracker._alerted_75_percent is True
-        assert cost_tracker._alerted_100_percent is False
+        state = get_alert_state()
+        assert state["_alerted_75_daily"] is True
+        assert state["_alerted_100_daily"] is False
 
     def test_check_budget_threshold_100_percent(self, capsys):
         """Test 100% budget hard stop alert."""
         # First set to 75% to trigger 75% alert
-        cost_tracker._check_budget_thresholds(7.5, 10.0, "daily")
-        assert cost_tracker._alerted_75_percent is True
+        check_budget_thresholds(7.5, 10.0, "daily")
+        state = get_alert_state()
+        assert state["_alerted_75_daily"] is True
 
         # Then simulate 100% usage
-        cost_tracker._check_budget_thresholds(10.0, 10.0, "daily")
+        check_budget_thresholds(10.0, 10.0, "daily")
 
         # Both alerts should have been triggered
-        assert cost_tracker._alerted_75_percent is True
-        assert cost_tracker._alerted_100_percent is True
+        state = get_alert_state()
+        assert state["_alerted_75_daily"] is True
+        assert state["_alerted_100_daily"] is True
 
     def test_check_budget_threshold_below_75(self):
         """Test no alert below 75%."""
-        cost_tracker._check_budget_thresholds(5.0, 10.0, "daily")
+        check_budget_thresholds(5.0, 10.0, "daily")
 
-        assert cost_tracker._alerted_75_percent is False
-        assert cost_tracker._alerted_100_percent is False
+        state = get_alert_state()
+        assert state["_alerted_75_daily"] is False
+        assert state["_alerted_100_daily"] is False
 
     def test_alert_only_once(self):
         """Test that 75% alert only fires once."""
         # First call at 75%
-        cost_tracker._check_budget_thresholds(7.5, 10.0, "daily")
-        assert cost_tracker._alerted_75_percent is True
+        check_budget_thresholds(7.5, 10.0, "daily")
+        state = get_alert_state()
+        assert state["_alerted_75_daily"] is True
 
-        # Reset the alert flag manually to test it stays set
-        # (simulating that we don't re-alert)
-        cost_tracker._alerted_75_percent = True
-        cost_tracker._check_budget_thresholds(8.0, 10.0, "daily")
+        # Call again at 80% - should stay triggered but not re-alert
+        check_budget_thresholds(8.0, 10.0, "daily")
         # Should remain True (not re-alert)
-        assert cost_tracker._alerted_75_percent is True
+        state = get_alert_state()
+        assert state["_alerted_75_daily"] is True
 
 
 class TestPreToolCallBlocking:
@@ -252,7 +268,7 @@ class TestPreToolCallBlocking:
     def setup_method(self):
         """Reset costs before each test."""
         cost_tracker.reset_all_costs_for_testing()
-        cost_tracker.reset_alert_state()
+        reset_alert_state()
 
     def test_pre_tool_call_no_block_without_budget(self, monkeypatch):
         """Test that calls are not blocked when no budget is set."""
@@ -347,19 +363,19 @@ class TestPricingLookup:
 
     def test_get_pricing_exact_match(self):
         """Test exact model name matching."""
-        pricing = cost_tracker._get_pricing_for_model("gpt-4o")
+        pricing = get_pricing_for_model("gpt-4o")
         assert pricing["input"] == 0.0025
         assert pricing["output"] == 0.010
 
     def test_get_pricing_prefix_match(self):
         """Test prefix matching for model variants."""
-        pricing = cost_tracker._get_pricing_for_model("claude-3-5-sonnet-20241022")
+        pricing = get_pricing_for_model("claude-3-5-sonnet-20241022")
         assert pricing["input"] == 0.003
         assert pricing["output"] == 0.015
 
     def test_get_pricing_fallback(self):
         """Test fallback for unknown models."""
-        pricing = cost_tracker._get_pricing_for_model("completely-unknown-model")
+        pricing = get_pricing_for_model("completely-unknown-model")
         assert pricing["input"] == 0.001
         assert pricing["output"] == 0.003
 
@@ -367,9 +383,9 @@ class TestPricingLookup:
         """Test that key models are in the default pricing."""
         key_models = ["gpt-4o", "claude-3-5-sonnet", "gemini-1.5-pro"]
         for model in key_models:
-            assert model in cost_tracker.DEFAULT_PRICING
-            assert "input" in cost_tracker.DEFAULT_PRICING[model]
-            assert "output" in cost_tracker.DEFAULT_PRICING[model]
+            assert model in DEFAULT_PRICING
+            assert "input" in DEFAULT_PRICING[model]
+            assert "output" in DEFAULT_PRICING[model]
 
 
 class TestAddCostForTesting:
@@ -400,7 +416,7 @@ class TestIntegration:
     def setup_method(self):
         """Reset costs before each test."""
         cost_tracker.reset_all_costs_for_testing()
-        cost_tracker.reset_alert_state()
+        reset_alert_state()
 
     def test_end_to_end_cost_tracking(self):
         """Test end-to-end cost tracking flow."""
@@ -430,7 +446,8 @@ class TestIntegration:
         cost_tracker._update_cost("gpt-4o", 10000, 5000)  # ~$0.075
 
         # Should have triggered at least 100% alert (which implies 75% was also triggered)
-        assert cost_tracker._alerted_100_percent is True
+        state = get_alert_state()
+        assert state["_alerted_100_session"] is True
 
         # Try to make another call - should be blocked
         result = cost_tracker._on_pre_tool_call("api_call", {})
