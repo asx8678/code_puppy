@@ -68,4 +68,6 @@ mana-*.tar
 *.db
 .beads-credential-key
 
-mana/
+# Ignore top-level mana/ build output, but not test/mana/
+^mana/
+/mana/
