@@ -78,11 +78,6 @@ class AppRunner:
             help="Specify which model to use (e.g., --model gpt-5)",
         )
         parser.add_argument(
-            "--bridge-mode",
-            action="store_true",
-            help="Enable Mana LiveView TCP bridge (CODE_PUPPY_BRIDGE=1)",
-        )
-        parser.add_argument(
             "command",
             nargs="*",
             help="Run a single command (deprecated, use -p instead)",
@@ -267,10 +262,6 @@ class AppRunner:
         global shutdown_flag
 
         args = self.parse_args()
-
-        # --bridge-mode sets CODE_PUPPY_BRIDGE=1 for the mana_bridge plugin
-        if getattr(args, "bridge_mode", False):
-            os.environ.setdefault("CODE_PUPPY_BRIDGE", "1")
 
         # Check TUI mode early to skip legacy renderers — Textual handles all output
         from code_puppy.tui.launcher import is_tui_enabled
