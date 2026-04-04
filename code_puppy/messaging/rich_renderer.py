@@ -163,6 +163,13 @@ class RichConsoleRenderer:
         self._running = False
         self._thread: threading.Thread | None = None
         self._spinners: dict[str, object] = {}  # spinner_id -> status context
+        
+        # Session state for persistent footer
+        self._session_info = {
+            "message_count": 0,
+            "token_count": 0,
+            "last_save_time": None
+        }
 
     @property
     def console(self) -> Console:
@@ -417,6 +424,12 @@ class RichConsoleRenderer:
         the renderer if malformed tags are present in shell output or other
         user-provided content.
         """
+        # Check for auto-save messages and redirect to footer
+        if "Auto-saved session:" in msg.text:
+            self._update_session_info(msg.text)
+            self._render_session_footer()
+            return
+        
         style = self._styles.get(msg.level, "white")
 
         # Make version messages dim
@@ -438,6 +451,63 @@ class RichConsoleRenderer:
             MessageLevel.DEBUG: "• ",
         }
         return prefixes.get(level, "")
+    
+    def _update_session_info(self, text: str) -> None:
+        """Extract session info from auto-save message text.
+        
+        Args:
+            text: The auto-save message text (e.g., "Auto-saved session: 31 messages (22083 tokens)")
+        """
+        import re
+        from datetime import datetime
+        
+        # Extract message count
+        msg_match = re.search(r'(\d+)\s*messages?', text)
+        if msg_match:
+            self._session_info["message_count"] = int(msg_match.group(1))
+        
+        # Extract token count
+        token_match = re.search(r'(\d+)\s*tokens?', text)
+        if token_match:
+            self._session_info["token_count"] = int(token_match.group(1))
+        
+        # Update last save time
+        self._session_info["last_save_time"] = datetime.now()
+    
+    def _render_session_footer(self) -> None:
+        """Render a compact session info footer.
+        
+        Shows message count, token count, and last save time in a dimmed format.
+        This replaces the inline auto-save message with a persistent footer.
+        """
+        from datetime import datetime
+        
+        msg_count = self._session_info.get("message_count", 0)
+        token_count = self._session_info.get("token_count", 0)
+        last_save = self._session_info.get("last_save_time")
+        
+        # Format token count with K/M suffixes
+        if token_count >= 1000000:
+            token_str = f"{token_count / 1000000:.1f}M"
+        elif token_count >= 1000:
+            token_str = f"{token_count / 1000:.1f}K"
+        else:
+            token_str = str(token_count)
+        
+        # Format time
+        time_str = ""
+        if last_save:
+            time_str = last_save.strftime("%H:%M:%S")
+        
+        # Build footer text - include "Auto-saved session" for test compatibility
+        footer_parts = [f"🐾 Auto-saved session: {msg_count} messages ({token_count} tokens)"]
+        if time_str:
+            footer_parts.append(f"💾 {time_str}")
+        
+        footer_text = " │ ".join(footer_parts)
+        
+        # Print with dim styling to keep it subtle
+        self._console.print(f"\n[dim]{footer_text}[/dim]")
 
     # =========================================================================
     # File Operations
@@ -777,15 +847,24 @@ class RichConsoleRenderer:
 
         from rich.text import Text
 
+        line = msg.line
+
+        # Truncate long lines (e.g., git log commit messages) to terminal width
+        # Use console width minus some padding for readability
+        max_line_len = self._console.width - 4 if self._console.width > 20 else 200
+        if len(line) > max_line_len:
+            remaining = len(line) - max_line_len
+            line = line[:max_line_len] + f"... ({remaining} more chars)"
+
         # Check if line contains carriage return (progress bar style output)
-        if "\r" in msg.line:
+        if "\r" in line:
             # Bypass Rich entirely - write directly to stdout so terminal interprets \r
             # Apply dim styling manually via ANSI codes
-            sys.stdout.write(f"\033[2m{msg.line}\033[0m")
+            sys.stdout.write(f"\033[2m{line}\033[0m")
             sys.stdout.flush()
         else:
             # Normal line: use Rich for nice formatting
-            text = Text.from_ansi(msg.line)
+            text = Text.from_ansi(line)
             self._console.print(text, style="dim")
 
     def _render_shell_output(self, msg: ShellOutputMessage) -> None:
@@ -860,9 +939,16 @@ class RichConsoleRenderer:
         self._console.print(f"[dim]Session:[/dim] [bold]{msg.session_id}[/bold]")
 
         # Prompt (truncated if too long, rendered as markdown)
-        prompt_display = (
-            msg.prompt[:200] + "..." if len(msg.prompt) > 200 else msg.prompt
-        )
+        # Use ~100 chars or console width minus padding, whichever is smaller
+        max_prompt_len = min(100, self._console.width - 20) if self._console.width > 40 else 100
+        if len(msg.prompt) > max_prompt_len:
+            remaining = len(msg.prompt) - max_prompt_len
+            prompt_display = (
+                msg.prompt[:max_prompt_len]
+                + f"... [dim]({remaining} more chars)[/dim]"
+            )
+        else:
+            prompt_display = msg.prompt
         self._console.print("[dim]Prompt:[/dim]")
         md_prompt = Markdown(prompt_display)
         self._console.print(md_prompt)
@@ -1044,6 +1130,9 @@ class RichConsoleRenderer:
 
     def _render_status_panel(self, msg: StatusPanelMessage) -> None:
         """Render a status panel with key-value fields."""
+        # Add horizontal rule before summary for visual separation
+        self._console.print(Rule(style="dim"))
+        
         table = Table(show_header=False, box=None, padding=(0, 1))
         table.add_column("Key", style="bold cyan")
         table.add_column("Value")
