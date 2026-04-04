@@ -443,13 +443,15 @@ class TestFallbackBehavior:
         orch = TurboOrchestrator()
         # Since turbo_ops is not installed, should use native fallback
         assert orch.using_native_ops is True
-        assert orch._turbo_ops_available is False
+        assert orch._turbo_ops_async_available is False
+        assert orch._turbo_ops_sync_available is False
 
     def test_orchestrator_forces_native_python(self):
         """Test forcing native Python mode."""
         orch = TurboOrchestrator(prefer_native_python=True)
         assert orch.using_native_ops is True
-        assert orch._turbo_ops_available is False
+        assert orch._turbo_ops_async_available is False
+        assert orch._turbo_ops_sync_available is False
 
     @pytest.mark.asyncio
     async def test_native_list_files_execution(self, temp_dir_with_files):

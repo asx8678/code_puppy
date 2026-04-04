@@ -3,7 +3,7 @@
 //! This crate provides Rust-native implementations of common file operations
 //! (list_files, grep, read_files) with batch orchestration and parallel execution.
 //!
-//! # Python Usage
+//! # Python Usage (Synchronous)
 //!
 //! ```python
 //! import turbo_ops
@@ -19,6 +19,25 @@
 //! result = turbo_ops.batch_execute_ops(ops)
 //! print(json.dumps(result, indent=2))
 //! ```
+//!
+//! # Python Usage (Async)
+//!
+//! ```python
+//! import turbo_ops
+//! import asyncio
+//!
+//! async def main():
+//!     ops = [
+//!         {"type": "list_files", "args": {"directory": ".", "recursive": True}, "id": "op1"},
+//!         {"type": "grep", "args": {"search_string": "def ", "directory": "."}, "id": "op2"},
+//!     ]
+//!
+//!     # Execute batch asynchronously
+//!     result = await turbo_ops.async_batch_execute_ops(ops)
+//!     print(result)  # Already a dict, no json.loads needed!
+//!
+//! asyncio.run(main())
+//! ```
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -28,8 +47,74 @@ mod batch_executor;
 mod models;
 mod operations;
 
+use async_batch_executor::execute_async_batch;
 use batch_executor::{batch_execute, batch_execute_grouped};
 use models::{BatchResult, TurboOperation};
+
+/// Execute a batch of file operations asynchronously.
+///
+/// This is an async version of `batch_execute_ops` that returns a Python
+/// awaitable (coroutine). It uses Tokio for async execution and Rayon for
+/// parallel CPU work within the async runtime.
+///
+/// # Arguments
+/// * `operations` - List of operation dicts with keys:
+///   - type: "list_files", "grep", or "read_files"
+///   - args: operation-specific arguments
+///   - id (optional): operation identifier
+///   - priority (optional): execution priority (lower = earlier, default 100)
+///
+/// # Returns
+/// A Python coroutine that, when awaited, returns a dict with batch execution results:
+/// - status: "completed", "partial", or "failed"
+/// - success_count, error_count, total_count
+/// - results: list of individual operation results
+/// - total_duration_ms
+/// - started_at, completed_at (ISO 8601 timestamps)
+///
+/// # Python Usage
+/// ```python
+/// import turbo_ops
+/// import asyncio
+///
+/// ops = [
+///     {"type": "list_files", "args": {"directory": ".", "recursive": True}, "id": "op1"},
+///     {"type": "grep", "args": {"search_string": "def ", "directory": "."}, "id": "op2"},
+/// ]
+///
+/// # Execute batch asynchronously
+/// result = await turbo_ops.async_batch_execute_ops(ops)
+/// ```
+#[pyfunction]
+fn async_batch_execute_ops<'py>(
+    py: Python<'py>,
+    operations: Vec<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    // Convert Python dicts to TurboOperation structs
+    let ops: Vec<TurboOperation> = operations
+        .iter()
+        .map(|obj| convert_py_op_to_rust(py, obj))
+        .collect::<PyResult<Vec<_>>>()?;
+
+    // Use pyo3_async_runtimes to convert Rust future to Python coroutine
+    pyo3_async_runtimes::tokio::future_into_py(py, async move {
+        // Execute the batch asynchronously
+        let async_result = execute_async_batch(ops).await;
+        
+        // Serialize the batch result to JSON string
+        let json_str = serde_json::to_string(&async_result.batch_result)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e)))?;
+        
+        // Use Python::attach to access Python's GIL and convert to dict
+        let py_obj = Python::attach(|py| {
+            let json_module = py.import("json")?;
+            let py_dict = json_module.call_method1("loads", (json_str,))?;
+            Ok::<_, PyErr>(py_dict.unbind())
+        }).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Python conversion error: {}", e)))?;
+        
+        Ok(py_obj)
+    })
+}
 
 /// Execute a batch of file operations.
 ///
@@ -267,6 +352,7 @@ fn convert_json_to_py<'py>(py: Python<'py>, value: &serde_json::Value) -> PyResu
 /// The turbo_ops Python module.
 #[pymodule]
 fn turbo_ops(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(async_batch_execute_ops, m)?)?;
     m.add_function(wrap_pyfunction!(batch_execute_ops, m)?)?;
     m.add_function(wrap_pyfunction!(batch_execute_grouped_ops, m)?)?;
     m.add_function(wrap_pyfunction!(list_files, m)?)?;

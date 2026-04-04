@@ -19,6 +19,7 @@ class OperationType(str, Enum):
     LIST_FILES = "list_files"
     GREP = "grep"
     READ_FILES = "read_files"
+    RUN_TESTS = "run_tests"
 
 
 class PlanStatus(str, Enum):
@@ -71,6 +72,13 @@ class Operation(BaseModel):
                 raise ValueError("read_files operation requires 'file_paths' in args")
             if not isinstance(args["file_paths"], list):
                 raise ValueError("read_files 'file_paths' must be a list")
+
+        elif op_type == OperationType.RUN_TESTS:
+            # test_path is optional, defaults to current directory
+            args.setdefault("test_path", ".")
+            args.setdefault("runner", "pytest")
+            args.setdefault("verbose", False)
+            args.setdefault("extra_args", "")
 
         return args
 

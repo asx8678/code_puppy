@@ -33,16 +33,27 @@ except ImportError:
 
 # Try to import Rust turbo_ops for accelerated file operations
 try:
+    from turbo_ops import async_batch_execute_ops
+    TURBO_OPS_ASYNC_AVAILABLE = True
+except ImportError:
+    TURBO_OPS_ASYNC_AVAILABLE = False
+    async_batch_execute_ops = None  # type: ignore
+
+try:
+    from turbo_ops import batch_execute_ops
     from turbo_ops import list_files as turbo_list_files
     from turbo_ops import grep as turbo_grep
     from turbo_ops import read_file as turbo_read_file
 
-    TURBO_OPS_AVAILABLE = True
+    TURBO_OPS_SYNC_AVAILABLE = True
 except ImportError:
-    TURBO_OPS_AVAILABLE = False
+    TURBO_OPS_SYNC_AVAILABLE = False
+    batch_execute_ops = None  # type: ignore
     turbo_list_files = None  # type: ignore
     turbo_grep = None  # type: ignore
     turbo_read_file = None  # type: ignore
+
+TURBO_OPS_AVAILABLE = TURBO_OPS_ASYNC_AVAILABLE or TURBO_OPS_SYNC_AVAILABLE
 
 
 # Fallback: Import Python-native file operations when turbo_ops unavailable
@@ -84,18 +95,20 @@ class TurboOrchestrator:
         """
         self.enable_parallel = enable_parallel
         self.prefer_native_python = prefer_native_python
-        self._turbo_ops_available = TURBO_OPS_AVAILABLE and not prefer_native_python
+        self._turbo_ops_async_available = TURBO_OPS_ASYNC_AVAILABLE and not prefer_native_python
+        self._turbo_ops_sync_available = TURBO_OPS_SYNC_AVAILABLE and not prefer_native_python
 
         self._operation_handlers: dict[OperationType, Callable] = {
             OperationType.LIST_FILES: self._execute_list_files,
             OperationType.GREP: self._execute_grep,
             OperationType.READ_FILES: self._execute_read_files,
+            OperationType.RUN_TESTS: self._execute_run_tests,
         }
 
     @property
     def using_native_ops(self) -> bool:
         """Check if using native Python operations (fallback mode)."""
-        return not self._turbo_ops_available
+        return not (self._turbo_ops_async_available or self._turbo_ops_sync_available)
 
     async def execute(self, plan: Plan) -> PlanResult:
         """Execute a plan and return results.
@@ -293,17 +306,68 @@ class TurboOrchestrator:
                 return "error"
             return "success"
 
+        if op_type == OperationType.RUN_TESTS:
+            # run_tests reports errors in data["error"] or via exit code
+            if data.get("error"):
+                return "error"
+            # Consider it an error if pytest had test failures and wasn't a success
+            if data.get("exit_code", 0) != 0 and not data.get("success", False):
+                return "error"
+            return "success"
+
         return "success"
 
     async def _execute_list_files(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Execute list_files operation with fallback to native Python."""
+        """Execute list_files operation with async/sync turbo_ops or native Python fallback."""
         directory = args.get("directory", ".")
         recursive = args.get("recursive", True)
 
-        # Try turbo_ops first if available
-        if self._turbo_ops_available and turbo_list_files is not None:
+        # Build operation for batch execution
+        op = {
+            "type": "list_files",
+            "args": {"directory": directory, "recursive": recursive},
+            "id": "list_files_op",
+        }
+
+        # Try async batch_execute_ops first (preferred - no to_thread needed)
+        if self._turbo_ops_async_available and async_batch_execute_ops is not None:
             try:
-                # Run in thread pool since turbo_ops is likely sync
+                result = await async_batch_execute_ops([op])
+                # Extract result from batch response
+                if result and "results" in result and len(result["results"]) > 0:
+                    op_result = result["results"][0]
+                    if op_result.get("status") == "success":
+                        data = op_result.get("data", {})
+                        return {
+                            "content": data.get("files", []),
+                            "error": None,
+                            "source": "turbo_ops_async",
+                        }
+            except Exception:
+                # Fall through to next option
+                pass
+
+        # Try sync batch_execute_ops (needs to_thread)
+        if self._turbo_ops_sync_available and batch_execute_ops is not None:
+            try:
+                result = await asyncio.to_thread(batch_execute_ops, [op], True)
+                # Extract result from batch response
+                if result and "results" in result and len(result["results"]) > 0:
+                    op_result = result["results"][0]
+                    if op_result.get("status") == "success":
+                        data = op_result.get("data", {})
+                        return {
+                            "content": data.get("files", []),
+                            "error": None,
+                            "source": "turbo_ops_sync",
+                        }
+            except Exception:
+                # Fall through to individual operations
+                pass
+
+        # Try individual sync turbo_ops functions (legacy fallback)
+        if self._turbo_ops_sync_available and turbo_list_files is not None:
+            try:
                 result = await asyncio.to_thread(turbo_list_files, directory, recursive)
                 return {
                     "content": result,
@@ -311,7 +375,7 @@ class TurboOrchestrator:
                     "source": "turbo_ops",
                 }
             except Exception:
-                # Fall through to native Python on failure
+                # Fall through to native Python
                 pass
 
         # Fallback to native Python implementation
@@ -324,14 +388,72 @@ class TurboOrchestrator:
         }
 
     async def _execute_grep(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Execute grep operation with fallback to native Python."""
+        """Execute grep operation with async/sync turbo_ops or native Python fallback."""
         search_string = args.get("search_string", "")
         directory = args.get("directory", ".")
 
-        # Try turbo_ops first if available
-        if self._turbo_ops_available and turbo_grep is not None:
+        # Build operation for batch execution
+        op = {
+            "type": "grep",
+            "args": {"search_string": search_string, "directory": directory},
+            "id": "grep_op",
+        }
+
+        # Try async batch_execute_ops first (preferred - no to_thread needed)
+        if self._turbo_ops_async_available and async_batch_execute_ops is not None:
             try:
-                # Run in thread pool since turbo_ops is likely sync
+                result = await async_batch_execute_ops([op])
+                # Extract result from batch response
+                if result and "results" in result and len(result["results"]) > 0:
+                    op_result = result["results"][0]
+                    if op_result.get("status") == "success":
+                        data = op_result.get("data", {})
+                        return {
+                            "matches": [
+                                {
+                                    "file_path": m.get("file_path", ""),
+                                    "line_number": m.get("line_number", 0),
+                                    "line_content": m.get("line_content", ""),
+                                }
+                                for m in data.get("matches", [])
+                            ],
+                            "total_matches": data.get("total_matches", 0),
+                            "error": None,
+                            "source": "turbo_ops_async",
+                        }
+            except Exception:
+                # Fall through to next option
+                pass
+
+        # Try sync batch_execute_ops (needs to_thread)
+        if self._turbo_ops_sync_available and batch_execute_ops is not None:
+            try:
+                result = await asyncio.to_thread(batch_execute_ops, [op], True)
+                # Extract result from batch response
+                if result and "results" in result and len(result["results"]) > 0:
+                    op_result = result["results"][0]
+                    if op_result.get("status") == "success":
+                        data = op_result.get("data", {})
+                        return {
+                            "matches": [
+                                {
+                                    "file_path": m.get("file_path", ""),
+                                    "line_number": m.get("line_number", 0),
+                                    "line_content": m.get("line_content", ""),
+                                }
+                                for m in data.get("matches", [])
+                            ],
+                            "total_matches": data.get("total_matches", 0),
+                            "error": None,
+                            "source": "turbo_ops_sync",
+                        }
+            except Exception:
+                # Fall through to individual operations
+                pass
+
+        # Try individual sync turbo_ops functions (legacy fallback)
+        if self._turbo_ops_sync_available and turbo_grep is not None:
+            try:
                 result = await asyncio.to_thread(turbo_grep, search_string, directory)
                 return {
                     "matches": [
@@ -347,7 +469,7 @@ class TurboOrchestrator:
                     "source": "turbo_ops",
                 }
             except Exception:
-                # Fall through to native Python on failure
+                # Fall through to native Python
                 pass
 
         # Fallback to native Python implementation
@@ -368,15 +490,86 @@ class TurboOrchestrator:
         }
 
     async def _execute_read_files(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Execute read_files operation with fallback to native Python."""
+        """Execute read_files operation with async/sync turbo_ops or native Python fallback."""
         file_paths = args.get("file_paths", [])
         start_line = args.get("start_line")
         num_lines = args.get("num_lines")
 
         files_data: list[dict[str, Any]] = []
 
-        # Try turbo_ops first if available
-        if self._turbo_ops_available and turbo_read_file is not None:
+        # Build operation for batch execution
+        op = {
+            "type": "read_files",
+            "args": {
+                "file_paths": file_paths,
+                "start_line": start_line,
+                "num_lines": num_lines,
+            },
+            "id": "read_files_op",
+        }
+
+        # Try async batch_execute_ops first (preferred - no to_thread needed)
+        if self._turbo_ops_async_available and async_batch_execute_ops is not None:
+            try:
+                result = await async_batch_execute_ops([op])
+                # Extract result from batch response
+                if result and "results" in result and len(result["results"]) > 0:
+                    op_result = result["results"][0]
+                    if op_result.get("status") == "success":
+                        data = op_result.get("data", {})
+                        files = data.get("files", [])
+                        files_data = [
+                            {
+                                "file_path": f.get("file_path", ""),
+                                "content": f.get("content"),
+                                "num_tokens": f.get("num_tokens", 0),
+                                "error": f.get("error"),
+                                "success": f.get("success", False),
+                            }
+                            for f in files
+                        ]
+                        return {
+                            "files": files_data,
+                            "total_files": len(file_paths),
+                            "successful_reads": sum(1 for f in files_data if f["success"]),
+                            "source": "turbo_ops_async",
+                        }
+            except Exception:
+                # Fall through to next option
+                files_data = []
+
+        # Try sync batch_execute_ops (needs to_thread)
+        if self._turbo_ops_sync_available and batch_execute_ops is not None and not files_data:
+            try:
+                result = await asyncio.to_thread(batch_execute_ops, [op], True)
+                # Extract result from batch response
+                if result and "results" in result and len(result["results"]) > 0:
+                    op_result = result["results"][0]
+                    if op_result.get("status") == "success":
+                        data = op_result.get("data", {})
+                        files = data.get("files", [])
+                        files_data = [
+                            {
+                                "file_path": f.get("file_path", ""),
+                                "content": f.get("content"),
+                                "num_tokens": f.get("num_tokens", 0),
+                                "error": f.get("error"),
+                                "success": f.get("success", False),
+                            }
+                            for f in files
+                        ]
+                        return {
+                            "files": files_data,
+                            "total_files": len(file_paths),
+                            "successful_reads": sum(1 for f in files_data if f["success"]),
+                            "source": "turbo_ops_sync",
+                        }
+            except Exception:
+                # Fall through to individual operations
+                files_data = []
+
+        # Try individual sync turbo_ops functions (legacy fallback)
+        if self._turbo_ops_sync_available and turbo_read_file is not None and not files_data:
             try:
                 for file_path in file_paths:
                     try:
@@ -410,7 +603,7 @@ class TurboOrchestrator:
                     "source": "turbo_ops",
                 }
             except Exception:
-                # Fall through to native Python on failure
+                # Fall through to native Python
                 files_data = []
 
         # Fallback to native Python implementation
@@ -447,6 +640,175 @@ class TurboOrchestrator:
             "source": "native_python",
         }
 
+    async def _execute_run_tests(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Execute run_tests operation using pytest or other test runners."""
+        test_path = args.get("test_path", ".")
+        runner = args.get("runner", "pytest")
+        verbose = args.get("verbose", False)
+        extra_args = args.get("extra_args", "")
+
+        # Build the command
+        if runner == "pytest":
+            # Use pytest with JSON output for structured results when possible
+            cmd_parts = ["pytest", test_path, "-v" if verbose else "-q"]
+
+            # Add extra args if provided
+            if extra_args:
+                cmd_parts.extend(extra_args.split())
+
+            # Try to get structured output with pytest-json-report if available
+            # Otherwise fall back to parsing text output
+            cmd_parts.extend(["--tb=short"])
+
+            cmd = " ".join(cmd_parts)
+        else:
+            # Generic test runner support
+            cmd = f"{runner} {test_path}"
+            if extra_args:
+                cmd += f" {extra_args}"
+
+        try:
+            # Import here to avoid circular imports
+            from code_puppy.tools.command_runner import run_shell_command
+
+            # Run the tests
+            result = await run_shell_command(
+                context=None,
+                command=cmd,
+                cwd=None,
+                timeout=300,  # 5 minute timeout for tests
+            )
+
+            # Parse the output for structured results
+            output = result.get("output", "")
+            stderr = result.get("stderr", "")
+            exit_code = result.get("exit_code", 1)
+            full_output = output + (f"\n{stderr}" if stderr else "")
+
+            # Parse pytest output for test counts
+            test_results = self._parse_pytest_output(full_output, exit_code)
+
+            return {
+                "test_path": test_path,
+                "runner": runner,
+                "command": cmd,
+                "exit_code": exit_code,
+                "output": full_output,
+                **test_results,
+                "source": "native_python",
+            }
+
+        except Exception as e:
+            return {
+                "test_path": test_path,
+                "runner": runner,
+                "command": cmd,
+                "exit_code": -1,
+                "output": "",
+                "error": str(e),
+                "passed": 0,
+                "failed": 0,
+                "skipped": 0,
+                "total": 0,
+                "duration_seconds": 0.0,
+                "success": False,
+                "source": "native_python",
+            }
+
+    def _parse_pytest_output(self, output: str, exit_code: int) -> dict[str, Any]:
+        """Parse pytest output to extract test results.
+
+        Handles various pytest output formats including:
+        - Standard pytest summary line (e.g., "5 passed, 2 failed, 1 skipped")
+        - pytest-json-report output
+        - Short traceback format
+
+        Returns:
+            Dict with passed, failed, skipped, error counts and success flag.
+        """
+        import re
+
+        result = {
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "total": 0,
+            "duration_seconds": 0.0,
+            "success": exit_code == 0,
+        }
+
+        if not output:
+            return result
+
+        # Look for the summary line pattern: "X passed, Y failed, Z skipped"
+        # Also matches variations like "1 passed in 0.01s" or "2 failed, 1 passed"
+        summary_patterns = [
+            # Pattern: "X passed, Y failed, Z skipped in 1.23s"
+            r"(\d+)\s+passed(?:,\s+(\d+)\s+failed)?(?:,\s+(\d+)\s+skipped)?(?:,\s+(\d+)\s+errors?)?\s+in\s+([\d.]+)s",
+            # Pattern: "X failed, Y passed, Z skipped"
+            r"(\d+)\s+failed(?:,\s+(\d+)\s+passed)?(?:,\s+(\d+)\s+skipped)?(?:,\s+(\d+)\s+errors?)?",
+            # Pattern: "X passed, Y skipped"
+            r"(\d+)\s+passed(?:,\s+(\d+)\s+skipped)?\s+in\s+([\d.]+)s",
+            # Pattern for just "X passed in 0.01s"
+            r"(\d+)\s+passed\s+in\s+([\d.]+)s",
+        ]
+
+        for pattern in summary_patterns:
+            match = re.search(pattern, output, re.IGNORECASE)
+            if match:
+                groups = match.groups()
+
+                # Extract counts based on pattern match
+                if "failed" in pattern and "passed" in pattern:
+                    # Pattern with both failed and passed
+                    failed_match = re.search(r"(\d+)\s+failed", output, re.IGNORECASE)
+                    passed_match = re.search(r"(\d+)\s+passed", output, re.IGNORECASE)
+                    skipped_match = re.search(r"(\d+)\s+skipped", output, re.IGNORECASE)
+                    error_match = re.search(r"(\d+)\s+error", output, re.IGNORECASE)
+
+                    result["failed"] = int(failed_match.group(1)) if failed_match else 0
+                    result["passed"] = int(passed_match.group(1)) if passed_match else 0
+                    result["skipped"] = int(skipped_match.group(1)) if skipped_match else 0
+                    result["errors"] = int(error_match.group(1)) if error_match else 0
+
+                    # Try to extract duration
+                    duration_match = re.search(r"in\s+([\d.]+)s", output)
+                    if duration_match:
+                        result["duration_seconds"] = float(duration_match.group(1))
+
+                elif "passed" in pattern:
+                    passed_match = re.search(r"(\d+)\s+passed", output, re.IGNORECASE)
+                    skipped_match = re.search(r"(\d+)\s+skipped", output, re.IGNORECASE)
+
+                    result["passed"] = int(passed_match.group(1)) if passed_match else 0
+                    result["skipped"] = int(skipped_match.group(1)) if skipped_match else 0
+
+                    # Extract duration
+                    if len(groups) >= 2 and groups[-1]:
+                        try:
+                            result["duration_seconds"] = float(groups[-1])
+                        except ValueError:
+                            pass
+
+                break  # Found a match, stop searching
+
+        # Calculate total
+        result["total"] = result["passed"] + result["failed"] + result["skipped"] + result["errors"]
+
+        # If we couldn't parse the summary but exit code is 0, assume all passed
+        if result["total"] == 0 and exit_code == 0 and output:
+            # Try to count test files or individual tests
+            test_file_matches = re.findall(r"(test_.+\.py|.+_test\.py)::", output)
+            if test_file_matches:
+                result["passed"] = len(test_file_matches)
+                result["total"] = len(test_file_matches)
+
+        # Success means: exit code 0 AND no failures/errors
+        result["success"] = exit_code == 0 and result["failed"] == 0 and result["errors"] == 0
+
+        return result
+
     def validate_plan(self, plan: Plan) -> list[str]:
         """Validate a plan and return list of validation errors.
 
@@ -481,5 +843,10 @@ class TurboOrchestrator:
                     errors.append(f"{prefix}: read_files requires 'file_paths'")
                 elif not isinstance(op.args.get("file_paths"), list):
                     errors.append(f"{prefix}: read_files 'file_paths' must be a list")
+
+            if op.type == OperationType.RUN_TESTS:
+                runner = op.args.get("runner", "pytest")
+                if runner not in ("pytest", "unittest", "tox", "nox"):
+                    errors.append(f"{prefix}: unsupported test runner '{runner}'")
 
         return errors

@@ -18,6 +18,7 @@ _OP_EMOJIS = {
     "list_files": "📂",
     "grep": "🔍",
     "read_files": "📄",
+    "run_tests": "🧪",
 }
 
 # Operation type singular/plural forms for display
@@ -25,6 +26,7 @@ _OP_DISPLAY_NAMES = {
     "list_files": "list_files",
     "grep": "grep",
     "read_files": "read_files",
+    "run_tests": "run_tests",
 }
 
 
@@ -100,6 +102,11 @@ def _format_brief_args(op_type: str, args: dict) -> str:
         count = len(paths) if isinstance(paths, list) else 0
         return f"{count} files"
 
+    if op_type == "run_tests":
+        test_path = args.get("test_path", ".")
+        runner = args.get("runner", "pytest")
+        return f"{runner} {test_path}"
+
     return ""
 
 
@@ -121,6 +128,16 @@ def _format_brief_stats(op_type: str, data: dict) -> str:
         successful = data.get("successful_reads", 0)
         total = data.get("total_files", 0)
         return f"{successful}/{total} reads"
+
+    if op_type == "run_tests":
+        passed = data.get("passed", 0)
+        failed = data.get("failed", 0)
+        skipped = data.get("skipped", 0)
+        duration = data.get("duration_seconds", 0.0)
+        total = data.get("total", 0)
+        if total > 0:
+            return f"{passed}✓ {failed}✗ {skipped}⊘ ({duration:.1f}s)"
+        return ""
 
     return ""
 
@@ -273,6 +290,10 @@ def generate_accomplishment_summary(result_data: dict) -> str:
     grep_unique_files: set[str] = set()
     read_files_total = 0
     read_files_successful = 0
+    test_runs_total = 0
+    test_passed = 0
+    test_failed = 0
+    test_skipped = 0
 
     for op in operation_results:
         if not isinstance(op, dict):
@@ -310,6 +331,12 @@ def generate_accomplishment_summary(result_data: dict) -> str:
             read_files_total += op_data.get("total_files", 0)
             read_files_successful += op_data.get("successful_reads", 0)
 
+        elif op_type == "run_tests":
+            test_runs_total += 1
+            test_passed += op_data.get("passed", 0)
+            test_failed += op_data.get("failed", 0)
+            test_skipped += op_data.get("skipped", 0)
+
     # Build summary lines
     summary_parts: list[str] = []
 
@@ -321,6 +348,9 @@ def generate_accomplishment_summary(result_data: dict) -> str:
 
     if read_files_total > 0 or read_files_successful > 0:
         summary_parts.append(f"   📄 Read {read_files_successful} files")
+
+    if test_runs_total > 0:
+        summary_parts.append(f"   🧪 Ran {test_passed + test_failed + test_skipped} tests ({test_passed}✓ {test_failed}✗ {test_skipped}⊘)")
 
     if not summary_parts:
         return ""

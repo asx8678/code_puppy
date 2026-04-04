@@ -117,9 +117,12 @@ def _on_startup():
     """Initialize the orchestrator registry on startup."""
     # Pre-initialize the default instance so it's ready when needed
     default_orch = _orchestrator_registry.get_orchestrator(None)
-    ops_mode = (
-        "turbo_ops (Rust)" if default_orch._turbo_ops_available else "native Python"
-    )
+    if default_orch._turbo_ops_async_available:
+        ops_mode = "turbo_ops (async Rust)"
+    elif default_orch._turbo_ops_sync_available:
+        ops_mode = "turbo_ops (sync Rust)"
+    else:
+        ops_mode = "native Python"
     logger.info(f"Turbo Executor plugin initialized (using {ops_mode})")
 
 
@@ -153,9 +156,14 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         emit_info("🚀 Turbo Executor Status:")
         emit_info(f"   Orchestrator ready: {orch is not None}")
         emit_info(f"   Parallel mode: {orch.enable_parallel}")
-        ops_source = "Rust turbo_ops" if orch._turbo_ops_available else "native Python"
+        if orch._turbo_ops_async_available:
+            ops_source = "Rust turbo_ops (async - preferred)"
+        elif orch._turbo_ops_sync_available:
+            ops_source = "Rust turbo_ops (sync - fallback)"
+        else:
+            ops_source = "native Python"
         emit_info(f"   Operations source: {ops_source}")
-        emit_info("   Supported operations: list_files, grep, read_files")
+        emit_info("   Supported operations: list_files, grep, read_files, run_tests")
         # Show registry info
         instance_count = _orchestrator_registry.get_instance_count()
         emit_info(f"   Active instances: {instance_count}")
@@ -175,7 +183,12 @@ def _handle_turbo_command(command: str, name: str) -> Any:
 
     if subcommand == "help":
         orch = _get_orchestrator()
-        ops_source = "Rust turbo_ops" if orch._turbo_ops_available else "native Python"
+        if orch._turbo_ops_async_available:
+            ops_source = "Rust turbo_ops (async - preferred)"
+        elif orch._turbo_ops_sync_available:
+            ops_source = "Rust turbo_ops (sync - fallback)"
+        else:
+            ops_source = "native Python"
         emit_info("🚀 Turbo Executor — Batch File Operations")
         emit_info("")
         emit_info("Usage:")
@@ -193,7 +206,7 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         )
         emit_info("  ]}")
         emit_info("")
-        emit_info("Operations: list_files, grep, read_files")
+        emit_info("Operations: list_files, grep, read_files, run_tests")
         emit_info("Priority: lower numbers execute first (default 100)")
         emit_info("")
         emit_info(f"Backend: {ops_source}")
@@ -304,7 +317,7 @@ def _register_turbo_execute_tool(agent):
         """Execute a batch of file operations via the turbo executor.
 
         Use this tool when you need to perform multiple file operations
-        (list_files, grep, read_files) efficiently in a single call.
+        (list_files, grep, read_files, run_tests) efficiently in a single call.
 
         Args:
             plan_json: JSON string containing the plan. Format:
@@ -328,6 +341,12 @@ def _register_turbo_execute_tool(agent):
                             "args": {"file_paths": ["file1.py", "file2.py"]},
                             "priority": 3,
                             "id": "op-3"
+                        },
+                        {
+                            "type": "run_tests",
+                            "args": {"test_path": "tests/", "runner": "pytest"},
+                            "priority": 4,
+                            "id": "op-4"
                         }
                     ],
                     "metadata": {"description": "Optional"}
@@ -472,7 +491,7 @@ invoke_agent(
 
 **Option 1: Use turbo_execute tool directly** (if available)
 - Best for: Programmatic batch operations within your current agent
-- Use `turbo_execute` with a plan JSON containing list_files, grep, read_files operations
+- Use `turbo_execute` with a plan JSON containing list_files, grep, read_files, run_tests operations
 
 **Option 2: Invoke turbo-executor agent** (always available)
 - Best for: Complex analysis tasks, large-scale exploration
