@@ -189,18 +189,25 @@ defmodule Mana.MessageBusTest do
           MessageBus.request_input("Second:", timeout: 5000)
         end)
 
-      # Receive both requests
+      # Receive both requests - order is non-deterministic due to concurrency
       assert_receive {:message, req1}, 1000
       assert_receive {:message, req2}, 1000
 
       # Verify they're different requests
       assert req1.id != req2.id
 
-      # Provide responses in reverse order
-      :ok = MessageBus.provide_response(req2.id, "Second response")
-      :ok = MessageBus.provide_response(req1.id, "First response")
+      # Match requests to their prompts to ensure correct response mapping
+      {first_req, second_req} =
+        case {req1.prompt, req2.prompt} do
+          {"First:", "Second:"} -> {req1, req2}
+          {"Second:", "First:"} -> {req2, req1}
+        end
 
-      # Verify responses
+      # Provide responses matched to correct requests
+      :ok = MessageBus.provide_response(first_req.id, "First response")
+      :ok = MessageBus.provide_response(second_req.id, "Second response")
+
+      # Verify each requester got their correct response
       assert {:ok, "First response"} = Task.await(requester1, 1000)
       assert {:ok, "Second response"} = Task.await(requester2, 1000)
     end
