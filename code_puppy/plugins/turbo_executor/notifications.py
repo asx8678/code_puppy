@@ -200,7 +200,7 @@ def _format_progress_line(
     return f"⚡ [{current}/{total}] {emoji} {op_type} {brief}"
 
 
-def emit_operation_start(current: int, total: int, op_type: str, args: dict) -> None:
+def emit_operation_start(current: int, total: int, op_type: str, args: dict, elapsed_ms: float = 0.0) -> None:
     """Emit operation start progress line.
 
     This is called from the orchestrator before each operation begins.
@@ -210,13 +210,15 @@ def emit_operation_start(current: int, total: int, op_type: str, args: dict) -> 
         total: Total number of operations
         op_type: Type of operation
         args: Operation arguments
+        elapsed_ms: Elapsed time since plan start in milliseconds
     """
-    line = _format_progress_line(current, total, op_type, args, is_start=True)
-    emit_info(line)
+    emoji = _get_op_emoji(op_type)
+    brief = _format_brief_args(op_type, args)
+    emit_info(f"⚡ [{current}/{total}] {emoji} {op_type} {brief} starting...")
 
 
 def emit_operation_complete(
-    current: int, total: int, op_type: str, args: dict, duration_ms: float, data: dict
+    current: int, total: int, op_type: str, args: dict, duration_ms: float, data: dict, elapsed_ms: float = 0.0
 ) -> None:
     """Emit operation completion progress line.
 
@@ -227,16 +229,18 @@ def emit_operation_complete(
         total: Total number of operations
         op_type: Type of operation
         args: Operation arguments
-        duration_ms: Duration in milliseconds
+        duration_ms: Duration in milliseconds for this operation
         data: Result data from the operation
+        elapsed_ms: Elapsed time since plan start in milliseconds
     """
     stats = _format_brief_stats(op_type, data)
     emit_info(
-        f"⚡ [{current}/{total}] ✅ {op_type} done ({duration_ms:.0f}ms, {stats})"
+        f"⚡ [{current}/{total}] ✅ {op_type} done ({duration_ms:.0f}ms, {stats}) — "
+        f"{elapsed_ms:.0f}ms elapsed, {current}/{total} complete"
     )
 
 
-def emit_operation_error(current: int, total: int, op_type: str, error: str) -> None:
+def emit_operation_error(current: int, total: int, op_type: str, error: str, elapsed_ms: float = 0.0) -> None:
     """Emit operation error progress line.
 
     This is called from the orchestrator when an operation fails.
@@ -246,8 +250,9 @@ def emit_operation_error(current: int, total: int, op_type: str, error: str) -> 
         total: Total number of operations
         op_type: Type of operation
         error: Error message
+        elapsed_ms: Elapsed time since plan start in milliseconds
     """
-    emit_info(f"⚡ [{current}/{total}] ❌ {op_type} failed: {error}")
+    emit_info(f"⚡ [{current}/{total}] ❌ {op_type} failed: {error} — {elapsed_ms:.0f}ms elapsed, {current}/{total} complete")
 
 
 def register() -> None:
