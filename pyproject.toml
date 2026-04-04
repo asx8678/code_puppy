@@ -88,6 +88,7 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [
     "eval: LLM evaluation test (skipped unless RUN_EVALS=1 is set)",
+    "benchmark: Performance benchmarks (run with -m benchmark)",
 ]
 
 [tool.coverage.run]
