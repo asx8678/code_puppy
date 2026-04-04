@@ -12,11 +12,16 @@ from code_puppy import config
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
 
-from ._age_filter import (
-    _human_age,
-    _is_older_than,
-    _parse_args,
+from ._age_filter import _human_age, _is_older_than, _parse_args
+from ._auto_cleanup import _auto_cleanup
+from ._disk_usage import (
+    _check_disk_usage,
+    _dir_stats,
+    _file_stats,
+    _get_last_modified,
+    _human_size,
 )
+from ._orphan_detection import _count_orphans_in_dirs, _run_orphans
 
 # ---------------------------------------------------------------------------
 # Storage location definitions
@@ -58,7 +63,7 @@ def _cache_targets() -> list[tuple[str, Path, str]]:
         ("Browser workflows", Path(config.DATA_DIR) / "browser_workflows", "dir"),
         (
             "Skills cache",
-            Path.home() / ".code_puppy" / "cache" / "skills_catalog.json",
+            Path(config.DATA_DIR) / "cache" / "skills_catalog.json",
             "file",
         ),
         ("API server PID", Path(config.STATE_DIR) / "api_server.pid", "file"),
@@ -100,68 +105,6 @@ _SAFE_CATEGORY_KEYS: list[str] = [k for k in _CATEGORIES if k != "db"]
 # ---------------------------------------------------------------------------
 
 
-def _human_size(nbytes: int) -> str:
-    """Format *nbytes* as a human-friendly string."""
-    if nbytes < 1024:
-        return f"{nbytes} B"
-    for unit in ("KB", "MB", "GB"):
-        nbytes /= 1024.0
-        if nbytes < 1024.0 or unit == "GB":
-            return f"{nbytes:.1f} {unit}"
-    return f"{nbytes:.1f} GB"  # pragma: no cover
-
-
-def _dir_stats(path: Path, max_age_seconds: int | None = None) -> tuple[int, int]:
-    """Return ``(file_count, total_bytes)`` for a directory tree.
-
-    Args:
-        path: Directory to scan.
-        max_age_seconds: If set, only count files older than this many seconds.
-
-    Returns:
-        Tuple of (file_count, total_bytes).
-    """
-    if not path.is_dir():
-        return 0, 0
-    count = 0
-    total = 0
-    try:
-        for item in path.rglob("*"):
-            if item.is_file():
-                try:
-                    if max_age_seconds is not None:
-                        if not _is_older_than(item, max_age_seconds):
-                            continue
-                    total += item.stat().st_size
-                    count += 1
-                except OSError:
-                    pass
-    except OSError:
-        pass
-    return count, total
-
-
-def _file_stats(path: Path, max_age_seconds: int | None = None) -> tuple[int, int]:
-    """Return ``(1, size)`` if file exists, else ``(0, 0)``.
-
-    Args:
-        path: File to check.
-        max_age_seconds: If set, only count file if older than this many seconds.
-
-    Returns:
-        Tuple of (1, size) if file exists and passes age filter, else (0, 0).
-    """
-    if not path.is_file():
-        return 0, 0
-    try:
-        if max_age_seconds is not None:
-            if not _is_older_than(path, max_age_seconds):
-                return 0, 0
-        return 1, path.stat().st_size
-    except OSError:
-        return 0, 0
-
-
 def _target_stats(
     targets: list[tuple[str, Path, str]], max_age_seconds: int | None = None
 ) -> tuple[int, int]:
@@ -170,19 +113,42 @@ def _target_stats(
     Args:
         targets: List of (label, path, kind) tuples.
         max_age_seconds: If set, only count files older than this many seconds.
-
-    Returns:
-        Tuple of (total_file_count, total_bytes).
     """
     count = 0
     total = 0
     for _label, path, kind in targets:
         if kind == "dir":
-            c, t = _dir_stats(path, max_age_seconds)
+            c, t = _dir_stats(path)
         else:
-            c, t = _file_stats(path, max_age_seconds)
+            c, t = _file_stats(path)
+        # Apply age filter for stats display
+        if max_age_seconds is not None:
+            if kind == "dir" and path.is_dir():
+                c, t = _dir_stats_age_filtered(path, max_age_seconds)
+            elif kind == "file" and path.is_file():
+                if not _is_older_than(path, max_age_seconds):
+                    c, t = 0, 0
         count += c
         total += t
+    return count, total
+
+
+def _dir_stats_age_filtered(path: Path, max_age_seconds: int) -> tuple[int, int]:
+    """Return (file_count, total_bytes) for files older than threshold."""
+    if not path.is_dir():
+        return 0, 0
+    count = 0
+    total = 0
+    try:
+        for item in path.rglob("*"):
+            if item.is_file() and _is_older_than(item, max_age_seconds):
+                try:
+                    total += item.stat().st_size
+                    count += 1
+                except OSError:
+                    pass
+    except OSError:
+        pass
     return count, total
 
 
@@ -258,9 +224,6 @@ def _clean_file(
         path: File to remove.
         dry_run: If True, only report what would be done.
         max_age_seconds: If set, only remove if file is older than this.
-
-    Returns:
-        Tuple of (files_removed, bytes_freed).
     """
     if not path.is_file():
         return 0, 0
@@ -341,15 +304,6 @@ def _clean_db(dry_run: bool, max_age_seconds: int | None = None) -> tuple[int, i
     connection **before** deleting the underlying SQLite file.  Deleting while
     DBOS holds an open connection causes
     ``sqlite3.OperationalError: attempt to write a readonly database``.
-
-    Args:
-        dry_run: If True, only report what would be done.
-        max_age_seconds: If set, only clean files older than this many seconds.
-            Note: Database files are treated as a unit; the age check applies
-            to the main database file.
-
-    Returns:
-        Tuple of (total_files, total_bytes).
     """
     if not dry_run:
         if _destroy_dbos():
@@ -378,30 +332,29 @@ def _show_help() -> None:
     """Print help text for /clean."""
     emit_info("🧹 /clean — Clean Code Puppy session data, logs, and caches\n")
     emit_info("Usage:")
-    emit_info("  /clean help                       Show this help message")
-    emit_info("  /clean status                     Show disk usage per category")
+    emit_info("  /clean help              Show this help message")
+    emit_info("  /clean status            Show detailed disk usage per category")
     emit_info(
-        "  /clean all                        Clean everything except db (sessions, history, logs, cache)"
+        "  /clean all               Clean everything except db (sessions, history, logs, cache)"
     )
     emit_info(
-        "  /clean sessions                   Clean autosave + sub-agent + terminal sessions"
+        "  /clean sessions          Clean autosave + sub-agent + terminal sessions"
     )
-    emit_info("  /clean history                    Clean command history")
-    emit_info("  /clean logs                       Clean error logs")
+    emit_info("  /clean history           Clean command history")
+    emit_info("  /clean logs              Clean error logs")
     emit_info(
-        "  /clean cache                      Clean browser profiles, workflows, skills cache"
+        "  /clean cache             Clean browser profiles, workflows, skills cache"
     )
     emit_info(
-        "  /clean db                         Clean DBOS state database (⚠️ requires restart)"
+        "  /clean db                Clean DBOS state database (⚠️ requires restart)"
     )
+    emit_info("  /clean orphans           Find and clean orphaned/temp files")
     emit_info("")
     emit_info("Options:")
     emit_info(
-        "  --dry-run                         Preview what would be cleaned without deleting"
+        "  --dry-run                Preview what would be cleaned without deleting"
     )
-    emit_info(
-        "  --older-than <duration>           Only clean files older than specified age"
-    )
+    emit_info("  --older-than <duration>  Only clean files older than specified age")
     emit_info("")
     emit_info("Duration formats:")
     emit_info("  7d, 30d  = days")
@@ -415,28 +368,89 @@ def _show_help() -> None:
     emit_info("  /clean --dry-run all")
     emit_info("  /clean sessions --older-than 7d")
     emit_info("  /clean logs --older-than 24h --dry-run")
+    emit_info("  /clean orphans")
+    emit_info("  /clean --dry-run orphans")
     emit_info("")
     emit_info("⚠️  Config files (puppy.cfg, mcp_servers.json, models, OAuth tokens)")
     emit_info("   are never touched.")
     emit_info("💡 /clean all excludes db — use /clean db explicitly (needs restart).")
+    emit_info("")
+    emit_info("🤖 Auto-cleanup Configuration (puppy.cfg):")
+    emit_info("   [cleanup]")
+    emit_info("   auto_clean_on_startup = false")
+    emit_info("   auto_clean_max_age_days = 30")
+    emit_info("   auto_clean_categories = cache,logs")
 
 
 def _show_status() -> None:
-    """Print disk usage per category."""
+    """Print detailed disk usage per category with warnings and timestamps."""
     emit_info("📊 Code Puppy Storage Status\n")
+
     grand_files = 0
     grand_bytes = 0
+    warnings: list[tuple[str, str]] = []
+
     for key, (display_name, target_fn) in _CATEGORIES.items():
         targets = target_fn()
         count, total = _target_stats(targets)
         grand_files += count
         grand_bytes += total
+
+        # Check for disk usage warnings
+        for _label, path, kind in targets:
+            if kind == "dir":
+                _, warning = _check_disk_usage(path)
+                if warning:
+                    warnings.append((f"{display_name}", warning))
+
         count_str = f"{count} file{'s' if count != 1 else ''}"
-        emit_info(f"  {display_name:<20s} {count_str:>12s}  {_human_size(total):>10s}")
+        size_str = _human_size(total)
+
+        # Get last modified for first target (if directory)
+        first_target = targets[0] if targets else None
+        last_mod = None
+        if first_target:
+            _label, path, kind = first_target
+            if kind == "dir":
+                last_mod = _get_last_modified(path)
+            elif kind == "file" and path.exists():
+                last_mod = _get_last_modified(path)
+
+        mod_str = f" (modified: {last_mod})" if last_mod else ""
+        emit_info(f"  {display_name:<20s} {count_str:>12s}  {size_str:>10s}{mod_str}")
+
+        # Show individual target details if more than one target
+        if len(targets) > 1:
+            for label, path, kind in targets:
+                if kind == "dir":
+                    c, t = _dir_stats(path)
+                else:
+                    c, t = _file_stats(path)
+                if c > 0:
+                    detail_count = f"{c} file{'s' if c != 1 else ''}"
+                    emit_info(
+                        f"    • {label:<30s} {detail_count:>10s}  {_human_size(t):>10s}"
+                    )
+
     emit_info("  " + "─" * 44)
     emit_info(
         f"  {'Total':<20s} {grand_files:>6d} file{'s' if grand_files != 1 else '':5s} {_human_size(grand_bytes):>10s}"
     )
+
+    # Display warnings section
+    if warnings:
+        emit_info("\n⚠️  Warnings:")
+        for category, warning in warnings:
+            emit_info(f"   {category}: {warning}")
+
+    # Show orphan count
+    orphan_count = _count_orphans_in_dirs()
+    if orphan_count > 0:
+        emit_info(
+            f"\n🔍 Found {orphan_count} orphan file(s). Run '/clean orphans' to remove."
+        )
+
+    emit_info("\n💡 Run '/clean help' for available commands.")
 
 
 def _run_clean(
@@ -486,10 +500,20 @@ def _run_clean(
 
 
 # ---------------------------------------------------------------------------
-# Subcommand handlers
+# Command dispatcher
 # ---------------------------------------------------------------------------
 
-_VALID_SUBCMDS = {"help", "status", "all", "sessions", "history", "logs", "cache", "db"}
+_VALID_SUBCMDS = {
+    "help",
+    "status",
+    "all",
+    "sessions",
+    "history",
+    "logs",
+    "cache",
+    "db",
+    "orphans",
+}
 
 
 def _handle_clean_command(command: str, name: str) -> bool | None:
@@ -518,6 +542,8 @@ def _handle_clean_command(command: str, name: str) -> bool | None:
             _show_status()
         elif subcmd == "all":
             _run_clean(_SAFE_CATEGORY_KEYS, dry_run, max_age_seconds)
+        elif subcmd == "orphans":
+            _run_orphans(dry_run)
         elif subcmd in _CATEGORIES:
             _run_clean([subcmd], dry_run, max_age_seconds)
         else:
@@ -529,11 +555,6 @@ def _handle_clean_command(command: str, name: str) -> bool | None:
     return True
 
 
-# ---------------------------------------------------------------------------
-# Help callback
-# ---------------------------------------------------------------------------
-
-
 def _custom_help() -> list[tuple[str, str]]:
     return [("clean", "Clean sessions, history, logs, and cache data")]
 
@@ -542,5 +563,12 @@ def _custom_help() -> list[tuple[str, str]]:
 # Registration
 # ---------------------------------------------------------------------------
 
+
+def _startup_cleanup() -> None:
+    """Wrapper to run auto-cleanup on startup."""
+    _auto_cleanup(_CATEGORIES, _clean_targets)
+
+
 register_callback("custom_command", _handle_clean_command)
 register_callback("custom_command_help", _custom_help)
+register_callback("startup", _startup_cleanup)
