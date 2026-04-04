@@ -282,6 +282,66 @@ def has_extended_thinking_active(model_name: str | None = None) -> bool:
     return extended_thinking in ("enabled", "adaptive")
 
 
+def _compute_tool_schema_tokens(tool_func, tool_name: str = "") -> int:
+    """Compute token count for a tool's schema (name, description, parameters).
+    
+    This pre-computes the token overhead for a tool at registration time,
+    so that estimate_context_overhead_tokens() can do O(1) lookups later.
+    
+    Args:
+        tool_func: The tool function to compute schema tokens for.
+        tool_name: Optional tool name (if not available from function).
+        
+    Returns:
+        Estimated token count for the tool's schema.
+    """
+    import json
+    from code_puppy.token_utils import estimate_token_count
+    
+    total_tokens = 0
+    
+    # Estimate tokens from tool name
+    name = tool_name or getattr(tool_func, "__name__", "")
+    if name:
+        total_tokens += estimate_token_count(name)
+    
+    # Estimate tokens from tool description
+    description = getattr(tool_func, "__doc__", None) or ""
+    if description:
+        total_tokens += estimate_token_count(description)
+    
+    # Estimate tokens from parameter schema
+    schema = getattr(tool_func, "schema", None)
+    if schema:
+        schema_str = json.dumps(schema) if isinstance(schema, dict) else str(schema)
+        total_tokens += estimate_token_count(schema_str)
+    else:
+        # Try to get schema from function annotations
+        annotations = getattr(tool_func, "__annotations__", None)
+        if annotations:
+            total_tokens += estimate_token_count(str(annotations))
+    
+    return total_tokens
+
+
+def _attach_schema_token_count(tool_func, tool_name: str = "") -> None:
+    """Attach pre-computed schema token count to a tool function.
+    
+    This stores the token count as an attribute on the tool function
+    for O(1) lookup during context overhead estimation.
+    
+    Args:
+        tool_func: The tool function to attach the token count to.
+        tool_name: Optional tool name (if not available from function).
+    """
+    try:
+        token_count = _compute_tool_schema_tokens(tool_func, tool_name)
+        setattr(tool_func, "_schema_token_count", token_count)
+    except Exception:
+        # Fail silently - token counting is non-critical
+        pass
+
+
 def register_tools_for_agent(
     agent, tool_names: list[str], model_name: str | None = None
 ):
@@ -346,6 +406,29 @@ def register_tools_for_agent(
         # Register the individual tool
         register_func = TOOL_REGISTRY[tool_name]
         register_func(agent)
+
+    # After all tools are registered, pre-compute and attach schema token counts
+    # This enables O(1) lookup in estimate_context_overhead_tokens()
+    _precompute_tool_schema_tokens(agent)
+
+
+def _precompute_tool_schema_tokens(agent) -> None:
+    """Pre-compute and attach schema token counts to all tools on an agent.
+    
+    Iterates over the agent's registered tools and computes/attaches token counts
+    for O(1) lookup during context overhead estimation.
+    
+    Args:
+        agent: The agent with tools to pre-compute token counts for.
+    """
+    tools = getattr(agent, "_tools", None)
+    if not tools or not isinstance(tools, dict):
+        return
+    
+    for tool_name, tool_func in tools.items():
+        # Only compute if not already attached
+        if not hasattr(tool_func, "_schema_token_count"):
+            _attach_schema_token_count(tool_func, tool_name)
 
 
 def _register_uc_tool_wrapper(agent, uc_tool_name: str):

@@ -527,6 +527,10 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         Results are cached per-instance and invalidated when the agent is reloaded
         (tool set and prompt change only on reload).
+
+        Tool schema token counts are pre-computed at registration time for O(1)
+        lookup performance. See _precompute_tool_schema_tokens() and
+        _update_mcp_tool_cache() for the lazy tokenization implementation.
         """
         if self._cached_context_overhead is not None:
             return self._cached_context_overhead
@@ -559,12 +563,21 @@ class BaseAgent(ABC, AgentPromptMixin):
             logger.debug("Failed to get system prompt for token estimation", exc_info=True)
 
         # 2. Estimate tokens for pydantic_agent tool definitions
+        # Uses pre-computed _schema_token_count from tool registration (O(1) lookup)
         pydantic_agent = getattr(self, "pydantic_agent", None)
         if pydantic_agent:
             tools = getattr(pydantic_agent, "_tools", None)
             if tools and isinstance(tools, dict):
                 for tool_name, tool_func in tools.items():
                     try:
+                        # Use pre-computed token count if available (fast O(1) path)
+                        # Check for int specifically to handle MagicMock in tests
+                        precomputed = getattr(tool_func, "_schema_token_count", None)
+                        if isinstance(precomputed, int):
+                            total_tokens += precomputed
+                            continue
+                        
+                        # Fallback: compute on-the-fly (slow path for legacy tools)
                         # Estimate tokens from tool name
                         total_tokens += self.estimate_token_count(tool_name)
 
@@ -595,12 +608,19 @@ class BaseAgent(ABC, AgentPromptMixin):
                         continue
 
         # 3. Estimate tokens for MCP tool definitions from cache
-        # MCP tools are fetched asynchronously, so we use a cache that's populated
-        # after the first successful run. See _update_mcp_tool_cache() method.
+        # MCP tools have _schema_token_count pre-computed when cache is populated
         mcp_tool_cache = getattr(self, "_mcp_tool_definitions_cache", [])
         if mcp_tool_cache:
             for tool_def in mcp_tool_cache:
                 try:
+                    # Use pre-computed token count if available (fast O(1) path)
+                    # Check for int specifically to handle MagicMock in tests
+                    precomputed = tool_def.get("_schema_token_count")
+                    if isinstance(precomputed, int):
+                        total_tokens += precomputed
+                        continue
+                    
+                    # Fallback: compute on-the-fly (slow path for legacy cache entries)
                     # Estimate tokens from tool name
                     tool_name = tool_def.get("name", "")
                     if tool_name:
@@ -632,7 +652,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         Update the MCP tool definitions cache by fetching tools from running MCP servers.
 
         This should be called after a successful run to populate the cache for
-        accurate token estimation in subsequent runs.
+        accurate token estimation in subsequent runs. Pre-computes schema token counts
+        for O(1) lookup in estimate_context_overhead_tokens().
         """
         mcp_servers = getattr(self, "_mcp_servers", None)
         if not mcp_servers:
@@ -646,10 +667,29 @@ class BaseAgent(ABC, AgentPromptMixin):
                     # list_tools() returns list[mcp_types.Tool]
                     tools = await mcp_server.list_tools()
                     for tool in tools:
+                        tool_name = getattr(tool, "name", "")
+                        description = getattr(tool, "description", "")
+                        input_schema = getattr(tool, "inputSchema", {})
+                        
+                        # Pre-compute schema token count for O(1) lookup
+                        schema_token_count = 0
+                        try:
+                            if tool_name:
+                                schema_token_count += _estimate_token_count(tool_name)
+                            if description:
+                                schema_token_count += _estimate_token_count(description)
+                            if input_schema:
+                                schema_str = json.dumps(input_schema) if isinstance(input_schema, dict) else str(input_schema)
+                                schema_token_count += _estimate_token_count(schema_str)
+                        except Exception:
+                            # Fail silently - token counting is non-critical
+                            pass
+                        
                         tool_def = {
-                            "name": getattr(tool, "name", ""),
-                            "description": getattr(tool, "description", ""),
-                            "inputSchema": getattr(tool, "inputSchema", {}),
+                            "name": tool_name,
+                            "description": description,
+                            "inputSchema": input_schema,
+                            "_schema_token_count": schema_token_count,  # Pre-computed for O(1) lookup
                         }
                         tool_definitions.append(tool_def)
             except Exception:
