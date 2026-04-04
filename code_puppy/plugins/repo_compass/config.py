@@ -11,6 +11,10 @@ class RepoCompassConfig:
     max_files: int = 40
     max_symbols_per_file: int = 8
     max_prompt_chars: int = 2400
+    # Condensed mode settings
+    condensed_max_files: int = 15
+    condensed_max_symbols_per_file: int = 3
+    condensed_max_prompt_chars: int = 800
 
 
 def _get_int(key: str, default: int) -> int:
@@ -37,4 +41,7 @@ def load_config() -> RepoCompassConfig:
         max_files=_get_int("repo_compass_max_files", 40),
         max_symbols_per_file=_get_int("repo_compass_max_symbols_per_file", 8),
         max_prompt_chars=_get_int("repo_compass_max_prompt_chars", 2400),
+        condensed_max_files=_get_int("repo_compass_condensed_max_files", 15),
+        condensed_max_symbols_per_file=_get_int("repo_compass_condensed_max_symbols_per_file", 3),
+        condensed_max_prompt_chars=_get_int("repo_compass_condensed_max_prompt_chars", 800),
     )

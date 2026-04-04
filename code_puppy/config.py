@@ -338,6 +338,15 @@ def get_config_keys():
     default_keys.append("enable_fast_puppy")
     # Add image lifecycle management configuration
     default_keys.append("image_ttl_turns")
+    # Add system prompt budget management configuration
+    default_keys.append("system_prompt_budget_tokens")
+    default_keys.append("system_prompt_budget_warning_threshold")
+    default_keys.append("system_prompt_condensed_mode")
+    default_keys.append("system_prompt_budget_enabled")
+    # Add repo_compass condensed mode configuration
+    default_keys.append("repo_compass_condensed_max_files")
+    default_keys.append("repo_compass_condensed_max_symbols_per_file")
+    default_keys.append("repo_compass_condensed_max_prompt_chars")
 
     config = _get_config()
     keys = set(config[DEFAULT_SECTION].keys()) if DEFAULT_SECTION in config else set()

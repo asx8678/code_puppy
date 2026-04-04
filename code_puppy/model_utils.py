@@ -91,7 +91,8 @@ def prepare_prompt_for_model(
     model_name: str,
     system_prompt: str,
     user_prompt: str,
-    prepend_system_to_user: bool = True) -> PreparedPrompt:
+    prepend_system_to_user: bool = True,
+    model_context_length: int = 128000) -> PreparedPrompt:
     """Prepare instructions and prompt for a specific model.
 
     This function handles model-specific system prompt requirements. Plugins can
@@ -104,10 +105,25 @@ def prepare_prompt_for_model(
         user_prompt: The user's prompt/message
         prepend_system_to_user: Whether to prepend system prompt to user prompt
             for models that require it (default: True)
+        model_context_length: Model's context length for budget calculation (default: 128000)
 
     Returns:
         PreparedPrompt with instructions and user_prompt ready for the model.
     """
+    # Import budget tracking
+    from code_puppy.system_prompt_budget import (
+        create_budget_tracker,
+        get_current_budget_tracker,
+        set_current_budget_tracker,
+        reset_budget_tracker
+    )
+    
+    # Create or get budget tracker
+    budget_tracker = get_current_budget_tracker()
+    if budget_tracker is None:
+        budget_tracker = create_budget_tracker(model_context_length)
+        set_current_budget_tracker(budget_tracker)
+    
     # Check for plugin-registered system prompt handlers first
     from code_puppy import callbacks
 
@@ -129,6 +145,8 @@ def prepare_prompt_for_model(
             plugin_is_claude_code = result.get("is_claude_code", False)
 
     if plugin_fully_handled:
+        # Reset budget tracker after use
+        reset_budget_tracker()
         return PreparedPrompt(
             instructions=effective_system_prompt,
             user_prompt=effective_user_prompt,
@@ -175,6 +193,8 @@ def prepare_prompt_for_model(
             user_prompt=modified_prompt,
             is_claude_code=False)
 
+    # Reset budget tracker after use
+    reset_budget_tracker()
     return PreparedPrompt(
         instructions=system_prompt,
         user_prompt=user_prompt,

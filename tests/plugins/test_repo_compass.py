@@ -71,7 +71,12 @@ def test_build_repo_context_can_be_disabled(monkeypatch):
 def test_inject_repo_context_appends_to_system_prompt(monkeypatch):
     monkeypatch.setattr(
         "code_puppy.plugins.repo_compass.register_callbacks._build_repo_context",
-        lambda root=None: "## Repo Compass\n- sample.py [python]: def run()",
+        lambda root=None, condensed=False: "## Repo Compass\n- sample.py [python]: def run()",
+    )
+    # Mock budget tracker to return None (disabled)
+    monkeypatch.setattr(
+        "code_puppy.system_prompt_budget.get_current_budget_tracker",
+        lambda: None,
     )
 
     result = _inject_repo_context("gpt-5", "BASE PROMPT", "hello")

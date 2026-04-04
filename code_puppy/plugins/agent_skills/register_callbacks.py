@@ -15,9 +15,12 @@ from code_puppy.callbacks import register_callback
 logger = logging.getLogger(__name__)
 
 
-def _get_skills_prompt_section() -> str | None:
+def _get_skills_prompt_section(condensed: bool = False) -> str | None:
     """Build the skills section to inject into system prompts.
 
+    Args:
+        condensed: Whether to use condensed mode.
+    
     Returns None if skills are disabled or no skills found.
     """
     from .config import get_disabled_skills, get_skill_directories, get_skills_enabled
@@ -65,12 +68,12 @@ def _get_skills_prompt_section() -> str | None:
         logger.debug("No valid skills with metadata found, skipping prompt injection")
         return None
 
-    xml_section = build_available_skills_xml(skills_metadata)
-    guidance = build_skills_guidance()
+    xml_section = build_available_skills_xml(skills_metadata, condensed=condensed)
+    guidance = build_skills_guidance(condensed=condensed)
 
     # 5. Return combined string
     combined = f"{xml_section}\n\n{guidance}"
-    logger.debug(f"Injecting skills section with {len(skills_metadata)} skills")
+    logger.debug(f"Injecting skills section with {len(skills_metadata)} skills (condensed={condensed})")
     return combined
 
 
@@ -81,11 +84,22 @@ def _inject_skills_into_prompt(
 
     This is registered with the 'get_model_system_prompt' callback phase.
     """
-    skills_section = _get_skills_prompt_section()
+    # Check budget tracker for condensed mode
+    from code_puppy.system_prompt_budget import get_current_budget_tracker
+    budget_tracker = get_current_budget_tracker()
+    use_condensed = False
+    if budget_tracker and budget_tracker.config.enabled:
+        use_condensed = budget_tracker.should_use_condensed
+    
+    skills_section = _get_skills_prompt_section(condensed=use_condensed)
 
     if not skills_section:
         return None  # No skills, don't modify prompt
 
+    # Track contribution in budget tracker
+    if budget_tracker and budget_tracker.config.enabled:
+        budget_tracker.add_contribution("agent_skills", skills_section, condensed=use_condensed)
+    
     # Append skills section to system prompt
     enhanced_prompt = f"{default_system_prompt}\n\n{skills_section}"
 
