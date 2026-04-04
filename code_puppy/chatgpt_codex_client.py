@@ -21,6 +21,8 @@ from typing import Any
 
 import httpx
 
+from code_puppy.timeout_config import get_timeout_config
+
 logger = logging.getLogger(__name__)
 
 
@@ -339,5 +341,5 @@ def create_codex_async_client(
     return ChatGPTCodexAsyncClient(
         headers=headers,
         verify=verify,
-        timeout=httpx.Timeout(300.0, connect=30.0),
+        timeout=get_timeout_config("llm_streaming"),
         **kwargs)

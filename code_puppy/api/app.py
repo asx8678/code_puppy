@@ -11,10 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from code_puppy.timeout_config import HTTP_CONNECT_TIMEOUT
+
 logger = logging.getLogger(__name__)
 
 # Default request timeout (seconds) - fail fast!
-REQUEST_TIMEOUT = 30.0
+# Use HTTP_CONNECT_TIMEOUT as the API request timeout for consistency
+REQUEST_TIMEOUT = HTTP_CONNECT_TIMEOUT
 
 
 class TimeoutMiddleware(BaseHTTPMiddleware):

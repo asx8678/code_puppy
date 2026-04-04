@@ -4,6 +4,7 @@ import itertools
 import json
 import logging
 import msgpack
+import random
 import re
 import traceback
 from datetime import datetime
@@ -119,13 +120,13 @@ async def _run_with_streaming_retry(run_coro_factory):
         except _RETRYABLE_STREAMING_EXCEPTIONS as e:
             last_error = e
             if attempt < MAX_STREAMING_RETRIES - 1:
-                delay = STREAMING_RETRY_DELAYS[attempt]
+                delay = STREAMING_RETRY_DELAYS[attempt] * (0.75 + random.random() * 0.5)
                 await asyncio.sleep(delay)
         except ModelHTTPError as e:
             if _is_transient_model_error(e):
                 last_error = e
                 if attempt < MAX_STREAMING_RETRIES - 1:
-                    delay = STREAMING_RETRY_DELAYS[attempt]
+                    delay = STREAMING_RETRY_DELAYS[attempt] * (0.75 + random.random() * 0.5)
                     logger.warning(
                         f"Transient ModelHTTPError (attempt {attempt + 1}/{MAX_STREAMING_RETRIES}): "
                         f"status={e.status_code}, body={e.body}"

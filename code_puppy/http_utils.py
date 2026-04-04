@@ -7,6 +7,7 @@ This module provides functions for creating properly configured HTTP clients.
 import asyncio
 import logging
 import os
+import random
 import socket
 import time
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ import httpx
 if TYPE_CHECKING:
     import requests
 from code_puppy.config import get_http2
+from code_puppy.timeout_config import HTTP_READ_TIMEOUT, get_timeout_config
 
 
 @dataclass
@@ -203,10 +205,10 @@ class RetryingAsyncClient(httpx.AsyncClient):
                 # Determine wait time - Cerebras gets special treatment
                 if self._ignore_retry_headers:
                     # Cerebras: 3s base with exponential backoff (3s, 6s, 12s...)
-                    wait_time = 3.0 * (2**attempt)
+                    wait_time = 3.0 * (2**attempt) * (0.75 + random.random() * 0.5)
                 else:
-                    # Default exponential backoff: 1s, 2s, 4s...
-                    wait_time = 1.0 * (2**attempt)
+                    # Default exponential backoff: 1s, 2s, 4s... with jitter
+                    wait_time = 1.0 * (2**attempt) * (0.75 + random.random() * 0.5)
 
                     # Check Retry-After header (only for non-Cerebras)
                     retry_after = response.headers.get("Retry-After")
@@ -238,7 +240,7 @@ class RetryingAsyncClient(httpx.AsyncClient):
 
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.PoolTimeout) as e:
                 last_exception = e
-                wait_time = 1.0 * (2**attempt)
+                wait_time = 1.0 * (2**attempt) * (0.75 + random.random() * 0.5)
                 if attempt < self.max_retries:
                     emit_warning(
                         f"HTTP connection error: {e}. Retrying in {wait_time}s..."
@@ -268,7 +270,7 @@ def get_cert_bundle_path() -> str | None:
 
 
 def create_client(
-    timeout: int = 180,
+    timeout: float = HTTP_READ_TIMEOUT,
     verify: bool | str = None,
     headers: dict[str, str | None] = None,
     retry_status_codes: tuple = (429, 502, 503, 504)) -> httpx.Client:
@@ -289,7 +291,7 @@ def create_client(
 
 
 def create_async_client(
-    timeout: int = 180,
+    timeout: float = HTTP_READ_TIMEOUT,
     verify: bool | str = None,
     headers: dict[str, str | None] = None,
     retry_status_codes: tuple = (429, 502, 503, 504),
@@ -358,7 +360,7 @@ def resolve_env_var_in_header(headers: dict[str, str]) -> dict[str, str]:
 
 
 def create_reopenable_async_client(
-    timeout: int = 180,
+    timeout: float = HTTP_READ_TIMEOUT,
     verify: bool | str = None,
     headers: dict[str, str | None] = None,
     retry_status_codes: tuple = (429, 502, 503, 504),

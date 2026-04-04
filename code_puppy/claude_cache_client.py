@@ -17,6 +17,7 @@ import asyncio
 import base64
 import json
 import logging
+import random
 import time
 from typing import Any, Callable, MutableMapping
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
@@ -425,8 +426,8 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                 # Close response before retrying
                 await response.aclose()
 
-                # Calculate wait time with exponential backoff
-                wait_time = 1.0 * (2**attempt)  # 1s, 2s, 4s, 8s, 16s
+                # Calculate wait time with exponential backoff and jitter
+                wait_time = 1.0 * (2**attempt) * (0.75 + random.random() * 0.5)  # ~0.75x-1.25x of 1s, 2s, 4s, 8s, 16s
 
                 # For 429, respect Retry-After header if present
                 if response.status_code == 429:
@@ -462,7 +463,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                 if attempt >= MAX_RETRIES:
                     raise
 
-                wait_time = 1.0 * (2**attempt)
+                wait_time = 1.0 * (2**attempt) * (0.75 + random.random() * 0.5)
                 wait_time = max(0.5, min(wait_time, 60.0))
 
                 logger.warning(

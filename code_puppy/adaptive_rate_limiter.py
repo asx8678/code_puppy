@@ -512,6 +512,34 @@ async def record_success(model_name: str) -> None:
         await close_circuit(key)
 
 
+def should_fallback_model(
+    model_name: str, threshold: int = 3
+) -> bool:
+    """Return True if *model_name* has hit *threshold* consecutive 429s.
+
+    This is a synchronous check used by the agent to decide whether to
+    switch to the next model in the fallback chain.
+
+    Args:
+        model_name: The model to check.
+        threshold: Number of 429s that triggers fallback (default 3).
+
+    Returns:
+        True if the model has reached the threshold and should be avoided.
+    """
+    key = _normalize_model_name(model_name)
+    if key is None:
+        return False
+
+    state = _state.model_states.get(key)
+    if state is None:
+        return False
+
+    # Fallback when total 429 count meets/exceeds threshold
+    # This ensures we give the model N chances before falling back
+    return state.total_429_count >= threshold
+
+
 # ── Public API ──────────────────────────────────────────────────────────────
 
 

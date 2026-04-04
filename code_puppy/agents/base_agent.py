@@ -85,7 +85,8 @@ from code_puppy.messaging import (
 from code_puppy.messaging.spinner import (
     SpinnerBase,
     update_spinner_context)
-from code_puppy.model_factory import ModelFactory, make_model_settings
+from code_puppy.model_factory import ModelFactory, make_model_settings, is_quota_exception
+from code_puppy.adaptive_rate_limiter import should_fallback_model
 from code_puppy.summarization_agent import run_summarization_sync, SummarizationError
 from code_puppy.token_utils import estimate_token_count as _estimate_token_count
 from code_puppy.tools.agent_tools import _active_subagent_tasks
@@ -114,7 +115,7 @@ class BaseAgent(ABC, AgentPromptMixin):
     def __init__(self):
         self.id = str(uuid.uuid7())  # time-sortable for chronological ordering
         self._message_history: list[Any] = []
-        self._compacted_message_hashes: set[str] = set()  # SHA-256 hex digests
+        self._compacted_message_hashes: set[str] = set()  # xxhash hex digests
         # Incremental hash set maintained alongside _message_history to avoid
         # O(n*p) rehashing in message_history_accumulator on every agent turn.
         self._message_history_hashes: set[int] = set()
@@ -653,15 +654,14 @@ class BaseAgent(ABC, AgentPromptMixin):
         return result
 
     def hash_message(self, message: Any) -> str:
-        """Create a stable hash for a model message that ignores timestamps.
+        """Create a fast hash for message deduplication.
 
-        Uses SHA-256 (truncated to 16 hex chars) instead of Python's built-in
-        hash() which randomizes per-process via PYTHONHASHSEED. This ensures
-        hashes are stable across process restarts, which matters because
-        _compacted_message_hashes is persisted to disk.
+        Uses xxhash.xxh64 (10x faster than SHA-256) if available, else
+        falls back to Python builtin hash(). Both are non-cryptographic and
+        suitable for dedup use cases.
+
+        Returns a 16-char hex string for backward compatibility.
         """
-        import hashlib
-
         role = getattr(message, "role", None)
         instructions = getattr(message, "instructions", None)
         header_bits: list[str] = []
@@ -674,7 +674,13 @@ class BaseAgent(ABC, AgentPromptMixin):
             self._stringify_part(part) for part in getattr(message, "parts", [])
         ]
         canonical = "||".join(header_bits + part_strings)
-        return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+
+        try:
+            import xxhash
+            return xxhash.xxh64(canonical.encode()).hexdigest()[:16]
+        except ImportError:
+            # Fallback: use Python builtin hash (randomized per process)
+            return format(abs(hash(canonical)) & 0xFFFFFFFFFFFFFFFF, "016x")
 
     def stringify_message_part(self, part) -> str:
         """
@@ -2103,9 +2109,26 @@ class BaseAgent(ABC, AgentPromptMixin):
         self,
         requested_model_name: str,
         models_config: dict[str, Any],
-        message_group: str) -> tuple[Any, str]:
-        """Load the requested model, applying a friendly fallback when unavailable."""
+        message_group: str,
+        exclude_models: set[str] | None = None,
+    ) -> tuple[Any, str]:
+        """Load the requested model, applying a friendly fallback when unavailable.
+
+        Args:
+            requested_model_name: The preferred model to load.
+            models_config: Configuration dict of available models.
+            message_group: Message group for logging.
+            exclude_models: Optional set of model names to skip during fallback
+                (e.g., models that have hit rate limits).
+
+        Returns:
+            Tuple of (model_instance, resolved_model_name).
+        """
+        exclude = exclude_models or set()
         try:
+            # If requested model is excluded, skip straight to fallback
+            if requested_model_name.lower() in exclude:
+                raise ValueError(f"Model '{requested_model_name}' excluded due to rate limits")
             model = ModelFactory.get_model(requested_model_name, models_config)
             return model, requested_model_name
         except ValueError as exc:
@@ -2115,20 +2138,24 @@ class BaseAgent(ABC, AgentPromptMixin):
                 if available_models
                 else "no configured models"
             )
-            emit_warning(
-                (
-                    f"Model '{requested_model_name}' not found. "
-                    f"Available models: {available_str}"
-                ),
-                message_group=message_group)
+            if requested_model_name.lower() not in exclude:
+                emit_warning(
+                    (
+                        f"Model '{requested_model_name}' not found. "
+                        f"Available models: {available_str}"
+                    ),
+                    message_group=message_group)
 
             fallback_candidates: list[str] = []
             global_candidate = get_global_model_name()
-            if global_candidate:
+            if global_candidate and global_candidate.lower() not in exclude:
                 fallback_candidates.append(global_candidate)
 
             for candidate in available_models:
-                if candidate not in fallback_candidates:
+                if (
+                    candidate not in fallback_candidates
+                    and candidate.lower() not in exclude
+                ):
                     fallback_candidates.append(candidate)
 
             for candidate in fallback_candidates:
@@ -2702,124 +2729,238 @@ class BaseAgent(ABC, AgentPromptMixin):
             prompt_payload = prompt
 
         async def run_agent_task():
-            try:
-                self.set_message_history(
-                    self.prune_interrupted_tool_calls(self.get_message_history())
-                )
+            nonlocal pydantic_agent
+            # Track models that have hit rate limits for fallback
+            rate_limited_models: set[str] = set()
+            max_fallback_attempts = 3  # Max number of model fallbacks to try
+            
+            for fallback_attempt in range(max_fallback_attempts + 1):
+                retry_needed = False
+                try:
+                    self.set_message_history(
+                        self.prune_interrupted_tool_calls(self.get_message_history())
+                    )
 
-                # DELAYED COMPACTION: Check if we should attempt delayed compaction
-                if self.should_attempt_delayed_compaction():
-                    emit_info(
-                        "🔄 Attempting delayed compaction (tool calls completed)",
-                        message_group="token_context_status")
-                    current_messages = self.get_message_history()
-                    compacted_messages, _ = self.compact_messages(current_messages)
-                    if compacted_messages != current_messages:
-                        self.set_message_history(compacted_messages)
+                    # DELAYED COMPACTION: Check if we should attempt delayed compaction
+                    if self.should_attempt_delayed_compaction():
                         emit_info(
-                            "✅ Delayed compaction completed successfully",
+                            "🔄 Attempting delayed compaction (tool calls completed)",
                             message_group="token_context_status")
+                        current_messages = self.get_message_history()
+                        compacted_messages, _ = self.compact_messages(current_messages)
+                        if compacted_messages != current_messages:
+                            self.set_message_history(compacted_messages)
+                            emit_info(
+                                "✅ Delayed compaction completed successfully",
+                                message_group="token_context_status")
 
-                usage_limits = UsageLimits(request_limit=get_message_limit())
+                    usage_limits = UsageLimits(request_limit=get_message_limit())
 
-                # Build context managers based on configuration, then run once.
-                @contextlib.contextmanager
-                def _mcp_injection():
-                    """Temporarily inject MCP servers into DBOS agent toolsets."""
-                    if (
-                        get_use_dbos()
-                        and hasattr(self, "_mcp_servers")
-                        and self._mcp_servers
-                    ):
-                        original = pydantic_agent._toolsets
-                        pydantic_agent._toolsets = original + self._mcp_servers
-                        try:
+                    # Build context managers based on configuration, then run once.
+                    @contextlib.contextmanager
+                    def _mcp_injection():
+                        """Temporarily inject MCP servers into DBOS agent toolsets."""
+                        if (
+                            get_use_dbos()
+                            and hasattr(self, "_mcp_servers")
+                            and self._mcp_servers
+                        ):
+                            original = pydantic_agent._toolsets
+                            pydantic_agent._toolsets = original + self._mcp_servers
+                            try:
+                                yield
+                            finally:
+                                pydantic_agent._toolsets = original
+                        else:
                             yield
-                        finally:
-                            pydantic_agent._toolsets = original
+
+                    # Set the workflow ID for DBOS context so DBOS and Code Puppy ID match
+                    workflow_ctx = (
+                        SetWorkflowID(group_id)
+                        if get_use_dbos()
+                        else contextlib.nullcontext()
+                    )
+
+                    with _mcp_injection(), workflow_ctx:
+                        result_ = await pydantic_agent.run(
+                            prompt_payload,
+                            message_history=self.get_message_history(),
+                            usage_limits=usage_limits,
+                            event_stream_handler=event_stream_handler,
+                            **kwargs)
+                        return result_
+                except Exception as exc:
+                    # Handle exception groups and quota exceptions
+                    # First, check if this is a quota exception that should trigger fallback
+                    should_try_fallback = False
+                    current_model = self.get_model_name()
+                    
+                    # Check if the exception or any exception in the group is a quota exception
+                    def check_quota_in_group(e):
+                        if isinstance(e, ExceptionGroup):
+                            for sub_exc in e.exceptions:
+                                if check_quota_in_group(sub_exc):
+                                    return True
+                            return False
+                        return is_quota_exception(e)
+                    
+                    if check_quota_in_group(exc) and fallback_attempt < max_fallback_attempts:
+                        if should_fallback_model(current_model):
+                            should_try_fallback = True
+                    
+                    if should_try_fallback:
+                        # Mark current model as rate-limited
+                        rate_limited_models.add(current_model.lower())
+                        
+                        emit_info(
+                            f"⚡ Rate limit hit for model '{current_model}'. "
+                            f"Attempting fallback (attempt {fallback_attempt + 1}/{max_fallback_attempts})...",
+                            group_id=group_id)
+                        
+                        # Try to load a fallback model
+                        try:
+                            models_config = ModelFactory.load_config()
+                            _model, fallback_model_name = self._load_model_with_fallback(
+                                current_model,
+                                models_config,
+                                group_id,
+                                exclude_models=rate_limited_models,
+                            )
+                            
+                            # Update the model name and rebuild the agent
+                            self._model_name = fallback_model_name
+                            pydantic_agent = self.reload_code_generation_agent(group_id)
+                            
+                            emit_info(
+                                f"✅ Switched to fallback model: {fallback_model_name}",
+                                group_id=group_id)
+                            
+                            # Clean up and retry
+                            self.set_message_history(
+                                self.prune_interrupted_tool_calls(self.get_message_history())
+                            )
+                            continue  # Retry with new model
+                        except (ValueError, Exception) as fallback_error:
+                            emit_warning(
+                                f"Failed to load fallback model: {fallback_error}",
+                                group_id=group_id)
+                            # Fall through to normal error handling
+                    
+                    # Normal exception handling for non-quota errors or when fallback failed
+                    # Handle specific exception types
+                    if isinstance(exc, ExceptionGroup):
+                        # Check for specific exception types in the group
+                        has_usage_limit = False
+                        has_mcp_error = False
+                        has_cancelled = False
+                        has_interrupted = False
+                        other_exceptions = []
+                        
+                        def categorize_exceptions(e):
+                            nonlocal has_usage_limit, has_mcp_error, has_cancelled, has_interrupted
+                            if isinstance(e, ExceptionGroup):
+                                for sub_exc in e.exceptions:
+                                    categorize_exceptions(sub_exc)
+                            elif isinstance(e, UsageLimitExceeded):
+                                has_usage_limit = True
+                            elif isinstance(e, mcp.shared.exceptions.McpError):
+                                has_mcp_error = True
+                            elif isinstance(e, asyncio.CancelledError):
+                                has_cancelled = True
+                            elif isinstance(e, InterruptedError):
+                                has_interrupted = True
+                            else:
+                                other_exceptions.append(e)
+                        
+                        categorize_exceptions(exc)
+                        
+                        # Handle specific exception types
+                        if has_usage_limit:
+                            emit_info(f"Usage limit exceeded: {str(exc)}", group_id=group_id)
+                            emit_info(
+                                "The agent has reached its usage limit. You can ask it to continue by saying 'please continue' or similar.",
+                                group_id=group_id)
+                            break
+                        elif has_mcp_error:
+                            emit_info(f"MCP server error: {str(exc)}", group_id=group_id)
+                            emit_info(f"{str(exc.args)}", group_id=group_id)
+                            emit_info(
+                                "Try disabling any malfunctioning MCP servers", group_id=group_id
+                            )
+                            break
+                        elif has_cancelled:
+                            emit_info("Cancelled")
+                            if get_use_dbos():
+                                await DBOS.cancel_workflow_async(group_id)
+                            break
+                        elif has_interrupted:
+                            emit_info(f"Interrupted: {str(exc)}")
+                            if get_use_dbos():
+                                await DBOS.cancel_workflow_async(group_id)
+                            break
+                        elif other_exceptions:
+                            # Handle other exceptions
+                            for _exc in other_exceptions:
+                                emit_info(f"Unexpected error: {str(_exc)}", group_id=group_id)
+                                emit_info(f"{str(_exc.args)}", group_id=group_id)
+                                log_error(
+                                    _exc,
+                                    context=f"Agent run (group_id={group_id})",
+                                    include_traceback=True)
+                                try:
+                                    await on_agent_exception(
+                                        _exc, agent_name=self.name, group_id=group_id
+                                    )
+                                except Exception:
+                                    logger.debug("agent_exception callback failed", exc_info=True)
+                            break
+                        else:
+                            # Re-raise if no specific handling
+                            raise exc
                     else:
-                        yield
-
-                # Set the workflow ID for DBOS context so DBOS and Code Puppy ID match
-                workflow_ctx = (
-                    SetWorkflowID(group_id)
-                    if get_use_dbos()
-                    else contextlib.nullcontext()
-                )
-
-                with _mcp_injection(), workflow_ctx:
-                    result_ = await pydantic_agent.run(
-                        prompt_payload,
-                        message_history=self.get_message_history(),
-                        usage_limits=usage_limits,
-                        event_stream_handler=event_stream_handler,
-                        **kwargs)
-                    return result_
-            except* UsageLimitExceeded as ule:
-                emit_info(f"Usage limit exceeded: {str(ule)}", group_id=group_id)
-                emit_info(
-                    "The agent has reached its usage limit. You can ask it to continue by saying 'please continue' or similar.",
-                    group_id=group_id)
-            except* mcp.shared.exceptions.McpError as mcp_error:
-                emit_info(f"MCP server error: {str(mcp_error)}", group_id=group_id)
-                emit_info(f"{str(mcp_error)}", group_id=group_id)
-                emit_info(
-                    "Try disabling any malfunctioning MCP servers", group_id=group_id
-                )
-            except* asyncio.exceptions.CancelledError:
-                emit_info("Cancelled")
-                if get_use_dbos():
-                    await DBOS.cancel_workflow_async(group_id)
-            except* InterruptedError as ie:
-                emit_info(f"Interrupted: {str(ie)}")
-                if get_use_dbos():
-                    await DBOS.cancel_workflow_async(group_id)
-            except* Exception as other_error:
-                # Filter out CancelledError and UsageLimitExceeded from the exception group - let it propagate
-                remaining_exceptions = []
-
-                def collect_non_cancelled_exceptions(exc):
-                    if isinstance(exc, ExceptionGroup):
-                        for sub_exc in exc.exceptions:
-                            collect_non_cancelled_exceptions(sub_exc)
-                    elif not isinstance(
-                        exc, (asyncio.CancelledError, UsageLimitExceeded)
-                    ):
-                        remaining_exceptions.append(exc)
-                        emit_info(f"Unexpected error: {str(exc)}", group_id=group_id)
-                        emit_info(f"{str(exc.args)}", group_id=group_id)
-                        # Log to file for debugging
-                        log_error(
-                            exc,
-                            context=f"Agent run (group_id={group_id})",
-                            include_traceback=True)
-
-                collect_non_cancelled_exceptions(other_error)
-
-                # Fire agent_exception callback for each non-cancelled exception
-                for _exc in remaining_exceptions:
-                    try:
-                        await on_agent_exception(
-                            _exc, agent_name=self.name, group_id=group_id
-                        )
-                    except Exception:
-                        logger.debug("agent_exception callback failed", exc_info=True)
-
-                # If there are CancelledError exceptions in the group, re-raise them
-                cancelled_exceptions = []
-
-                def collect_cancelled_exceptions(exc):
-                    if isinstance(exc, ExceptionGroup):
-                        for sub_exc in exc.exceptions:
-                            collect_cancelled_exceptions(sub_exc)
-                    elif isinstance(exc, asyncio.CancelledError):
-                        cancelled_exceptions.append(exc)
-
-                collect_cancelled_exceptions(other_error)
-            finally:
-                self.set_message_history(
-                    self.prune_interrupted_tool_calls(self.get_message_history())
-                )
+                        # Handle non-exception-group errors
+                        if isinstance(exc, UsageLimitExceeded):
+                            emit_info(f"Usage limit exceeded: {str(exc)}", group_id=group_id)
+                            emit_info(
+                                "The agent has reached its usage limit. You can ask it to continue by saying 'please continue' or similar.",
+                                group_id=group_id)
+                            break
+                        elif isinstance(exc, mcp.shared.exceptions.McpError):
+                            emit_info(f"MCP server error: {str(exc)}", group_id=group_id)
+                            emit_info(f"{str(exc.args)}", group_id=group_id)
+                            emit_info(
+                                "Try disabling any malfunctioning MCP servers", group_id=group_id
+                            )
+                            break
+                        elif isinstance(exc, asyncio.CancelledError):
+                            emit_info("Cancelled")
+                            if get_use_dbos():
+                                await DBOS.cancel_workflow_async(group_id)
+                            break
+                        elif isinstance(exc, InterruptedError):
+                            emit_info(f"Interrupted: {str(exc)}")
+                            if get_use_dbos():
+                                await DBOS.cancel_workflow_async(group_id)
+                            break
+                        else:
+                            # Unexpected error
+                            emit_info(f"Unexpected error: {str(exc)}", group_id=group_id)
+                            emit_info(f"{str(exc.args)}", group_id=group_id)
+                            log_error(
+                                exc,
+                                context=f"Agent run (group_id={group_id})",
+                                include_traceback=True)
+                            try:
+                                await on_agent_exception(
+                                    exc, agent_name=self.name, group_id=group_id
+                                )
+                            except Exception:
+                                logger.debug("agent_exception callback failed", exc_info=True)
+                            break
+                finally:
+                    self.set_message_history(
+                        self.prune_interrupted_tool_calls(self.get_message_history())
+                    )
 
         # Create the task FIRST
         agent_task = asyncio.create_task(run_agent_task())
