@@ -234,7 +234,7 @@ class TestPreparePromptForOpenAIReasoningModels:
     """Tests for prepare_prompt_for_model with OpenAI reasoning models."""
 
     def test_gpt5_preserves_instructions(self):
-        """GPT-5 models should preserve instructions for token counting."""
+        """GPT-5 models should preserve instructions."""
         result = prepare_prompt_for_model(
             "gpt-5", "You are a helpful assistant.", "Hello world"
         )
@@ -242,32 +242,30 @@ class TestPreparePromptForOpenAIReasoningModels:
         assert result.instructions == "You are a helpful assistant."
         assert result.user_prompt == "Hello world"
         assert result.is_claude_code is False
-        assert result.use_developer_role is True
 
     def test_o1_preserves_instructions(self):
-        """O1 models should preserve instructions for token counting."""
+        """O1 models should preserve instructions."""
         result = prepare_prompt_for_model(
             "o1-mini", "System prompt here.", "User query"
         )
 
         assert result.instructions == "System prompt here."
         assert result.user_prompt == "User query"
-        assert result.use_developer_role is True
 
     def test_o3_preserves_instructions(self):
-        """O3 models should preserve instructions for token counting."""
+        """O3 models should preserve instructions."""
         result = prepare_prompt_for_model(
             "o3", "System prompt here.", "User query"
         )
 
         assert result.instructions == "System prompt here."
         assert result.user_prompt == "User query"
-        assert result.use_developer_role is True
 
-    def test_prepared_prompt_has_developer_role_flag(self):
-        """PreparedPrompt should have use_developer_role=True for reasoning models."""
+    def test_prepared_prompt_for_reasoning_models(self):
+        """PreparedPrompt should be returned for reasoning models."""
         result = prepare_prompt_for_model("gpt-5", "System", "User")
 
         assert isinstance(result, PreparedPrompt)
-        assert hasattr(result, "use_developer_role")
-        assert result.use_developer_role is True
+        assert hasattr(result, "instructions")
+        assert hasattr(result, "user_prompt")
+        assert hasattr(result, "is_claude_code")

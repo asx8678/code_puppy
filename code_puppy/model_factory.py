@@ -338,17 +338,24 @@ def _build_gemini(model_name: str, model_config: dict, config: dict) -> Any:
 
 
 def _build_openai(model_name: str, model_config: dict, config: dict) -> Any:
-    from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
+    from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel, OpenAIModelProfile
     from pydantic_ai.providers.openai import OpenAIProvider
+    from code_puppy.model_utils import is_openai_reasoning_model
 
     api_key = _require_api_key("OPENAI_API_KEY", model_config)
     if not api_key:
         return None
     provider = OpenAIProvider(api_key=api_key)
+
+    # For reasoning models (o1, o3, o4, gpt-5), set the developer role via profile
+    profile = None
+    if is_openai_reasoning_model(model_config["name"]):
+        profile = OpenAIModelProfile(openai_system_prompt_role="developer")
+
     if "codex" in model_name:
-        model = OpenAIResponsesModel(model_name=model_config["name"], provider=provider)
+        model = OpenAIResponsesModel(model_name=model_config["name"], provider=provider, profile=profile)
     else:
-        model = OpenAIChatModel(model_name=model_config["name"], provider=provider)
+        model = OpenAIChatModel(model_name=model_config["name"], provider=provider, profile=profile)
     model.provider = provider
     return model
 
