@@ -20,10 +20,66 @@ _OP_EMOJIS = {
     "read_files": "📄",
 }
 
+# Operation type singular/plural forms for display
+_OP_DISPLAY_NAMES = {
+    "list_files": "list_files",
+    "grep": "grep",
+    "read_files": "read_files",
+}
+
 
 def _get_op_emoji(op_type: str) -> str:
     """Get emoji for operation type."""
     return _OP_EMOJIS.get(op_type, "⚡")
+
+
+def _get_op_display_name(op_type: str, count: int = 1) -> str:
+    """Get display name for operation type.
+
+    Args:
+        op_type: The operation type
+        count: Number of operations (for pluralization)
+
+    Returns:
+        Display name for the operation type
+    """
+    return _OP_DISPLAY_NAMES.get(op_type, op_type)
+
+
+def generate_plan_preview(plan_data: dict) -> str:
+    """Generate a formatted plan preview string.
+
+    Creates a concise summary showing the operation breakdown by type,
+    total count, and any validation warnings.
+
+    Args:
+        plan_data: The plan dictionary (parsed from plan_json)
+
+    Returns:
+        Formatted preview string like:
+        "📋 Plan preview: 1× list_files, 2× grep, 1× read_files (4 ops)"
+    """
+    operations = plan_data.get("operations", [])
+    num_ops = len(operations)
+
+    if num_ops == 0:
+        return "📋 Plan preview: no operations"
+
+    # Count operations by type
+    op_counts: dict[str, int] = {}
+    for op in operations:
+        op_type = op.get("type", "unknown")
+        op_counts[op_type] = op_counts.get(op_type, 0) + 1
+
+    # Build the operation breakdown
+    breakdown_parts = []
+    for op_type, count in sorted(op_counts.items()):
+        display_name = _get_op_display_name(op_type, count)
+        breakdown_parts.append(f"{count}× {display_name}")
+
+    breakdown = ", ".join(breakdown_parts) if breakdown_parts else "no operations"
+
+    return f"📋 Plan preview: {breakdown} ({num_ops} ops)"
 
 
 def _format_brief_args(op_type: str, args: dict) -> str:
@@ -106,6 +162,12 @@ def _on_pre_tool_call(tool_name: str, tool_args: dict, context: Any = None) -> N
 
         # Emit startup banner
         emit_info(f"🚀 Turbo Plan '{plan_id}' starting — {num_ops} operations")
+
+        # Emit plan preview (new feature!)
+        plan_preview = generate_plan_preview(plan_data)
+        emit_info(f"   {plan_preview}")
+
+        # Emit detailed type summary
         emit_info(f"   {summary}")
 
     except json.JSONDecodeError as e:
