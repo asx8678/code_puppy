@@ -205,13 +205,43 @@ class TestFindOrphans:
     def test_known_extensions_not_flagged(self, tmp_path: Path):
         """Test that files with known extensions are NOT flagged."""
         json_file = tmp_path / "data.json"
-        sqlite_file = tmp_path / "data.sqlite"
         json_file.write_text('{"key": "value"}')
-        sqlite_file.write_bytes(b"sqlite data")
 
         orphans = _find_orphans(tmp_path)
         assert json_file not in orphans
-        assert sqlite_file not in orphans
+
+    def test_known_db_files_not_flagged(self, tmp_path: Path):
+        """Test that legitimate DB files are NOT flagged as orphans."""
+        # These are the known legitimate DB files
+        db_file = tmp_path / "dbos_store.sqlite"
+        db_shm = tmp_path / "dbos_store.sqlite-shm"
+        db_wal = tmp_path / "dbos_store.sqlite-wal"
+        db_file.write_bytes(b"sqlite data")
+        db_shm.write_bytes(b"shm data")
+        db_wal.write_bytes(b"wal data")
+
+        orphans = _find_orphans(tmp_path)
+        assert db_file not in orphans
+        assert db_shm not in orphans
+        assert db_wal not in orphans
+
+    def test_unknown_db_files_flagged(self, tmp_path: Path):
+        """Test that unknown/unreferenced DB files ARE flagged as orphans."""
+        # Generic DB files not in the known list should be orphans
+        sqlite_file = tmp_path / "data.sqlite"
+        db_file = tmp_path / "code_puppy_dev.db"
+        db_shm = tmp_path / "code_puppy_dev.db-shm"
+        db_wal = tmp_path / "code_puppy_dev.db-wal"
+        sqlite_file.write_bytes(b"sqlite data")
+        db_file.write_bytes(b"db data")
+        db_shm.write_bytes(b"shm data")
+        db_wal.write_bytes(b"wal data")
+
+        orphans = _find_orphans(tmp_path)
+        assert sqlite_file in orphans
+        assert db_file in orphans
+        assert db_shm in orphans
+        assert db_wal in orphans
 
     def test_empty_directory(self, tmp_path: Path):
         """Test that empty directories return empty orphan list."""

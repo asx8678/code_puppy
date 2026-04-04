@@ -26,6 +26,16 @@ _KNOWN_EXTENSIONS: set[str] = {
     ".css",
 }
 
+# Known legitimate database files (anything else is orphaned)
+_KNOWN_DB_FILES: set[str] = {
+    "dbos_store.sqlite",
+    "dbos_store.sqlite-shm",
+    "dbos_store.sqlite-wal",
+}
+
+# Database extensions that require reference checking
+_DB_EXTENSIONS: set[str] = {".db", ".sqlite", ".db-shm", ".db-wal", ".sqlite-shm", ".sqlite-wal"}
+
 # Known bad hidden file patterns (specific patterns, not all dotfiles)
 _BAD_HIDDEN_PATTERNS: tuple[str, ...] = (
     ".DS_Store",
@@ -90,6 +100,12 @@ def _find_orphans(
                 for pattern in _BAD_HIDDEN_PATTERNS
             ):
                 orphans.append(item)
+                continue
+
+            # Database files not in the known list are orphaned
+            if ext in _DB_EXTENSIONS or name in _KNOWN_DB_FILES:
+                if name not in _KNOWN_DB_FILES:
+                    orphans.append(item)
                 continue
 
             # Unknown extensions
