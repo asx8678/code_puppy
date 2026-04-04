@@ -5,6 +5,11 @@ It consumes structured messages from the MessageBus and renders them using Rich.
 
 The renderer is responsible for ALL presentation decisions - the messages contain
 only structured data with no formatting hints.
+
+Tiered Banner System:
+- Tier 1: High-importance banners with colored box (agent response, reasoning, agent invocations)
+- Tier 2: Medium-importance operational tools with colored text, no box (shell, file ops, grep)
+- Tier 3: Low-importance system messages with dimmed/minimal styling (tool results, token/session info)
 """
 
 from typing import Protocol, runtime_checkable
@@ -96,6 +101,35 @@ DIFF_STYLES = {
     "context": "dim",
 }
 
+# =============================================================================
+# Tiered Banner System
+# =============================================================================
+
+# Banner tier classification for visual noise reduction
+BANNER_TIERS: dict[str, int] = {
+    # Tier 1: High-importance - colored box (keep existing _format_banner style)
+    "agent_response": 1,
+    "agent_reasoning": 1,
+    "invoke_agent": 1,
+    "subagent_response": 1,
+    # Tier 2: Medium-importance - colored text, no box
+    "shell_command": 2,
+    "read_file": 2,
+    "grep": 2,
+    "directory_listing": 2,
+    "write_file": 2,
+    "edit_file": 2,
+    "create_file": 2,
+    "delete_file": 2,
+    "replace_in_file": 2,
+    # Tier 3: Low-importance - dimmed/minimal
+    "tool_result": 3,
+    "token_info": 3,
+    "session_info": 3,
+    "system_info": 3,
+    "universal_constructor": 3,
+}
+
 
 # =============================================================================
 # Rich Console Renderer
@@ -149,7 +183,47 @@ class RichConsoleRenderer:
         return get_banner_color(banner_name)
 
     def _format_banner(self, banner_name: str, text: str) -> str:
-        """Format a banner with its configured color.
+        """Format a banner with its configured color (Tier 1 - colored box).
+
+        Args:
+            banner_name: The banner identifier
+            text: The banner text
+
+        Returns:
+            Rich markup string for the banner with full box styling
+        """
+        color = self._get_banner_color(banner_name)
+        return f"[bold white on {color}] {text} [/bold white on {color}]"
+
+    def _format_banner_tier2(self, banner_name: str, text: str) -> str:
+        """Format a banner with colored text, no box (Tier 2).
+
+        Args:
+            banner_name: The banner identifier
+            text: The banner text
+
+        Returns:
+            Rich markup string with colored text but no box border
+        """
+        color = self._get_banner_color(banner_name)
+        return f"[bold {color}]{text}[/bold {color}]"
+
+    def _format_banner_tier3(self, banner_name: str, text: str) -> str:
+        """Format a banner with dimmed/minimal styling (Tier 3).
+
+        Args:
+            banner_name: The banner identifier
+            text: The banner text
+
+        Returns:
+            Rich markup string with dimmed/minimal styling
+        """
+        return f"[dim]{text}[/dim]"
+
+    def _format_banner_by_tier(self, banner_name: str, text: str) -> str:
+        """Format a banner according to its tier classification.
+
+        Routes the banner to the appropriate formatter based on BANNER_TIERS.
 
         Args:
             banner_name: The banner identifier
@@ -158,8 +232,13 @@ class RichConsoleRenderer:
         Returns:
             Rich markup string for the banner
         """
-        color = self._get_banner_color(banner_name)
-        return f"[bold white on {color}] {text} [/bold white on {color}]"
+        tier = BANNER_TIERS.get(banner_name, 1)  # Default to tier 1
+        if tier == 1:
+            return self._format_banner(banner_name, text)
+        elif tier == 2:
+            return self._format_banner_tier2(banner_name, text)
+        else:  # tier == 3
+            return self._format_banner_tier3(banner_name, text)
 
     def _should_suppress_subagent_output(self) -> bool:
         """Check if sub-agent output should be suppressed.
@@ -382,7 +461,7 @@ class RichConsoleRenderer:
 
         # Header on single line
         rec_flag = f"(recursive={msg.recursive})"
-        banner = self._format_banner("directory_listing", "DIRECTORY LISTING")
+        banner = self._format_banner_by_tier("directory_listing", "DIRECTORY LISTING")
         self._console.print(
             f"\n{banner} "
             f"📂 [bold cyan]{msg.directory}[/bold cyan] [dim]{rec_flag}[/dim]\n"
@@ -511,7 +590,7 @@ class RichConsoleRenderer:
             line_info = f" [dim](lines {msg.start_line}-{end_line})[/dim]"
 
         # Just print the header - content is for LLM only
-        banner = self._format_banner("read_file", "READ FILE")
+        banner = self._format_banner_by_tier("read_file", "READ FILE")
         self._console.print(
             f"\n{banner} 📂 [bold cyan]{msg.path}[/bold cyan]{line_info}"
         )
@@ -525,7 +604,7 @@ class RichConsoleRenderer:
         import re
 
         # Header
-        banner = self._format_banner("grep", "GREP")
+        banner = self._format_banner_by_tier("grep", "GREP")
         self._console.print(
             f"\n{banner} 📂 [dim]{msg.directory} for '{msg.search_term}'[/dim]"
         )
@@ -623,11 +702,11 @@ class RichConsoleRenderer:
 
         # Choose banner based on operation type
         if msg.operation == "create":
-            banner = self._format_banner("create_file", "CREATE FILE")
+            banner = self._format_banner_by_tier("create_file", "CREATE FILE")
         elif msg.operation == "delete":
-            banner = self._format_banner("delete_file", "DELETE FILE")
+            banner = self._format_banner_by_tier("delete_file", "DELETE FILE")
         else:
-            banner = self._format_banner("replace_in_file", "EDIT FILE")
+            banner = self._format_banner_by_tier("replace_in_file", "EDIT FILE")
         self._console.print(
             f"\n{banner} "
             f"{icon} [{op_color}]{msg.operation.upper()}[/{op_color}] "
@@ -671,7 +750,7 @@ class RichConsoleRenderer:
         # Escape command to prevent Rich markup injection
         safe_command = escape_rich_markup(msg.command)
         # Header showing command is starting
-        banner = self._format_banner("shell_command", "SHELL COMMAND")
+        banner = self._format_banner_by_tier("shell_command", "SHELL COMMAND")
 
         # Add background indicator if running in background mode
         if msg.background:
@@ -724,8 +803,8 @@ class RichConsoleRenderer:
 
     def _render_agent_reasoning(self, msg: AgentReasoningMessage) -> None:
         """Render agent reasoning with dim styling to reduce scroll fatigue."""
-        # Use tier 2 banner (shorter, less prominent)
-        banner = self._format_banner("agent_reasoning", "THINKING")
+        # Tier 1 banner - full colored box for high-importance
+        banner = self._format_banner_by_tier("agent_reasoning", "AGENT REASONING")
         self._console.print(f"\n{banner}")
 
         # Render reasoning in dim style with left pipe border
@@ -746,8 +825,8 @@ class RichConsoleRenderer:
 
     def _render_agent_response(self, msg: AgentResponseMessage) -> None:
         """Render agent response with header and markdown formatting."""
-        # Header
-        banner = self._format_banner("agent_response", "AGENT RESPONSE")
+        # Tier 1 banner - full colored box for high-importance
+        banner = self._format_banner_by_tier("agent_response", "AGENT RESPONSE")
         self._console.print(f"\n{banner}\n")
 
         # Content (markdown or plain)
@@ -769,7 +848,8 @@ class RichConsoleRenderer:
             if msg.is_new_session
             else f"Continuing ({msg.message_count} messages)"
         )
-        banner = self._format_banner("invoke_agent", "🤖 INVOKE AGENT")
+        # Tier 1 banner - full colored box for high-importance
+        banner = self._format_banner_by_tier("invoke_agent", "🤖 INVOKE AGENT")
         self._console.print(
             f"\n{banner} "
             f"[bold cyan]{msg.agent_name}[/bold cyan] "
@@ -789,8 +869,8 @@ class RichConsoleRenderer:
 
     def _render_subagent_response(self, msg: SubAgentResponseMessage) -> None:
         """Render sub-agent response with markdown formatting."""
-        # Response header
-        banner = self._format_banner("subagent_response", "✓ AGENT RESPONSE")
+        # Response header - Tier 1 banner
+        banner = self._format_banner_by_tier("subagent_response", "✓ AGENT RESPONSE")
         self._console.print(f"\n{banner} [bold cyan]{msg.agent_name}[/bold cyan]")
 
         # Render response as markdown
@@ -809,8 +889,8 @@ class RichConsoleRenderer:
         if self._should_suppress_subagent_output():
             return
 
-        # Format banner
-        banner = self._format_banner("universal_constructor", "UNIVERSAL CONSTRUCTOR")
+        # Tier 3 banner - dimmed/minimal for low-importance operational noise
+        banner = self._format_banner_by_tier("universal_constructor", "UNIVERSAL CONSTRUCTOR")
 
         # Build the header line with action and optional tool name
         # Escape user-controlled strings to prevent Rich markup injection
