@@ -1,3 +1,4 @@
+
 # agent_tools.py
 import asyncio
 import itertools
@@ -35,6 +36,7 @@ from code_puppy.messaging import (
     get_session_context,
     set_session_context,
 )
+from code_puppy.messaging.subagent_console import SubAgentConsoleManager
 from code_puppy.persistence import atomic_write_msgpack
 from code_puppy.tools.common import generate_group_id
 from code_puppy.tools.subagent_context import subagent_context
@@ -76,6 +78,59 @@ _RETRYABLE_STREAMING_EXCEPTIONS = (
     httpx.ReadTimeout,
     httpcore.RemoteProtocolError,
 )
+
+
+def _format_subagent_completion_message(
+    agent_name: str, agent_state: "AgentState | None"
+) -> str:
+    """Format an enhanced completion message with metrics.
+
+    Args:
+        agent_name: Name of the agent that completed
+        agent_state: The AgentState with metrics, or None if unavailable
+
+    Returns:
+        Formatted completion message string
+    """
+    if agent_state is None:
+        return f"✓ {agent_name} completed successfully"
+
+    # Calculate duration
+    duration_sec = agent_state.elapsed_seconds()
+
+    # Get cost from cost tracker plugin (if available)
+    cost_str = ""
+    try:
+        from code_puppy.plugins.cost_tracker.register_callbacks import (
+            get_cost_summary,
+        )
+
+        cost_summary = get_cost_summary()
+        session_cost = cost_summary.get("session_cost_usd", 0.0)
+        if session_cost > 0:
+            cost_str = f"${session_cost:.2f}"
+    except Exception:
+        pass  # Cost tracker not available
+
+    # Format token count (compact: 12,430 -> 12.4k)
+    tokens = agent_state.token_count
+    if tokens >= 1000:
+        token_str = f"{tokens/1000:.1f}k tok"
+    else:
+        token_str = f"{tokens} tok"
+
+    # Build the enhanced summary line
+    summary_parts = [
+        f"✓ {agent_name} completed",
+        f"{agent_state.model_name}",
+        f"{duration_sec:.1f}s",
+        f"{agent_state.tool_call_count} tools",
+        token_str,
+    ]
+    if cost_str:
+        summary_parts.append(cost_str)
+
+    return " · ".join(summary_parts)
 
 
 def _is_transient_model_error(error: ModelHTTPError) -> bool:
@@ -497,6 +552,9 @@ def register_invoke_agent(agent):
         previous_session_id = get_session_context()
         set_session_context(session_id)
 
+        # Initialize console manager reference (defined here for exception handler access)
+        console_manager = None
+
         # Set terminal session for browser-based terminal tools
         # This uses contextvars which properly propagate through async tasks
         from code_puppy.tools.browser.terminal_tools import (
@@ -652,6 +710,10 @@ def register_invoke_agent(agent):
             # This ensures all sub-agent output goes through the aggregated dashboard
             stream_handler = partial(subagent_stream_handler, session_id=session_id)
 
+            # Register with SubAgentConsoleManager for tracking and metrics
+            console_manager = SubAgentConsoleManager.get_instance()
+            console_manager.register_agent(session_id, agent_name, model_name)
+
             # Wrap the agent run in subagent context for tracking
             with subagent_context(agent_name):
                 if get_use_dbos():
@@ -731,16 +793,28 @@ def register_invoke_agent(agent):
                 )
             )
 
-            # Emit clean completion summary
-            emit_success(
-                f"✓ {agent_name} completed successfully", message_group=group_id
-            )
+            # Get AgentState BEFORE unregistering (it gets deleted on unregister)
+            agent_state = console_manager.get_agent_state(session_id)
+
+            # Build enhanced completion summary with metrics
+            completion_msg = _format_subagent_completion_message(agent_name, agent_state)
+            emit_success(completion_msg, message_group=group_id)
+
+            # Unregister from console manager
+            console_manager.unregister_agent(session_id, final_status="completed")
 
             return AgentInvokeOutput(
                 response=response, agent_name=agent_name, session_id=session_id
             )
 
         except Exception as e:
+            # Unregister from console manager on failure
+            if console_manager is not None:
+                try:
+                    console_manager.unregister_agent(session_id, final_status="error")
+                except Exception:
+                    pass  # Ignore unregister errors during exception handling
+
             # Emit clean failure summary
             emit_error(f"✗ {agent_name} failed: {str(e)}", message_group=group_id)
 
