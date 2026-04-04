@@ -14,7 +14,7 @@ from code_puppy.plugins.tool_result_truncator.register_callbacks import (
     _on_post_tool_call,
     TRUNCATED_TOOLS,
 )
-from code_puppy.token_utils import estimate_token_count
+
 
 
 class TestExtractResultText:

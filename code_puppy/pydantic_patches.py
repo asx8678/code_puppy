@@ -314,7 +314,6 @@ def patch_tool_call_callbacks() -> None:
                     wrap_validation_errors=wrap_validation_errors,
                     approved=approved,
                     metadata=metadata)
-                return result
             except Exception as exc:
                 error = exc
                 raise
@@ -324,13 +323,24 @@ def patch_tool_call_callbacks() -> None:
                 try:
                     from code_puppy import callbacks
                     from code_puppy.run_context import get_current_run_context
+
                     # Get current run context for tracing
                     current_ctx = get_current_run_context()
-                    await callbacks.on_post_tool_call(
+
+                    # Trigger post_tool_call callbacks and apply transformations
+                    callback_results = await callbacks.on_post_tool_call(
                         tool_name, tool_args, final_result, duration_ms, current_ctx
                     )
+
+                    # Apply the first non-None callback result as the transformed result
+                    for cb_result in callback_results:
+                        if cb_result is not None:
+                            result = cb_result
+                            break
                 except Exception:
                     pass  # never block tool execution
+
+            return result
 
         ToolManager.get_tool_def = _patched_get_tool_def
         ToolManager.handle_call = _patched_handle_call
