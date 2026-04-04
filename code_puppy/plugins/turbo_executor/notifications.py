@@ -214,6 +214,11 @@ def _on_post_tool_call(
                 f"✅ Turbo Plan completed — {success_count} success, {error_count} errors in {total_duration:.0f}ms"
             )
 
+            # Emit accomplishment summary
+            summary = generate_accomplishment_summary(result)
+            if summary:
+                emit_info(summary)
+
             # Emit warnings for each failed operation
             if error_count > 0:
                 op_results = result.get("operation_results", [])
@@ -237,6 +242,92 @@ def _on_post_tool_call(
     except Exception as e:
         logger.warning(f"Error in turbo_execute post_tool_call notification: {e}")
         # Fail silently - don't break the actual tool execution
+
+
+def generate_accomplishment_summary(result_data: dict) -> str:
+    """Generate a formatted accomplishment summary from turbo execution results.
+
+    Groups operation results by type and summarizes what was accomplished:
+    - list_files: count of items listed
+    - grep: total matches and unique files matched
+    - read_files: total files and successful reads
+
+    Args:
+        result_data: The result dictionary containing operation_results and total_duration_ms
+
+    Returns:
+        Formatted summary string, or empty string if no data to summarize
+    """
+    if not isinstance(result_data, dict):
+        return ""
+
+    operation_results = result_data.get("operation_results", [])
+    if not operation_results:
+        return ""
+
+    total_duration = result_data.get("total_duration_ms", 0.0)
+
+    # Counters for each operation type
+    list_files_count = 0
+    grep_total_matches = 0
+    grep_unique_files: set[str] = set()
+    read_files_total = 0
+    read_files_successful = 0
+
+    for op in operation_results:
+        if not isinstance(op, dict):
+            continue
+
+        op_type = op.get("type", "")
+        op_status = op.get("status", "")
+        op_data = op.get("data", {}) or {}
+
+        # Skip failed operations in summary counts
+        if op_status != "success":
+            continue
+
+        if op_type == "list_files":
+            content = op_data.get("content", "")
+            if isinstance(content, list):
+                list_files_count += len(content)
+            elif isinstance(content, str):
+                # Count non-empty lines
+                lines = [line for line in content.split("\n") if line.strip()]
+                list_files_count += len(lines)
+
+        elif op_type == "grep":
+            matches = op_data.get("matches", [])
+            grep_total_matches += op_data.get("total_matches", len(matches))
+
+            # Count unique files from matches
+            for match in matches:
+                if isinstance(match, dict):
+                    file_path = match.get("file", "")
+                    if file_path:
+                        grep_unique_files.add(file_path)
+
+        elif op_type == "read_files":
+            read_files_total += op_data.get("total_files", 0)
+            read_files_successful += op_data.get("successful_reads", 0)
+
+    # Build summary lines
+    summary_parts: list[str] = []
+
+    if list_files_count > 0:
+        summary_parts.append(f"   📂 Listed {list_files_count} files")
+
+    if grep_total_matches > 0 or grep_unique_files:
+        summary_parts.append(f"   🔍 Found {grep_total_matches} matches across {len(grep_unique_files)} files")
+
+    if read_files_total > 0 or read_files_successful > 0:
+        summary_parts.append(f"   📄 Read {read_files_successful} files")
+
+    if not summary_parts:
+        return ""
+
+    summary_parts.append(f"   Total: {total_duration:.0f}ms")
+
+    return "📊 Turbo Accomplishments:\n" + "\n".join(summary_parts)
 
 
 def _format_progress_line(
