@@ -285,14 +285,24 @@ def _on_pre_tool_call(
 
     Hooks into pre_tool_call to enforce hard stop at 100% budget.
     """
-    # Only block API-related calls
+    # Whitelist free local operations that don't require budget checks
     if tool_name in (
         "create_file",
         "read_file",
         "replace_in_file",
         "delete_file",
+        "delete_snippet",
+        "grep",
+        "list_files",
+        "cp_list_files",
+        "cp_read_file",
+        "cp_grep",
+        "turbo_execute",
+        "agent_share_your_reasoning",
+        "list_or_search_skills",
+        "activate_skill",
     ):
-        return None  # Don't block file operations
+        return None  # Don't block free local operations
 
     with _cost_lock:
         daily_budget = _get_daily_budget()
