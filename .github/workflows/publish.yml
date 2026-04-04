@@ -1,13 +1,19 @@
-# Publishes your package to PyPI using Astral/uv for builds.
-# Set PYPI_API_TOKEN in repo secrets.
-
-permissions:
-  contents: write # Allows writing to the repository
+# Publishes the package to PyPI when a GitHub Release is published.
+# Also supports manual trigger via workflow_dispatch.
+#
+# Prerequisites:
+#   Configure Trusted Publishing on PyPI for this repo:
+#   https://pypi.org/manage/project/codepp/settings/publishing/
 
 name: Build and Publish to PyPI
 
+permissions:
+  contents: write
+
 on:
-  workflow_dispatch: # only runs when manually triggered
+  release:
+    types: [published]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -33,33 +39,10 @@ jobs:
         run: uv venv
 
       - name: Install dependencies
-        run: uv pip install -e .
+        run: uv pip install -e ".[dev]" || uv pip install -e .
 
       - name: Install pexpect for integration tests
         run: uv pip install pexpect>=4.9.0
-
-
-
-      - name: Debug environment variables
-        env:
-          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY || 'fake-key-for-ci-testing' }}
-          CONTEXT7_API_KEY: ${{ secrets.CONTEXT7_API_KEY || 'fake-key-for-ci-testing' }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'fake-key-for-ci-testing' }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || 'fake-key-for-ci-testing' }}
-          SYN_API_KEY: ${{ secrets.SYN_API_KEY || 'fake-key-for-ci-testing' }}
-        run: |
-          echo "=== DEBUG: Environment Variables ==="
-          echo "CEREBRAS_API_KEY is set: ${{ secrets.CEREBRAS_API_KEY != '' }}"
-          echo "CONTEXT7_API_KEY is set: ${{ secrets.CONTEXT7_API_KEY != '' }}"
-          echo "OPENAI_API_KEY is set: ${{ secrets.OPENAI_API_KEY != '' }}"
-          echo "ANTHROPIC_API_KEY is set: ${{ secrets.ANTHROPIC_API_KEY != '' }}"
-          echo "SYN_API_KEY is set: ${{ secrets.SYN_API_KEY != '' }}"
-          echo "CEREBRAS_API_KEY length: ${#CEREBRAS_API_KEY}"
-          echo "CONTEXT7_API_KEY length: ${#CONTEXT7_API_KEY}"
-          echo "OPENAI_API_KEY length: ${#OPENAI_API_KEY}"
-          echo "ANTHROPIC_API_KEY length: ${#ANTHROPIC_API_KEY}"
-          echo "SYN_API_KEY length: ${#SYN_API_KEY}"
-          echo "=== END DEBUG ==="
 
       - name: Run tests
         env:
@@ -71,8 +54,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || 'fake-key-for-ci-testing' }}
           SYN_API_KEY: ${{ secrets.SYN_API_KEY || 'fake-key-for-ci-testing' }}
         run: |
-          echo "Running tests (including integration tests) on ${{ runner.os }} with Python ${{ matrix.python-version }}..."
-          echo "Required environment variables are set (using CI fallbacks if secrets not available)"
+          echo "Running tests on ${{ runner.os }} with Python ${{ matrix.python-version }}..."
           uv run pytest tests/ -v --cov=code_puppy --cov-report=term-missing
 
   build-publish:
@@ -80,12 +62,12 @@ jobs:
     needs: test
     permissions:
       contents: write
-      id-token: write # Required for OIDC trusted publishing
+      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Setup Python 3.13
+      - name: Setup Python 3.14
         uses: actions/setup-python@v6
         with:
           python-version: '3.14'
@@ -96,7 +78,16 @@ jobs:
       - name: Setup uv virtual environment
         run: uv venv
 
-      - name: Bump version
+      - name: Set version from release tag
+        if: github.event_name == 'release'
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "Setting version to ${VERSION} from release tag ${TAG}"
+          uv version "${VERSION}"
+
+      - name: Bump patch version (manual trigger)
+        if: github.event_name == 'workflow_dispatch'
         run: uv version --bump patch
 
       - name: Build package
@@ -106,12 +97,12 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Push version bump to GitHub
-        if: ${{ success() }}
+        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add .
-          git commit -m "chore: bump version [ci skip]" || echo "No changes to commit"
+          git commit -m "chore: bump version to $(uv version) [ci skip]" || echo "No changes to commit"
           git push
