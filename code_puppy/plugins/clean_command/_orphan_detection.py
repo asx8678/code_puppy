@@ -33,6 +33,16 @@ _KNOWN_DB_FILES: set[str] = {
     "dbos_store.sqlite-wal",
 }
 
+# Known legitimate data files in DATA_DIR (not orphans when present)
+_KNOWN_DATA_FILES: set[str] = {
+    "cost_tracker.json",
+}
+
+# Known legitimate config files in CONFIG_DIR (not orphans when present)
+_KNOWN_CONFIG_FILES: set[str] = {
+    "motd.txt",
+}
+
 # Database extensions that require reference checking
 _DB_EXTENSIONS: set[str] = {".db", ".sqlite", ".db-shm", ".db-wal", ".sqlite-shm", ".sqlite-wal"}
 
@@ -45,7 +55,9 @@ _BAD_HIDDEN_PATTERNS: tuple[str, ...] = (
 
 
 def _find_orphans(
-    dir_path: Path, known_extensions: set[str] | None = None
+    dir_path: Path,
+    known_extensions: set[str] | None = None,
+    known_files: set[str] | None = None,
 ) -> list[Path]:
     """Find orphaned files that don't match expected patterns.
 
@@ -55,16 +67,20 @@ def _find_orphans(
     - Temp files (ending with '.tmp', '.temp')
     - Known bad hidden files (.DS_Store, .tmp_*, .temp_*)
     - Files with unknown extensions
+    - Files not in the known files list for their directory type
 
     Args:
         dir_path: Directory to scan
         known_extensions: Set of known extensions (defaults to _KNOWN_EXTENSIONS)
+        known_files: Set of known legitimate file names for this directory type
 
     Returns:
         List of orphaned file paths
     """
     if known_extensions is None:
         known_extensions = _KNOWN_EXTENSIONS
+    if known_files is None:
+        known_files = set()
 
     orphans: list[Path] = []
 
@@ -108,6 +124,10 @@ def _find_orphans(
                     orphans.append(item)
                 continue
 
+            # Known legitimate files for this directory (not orphans)
+            if name in known_files:
+                continue
+
             # Unknown extensions
             if ext and ext not in known_extensions:
                 orphans.append(item)
@@ -134,17 +154,19 @@ def _run_orphans(dry_run: bool = False, auto_clean: bool = False) -> None:
     all_orphans: list[tuple[Path, str]] = []
 
     # Scan XDG directories (use config paths, not hardcoded ~/.code_puppy)
+    # Each directory has its own set of known legitimate files
     dirs_to_scan = [
-        (Path(config.CACHE_DIR), "Cache directory"),
-        (Path(config.DATA_DIR), "Data directory"),
-        (Path(config.STATE_DIR), "State directory"),
+        (Path(config.CACHE_DIR), "Cache directory", set()),
+        (Path(config.DATA_DIR), "Data directory", _KNOWN_DATA_FILES),
+        (Path(config.STATE_DIR), "State directory", set()),
+        (Path(config.CONFIG_DIR), "Config directory", _KNOWN_CONFIG_FILES),
     ]
 
-    for dir_path, label in dirs_to_scan:
+    for dir_path, label, known_files in dirs_to_scan:
         if not dir_path.exists():
             continue
 
-        orphans = _find_orphans(dir_path)
+        orphans = _find_orphans(dir_path, known_files=known_files)
         for orphan in orphans:
             # Determine type
             if orphan.is_symlink():
@@ -221,13 +243,14 @@ def _count_orphans_in_dirs() -> int:
     """
     total = 0
     dirs_to_scan = [
-        Path(config.CACHE_DIR),
-        Path(config.DATA_DIR),
-        Path(config.STATE_DIR),
+        (Path(config.CACHE_DIR), set()),
+        (Path(config.DATA_DIR), _KNOWN_DATA_FILES),
+        (Path(config.STATE_DIR), set()),
+        (Path(config.CONFIG_DIR), _KNOWN_CONFIG_FILES),
     ]
 
-    for dir_path in dirs_to_scan:
+    for dir_path, known_files in dirs_to_scan:
         if dir_path.exists():
-            total += len(_find_orphans(dir_path))
+            total += len(_find_orphans(dir_path, known_files=known_files))
 
     return total

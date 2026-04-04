@@ -6,7 +6,12 @@ from unittest import mock
 from code_puppy import config
 
 from ._disk_usage import _check_disk_usage, _dir_stats, _file_stats, _human_size
-from ._orphan_detection import _find_orphans, _count_orphans_in_dirs
+from ._orphan_detection import (
+    _find_orphans,
+    _count_orphans_in_dirs,
+    _KNOWN_DATA_FILES,
+    _KNOWN_CONFIG_FILES,
+)
 from ._auto_cleanup import _load_cleanup_config
 
 
@@ -358,9 +363,11 @@ class TestCountOrphansInDirs:
         cache_dir = tmp_path / "cache"
         data_dir = tmp_path / "data"
         state_dir = tmp_path / "state"
+        config_dir = tmp_path / "config"
         cache_dir.mkdir()
         data_dir.mkdir()
         state_dir.mkdir()
+        config_dir.mkdir()
 
         # Create some orphans
         (cache_dir / "temp.tmp").write_text("temp")
@@ -371,6 +378,7 @@ class TestCountOrphansInDirs:
             mock.patch.object(config, "CACHE_DIR", str(cache_dir)),
             mock.patch.object(config, "DATA_DIR", str(data_dir)),
             mock.patch.object(config, "STATE_DIR", str(state_dir)),
+            mock.patch.object(config, "CONFIG_DIR", str(config_dir)),
         ):
             count = _count_orphans_in_dirs()
             assert count == 3
@@ -378,13 +386,16 @@ class TestCountOrphansInDirs:
     def test_no_orphans(self, tmp_path: Path):
         """Test counting when no orphans exist."""
         cache_dir = tmp_path / "cache"
+        config_dir = tmp_path / "config"
         cache_dir.mkdir()
+        config_dir.mkdir()
 
         with mock.patch.object(config, "CACHE_DIR", str(cache_dir)):
             with mock.patch.object(config, "DATA_DIR", str(cache_dir)):
                 with mock.patch.object(config, "STATE_DIR", str(cache_dir)):
-                    count = _count_orphans_in_dirs()
-                    assert count == 0
+                    with mock.patch.object(config, "CONFIG_DIR", str(config_dir)):
+                        count = _count_orphans_in_dirs()
+                        assert count == 0
 
     def test_missing_directories(self):
         """Test counting when XDG directories don't exist."""
@@ -392,6 +403,75 @@ class TestCountOrphansInDirs:
             mock.patch.object(config, "CACHE_DIR", "/nonexistent/cache"),
             mock.patch.object(config, "DATA_DIR", "/nonexistent/data"),
             mock.patch.object(config, "STATE_DIR", "/nonexistent/state"),
+            mock.patch.object(config, "CONFIG_DIR", "/nonexistent/config"),
         ):
             count = _count_orphans_in_dirs()
             assert count == 0
+
+
+class TestKnownFilesNotOrphans:
+    """Tests for cost_tracker.json and motd.txt not being flagged as orphans."""
+
+    def test_cost_tracker_json_not_orphan_in_data_dir(self, tmp_path: Path):
+        """Test that cost_tracker.json in DATA_DIR is NOT flagged as orphan."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "cost_tracker.json").write_text('{"daily_cost_usd": 1.23}')
+
+        orphans = _find_orphans(data_dir, known_files=_KNOWN_DATA_FILES)
+        assert len(orphans) == 0
+
+    def test_motd_txt_not_orphan_in_config_dir(self, tmp_path: Path):
+        """Test that motd.txt in CONFIG_DIR is NOT flagged as orphan."""
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        (config_dir / "motd.txt").write_text("2026-01-01\n")
+
+        orphans = _find_orphans(config_dir, known_files=_KNOWN_CONFIG_FILES)
+        assert len(orphans) == 0
+
+    def test_cost_tracker_json_not_orphan_anywhere(self, tmp_path: Path):
+        """Test that cost_tracker.json is never flagged as orphan (json is known extension)."""
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        (cache_dir / "cost_tracker.json").write_text('{"daily_cost_usd": 1.23}')
+
+        # JSON files are in _KNOWN_EXTENSIONS, so never flagged as orphans by extension
+        orphans = _find_orphans(cache_dir, known_files=set())
+        assert len(orphans) == 0
+
+    def test_motd_txt_not_orphan_anywhere(self, tmp_path: Path):
+        """Test that motd.txt is never flagged as orphan (txt is known extension)."""
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        (cache_dir / "motd.txt").write_text("2026-01-01\n")
+
+        # TXT files are in _KNOWN_EXTENSIONS, so never flagged as orphans by extension
+        orphans = _find_orphans(cache_dir, known_files=set())
+        assert len(orphans) == 0
+
+    def test_unknown_extensions_still_flagged(self, tmp_path: Path):
+        """Test that files with unknown extensions are still flagged as orphans."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "unknown_file.xyz").write_text("some data")
+
+        orphans = _find_orphans(data_dir, known_files=_KNOWN_DATA_FILES)
+        assert len(orphans) == 1
+        assert orphans[0].name == "unknown_file.xyz"
+
+    def test_known_files_list_is_used(self, tmp_path: Path):
+        """Test that known_files parameter is used to filter out specific files."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        # Create a file that would be flagged (no known extension, but in known_files)
+        (data_dir / "my_custom_file").write_text("some content")
+
+        # Without known_files, this would be flagged as unknown extension (no extension)
+        orphans = _find_orphans(data_dir, known_files={"my_custom_file"})
+        assert len(orphans) == 0
+
+        # Without the known_files entry, it would be flagged (files without extension)
+        orphans = _find_orphans(data_dir, known_files=set())
+        # Files without extensions are NOT flagged (empty ext check)
+        assert len(orphans) == 0
