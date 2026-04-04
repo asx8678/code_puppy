@@ -73,6 +73,7 @@ _COMPLEXITY_KEYWORDS: list[str] = [
     "debug",
     "debugging",
     "test",
+    "tests",
     "testing",
     "unittest",
     "pytest",
@@ -160,7 +161,10 @@ def calculate_complexity(prompt: str) -> tuple[float, str]:
         length_score = 1.0
 
     # --- keyword score (0-1) --------------------------------------------------
-    matched_keywords = [kw for kw in _COMPLEXITY_KEYWORDS if kw in prompt_lower]
+    matched_keywords = [
+        kw for kw in _COMPLEXITY_KEYWORDS
+        if re.search(r'\b' + re.escape(kw) + r'\b', prompt_lower)
+    ]
     keyword_score = min(len(matched_keywords) / 4.0, 1.0)
 
     # --- tool score (0-1) -----------------------------------------------------
