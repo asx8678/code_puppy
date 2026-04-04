@@ -1753,6 +1753,8 @@ def load_api_keys_to_environment():
         "AZURE_OPENAI_ENDPOINT",
         "OPENROUTER_API_KEY",
         "ZAI_API_KEY",
+        "XIAOMI_API_KEY",
+        "XIAOMI_TP_API_KEY",
     ]
 
     # Step 1: Load from .env file if it exists (highest priority)
