@@ -945,7 +945,7 @@ class RichConsoleRenderer:
             remaining = len(msg.prompt) - max_prompt_len
             prompt_display = (
                 msg.prompt[:max_prompt_len]
-                + f"... [dim]({remaining} more chars)[/dim]"
+                + f"... ({remaining} more chars)"
             )
         else:
             prompt_display = msg.prompt
