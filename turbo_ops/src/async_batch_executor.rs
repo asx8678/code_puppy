@@ -508,4 +508,280 @@ mod tests {
         // Groups should be in ascending priority order
         assert_eq!(group_events, vec![100, 200]);
     }
+
+    #[tokio::test]
+    async fn test_progress_events_detailed() {
+        // Test that all expected progress events are emitted in correct order.
+        let ops = vec![
+            TurboOperation::list_files(".", false)
+                .with_id("op1".to_string())
+                .with_priority(100),
+        ];
+
+        let (executor, mut rx) = AsyncBatchExecutor::new(ops);
+        let cancel_token = CancellationToken::new();
+
+        let result = executor.execute(cancel_token).await;
+
+        // Collect all events in order
+        let mut events = vec![];
+        while let Ok(Some(event)) = tokio::time::timeout(
+            tokio::time::Duration::from_millis(200),
+            rx.recv()
+        ).await {
+            events.push(event);
+        }
+
+        // Verify event sequence
+        assert!(!events.is_empty());
+        
+        // First event should be PlanStarted
+        assert!(matches!(events[0], ProgressEvent::PlanStarted { total_ops: 1, num_groups: 1 }));
+        
+        // Last event should be PlanCompleted
+        assert!(matches!(events.last().unwrap(), ProgressEvent::PlanCompleted { .. }));
+        
+        // Should have GroupStarted and GroupCompleted
+        assert!(events.iter().any(|e| matches!(e, ProgressEvent::GroupStarted { priority: 100, .. })));
+        assert!(events.iter().any(|e| matches!(e, ProgressEvent::GroupCompleted { priority: 100, .. })));
+        
+        // Should have OpCompleted
+        assert!(events.iter().any(|e| matches!(e, ProgressEvent::OpCompleted { op_id: Some(ref id), .. } if id == "op1")));
+        
+        // Result should indicate success
+        assert_eq!(result.batch_result.success_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_cancellation_during_execution() {
+        // Test cancellation that occurs during execution.
+        let ops = vec![
+            TurboOperation::list_files(".", false)
+                .with_id("first".to_string())
+                .with_priority(100),
+            TurboOperation::list_files(".", false)
+                .with_id("second".to_string())
+                .with_priority(100),
+            TurboOperation::list_files(".", false)
+                .with_id("third".to_string())
+                .with_priority(200),
+        ];
+
+        let (executor, mut rx) = AsyncBatchExecutor::new(ops);
+        let cancel_token = CancellationToken::new();
+
+        // Start execution in a separate task
+        let executor_handle = tokio::spawn({
+            let cancel_token = cancel_token.clone();
+            async move {
+                executor.execute(cancel_token).await
+            }
+        });
+
+        // Cancel after receiving the first GroupStarted event
+        while let Ok(Some(event)) = tokio::time::timeout(
+            tokio::time::Duration::from_millis(50),
+            rx.recv()
+        ).await {
+            if matches!(event, ProgressEvent::GroupStarted { .. }) {
+                cancel_token.cancel();
+                break;
+            }
+        }
+
+        let result = executor_handle.await.unwrap();
+
+        // Should be marked as cancelled
+        assert!(result.was_cancelled);
+    }
+
+    #[tokio::test]
+    async fn test_multiple_operations_same_priority() {
+        // Test multiple operations with the same priority are executed together.
+        let ops = vec![
+            TurboOperation::list_files(".", false)
+                .with_id("op1".to_string())
+                .with_priority(100),
+            TurboOperation::list_files(".", false)
+                .with_id("op2".to_string())
+                .with_priority(100),
+            TurboOperation::list_files(".", false)
+                .with_id("op3".to_string())
+                .with_priority(100),
+        ];
+
+        let (executor, mut rx) = AsyncBatchExecutor::new(ops);
+        let cancel_token = CancellationToken::new();
+
+        let result = executor.execute(cancel_token).await;
+
+        // All 3 should succeed
+        assert_eq!(result.batch_result.success_count, 3);
+        assert_eq!(result.batch_result.total_count, 3);
+
+        // Collect all events
+        let mut group_started_count = 0;
+        while let Ok(Some(event)) = tokio::time::timeout(
+            tokio::time::Duration::from_millis(50),
+            rx.recv()
+        ).await {
+            if let ProgressEvent::GroupStarted { priority: 100, .. } = &event {
+                group_started_count += 1;
+            }
+        }
+
+        // Should only have 1 group (all same priority)
+        assert_eq!(group_started_count, 1, "Expected 1 group for same priority operations");
+    }
+
+    #[tokio::test]
+    async fn test_error_handling_async() {
+        // Test that errors in operations are properly handled.
+        let ops = vec![
+            TurboOperation {
+                op_type: crate::models::OperationType::ListFiles,
+                args: serde_json::json!({
+                    "directory": "/nonexistent/path/that/does/not/exist",
+                    "recursive": false
+                }),
+                id: Some("failing".to_string()),
+                priority: 100,
+            },
+        ];
+
+        let (executor, mut rx) = AsyncBatchExecutor::new(ops);
+        let cancel_token = CancellationToken::new();
+
+        let result = executor.execute(cancel_token).await;
+
+        // Should have 1 failed operation
+        assert_eq!(result.batch_result.total_count, 1);
+        assert_eq!(result.batch_result.error_count, 1);
+        assert_eq!(result.batch_result.success_count, 0);
+        assert_eq!(result.batch_result.status, "failed");
+
+        // Check that error event was emitted
+        let mut found_error = false;
+        while let Ok(Some(event)) = tokio::time::timeout(
+            tokio::time::Duration::from_millis(100),
+            rx.recv()
+        ).await {
+            if let ProgressEvent::OpCompleted { success: false, op_id: Some(ref id), .. } = event {
+                if id == "failing" {
+                    found_error = true;
+                }
+            }
+        }
+        assert!(found_error, "Should have received error event for failing operation");
+    }
+
+    #[tokio::test]
+    async fn test_mixed_success_failure() {
+        // Test batch with both successful and failed operations.
+        let ops = vec![
+            TurboOperation::list_files(".", false)
+                .with_id("success".to_string())
+                .with_priority(100),
+            TurboOperation {
+                op_type: crate::models::OperationType::ListFiles,
+                args: serde_json::json!({
+                    "directory": "/nonexistent/path",
+                    "recursive": false
+                }),
+                id: Some("failure".to_string()),
+                priority: 100,
+            },
+        ];
+
+        let (executor, _rx) = AsyncBatchExecutor::new(ops);
+        let cancel_token = CancellationToken::new();
+
+        let result = executor.execute(cancel_token).await;
+
+        assert_eq!(result.batch_result.total_count, 2);
+        assert_eq!(result.batch_result.success_count, 1);
+        assert_eq!(result.batch_result.error_count, 1);
+        assert_eq!(result.batch_result.status, "partial");
+    }
+
+    #[tokio::test]
+    async fn test_different_operation_types() {
+        // Test batch with different operation types.
+        let ops = vec![
+            TurboOperation::list_files(".", false)
+                .with_id("list".to_string())
+                .with_priority(100),
+            TurboOperation::grep("fn", ".")
+                .with_id("grep".to_string())
+                .with_priority(200),
+        ];
+
+        let (executor, _rx) = AsyncBatchExecutor::new(ops);
+        let cancel_token = CancellationToken::new();
+
+        let result = executor.execute(cancel_token).await;
+
+        // Both should succeed
+        assert_eq!(result.batch_result.success_count, 2);
+        
+        // Verify both operations have results
+        let list_result = result.batch_result.results.iter().find(|r| r.operation_id == Some("list".to_string()));
+        let grep_result = result.batch_result.results.iter().find(|r| r.operation_id == Some("grep".to_string()));
+        
+        assert!(list_result.is_some(), "Should have list_files result");
+        assert!(grep_result.is_some(), "Should have grep result");
+        assert!(list_result.unwrap().is_success());
+        assert!(grep_result.unwrap().is_success());
+    }
+
+    #[tokio::test]
+    async fn test_execute_batch_with_progress() {
+        // Test the execute_batch_with_progress helper function.
+        let ops = vec![
+            TurboOperation::list_files(".", false)
+                .with_id("op1".to_string()),
+        ];
+
+        let (result, mut rx) = AsyncBatchExecutor::execute_batch_with_progress(ops).await;
+
+        // Result should be successful
+        assert_eq!(result.success_count, 1);
+
+        // Should receive progress events
+        let mut found_plan_started = false;
+        while let Ok(Some(event)) = tokio::time::timeout(
+            tokio::time::Duration::from_millis(100),
+            rx.recv()
+        ).await {
+            if matches!(event, ProgressEvent::PlanStarted { .. }) {
+                found_plan_started = true;
+            }
+        }
+        assert!(found_plan_started);
+    }
+
+    #[tokio::test]
+    async fn test_async_batch_result_fields() {
+        // Test that AsyncBatchResult contains expected fields.
+        let ops = vec![
+            TurboOperation::list_files(".", false)
+                .with_id("op1".to_string()),
+        ];
+
+        let (executor, _rx) = AsyncBatchExecutor::new(ops);
+        let cancel_token = CancellationToken::new();
+
+        let result = executor.execute(cancel_token).await;
+
+        // Check all expected fields
+        assert!(!result.was_cancelled);
+        assert_eq!(result.batch_result.total_count, 1);
+        assert_eq!(result.batch_result.success_count, 1);
+        assert_eq!(result.batch_result.error_count, 0);
+        assert!(!result.batch_result.results.is_empty());
+        
+        // Verify timestamps
+        assert!(!result.batch_result.started_at.is_empty());
+        assert!(!result.batch_result.completed_at.is_empty());
+    }
 }

@@ -869,6 +869,8 @@ class TurboOrchestrator:
         result["test_modules"] = list(set(dir_matches))
 
         return result
+
+    def _parse_pytest_output(self, output: str, exit_code: int) -> dict[str, Any]:
         """Parse pytest output to extract test results.
 
         Handles various pytest output formats including:

@@ -794,3 +794,7 @@ class TestSummarizerImports:
         assert callable(_summarize_list_files)
         assert callable(_summarize_grep)
         assert callable(_summarize_read_files)
+
+
+# Note: Multi-instance tests moved to test_turbo_executor_multi_instance.py
+# Note: Testing operation tests moved to test_turbo_executor_testing.py
