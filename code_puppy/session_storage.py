@@ -121,17 +121,15 @@ def _get_hmac_key() -> bytes:
 
 def _load_raw_bytes(raw: bytes) -> Any:
     """Deserialize session file bytes, handling incremental, msgpack, legacy-signed, and plain pickle."""
-    # Incremental format: CPINCV01 magic + header + length-prefixed messages
+    # Incremental format: CPINCV01 magic + header + length-prefixed messages + compacted_hashes
     if raw.startswith(_INCREMENTAL_MAGIC):
-        # Use Rust to deserialize incremental format
+        # Use Rust to deserialize incremental format with compacted_hashes
         from code_puppy._core_bridge import is_rust_enabled
         if is_rust_enabled():
-            from _code_puppy_core import deserialize_session
-            # deserialize_session returns a PyList, but _load_raw_bytes should return
-            # the payload dict that _parse_session_payload expects
-            msgs = deserialize_session(raw)
-            # Return in the expected format: {"messages": [...], "compacted_hashes": []}
-            return {"messages": msgs, "compacted_hashes": []}
+            from _code_puppy_core import deserialize_incremental_with_hashes
+            # deserialize_incremental_with_hashes returns (messages, compacted_hashes)
+            msgs, compacted_hashes = deserialize_incremental_with_hashes(raw)
+            return {"messages": msgs, "compacted_hashes": compacted_hashes}
         else:
             raise ValueError(
                 "Incremental format file detected but Rust extension is not available. "
@@ -308,21 +306,52 @@ def save_session(
     return metadata
 
 
+def _is_valid_message_dict(msg: Any) -> bool:
+    """Check if a message dict has the expected structure for Rust serialization.
+    
+    Valid ModelMessage dicts from pydantic-ai have at minimum:
+    - 'kind' field (string: 'request' or 'response')
+    - 'parts' field (list of dicts)
+    """
+    if not isinstance(msg, dict):
+        return False
+    if "kind" not in msg:
+        return False
+    if "parts" not in msg or not isinstance(msg.get("parts"), list):
+        return False
+    return True
+
+
 def _save_session_incremental(
     *,
     history: SessionHistory,
     paths: SessionPaths,
     compacted_hashes: list | None = None,
 ) -> None:
-    """Save session using incremental Rust serialization.
+    """Save session using true incremental Rust serialization.
     
     Only serializes new messages since the last save, appending to the file.
+    Preserves compacted_hashes across saves.
     """
     from code_puppy._core_bridge import (
-        serialize_messages_incremental,
+        append_messages_incremental,
         serialize_session_incremental_new,
-        get_incremental_message_count,
     )
+    
+    # Convert to dicts for Rust
+    try:
+        from pydantic_ai.messages import ModelMessagesTypeAdapter
+        serializable_history = ModelMessagesTypeAdapter.dump_python(history, mode="json")
+    except Exception:
+        serializable_history = history
+    
+    # Validate that we have proper message dicts for incremental format
+    # If not, raise exception to trigger fallback to msgpack
+    if serializable_history and not all(_is_valid_message_dict(m) for m in serializable_history):
+        raise ValueError(
+            "History contains non-ModelMessage objects, "
+            "falling back to msgpack format"
+        )
     
     session_key = (str(paths.pickle_path.parent), paths.pickle_path.stem)
     last_saved_count = _last_saved_offsets.get(session_key, 0)
@@ -330,16 +359,12 @@ def _save_session_incremental(
     
     # If this is a new session or file doesn't exist, create with full serialization
     if last_saved_count == 0 or not paths.pickle_path.exists():
-        # Convert to dicts for Rust
-        try:
-            from pydantic_ai.messages import ModelMessagesTypeAdapter
-            serializable_history = ModelMessagesTypeAdapter.dump_python(history, mode="json")
-        except Exception:
-            serializable_history = history
-        
-        # Create incremental format
-        import _code_puppy_core
-        data = serialize_session_incremental_new(serializable_history)
+        # Create incremental format with compacted_hashes
+        if compacted_hashes:
+            hashes_list = list(compacted_hashes)
+            data = serialize_session_incremental_new(serializable_history, hashes_list)
+        else:
+            data = serialize_session_incremental_new(serializable_history, None)
         
         tmp_session = paths.pickle_path.with_suffix(".tmp")
         with tmp_session.open("wb") as f:
@@ -354,14 +379,11 @@ def _save_session_incremental(
     if not existing_data.startswith(_INCREMENTAL_MAGIC):
         # File exists but is old format - need to convert
         # Re-save as incremental with all messages
-        try:
-            from pydantic_ai.messages import ModelMessagesTypeAdapter
-            serializable_history = ModelMessagesTypeAdapter.dump_python(history, mode="json")
-        except Exception:
-            serializable_history = history
-        
-        import _code_puppy_core
-        data = serialize_session_incremental_new(serializable_history)
+        if compacted_hashes:
+            hashes_list = list(compacted_hashes)
+            data = serialize_session_incremental_new(serializable_history, hashes_list)
+        else:
+            data = serialize_session_incremental_new(serializable_history, None)
         
         tmp_session = paths.pickle_path.with_suffix(".tmp")
         with tmp_session.open("wb") as f:
@@ -373,48 +395,29 @@ def _save_session_incremental(
     
     # File is incremental format - append only new messages
     if current_count > last_saved_count:
-        new_messages = history[last_saved_count:current_count]
+        new_messages = serializable_history[last_saved_count:current_count]
         
-        # Convert new messages to dicts
-        try:
-            from pydantic_ai.messages import ModelMessagesTypeAdapter
-            serializable_new = ModelMessagesTypeAdapter.dump_python(new_messages, mode="json")
-        except Exception:
-            serializable_new = new_messages
+        # TRUE INCREMENTAL: Append only new messages using Rust
+        # This updates the header count and preserves existing compacted_hashes
+        new_file_data = append_messages_incremental(existing_data, new_messages)
         
-        # Serialize only new messages
-        new_data = serialize_messages_incremental(serializable_new)
+        # Write the new data (header + existing messages + new messages + hashes)
+        tmp_session = paths.pickle_path.with_suffix(".tmp")
+        with tmp_session.open("wb") as f:
+            f.write(new_file_data)
+        tmp_session.replace(paths.pickle_path)
         
-        # Append to file (updating header is done by Rust - it handles the count)
-        # Actually, we need to update the message count in the header
-        # For now, we'll read, deserialize, add new, and write back but using incremental format
-        # This is still faster because we avoid msgpack serialization of all messages
+        _last_saved_offsets[session_key] = current_count
+    elif compacted_hashes:
+        # No new messages but compacted_hashes may have changed
+        # For now, we re-serialize (this is a rare edge case)
+        hashes_list = list(compacted_hashes)
+        data = serialize_session_incremental_new(serializable_history, hashes_list)
         
-        # Read existing count
-        try:
-            existing_count = get_incremental_message_count(existing_data)
-            new_total_count = existing_count + len(new_messages)
-            
-            # Create new file with all messages in incremental format
-            # This is more efficient than msgpack serialization
-            try:
-                from pydantic_ai.messages import ModelMessagesTypeAdapter
-                serializable_history = ModelMessagesTypeAdapter.dump_python(history, mode="json")
-            except Exception:
-                serializable_history = history
-            
-            import _code_puppy_core
-            data = serialize_session_incremental_new(serializable_history)
-            
-            tmp_session = paths.pickle_path.with_suffix(".tmp")
-            with tmp_session.open("wb") as f:
-                f.write(data)
-            tmp_session.replace(paths.pickle_path)
-            
-            _last_saved_offsets[session_key] = current_count
-        except Exception:
-            # Fall back to full save
-            raise
+        tmp_session = paths.pickle_path.with_suffix(".tmp")
+        with tmp_session.open("wb") as f:
+            f.write(data)
+        tmp_session.replace(paths.pickle_path)
     
     # Update offset even if no new messages
     _last_saved_offsets[session_key] = current_count

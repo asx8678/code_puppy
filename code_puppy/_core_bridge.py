@@ -14,8 +14,11 @@ try:
         ProcessResult,
         PruneResult,
         SplitResult,
+        append_messages_incremental,
         collect_tool_call_ids,
+        deserialize_incremental_with_hashes,
         deserialize_session,
+        get_compacted_hashes_offset,
         get_incremental_data_offset,
         get_incremental_message_count,
         process_messages_batch,
@@ -46,6 +49,9 @@ except ImportError:
     serialize_session_incremental_new = None  # type: ignore[assignment]
     get_incremental_message_count = None  # type: ignore[assignment]
     get_incremental_data_offset = None  # type: ignore[assignment]
+    get_compacted_hashes_offset = None  # type: ignore[assignment]
+    append_messages_incremental = None  # type: ignore[assignment]
+    deserialize_incremental_with_hashes = None  # type: ignore[assignment]
     collect_tool_call_ids = None  # type: ignore[assignment]
 
 

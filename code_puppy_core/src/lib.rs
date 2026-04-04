@@ -20,6 +20,8 @@ use serialization::{
     deserialize_session_impl, serialize_session_impl, serialize_session_incremental_impl,
     serialize_messages_incremental_impl, serialize_session_incremental_new_impl,
     get_incremental_message_count_impl, get_incremental_data_offset_impl,
+    append_messages_incremental_impl, deserialize_incremental_with_hashes_impl,
+    get_compacted_hashes_offset_impl,
 };
 use token_estimation::process_messages_batch_impl;
 
@@ -149,13 +151,14 @@ fn serialize_messages_incremental(
     serialize_messages_incremental_impl(new_messages)
 }
 
-/// Create a new incremental format file with all messages.
+/// Create a new incremental format file with all messages and optional compacted_hashes.
 #[pyfunction]
-#[pyo3(signature = (messages,))]
+#[pyo3(signature = (messages, compacted_hashes=None))]
 fn serialize_session_incremental_new(
     messages: &Bound<'_, PyList>,
+    compacted_hashes: Option<&Bound<'_, PyList>>,
 ) -> PyResult<Vec<u8>> {
-    serialize_session_incremental_new_impl(messages)
+    serialize_session_incremental_new_impl(messages, compacted_hashes)
 }
 
 /// Get message count from incremental format file.
@@ -170,6 +173,35 @@ fn get_incremental_message_count(data: &[u8]) -> PyResult<usize> {
 #[pyo3(signature = (data,))]
 fn get_incremental_data_offset(data: &[u8]) -> PyResult<usize> {
     get_incremental_data_offset_impl(data)
+}
+
+/// Get compacted_hashes offset in incremental format file.
+#[pyfunction]
+#[pyo3(signature = (data,))]
+fn get_compacted_hashes_offset(data: &[u8]) -> PyResult<usize> {
+    get_compacted_hashes_offset_impl(data)
+}
+
+/// Append new messages to existing incremental file data.
+/// Returns new complete file data with updated header and appended messages.
+#[pyfunction]
+#[pyo3(signature = (existing_data, new_messages))]
+fn append_messages_incremental(
+    existing_data: &[u8],
+    new_messages: &Bound<'_, PyList>,
+) -> PyResult<Vec<u8>> {
+    append_messages_incremental_impl(existing_data, new_messages)
+}
+
+/// Deserialize incremental format including compacted_hashes.
+/// Returns (messages, compacted_hashes) tuple.
+#[pyfunction]
+#[pyo3(signature = (data,))]
+fn deserialize_incremental_with_hashes<'py>(
+    data: &[u8],
+    py: Python<'py>,
+) -> PyResult<(Py<PyList>, Vec<String>)> {
+    deserialize_incremental_with_hashes_impl(py, data)
 }
 
 // ── Hashline functions ──────────────────────────────────────────────────────
@@ -218,6 +250,9 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(serialize_session_incremental_new, m)?)?;
     m.add_function(wrap_pyfunction!(get_incremental_message_count, m)?)?;
     m.add_function(wrap_pyfunction!(get_incremental_data_offset, m)?)?;
+    m.add_function(wrap_pyfunction!(get_compacted_hashes_offset, m)?)?;
+    m.add_function(wrap_pyfunction!(append_messages_incremental, m)?)?;
+    m.add_function(wrap_pyfunction!(deserialize_incremental_with_hashes, m)?)?;
     m.add_function(wrap_pyfunction!(collect_tool_call_ids, m)?)?;
     m.add_function(wrap_pyfunction!(compute_line_hash, m)?)?;
     m.add_function(wrap_pyfunction!(format_hashlines, m)?)?;

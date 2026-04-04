@@ -2,13 +2,11 @@
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
-use std::io::Write;
 
 use crate::types::Message;
 
 // Magic header for incremental format (different from old msgpack format)
 const INCREMENTAL_MAGIC: &[u8] = b"CPINCV01";
-const OLD_MSGPACK_MAGIC: &[u8] = b"MSGPACK\x01";
 
 /// Serialize all messages to a single msgpack array (legacy full-serialization).
 pub fn serialize_session_impl(messages: &Bound<'_, PyList>) -> PyResult<Vec<u8>> {
@@ -67,41 +65,6 @@ pub fn serialize_messages_incremental_impl(
         let len_bytes = (msg_bytes.len() as u32).to_le_bytes();
         result.extend_from_slice(&len_bytes);
         // Write message bytes
-        result.extend_from_slice(&msg_bytes);
-    }
-    
-    Ok(result)
-}
-
-/// Create a new incremental format file with initial messages.
-/// Format: MAGIC + header + [length-prefixed messages]
-pub fn serialize_session_incremental_new_impl(
-    messages: &Bound<'_, PyList>,
-) -> PyResult<Vec<u8>> {
-    let msgs: Vec<Message> = messages
-        .iter()
-        .map(|o| Message::from_py(&o))
-        .collect::<PyResult<_>>()?;
-    
-    let mut result = Vec::new();
-    
-    // Write magic
-    result.extend_from_slice(INCREMENTAL_MAGIC);
-    
-    // Write header: version (1), flags (1), message_count (4 LE)
-    result.push(1u8); // version
-    result.push(0u8); // flags (reserved)
-    let count_bytes = (msgs.len() as u32).to_le_bytes();
-    result.extend_from_slice(&count_bytes);
-    
-    // Write messages with length prefix
-    for msg in msgs {
-        let msg_bytes = rmp_serde::to_vec(&msg).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Message serialization failed: {e}"))
-        })?;
-        
-        let len_bytes = (msg_bytes.len() as u32).to_le_bytes();
-        result.extend_from_slice(&len_bytes);
         result.extend_from_slice(&msg_bytes);
     }
     
@@ -192,7 +155,7 @@ pub fn serialize_session_incremental_impl(
                 combined.append(message_to_py_dict(py, msg)?)?;
             }
             
-            return serialize_session_incremental_new_impl(&combined);
+            return serialize_session_incremental_new_impl(&combined, None);
         }
     }
     
@@ -239,6 +202,215 @@ pub fn get_incremental_data_offset_impl(data: &[u8]) -> PyResult<usize> {
     Ok(INCREMENTAL_MAGIC.len() + 6) // magic (8) + version (1) + flags (1) + count (4)
 }
 
+/// Get the byte offset where the compacted_hashes section begins.
+/// This is after all messages (we need to scan through them).
+pub fn get_compacted_hashes_offset_impl(data: &[u8]) -> PyResult<usize> {
+    if !data.starts_with(INCREMENTAL_MAGIC) {
+        return Err(pyerr("Not an incremental format file"));
+    }
+    
+    let count = get_incremental_message_count_impl(data)?;
+    let header_end = INCREMENTAL_MAGIC.len() + 6;
+    
+    let mut offset = header_end;
+    for _ in 0..count {
+        if data.len() < offset + 4 {
+            return Err(pyerr("File truncated reading message length"));
+        }
+        let msg_len = u32::from_le_bytes([
+            data[offset], data[offset+1], data[offset+2], data[offset+3]
+        ]) as usize;
+        offset += 4 + msg_len;
+    }
+    
+    Ok(offset)
+}
+
+/// Append new messages to an existing incremental file.
+/// Returns the new file data with updated header and appended messages.
+/// Preserves existing compacted_hashes.
+pub fn append_messages_incremental_impl(
+    existing_data: &[u8],
+    new_messages: &Bound<'_, PyList>,
+) -> PyResult<Vec<u8>> {
+    if !existing_data.starts_with(INCREMENTAL_MAGIC) {
+        return Err(pyerr("Not an incremental format file"));
+    }
+    
+    let existing_count = get_incremental_message_count_impl(existing_data)?;
+    let new_count = new_messages.len();
+    let total_count = existing_count + new_count as usize;
+    
+    // Find where compacted_hashes section begins (end of messages)
+    let hashes_offset = get_compacted_hashes_offset_impl(existing_data)?;
+    
+    // Extract existing compacted_hashes if present
+    let existing_hashes: Vec<String> = if hashes_offset < existing_data.len() {
+        // Read compacted_hashes length and data
+        if existing_data.len() >= hashes_offset + 4 {
+            let hashes_len = u32::from_le_bytes([
+                existing_data[hashes_offset],
+                existing_data[hashes_offset+1],
+                existing_data[hashes_offset+2],
+                existing_data[hashes_offset+3],
+            ]) as usize;
+            if existing_data.len() >= hashes_offset + 4 + hashes_len {
+                rmp_serde::from_slice(&existing_data[hashes_offset+4..hashes_offset+4+hashes_len])
+                    .map_err(|e| pyerr(&format!("Failed to deserialize hashes: {e}")))?
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+    
+    // Serialize new messages
+    let new_msgs_serialized = serialize_messages_incremental_impl(new_messages)?;
+    
+    // Build new file:
+    // 1. Header with updated count
+    // 2. Existing messages (from original file, up to hashes_offset)
+    // 3. New messages
+    // 4. Compacted hashes section
+    
+    let mut result = Vec::new();
+    
+    // Magic
+    result.extend_from_slice(INCREMENTAL_MAGIC);
+    
+    // Header: version (1), flags (1), message_count (4 LE)
+    result.push(1u8); // version
+    result.push(0u8); // flags (reserved)
+    let count_bytes = (total_count as u32).to_le_bytes();
+    result.extend_from_slice(&count_bytes);
+    
+    // Existing messages (from header end to hashes_offset)
+    let header_end = INCREMENTAL_MAGIC.len() + 6;
+    result.extend_from_slice(&existing_data[header_end..hashes_offset]);
+    
+    // New messages
+    result.extend_from_slice(&new_msgs_serialized);
+    
+    // Compacted hashes section
+    let hashes_bytes = rmp_serde::to_vec(&existing_hashes).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Failed to serialize hashes: {e}"))
+    })?;
+    let hashes_len_bytes = (hashes_bytes.len() as u32).to_le_bytes();
+    result.extend_from_slice(&hashes_len_bytes);
+    result.extend_from_slice(&hashes_bytes);
+    
+    Ok(result)
+}
+
+/// Deserialize incremental format including compacted_hashes.
+/// Returns (messages, compacted_hashes) tuple.
+pub fn deserialize_incremental_with_hashes_impl<'py>(
+    py: Python<'py>,
+    data: &[u8],
+) -> PyResult<(Py<PyList>, Vec<String>)> {
+    if !data.starts_with(INCREMENTAL_MAGIC) {
+        return Err(pyerr("Not an incremental format file"));
+    }
+    
+    let count = get_incremental_message_count_impl(data)?;
+    let header_end = INCREMENTAL_MAGIC.len() + 6;
+    let mut offset = header_end;
+    
+    // Read messages
+    let list = PyList::empty(py);
+    for _ in 0..count {
+        if data.len() < offset + 4 {
+            return Err(pyerr("Incremental file truncated (reading length)"));
+        }
+        
+        let msg_len = u32::from_le_bytes([
+            data[offset], data[offset+1], data[offset+2], data[offset+3]
+        ]) as usize;
+        offset += 4;
+        
+        if data.len() < offset + msg_len {
+            return Err(pyerr("Incremental file truncated (reading message)"));
+        }
+        
+        let msg: Message = rmp_serde::from_slice(&data[offset..offset+msg_len])
+            .map_err(|e| pyerr(&format!("Failed to deserialize message: {e}")))?;
+        offset += msg_len;
+        
+        list.append(message_to_py_dict(py, &msg)?)?;
+    }
+    
+    // Read compacted_hashes if present
+    let hashes: Vec<String> = if data.len() > offset + 4 {
+        let hashes_len = u32::from_le_bytes([
+            data[offset], data[offset+1], data[offset+2], data[offset+3],
+        ]) as usize;
+        offset += 4;
+        if data.len() >= offset + hashes_len {
+            rmp_serde::from_slice(&data[offset..offset+hashes_len])
+                .map_err(|e| pyerr(&format!("Failed to deserialize hashes: {e}")))?
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+    
+    Ok((list.unbind(), hashes))
+}
+
+/// Create a new incremental format file with compacted_hashes support.
+pub fn serialize_session_incremental_new_impl(
+    messages: &Bound<'_, PyList>,
+    compacted_hashes: Option<&Bound<'_, PyList>>,
+) -> PyResult<Vec<u8>> {
+    let msgs: Vec<Message> = messages
+        .iter()
+        .map(|o| Message::from_py(&o))
+        .collect::<PyResult<_>>()?;
+    
+    let mut result = Vec::new();
+    
+    // Write magic
+    result.extend_from_slice(INCREMENTAL_MAGIC);
+    
+    // Write header: version (1), flags (1), message_count (4 LE)
+    result.push(1u8); // version
+    result.push(0u8); // flags (reserved)
+    let count_bytes = (msgs.len() as u32).to_le_bytes();
+    result.extend_from_slice(&count_bytes);
+    
+    // Write messages with length prefix
+    for msg in msgs {
+        let msg_bytes = rmp_serde::to_vec(&msg).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Message serialization failed: {e}"))
+        })?;
+        
+        let len_bytes = (msg_bytes.len() as u32).to_le_bytes();
+        result.extend_from_slice(&len_bytes);
+        result.extend_from_slice(&msg_bytes);
+    }
+    
+    // Write compacted_hashes
+    let hashes: Vec<String> = if let Some(hashes_list) = compacted_hashes {
+        hashes_list.iter()
+            .map(|o| o.extract::<String>())
+            .collect::<PyResult<_>>()?
+    } else {
+        Vec::new()
+    };
+    
+    let hashes_bytes = rmp_serde::to_vec(&hashes).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Hashes serialization failed: {e}"))
+    })?;
+    let hashes_len_bytes = (hashes_bytes.len() as u32).to_le_bytes();
+    result.extend_from_slice(&hashes_len_bytes);
+    result.extend_from_slice(&hashes_bytes);
+    
+    Ok(result)
+}
 fn pyerr(msg: &str) -> PyErr {
     pyo3::exceptions::PyValueError::new_err(msg.to_string())
 }
