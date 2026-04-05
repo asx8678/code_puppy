@@ -104,19 +104,14 @@ defmodule Mana.Agents.RunSupervisor do
            fn ->
              Logger.debug("Starting agent run for agent #{inspect(agent_pid)}")
 
-             try do
-               case Runner.run(agent_pid, user_message, opts) do
-                 {:ok, response} ->
-                   Logger.debug("Agent run completed successfully")
-                   {:ok, response}
+             case Runner.run(agent_pid, user_message, opts) do
+               {:ok, response} ->
+                 Logger.debug("Agent run completed successfully")
+                 {:ok, response}
 
-                 {:error, reason} ->
-                   Logger.warning("Agent run failed: #{inspect(reason)}")
-                   {:error, reason}
-               end
-             after
-               # Exit the task process when done
-               exit(:normal)
+               {:error, reason} ->
+                 Logger.warning("Agent run failed: #{inspect(reason)}")
+                 {:error, reason}
              end
            end
          ]},

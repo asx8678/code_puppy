@@ -11,16 +11,7 @@
   # DynamicSupervisor type - stdlib type should be in PLT but sometimes isn't found
   ~r/unknown_type.*DynamicSupervisor\.on_start/,
 
-  # Task anonymous functions - no_return is expected for tasks that call exit(:normal)
-  # This is a dialyzer limitation with spawned processes
-  ~r/lib\/mana\/agents\/run_supervisor\.ex:.*no_return/,
-
   # MapSet opaque type mismatch - dialyzer limitation with ETS constructed MapSets
   # The MapSet is built from ETS select results, which dialyzer tracks as raw Erlang :set
-  ~r/lib\/mana\/tools\/registry\.ex:.*call_without_opaque/,
-
-  # TUI markdown - dialyzer false positive
-  # render_ast is only called with list() from {:ok, ast, _} pattern match
-  # but dialyzer thinks the catch-all _ -> markdown case could pass a binary
-  ~r/lib\/mana\/tui\/markdown\.ex:.*call/
+  ~r/lib\/mana\/tools\/registry\.ex:.*call_without_opaque/
 ]
