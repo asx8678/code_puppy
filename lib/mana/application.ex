@@ -3,11 +3,48 @@ defmodule Mana.Application do
   OTP Application module for the Mana plugin system.
 
   Starts the supervision tree with all core GenServers.
+
+  ## Headless/Container Mode
+
+  This application gracefully handles headless environments where
+  standard IO devices may not be available (e.g., containers, systemd,
+  detached mode). It detects missing TTY and configures fallbacks
+  to prevent crashes from Logger/IO operations.
   """
 
   use Application
 
   require Logger
+
+  @doc """
+  Checks if the application is running in a headless environment.
+
+  Returns true if standard_error device is not available, indicating
+  a container, detached, or non-TTY environment.
+  """
+  @spec headless?() :: boolean()
+  def headless? do
+    Process.whereis(:standard_error) == nil ||
+      System.get_env("MANA_HEADLESS") == "true" ||
+      System.get_env("CONTAINER") == "true"
+  end
+
+  @doc """
+  Configures Logger for headless environments.
+
+  When running without a TTY, Logger backends that write to
+  standard_error will crash. This configures a safe fallback.
+  """
+  @spec configure_headless_logging() :: :ok
+  def configure_headless_logging do
+    # Remove console backend if standard_error is not available
+    if Process.whereis(:standard_error) == nil do
+      Logger.remove_backend(:console)
+      :ok
+    else
+      :ok
+    end
+  end
 
   # Web endpoint configuration - only start when server: true
   defp web_endpoint_children do
@@ -25,6 +62,11 @@ defmodule Mana.Application do
 
   @impl true
   def start(_type, _args) do
+    # Check for headless environment and configure fallbacks
+    if headless?() do
+      configure_headless_logging()
+    end
+
     children =
       if Application.get_env(:mana, :auto_start, true) do
         [
