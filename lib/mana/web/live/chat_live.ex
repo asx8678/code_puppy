@@ -273,8 +273,9 @@ defmodule Mana.Web.Live.ChatLive do
     # Remove leading slash and split into command and args
     [cmd | args] = String.split(String.trim_leading(message, "/"), " ", parts: 2)
     args = if args == [], do: [], else: [hd(args)]
+    full_cmd = "/#{cmd}"
 
-    case Registry.dispatch(cmd, args, %{}) do
+    case Registry.dispatch(full_cmd, args, %{}) do
       :ok -> {:command_result, "Command executed: /#{cmd}"}
       {:ok, result} -> {:command_result, to_string(result)}
       {:error, reason} -> {:command_error, to_string(reason)}

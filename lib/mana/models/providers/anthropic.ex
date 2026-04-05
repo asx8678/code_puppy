@@ -52,6 +52,24 @@ defmodule Mana.Models.Providers.Anthropic do
     }
 
     body = maybe_add_temperature(body, opts)
+
+    # Extract system messages from the messages list for the system parameter
+    system_from_messages =
+      messages
+      |> Enum.filter(fn msg ->
+        role = msg["role"] || msg[:role]
+        role == "system" or role == :system
+      end)
+      |> Enum.map(fn msg -> msg["content"] || msg[:content] end)
+      |> Enum.join("\n\n")
+
+    body =
+      if system_from_messages != "" and not Keyword.has_key?(opts, :system) do
+        Map.put(body, "system", system_from_messages)
+      else
+        body
+      end
+
     body = maybe_add_system_prompt(body, opts)
     body = maybe_add_tools(body, opts)
 
@@ -105,6 +123,24 @@ defmodule Mana.Models.Providers.Anthropic do
     }
 
     body = maybe_add_temperature(body, opts)
+
+    # Extract system messages from the messages list for the system parameter
+    system_from_messages =
+      messages
+      |> Enum.filter(fn msg ->
+        role = msg["role"] || msg[:role]
+        role == "system" or role == :system
+      end)
+      |> Enum.map(fn msg -> msg["content"] || msg[:content] end)
+      |> Enum.join("\n\n")
+
+    body =
+      if system_from_messages != "" and not Keyword.has_key?(opts, :system) do
+        Map.put(body, "system", system_from_messages)
+      else
+        body
+      end
+
     body = maybe_add_system_prompt(body, opts)
     body = maybe_add_tools(body, opts)
 
@@ -223,7 +259,13 @@ defmodule Mana.Models.Providers.Anthropic do
   # Message conversion
 
   defp convert_messages(messages) when is_list(messages) do
-    Enum.map(messages, fn msg ->
+    # Filter out system messages — they should be passed via the "system" parameter
+    messages
+    |> Enum.reject(fn msg ->
+      role = msg["role"] || msg[:role]
+      role == "system" or role == :system
+    end)
+    |> Enum.map(fn msg ->
       case msg do
         %{"role" => role, "content" => content} ->
           %{"role" => convert_role(role), "content" => content}
@@ -239,7 +281,7 @@ defmodule Mana.Models.Providers.Anthropic do
 
   defp convert_messages(messages), do: messages
 
-  defp convert_role("system"), do: "assistant"
+  defp convert_role("system"), do: "user"
   defp convert_role(role), do: role
 
   # Response parsing

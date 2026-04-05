@@ -112,11 +112,11 @@ defmodule Mana.OAuth.ClaudeCode do
 
     receive do
       {:oauth_callback, code} ->
-        GenServer.stop(server)
+        if Process.alive?(server), do: Process.exit(server, :normal)
         exchange_for_tokens(code, pkce.code_verifier, port)
     after
       timeout ->
-        GenServer.stop(server)
+        if Process.alive?(server), do: Process.exit(server, :normal)
         {:error, :timeout}
     end
   end

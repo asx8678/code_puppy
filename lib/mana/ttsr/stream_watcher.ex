@@ -18,6 +18,7 @@ defmodule Mana.TTSR.StreamWatcher do
   defstruct [
     :session_id,
     :rules,
+    :current_scope,
     text_buffer: "",
     thinking_buffer: "",
     tool_buffer: "",
@@ -29,6 +30,7 @@ defmodule Mana.TTSR.StreamWatcher do
   @type t :: %__MODULE__{
           session_id: String.t(),
           rules: [Rule.t()],
+          current_scope: atom() | nil,
           text_buffer: String.t(),
           thinking_buffer: String.t(),
           tool_buffer: String.t(),
@@ -111,32 +113,22 @@ defmodule Mana.TTSR.StreamWatcher do
   end
 
   @impl true
-  def handle_cast({:stream_event, {:stream_chunk, type, content}}, state) do
-    {buffer_key, buffer} =
-      case type do
-        :text -> {:text_buffer, state.text_buffer}
-        :thinking -> {:thinking_buffer, state.thinking_buffer}
-        :tool -> {:tool_buffer, state.tool_buffer}
-        _ -> {:text_buffer, state.text_buffer}
-      end
-
-    # Process each character through the buffer
-    {new_buffer, new_rules} =
-      Enum.reduce(String.graphemes(content), {buffer, state.rules}, fn char, {buf, rules} ->
-        updated_buffer = push_to_buffer(buf, char)
-        checked_rules = check_rules_for_scope(rules, updated_buffer, type, state.current_turn)
-        {updated_buffer, checked_rules}
-      end)
-
-    new_state =
-      state
-      |> Map.put(buffer_key, new_buffer)
-      |> Map.put(:rules, new_rules)
-
-    {:noreply, new_state}
+  def handle_cast({:stream_event, {:part_delta, _part_id, content}}, state) do
+    # Use current scope if tracked, otherwise default to :text
+    scope = state.current_scope || :text
+    handle_stream_content(state, scope, content)
   end
 
-  def handle_cast({:stream_event, _}, state) do
+  def handle_cast({:stream_event, {:part_start, _part_id, type, _meta}}, state) do
+    # Track scope type for subsequent deltas
+    {:noreply, Map.put(state, :current_scope, type)}
+  end
+
+  def handle_cast({:stream_event, {:part_end, _part_id, _meta}}, state) do
+    {:noreply, Map.put(state, :current_scope, nil)}
+  end
+
+  def handle_cast({:stream_event, _other_event}, state) do
     {:noreply, state}
   end
 
@@ -190,6 +182,31 @@ defmodule Mana.TTSR.StreamWatcher do
           rule
       end
     end)
+  end
+
+  defp handle_stream_content(state, scope, content) do
+    buffer_key =
+      case scope do
+        :thinking -> :thinking_buffer
+        :tool -> :tool_buffer
+        _ -> :text_buffer
+      end
+
+    buffer = Map.get(state, buffer_key, "")
+
+    {new_buffer, new_rules} =
+      Enum.reduce(String.graphemes(content), {buffer, state.rules}, fn char, {buf, rules} ->
+        updated_buffer = push_to_buffer(buf, char)
+        checked_rules = check_rules_for_scope(rules, updated_buffer, scope, state.current_turn)
+        {updated_buffer, checked_rules}
+      end)
+
+    new_state =
+      state
+      |> Map.put(buffer_key, new_buffer)
+      |> Map.put(:rules, new_rules)
+
+    {:noreply, new_state}
   end
 
   defp via_tuple(session_id) do

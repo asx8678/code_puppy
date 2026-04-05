@@ -52,11 +52,11 @@ defmodule Mana.TTSR.StreamWatcherTest do
       {:ok, _pid} = StreamWatcher.start_link(session_id, rules)
 
       # Send a chunk that doesn't match
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "hello world"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 0, "hello world"})
       assert StreamWatcher.get_pending(session_id) == []
 
       # Send a chunk that matches
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "there was an error"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 1, "there was an error"})
 
       pending = StreamWatcher.get_pending(session_id)
       assert length(pending) == 1
@@ -70,8 +70,8 @@ defmodule Mana.TTSR.StreamWatcherTest do
       {:ok, _pid} = StreamWatcher.start_link(session_id, rules)
 
       # Split "error" across two chunks
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "err"})
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "or"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 0, "err"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 1, "or"})
 
       pending = StreamWatcher.get_pending(session_id)
       assert length(pending) == 1
@@ -88,21 +88,24 @@ defmodule Mana.TTSR.StreamWatcherTest do
       {:ok, _pid} = StreamWatcher.start_link(session_id, rules)
 
       # Text scope - text_rule and all_rule should match
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "some text anywhere"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_start, 0, :text, %{}})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 0, "some text anywhere"})
       pending = StreamWatcher.get_pending(session_id)
       assert length(pending) == 2
       assert Enum.any?(pending, &(&1.name == "text_rule"))
       assert Enum.any?(pending, &(&1.name == "all_rule"))
 
       # Thinking scope - thinking_rule and all_rule should match
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :thinking, "deep thought anywhere"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_start, 1, :thinking, %{}})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 1, "deep thought anywhere"})
       pending = StreamWatcher.get_pending(session_id)
       assert length(pending) == 2
       assert Enum.any?(pending, &(&1.name == "thinking_rule"))
       assert Enum.any?(pending, &(&1.name == "all_rule"))
 
       # Tool scope - tool_rule and all_rule should match
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :tool, "using a tool anywhere"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_start, 2, :tool, %{}})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 2, "using a tool anywhere"})
       pending = StreamWatcher.get_pending(session_id)
       assert length(pending) == 2
       assert Enum.any?(pending, &(&1.name == "tool_rule"))
@@ -115,12 +118,12 @@ defmodule Mana.TTSR.StreamWatcherTest do
       {:ok, _pid} = StreamWatcher.start_link(session_id, rules)
 
       # First match
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "error"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 0, "error"})
       pending1 = StreamWatcher.get_pending(session_id)
       assert length(pending1) == 1
 
       # Same rule should not be pending again (cleared by get_pending)
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "error"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 1, "error"})
       pending2 = StreamWatcher.get_pending(session_id)
       assert pending2 == []
     end
@@ -139,7 +142,7 @@ defmodule Mana.TTSR.StreamWatcherTest do
 
     test "handles empty session gracefully" do
       # No watcher started for this session
-      result = StreamWatcher.watch_event("nonexistent_session_xyz", {:stream_chunk, :text, "test"})
+      result = StreamWatcher.watch_event("nonexistent_session_xyz", {:part_delta, 0, "test"})
       assert result == :ok
     end
 
@@ -149,7 +152,7 @@ defmodule Mana.TTSR.StreamWatcherTest do
       {:ok, _pid} = StreamWatcher.start_link(session_id, rules)
 
       # Should not trigger since already triggered at turn 0
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "test"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 0, "test"})
       assert StreamWatcher.get_pending(session_id) == []
     end
 
@@ -161,7 +164,7 @@ defmodule Mana.TTSR.StreamWatcherTest do
 
       # Current turn is 0, same as triggered_at_turn
       # Gap of 3 means needs 3 turns after turn 0, so not eligible at turn 0
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "test"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 0, "test"})
       assert StreamWatcher.get_pending(session_id) == []
     end
   end
@@ -173,7 +176,7 @@ defmodule Mana.TTSR.StreamWatcherTest do
       {:ok, _pid} = StreamWatcher.start_link(session_id, rules)
 
       # Add some content to buffer
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "initial content"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 0, "initial content"})
 
       # Increment turn
       :ok = StreamWatcher.increment_turn(session_id)
@@ -181,7 +184,7 @@ defmodule Mana.TTSR.StreamWatcherTest do
       # After turn increment, buffers should be cleared
       # Pattern that would have matched across boundary now won't match
       # because buffer was reset
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "est"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 1, "est"})
 
       # "test" won't match because "in" was cleared
       assert StreamWatcher.get_pending(session_id) == []
@@ -202,7 +205,7 @@ defmodule Mana.TTSR.StreamWatcherTest do
       {:ok, _pid} = StreamWatcher.start_link(session_id, rules)
 
       # Trigger both rules
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "one two"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 0, "one two"})
 
       pending1 = StreamWatcher.get_pending(session_id)
       assert length(pending1) == 2
@@ -251,11 +254,11 @@ defmodule Mana.TTSR.StreamWatcherTest do
 
       # Send more than 512 characters
       long_content = String.duplicate("a", 600)
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, long_content})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 0, long_content})
 
       # Internal buffer should be limited to 512
       # Send a pattern that matches in the recent 512 chars
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "test"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 1, "test"})
 
       pending = StreamWatcher.get_pending(session_id)
       assert length(pending) == 1
@@ -269,9 +272,9 @@ defmodule Mana.TTSR.StreamWatcherTest do
 
       # Fill buffer with exactly 510 chars, then send "boun" and "dary"
       fill = String.duplicate("x", 510)
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, fill})
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "boun"})
-      :ok = StreamWatcher.watch_event(session_id, {:stream_chunk, :text, "dary"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 0, fill})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 1, "boun"})
+      :ok = StreamWatcher.watch_event(session_id, {:part_delta, 2, "dary"})
 
       pending = StreamWatcher.get_pending(session_id)
       assert length(pending) == 1
