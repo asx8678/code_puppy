@@ -10,9 +10,16 @@ defmodule Mana.ShellTest do
   alias Mana.Shell.Result
 
   setup do
-    # Start required GenServers
-    {:ok, _store} = Store.start_link()
-    {:ok, _registry} = Registry.start_link()
+    # Start required GenServers with proper error handling
+    case Store.start_link() do
+      {:ok, _store} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+    end
+
+    case Registry.start_link() do
+      {:ok, _registry} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+    end
 
     # Ensure executor is started
     case Executor.start_link() do
@@ -21,7 +28,10 @@ defmodule Mana.ShellTest do
     end
 
     # Initialize plugin manager
-    {:ok, _manager} = Manager.start_link()
+    case Manager.start_link() do
+      {:ok, _manager} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+    end
 
     # Clear any existing callbacks to ensure clean state
     Registry.clear(:run_shell_command)

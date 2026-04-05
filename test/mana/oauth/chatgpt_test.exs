@@ -348,6 +348,7 @@ defmodule Mana.OAuth.ChatGPTTest do
   end
 
   describe "start_oauth/1" do
+    @tag :external
     test "requires mocking for full testing" do
       # This test verifies that start_oauth function exists and has correct signature
       # Full testing would require mocking the Flow module and browser launch

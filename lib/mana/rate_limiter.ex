@@ -12,6 +12,7 @@ defmodule Mana.RateLimiter do
 
   @default_limit 60
   @recovery_interval 30_000
+  @required_probe_successes 3
 
   defstruct models: %{}, last_recovery: nil
 
@@ -19,7 +20,8 @@ defmodule Mana.RateLimiter do
           count: non_neg_integer(),
           state: :closed | :open | :half_open,
           limit: non_neg_integer(),
-          idle_cycles: non_neg_integer()
+          idle_cycles: non_neg_integer(),
+          probe_successes: non_neg_integer()
         }
 
   @type t :: %__MODULE__{
@@ -136,11 +138,31 @@ defmodule Mana.RateLimiter do
 
     case model_state.state do
       :half_open ->
-        new_models =
-          Map.put(state.models, model, %{model_state | state: :closed, count: 0, idle_cycles: 0})
+        new_probe_successes = model_state.probe_successes + 1
 
-        Logger.info("Circuit closed for model #{model} after successful probe")
-        {:reply, :ok, %{state | models: new_models}}
+        if new_probe_successes >= @required_probe_successes do
+          new_models =
+            Map.put(state.models, model, %{
+              model_state
+              | state: :closed,
+                count: 0,
+                idle_cycles: 0,
+                probe_successes: 0
+            })
+
+          Logger.info("Circuit closed for model #{model} after #{new_probe_successes} successful probes")
+          {:reply, :ok, %{state | models: new_models}}
+        else
+          new_models =
+            Map.put(state.models, model, %{
+              model_state
+              | probe_successes: new_probe_successes,
+                idle_cycles: 0
+            })
+
+          Logger.info("Probe #{new_probe_successes}/#{@required_probe_successes} succeeded for model #{model}")
+          {:reply, :ok, %{state | models: new_models}}
+        end
 
       _ ->
         {:reply, :ok, state}
@@ -175,7 +197,7 @@ defmodule Mana.RateLimiter do
         case model_state.state do
           :open ->
             Logger.info("Circuit recovery for model #{model}, transitioning to half-open")
-            {model, %{model_state | state: :half_open}}
+            {model, %{model_state | state: :half_open, probe_successes: 0}}
 
           _ ->
             idle = model_state.idle_cycles + 1
@@ -198,7 +220,7 @@ defmodule Mana.RateLimiter do
   # ============================================================================
 
   defp default_model_state do
-    %{count: 0, state: :closed, limit: @default_limit, idle_cycles: 0}
+    %{count: 0, state: :closed, limit: @default_limit, idle_cycles: 0, probe_successes: 0}
   end
 
   defp normalize(model) when is_binary(model), do: String.downcase(model)
