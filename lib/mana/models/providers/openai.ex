@@ -270,6 +270,7 @@ defmodule Mana.Models.Providers.OpenAI do
   end
 
   defp maybe_add_finish_event(events, "stop"), do: events ++ [{:part_end, :content}]
+  defp maybe_add_finish_event(events, "tool_calls"), do: events ++ [{:part_end, :tool_calls}]
   defp maybe_add_finish_event(events, _), do: events
 
   # Response parsing
