@@ -255,9 +255,19 @@ defmodule Mana.Session.Store do
 
   @impl true
   def handle_call({:clear, session_id}, _from, state) do
-    # Reset to empty queue with count 0
-    :ets.insert(@table, {session_id, {:queue.new(), 0}})
-    {:reply, :ok, state}
+    # Check if session exists first (safe for non-existent sessions)
+    case :ets.lookup(@table, session_id) do
+      [{^session_id, _data}] ->
+        # Session exists - reset to empty queue with count 0
+        :ets.insert(@table, {session_id, {:queue.new(), 0}})
+        # Update internal state to maintain consistency
+        new_sessions = Map.put(state.sessions, session_id, {:queue.new(), 0})
+        {:reply, :ok, %{state | sessions: new_sessions}}
+
+      [] ->
+        # Session doesn't exist - safe no-op
+        {:reply, :ok, state}
+    end
   end
 
   @impl true
