@@ -100,15 +100,7 @@ defmodule Mana.Commands.Behaviour do
 
       @impl true
       def execute([key, value], _context) do
-        # Use String.to_existing_atom for safety - only converts if atom exists
-        try do
-          atom_key = String.to_existing_atom(key)
-          Mana.Config.Store.put(atom_key, value)
-          {:ok, "Set \#{key} to \#{value}"}
-        rescue
-          ArgumentError ->
-            {:error, "Unknown configuration key: \#{key}"}
-        end
+        Mana.Config.Store.put_by_name(key, value)
       end
   """
   @callback execute(args :: [String.t()], context :: map()) ::

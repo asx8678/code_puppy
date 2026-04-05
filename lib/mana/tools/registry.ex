@@ -271,6 +271,12 @@ defmodule Mana.Tools.Registry do
     {:noreply, %{state | stats: new_stats}}
   end
 
+  @impl true
+  def handle_info(msg, state) do
+    Logger.warning("[#{__MODULE__}] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
   # Private Functions
 
   defp register_expected_tools do

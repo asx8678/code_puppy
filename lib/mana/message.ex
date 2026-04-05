@@ -122,14 +122,7 @@ defmodule Mana.Message do
   def normalize_keys(%{} = msg) do
     msg
     |> Map.new(fn
-      {k, v} when is_binary(k) ->
-        # Use to_existing_atom to prevent atom table exhaustion from untrusted input
-        try do
-          {String.to_existing_atom(k), v}
-        rescue
-          # Keep as string if atom doesn't exist
-          ArgumentError -> {k, v}
-        end
+      {k, v} when is_binary(k) -> {safe_to_atom(k), v}
 
       pair ->
         pair
@@ -142,6 +135,21 @@ defmodule Mana.Message do
 
   @spec normalize_keys(any()) :: any()
   def normalize_keys(other), do: other
+
+  # Known message keys that are safe to convert to atoms.
+  # Unknown keys stay as strings to prevent atom table exhaustion.
+  @known_keys ~w(role content tool_calls function name arguments tool_call_id
+                 type id refusal model finish_reason index delta message
+                 logprobs usage choices error session_id timestamp category
+                 created object system_fingerprint)a
+
+  defp safe_to_atom(key) when is_binary(key) do
+    if key in Enum.map(@known_keys, &Atom.to_string/1),
+      do: String.to_existing_atom(key),
+      else: key
+  rescue
+    ArgumentError -> key
+  end
 
   defp maybe_normalize_nested(%{tool_calls: calls} = msg) when is_list(calls) do
     %{msg | tool_calls: Enum.map(calls, &normalize_keys/1)}

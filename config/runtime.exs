@@ -61,7 +61,16 @@ if config_env() == :prod do
         |> String.split(",")
         |> Enum.map(&String.trim/1)
         |> Enum.map(fn module_str ->
-          case Code.ensure_compiled(String.to_atom("Elixir.#{module_str}")) do
+          module_atom =
+            try do
+              String.to_existing_atom("Elixir.#{module_str}")
+            rescue
+              ArgumentError ->
+                IO.warn("Unknown plugin module: #{module_str}")
+                nil
+            end
+
+          case if(module_atom, do: Code.ensure_compiled(module_atom)) do
             {:module, module} -> module
             _ -> nil
           end

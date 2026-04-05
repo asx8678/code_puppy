@@ -431,7 +431,7 @@ defmodule Mana.Plugin.Manager do
 
   @impl true
   def handle_info(msg, state) do
-    Logger.debug("[Mana.Plugin.Manager] Unexpected message: #{inspect(msg)}")
+    Logger.warning("[#{__MODULE__}] Unexpected message: #{inspect(msg)}")
     {:noreply, state}
   end
 

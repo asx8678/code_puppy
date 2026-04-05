@@ -317,7 +317,7 @@ defmodule Mana.Callbacks.Registry do
 
   @impl true
   def handle_info(msg, state) do
-    Logger.debug("[Mana.Callbacks.Registry] Unexpected message: #{inspect(msg)}")
+    Logger.warning("[#{__MODULE__}] Unexpected message: #{inspect(msg)}")
     {:noreply, state}
   end
 

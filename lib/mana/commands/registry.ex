@@ -222,6 +222,12 @@ defmodule Mana.Commands.Registry do
     {:noreply, %{state | stats: new_stats}}
   end
 
+  @impl true
+  def handle_info(msg, state) do
+    Logger.warning("[#{__MODULE__}] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
   # Executes command in the caller's process (not in GenServer)
   # This eliminates the serialization bottleneck
   defp execute_in_caller(module, resolved_name, args, context) do

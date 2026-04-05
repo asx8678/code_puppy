@@ -185,7 +185,7 @@ defmodule Mana.Agent.Server do
 
   @impl true
   def handle_info(msg, state) do
-    Logger.debug("[Mana.Agent.Server] Unexpected message: #{inspect(msg)}")
+    Logger.warning("[#{__MODULE__}] Unexpected message: #{inspect(msg)}")
     {:noreply, state}
   end
 
