@@ -167,7 +167,15 @@ defmodule Mana.TTSR.StreamWatcher do
 
   def handle_cast(:increment_turn, state) do
     # Reset buffers and increment turn
-    {:noreply, %{state | current_turn: state.current_turn + 1, text_buffer: "", thinking_buffer: "", tool_buffer: "", byte_buffer: <<>>}}
+    {:noreply,
+     %{
+       state
+       | current_turn: state.current_turn + 1,
+         text_buffer: "",
+         thinking_buffer: "",
+         tool_buffer: "",
+         byte_buffer: <<>>
+     }}
   end
 
   @impl true

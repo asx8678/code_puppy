@@ -36,28 +36,30 @@ defmodule Mana.Tools.FileEdit.CreateFile do
     path = Map.get(args, "file_path")
     content = Map.get(args, "content")
 
-    # Validate path safety
     with {:ok, cwd} <- SafePath.current_working_dir(),
-         {:ok, safe_path} <- SafePath.validate(path, cwd),
-         :ok <- ensure_directory(safe_path),
-         :ok <- write_file(safe_path, content) do
-      {:ok, %{"created" => safe_path, "size" => byte_size(content)}}
+         :ok <- ensure_parent_directory(path, cwd),
+         :ok <- SafePath.safe_write(path, content, cwd) do
+      {:ok, %{"created" => path, "size" => byte_size(content)}}
     end
   end
 
-  defp ensure_directory(safe_path) do
-    dir = Path.dirname(safe_path)
+  # Create parent directory before validate + safe_write.
+  # We do this before validation because validate will fail with :enoent
+  # if the parent directory doesn't exist. The safe_write call handles
+  # the actual atomic write with TOCTOU protection.
+  defp ensure_parent_directory(path, cwd) do
+    expanded =
+      if Path.type(path) == :relative do
+        Path.expand(path, cwd)
+      else
+        Path.expand(path)
+      end
+
+    dir = Path.dirname(expanded)
 
     case File.mkdir_p(dir) do
       :ok -> :ok
       {:error, reason} -> {:error, "Failed to create directory #{dir}: #{reason}"}
-    end
-  end
-
-  defp write_file(safe_path, content) do
-    case File.write(safe_path, content) do
-      :ok -> :ok
-      {:error, reason} -> {:error, "Failed to create #{safe_path}: #{reason}"}
     end
   end
 end
@@ -106,30 +108,30 @@ defmodule Mana.Tools.FileEdit.ReplaceInFile do
     old = Map.get(args, "old_string")
     new = Map.get(args, "new_string")
 
-    # Validate path safety
     with {:ok, cwd} <- SafePath.current_working_dir(),
-         {:ok, safe_path} <- SafePath.validate(path, cwd),
-         {:ok, content} <- read_file(safe_path) do
-      perform_replacement(safe_path, content, old, new)
-    end
-  end
-
-  defp read_file(safe_path) do
-    case File.read(safe_path) do
-      {:ok, content} -> {:ok, content}
-      {:error, reason} -> {:error, "Failed to read #{safe_path}: #{reason}"}
-    end
-  end
-
-  defp perform_replacement(safe_path, content, old, new) do
-    if String.contains?(content, old) do
-      new_content = String.replace(content, old, new, global: false)
-      File.write!(safe_path, new_content)
+         {:ok, _new_content} <- safe_transform_with_replace(path, old, new, cwd) do
       diff = generate_diff(old, new)
-      {:ok, %{"replaced" => safe_path, "diff" => diff}}
-    else
-      {:error, "String not found in #{safe_path}"}
+      {:ok, %{"replaced" => path, "diff" => diff}}
     end
+  end
+
+  # Uses SafePath.safe_transform with a custom transform function that
+  # performs the string replacement. The safe_transform internally uses
+  # safe_write which provides TOCTOU protection via atomic rename.
+  defp safe_transform_with_replace(path, old, new, cwd) do
+    SafePath.safe_transform(
+      path,
+      fn content ->
+        if String.contains?(content, old) do
+          String.replace(content, old, new, global: false)
+        else
+          raise ArgumentError, "String not found in file"
+        end
+      end,
+      cwd
+    )
+  rescue
+    ArgumentError -> {:error, "String not found in #{path}"}
   end
 
   defp generate_diff(old, new) do

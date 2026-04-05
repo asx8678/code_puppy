@@ -8,6 +8,7 @@ defmodule Mana.Models.Providers.OpenAI do
   @behaviour Mana.Models.Provider
 
   alias Mana.Config
+  alias Mana.Models.Providers.SSE
 
   @default_base_url "https://api.openai.com/v1"
   @chat_completions_endpoint "/chat/completions"
@@ -64,11 +65,11 @@ defmodule Mana.Models.Providers.OpenAI do
 
       {:ok, %{status: 429} = resp} ->
         Mana.RateLimiter.report_rate_limit(model)
-        retry_after = parse_retry_after(resp)
-        {:error, "Rate limited (429), retry after #{retry_after}s: #{format_error(resp.body)}"}
+        retry_after = SSE.parse_retry_after(resp)
+        {:error, "Rate limited (429), retry after #{retry_after}s: #{SSE.format_error(resp.body)}"}
 
       {:ok, %{status: status, body: error_body}} ->
-        {:error, "HTTP #{status}: #{format_error(error_body)}"}
+        {:error, "HTTP #{status}: #{SSE.format_error(error_body)}"}
 
       {:error, reason} ->
         {:error, "Request failed: #{inspect(reason)}"}
@@ -135,11 +136,11 @@ defmodule Mana.Models.Providers.OpenAI do
 
           {:ok, %{status: 429} = resp} ->
             Mana.RateLimiter.report_rate_limit(model)
-            retry_after = parse_retry_after(resp)
+            retry_after = SSE.parse_retry_after(resp)
             {:error, "Rate limited (429), retry after #{retry_after}s"}
 
           {:ok, %{status: status, body: error_body}} ->
-            {:error, "HTTP #{status}: #{format_error(error_body)}"}
+            {:error, "HTTP #{status}: #{SSE.format_error(error_body)}"}
 
           {:error, reason} ->
             {:error, "Request failed: #{inspect(reason)}"}
@@ -157,7 +158,7 @@ defmodule Mana.Models.Providers.OpenAI do
             message ->
               case Req.parse_message(resp, message) do
                 {:ok, [data: chunk]} ->
-                  {events, new_buffer} = parse_sse_chunk(buffer <> chunk)
+                  {events, new_buffer} = SSE.parse_chunk(buffer <> chunk)
                   stream_events = Enum.flat_map(events, &parse_sse_event/1)
                   {stream_events, {:streaming, resp, new_buffer}}
 
@@ -178,33 +179,7 @@ defmodule Mana.Models.Providers.OpenAI do
     )
   end
 
-  # SSE Processing
-
-  defp parse_sse_chunk(data) do
-    lines = String.split(data, "\n")
-
-    # Last element may be an incomplete line — keep it as the new buffer
-    {complete_lines, [remainder]} = Enum.split(lines, -1)
-
-    events =
-      complete_lines
-      |> Enum.filter(&String.starts_with?(&1, "data: "))
-      |> Enum.map(fn line ->
-        case String.trim_leading(line, "data: ") do
-          "[DONE]" -> :done
-          json -> decode_sse_json(json)
-        end
-      end)
-
-    {events, remainder}
-  end
-
-  defp decode_sse_json(json) do
-    case Jason.decode(json) do
-      {:ok, decoded} -> decoded
-      {:error, _} -> {:error, "Invalid JSON: #{json}"}
-    end
-  end
+  # SSE event parsing
 
   defp parse_sse_event(:done), do: [{:part_end, :done}]
   defp parse_sse_event({:error, _} = err), do: [err]
@@ -328,26 +303,4 @@ defmodule Mana.Models.Providers.OpenAI do
       tools -> Map.put(body, "tools", tools)
     end
   end
-
-  defp parse_retry_after(%{headers: headers}) do
-    case headers["retry-after"] do
-      [value | _] ->
-        case Integer.parse(value) do
-          {seconds, _} -> seconds
-          :error -> 60
-        end
-
-      _ ->
-        60
-    end
-  end
-
-  defp format_error(%{__struct__: _} = body), do: inspect(body)
-
-  defp format_error(body) when is_map(body) do
-    error = body["error"] || %{}
-    error["message"] || inspect(body)
-  end
-
-  defp format_error(body), do: inspect(body)
 end

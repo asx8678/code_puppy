@@ -163,6 +163,97 @@ defmodule Mana.Tools.SafePath do
     check_path_within_base(path, base_dir)
   end
 
+  @doc """
+  Atomically writes content to a validated path, minimizing TOCTOU window.
+
+  The race condition: `validate/2` checks a path is safe, then a SEPARATE
+  `File.write` call writes to it. Between those two calls, an attacker could
+  swap the validated path for a symlink. This function mitigates that by:
+
+  1. Validating the path
+  2. Writing to a temp file in the same directory
+  3. Re-validating the target path hasn't changed (symlink swap detection)
+  4. Renaming temp to target (atomic on same filesystem)
+
+  ## Parameters
+
+  - `path` - The path to write to (relative or absolute)
+  - `content` - The binary content to write
+  - `cwd` - The allowed base directory
+
+  ## Returns
+
+  - `:ok` - File written successfully
+  - `{:error, reason}` - Validation failed or write failed
+  """
+  @spec safe_write(String.t(), binary(), String.t()) :: :ok | {:error, String.t()}
+  def safe_write(path, content, cwd) do
+    with {:ok, safe_path} <- validate(path, cwd) do
+      dir = Path.dirname(safe_path)
+      tmp_name = ".mana_tmp_#{System.unique_integer([:positive, :monotonic])}"
+      tmp_path = Path.join(dir, tmp_name)
+
+      try do
+        case File.write(tmp_path, content) do
+          :ok ->
+            # Re-validate: detect symlink swap between first validate and now
+            case validate(path, cwd) do
+              {:ok, ^safe_path} ->
+                case File.rename(tmp_path, safe_path) do
+                  :ok -> :ok
+                  {:error, reason} -> {:error, "Failed to rename temp file: #{reason}"}
+                end
+
+              {:ok, _different} ->
+                {:error, "Path resolution changed during write - possible symlink attack: #{path}"}
+
+              {:error, reason} ->
+                {:error, reason}
+            end
+
+          {:error, reason} ->
+            {:error, "Failed to write temp file: #{reason}"}
+        end
+      after
+        # Always clean up temp file on any error path.
+        # On success, the rename already moved the file away so rm returns
+        # {:error, :enoent} which is harmless. On error, it cleans up the temp file.
+        File.rm(tmp_path)
+      end
+    end
+  end
+
+  @doc """
+  Reads, transforms, and atomically writes back a file.
+
+  Combines read + transform + safe_write for replace-in-file operations,
+  minimizing the TOCTOU window by using atomic rename.
+
+  ## Parameters
+
+  - `path` - The path to the file (relative or absolute)
+  - `transform_fn` - A function that takes the current content and returns new content
+  - `cwd` - The allowed base directory
+
+  ## Returns
+
+  - `{:ok, new_content}` - File transformed and written successfully
+  - `{:error, reason}` - Validation, read, or write failed
+  """
+  @spec safe_transform(String.t(), (String.t() -> String.t()), String.t()) ::
+          {:ok, String.t()} | {:error, String.t()}
+  def safe_transform(path, transform_fn, cwd) do
+    with {:ok, safe_path} <- validate(path, cwd),
+         {:ok, content} <- File.read(safe_path) do
+      new_content = transform_fn.(content)
+
+      case safe_write(path, new_content, cwd) do
+        :ok -> {:ok, new_content}
+        {:error, _} = err -> err
+      end
+    end
+  end
+
   # ============================================================================
   # Private Functions
   # ============================================================================
