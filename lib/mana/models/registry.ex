@@ -127,6 +127,18 @@ defmodule Mana.Models.Registry do
   end
 
   @doc """
+  Unregisters a provider by ID.
+
+  ## Examples
+
+      :ok = Mana.Models.Registry.unregister_provider("custom")
+  """
+  @spec unregister_provider(String.t()) :: :ok
+  def unregister_provider(id) do
+    GenServer.call(__MODULE__, {:unregister_provider, id})
+  end
+
+  @doc """
   Lists all registered models with their configurations.
 
   ## Examples
@@ -268,6 +280,12 @@ defmodule Mana.Models.Registry do
   @impl true
   def handle_call({:register_provider, id, module}, _from, state) do
     new_providers = Map.put(state.providers, id, module)
+    {:reply, :ok, %{state | providers: new_providers}}
+  end
+
+  @impl true
+  def handle_call({:unregister_provider, id}, _from, state) do
+    new_providers = Map.delete(state.providers, id)
     {:reply, :ok, %{state | providers: new_providers}}
   end
 

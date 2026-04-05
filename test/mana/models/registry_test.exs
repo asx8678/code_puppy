@@ -128,14 +128,15 @@ defmodule Mana.Models.RegistryTest do
 
   describe "complete/3" do
     test "returns error when provider not found", %{registry_name: name} do
-      # Register a test provider that doesn't exist
-      :ok = GenServer.call(name, {:register_provider, "test", NonExistentProvider})
+      # Unregister the openai_compatible provider so unknown models will fail
+      # First, let's get current providers and remove openai_compatible
+      :ok = GenServer.call(name, {:unregister_provider, "openai_compatible"})
 
       messages = [%{"role" => "user", "content" => "Hello"}]
-      result = GenServer.call(name, {:complete, messages, "test-model", []})
+      result = GenServer.call(name, {:complete, messages, "unknown-model", []})
 
-      # Should error because provider module doesn't exist
-      assert {:error, _} = result
+      # Should error because provider is not registered
+      assert {:error, :provider_not_found} = result
     end
 
     test "increments dispatch stats on completion attempt", %{registry_name: name} do
@@ -156,8 +157,9 @@ defmodule Mana.Models.RegistryTest do
       messages = [%{"role" => "user", "content" => "Hello"}]
       result = GenServer.call(name, {:stream, messages, "gpt-4", []})
 
-      # Stream is returned as an Enumerable.t()
-      assert is_function(result, 2)
+      # The registry returns a dispatch tuple with the provider and args
+      # The actual streaming function is created by the client-side stream/3 wrapper
+      assert {:dispatch, Mana.Models.Providers.OpenAI, ^messages, "gpt-4", []} = result
     end
 
     test "increments dispatch stats on stream attempt", %{registry_name: name} do

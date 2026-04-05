@@ -18,9 +18,14 @@ defmodule Mana.Web.ChatLiveTest do
   defp build_socket(assigns) do
     base_socket = %Phoenix.LiveView.Socket{}
 
+    defaults = %{
+      __changed__: %{},
+      agent_pid: nil
+    }
+
     %Phoenix.LiveView.Socket{
       base_socket
-      | assigns: Map.merge(%{__changed__: %{}}, assigns)
+      | assigns: Map.merge(defaults, assigns)
     }
   end
 

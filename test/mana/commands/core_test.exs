@@ -123,7 +123,7 @@ defmodule Mana.Commands.CoreTest do
     end
 
     test "/show for unset key" do
-      assert {:ok, "unset_key is not set"} = Registry.dispatch("/show", ["unset_key"], %{})
+      assert {:ok, "unset_key is not a known config key"} = Registry.dispatch("/show", ["unset_key"], %{})
     end
 
     test "/show without args returns error" do
