@@ -12,10 +12,13 @@ defmodule Mana.Message.Shell do
   - `:category` - Always `:shell`
   - `:session_id` - Optional session identifier
 
-  Type-specific fields:
+  Type-specific fields (use string keys for JSON-serializable maps):
   - `:command` - String command that was executed
   - `:output` - String output from the command
   - `:exit_code` - Integer exit code (0 for success)
+
+  When working with plain maps for JSON serialization, use string keys:
+  `%{"command" => "ls", "output" => "files", "exit_code" => 0}`
 
   ## Examples
 

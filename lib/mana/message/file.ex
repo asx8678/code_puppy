@@ -12,10 +12,13 @@ defmodule Mana.Message.File do
   - `:category` - Always `:file`
   - `:session_id` - Optional session identifier
 
-  Type-specific fields:
+  Type-specific fields (use string keys for JSON-serializable maps):
   - `:path` - String file path
   - `:content` - String content (optional for delete operations)
   - `:operation` - Atom: `:read`, `:write`, `:edit`, or `:delete`
+
+  When working with plain maps for JSON serialization, use string keys:
+  `%{"path" => "/file.txt", "operation" => "read", "content" => "data"}`
 
   ## Examples
 

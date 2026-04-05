@@ -12,8 +12,11 @@ defmodule Mana.Message.Control do
   - `:category` - Always `:control`
   - `:session_id` - Optional session identifier
 
-  Type-specific fields:
+  Type-specific fields (use string keys for JSON-serializable maps):
   - `:command` - Atom: `:start`, `:stop`, `:pause`, or `:resume`
+
+  When working with plain maps for JSON serialization, use string keys:
+  `%{"command" => "start"}`
 
   ## Examples
 

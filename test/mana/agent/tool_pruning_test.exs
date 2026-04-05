@@ -14,8 +14,8 @@ defmodule Mana.Agent.ToolPruningTest do
 
     test "returns unchanged when no tool calls" do
       messages = [
-        %{role: "user", content: "Hello"},
-        %{role: "assistant", content: "Hi!"}
+        %{"role" => "user", "content" => "Hello"},
+        %{"role" => "assistant", "content" => "Hi!"}
       ]
 
       assert ToolPruning.prune_interrupted(messages) == messages

@@ -551,9 +551,6 @@ defmodule Mana.OAuth.ClaudeCode do
         %{"role" => role, "content" => content} ->
           %{"role" => to_string(role), "content" => content}
 
-        %{role: role, content: content} ->
-          %{"role" => to_string(role), "content" => content}
-
         _ ->
           msg
       end

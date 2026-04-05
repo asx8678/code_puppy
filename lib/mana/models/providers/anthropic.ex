@@ -261,15 +261,12 @@ defmodule Mana.Models.Providers.Anthropic do
     # Filter out system messages — they should be passed via the "system" parameter
     messages
     |> Enum.reject(fn msg ->
-      role = msg["role"] || msg[:role]
-      role == "system" or role == :system
+      role = Map.get(msg, "role")
+      role == "system"
     end)
     |> Enum.map(fn msg ->
       case msg do
         %{"role" => role, "content" => content} ->
-          %{"role" => convert_role(role), "content" => content}
-
-        %{role: role, content: content} ->
           %{"role" => convert_role(role), "content" => content}
 
         _ ->
@@ -356,10 +353,9 @@ defmodule Mana.Models.Providers.Anthropic do
     system_text =
       messages
       |> Enum.filter(fn msg ->
-        role = msg["role"] || msg[:role]
-        role == "system" or role == :system
+        Map.get(msg, "role") == "system"
       end)
-      |> Enum.map_join("\n\n", fn msg -> msg["content"] || msg[:content] end)
+      |> Enum.map_join("\n\n", fn msg -> Map.get(msg, "content", "") end)
 
     if system_text != "" and not Keyword.has_key?(opts, :system) do
       Map.put(body, "system", system_text)

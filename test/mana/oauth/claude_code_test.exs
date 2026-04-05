@@ -372,7 +372,7 @@ defmodule Mana.OAuth.ClaudeCodeTest do
   end
 
   describe "message conversion" do
-    test "converts atom-key messages to string keys", %{temp_dir: _} do
+    test "converts string-key messages with cache_control for system messages", %{temp_dir: _} do
       future_time = System.os_time(:second) + 3600
 
       tokens = %{
@@ -404,9 +404,10 @@ defmodule Mana.OAuth.ClaudeCodeTest do
              }
            }}
         end do
+        # Use string keys for JSON-serializable messages per convention
         messages = [
-          %{role: :system, content: "You are helpful"},
-          %{role: :user, content: "Hello"}
+          %{"role" => "system", "content" => "You are helpful"},
+          %{"role" => "user", "content" => "Hello"}
         ]
 
         {:ok, _response} = ClaudeCode.complete(messages, "claude-sonnet-4-20250514")

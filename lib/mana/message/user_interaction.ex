@@ -13,11 +13,14 @@ defmodule Mana.Message.UserInteraction do
   - `:category` - Always `:user_interaction`
   - `:session_id` - Optional session identifier
 
-  Type-specific fields:
+  Type-specific fields (use string keys for JSON-serializable maps):
   - `:prompt` - String prompt displayed to user
   - `:response` - String user response (nil until provided)
   - `:interaction_type` - Atom: `:input`, `:confirmation`, or `:selection`
   - `:payload` - Map for additional data (e.g., `choices` for selection)
+
+  When working with plain maps for JSON serialization, use string keys:
+  `%{"prompt" => "Enter name:", "interaction_type" => "input"}`
 
   ## Examples
 
