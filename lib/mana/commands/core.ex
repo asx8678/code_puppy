@@ -364,7 +364,8 @@ defmodule Mana.Commands.Core do
       Mana.Commands.Diff,
       Mana.Commands.Config,
       Mana.Commands.Hooks,
-      Mana.Commands.Colors
+      Mana.Commands.Colors,
+      Mana.Commands.Pack
     ]
 
     Enum.each(commands, fn module ->
