@@ -124,11 +124,15 @@ defmodule Mana.Plugins.FrontendEmitter do
   """
   @spec on_stream_event(String.t(), term(), String.t() | nil) :: :ok
   def on_stream_event(event_type, event_data, session_id) do
-    emit("stream_event", %{
-      event_type: event_type,
-      event_data: sanitize_event_data(event_data),
-      agent_session_id: session_id
-    }, session_id)
+    emit(
+      "stream_event",
+      %{
+        event_type: event_type,
+        event_data: sanitize_event_data(event_data),
+        agent_session_id: session_id
+      },
+      session_id
+    )
 
     Logger.debug("[FrontendEmitter] Emitted stream_event: #{event_type}")
     :ok
