@@ -257,4 +257,128 @@ defmodule Mana.Tools.SafePathTest do
       end
     end
   end
+
+  describe "safe_read/2" do
+    test "reads file content atomically with validation" do
+      temp_dir = Path.join(System.tmp_dir!(), "safe_read_test_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      try do
+        file_path = Path.join(temp_dir, "test.txt")
+        File.write!(file_path, "hello world")
+
+        assert {:ok, "hello world"} = SafePath.safe_read("test.txt", temp_dir)
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+
+    test "rejects reading outside base directory" do
+      temp_dir = Path.join(System.tmp_dir!(), "safe_read_oob_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      try do
+        assert {:error, "Path escapes allowed directory"} =
+                 SafePath.safe_read("../etc/passwd", temp_dir)
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+
+    test "rejects reading symlinks" do
+      temp_dir = Path.join(System.tmp_dir!(), "safe_read_symlink_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      try do
+        # Create a legitimate file
+        file_path = Path.join(temp_dir, "real.txt")
+        File.write!(file_path, "real content")
+
+        # Create a symlink to it
+        link_path = Path.join(temp_dir, "link.txt")
+        File.ln_s!(file_path, link_path)
+
+        # Should reject reading the symlink due to TOCTOU protection
+        assert {:error, msg} = SafePath.safe_read("link.txt", temp_dir)
+        assert msg =~ "symlink"
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+
+    test "returns error for non-existent file" do
+      temp_dir = Path.join(System.tmp_dir!(), "safe_read_missing_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      try do
+        assert {:error, _} = SafePath.safe_read("nonexistent.txt", temp_dir)
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+  end
+
+  describe "safe_delete/2" do
+    test "deletes file atomically with validation" do
+      temp_dir = Path.join(System.tmp_dir!(), "safe_delete_test_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      try do
+        file_path = Path.join(temp_dir, "delete_me.txt")
+        File.write!(file_path, "delete me")
+
+        assert :ok = SafePath.safe_delete("delete_me.txt", temp_dir)
+        refute File.exists?(file_path)
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+
+    test "rejects deleting outside base directory" do
+      temp_dir = Path.join(System.tmp_dir!(), "safe_delete_oob_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      try do
+        assert {:error, "Path escapes allowed directory"} =
+                 SafePath.safe_delete("../etc/passwd", temp_dir)
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+
+    test "rejects deleting symlinks" do
+      temp_dir = Path.join(System.tmp_dir!(), "safe_delete_symlink_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      try do
+        # Create a legitimate file outside temp_dir
+        outside_file = Path.join(System.tmp_dir!(), "outside_#{System.unique_integer([:positive])}.txt")
+        File.write!(outside_file, "outside content")
+
+        # Create a symlink inside temp_dir that points to outside file
+        link_path = Path.join(temp_dir, "sneaky_link")
+        File.ln_s!(outside_file, link_path)
+
+        # Should reject deleting the symlink due to TOCTOU protection
+        assert {:error, msg} = SafePath.safe_delete("sneaky_link", temp_dir)
+        assert msg =~ "symlink"
+
+        # Clean up outside file
+        File.rm(outside_file)
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+
+    test "returns error for non-existent file" do
+      temp_dir = Path.join(System.tmp_dir!(), "safe_delete_missing_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      try do
+        assert {:error, _} = SafePath.safe_delete("nonexistent.txt", temp_dir)
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+  end
 end

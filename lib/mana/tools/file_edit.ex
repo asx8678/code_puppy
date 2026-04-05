@@ -178,13 +178,10 @@ defmodule Mana.Tools.FileEdit.DeleteFile do
   def execute(args) do
     path = Map.get(args, "file_path")
 
-    # Validate path safety
+    # Validate path safety and delete atomically with TOCTOU protection
     with {:ok, cwd} <- SafePath.current_working_dir(),
-         {:ok, safe_path} <- SafePath.validate(path, cwd) do
-      case File.rm(safe_path) do
-        :ok -> {:ok, %{"deleted" => safe_path}}
-        {:error, reason} -> {:error, "Failed to delete #{safe_path}: #{reason}"}
-      end
+         :ok <- SafePath.safe_delete(path, cwd) do
+      {:ok, %{"deleted" => path}}
     end
   end
 end
