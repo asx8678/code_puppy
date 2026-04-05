@@ -198,7 +198,8 @@ defmodule Mana.Tools.FileOps.Grep do
     # Validate path safety
     with {:ok, cwd} <- SafePath.current_working_dir(),
          {:ok, safe_dir} <- SafePath.validate(dir, cwd) do
-      handle_grep_result(System.cmd("rg", ["--json", pattern, safe_dir], stderr_to_stdout: true))
+      result = System.cmd("rg", ["--json", pattern, safe_dir], stderr_to_stdout: true)
+      handle_grep_result(result)
     end
   end
 

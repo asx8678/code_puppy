@@ -214,6 +214,8 @@ defmodule Mana.Tools.SafePath do
     # We use Path.split which gives us path components
     parts = Path.split(expanded_path)
 
+    # Count depth: go up one level for "..", down one for normal components
+    # Skip the root component ("/" on Unix)
     depth_result = Enum.reduce(parts, {:ok, 0}, &update_depth/2)
 
     case depth_result do
@@ -222,17 +224,10 @@ defmodule Mana.Tools.SafePath do
     end
   end
 
-  # Count depth: go up one level for "..", down one for normal components
-  # Skip the root component ("/" on Unix)
   defp update_depth("/", {:ok, depth}), do: {:ok, depth}
   defp update_depth(".", {:ok, depth}), do: {:ok, depth}
-
-  defp update_depth("..", {:ok, depth}) do
-    new_depth = depth - 1
-    # Negative depth means we went above root - that's traversal!
-    if new_depth < 0, do: {:error, "traversal"}, else: {:ok, new_depth}
-  end
-
+  defp update_depth("..", {:ok, depth}) when depth <= 0, do: {:error, "traversal"}
+  defp update_depth("..", {:ok, depth}), do: {:ok, depth - 1}
   defp update_depth(_, {:ok, depth}), do: {:ok, depth + 1}
 
   defp check_relative_path_within_base(expanded_path, expanded_base, original_path) do
