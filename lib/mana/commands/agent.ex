@@ -26,6 +26,8 @@ defmodule Mana.Commands.Agent do
 
   alias Mana.Agents.Registry, as: AgentsRegistry
   alias Mana.Session.Store, as: SessionStore
+  alias Mana.TUI.Screens.AgentPicker
+  alias Mana.TUI.ScreenRunner
 
   @impl true
   def name, do: "/agent"
@@ -34,7 +36,7 @@ defmodule Mana.Commands.Agent do
   def description, do: "Manage AI agents"
 
   @impl true
-  def usage, do: "/agent [list|set <name>|current]"
+  def usage, do: "/agent [list|set <name>|current|picker]"
 
   @impl true
   def execute(["list"], _context) do
@@ -79,8 +81,17 @@ defmodule Mana.Commands.Agent do
     end
   end
 
-  def execute([], _context) do
-    {:ok, "Usage: #{usage()}"}
+  def execute([], context) do
+    session_id = get_session_id(context)
+
+    case ScreenRunner.run(AgentPicker, session_id: session_id) do
+      {:ok, agent} ->
+        name = Map.get(agent, :name, "unknown")
+        {:ok, "Agent set to: #{name}"}
+
+      :ok ->
+        {:ok, "Agent picker cancelled."}
+    end
   end
 
   def execute(_args, _context) do

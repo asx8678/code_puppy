@@ -94,15 +94,17 @@ defmodule Mana.Application do
           {Task.Supervisor, name: Mana.TaskSupervisor},
           # 11. Agents.RunSupervisor — supervised agent runs
           {Mana.Agents.RunSupervisor, []},
-          # 12. RateLimiter — per-model rate limiting
+          # 12. Pack.Supervisor — multi-agent workflow orchestrator (uses RunSupervisor)
+          {Mana.Pack.Supervisor, []},
+          # 13. RateLimiter — per-model rate limiting
           {Mana.RateLimiter, []},
-          # 13. OAuth.RefreshManager — serialized token refresh
+          # 14. OAuth.RefreshManager — serialized token refresh
           {Mana.OAuth.RefreshManager, []},
-          # 14. TTSR Registry — stream watcher session registry
+          # 15. TTSR Registry — stream watcher session registry
           {Registry, keys: :unique, name: Mana.TTSR.Registry},
-          # 15. TTSR Watcher Supervisor — supervised stream watchers
+          # 16. TTSR Watcher Supervisor — supervised stream watchers
           {DynamicSupervisor, strategy: :one_for_one, name: Mana.TTSR.WatcherSupervisor},
-          # 16. TTSR Watcher Cleanup — periodic cleanup of stale watchers
+          # 17. TTSR Watcher Cleanup — periodic cleanup of stale watchers
           {Mana.TTSR.WatcherCleanup, []}
         ]
       else

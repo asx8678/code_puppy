@@ -24,7 +24,6 @@ defmodule Mana.TUI.ScreenRunner do
       end
   """
 
-
   @doc """
   Run a screen module in an interactive loop.
 

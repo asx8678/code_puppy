@@ -86,7 +86,7 @@ defmodule Mana.Tools.RegistryTest do
     test "registers real tools on startup" do
       tools = Registry.list_tools()
 
-      # 10 real tools are registered on startup
+      # Core tools
       assert "list_files" in tools
       assert "read_file" in tools
       assert "grep" in tools
@@ -97,7 +97,18 @@ defmodule Mana.Tools.RegistryTest do
       assert "invoke_agent" in tools
       assert "ask_user" in tools
       assert "run_shell_command" in tools
-      assert length(tools) == 10
+
+      # Browser tools
+      assert "browser_navigate" in tools
+      assert "browser_click" in tools
+      assert "browser_screenshot_analyze" in tools
+      assert "browser_find_by_role" in tools
+      assert "browser_find_by_text" in tools
+      assert "browser_find_by_label" in tools
+      assert "browser_new_page" in tools
+      assert "browser_list_pages" in tools
+
+      assert length(tools) == 18
     end
   end
 
@@ -212,8 +223,8 @@ defmodule Mana.Tools.RegistryTest do
     test "returns initial stats" do
       stats = Registry.get_stats()
 
-      # 10 real tools are registered on startup
-      assert stats.tools_registered == 10
+      # 18 real tools are registered on startup (10 core + 8 browser)
+      assert stats.tools_registered == 18
       assert stats.calls == 0
       assert stats.errors == 0
     end
@@ -222,8 +233,8 @@ defmodule Mana.Tools.RegistryTest do
       Registry.register(TestTool)
 
       stats = Registry.get_stats()
-      # 10 real tools + 1 new tool
-      assert stats.tools_registered == 11
+      # 18 real tools + 1 new tool
+      assert stats.tools_registered == 19
     end
 
     test "stats reflect tool calls" do
