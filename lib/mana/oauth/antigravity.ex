@@ -291,39 +291,55 @@ defmodule Mana.OAuth.Antigravity do
 
     case TokenStore.load(provider_key) do
       {:ok, tokens} ->
-        if TokenStore.expired?(tokens) do
-          # Check if we have a refresh token
-          case tokens["refresh_token"] || tokens[:refresh_token] do
-            nil ->
-              # Token is expired but can't be refreshed
-              {:error, :expired}
-
-            refresh_token when is_binary(refresh_token) ->
-              # Try to refresh using RefreshManager
-              RefreshManager.execute_refresh(provider_key, fn _ ->
-                do_refresh_token_call(refresh_token, account_id)
-                |> case do
-                  {:ok, new_tokens} ->
-                    case save_refreshed_tokens(provider_key, new_tokens) do
-                      :ok -> {:ok, new_tokens}
-                      error -> error
-                    end
-
-                  error ->
-                    error
-                end
-              end)
-              |> case do
-                {:ok, new_tokens} -> {:ok, new_tokens["access_token"]}
-                error -> error
-              end
-          end
-        else
-          {:ok, tokens["access_token"]}
-        end
+        get_token_from_loaded(provider_key, tokens, account_id)
 
       {:error, :not_found} ->
         {:error, :not_found}
+    end
+  end
+
+  # Extracted helper to reduce cyclomatic complexity in get_token/1
+  defp get_token_from_loaded(provider_key, tokens, account_id) do
+    if TokenStore.expired?(tokens) do
+      handle_expired_token(provider_key, tokens, account_id)
+    else
+      {:ok, tokens["access_token"]}
+    end
+  end
+
+  # Extracted helper to handle expired token refresh logic
+  defp handle_expired_token(provider_key, tokens, account_id) do
+    case tokens["refresh_token"] || tokens[:refresh_token] do
+      nil ->
+        {:error, :expired}
+
+      refresh_token when is_binary(refresh_token) ->
+        execute_token_refresh(provider_key, refresh_token, account_id)
+    end
+  end
+
+  # Extracted helper to execute token refresh and extract access token
+  defp execute_token_refresh(provider_key, refresh_token, account_id) do
+    RefreshManager.execute_refresh(provider_key, fn _ ->
+      do_refresh_and_save(provider_key, refresh_token, account_id)
+    end)
+    |> case do
+      {:ok, new_tokens} -> {:ok, new_tokens["access_token"]}
+      error -> error
+    end
+  end
+
+  # Extracted helper to perform refresh call and save tokens
+  defp do_refresh_and_save(provider_key, refresh_token, account_id) do
+    case do_refresh_token_call(refresh_token, account_id) do
+      {:ok, new_tokens} ->
+        case save_refreshed_tokens(provider_key, new_tokens) do
+          :ok -> {:ok, new_tokens}
+          error -> error
+        end
+
+      error ->
+        error
     end
   end
 
@@ -346,17 +362,7 @@ defmodule Mana.OAuth.Antigravity do
          refresh_token when is_binary(refresh_token) <-
            tokens["refresh_token"] || tokens[:refresh_token] do
       RefreshManager.execute_refresh(provider_key, fn _ ->
-        do_refresh_token_call(refresh_token, account_id)
-        |> case do
-          {:ok, new_tokens} ->
-            case save_refreshed_tokens(provider_key, new_tokens) do
-              :ok -> {:ok, new_tokens}
-              error -> error
-            end
-
-          error ->
-            error
-        end
+        do_refresh_and_save(provider_key, refresh_token, account_id)
       end)
     else
       nil -> {:error, "No refresh token available"}

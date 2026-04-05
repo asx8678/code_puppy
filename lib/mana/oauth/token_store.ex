@@ -24,6 +24,8 @@ defmodule Mana.OAuth.TokenStore do
 
   require Logger
 
+  alias Mana.OAuth.RefreshManager
+
   @default_tokens_dir "~/.mana/tokens"
 
   @doc """
@@ -162,7 +164,7 @@ defmodule Mana.OAuth.TokenStore do
           {:ok, map()} | {:error, term()}
   def refresh_if_needed(provider, refresh_fn) when is_function(refresh_fn, 1) do
     # Delegate to RefreshManager for serialized refresh
-    Mana.OAuth.RefreshManager.refresh_if_needed(provider, refresh_fn)
+    RefreshManager.refresh_if_needed(provider, refresh_fn)
   end
 
   @doc """

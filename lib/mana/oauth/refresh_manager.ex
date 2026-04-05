@@ -186,20 +186,7 @@ defmodule Mana.OAuth.RefreshManager do
       @state_cooldown ->
         # Just finished a refresh, check if token is now valid
         # If still expired (rare edge case), start a new refresh
-        case TokenStore.load(provider) do
-          {:ok, tokens} ->
-            if TokenStore.expired?(tokens) do
-              Logger.debug("Token still expired after cooldown, refreshing again for '#{provider}'")
-              new_state = start_refresh(state, provider, refresh_fn, from)
-              {:noreply, new_state}
-            else
-              # Token is valid, reply immediately
-              {:reply, {:ok, tokens}, state}
-            end
-
-          error ->
-            {:reply, error, state}
-        end
+        handle_cooldown_state(state, provider, refresh_fn, from)
     end
   end
 
@@ -232,6 +219,24 @@ defmodule Mana.OAuth.RefreshManager do
   # ============================================================================
   # Private Functions
   # ============================================================================
+
+  # Handle the cooldown state in handle_call - extracted to reduce nesting
+  defp handle_cooldown_state(state, provider, refresh_fn, from) do
+    case TokenStore.load(provider) do
+      {:ok, tokens} ->
+        if TokenStore.expired?(tokens) do
+          Logger.debug("Token still expired after cooldown, refreshing again for '#{provider}'")
+          new_state = start_refresh(state, provider, refresh_fn, from)
+          {:noreply, new_state}
+        else
+          # Token is valid, reply immediately
+          {:reply, {:ok, tokens}, state}
+        end
+
+      error ->
+        {:reply, error, state}
+    end
+  end
 
   defp start_refresh(state, provider, refresh_fn, initial_caller) do
     # Set state to refreshing
