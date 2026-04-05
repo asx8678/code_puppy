@@ -59,13 +59,30 @@ defmodule Mana.Tools.Registry do
     Mana.Tools.Browser.Find.ByLabel,
     Mana.Tools.Browser.Page.New,
     Mana.Tools.Browser.Page.List,
+    Mana.Tools.Browser.Hover,
+    Mana.Tools.Browser.TextInput.SetText,
+    Mana.Tools.Browser.TextInput.GetText,
+    Mana.Tools.Browser.TextInput.GetValue,
+    Mana.Tools.Browser.ExecuteJs,
+    Mana.Tools.Browser.Scroll.ScrollPage,
+    Mana.Tools.Browser.Scroll.ScrollToElement,
+    Mana.Tools.Browser.Wait.WaitForElement,
+    Mana.Tools.Browser.Wait.WaitForLoad,
+    Mana.Tools.Browser.Workflow.SaveWorkflow,
+    Mana.Tools.Browser.Workflow.ListWorkflows,
+    Mana.Tools.Browser.Workflow.ReadWorkflow,
+    Mana.Tools.Browser.Highlight.HighlightElement,
+    Mana.Tools.Browser.Highlight.ClearHighlights,
     # Terminal tools
     Mana.Tools.Terminal.Open,
     Mana.Tools.Terminal.RunCommand,
     Mana.Tools.Terminal.SendKeys,
     Mana.Tools.Terminal.ReadOutput,
     Mana.Tools.Terminal.Close,
-    Mana.Tools.Terminal.Screenshot
+    Mana.Tools.Terminal.Screenshot,
+    # Scheduler tools
+    Mana.Tools.SchedulerTools.ListTasks,
+    Mana.Tools.SchedulerTools.CreateTask
   ]
 
   # Client API
