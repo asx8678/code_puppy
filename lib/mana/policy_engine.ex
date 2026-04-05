@@ -6,6 +6,19 @@ defmodule Mana.PolicyEngine do
   allowed, denied, or require user approval. Rules are loaded from JSON policy
   files at both global (~/.mana/policy.json) and local (.mana/policy.json) levels.
 
+  ## Trust Model
+
+  **Global** policy (`~/.mana/policy.json`) is fully trusted — it lives in the
+  user's home directory and may contain `:allow` rules.
+
+  **Local** policy (`.mana/policy.json` in the working directory) is UNTRUSTED.
+  A malicious repository could ship its own `.mana/policy.json` to hijack
+  permission checks. Therefore local policies can only **restrict** access:
+
+  - Local `:allow` rules are automatically upgraded to `:ask_user`.
+  - The merged `default_action` is the most restrictive of global and local
+    (`:deny` > `:ask_user` > `:allow`).
+
   ## Policy File Format
 
       {
@@ -78,9 +91,21 @@ defmodule Mana.PolicyEngine do
     global = load_policy_file(Path.join(Paths.config_dir(), @policy_file))
     local = load_policy_file(Path.join(@local_policy_dir, @policy_file))
 
+    # Local policy is untrusted (may come from a malicious repo).
+    # Sanitize: local :allow rules are upgraded to :ask_user so a
+    # crafted .mana/policy.json can never grant more access than the
+    # global policy alone would.
+    sanitized_local_rules = sanitize_local_rules(local.rules)
+
+    merged_default =
+      most_restrictive_action(
+        global.default_action || :ask_user,
+        local.default_action || :ask_user
+      )
+
     %__MODULE__{
-      rules: global.rules ++ local.rules,
-      default_action: local.default_action || global.default_action || :ask_user
+      rules: global.rules ++ sanitized_local_rules,
+      default_action: merged_default
     }
   end
 
@@ -109,11 +134,16 @@ defmodule Mana.PolicyEngine do
   """
   @spec evaluate(t(), String.t(), map()) :: {action(), String.t()}
   def evaluate(policy, tool_name, args) do
-    args_str = Jason.encode!(args)
+    case Jason.encode(args) do
+      {:ok, args_str} ->
+        case find_matching_rule(policy, tool_name, args_str) do
+          nil -> {policy.default_action, "No matching policy rule"}
+          rule -> {rule.action, rule.reason}
+        end
 
-    case find_matching_rule(policy, tool_name, args_str) do
-      nil -> {policy.default_action, "No matching policy rule"}
-      rule -> {rule.action, rule.reason}
+      {:error, _} ->
+        # Non-encodable args — fall back to the default action rather than crash.
+        {policy.default_action, "No matching policy rule (args not encodable)"}
     end
   end
 
@@ -133,6 +163,27 @@ defmodule Mana.PolicyEngine do
   end
 
   # Private functions
+
+  # Local (untrusted) rules can only restrict, never relax.
+  # Any :allow action is upgraded to :ask_user to prevent a malicious
+  # repo from granting itself blanket permissions.
+  defp sanitize_local_rules(rules) do
+    Enum.map(rules, fn rule ->
+      if rule.action == :allow do
+        %{rule | action: :ask_user}
+      else
+        rule
+      end
+    end)
+  end
+
+  # Return the more restrictive of two actions.
+  # Ordering: :deny > :ask_user > :allow
+  defp most_restrictive_action(:deny, _), do: :deny
+  defp most_restrictive_action(_, :deny), do: :deny
+  defp most_restrictive_action(:ask_user, _), do: :ask_user
+  defp most_restrictive_action(_, :ask_user), do: :ask_user
+  defp most_restrictive_action(:allow, :allow), do: :allow
 
   defp load_policy_file(path) do
     case File.read(path) do
