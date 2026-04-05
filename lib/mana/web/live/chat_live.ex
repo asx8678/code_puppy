@@ -91,16 +91,7 @@ defmodule Mana.Web.Live.ChatLive do
           )
 
         agent_pid = socket.assigns.agent_pid
-
-        task =
-          Task.Supervisor.async_nolink(Mana.TaskSupervisor, fn ->
-            if String.starts_with?(message, "/") do
-              dispatch_command(message)
-            else
-              run_agent(socket.assigns.session_id, message, agent_pid)
-            end
-          end)
-
+        task = create_agent_task(message, socket.assigns.session_id, agent_pid)
         {:noreply, assign(socket, current_task: task)}
     end
   end
@@ -330,6 +321,21 @@ defmodule Mana.Web.Live.ChatLive do
     error ->
       Logger.error("Command dispatch error: #{inspect(error)}")
       {:command_error, "Failed to execute command"}
+  end
+
+  # Extracted helper to reduce nesting depth
+  defp create_agent_task(message, session_id, agent_pid) do
+    Task.Supervisor.async_nolink(Mana.TaskSupervisor, fn ->
+      execute_agent_message(message, session_id, agent_pid)
+    end)
+  end
+
+  defp execute_agent_message(message, session_id, agent_pid) do
+    if String.starts_with?(message, "/") do
+      dispatch_command(message)
+    else
+      run_agent(session_id, message, agent_pid)
+    end
   end
 
   defp run_agent(session_id, message, agent_pid) do
