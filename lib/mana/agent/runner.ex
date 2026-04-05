@@ -65,6 +65,39 @@ defmodule Mana.Agent.Runner do
   end
 
   def run(agent_state, user_message, opts) when is_map(agent_state) do
+    timeout = Keyword.get(opts, :timeout, 120_000)
+
+    task =
+      Task.async(fn ->
+        do_run_with_state(agent_state, user_message, opts)
+      end)
+
+    case Task.yield(task, timeout) || Task.shutdown(task) do
+      {:ok, result} ->
+        result
+
+      nil ->
+        # Fire :agent_run_end callback for timeout
+        agent_def = agent_state.agent_def
+        model_name = agent_state.model_name
+        session_id = agent_state.session_id || generate_session_id()
+        agent_name = agent_def[:name] || "agent"
+
+        Callbacks.dispatch(:agent_run_end, [
+          agent_name,
+          model_name,
+          session_id,
+          false,
+          :timeout,
+          nil,
+          %{}
+        ])
+
+        {:error, :timeout}
+    end
+  end
+
+  defp do_run_with_state(agent_state, user_message, opts) do
     agent_def = agent_state.agent_def
     model_name = agent_state.model_name
     session_id = agent_state.session_id || generate_session_id()
