@@ -114,7 +114,6 @@ defmodule Mix.Tasks.Bench do
   # Format available benchmarks for help text
   defp format_available_benchmarks do
     @available_benchmarks
-    |> Enum.map(fn {name, file} -> "  - #{name} -> #{file}" end)
-    |> Enum.join("\n")
+    |> Enum.map_join("\n", fn {name, file} -> "  - #{name} -> #{file}" end)
   end
 end
