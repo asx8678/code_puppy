@@ -5,13 +5,19 @@ defmodule Mana.Session.Store do
   ## Features
 
   - Fast concurrent reads via ETS
-  - Session history storage
+  - Session history storage with bounded size
+  - O(1) message append using queue data structure
   - JSON persistence to disk
   - Session creation, deletion, and listing
 
+  ## Configuration
+
+  - `:max_history_size` - Maximum number of messages to keep per session.
+    Default: 100. Set via `config :mana, Mana.Session.Store, max_history_size: 100`
+
   ## State Structure
 
-  - `sessions`: Map of session_id => [messages]
+  - `sessions`: Map of session_id => {queue, count}
   - `active_session`: Currently active session id or nil
 
   ## Usage
@@ -42,6 +48,8 @@ defmodule Mana.Session.Store do
   alias Mana.Config.Paths
 
   @table :mana_sessions
+  @default_max_history_size 100
+  @compaction_threshold 200
 
   # Client API
 
@@ -84,11 +92,13 @@ defmodule Mana.Session.Store do
 
   @doc """
   Gets message history for a session.
+  Returns messages in chronological order (oldest first).
   """
   @spec get_history(String.t()) :: [map()]
   def get_history(session_id) do
     case :ets.lookup(@table, session_id) do
-      [{^session_id, messages}] -> messages
+      # Queue stores newest first, so reverse to get chronological order
+      [{^session_id, {queue, _count}}] -> :queue.to_list(queue) |> Enum.reverse()
       [] -> []
     end
   end
@@ -180,8 +190,8 @@ defmodule Mana.Session.Store do
   def handle_continue(:load_sessions, state) do
     sessions = load_all_sessions()
 
-    Enum.each(sessions, fn {id, messages} ->
-      :ets.insert(@table, {id, messages})
+    Enum.each(sessions, fn {id, {queue, count}} ->
+      :ets.insert(@table, {id, {queue, count}})
     end)
 
     {:noreply, %{state | sessions: sessions}}
@@ -190,17 +200,18 @@ defmodule Mana.Session.Store do
   @impl true
   def handle_call(:create_session, _from, state) do
     session_id = generate_session_id()
-    :ets.insert(@table, {session_id, []})
+    # Store as {queue, count} tuple
+    :ets.insert(@table, {session_id, {:queue.new(), 0}})
     {:reply, session_id, %{state | active_session: session_id}}
   end
 
   @impl true
   def handle_call({:append, session_id, message}, _from, state) do
-    # Get current messages from ETS
-    messages =
+    # Get current queue and count from ETS
+    {queue, count} =
       case :ets.lookup(@table, session_id) do
-        [{^session_id, existing}] -> existing
-        [] -> []
+        [{^session_id, {existing_queue, existing_count}}] -> {existing_queue, existing_count}
+        [] -> {:queue.new(), 0}
       end
 
     # Normalize message keys via Mana.Message, preserving all fields
@@ -209,20 +220,43 @@ defmodule Mana.Session.Store do
     message_with_timestamp =
       Map.put(normalized, :timestamp, System.system_time(:millisecond))
 
-    new_messages = messages ++ [message_with_timestamp]
+    max_size = max_history_size()
+
+    # Add message to front of queue (O(1) operation)
+    # We store in reverse order (newest first) for efficient append
+    new_queue = :queue.in_r(message_with_timestamp, queue)
+    new_count = count + 1
+
+    # Trim old messages if over limit (remove from back of queue)
+    {trimmed_queue, trimmed_count} =
+      if new_count > max_size do
+        {{:value, _}, q} = :queue.out(new_queue)
+        {q, new_count - 1}
+      else
+        {new_queue, new_count}
+      end
+
+    # Check if compaction is needed (history grew too large)
+    final_queue =
+      if count > @compaction_threshold do
+        compact_queue(trimmed_queue, max_size)
+      else
+        trimmed_queue
+      end
 
     # Update ETS
-    :ets.insert(@table, {session_id, new_messages})
+    :ets.insert(@table, {session_id, {final_queue, trimmed_count}})
 
-    # Update state
-    new_sessions = Map.put(state.sessions, session_id, new_messages)
+    # Update state (keep the queue in state too for consistency)
+    new_sessions = Map.put(state.sessions, session_id, {final_queue, trimmed_count})
 
     {:reply, :ok, %{state | sessions: new_sessions}}
   end
 
   @impl true
   def handle_call({:clear, session_id}, _from, state) do
-    :ets.insert(@table, {session_id, []})
+    # Reset to empty queue with count 0
+    :ets.insert(@table, {session_id, {:queue.new(), 0}})
     {:reply, :ok, state}
   end
 
@@ -239,8 +273,11 @@ defmodule Mana.Session.Store do
     new_state =
       case result do
         {:ok, messages} ->
-          :ets.insert(@table, {session_id, messages})
-          %{state | sessions: Map.put(state.sessions, session_id, messages)}
+          # Convert list to queue (reverse to store newest first)
+          queue = :queue.from_list(Enum.reverse(messages))
+          count = length(messages)
+          :ets.insert(@table, {session_id, {queue, count}})
+          %{state | sessions: Map.put(state.sessions, session_id, {queue, count})}
 
         _ ->
           state
@@ -329,21 +366,28 @@ defmodule Mana.Session.Store do
   defp load_session_entry(file, sessions_dir) do
     id = String.replace_suffix(file, ".json", "")
     file_path = Path.join(sessions_dir, file)
-    messages = load_session_messages(file_path)
-    {id, messages}
+    {queue, count} = load_session_messages(file_path)
+    {id, {queue, count}}
   end
 
   defp load_session_messages(file_path) do
     case File.read(file_path) do
       {:ok, contents} -> decode_messages(contents)
-      _ -> []
+      _ -> {:queue.new(), 0}
     end
   end
 
   defp decode_messages(contents) do
     case Jason.decode(contents) do
-      {:ok, data} when is_list(data) -> Mana.Message.normalize_list(data)
-      _ -> []
+      {:ok, data} when is_list(data) ->
+        messages = Mana.Message.normalize_list(data)
+        # Store in reverse order (newest first) for efficient append
+        queue = :queue.from_list(Enum.reverse(messages))
+        count = length(messages)
+        {queue, count}
+
+      _ ->
+        {:queue.new(), 0}
     end
   end
 
@@ -362,11 +406,14 @@ defmodule Mana.Session.Store do
   end
 
   defp save_session_to_disk(session_id) do
-    messages =
+    {queue, _count} =
       case :ets.lookup(@table, session_id) do
-        [{^session_id, msgs}] -> msgs
-        [] -> []
+        [{^session_id, data}] -> data
+        [] -> {:queue.new(), 0}
       end
+
+    # Convert queue to list (messages are stored newest-first, so reverse for disk)
+    messages = :queue.to_list(queue) |> Enum.reverse()
 
     file_path = session_file_path(session_id)
 
@@ -395,6 +442,42 @@ defmodule Mana.Session.Store do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @doc """
+  Returns the maximum history size from config or default.
+  """
+  @spec max_history_size() :: non_neg_integer()
+  def max_history_size do
+    Application.get_env(:mana, __MODULE__, [])
+    |> Keyword.get(:max_history_size, @default_max_history_size)
+  end
+
+  @doc """
+  Compacts a queue to the specified maximum size by dropping oldest items.
+  Used for memory optimization when history grows too large.
+  """
+  @spec compact_queue(:queue.queue(), non_neg_integer()) :: :queue.queue()
+  def compact_queue(queue, max_size) do
+    queue_length = :queue.len(queue)
+
+    if queue_length <= max_size do
+      queue
+    else
+      # Need to drop oldest items from the back of the queue
+      to_drop = queue_length - max_size
+      drop_from_back(queue, to_drop)
+    end
+  end
+
+  # Helper to drop N items from the back (oldest) of the queue
+  defp drop_from_back(queue, 0), do: queue
+
+  defp drop_from_back(queue, n) when n > 0 do
+    case :queue.out(queue) do
+      {{:value, _}, rest} -> drop_from_back(rest, n - 1)
+      {:empty, _} -> queue
     end
   end
 end
