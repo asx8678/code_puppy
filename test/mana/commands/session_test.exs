@@ -239,9 +239,8 @@ defmodule Mana.Commands.SessionTest do
       assert result == "No messages to compact."
     end
 
-    @tag :skip
     test "compacts session with messages" do
-      # Skipped - requires full ModelsRegistry for summarization
+      # Requires ModelsRegistry for summarization (already started in setup)
       session_id = SessionStore.create_session()
       SessionStore.set_active_session(session_id)
 
