@@ -5,6 +5,20 @@ import Config
 # This file is evaluated at runtime (on startup) and can access
 # environment variables and other runtime-only information.
 
+# Web Endpoint Configuration
+config :mana, Mana.Web.Endpoint,
+  url: [host: System.get_env("MANA_HOST", "localhost")],
+  http: [
+    ip: {127, 0, 0, 1},
+    port: String.to_integer(System.get_env("MANA_PORT", "4000"))
+  ],
+  secret_key_base:
+    System.get_env(
+      "MANA_SECRET_KEY_BASE",
+      "dev-secret-key-base-min-64-bytes-long-for-testing-only-change-in-prod"
+    ),
+  server: true
+
 if config_env() == :prod do
   # Production logging
   log_level =

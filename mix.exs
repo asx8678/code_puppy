@@ -53,6 +53,12 @@ defmodule Mana.MixProject do
       {:owl, "~> 0.12"},
       {:oauth2, "~> 2.1"},
 
+      # Web interface dependencies
+      {:phoenix, "~> 1.7"},
+      {:phoenix_live_view, "~> 1.0"},
+      {:bandit, "~> 1.6"},
+      {:phoenix_html, "~> 4.0"},
+
       # Development dependencies
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
