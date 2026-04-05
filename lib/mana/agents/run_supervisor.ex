@@ -67,7 +67,7 @@ defmodule Mana.Agents.RunSupervisor do
   """
   @spec start_run(pid(), String.t(), keyword()) :: DynamicSupervisor.on_start_child()
   def start_run(agent_pid, user_message, opts \\ []) when is_pid(agent_pid) do
-    parent_supervisor = self()
+    _parent_supervisor = self()
 
     task_spec = %{
       id: make_ref(),
@@ -88,9 +88,8 @@ defmodule Mana.Agents.RunSupervisor do
                    {:error, reason}
                end
              after
-               # Terminate this child from the supervisor when done
-               _child_pid = self()
-               DynamicSupervisor.terminate_child(parent_supervisor, self())
+               # Exit the task process when done
+               exit(:normal)
              end
            end
          ]},

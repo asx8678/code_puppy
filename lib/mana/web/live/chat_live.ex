@@ -75,7 +75,7 @@ defmodule Mana.Web.Live.ChatLive do
 
     agent_pid = socket.assigns.agent_pid
 
-    Task.async(fn ->
+    Task.Supervisor.async_nolink(Mana.TaskSupervisor, fn ->
       if String.starts_with?(message, "/") do
         dispatch_command(message)
       else
