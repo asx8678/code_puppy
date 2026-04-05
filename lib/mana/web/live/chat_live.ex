@@ -293,20 +293,27 @@ defmodule Mana.Web.Live.ChatLive do
       execute_agent_run(agent_pid, message, session_id)
     else
       # Create new agent server
-      agent = AgentsRegistry.current_agent(session_id)
+      case start_agent_server(session_id) do
+        {:ok, pid} -> {:new_agent, pid, execute_agent_run(pid, message, session_id)}
+        {:error, reason} -> {:agent_error, reason}
+      end
+    end
+  end
 
-      if agent do
+  defp start_agent_server(session_id) do
+    case AgentsRegistry.current_agent(session_id) do
+      nil ->
+        {:error, "No agent available for session"}
+
+      agent ->
         case AgentServer.start_link(agent_def: agent, session_id: session_id) do
           {:ok, pid} ->
-            {:new_agent, pid, execute_agent_run(pid, message, session_id)}
+            {:ok, pid}
 
           {:error, reason} ->
             Logger.error("Failed to start agent server: #{inspect(reason)}")
-            {:agent_error, "Failed to initialize agent"}
+            {:error, "Failed to initialize agent"}
         end
-      else
-        {:agent_error, "No agent available for session"}
-      end
     end
   end
 

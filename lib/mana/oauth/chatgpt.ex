@@ -180,18 +180,8 @@ defmodule Mana.OAuth.ChatGPT do
           )
 
         case Req.request(req) do
-          {:ok, %{status: 200, body: body}} ->
-            {:ok, parse_codex_response(body, model)}
-
-          {:ok, %{status: 401}} ->
-            if Keyword.get(opts, :retried, false) do
-              {:error, "Authentication failed after token refresh"}
-            else
-              refresh_and_retry(:complete, messages, model, Keyword.put(opts, :retried, true))
-            end
-
-          {:ok, %{status: status, body: body}} ->
-            {:error, "ChatGPT API error: #{status} - #{inspect(body)}"}
+          {:ok, response} ->
+            handle_codex_response(response, messages, model, opts)
 
           {:error, reason} ->
             {:error, "Request failed: #{inspect(reason)}"}
@@ -200,6 +190,22 @@ defmodule Mana.OAuth.ChatGPT do
       error ->
         error
     end
+  end
+
+  defp handle_codex_response(%{status: 200, body: body}, _messages, model, _opts) do
+    {:ok, parse_codex_response(body, model)}
+  end
+
+  defp handle_codex_response(%{status: 401}, messages, model, opts) do
+    if Keyword.get(opts, :retried, false) do
+      {:error, "Authentication failed after token refresh"}
+    else
+      refresh_and_retry(:complete, messages, model, Keyword.put(opts, :retried, true))
+    end
+  end
+
+  defp handle_codex_response(%{status: status, body: body}, _messages, _model, _opts) do
+    {:error, "ChatGPT API error: #{status} - #{inspect(body)}"}
   end
 
   @impl true

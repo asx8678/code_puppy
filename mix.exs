@@ -13,6 +13,7 @@ defmodule Mana.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
+      releases: releases(),
 
       # Dialyzer configuration
       dialyzer: [
@@ -112,6 +113,15 @@ defmodule Mana.MixProject do
           Mana.Plugin.Hook
         ],
         "Built-in Plugins": ~r/Mana\.Plugins\.*/
+      ]
+    ]
+  end
+
+  defp releases do
+    [
+      mana: [
+        applications: [mana: :permanent],
+        steps: [:assemble, :tar]
       ]
     ]
   end
