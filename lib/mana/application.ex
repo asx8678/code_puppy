@@ -44,7 +44,9 @@ defmodule Mana.Application do
           # 14. TTSR Registry — stream watcher session registry
           {Registry, keys: :unique, name: Mana.TTSR.Registry},
           # 15. TTSR Watcher Supervisor — supervised stream watchers
-          {DynamicSupervisor, strategy: :one_for_one, name: Mana.TTSR.WatcherSupervisor}
+          {DynamicSupervisor, strategy: :one_for_one, name: Mana.TTSR.WatcherSupervisor},
+          # 16. TTSR Watcher Cleanup — periodic cleanup of stale watchers
+          {Mana.TTSR.WatcherCleanup, []}
         ]
       else
         []
