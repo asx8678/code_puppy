@@ -146,6 +146,57 @@ defmodule Mana.Session.StoreTest do
 
       assert Store.get_history(id) == []
     end
+
+    test "clear/1 maintains state consistency between ETS and GenServer state" do
+      # Create session and add messages
+      id = Store.create_session()
+      Store.append(id, %{role: "user", content: "Message 1"})
+      Store.append(id, %{role: "assistant", content: "Message 2"})
+      Store.append(id, %{role: "user", content: "Message 3"})
+
+      # Verify initial state
+      assert length(Store.get_history(id)) == 3
+
+      # Clear the session
+      :ok = Store.clear(id)
+
+      # Verify ETS state is cleared
+      assert Store.get_history(id) == []
+
+      # Verify session is still listed (clear doesn't delete)
+      assert id in Store.list_sessions()
+
+      # Verify we can append after clear and history works correctly
+      Store.append(id, %{role: "user", content: "After clear"})
+      history = Store.get_history(id)
+      assert length(history) == 1
+      assert hd(history).content == "After clear"
+    end
+
+    test "clear/1 is safe to call on non-existent session" do
+      # Should not raise and return :ok
+      assert :ok = Store.clear("nonexistent_session")
+
+      # Verify no ghost session was created
+      refute "nonexistent_session" in Store.list_sessions()
+    end
+
+    test "clear/1 preserves active session state" do
+      id = Store.create_session()
+      Store.append(id, %{role: "user", content: "Hello"})
+
+      # Verify session is active
+      assert Store.active_session() == id
+
+      # Clear the session
+      :ok = Store.clear(id)
+
+      # Active session should remain unchanged
+      assert Store.active_session() == id
+
+      # History should be empty
+      assert Store.get_history(id) == []
+    end
   end
 
   describe "save/1 and load/1" do
