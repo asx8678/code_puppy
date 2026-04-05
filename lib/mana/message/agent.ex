@@ -12,10 +12,13 @@ defmodule Mana.Message.Agent do
   - `:category` - Always `:agent`
   - `:session_id` - Optional session identifier
 
-  Type-specific fields:
+  Type-specific fields (use string keys for JSON-serializable maps):
   - `:agent_name` - String agent name
   - `:action` - Atom: `:invoke`, `:result`, or `:error`
   - `:payload` - Map with action-specific data
+
+  When working with plain maps for JSON serialization, use string keys:
+  `%{"agent_name" => "my_agent", "action" => "invoke", "payload" => %{}}`
 
   ## Examples
 

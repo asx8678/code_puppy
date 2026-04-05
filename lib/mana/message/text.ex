@@ -12,9 +12,12 @@ defmodule Mana.Message.Text do
   - `:category` - Always `:text`
   - `:session_id` - Optional session identifier
 
-  Type-specific fields:
+  Type-specific fields (use string keys for JSON-serializable maps):
   - `:content` - String content
   - `:role` - Atom: `:user`, `:assistant`, or `:system`
+
+  When working with plain maps for JSON serialization, use string keys:
+  `%{"role" => "user", "content" => "Hello"}`
 
   ## Examples
 

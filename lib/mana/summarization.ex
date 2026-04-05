@@ -130,8 +130,8 @@ defmodule Mana.Summarization do
   defp build_summarization_prompt(messages) do
     conversation =
       Enum.map_join(messages, "\n", fn msg ->
-        role = msg[:role] || Map.get(msg, "role", "user")
-        content = msg[:content] || Map.get(msg, "content", "")
+        role = Map.get(msg, "role", "user")
+        content = Map.get(msg, "content", "")
         "#{role}: #{content}"
       end)
 
