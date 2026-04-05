@@ -42,10 +42,12 @@ defmodule Mana.Agents.RunSupervisor do
   end
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
+    max_children = Keyword.get(opts, :max_children, 50)
+
     DynamicSupervisor.init(
       strategy: :one_for_one,
-      max_children: 50
+      max_children: max_children
     )
   end
 
@@ -57,6 +59,7 @@ defmodule Mana.Agents.RunSupervisor do
     - `agent_pid` - PID of the agent server
     - `user_message` - The user message to process
     - `opts` - Keyword list of options passed to Runner.run/3
+      - `:supervisor` - The supervisor to start the child under (default: `RunSupervisor`)
 
   ## Returns
 
@@ -67,6 +70,7 @@ defmodule Mana.Agents.RunSupervisor do
   """
   @spec start_run(pid(), String.t(), keyword()) :: DynamicSupervisor.on_start_child()
   def start_run(agent_pid, user_message, opts \\ []) when is_pid(agent_pid) do
+    supervisor = Keyword.get(opts, :supervisor, __MODULE__)
     _parent_supervisor = self()
 
     task_spec = %{
@@ -96,6 +100,64 @@ defmodule Mana.Agents.RunSupervisor do
       restart: :temporary
     }
 
-    DynamicSupervisor.start_child(__MODULE__, task_spec)
+    DynamicSupervisor.start_child(supervisor, task_spec)
+  end
+
+  @doc """
+  Start multiple agent runs in parallel as supervised tasks.
+
+  ## Parameters
+
+    - `runs` - List of `{agent_pid, user_message, run_opts}` tuples
+    - `opts` - Keyword list of options:
+      - `:max_parallel` - Maximum number of concurrent runs (default: 4)
+      - `:supervisor` - The supervisor to start the children under (default: `RunSupervisor`)
+
+  ## Returns
+
+    - `{:ok, [pid]}` - All tasks were started successfully, returns list of task PIDs
+    - `{:error, :max_children}` - Maximum number of children reached
+    - `{:error, term()}` - Failed to start one or more tasks
+
+  ## Examples
+
+      runs = [
+        {agent_pid1, "Hello", []},
+        {agent_pid2, "World", [timeout: 5000]}
+      ]
+      {:ok, task_pids} = RunSupervisor.start_parallel_runs(runs, max_parallel: 2)
+
+  """
+  @spec start_parallel_runs(list({pid(), String.t(), keyword()}), keyword()) ::
+          {:ok, list(pid())} | {:error, term()}
+  def start_parallel_runs(runs, opts \\ []) when is_list(runs) do
+    max_parallel = Keyword.get(opts, :max_parallel, 4)
+    supervisor = Keyword.get(opts, :supervisor, __MODULE__)
+
+    # Use Task.async_stream to respect max_parallel limit
+    results =
+      runs
+      |> Task.async_stream(
+        fn {agent_pid, user_message, run_opts} ->
+          start_run(agent_pid, user_message, Keyword.put(run_opts, :supervisor, supervisor))
+        end,
+        max_concurrency: max_parallel,
+        ordered: true,
+        timeout: :infinity
+      )
+      |> Enum.map(fn
+        {:ok, {:ok, pid}} -> {:ok, pid}
+        {:ok, {:error, reason}} -> {:error, reason}
+        {:exit, reason} -> {:error, reason}
+      end)
+
+    case Enum.split_with(results, &match?({:ok, _}, &1)) do
+      {oks, []} ->
+        {:ok, Enum.map(oks, fn {:ok, pid} -> pid end)}
+
+      {_oks, errors} ->
+        first_error = errors |> hd() |> elem(1)
+        {:error, first_error}
+    end
   end
 end
