@@ -33,19 +33,25 @@ defmodule Mana.Commands.Core do
 
     @impl true
     def execute([], _context) do
-      # Use :ets directly to avoid calling back into GenServer (prevents deadlock)
-      commands = get_commands_from_ets()
+      if tty_available?() do
+        # Launch the interactive help screen
+        Mana.TUI.ScreenRunner.run(Mana.TUI.Screens.Help)
+        {:ok, ""}
+      else
+        # Fallback: plain text help (for tests / non-interactive contexts)
+        commands = get_commands_from_registry()
 
-      help_text =
-        [
-          "Available commands:"
-          | Enum.map(commands, fn {cmd, desc} ->
-              "  #{cmd} - #{desc}"
-            end)
-        ]
-        |> Enum.join("\n")
+        help_text =
+          [
+            "Available commands:"
+            | Enum.map(commands, fn {cmd, desc} ->
+                "  #{cmd} - #{desc}"
+              end)
+          ]
+          |> Enum.join("\n")
 
-      {:ok, help_text}
+        {:ok, help_text}
+      end
     end
 
     def execute([command_name], _context) do
@@ -70,8 +76,14 @@ defmodule Mana.Commands.Core do
       {:error, "Usage: #{usage()}"}
     end
 
-    # Read directly from ETS to avoid GenServer deadlock
-    defp get_commands_from_ets do
+    defp tty_available? do
+      # Don't launch interactive screen in test or non-TTY environments
+      not (Code.ensure_loaded?(ExUnit) and Process.whereis(ExUnit.Server) != nil)
+    rescue
+      _ -> false
+    end
+
+    defp get_commands_from_registry do
       case :ets.whereis(:mana_commands) do
         :undefined ->
           []
@@ -365,6 +377,7 @@ defmodule Mana.Commands.Core do
       Mana.Commands.Config,
       Mana.Commands.Hooks,
       Mana.Commands.Colors,
+      Mana.Commands.Skills,
       Mana.Commands.Pack,
       Mana.Commands.Stats
     ]
