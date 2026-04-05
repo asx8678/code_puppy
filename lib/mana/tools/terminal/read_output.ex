@@ -77,9 +77,16 @@ defmodule Mana.Tools.Terminal.ReadOutput do
 
         result =
           if pattern do
-            case Regex.run(~r/#{pattern}/, truncated_output) do
-              nil -> Map.put(result, "matched", false)
-              matches -> Map.put(result, "matched", true) |> Map.put("matches", matches)
+            case Regex.compile(pattern) do
+              {:error, _} ->
+                # Invalid regex — fall back to plain string contains
+                Map.put(result, "matched", String.contains?(truncated_output, pattern))
+
+              {:ok, regex} ->
+                case Regex.run(regex, truncated_output) do
+                  nil -> Map.put(result, "matched", false)
+                  matches -> Map.put(result, "matched", true) |> Map.put("matches", matches)
+                end
             end
           else
             result

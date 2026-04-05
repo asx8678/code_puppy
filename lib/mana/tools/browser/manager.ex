@@ -67,7 +67,7 @@ defmodule Mana.Tools.Browser.Manager do
           script_path: String.t(),
           node_path: String.t(),
           request_id: non_neg_integer(),
-          pending: %{optional(Protocol.command_id()) => {pid(), reference()}},
+          pending: %{optional(Protocol.command_id()) => GenServer.from()},
           buffer: binary()
         }
 
@@ -324,11 +324,9 @@ defmodule Mana.Tools.Browser.Manager do
       {:ok, json} ->
         send_command(state.port, json)
 
-        ref = make_ref()
-        {pid, _tag} = from
-
-        new_pending = Map.put(state.pending, request_id, {pid, ref})
+        new_pending = Map.put(state.pending, request_id, from)
         # Monitor the caller so we can clean up if they crash
+        {pid, _tag} = from
         Process.monitor(pid, tag: {:caller_down, request_id})
 
         {:noreply, %{state | request_id: request_id, pending: new_pending, status: :busy}}
@@ -386,8 +384,8 @@ defmodule Mana.Tools.Browser.Manager do
     Logger.error("[#{__MODULE__}] Port exited: #{inspect(reason)}")
 
     # Reply to all pending callers with an error
-    Enum.each(state.pending, fn {_id, {pid, _ref}} ->
-      send(pid, {:browser_response, {:error, :port_disconnected}})
+    Enum.each(state.pending, fn {_id, from} ->
+      GenServer.reply(from, {:error, :port_disconnected})
     end)
 
     {:noreply, %{state | port: nil, status: :disconnected, pending: %{}, buffer: ""}}
@@ -472,9 +470,9 @@ defmodule Mana.Tools.Browser.Manager do
         # No pending request for this ID — ignore (could be a duplicate)
         state
 
-      {{pid, ref}, new_pending} ->
+      {from, new_pending} ->
         result = Protocol.classify(response)
-        send(pid, {ref, result})
+        GenServer.reply(from, result)
 
         new_status = if map_size(new_pending) == 0, do: :ready, else: :busy
         %{state | pending: new_pending, status: new_status}
