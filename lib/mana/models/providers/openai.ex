@@ -9,6 +9,7 @@ defmodule Mana.Models.Providers.OpenAI do
 
   alias Mana.Config
   alias Mana.Models.Providers.SSE
+  alias Mana.Streaming.SSEParser
 
   @default_base_url "https://api.openai.com/v1"
   @chat_completions_endpoint "/chat/completions"
@@ -87,15 +88,7 @@ defmodule Mana.Models.Providers.OpenAI do
 
       error ->
         # Return a stream that yields just the error
-        Stream.resource(
-          fn -> error end,
-          fn
-            nil -> {:halt, nil}
-            {:error, _reason} = err -> {[err], nil}
-            err -> {[{:error, err}], nil}
-          end,
-          fn _ -> :ok end
-        )
+        SSEParser.error_stream(error)
     end
   end
 
@@ -118,64 +111,24 @@ defmodule Mana.Models.Providers.OpenAI do
       {"Accept", "text/event-stream"}
     ]
 
-    Stream.resource(
+    request =
+      SSEParser.build_request(
+        url: url,
+        headers: headers,
+        body: body
+      )
+
+    SSEParser.stream(
       fn ->
-        request =
-          Req.new(
-            method: :post,
-            url: url,
-            headers: headers,
-            json: body,
-            into: :self,
-            receive_timeout: 600_000
-          )
-
-        case Req.request(request) do
-          {:ok, %{status: 200} = resp} ->
-            {:streaming, resp, ""}
-
-          {:ok, %{status: 429} = resp} ->
-            Mana.RateLimiter.report_rate_limit(model)
-            retry_after = SSE.parse_retry_after(resp)
-            {:error, "Rate limited (429), retry after #{retry_after}s"}
-
-          {:ok, %{status: status, body: error_body}} ->
-            {:error, "HTTP #{status}: #{SSE.format_error(error_body)}"}
-
-          {:error, reason} ->
-            {:error, "Request failed: #{inspect(reason)}"}
-        end
+        SSEParser.init_stream_request(
+          request,
+          model,
+          error_msg: "Rate limited",
+          format_fn: &SSE.format_error/1
+        )
       end,
-      fn
-        {:error, msg} ->
-          {[{:error, msg}], :halt}
-
-        :halt ->
-          {:halt, :halt}
-
-        {:streaming, resp, buffer} ->
-          receive do
-            message ->
-              case Req.parse_message(resp, message) do
-                {:ok, [data: chunk]} ->
-                  {events, new_buffer} = SSE.parse_chunk(buffer <> chunk)
-                  stream_events = Enum.flat_map(events, &parse_sse_event/1)
-                  {stream_events, {:streaming, resp, new_buffer}}
-
-                {:ok, [:done]} ->
-                  {[{:part_end, :done}], :halt}
-
-                :unknown ->
-                  {[], {:streaming, resp, buffer}}
-              end
-          after
-            60_000 -> {[{:error, :timeout}], :halt}
-          end
-      end,
-      fn
-        {:streaming, resp, _} -> Req.cancel_async_response(resp)
-        _ -> :ok
-      end
+      &parse_sse_event/1,
+      timeout: 60_000
     )
   end
 
