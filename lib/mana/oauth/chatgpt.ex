@@ -29,7 +29,7 @@ defmodule Mana.OAuth.ChatGPT do
 
   require Logger
 
-  alias Mana.OAuth.{Flow, TokenStore}
+  alias Mana.OAuth.{Flow, RefreshManager, TokenStore}
 
   # ChatGPT Codex OAuth config
   @client_id "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -284,53 +284,49 @@ defmodule Mana.OAuth.ChatGPT do
   end
 
   defp get_token do
-    case TokenStore.load("chatgpt") do
-      {:ok, tokens} ->
-        if TokenStore.expired?(tokens) do
-          refresh_token(tokens)
-        else
-          {:ok, tokens["access_token"]}
-        end
+    RefreshManager.refresh_if_needed("chatgpt", &do_refresh_token/1)
+    |> case do
+      {:ok, tokens} -> {:ok, tokens["access_token"]}
+      error -> error
+    end
+  end
+
+  defp refresh_token(tokens) do
+    do_refresh_token(tokens)
+    |> case do
+      {:ok, tokens} -> {:ok, tokens["access_token"]}
+      error -> error
+    end
+  end
+
+  defp refresh_and_retry(fun_name, messages, model, opts) do
+    # Use RefreshManager to serialize refresh attempts
+    case RefreshManager.refresh_if_needed("chatgpt", &do_refresh_token/1) do
+      {:ok, _new_tokens} ->
+        # Retry the original call
+        apply(__MODULE__, fun_name, [messages, model, opts])
 
       error ->
         error
     end
   end
 
-  defp refresh_token(%{"refresh_token" => refresh_token}) do
+  defp do_refresh_token(tokens) do
     body = %{
       grant_type: "refresh_token",
-      refresh_token: refresh_token,
+      refresh_token: tokens["refresh_token"],
       client_id: @client_id
     }
 
     case Req.post(@token_url, json: body) do
-      {:ok, %{status: 200, body: tokens}} ->
-        TokenStore.save("chatgpt", tokens)
-        {:ok, tokens["access_token"]}
+      {:ok, %{status: 200, body: new_tokens}} ->
+        {:ok, new_tokens}
 
       {:ok, %{status: status}} ->
         {:error, "Token refresh failed: HTTP #{status}"}
 
       {:error, reason} ->
         {:error, reason}
-    end
-  end
-
-  defp refresh_and_retry(fun_name, messages, model, opts) do
-    case TokenStore.load("chatgpt") do
-      {:ok, tokens} ->
-        case refresh_token(tokens) do
-          {:ok, _new_token} ->
-            # Retry the original call
-            apply(__MODULE__, fun_name, [messages, model, opts])
-
-          error ->
-            error
-        end
-
-      error ->
-        error
     end
   end
 

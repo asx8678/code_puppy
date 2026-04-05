@@ -7,3 +7,7 @@ Application.put_env(:mana, Mana.Plugin.Manager,
   max_backlog_size: 10,
   auto_dismiss_errors: false
 )
+
+# Start the OAuth RefreshManager for tests that need token refresh serialization
+# This prevents race conditions during concurrent token refresh operations
+{:ok, _refresh_manager} = Mana.OAuth.RefreshManager.start_link()

@@ -24,6 +24,8 @@ defmodule Mana.OAuth.TokenStore do
 
   require Logger
 
+  alias Mana.OAuth.RefreshManager
+
   @default_tokens_dir "~/.mana/tokens"
 
   @doc """
@@ -144,6 +146,13 @@ defmodule Mana.OAuth.TokenStore do
   The `refresh_fn` should accept the current tokens map and return
   `{:ok, new_tokens}` or `{:error, reason}`.
 
+  ## Race Condition Prevention
+
+  This function now uses `Mana.OAuth.RefreshManager` to serialize refresh
+  attempts. When multiple requests encounter 401 errors simultaneously,
+  only one will trigger the actual HTTP refresh request, and all others
+  will wait for and share the result.
+
   ## Examples
 
       Mana.OAuth.TokenStore.refresh_if_needed("chatgpt", fn current_tokens ->
@@ -154,47 +163,8 @@ defmodule Mana.OAuth.TokenStore do
   @spec refresh_if_needed(String.t(), (map() -> {:ok, map()} | {:error, term()})) ::
           {:ok, map()} | {:error, term()}
   def refresh_if_needed(provider, refresh_fn) when is_function(refresh_fn, 1) do
-    case load(provider) do
-      {:ok, tokens} ->
-        maybe_refresh(tokens, provider, refresh_fn)
-
-      error ->
-        error
-    end
-  end
-
-  defp maybe_refresh(tokens, provider, refresh_fn) do
-    if expired?(tokens) do
-      do_refresh(tokens, provider, refresh_fn)
-    else
-      {:ok, tokens}
-    end
-  end
-
-  defp do_refresh(tokens, provider, refresh_fn) do
-    Logger.info("Token for '#{provider}' is expired, refreshing...")
-
-    case refresh_fn.(tokens) do
-      {:ok, new_tokens} ->
-        save_and_return(new_tokens, provider)
-
-      error ->
-        Logger.error("Failed to refresh token for '#{provider}': #{inspect(error)}")
-        error
-    end
-  end
-
-  defp save_and_return(new_tokens, provider) do
-    case save(provider, new_tokens) do
-      :ok ->
-        Logger.info("Successfully refreshed token for '#{provider}'")
-        {:ok, new_tokens}
-
-      {:error, reason} ->
-        Logger.error("Failed to save refreshed tokens for '#{provider}': #{inspect(reason)}")
-        # Still return the new tokens even if saving failed
-        {:ok, new_tokens}
-    end
+    # Delegate to RefreshManager for serialized refresh
+    RefreshManager.refresh_if_needed(provider, refresh_fn)
   end
 
   @doc """
