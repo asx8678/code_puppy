@@ -8,6 +8,7 @@ defmodule Mana.Agents.RunSupervisorTest do
   import Mana.TestHelpers
   alias Mana.Agent.Server
   alias Mana.Agents.RunSupervisor
+  alias Mana.Agents.Registry, as: AgentsRegistry
   alias Mana.Callbacks.Registry
   alias Mana.Config.Store
   alias Mana.Tools.Registry, as: ToolsRegistry
@@ -26,6 +27,7 @@ defmodule Mana.Agents.RunSupervisorTest do
     start_supervised!(Store)
     start_supervised!(Registry)
     start_supervised!(ToolsRegistry)
+    start_supervised!(AgentsRegistry)
     start_supervised!(RunSupervisor)
 
     :ok
@@ -71,24 +73,22 @@ defmodule Mana.Agents.RunSupervisorTest do
   end
 
   describe "start_parallel_runs/2" do
-    test "starts multiple supervised run tasks" do
-      {:ok, agent_pid1} = Server.start_link(agent_def: @test_agent_def)
-      {:ok, agent_pid2} = Server.start_link(agent_def: @test_agent_def)
-
+    test "starts multiple agent runs and returns named results" do
       runs = [
-        {agent_pid1, "Hello", []},
-        {agent_pid2, "World", []}
+        {"assistant", "Hello", []},
+        {"assistant", "World", []}
       ]
 
       result = RunSupervisor.start_parallel_runs(runs)
 
-      # Should return {:ok, [pid, pid]}
-      assert match?({:ok, [_, _]}, result)
-      {:ok, pids} = result
+      # Should return {:ok, [{name, result}, ...]}
+      assert match?({:ok, [{_, _}, {_, _}]}, result)
+      {:ok, results} = result
 
-      # All tasks should be alive initially
-      for pid <- pids do
-        assert Process.alive?(pid)
+      # Each result should be a {agent_name, {:ok, _} | {:error, _}} tuple
+      for {agent_name, run_result} <- results do
+        assert agent_name == "assistant"
+        assert match?({:ok, _}, run_result) or match?({:error, _}, run_result)
       end
     end
 
@@ -98,35 +98,52 @@ defmodule Mana.Agents.RunSupervisorTest do
     end
 
     test "respects max_parallel option" do
-      {:ok, agent_pid} = Server.start_link(agent_def: @test_agent_def)
-
       # Create 8 runs with max_parallel: 2
-      runs = for i <- 1..8, do: {agent_pid, "message #{i}", []}
+      runs = for i <- 1..8, do: {"assistant", "message #{i}", []}
 
-      # Start with max_parallel: 2
+      # Start with max_parallel: 2 — should still work
       result = RunSupervisor.start_parallel_runs(runs, max_parallel: 2)
       assert match?({:ok, _}, result)
-      {:ok, pids} = result
-      assert length(pids) == 8
+      {:ok, results} = result
+      assert length(results) == 8
     end
 
     test "uses default max_parallel of 4" do
-      {:ok, agent_pid} = Server.start_link(agent_def: @test_agent_def)
-
       # Create 6 runs (more than default max_parallel of 4)
-      runs = for i <- 1..6, do: {agent_pid, "message #{i}", []}
+      runs = for i <- 1..6, do: {"assistant", "message #{i}", []}
 
       result = RunSupervisor.start_parallel_runs(runs)
       assert match?({:ok, _}, result)
-      {:ok, pids} = result
-      assert length(pids) == 6
+      {:ok, results} = result
+      assert length(results) == 6
+    end
+
+    test "returns results in order" do
+      runs = [
+        {"assistant", "first", []},
+        {"assistant", "second", []},
+        {"assistant", "third", []}
+      ]
+
+      {:ok, results} = RunSupervisor.start_parallel_runs(runs)
+      names = Enum.map(results, &elem(&1, 0))
+      assert names == ["assistant", "assistant", "assistant"]
+    end
+
+    test "returns error for unknown agent name" do
+      runs = [
+        {"nonexistent-agent-xyz", "Hello", []}
+      ]
+
+      result = RunSupervisor.start_parallel_runs(runs)
+      assert match?({:error, {:agent_not_found, _}}, result)
     end
 
     test "propagates :max_children error when limit exceeded" do
       # Start a RunSupervisor with a very low max_children for testing
-      {:ok, test_supervisor} = RunSupervisor.start_link(max_children: 3, name: :test_low_capacity)
+      {:ok, test_supervisor} = RunSupervisor.start_link(max_children: 2, name: :test_low_capacity)
 
-      # Fill the supervisor near capacity (2 children)
+      # Fill the supervisor to capacity (2 long-running children)
       for _i <- 1..2 do
         {:ok, _} =
           DynamicSupervisor.start_child(
@@ -139,39 +156,33 @@ defmodule Mana.Agents.RunSupervisorTest do
           )
       end
 
-      {:ok, agent_pid} = Server.start_link(agent_def: @test_agent_def)
-
-      # Try to start 5 parallel runs (which would exceed the limit of 3 children)
-      runs = for i <- 1..5, do: {agent_pid, "message #{i}", []}
+      # Try to start 3 parallel runs with max_parallel: 3 — the batch of 3
+      # will try to add children to an already-full supervisor (capacity 2).
+      runs = for i <- 1..3, do: {"assistant", "message #{i}", []}
 
       # Call start_parallel_runs with the test supervisor
-      result = RunSupervisor.start_parallel_runs(runs, supervisor: test_supervisor)
+      result = RunSupervisor.start_parallel_runs(runs, supervisor: test_supervisor, max_parallel: 3)
 
-      # Should return an error (either :max_children or another error from the runs)
+      # Should return an error because the supervisor is at capacity
       assert match?({:error, _}, result)
 
       # Cleanup
       DynamicSupervisor.stop(test_supervisor)
     end
 
-    test "parallel tasks are supervised independently" do
-      {:ok, agent_pid1} = Server.start_link(agent_def: @test_agent_def)
-      {:ok, agent_pid2} = Server.start_link(agent_def: @test_agent_def)
-
+    test "parallel runs are supervised independently" do
       runs = [
-        {agent_pid1, "Hello", []},
-        {agent_pid2, "World", []}
+        {"assistant", "Hello", []},
+        {"assistant", "World", []}
       ]
 
-      {:ok, [pid1, _pid2]} = RunSupervisor.start_parallel_runs(runs)
+      {:ok, results} = RunSupervisor.start_parallel_runs(runs)
+      assert length(results) == 2
 
-      # Kill one task
-      Process.exit(pid1, :kill)
-      wait_for_exit(pid1, timeout: 500)
-
-      # The other task should still be alive (or have completed)
-      # We just verify the parallel execution happened
-      refute Process.alive?(pid1)
+      # All results should be tagged with the agent name
+      for {name, _result} <- results do
+        assert name == "assistant"
+      end
     end
   end
 

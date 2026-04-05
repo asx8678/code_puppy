@@ -13,6 +13,15 @@ defmodule Mana.Agents.RunSupervisor do
       # Start an agent run
       {:ok, task_pid} = Mana.Agents.RunSupervisor.start_run(agent_pid, "Hello!")
 
+  ## Parallel Runs
+
+      runs = [
+        {"coder", "Write a function", []},
+        {"reviewer", "Review this code", []}
+      ]
+      {:ok, results} = Mana.Agents.RunSupervisor.start_parallel_runs(runs, max_parallel: 2)
+      # results => [{"coder", {:ok, "..."}}, {"reviewer", {:ok, "..."}}]
+
   ## Supervision
 
   Tasks are started with `:temporary` restart policy, meaning they
@@ -26,11 +35,15 @@ defmodule Mana.Agents.RunSupervisor do
   require Logger
 
   alias Mana.Agent.Runner
-  alias Mana.Agents.Registry, as: AgentsRegistry
   alias Mana.Agent.Server, as: AgentServer
+  alias Mana.Agents.Registry, as: AgentsRegistry
 
   @type run_spec :: {String.t(), String.t(), keyword()}
   @type run_result :: {String.t(), {:ok, String.t()} | {:error, term()}}
+
+  # ============================================================================
+  # DynamicSupervisor callbacks
+  # ============================================================================
 
   @doc """
   Starts the RunSupervisor.
@@ -38,6 +51,7 @@ defmodule Mana.Agents.RunSupervisor do
   ## Options
 
     - `:name` - The name to register the process under (default: `__MODULE__`)
+    - `:max_children` - Maximum concurrent children (default: 50)
 
   """
   @spec start_link(keyword()) :: DynamicSupervisor.on_start()
@@ -55,6 +69,10 @@ defmodule Mana.Agents.RunSupervisor do
       max_children: max_children
     )
   end
+
+  # ============================================================================
+  # Single run API
+  # ============================================================================
 
   @doc """
   Start an agent run as a supervised task.
@@ -108,6 +126,10 @@ defmodule Mana.Agents.RunSupervisor do
     DynamicSupervisor.start_child(supervisor, task_spec)
   end
 
+  # ============================================================================
+  # Parallel run API
+  # ============================================================================
+
   @doc """
   Start multiple agent runs in parallel, collecting results.
 
@@ -115,13 +137,17 @@ defmodule Mana.Agents.RunSupervisor do
   started as a supervised task under this `DynamicSupervisor`, and
   awaited for its result. Concurrency is limited by `:max_parallel`.
 
+  Internally, runs are batched into groups of `max_parallel`. Within
+  each batch, supervised tasks are started under the DynamicSupervisor
+  and their results are collected via message passing.
+
   ## Parameters
 
     - `runs` - List of `{agent_name, message, run_opts}` tuples where
       `agent_name` is a string matching a registered agent name.
     - `opts` - Keyword list of options:
       - `:max_parallel` - Maximum number of concurrent runs (default: 4)
-      - `:supervisor` - The supervisor to start the children under (default: `RunSupervisor`)
+      - `:supervisor` - The supervisor to start children under (default: `RunSupervisor`)
       - `:timeout` - Per-run timeout in milliseconds (default: 120_000)
 
   ## Returns
@@ -149,52 +175,54 @@ defmodule Mana.Agents.RunSupervisor do
     if runs == [] do
       {:ok, []}
     else
-      do_parallel_runs(runs, supervisor, max_parallel, run_timeout)
-    end
-  end
-
-  # ------------------------------------------------------------------
-  # Private helpers for start_parallel_runs/2
-  # ------------------------------------------------------------------
-
-  defp do_parallel_runs(runs, supervisor, max_parallel, run_timeout) do
-    results =
       runs
-      |> Task.async_stream(
-        fn {agent_name, message, run_opts} ->
-          execute_named_run(agent_name, message, run_opts, supervisor, run_timeout)
-        end,
-        max_concurrency: max_parallel,
-        ordered: true,
-        timeout: :infinity
-      )
-      |> Enum.map(fn
-        {:ok, result} -> result
-        {:exit, reason} -> {:error, reason}
+      |> Enum.chunk_every(max_parallel)
+      |> Enum.reduce_while({:ok, []}, fn batch, {:ok, acc} ->
+        case run_batch(batch, supervisor, run_timeout) do
+          {:ok, batch_results} -> {:cont, {:ok, acc ++ batch_results}}
+          {:error, _} = error -> {:halt, error}
+        end
       end)
-
-    case Enum.find(results, &match?({:error, {:agent_not_found, _}}, &1)) do
-      nil -> {:ok, results}
-      error -> error
     end
   end
 
-  # Resolve the agent def from the registry, start a supervised task,
-  # and collect the result.
-  defp execute_named_run(agent_name, message, run_opts, supervisor, run_timeout) do
+  # ---------------------------------------------------------------------------
+  # Batch execution — starts `max_parallel` supervised tasks and collects
+  # their results via message passing.
+  # ---------------------------------------------------------------------------
+
+  defp run_batch(batch, supervisor, run_timeout) do
+    caller = self()
+
+    # Resolve agent defs and start supervised tasks for each run spec.
+    {tasks, resolve_errors} =
+      batch
+      |> Enum.map(fn {agent_name, message, run_opts} ->
+        start_named_task(agent_name, message, run_opts, supervisor, caller)
+      end)
+      |> Enum.split_with(&match?({:ok, _, _}, &1))
+
+    case resolve_errors do
+      [{:error, reason} | _] ->
+        {:error, reason}
+
+      [] ->
+        # All tasks started — await results in order
+        results =
+          tasks
+          |> Enum.map(fn {:ok, agent_name, task_pid} ->
+            result = await_task_result(task_pid, run_timeout)
+            {agent_name, result}
+          end)
+
+        {:ok, results}
+    end
+  end
+
+  defp start_named_task(agent_name, message, run_opts, supervisor, caller) do
     case resolve_agent(agent_name) do
       {:ok, agent_def} ->
-        result =
-          run_agent_supervised(
-            agent_name,
-            agent_def,
-            message,
-            run_opts,
-            supervisor,
-            run_timeout
-          )
-
-        {agent_name, result}
+        start_supervised_task(agent_name, agent_def, message, run_opts, supervisor, caller)
 
       {:error, reason} ->
         {:error, {:agent_not_found, reason}}
@@ -208,20 +236,10 @@ defmodule Mana.Agents.RunSupervisor do
     end
   end
 
-  # Start a supervised task that runs the agent and sends the result
-  # back to the caller before exiting.
-  defp run_agent_supervised(
-         agent_name,
-         agent_def,
-         message,
-         run_opts,
-         supervisor,
-         run_timeout
-       ) do
+  defp start_supervised_task(agent_name, agent_def, message, run_opts, supervisor, caller) do
     {:ok, agent_pid} =
       AgentServer.start_link(agent_def: normalize_agent_def(agent_def))
 
-    caller = self()
     merged_opts = Keyword.put(run_opts, :supervisor, supervisor)
 
     task_spec = %{
@@ -243,10 +261,9 @@ defmodule Mana.Agents.RunSupervisor do
                end
 
              Logger.debug("Parallel run for agent #{agent_name} completed")
-
-             # Send result back to caller before exiting
-             send(caller, {ref = make_ref(), result})
-             ref
+             # Send result back to the process that initiated the parallel run
+             send(caller, {self(), result})
+             result
            end
          ]},
       restart: :temporary
@@ -254,7 +271,7 @@ defmodule Mana.Agents.RunSupervisor do
 
     case DynamicSupervisor.start_child(supervisor, task_spec) do
       {:ok, task_pid} ->
-        await_task_result(task_pid, run_timeout)
+        {:ok, agent_name, task_pid}
 
       {:error, reason} ->
         if Process.alive?(agent_pid),
@@ -264,26 +281,20 @@ defmodule Mana.Agents.RunSupervisor do
     end
   end
 
-  # Wait for the supervised task to send its result, with a timeout.
+  # Wait for a specific task to send its result message.
   defp await_task_result(task_pid, timeout) do
     ref = Process.monitor(task_pid)
-    result_key = make_ref()
 
-    # The task sends {^result_key, result} — but we don't know the ref
-    # the task will use, so we monitor and receive.
     receive do
-      {_task_ref, {:ok, _} = result} when is_reference(elem(_task_ref, 0)) ->
-        Process.demonitor(ref, [:flush])
-        result
-
-      {_task_ref, {:error, _} = result} ->
+      {^task_pid, result} ->
         Process.demonitor(ref, [:flush])
         result
 
       {:DOWN, ^ref, :process, ^task_pid, :normal} ->
-        # Task exited — drain any late result message
+        Process.demonitor(ref, [:flush])
+        # Task exited before sending — drain any late message
         receive do
-          {_ref, result} -> result
+          {^task_pid, result} -> result
         after
           0 -> {:ok, :completed}
         end
@@ -299,6 +310,8 @@ defmodule Mana.Agents.RunSupervisor do
     end
   end
 
+  # Normalize agent_def from Registry (may have string or atom keys) into
+  # atom-keyed maps expected by Agent.Server.
   defp normalize_agent_def(agent_def) when is_map(agent_def) do
     agent_def
     |> Enum.map(fn
