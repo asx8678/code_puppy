@@ -44,11 +44,11 @@ defmodule Mana.Tools.UserApproval do
   def request_file_approval(operation, details) do
     message = build_file_message(operation, details)
 
-    MessageBus.request_confirmation(message, %{
+    MessageBus.request_confirmation(message,
       type: :file_approval,
       operation: operation,
       details: details
-    })
+    )
   catch
     :exit, {:timeout, _} ->
       {:error, :timeout}
@@ -77,11 +77,11 @@ defmodule Mana.Tools.UserApproval do
   def request_command_approval(command, cwd) do
     message = "Execute command: `#{command}` in `#{cwd}`?"
 
-    MessageBus.request_confirmation(message, %{
+    MessageBus.request_confirmation(message,
       type: :command_approval,
       command: command,
       cwd: cwd
-    })
+    )
   catch
     :exit, {:timeout, _} ->
       {:error, :timeout}

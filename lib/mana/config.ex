@@ -66,6 +66,14 @@ defmodule Mana.Config do
   }
 
   @doc """
+  Returns the configuration directory path.
+  """
+  @spec home_dir() :: String.t()
+  def home_dir do
+    Mana.Config.Paths.home_dir()
+  end
+
+  @doc """
   Returns the full configuration schema.
   """
   @spec config_keys() :: map()
@@ -90,6 +98,16 @@ defmodule Mana.Config do
   @spec put(atom(), any()) :: :ok
   def put(key, value) do
     Store.put(key, value)
+  end
+
+  @doc """
+  Sets a configuration value (alias for put/2).
+
+  The value will be persisted to disk asynchronously.
+  """
+  @spec set(atom(), any()) :: :ok
+  def set(key, value) do
+    put(key, value)
   end
 
   @doc """

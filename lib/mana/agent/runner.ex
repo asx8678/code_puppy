@@ -433,10 +433,8 @@ defmodule Mana.Agent.Runner do
   defp get_tool_schemas(agent_def) do
     available = Map.get(agent_def, :available_tools, []) || []
 
-    case ToolsRegistry.tool_definitions(List.first(available, "")) do
-      tools when is_list(tools) -> tools
-      _ -> []
-    end
+    # tool_definitions always returns a list, so no need for case
+    ToolsRegistry.tool_definitions(List.first(available, ""))
   end
 
   defp build_provider_opts(tools, opts) do

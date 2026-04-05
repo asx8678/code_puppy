@@ -117,6 +117,45 @@ defmodule Mana.Commands.Registry do
     GenServer.call(__MODULE__, :get_stats)
   end
 
+  @doc """
+  Lists all registered command names (alias for list_commands/0).
+  """
+  @spec list() :: [String.t()]
+  def list do
+    list_commands()
+  end
+
+  @doc """
+  Executes a command by name with the given arguments and context.
+
+  Supports fuzzy matching if exact match fails.
+  Returns the result of command execution.
+  """
+  @spec execute(String.t(), keyword() | map()) :: :ok | {:ok, term()} | {:error, term()}
+  def execute(command_name, opts \\ []) do
+    args = if is_list(opts), do: Keyword.get(opts, :args, []), else: Map.get(opts, :args, [])
+
+    context =
+      if is_list(opts), do: Keyword.get(opts, :context, %{}) |> Enum.into(%{}), else: Map.get(opts, :context, %{})
+
+    dispatch(command_name, args, context)
+  end
+
+  @doc """
+  Returns command definitions for all registered commands.
+  """
+  @spec get_definitions() :: [map()]
+  def get_definitions do
+    list_commands()
+    |> Enum.map(fn name ->
+      case get_command(name) do
+        {:ok, details} -> details
+        {:error, _} -> nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
   # Server Callbacks
 
   @impl true

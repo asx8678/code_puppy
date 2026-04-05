@@ -14,6 +14,12 @@ defmodule Mana.MixProject do
       deps: deps(),
       aliases: aliases(),
 
+      # Dialyzer configuration
+      dialyzer: [
+        ignore_warnings: ".dialyzer_ignore.exs",
+        plt_file: {:no_warn, "priv/plts/dialyzer.plt"}
+      ],
+
       # Hex.pm package info
       package: package(),
 

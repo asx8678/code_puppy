@@ -200,7 +200,7 @@ defmodule Mana.ErrorClassifier do
 
   defp classify_generic_exception(error) do
     if Map.get(error, :__exception__) do
-      message = Exception.message(error) || inspect(error, limit: 100)
+      message = Exception.message(error)
       %{message: message, severity: :error, retryable: false}
     else
       %{message: "Unexpected error: #{inspect(error, limit: 200)}", severity: :error, retryable: false}
@@ -267,8 +267,8 @@ defmodule Mana.ErrorClassifier do
   - `String.t()` - Formatted message with retry guidance
   """
   @spec format_with_retry(classification()) :: String.t()
-  def format_with_retry(%{message: message, severity: severity, retryable: true}) do
-    base = format_for_user(%{message: message, severity: severity})
+  def format_with_retry(%{message: _message, severity: _severity, retryable: true} = classification) do
+    base = format_for_user(classification)
     "#{base} (This error may resolve if you retry)"
   end
 
