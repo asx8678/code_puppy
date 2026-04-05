@@ -117,7 +117,7 @@ defmodule Mana.Shell.ExecutorTest do
 
       # Verify it's running
       processes = Executor.list_processes()
-      assert length(processes) > 0
+      assert processes != []
 
       # Kill all processes
       assert :ok = Executor.kill_all()
@@ -161,7 +161,7 @@ defmodule Mana.Shell.ExecutorTest do
 
       # List should show it
       processes = Executor.list_processes()
-      assert length(processes) >= 1
+      assert processes != []
 
       # Check process structure
       {ref, command, started_at} = hd(processes)
