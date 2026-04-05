@@ -1,5 +1,5 @@
 defmodule Mana.TUI.App do
-  @moduledoc "Main TUI application loop"
+  @moduledoc "Main TUI application loop with non-blocking input"
 
   alias Mana.Agent.Runner
   alias Mana.Banner
@@ -48,46 +48,80 @@ defmodule Mana.TUI.App do
       |> to_string()
     )
 
-    # Main loop
-    loop(session_id, opts)
+    # Start input reader process for non-blocking input
+    input_pid = spawn_input_reader(self())
+
+    # Main loop with non-blocking input
+    loop(session_id, opts, input_pid)
   end
 
-  defp loop(session_id, opts) do
-    input = read_input()
-
-    case String.trim(input) do
-      "" ->
-        loop(session_id, opts)
-
-      "/quit" ->
-        shutdown(session_id)
-
-      "/help" ->
-        print_help()
-        loop(session_id, opts)
-
-      "/clear" ->
-        IO.write("\e[2J\e[H")
-        loop(session_id, opts)
-
-      "/" <> command ->
-        dispatch_command(command, session_id)
-        loop(session_id, opts)
-
-      message ->
-        run_agent(message, session_id, opts)
-        loop(session_id, opts)
-    end
+  # Spawns a separate process to read input and send it to the main process
+  defp spawn_input_reader(parent_pid) do
+    spawn(fn -> input_reader_loop(parent_pid) end)
   end
 
-  defp read_input do
+  # Input reader loop - runs in separate process to avoid blocking
+  defp input_reader_loop(parent_pid) do
     prompt = IO.ANSI.format([:bright, :green, "❯ ", :reset]) |> to_string()
     IO.write(prompt)
 
     case IO.read(:line) do
-      :eof -> "/quit\n"
-      {:error, _} -> "/quit\n"
-      line when is_binary(line) -> line
+      :eof ->
+        send(parent_pid, {:input, "/quit\n"})
+
+      {:error, _} ->
+        send(parent_pid, {:input, "/quit\n"})
+
+      line when is_binary(line) ->
+        send(parent_pid, {:input, line})
+        input_reader_loop(parent_pid)
+    end
+  end
+
+  defp loop(session_id, opts, input_pid) do
+    receive do
+      {:input, input} ->
+        handle_input(input, session_id, opts, input_pid)
+
+      {:message, %{type: :text} = msg} ->
+        IO.puts(IO.ANSI.format([:faint, msg.content, :reset]) |> to_string())
+        # Reprint prompt since message interrupted it
+        prompt = IO.ANSI.format([:bright, :green, "❯ ", :reset]) |> to_string()
+        IO.write(prompt)
+        loop(session_id, opts, input_pid)
+
+      {:message, _msg} ->
+        # Ignore other message types
+        loop(session_id, opts, input_pid)
+
+      _other ->
+        loop(session_id, opts, input_pid)
+    end
+  end
+
+  defp handle_input(input, session_id, opts, input_pid) do
+    case String.trim(input) do
+      "" ->
+        loop(session_id, opts, input_pid)
+
+      "/quit" ->
+        shutdown(session_id, input_pid)
+
+      "/help" ->
+        print_help()
+        loop(session_id, opts, input_pid)
+
+      "/clear" ->
+        IO.write("\e[2J\e[H")
+        loop(session_id, opts, input_pid)
+
+      "/" <> command ->
+        dispatch_command(command, session_id)
+        loop(session_id, opts, input_pid)
+
+      message ->
+        run_agent(message, session_id, opts)
+        loop(session_id, opts, input_pid)
     end
   end
 
@@ -184,7 +218,10 @@ defmodule Mana.TUI.App do
     IO.puts(help_text)
   end
 
-  defp shutdown(session_id) do
+  defp shutdown(session_id, input_pid) do
+    # Stop the input reader process
+    Process.exit(input_pid, :kill)
+
     Store.set_active_session(session_id)
     Store.save(session_id)
     MessageBus.remove_listener(self())
@@ -192,8 +229,7 @@ defmodule Mana.TUI.App do
     :ok
   end
 
-  @doc "Handle messages from MessageBus (for async notifications)"
-  @spec handle_message(any()) :: :ok
+  # Deprecated: kept for backwards compatibility
   def handle_message({:message, %{type: :text} = msg}) do
     IO.puts(IO.ANSI.format([:faint, msg.content, :reset]) |> to_string())
     :ok
