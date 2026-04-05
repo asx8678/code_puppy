@@ -91,16 +91,30 @@ defmodule Mana.Plugins.AgentSkillsTest do
   end
 
   describe "on_load_prompt/0" do
-    test "returns nil when no skills are active" do
+    test "returns available skills catalog when no skills are active" do
       AgentSkills.deactivate_all_skills()
-      assert AgentSkills.on_load_prompt() == nil
+      prompt = AgentSkills.on_load_prompt()
+      assert is_binary(prompt)
+      assert prompt =~ "<available_skills>"
+      assert prompt =~ "elixir-dev"
+      assert prompt =~ "rust-api"
+      refute prompt =~ "Active Skills"
     end
 
-    test "returns formatted prompt with active skills" do
+    test "returns nil when no skills are loaded and none are active" do
+      :persistent_term.put({AgentSkills, :available_skills}, [])
+      AgentSkills.deactivate_all_skills()
+      assert AgentSkills.on_load_prompt() == nil
+      # Restore for other tests
+      :persistent_term.put({AgentSkills, :available_skills}, [])
+    end
+
+    test "returns formatted prompt with available catalog and active skills" do
       AgentSkills.activate_skill("elixir-dev")
 
       prompt = AgentSkills.on_load_prompt()
       assert is_binary(prompt)
+      assert prompt =~ "<available_skills>"
       assert prompt =~ "Active Skills"
       assert prompt =~ "elixir-dev"
       assert prompt =~ "Elixir development expertise"
@@ -112,8 +126,10 @@ defmodule Mana.Plugins.AgentSkillsTest do
       AgentSkills.activate_skill("rust-api")
 
       prompt = AgentSkills.on_load_prompt()
+      assert prompt =~ "<available_skills>"
       assert prompt =~ "elixir-dev"
       assert prompt =~ "rust-api"
+      assert prompt =~ "Active Skills"
     end
   end
 

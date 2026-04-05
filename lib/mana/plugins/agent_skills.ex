@@ -4,8 +4,9 @@ defmodule Mana.Plugins.AgentSkills do
 
   This plugin wires the Mana Skills system into the plugin lifecycle:
   - Discovers SKILL.md files from ~/.mana/skills/, ./skills/, and priv/skills/
-  - Tracks active skills per session
-  - Injects active skill content into system prompts via :load_prompt
+  - Tracks active skills per session (persisted to Config.Store)
+  - Injects skill content into system prompts via :load_prompt
+  - Uses PromptBuilder for generating catalog sections
   - Provides /skills command for listing and activating skills
 
   ## Usage
@@ -18,15 +19,16 @@ defmodule Mana.Plugins.AgentSkills do
 
   ## Hooks Registered
 
-  - `:startup` - Load skills into persistent_term
-  - `:load_prompt` - Inject active skill content into system prompt
+  - `:startup` - Load skills into persistent_term, log count
+  - `:load_prompt` - Inject available skills catalog + active skill content
   - `:custom_command` - Handle /skills commands
-  - `:agent_run_end` - Clean up session state
+  - `:agent_run_end` - Session cleanup hook
   """
 
   @behaviour Mana.Plugin.Behaviour
 
   alias Mana.Skills.Loader
+  alias Mana.Skills.PromptBuilder
 
   require Logger
 
@@ -34,13 +36,16 @@ defmodule Mana.Plugins.AgentSkills do
   @available_skills_key {__MODULE__, :available_skills}
   @active_skills_key_prefix {__MODULE__, :active_skills}
 
+  # Config.Store key for persisting activated skill names across sessions
+  @active_skills_config_key :active_skills
+
   @impl true
   def name, do: "agent_skills"
 
   @impl true
   def init(_config) do
-    # Load available skills on plugin initialization
     load_skills()
+    restore_active_skills()
     {:ok, %{loaded: true}}
   end
 
@@ -70,18 +75,43 @@ defmodule Mana.Plugins.AgentSkills do
   end
 
   @doc """
-  Load prompt hook - returns content from active skills.
-  Called during prompt assembly to inject skill content.
+  Load prompt hook - returns skill content for the system prompt.
+
+  Builds two sections:
+  1. A catalog of ALL available skills (via PromptBuilder) so the agent
+     knows what skills exist and can request activation.
+  2. Full content of currently activated skills so the agent can follow
+     their guidance immediately.
+
+  Returns `nil` when no skills are loaded and none are active.
   """
   def on_load_prompt do
-    session_id = get_current_session_id()
-    active_skills = get_active_skills(session_id)
+    available = list_skills()
+    active_skills = get_active_skills()
 
-    if active_skills == [] do
-      nil
-    else
-      build_active_skills_prompt(active_skills)
+    sections =
+      []
+      |> maybe_add_available_catalog(available)
+      |> maybe_add_active_content(active_skills)
+
+    case sections do
+      [] -> nil
+      _ -> Enum.join(sections, "\n\n")
     end
+  end
+
+  defp maybe_add_available_catalog(acc, []), do: acc
+
+  defp maybe_add_available_catalog(acc, skills) do
+    catalog = PromptBuilder.build_available_skills_xml(skills)
+    guidance = PromptBuilder.build_skills_guidance()
+    acc ++ ["#{catalog}\n#{guidance}"]
+  end
+
+  defp maybe_add_active_content(acc, []), do: acc
+
+  defp maybe_add_active_content(acc, active_skills) do
+    acc ++ [build_active_skills_prompt(active_skills)]
   end
 
   @doc """
@@ -161,6 +191,7 @@ defmodule Mana.Plugins.AgentSkills do
 
   @doc """
   Activates a skill by name for the current session.
+  Persists the activation to Config.Store so it survives restarts.
   """
   @spec activate_skill(String.t()) :: String.t()
   def activate_skill(name) do
@@ -178,6 +209,7 @@ defmodule Mana.Plugins.AgentSkills do
         else
           new_active = [skill | current_active]
           set_active_skills(session_id, new_active)
+          persist_active_skill_names(new_active)
           "Activated skill: #{skill.name}\n#{skill.description}"
         end
     end
@@ -198,6 +230,7 @@ defmodule Mana.Plugins.AgentSkills do
       _skill ->
         new_active = Enum.reject(current_active, fn s -> s.name == name end)
         set_active_skills(session_id, new_active)
+        persist_active_skill_names(new_active)
         "Deactivated skill: #{name}"
     end
   end
@@ -210,6 +243,7 @@ defmodule Mana.Plugins.AgentSkills do
     session_id = get_current_session_id()
     count = length(get_active_skills(session_id))
     clear_active_skills(session_id)
+    persist_active_skill_names([])
     "Deactivated #{count} skill(s)."
   end
 
@@ -344,4 +378,53 @@ defmodule Mana.Plugins.AgentSkills do
 
   defp format_tags([]), do: ""
   defp format_tags(tags), do: " [#{Enum.join(tags, ", ")}]"
+
+  # Config.Store integration for persisting active skill names.
+  # Gracefully handles the case where ConfigStore is not running (e.g. tests).
+
+  defp persist_active_skill_names(skills) do
+    names = Enum.map(skills, & &1.name)
+
+    try do
+      Mana.Config.Store.put(@active_skills_config_key, names)
+    rescue
+      ArgumentError -> :ok
+    catch
+      :exit, _ -> :ok
+    end
+  end
+
+  defp restore_active_skills do
+    names =
+      try do
+        Mana.Config.Store.get(@active_skills_config_key, [])
+      rescue
+        ArgumentError -> []
+      catch
+        :exit, _ -> []
+      end
+
+    case names do
+      [] ->
+        :ok
+
+      [_ | _] ->
+        available = list_skills()
+
+        restored =
+          Enum.flat_map(names, fn name ->
+            case Enum.find(available, fn s -> s.name == name end) do
+              nil -> []
+              skill -> [skill]
+            end
+          end)
+
+        if restored != [] do
+          set_active_skills(get_current_session_id(), restored)
+          Logger.info("AgentSkills: restored #{length(restored)} active skill(s)")
+        end
+
+        :ok
+    end
+  end
 end
