@@ -104,6 +104,9 @@ defmodule Mana.Message do
   Called at ingestion boundaries (JSON decode, session load, provider response
   parsing) to ensure consistent atom-keyed maps throughout the internal pipeline.
 
+  Uses `String.to_existing_atom/1` for security - only converts strings to atoms
+  that already exist in the BEAM VM, preventing atom table exhaustion attacks.
+
   Handles nested structures: `tool_calls` lists and `function` maps are
   recursively normalized.
 
@@ -112,15 +115,24 @@ defmodule Mana.Message do
       iex> Mana.Message.normalize_keys(%{"role" => "user", "content" => "hi"})
       %{role: "user", content: "hi"}
 
-      iex> Mana.Message.normalize_keys(%{role: "user", content: "hi"})
+      iex> Mana.Message.normalize_keys(%{role: "user", "content" => "hi"})
       %{role: "user", content: "hi"}
   """
   @spec normalize_keys(map()) :: map()
   def normalize_keys(%{} = msg) do
     msg
     |> Map.new(fn
-      {k, v} when is_binary(k) -> {String.to_atom(k), v}
-      pair -> pair
+      {k, v} when is_binary(k) ->
+        # Use to_existing_atom to prevent atom table exhaustion from untrusted input
+        try do
+          {String.to_existing_atom(k), v}
+        rescue
+          # Keep as string if atom doesn't exist
+          ArgumentError -> {k, v}
+        end
+
+      pair ->
+        pair
     end)
     |> maybe_normalize_nested()
   end
