@@ -150,6 +150,7 @@ defmodule Mana.Plugin.Manager do
       Mana.Plugin.Manager.trigger(:agent_run_start, ["agent", "model", nil])
       Mana.Plugin.Manager.trigger(:file_permission, [ctx, "/path", "read", nil, nil, nil], timeout: 10_000)
   """
+  @deprecated "Use Mana.Callbacks.dispatch/2 instead — plugin hooks are now bridged to Callbacks.Registry"
   @spec trigger(Hook.hook_phase(), [term()], keyword()) :: {:ok, [term()]} | {:error, term()}
   def trigger(hook, args \\ [], opts \\ []) do
     # Reentrancy guard: if called from within the GenServer itself, execute directly
@@ -635,6 +636,10 @@ defmodule Mana.Plugin.Manager do
   defp register_hooks(hooks, plugin_name, existing_hooks) do
     Enum.reduce(hooks, existing_hooks, fn {hook, func}, acc ->
       func_with_metadata = {func, plugin_name}
+
+      # Bridge to Callbacks.Registry so plugin hooks fire through the unified system
+      bridge_register(hook, func)
+
       Map.update(acc, hook, [func_with_metadata], &(&1 ++ [func_with_metadata]))
     end)
   end
@@ -648,7 +653,10 @@ defmodule Mana.Plugin.Manager do
   end
 
   defp remove_plugin_hooks(plugin, hooks) do
-    Enum.reduce(plugin.hooks, hooks, fn {hook, _func}, acc ->
+    Enum.reduce(plugin.hooks, hooks, fn {hook, func}, acc ->
+      # Bridge deregistration to Callbacks.Registry
+      bridge_unregister(hook, func)
+
       Map.update(acc, hook, [], &reject_plugin_funcs(&1, plugin.name))
     end)
   end
@@ -760,6 +768,26 @@ defmodule Mana.Plugin.Manager do
       {:error, _} -> true
       _ -> false
     end)
+  end
+
+  defp bridge_register(hook, func) do
+    if GenServer.whereis(Mana.Callbacks.Registry) do
+      try do
+        Mana.Callbacks.Registry.register(hook, func)
+      catch
+        :exit, _ -> :ok
+      end
+    end
+  end
+
+  defp bridge_unregister(hook, func) do
+    if GenServer.whereis(Mana.Callbacks.Registry) do
+      try do
+        Mana.Callbacks.Registry.unregister(hook, func)
+      catch
+        :exit, _ -> :ok
+      end
+    end
   end
 
   defp do_drain_backlog(hook, state) do
