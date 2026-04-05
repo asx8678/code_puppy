@@ -124,8 +124,11 @@ defmodule Mana.Callbacks.Registry do
         {:ok, []}
       else
         # Execute in caller's process
+        # Deduplicate callbacks to prevent double dispatch
+        unique_callbacks = Enum.uniq(callbacks)
+
         results =
-          Enum.map(callbacks, fn callback ->
+          Enum.map(unique_callbacks, fn callback ->
             try do
               apply(callback, args)
             catch
@@ -135,8 +138,8 @@ defmodule Mana.Callbacks.Registry do
             end
           end)
 
-        # Update stats
-        GenServer.cast(__MODULE__, {:increment_stats, :dispatches, length(callbacks)})
+        # Update stats with unique count
+        GenServer.cast(__MODULE__, {:increment_stats, :dispatches, length(unique_callbacks)})
 
         {:ok, results}
       end
