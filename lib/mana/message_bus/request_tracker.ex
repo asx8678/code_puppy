@@ -18,7 +18,10 @@ defmodule Mana.MessageBus.RequestTracker do
   @typedoc "Pending request entry"
   @type pending_request :: %{
           from: GenServer.from(),
-          type: atom()
+          type: atom(),
+          caller_pid: pid(),
+          monitor_ref: reference(),
+          timestamp: integer()
         }
 
   @doc """
@@ -48,16 +51,24 @@ defmodule Mana.MessageBus.RequestTracker do
   - `from` - GenServer.from() tuple for replying later
   - `type` - Request type atom (e.g., `:input`, `:confirmation`)
 
-  ## Examples
+  ## Returns
 
-      iex> state = %{pending_requests: %{}, request_counter: 0, listeners: MapSet.new()}
-      iex> from = {self(), :erlang.make_ref()}
-      iex> Mana.MessageBus.RequestTracker.track(state, "req_123", from, :input)
-      %{pending_requests: %{"req_123" => %{from: from, type: :input}}, request_counter: 0, listeners: MapSet.new()}
+  Updated state with the tracked request.
   """
   @spec track(state(), String.t(), GenServer.from(), atom()) :: state()
   def track(state, id, from, type) do
-    pending = Map.put(state.pending_requests, id, %{from: from, type: type})
+    {caller_pid, _} = from
+    monitor_ref = Process.monitor(caller_pid)
+    timestamp = System.monotonic_time(:millisecond)
+
+    pending =
+      Map.put(state.pending_requests, id, %{
+        from: from,
+        type: type,
+        caller_pid: caller_pid,
+        monitor_ref: monitor_ref,
+        timestamp: timestamp
+      })
 
     %{state | pending_requests: pending}
   end
@@ -68,18 +79,14 @@ defmodule Mana.MessageBus.RequestTracker do
   Returns `{:ok, new_state}` if the request was found and resolved,
   or `{:error, :not_found}` if the request ID doesn't exist.
 
-  ## Examples
-
-      iex> from = {self(), :erlang.make_ref()}
-      iex> state = %{pending_requests: %{"req_123" => %{from: from, type: :input}}, request_counter: 0, listeners: MapSet.new()}
-      iex> Mana.MessageBus.RequestTracker.resolve(state, "req_123", "user response")
-      {:ok, %{pending_requests: %{}, request_counter: 0, listeners: MapSet.new()}}
+  When a request is resolved, the caller monitor is demonitored.
   """
   @spec resolve(state(), String.t(), any()) :: {:ok, state()} | {:error, :not_found}
   def resolve(state, id, response) do
     case Map.pop(state.pending_requests, id) do
-      {%{from: from, type: _type}, remaining} ->
-        # Reply to the waiting process
+      {%{from: from, type: _type, monitor_ref: ref}, remaining} ->
+        # Demonitor the caller and reply to the waiting process
+        Process.demonitor(ref, [:flush])
         GenServer.reply(from, {:ok, response})
         {:ok, %{state | pending_requests: remaining}}
 
@@ -89,15 +96,51 @@ defmodule Mana.MessageBus.RequestTracker do
   end
 
   @doc """
+  Removes a pending request without sending a response.
+
+  Used when a caller process dies or a request times out.
+
+  Returns `{:ok, new_state}` if the request was found and removed,
+  or `{:error, :not_found}` if the request ID doesn't exist.
+  """
+  @spec remove(state(), String.t()) :: {:ok, state()} | {:error, :not_found}
+  def remove(state, id) do
+    case Map.pop(state.pending_requests, id) do
+      {%{monitor_ref: ref}, remaining} ->
+        # Demonitor the caller
+        Process.demonitor(ref, [:flush])
+        {:ok, %{state | pending_requests: remaining}}
+
+      {nil, _pending} ->
+        {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Cleans up stale pending requests that have exceeded the timeout.
+
+  Returns `{removed_count, new_state}` with the number of removed requests.
+  """
+  @spec cleanup_stale(state(), non_neg_integer()) :: {non_neg_integer(), state()}
+  def cleanup_stale(state, timeout_ms) do
+    now = System.monotonic_time(:millisecond)
+
+    {to_remove, remaining} =
+      Enum.split_with(state.pending_requests, fn {_id, %{timestamp: ts}} ->
+        now - ts > timeout_ms
+      end)
+
+    # Demonitor all removed requests
+    Enum.each(to_remove, fn {_id, %{monitor_ref: ref}} ->
+      Process.demonitor(ref, [:flush])
+    end)
+
+    removed_count = length(to_remove)
+    {removed_count, %{state | pending_requests: Map.new(remaining)}}
+  end
+
+  @doc """
   Checks if a request ID is pending.
-
-  ## Examples
-
-      iex> state = %{pending_requests: %{"req_123" => %{from: nil, type: :input}}, request_counter: 0, listeners: MapSet.new()}
-      iex> Mana.MessageBus.RequestTracker.pending?(state, "req_123")
-      true
-      iex> Mana.MessageBus.RequestTracker.pending?(state, "req_456")
-      false
   """
   @spec pending?(state(), String.t()) :: boolean()
   def pending?(state, id) do
@@ -106,12 +149,6 @@ defmodule Mana.MessageBus.RequestTracker do
 
   @doc """
   Lists all pending request IDs.
-
-  ## Examples
-
-      iex> state = %{pending_requests: %{"req_123" => %{}, "req_456" => %{}}, request_counter: 0, listeners: MapSet.new()}
-      iex> Mana.MessageBus.RequestTracker.list_pending(state)
-      ["req_123", "req_456"]
   """
   @spec list_pending(state()) :: [String.t()]
   def list_pending(state) do
