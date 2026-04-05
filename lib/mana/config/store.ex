@@ -184,6 +184,12 @@ defmodule Mana.Config.Store do
     end
   end
 
+  @impl true
+  def handle_info(msg, state) do
+    Logger.debug("[Mana.Config.Store] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
   # Private Functions
 
   defp schedule_flush(%{dirty: true} = state) do

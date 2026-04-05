@@ -430,6 +430,12 @@ defmodule Mana.Plugin.Manager do
   end
 
   @impl true
+  def handle_info(msg, state) do
+    Logger.debug("[Mana.Plugin.Manager] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
+  @impl true
   def terminate(_reason, state) do
     # Trigger shutdown hooks via Callbacks system
     _ = Callbacks.dispatch(:shutdown, [])

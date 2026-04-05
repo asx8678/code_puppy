@@ -216,6 +216,12 @@ defmodule Mana.OAuth.RefreshManager do
     {:noreply, %{state | refresh_state: new_refresh_state}}
   end
 
+  @impl true
+  def handle_info(msg, state) do
+    Logger.debug("[Mana.OAuth.RefreshManager] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
   # ============================================================================
   # Private Functions
   # ============================================================================

@@ -196,6 +196,12 @@ defmodule Mana.TTSR.StreamWatcher do
     {:reply, state.last_activity, state}
   end
 
+  @impl true
+  def handle_info(msg, state) do
+    Logger.debug("[Mana.TTSR.StreamWatcher] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
   # Private Functions
 
   defp handle_stream_event({:part_delta, _part_id, content}, state) do

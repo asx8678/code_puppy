@@ -179,6 +179,12 @@ defmodule Mana.Agents.Registry do
     {:reply, :ok, %{state | agents: agents, last_refresh: DateTime.utc_now()}}
   end
 
+  @impl true
+  def handle_info(msg, state) do
+    Logger.debug("[Mana.Agents.Registry] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
   # ============================================================================
   # Private Functions
   # ============================================================================

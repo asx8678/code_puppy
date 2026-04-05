@@ -315,6 +315,12 @@ defmodule Mana.Callbacks.Registry do
     {:noreply, %{state | backlog: new_backlog}}
   end
 
+  @impl true
+  def handle_info(msg, state) do
+    Logger.debug("[Mana.Callbacks.Registry] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
   # Private Functions
 
   defp count_callbacks(callbacks_map) do

@@ -215,6 +215,12 @@ defmodule Mana.RateLimiter do
     {:noreply, %{state | models: new_models, last_recovery: DateTime.utc_now()}}
   end
 
+  @impl true
+  def handle_info(msg, state) do
+    Logger.debug("[Mana.RateLimiter] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
   # ============================================================================
   # Private Functions
   # ============================================================================

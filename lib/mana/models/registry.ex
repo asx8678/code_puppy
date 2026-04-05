@@ -345,6 +345,12 @@ defmodule Mana.Models.Registry do
     {:reply, state.stats, state}
   end
 
+  @impl true
+  def handle_info(msg, state) do
+    Logger.debug("[Mana.Models.Registry] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
   # ============================================================================
   # Private Functions
   # ============================================================================

@@ -39,6 +39,8 @@ defmodule Mana.Agent.Server do
   alias Mana.Config
   alias Mana.Prompt.Compositor
 
+  require Logger
+
   defstruct [
     :id,
     :agent_def,
@@ -179,6 +181,12 @@ defmodule Mana.Agent.Server do
     }
 
     {:reply, :ok, new_state}
+  end
+
+  @impl true
+  def handle_info(msg, state) do
+    Logger.debug("[Mana.Agent.Server] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
   end
 
   defp generate_id do
