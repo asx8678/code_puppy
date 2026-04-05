@@ -67,7 +67,7 @@ defmodule Mana.Agents.RunSupervisor do
   """
   @spec start_run(pid(), String.t(), keyword()) :: DynamicSupervisor.on_start_child()
   def start_run(agent_pid, user_message, opts \\ []) when is_pid(agent_pid) do
-    parent_supervisor = self()
+    _parent_supervisor = self()
 
     task_spec = %{
       id: make_ref(),
