@@ -267,26 +267,45 @@ defmodule Mana.OAuth.ClaudeCodeTest do
 
       TokenStore.save("claude_code", tokens)
 
+      test_pid = self()
+
       with_mock Req,
         new: fn _opts ->
           %{}
         end,
         request: fn _req ->
-          # Return mocked response body as list (simulating streaming chunks)
-          {:ok,
-           %{
-             status: 200,
-             body: [
-               ~s(data: {"type": "message_start", "message": {"id": "msg_123"}}) <> "\n\n",
-               ~s(data: {"type": "content_block_start", "content_block": {"type": "text"}}) <> "\n\n",
-               ~s(data: {"type": "content_block_delta", "delta": {"text": "Hello"}}) <> "\n\n",
-               ~s(data: {"type": "content_block_delta", "delta": {"text": " there!"}}) <> "\n\n",
-               ~s(data: {"type": "content_block_stop"}) <> "\n\n",
-               ~s(data: {"type": "message_stop"}) <> "\n\n",
-               ~s(data: [DONE]) <> "\n\n"
-             ]
-           }}
-        end do
+          # Spawn a process to send streaming messages to the caller
+          ref = make_ref()
+
+          spawn(fn ->
+            chunks = [
+              ~s(data: {"type": "message_start", "message": {"id": "msg_123"}}) <> "\n\n",
+              ~s(data: {"type": "content_block_start", "content_block": {"type": "text"}}) <> "\n\n",
+              ~s(data: {"type": "content_block_delta", "delta": {"text": "Hello"}}) <> "\n\n",
+              ~s(data: {"type": "content_block_delta", "delta": {"text": " there!"}}) <> "\n\n",
+              ~s(data: {"type": "content_block_stop"}) <> "\n\n",
+              ~s(data: {"type": "message_stop"}) <> "\n\n",
+              ~s(data: [DONE]) <> "\n\n"
+            ]
+
+            Enum.each(chunks, fn chunk ->
+              send(test_pid, {:req_chunk, ref, chunk})
+            end)
+
+            send(test_pid, {:req_done, ref})
+          end)
+
+          resp = %{__req_ref__: ref, status: 200}
+          {:ok, resp}
+        end,
+        parse_message: fn _resp, message ->
+          case message do
+            {:req_chunk, _ref, chunk} -> {:ok, [data: chunk]}
+            {:req_done, _ref} -> {:ok, [:done]}
+            _ -> :unknown
+          end
+        end,
+        cancel_async_response: fn _resp -> :ok end do
         messages = [%{"role" => "user", "content" => "Hello"}]
         stream = ClaudeCode.stream(messages, "claude-sonnet-4-20250514")
         events = Enum.to_list(stream)

@@ -370,67 +370,94 @@ defmodule Mana.OAuth.ChatGPT do
             url: "#{@api_base}/responses",
             headers: headers,
             json: body,
-            into: :self
+            into: :self,
+            receive_timeout: 600_000
           )
 
-        %{request: request, buffer: "", done: false}
+        case Req.request(request) do
+          {:ok, %{status: 200} = resp} ->
+            {:streaming, resp, ""}
+
+          {:ok, %{status: 401}} ->
+            {:error, "Unauthorized - token may be expired"}
+
+          {:ok, %{status: status}} ->
+            {:error, "HTTP #{status}"}
+
+          {:error, reason} ->
+            {:error, "Request failed: #{inspect(reason)}"}
+        end
       end,
-      &stream_next/1,
-      fn _state -> :ok end
+      fn
+        {:error, msg} ->
+          {[{:error, msg}], :halt}
+
+        :halt ->
+          {:halt, :halt}
+
+        {:streaming, resp, buffer} ->
+          receive do
+            message ->
+              case Req.parse_message(resp, message) do
+                {:ok, [data: chunk]} ->
+                  {events, new_buffer} = parse_chatgpt_sse_chunk(buffer <> chunk)
+                  {events, {:streaming, resp, new_buffer}}
+
+                {:ok, [:done]} ->
+                  {[{:part_end, :done}], :halt}
+
+                :unknown ->
+                  {[], {:streaming, resp, buffer}}
+              end
+          after
+            60_000 -> {[{:error, :timeout}], :halt}
+          end
+      end,
+      fn
+        {:streaming, resp, _} -> Req.cancel_async_response(resp)
+        _ -> :ok
+      end
     )
   end
 
-  defp stream_next(%{done: true} = state), do: {:halt, state}
+  defp parse_chatgpt_sse_chunk(data) do
+    lines = String.split(data, ~r/\r?\n/)
 
-  defp stream_next(%{request: request, buffer: buffer} = state) do
-    case Req.request(request) do
-      {:ok, %{status: 200} = response} ->
-        events = process_stream_body(response.body)
-        done = stream_complete?(events)
-        {events, %{state | buffer: buffer <> "", done: done}}
+    {complete_lines, remainder} =
+      case List.last(lines) do
+        nil ->
+          {[], ""}
 
-      {:ok, %{status: 401}} ->
-        {[{:error, "Unauthorized - token may be expired"}], %{state | done: true}}
+        last ->
+          if String.ends_with?(data, "\n") do
+            {lines, ""}
+          else
+            all_but_last = lines |> Enum.reverse() |> tl() |> Enum.reverse()
+            {all_but_last, last}
+          end
+      end
 
-      {:ok, %{status: status}} ->
-        {[{:error, "HTTP #{status}"}], %{state | done: true}}
+    events =
+      complete_lines
+      |> Enum.filter(&String.starts_with?(&1, "data: "))
+      |> Enum.flat_map(fn line ->
+        json = String.trim_leading(line, "data: ")
 
-      {:error, reason} ->
-        {[{:error, "Request failed: #{inspect(reason)}"}], %{state | done: true}}
-    end
+        case json do
+          "[DONE]" ->
+            [{:part_end, :done}]
+
+          _ ->
+            case Jason.decode(json) do
+              {:ok, decoded} -> parse_codex_stream_event(decoded)
+              {:error, _} -> [{:error, "Invalid JSON: #{json}"}]
+            end
+        end
+      end)
+
+    {events, remainder}
   end
 
-  defp process_stream_body(body) when is_list(body) do
-    body
-    |> Enum.flat_map(&extract_sse_lines/1)
-    |> Enum.map(&parse_sse_data/1)
-    |> Enum.flat_map(&parse_codex_stream_event/1)
-  end
-
-  defp process_stream_body(_), do: []
-
-  defp extract_sse_lines(chunk) do
-    chunk
-    |> String.split("\n")
-    |> Enum.filter(&String.starts_with?(&1, "data: "))
-  end
-
-  defp parse_sse_data(line) do
-    case String.trim_leading(line, "data: ") do
-      "[DONE]" -> :done
-      json -> decode_json(json)
-    end
-  end
-
-  defp decode_json(json) do
-    case Jason.decode(json) do
-      {:ok, decoded} -> decoded
-      {:error, _} -> {:error, "Invalid JSON: #{json}"}
-    end
-  end
-
-  defp parse_codex_stream_event(:done), do: [{:part_end, :done}]
-  defp parse_codex_stream_event({:error, _} = err), do: [err]
   defp parse_codex_stream_event(%{"type" => "response.created"}), do: [{:part_start, :content}]
 
   defp parse_codex_stream_event(%{"type" => "response.output_item.added", "item" => item}) do
@@ -465,13 +492,6 @@ defmodule Mana.OAuth.ChatGPT do
   end
 
   defp parse_output_item(_), do: []
-
-  defp stream_complete?(events) do
-    Enum.any?(events, fn
-      {:part_end, :done} -> true
-      _ -> false
-    end)
-  end
 
   defp convert_messages(messages) when is_list(messages) do
     Enum.map(messages, fn msg ->

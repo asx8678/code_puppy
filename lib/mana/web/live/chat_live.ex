@@ -32,9 +32,12 @@ defmodule Mana.Web.Live.ChatLive do
   use Phoenix.LiveView
 
   # DoS protection limits
-  @max_message_length 100_000   # 100KB per message
-  @max_stream_size   1_000_000  # 1MB stream output buffer cap
-  @max_messages      200         # Max messages retained in session history
+  # 100KB per message
+  @max_message_length 100_000
+  # 1MB stream output buffer cap
+  @max_stream_size 1_000_000
+  # Max messages retained in session history
+  @max_messages 200
 
   require Logger
 
@@ -89,24 +92,27 @@ defmodule Mana.Web.Live.ChatLive do
 
         agent_pid = socket.assigns.agent_pid
 
-        task = Task.Supervisor.async_nolink(Mana.TaskSupervisor, fn ->
-          if String.starts_with?(message, "/") do
-            dispatch_command(message)
-          else
-            run_agent(socket.assigns.session_id, message, agent_pid)
-          end
-        end)
+        task =
+          Task.Supervisor.async_nolink(Mana.TaskSupervisor, fn ->
+            if String.starts_with?(message, "/") do
+              dispatch_command(message)
+            else
+              run_agent(socket.assigns.session_id, message, agent_pid)
+            end
+          end)
 
         {:noreply, assign(socket, current_task: task)}
     end
   end
 
   def handle_event("update_input", %{"value" => value}, socket) do
-    capped = if byte_size(value) > @max_message_length do
-      String.slice(value, 0, @max_message_length)
-    else
-      value
-    end
+    capped =
+      if byte_size(value) > @max_message_length do
+        String.slice(value, 0, @max_message_length)
+      else
+        value
+      end
+
     {:noreply, assign(socket, input: capped)}
   end
 

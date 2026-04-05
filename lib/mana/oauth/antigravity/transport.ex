@@ -163,100 +163,78 @@ defmodule Mana.OAuth.Antigravity.Transport do
       )
     else
       Stream.resource(
-        fn -> init_stream_state(url, body, account) end,
-        &stream_next/1,
-        &cleanup_stream/1
+        fn ->
+          case get_token(account) do
+            {:ok, token} ->
+              headers = [
+                {"authorization", "Bearer #{token}"},
+                {"content-type", "application/json"},
+                {"accept", "text/event-stream"}
+              ]
+
+              request =
+                Req.new(
+                  method: :post,
+                  url: url,
+                  headers: headers,
+                  json: body,
+                  into: :self,
+                  receive_timeout: @default_receive_timeout
+                )
+
+              case Req.request(request) do
+                {:ok, %{status: 200} = resp} ->
+                  {:streaming, resp, ""}
+
+                {:ok, %{status: status}} ->
+                  {:error, %{status: status, reason: :http_error}}
+
+                {:error, reason} ->
+                  {:error, %{reason: reason, type: :request_failed}}
+              end
+
+            {:error, reason} ->
+              {:error, %{reason: reason, type: :token_error}}
+          end
+        end,
+        fn
+          {:error, reason} ->
+            {[{:error, reason}], :halt}
+
+          :halt ->
+            {:halt, :halt}
+
+          {:streaming, resp, buffer} ->
+            receive do
+              message ->
+                case Req.parse_message(resp, message) do
+                  {:ok, [data: chunk]} ->
+                    chunk_str = if is_binary(chunk), do: chunk, else: to_string(chunk)
+                    {events, new_buffer} = process_sse_data(buffer <> chunk_str)
+                    done = Enum.any?(events, &match?({:done}, &1))
+
+                    if done do
+                      {events, :halt}
+                    else
+                      {events, {:streaming, resp, new_buffer}}
+                    end
+
+                  {:ok, [:done]} ->
+                    {[], :halt}
+
+                  :unknown ->
+                    {[], {:streaming, resp, buffer}}
+                end
+            after
+              60_000 -> {[{:error, :timeout}], :halt}
+            end
+        end,
+        fn
+          {:streaming, resp, _} -> Req.cancel_async_response(resp)
+          _ -> :ok
+        end
       )
     end
-  end
-
-  # ============================================================================
-  # Stream Implementation
-  # ============================================================================
-
-  defp init_stream_state(url, body, account) do
-    case get_token(account) do
-      {:ok, token} ->
-        headers = [
-          {"authorization", "Bearer #{token}"},
-          {"content-type", "application/json"},
-          {"accept", "text/event-stream"}
-        ]
-
-        %{
-          request:
-            Req.new(
-              method: :post,
-              url: url,
-              headers: headers,
-              json: body,
-              into: :self,
-              receive_timeout: @default_receive_timeout
-            ),
-          buffer: "",
-          done: false,
-          response: nil
-        }
-
-      {:error, reason} ->
-        %{error: reason, done: false, buffer: "", request: nil, response: nil}
-    end
-  end
-
-  defp stream_next(%{error: reason} = state) do
-    events = [{:error, %{reason: reason, type: :token_error}}]
-    {events, %{state | done: true}}
-  end
-
-  defp stream_next(%{done: true} = state) do
-    {:halt, state}
-  end
-
-  defp stream_next(%{response: nil, request: request} = state) do
-    # Initial request
-    case Req.request(request) do
-      {:ok, %{status: 200} = response} ->
-        # Continue with response body processing
-        stream_next(%{state | response: response, buffer: ""})
-
-      {:ok, %{status: status}} ->
-        events = [{:error, %{status: status, reason: :http_error}}]
-        {events, %{state | done: true}}
-
-      {:error, reason} ->
-        events = [{:error, %{reason: reason, type: :request_failed}}]
-        {events, %{state | done: true}}
-    end
-  end
-
-  defp stream_next(%{response: response, buffer: buffer} = state) do
-    # Process response body chunks
-    case response.body do
-      chunks when is_list(chunks) ->
-        {events, new_buffer, done} = process_chunks(chunks, buffer)
-        {events, %{state | buffer: new_buffer, done: done}}
-
-      _other ->
-        # Body not in expected format, mark as done
-        {[], %{state | done: true}}
-    end
-  end
-
-  defp process_chunks(chunks, buffer) do
-    {events, new_buffer} =
-      chunks
-      |> Enum.reduce({[], buffer}, fn chunk, {acc_events, acc_buffer} ->
-        chunk_str = if is_binary(chunk), do: chunk, else: to_string(chunk)
-        {new_events, new_buffer} = process_sse_data(acc_buffer <> chunk_str)
-        {acc_events ++ new_events, new_buffer}
-      end)
-
-    done = String.contains?(new_buffer, "[DONE]") || events |> Enum.any?(&match?({:done}, &1))
-    {events, new_buffer, done}
-  end
-
-  defp cleanup_stream(_state) do
-    :ok
   end
 
   # ============================================================================

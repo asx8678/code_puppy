@@ -414,6 +414,8 @@ defmodule Mana.OAuth.ClaudeCode do
         {"accept", "text/event-stream"}
       ] ++ Enum.map(@beta_headers, &{"anthropic-beta", &1})
 
+    alias Mana.Models.Providers.SSE
+
     Stream.resource(
       fn ->
         request =
@@ -422,63 +424,55 @@ defmodule Mana.OAuth.ClaudeCode do
             url: "#{@api_base}/messages",
             headers: headers,
             json: body,
-            into: :self
+            into: :self,
+            receive_timeout: 600_000
           )
 
-        %{request: request, buffer: "", done: false}
+        case Req.request(request) do
+          {:ok, %{status: 200} = resp} ->
+            {:streaming, resp, ""}
+
+          {:ok, %{status: 401}} ->
+            {:error, "Unauthorized - token may be expired"}
+
+          {:ok, %{status: status}} ->
+            {:error, "HTTP #{status}"}
+
+          {:error, reason} ->
+            {:error, "Request failed: #{inspect(reason)}"}
+        end
       end,
-      &stream_next/1,
-      fn _state -> :ok end
+      fn
+        {:error, msg} ->
+          {[{:error, msg}], :halt}
+
+        :halt ->
+          {:halt, :halt}
+
+        {:streaming, resp, buffer} ->
+          receive do
+            message ->
+              case Req.parse_message(resp, message) do
+                {:ok, [data: chunk]} ->
+                  {events, new_buffer} = SSE.parse_chunk(buffer <> chunk)
+                  stream_events = Enum.flat_map(events, &parse_anthropic_event/1)
+                  {stream_events, {:streaming, resp, new_buffer}}
+
+                {:ok, [:done]} ->
+                  {[{:part_end, :done}], :halt}
+
+                :unknown ->
+                  {[], {:streaming, resp, buffer}}
+              end
+          after
+            60_000 -> {[{:error, :timeout}], :halt}
+          end
+      end,
+      fn
+        {:streaming, resp, _} -> Req.cancel_async_response(resp)
+        _ -> :ok
+      end
     )
-  end
-
-  defp stream_next(%{done: true} = state), do: {:halt, state}
-
-  defp stream_next(%{request: request} = state) do
-    case Req.request(request) do
-      {:ok, %{status: 200} = response} ->
-        events = process_stream_body(response.body)
-        done = stream_complete?(events)
-        {events, %{state | done: done}}
-
-      {:ok, %{status: 401}} ->
-        {[{:error, "Unauthorized - token may be expired"}], %{state | done: true}}
-
-      {:ok, %{status: status}} ->
-        {[{:error, "HTTP #{status}"}], %{state | done: true}}
-
-      {:error, reason} ->
-        {[{:error, "Request failed: #{inspect(reason)}"}], %{state | done: true}}
-    end
-  end
-
-  defp process_stream_body(body) when is_list(body) do
-    body
-    |> Enum.flat_map(&extract_sse_lines/1)
-    |> Enum.map(&parse_sse_data/1)
-    |> Enum.flat_map(&parse_anthropic_event/1)
-  end
-
-  defp process_stream_body(_), do: []
-
-  defp extract_sse_lines(chunk) do
-    chunk
-    |> String.split("\n")
-    |> Enum.filter(&String.starts_with?(&1, "data: "))
-  end
-
-  defp parse_sse_data(line) do
-    case String.trim_leading(line, "data: ") do
-      "[DONE]" -> :done
-      json -> decode_sse_json(json)
-    end
-  end
-
-  defp decode_sse_json(json) do
-    case Jason.decode(json) do
-      {:ok, decoded} -> decoded
-      {:error, _} -> {:error, "Invalid JSON: #{json}"}
-    end
   end
 
   defp parse_anthropic_event(:done), do: [{:part_end, :done}]
@@ -509,13 +503,6 @@ defmodule Mana.OAuth.ClaudeCode do
   defp parse_error_event(event) do
     error = event["error"] || %{}
     [{:error, error["message"] || "Unknown error"}]
-  end
-
-  defp stream_complete?(events) do
-    Enum.any?(events, fn
-      {:part_end, :done} -> true
-      _ -> false
-    end)
   end
 
   @doc """
