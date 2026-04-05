@@ -43,7 +43,10 @@ defmodule Mana.Agents.RunSupervisor do
 
   @impl true
   def init(_opts) do
-    DynamicSupervisor.init(strategy: :one_for_one)
+    DynamicSupervisor.init(
+      strategy: :one_for_one,
+      max_children: 50
+    )
   end
 
   @doc """
@@ -58,11 +61,14 @@ defmodule Mana.Agents.RunSupervisor do
   ## Returns
 
     - `{:ok, pid}` - Task was started successfully
+    - `{:error, :max_children}` - Maximum number of children reached
     - `{:error, term()}` - Failed to start task
 
   """
   @spec start_run(pid(), String.t(), keyword()) :: DynamicSupervisor.on_start_child()
   def start_run(agent_pid, user_message, opts \\ []) when is_pid(agent_pid) do
+    parent_supervisor = self()
+
     task_spec = %{
       id: make_ref(),
       start:
@@ -71,14 +77,20 @@ defmodule Mana.Agents.RunSupervisor do
            fn ->
              Logger.debug("Starting agent run for agent #{inspect(agent_pid)}")
 
-             case Runner.run(agent_pid, user_message, opts) do
-               {:ok, response} ->
-                 Logger.debug("Agent run completed successfully")
-                 {:ok, response}
+             try do
+               case Runner.run(agent_pid, user_message, opts) do
+                 {:ok, response} ->
+                   Logger.debug("Agent run completed successfully")
+                   {:ok, response}
 
-               {:error, reason} ->
-                 Logger.warning("Agent run failed: #{inspect(reason)}")
-                 {:error, reason}
+                 {:error, reason} ->
+                   Logger.warning("Agent run failed: #{inspect(reason)}")
+                   {:error, reason}
+               end
+             after
+               # Terminate this child from the supervisor when done
+               _child_pid = self()
+               DynamicSupervisor.terminate_child(parent_supervisor, self())
              end
            end
          ]},

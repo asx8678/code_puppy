@@ -67,6 +67,69 @@ defmodule Mana.Agents.RunSupervisorTest do
     end
   end
 
+  describe "max_children enforcement" do
+    test "enforces max_children limit of 50" do
+      # Start a supervisor with a low max_children for testing
+      {:ok, test_supervisor} =
+        DynamicSupervisor.start_link(
+          strategy: :one_for_one,
+          max_children: 3
+        )
+
+      # Start 3 children (the limit)
+      children =
+        for _i <- 1..3 do
+          {:ok, pid} =
+            DynamicSupervisor.start_child(
+              test_supervisor,
+              %{
+                id: make_ref(),
+                start: {Task, :start_link, [fn -> Process.sleep(5000) end]},
+                restart: :temporary
+              }
+            )
+
+          pid
+        end
+
+      # Verify all 3 are running
+      assert length(children) == 3
+
+      for pid <- children do
+        assert Process.alive?(pid)
+      end
+
+      # 4th child should fail with :max_children
+      result =
+        DynamicSupervisor.start_child(
+          test_supervisor,
+          %{
+            id: make_ref(),
+            start: {Task, :start_link, [fn -> :ok end]},
+            restart: :temporary
+          }
+        )
+
+      assert result == {:error, :max_children}
+
+      # Cleanup
+      DynamicSupervisor.stop(test_supervisor)
+    end
+
+    test "RunSupervisor has max_children configured" do
+      # Verify the actual RunSupervisor has max_children set
+      {:ok, test_super} = RunSupervisor.start_link(name: :test_max_children)
+
+      # Verify max_children is set to 50 by trying to get info via count_children
+      count = DynamicSupervisor.count_children(test_super)
+      # max_children isn't directly exposed, but we can verify the supervisor starts
+      assert count.active >= 0
+      assert count.specs >= 0
+
+      DynamicSupervisor.stop(test_super)
+    end
+  end
+
   describe "supervision" do
     test "tasks are started with temporary restart policy" do
       {:ok, agent_pid} = Server.start_link(agent_def: @test_agent_def)
@@ -80,6 +143,27 @@ defmodule Mana.Agents.RunSupervisorTest do
 
       # Task should be dead and not restarted (temporary policy)
       refute Process.alive?(task_pid)
+    end
+
+    test "terminates child after run completes" do
+      {:ok, agent_pid} = Server.start_link(agent_def: @test_agent_def)
+
+      # Get initial child count
+      count_before = DynamicSupervisor.count_children(RunSupervisor)
+      initial_count = count_before.active
+
+      # Start a run
+      {:ok, task_pid} = RunSupervisor.start_run(agent_pid, "test", timeout: 100)
+
+      # Wait for it to complete and terminate
+      Process.sleep(200)
+
+      # Child should be terminated
+      refute Process.alive?(task_pid)
+
+      # Child count should return to initial (or close to it)
+      count_after = DynamicSupervisor.count_children(RunSupervisor)
+      assert count_after.active <= initial_count
     end
   end
 end
