@@ -460,6 +460,19 @@ defmodule Mana.OAuth.Antigravity do
       {:error, :not_found} -> Logger.warning("Unknown Antigravity model: #{model}")
     end
 
+    # Get max retries from opts with default
+    max_retries = Keyword.get(opts, :max_retries, 3)
+    opts = Keyword.put(opts, :max_retries, max_retries)
+
+    do_complete(messages, model, opts, max_retries)
+  end
+
+  # Private implementation with retry tracking to prevent infinite recursion
+  defp do_complete(_messages, _model, _opts, 0) do
+    {:error, "Rate limited: max retry attempts exceeded"}
+  end
+
+  defp do_complete(messages, model, opts, retries_left) do
     # Select account for this request
     account = select_account()
 
@@ -481,9 +494,9 @@ defmodule Mana.OAuth.Antigravity do
         {:ok, parse_response(response, model)}
 
       {:error, %{status: 429} = _reason} ->
-        # Rate limited - mark account and retry with another
+        # Rate limited - mark account and retry with another if retries remain
         mark_rate_limited(account)
-        complete(messages, model, opts)
+        do_complete(messages, model, opts, retries_left - 1)
 
       {:error, reason} ->
         handle_error(reason, account)
