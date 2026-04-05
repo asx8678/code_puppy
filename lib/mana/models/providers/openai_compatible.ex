@@ -40,8 +40,7 @@ defmodule Mana.Models.Providers.OpenAICompatible do
         {:error, "base_url must be a string"}
 
       true ->
-        # Validate API key through OpenAI provider
-        OpenAI.validate_config(config)
+        :ok
     end
   end
 
