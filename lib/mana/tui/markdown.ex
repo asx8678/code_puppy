@@ -58,7 +58,7 @@ defmodule Mana.TUI.Markdown do
   # Code blocks with language (language-class pattern)
   defp render_node({"pre", _attrs, [{"code", [{"class", "language-" <> lang}], [code], _}], _}) do
     lines = String.split(code, "\n")
-    render_code_block(lines, lang)
+    render_code_with_lang(lang, lines)
   end
 
   # Code blocks with or without language (general attrs pattern)
