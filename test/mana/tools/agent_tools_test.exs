@@ -15,6 +15,11 @@ defmodule Mana.Tools.AgentToolsTest do
     start_supervised!({AgentsRegistry, name: AgentsRegistry})
     start_supervised!({Mana.Config.Store, []})
     start_supervised!({MessageBus, []})
+    # Start RunSupervisor and Models.Registry needed for agent invocation tests
+    start_supervised!({Mana.Agents.RunSupervisor, []})
+    start_supervised!({Mana.Models.Registry, []})
+    # Start Callbacks.Registry needed for agent execution
+    start_supervised!({Mana.Callbacks.Registry, []})
 
     :ok
   end
@@ -97,10 +102,8 @@ defmodule Mana.Tools.AgentToolsTest do
       assert message =~ "Agent not found"
     end
 
-    @tag :skip
     test "execute with valid agent starts invocation" do
-      # Note: This test requires full supervision tree and is skipped in unit tests
-      # Integration tests should cover this functionality
+      # Note: This test requires full supervision tree
       result =
         AgentTools.InvokeAgent.execute(%{
           "agent_name" => "assistant",
@@ -116,9 +119,8 @@ defmodule Mana.Tools.AgentToolsTest do
       assert {:error, _} = result
     end
 
-    @tag :skip
     test "execute generates session_id if not provided" do
-      # Skipped - requires full supervision tree
+      # Requires full supervision tree
       result =
         AgentTools.InvokeAgent.execute(%{
           "agent_name" => "assistant",
@@ -184,6 +186,8 @@ defmodule Mana.Tools.AgentToolsTest do
 
     @tag :skip
     test "execute handles timeout gracefully" do
+      # Skipped - requires timeout configuration support in AskUser tool
+      # The tool uses a 300s default timeout which exceeds ExUnit's 60s timeout
       # Don't provide a response - should timeout quickly
       result = AgentTools.AskUser.execute(%{"question" => "Test?"})
 
