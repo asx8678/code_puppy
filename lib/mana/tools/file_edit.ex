@@ -3,6 +3,8 @@ defmodule Mana.Tools.FileEdit.CreateFile do
 
   @behaviour Mana.Tools.Behaviour
 
+  alias Mana.Tools.SafePath
+
   @impl true
   def name, do: "create_file"
 
@@ -34,17 +36,21 @@ defmodule Mana.Tools.FileEdit.CreateFile do
     path = Map.get(args, "file_path")
     content = Map.get(args, "content")
 
-    dir = Path.dirname(path)
+    # Validate path safety
+    with {:ok, cwd} <- SafePath.current_working_dir(),
+         {:ok, safe_path} <- SafePath.validate(path, cwd) do
+      dir = Path.dirname(safe_path)
 
-    case File.mkdir_p(dir) do
-      :ok ->
-        case File.write(path, content) do
-          :ok -> {:ok, %{"created" => path, "size" => byte_size(content)}}
-          {:error, reason} -> {:error, "Failed to create #{path}: #{reason}"}
-        end
+      case File.mkdir_p(dir) do
+        :ok ->
+          case File.write(safe_path, content) do
+            :ok -> {:ok, %{"created" => safe_path, "size" => byte_size(content)}}
+            {:error, reason} -> {:error, "Failed to create #{safe_path}: #{reason}"}
+          end
 
-      {:error, reason} ->
-        {:error, "Failed to create directory #{dir}: #{reason}"}
+        {:error, reason} ->
+          {:error, "Failed to create directory #{dir}: #{reason}"}
+      end
     end
   end
 end
@@ -53,6 +59,8 @@ defmodule Mana.Tools.FileEdit.ReplaceInFile do
   @moduledoc "Tool for replacing text in a file"
 
   @behaviour Mana.Tools.Behaviour
+
+  alias Mana.Tools.SafePath
 
   @impl true
   def name, do: "replace_in_file"
@@ -91,19 +99,23 @@ defmodule Mana.Tools.FileEdit.ReplaceInFile do
     old = Map.get(args, "old_string")
     new = Map.get(args, "new_string")
 
-    case File.read(path) do
-      {:ok, content} ->
-        if String.contains?(content, old) do
-          new_content = String.replace(content, old, new, global: false)
-          File.write!(path, new_content)
-          diff = generate_diff(old, new)
-          {:ok, %{"replaced" => path, "diff" => diff}}
-        else
-          {:error, "String not found in #{path}"}
-        end
+    # Validate path safety
+    with {:ok, cwd} <- SafePath.current_working_dir(),
+         {:ok, safe_path} <- SafePath.validate(path, cwd) do
+      case File.read(safe_path) do
+        {:ok, content} ->
+          if String.contains?(content, old) do
+            new_content = String.replace(content, old, new, global: false)
+            File.write!(safe_path, new_content)
+            diff = generate_diff(old, new)
+            {:ok, %{"replaced" => safe_path, "diff" => diff}}
+          else
+            {:error, "String not found in #{safe_path}"}
+          end
 
-      {:error, reason} ->
-        {:error, "Failed to read #{path}: #{reason}"}
+        {:error, reason} ->
+          {:error, "Failed to read #{safe_path}: #{reason}"}
+      end
     end
   end
 
@@ -122,6 +134,8 @@ defmodule Mana.Tools.FileEdit.DeleteFile do
   @moduledoc "Tool for deleting a file"
 
   @behaviour Mana.Tools.Behaviour
+
+  alias Mana.Tools.SafePath
 
   @impl true
   def name, do: "delete_file"
@@ -148,9 +162,13 @@ defmodule Mana.Tools.FileEdit.DeleteFile do
   def execute(args) do
     path = Map.get(args, "file_path")
 
-    case File.rm(path) do
-      :ok -> {:ok, %{"deleted" => path}}
-      {:error, reason} -> {:error, "Failed to delete #{path}: #{reason}"}
+    # Validate path safety
+    with {:ok, cwd} <- SafePath.current_working_dir(),
+         {:ok, safe_path} <- SafePath.validate(path, cwd) do
+      case File.rm(safe_path) do
+        :ok -> {:ok, %{"deleted" => safe_path}}
+        {:error, reason} -> {:error, "Failed to delete #{safe_path}: #{reason}"}
+      end
     end
   end
 end

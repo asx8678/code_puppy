@@ -4,6 +4,7 @@ defmodule Mana.Tools.FileOps.ListFiles do
   @behaviour Mana.Tools.Behaviour
 
   alias Mana.Tools.IgnorePatterns
+  alias Mana.Tools.SafePath
 
   @impl true
   def name, do: "list_files"
@@ -36,9 +37,13 @@ defmodule Mana.Tools.FileOps.ListFiles do
     dir = Map.get(args, "directory", ".")
     recursive = Map.get(args, "recursive", true)
 
-    case list_files(dir, recursive) do
-      {:ok, files} -> {:ok, %{"files" => files, "count" => length(files)}}
-      error -> error
+    # Validate path safety
+    with {:ok, cwd} <- SafePath.current_working_dir(),
+         {:ok, safe_dir} <- SafePath.validate(dir, cwd) do
+      case list_files(safe_dir, recursive) do
+        {:ok, files} -> {:ok, %{"files" => files, "count" => length(files)}}
+        error -> error
+      end
     end
   end
 
@@ -80,6 +85,8 @@ defmodule Mana.Tools.FileOps.ReadFile do
 
   @behaviour Mana.Tools.Behaviour
 
+  alias Mana.Tools.SafePath
+
   @impl true
   def name, do: "read_file"
 
@@ -115,20 +122,24 @@ defmodule Mana.Tools.FileOps.ReadFile do
     start_line = Map.get(args, "start_line")
     num_lines = Map.get(args, "num_lines")
 
-    case File.read(file_path) do
-      {:ok, content} ->
-        result = extract_content(content, start_line, num_lines)
-        total_lines = content |> String.split("\n") |> length()
+    # Validate path safety
+    with {:ok, cwd} <- SafePath.current_working_dir(),
+         {:ok, safe_path} <- SafePath.validate(file_path, cwd) do
+      case File.read(safe_path) do
+        {:ok, content} ->
+          result = extract_content(content, start_line, num_lines)
+          total_lines = content |> String.split("\n") |> length()
 
-        {:ok,
-         %{
-           "content" => result,
-           "file_path" => file_path,
-           "total_lines" => total_lines
-         }}
+          {:ok,
+           %{
+             "content" => result,
+             "file_path" => safe_path,
+             "total_lines" => total_lines
+           }}
 
-      {:error, reason} ->
-        {:error, "Failed to read #{file_path}: #{reason}"}
+        {:error, reason} ->
+          {:error, "Failed to read #{safe_path}: #{reason}"}
+      end
     end
   end
 
@@ -150,6 +161,8 @@ defmodule Mana.Tools.FileOps.Grep do
   @moduledoc "Tool for searching file contents using ripgrep"
 
   @behaviour Mana.Tools.Behaviour
+
+  alias Mana.Tools.SafePath
 
   @impl true
   def name, do: "grep"
@@ -182,27 +195,31 @@ defmodule Mana.Tools.FileOps.Grep do
     pattern = Map.get(args, "search_string")
     dir = Map.get(args, "directory", ".")
 
-    case System.cmd("rg", ["--json", pattern, dir], stderr_to_stdout: true) do
-      {output, 0} ->
-        matches = parse_grep_output(output)
-        {:ok, %{"matches" => matches, "count" => length(matches)}}
-
-      {output, 1} ->
-        # Exit code 1 means no matches found (not an error)
-        if String.contains?(output, "No files were searched") do
-          {:ok, %{"matches" => [], "count" => 0}}
-        else
-          # Check if output contains matches (some ripgrep versions return 1 with matches)
+    # Validate path safety
+    with {:ok, cwd} <- SafePath.current_working_dir(),
+         {:ok, safe_dir} <- SafePath.validate(dir, cwd) do
+      case System.cmd("rg", ["--json", pattern, safe_dir], stderr_to_stdout: true) do
+        {output, 0} ->
           matches = parse_grep_output(output)
           {:ok, %{"matches" => matches, "count" => length(matches)}}
-        end
 
-      {output, _} ->
-        if String.contains?(output, "No files were searched") do
-          {:ok, %{"matches" => [], "count" => 0}}
-        else
-          {:error, "grep failed: #{output}"}
-        end
+        {output, 1} ->
+          # Exit code 1 means no matches found (not an error)
+          if String.contains?(output, "No files were searched") do
+            {:ok, %{"matches" => [], "count" => 0}}
+          else
+            # Check if output contains matches (some ripgrep versions return 1 with matches)
+            matches = parse_grep_output(output)
+            {:ok, %{"matches" => matches, "count" => length(matches)}}
+          end
+
+        {output, _} ->
+          if String.contains?(output, "No files were searched") do
+            {:ok, %{"matches" => [], "count" => 0}}
+          else
+            {:error, "grep failed: #{output}"}
+          end
+      end
     end
   end
 

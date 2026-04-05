@@ -5,6 +5,11 @@ defmodule Mana.Shell.Executor do
   Uses Ports (NOT threads) for process management. Port sends {:data, data}
   messages to the GenServer mailbox, which are handled via handle_info callbacks.
 
+  ## Security Features
+
+  - Dangerous command blocklist with configurable patterns
+  - Command validation before execution
+
   ## Features
 
   - Synchronous command execution with timeout
@@ -34,6 +39,35 @@ defmodule Mana.Shell.Executor do
   defstruct processes: %{}, killed_refs: MapSet.new()
 
   # ============================================================================
+  # Default Dangerous Command Patterns (can be overridden via Application config)
+  # ============================================================================
+
+  @default_dangerous_patterns [
+    # rm -rf / or similar destructive deletions
+    ~r/rm\s+-rf\s+\//i,
+    # Disk operations with dd (direct to device)
+    ~r/dd\s+if=/i,
+    # Filesystem formatting
+    ~r/mkfs/i,
+    # Raw device writes
+    ~r/>\s*\/dev\/sd[a-z]/i,
+    ~r/>\s*\/dev\/hd[a-z]/i,
+    ~r/>\s*\/dev\/disk/i,
+    ~r/>\s*\/dev\/nvme/i,
+    # Fork bomb pattern
+    ~r/:\(\)\s*\{[^}]*:\|[^}]*\}/,
+    # curl | sh pattern
+    ~r/curl.*\|\s*(sh|bash)/i,
+    # wget | bash pattern
+    ~r/wget.*\|\s*(sh|bash)/i,
+    # sudo rm, sudo dd
+    ~r/sudo\s+rm/i,
+    ~r/sudo\s+dd/i,
+    # format commands
+    ~r/format\s/i
+  ]
+
+  # ============================================================================
   # API
   # ============================================================================
 
@@ -49,10 +83,15 @@ defmodule Mana.Shell.Executor do
   Executes a shell command synchronously with timeout.
 
   Returns {:ok, Result.t()} on success or timeout, {:error, term()} on failure.
+  Before execution, checks if the command is in the dangerous command blocklist.
   """
   @spec execute(String.t(), String.t(), integer()) :: {:ok, Result.t()} | {:error, term()}
   def execute(command, cwd, timeout) do
-    GenServer.call(__MODULE__, {:execute, command, cwd, timeout}, timeout + 5_000)
+    if dangerous_command?(command) do
+      {:error, "Command blocked: dangerous command detected"}
+    else
+      GenServer.call(__MODULE__, {:execute, command, cwd, timeout}, timeout + 5_000)
+    end
   end
 
   @doc """
@@ -60,10 +99,15 @@ defmodule Mana.Shell.Executor do
 
   Returns {:ok, reference()} immediately. The caller can monitor the
   process via the returned reference.
+  Before execution, checks if the command is in the dangerous command blocklist.
   """
   @spec execute_background(String.t(), String.t()) :: {:ok, reference()} | {:error, term()}
   def execute_background(command, cwd) do
-    GenServer.call(__MODULE__, {:execute_background, command, cwd})
+    if dangerous_command?(command) do
+      {:error, "Command blocked: dangerous command detected"}
+    else
+      GenServer.call(__MODULE__, {:execute_background, command, cwd})
+    end
   end
 
   @doc """
@@ -278,6 +322,101 @@ defmodule Mana.Shell.Executor do
   def handle_info(_msg, state) do
     # Ignore unknown messages
     {:noreply, state}
+  end
+
+  # ============================================================================
+  # Security Functions
+  # ============================================================================
+
+  @doc """
+  Checks if a command matches dangerous patterns in the blocklist.
+
+  Returns true if the command is considered dangerous and should be blocked.
+
+  This function is designed to block actual execution of dangerous commands,
+  not just commands that mention dangerous patterns in strings.
+
+  ## Examples
+
+      iex> dangerous_command?("rm -rf /")
+      true
+
+      iex> dangerous_command?("echo 'rm -rf /'")
+      false
+
+      iex> dangerous_command?("ls -la")
+      false
+  """
+  @spec dangerous_command?(String.t()) :: boolean()
+  def dangerous_command?(command) when is_binary(command) do
+    patterns = get_dangerous_patterns()
+
+    # Normalize the command: trim whitespace
+    normalized = String.trim(command)
+
+    # Check for dangerous patterns only in the actual command execution context
+    # We check if the pattern appears at the start or after shell operators
+    Enum.any?(patterns, fn pattern ->
+      matches_dangerous_in_context?(normalized, pattern)
+    end)
+  end
+
+  def dangerous_command?(_), do: false
+
+  # Check if a pattern matches in a context where it would actually execute
+  # Pattern must be at start, after shell control operators, or is itself a dangerous operation
+  defp matches_dangerous_in_context?(command, pattern) do
+    cond do
+      # Match at the beginning of command
+      Regex.match?(~r/^#{pattern.source}/i, command) ->
+        true
+
+      # Match after shell control operators
+      Regex.match?(~r/[;&|]\s*#{pattern.source}/i, command) ->
+        true
+
+      # For raw device writes (> /dev/sd*), match anywhere as this is always dangerous
+      pattern.source =~ "dev/sd" and Regex.match?(pattern, command) ->
+        true
+
+      # Match in subshell context $()
+      Regex.match?(~r/\$\([^)]*#{pattern.source}/i, command) ->
+        true
+
+      # Match in backtick execution
+      Regex.match?(~r/`[^`]*#{pattern.source}/i, command) ->
+        true
+
+      true ->
+        false
+    end
+  end
+
+  @doc """
+  Returns the list of dangerous command patterns.
+
+  Patterns are loaded from Application config :mana, :dangerous_command_patterns
+  or use the default list if not configured.
+  """
+  @spec get_dangerous_patterns() :: list(Regex.t())
+  def get_dangerous_patterns do
+    Application.get_env(:mana, :dangerous_command_patterns, @default_dangerous_patterns)
+  end
+
+  @doc """
+  Validates that the configured dangerous patterns are valid regexes.
+
+  Returns {:ok, patterns} if all patterns are valid, or {:error, reason} if any
+  pattern is invalid.
+  """
+  @spec validate_dangerous_patterns(list()) :: {:ok, list(Regex.t())} | {:error, String.t()}
+  def validate_dangerous_patterns(patterns) do
+    Enum.reduce_while(patterns, {:ok, []}, fn pattern, {:ok, acc} ->
+      case pattern do
+        %Regex{} -> {:cont, {:ok, [pattern | acc]}}
+        _ -> {:halt, {:error, "Invalid pattern: #{inspect(pattern)} - must be a Regex"}}
+      end
+    end)
   end
 
   # ============================================================================

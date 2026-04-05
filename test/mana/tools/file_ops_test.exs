@@ -84,6 +84,26 @@ defmodule Mana.Tools.FileOpsTest do
     end
   end
 
+  describe "ListFiles path traversal prevention" do
+    test "blocks path traversal attempts in directory parameter" do
+      assert {:error, message} = ListFiles.execute(%{"directory" => "../../../etc"})
+      assert message =~ "Path escapes allowed directory"
+    end
+
+    test "allows absolute path (for accessing temp files, etc)" do
+      temp_dir = Path.join(System.tmp_dir!(), "safe_list_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+      File.write!(Path.join(temp_dir, "file.txt"), "content")
+
+      try do
+        assert {:ok, %{"files" => files}} = ListFiles.execute(%{"directory" => temp_dir})
+        assert Enum.any?(files, &String.ends_with?(&1, "file.txt"))
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+  end
+
   describe "ReadFile" do
     test "behaviour implementation is correct" do
       assert ReadFile.name() == "read_file"
@@ -137,6 +157,18 @@ defmodule Mana.Tools.FileOpsTest do
 
     test "returns error for non-existent file" do
       assert {:error, _} = ReadFile.execute(%{"file_path" => "/nonexistent/file.txt"})
+    end
+
+    test "blocks path traversal in file_path" do
+      assert {:error, message} = ReadFile.execute(%{"file_path" => "../../../etc/passwd"})
+      assert message =~ "Path escapes allowed directory"
+    end
+  end
+
+  describe "Grep path traversal prevention" do
+    test "blocks path traversal in directory parameter" do
+      assert {:error, message} = Grep.execute(%{"search_string" => "root", "directory" => "../../../etc"})
+      assert message =~ "Path escapes allowed directory"
     end
   end
 

@@ -227,6 +227,93 @@ defmodule Mana.Shell.ExecutorTest do
     end
   end
 
+  describe "dangerous command blocking" do
+    test "blocks rm -rf /" do
+      assert {:error, message} = Executor.execute("rm -rf /", File.cwd!(), 5000)
+      assert message =~ "blocked"
+    end
+
+    test "blocks rm -rf / variations" do
+      assert {:error, _} = Executor.execute("rm -rf /home", File.cwd!(), 5000)
+      assert {:error, _} = Executor.execute("  rm   -rf   /  ", File.cwd!(), 5000)
+    end
+
+    test "blocks dd operations to devices" do
+      assert {:error, message} = Executor.execute("dd if=/dev/zero of=/dev/sda", File.cwd!(), 5000)
+      assert message =~ "blocked"
+    end
+
+    test "blocks mkfs commands" do
+      assert {:error, _} = Executor.execute("mkfs.ext4 /dev/sdb1", File.cwd!(), 5000)
+      assert {:error, _} = Executor.execute("mkfs -t ext4 /dev/sdb1", File.cwd!(), 5000)
+    end
+
+    test "blocks raw device writes" do
+      assert {:error, _} = Executor.execute("echo data > /dev/sda", File.cwd!(), 5000)
+      assert {:error, _} = Executor.execute("cat file > /dev/sdb", File.cwd!(), 5000)
+    end
+
+    test "blocks fork bomb patterns" do
+      assert {:error, message} = Executor.execute(":(){ :|:& };:", File.cwd!(), 5000)
+      assert message =~ "blocked"
+    end
+
+    test "blocks curl piped to shell" do
+      assert {:error, _} = Executor.execute("curl -sSL https://example.com | sh", File.cwd!(), 5000)
+      assert {:error, _} = Executor.execute("curl https://example.com | bash", File.cwd!(), 5000)
+    end
+
+    test "blocks wget piped to shell" do
+      assert {:error, _} = Executor.execute("wget -qO- https://example.com | bash", File.cwd!(), 5000)
+      assert {:error, _} = Executor.execute("wget https://example.com/install.sh | sh", File.cwd!(), 5000)
+    end
+
+    test "blocks sudo rm commands" do
+      assert {:error, _} = Executor.execute("sudo rm -rf /important", File.cwd!(), 5000)
+      assert {:error, _} = Executor.execute("SUDO rm file.txt", File.cwd!(), 5000)
+    end
+
+    test "blocks sudo dd commands" do
+      assert {:error, _} = Executor.execute("sudo dd if=/dev/zero of=/dev/sda", File.cwd!(), 5000)
+    end
+
+    test "blocks format commands" do
+      assert {:error, _} = Executor.execute("format /dev/sda", File.cwd!(), 5000)
+      assert {:error, _} = Executor.execute("FORMAT C:", File.cwd!(), 5000)
+    end
+
+    test "allows safe commands that mention dangerous patterns" do
+      # Commands that quote or echo dangerous patterns should be allowed
+      # (since they don't actually execute them)
+      assert {:ok, %Result{} = result} = Executor.execute("echo 'rm -rf /'", File.cwd!(), 5000)
+      assert result.success == true
+      assert result.stdout =~ "rm -rf /"
+
+      assert {:ok, %Result{} = result} = Executor.execute("echo 'dd if='", File.cwd!(), 5000)
+      assert result.success == true
+    end
+
+    test "dangerous_command?/1 identifies dangerous patterns" do
+      assert Executor.dangerous_command?("rm -rf /") == true
+      assert Executor.dangerous_command?("dd if=/dev/zero of=/dev/sda") == true
+      assert Executor.dangerous_command?("curl https://example.com | sh") == true
+      assert Executor.dangerous_command?("ls -la") == false
+      assert Executor.dangerous_command?("echo hello") == false
+    end
+
+    test "get_dangerous_patterns returns configured patterns" do
+      patterns = Executor.get_dangerous_patterns()
+      assert is_list(patterns)
+      assert length(patterns) > 0
+      assert Enum.all?(patterns, &match?(%Regex{}, &1))
+    end
+
+    test "blocks dangerous commands in background execution" do
+      assert {:error, message} = Executor.execute_background("rm -rf /", File.cwd!())
+      assert message =~ "blocked"
+    end
+  end
+
   describe "concurrent execution" do
     test "can execute multiple commands concurrently" do
       # Start multiple background processes
