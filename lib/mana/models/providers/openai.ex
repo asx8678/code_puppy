@@ -164,10 +164,13 @@ defmodule Mana.Models.Providers.OpenAI do
   defp process_sse_chunk(chunk) do
     lines = String.split(chunk, "\n")
 
-    {events, [remainder]} =
+    {events, remainder_lines} =
       Enum.split_with(lines, fn line ->
         String.starts_with?(line, "data: ") or line == ""
       end)
+
+    # Join any non-matching lines as the remainder (partial data for next chunk)
+    remainder = Enum.join(remainder_lines, "\n")
 
     parsed =
       events
@@ -267,11 +270,13 @@ defmodule Mana.Models.Providers.OpenAI do
       choice ->
         message = choice["message"] || %{}
         content = message["content"] || ""
+        tool_calls = message["tool_calls"] || []
         usage = body["usage"] || %{}
 
         {:ok,
          %{
            content: content,
+           tool_calls: tool_calls,
            usage: usage,
            model: model
          }}

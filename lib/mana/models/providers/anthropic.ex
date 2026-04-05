@@ -294,11 +294,29 @@ defmodule Mana.Models.Providers.Anthropic do
       |> Enum.filter(fn block -> block["type"] == "text" end)
       |> Enum.map_join("", fn block -> block["text"] || "" end)
 
+    # Extract tool_use blocks as tool_calls in OpenAI-compatible format
+    tool_calls =
+      content_blocks
+      |> Enum.filter(fn block -> block["type"] == "tool_use" end)
+      |> Enum.with_index()
+      |> Enum.map(fn {block, index} ->
+        %{
+          "id" => block["id"],
+          "type" => "function",
+          "index" => index,
+          "function" => %{
+            "name" => block["name"],
+            "arguments" => Jason.encode!(block["input"] || %{})
+          }
+        }
+      end)
+
     usage = body["usage"] || %{}
 
     {:ok,
      %{
        content: content,
+       tool_calls: tool_calls,
        usage: usage,
        model: model
      }}

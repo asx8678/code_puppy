@@ -124,14 +124,10 @@ defmodule Mana.Config.Store do
 
     # Populate ETS with safe atom conversion
     Enum.each(config, fn {key, value} ->
-      atom_key =
-        try do
-          String.to_existing_atom(key)
-        rescue
-          ArgumentError -> String.to_atom(key)
-        end
-
-      :ets.insert(@table, {atom_key, value})
+      case safe_to_atom(key) do
+        {:ok, atom_key} -> :ets.insert(@table, {atom_key, value})
+        :skip -> Logger.debug("Skipping unknown config key: #{key}")
+      end
     end)
 
     {:ok, %{config: config, dirty: false, flush_timer: nil}}
@@ -166,14 +162,10 @@ defmodule Mana.Config.Store do
     :ets.delete_all_objects(@table)
 
     Enum.each(config, fn {key, value} ->
-      atom_key =
-        try do
-          String.to_existing_atom(key)
-        rescue
-          ArgumentError -> String.to_atom(key)
-        end
-
-      :ets.insert(@table, {atom_key, value})
+      case safe_to_atom(key) do
+        {:ok, atom_key} -> :ets.insert(@table, {atom_key, value})
+        :skip -> Logger.debug("Skipping unknown config key: #{key}")
+      end
     end)
 
     {:reply, :ok, %{state | config: config, dirty: false}}
@@ -256,5 +248,11 @@ defmodule Mana.Config.Store do
     # In the future, this will broadcast via Phoenix.PubSub
     Logger.debug("Config change: #{key} = #{inspect(value)} (topic: #{@pubsub_topic})")
     :ok
+  end
+
+  defp safe_to_atom(key) when is_binary(key) do
+    {:ok, String.to_existing_atom(key)}
+  rescue
+    ArgumentError -> :skip
   end
 end

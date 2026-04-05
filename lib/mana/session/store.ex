@@ -195,12 +195,18 @@ defmodule Mana.Session.Store do
         [] -> []
       end
 
-    # Normalize message keys and add timestamp
+    # Normalize message keys and add timestamp, preserving tool fields
+    normalized = %{
+      role: message[:role] || message["role"],
+      content: message[:content] || message["content"]
+    }
+
+    # Preserve tool-related fields if present
     normalized =
-      %{
-        role: message[:role] || message["role"],
-        content: message[:content] || message["content"]
-      }
+      normalized
+      |> maybe_put(:tool_calls, message[:tool_calls] || message["tool_calls"])
+      |> maybe_put(:tool_call_id, message[:tool_call_id] || message["tool_call_id"])
+      |> maybe_put(:name, message[:name] || message["name"])
 
     message_with_timestamp =
       Map.put(normalized, :timestamp, System.system_time(:millisecond))
@@ -412,8 +418,8 @@ defmodule Mana.Session.Store do
     |> maybe_put(:name, message["name"] || message[:name])
   end
 
+  defp normalize_message_keys(_), do: %{role: nil, content: nil, timestamp: nil}
+
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
-
-  defp normalize_message_keys(_), do: %{role: nil, content: nil, timestamp: nil}
 end
