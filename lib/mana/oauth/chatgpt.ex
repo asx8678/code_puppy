@@ -440,22 +440,30 @@ defmodule Mana.OAuth.ChatGPT do
     events =
       complete_lines
       |> Enum.filter(&String.starts_with?(&1, "data: "))
-      |> Enum.flat_map(fn line ->
-        json = String.trim_leading(line, "data: ")
-
-        case json do
-          "[DONE]" ->
-            [{:part_end, :done}]
-
-          _ ->
-            case Jason.decode(json) do
-              {:ok, decoded} -> parse_codex_stream_event(decoded)
-              {:error, _} -> [{:error, "Invalid JSON: #{json}"}]
-            end
-        end
-      end)
+      |> Enum.flat_map(&parse_sse_line/1)
 
     {events, remainder}
+  end
+
+  # Parse a single SSE line - extracted to reduce nesting
+  defp parse_sse_line(line) do
+    json = String.trim_leading(line, "data: ")
+
+    case json do
+      "[DONE]" ->
+        [{:part_end, :done}]
+
+      _ ->
+        decode_sse_json(json)
+    end
+  end
+
+  # Decode JSON from SSE data - extracted to reduce nesting
+  defp decode_sse_json(json) do
+    case Jason.decode(json) do
+      {:ok, decoded} -> parse_codex_stream_event(decoded)
+      {:error, _} -> [{:error, "Invalid JSON: #{json}"}]
+    end
   end
 
   defp parse_codex_stream_event(%{"type" => "response.created"}), do: [{:part_start, :content}]
