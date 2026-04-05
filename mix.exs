@@ -55,7 +55,6 @@ defmodule Mana.MixProject do
       {:req, "~> 0.5"},
       {:finch, "~> 0.19"},
       {:anthropix, "~> 0.6"},
-      {:ecto, "~> 3.12"},
       {:earmark, "~> 1.4"},
       {:owl, "~> 0.12"},
       {:oauth2, "~> 2.1"},
