@@ -1,18 +1,20 @@
 defmodule Mana.Tools.Registry do
   @moduledoc """
-  GenServer for tool registration and execution.
+  GenServer for tool registration with ETS-backed fast lookups.
 
   ## Features
 
   - Register tool modules implementing `Mana.Tools.Behaviour`
-  - Execute tools by name
+  - Execute tools by name (in caller's process for concurrency)
   - Get tool definitions for agent configuration
   - Track tool call statistics
 
-  ## State Structure
+  ## Architecture
 
-  - `tools`: Map of tool_name => %{module, description, schema}
-  - `stats`: Tool execution statistics
+  - ETS table `:mana_tools` for fast concurrent reads
+  - GenServer only handles registrations (writes)
+  - Tool execution happens in caller's process (no bottleneck)
+  - Stats updates are asynchronous via cast
 
   ## Usage
 
@@ -22,7 +24,7 @@ defmodule Mana.Tools.Registry do
       # Register a tool
       Mana.Tools.Registry.register(Mana.Tools.File)
 
-      # Execute a tool
+      # Execute a tool (runs in caller's process)
       Mana.Tools.Registry.execute("read_file", %{"path" => "/tmp/file.txt"})
 
       # Get tool definitions for an agent
@@ -32,6 +34,8 @@ defmodule Mana.Tools.Registry do
   use GenServer
 
   require Logger
+
+  @table :mana_tools
 
   # List of expected tool modules that should be registered at startup
   @expected_tools [
@@ -84,20 +88,57 @@ defmodule Mana.Tools.Registry do
   Executes a tool by name with the given arguments.
 
   Returns the result of tool execution.
+
+  ## Performance Note
+
+  This function performs tool lookup via ETS (no GenServer blocking)
+  and executes the tool in the caller's process for maximum concurrency.
+  Stats updates are performed asynchronously via cast.
   """
   @spec execute(String.t(), map()) :: {:ok, term()} | {:error, term()}
   def execute(tool_name, args \\ %{}) do
-    GenServer.call(__MODULE__, {:execute, tool_name, args})
+    case :ets.lookup(@table, tool_name) do
+      [{^tool_name, tool_info}] ->
+        try do
+          result = tool_info.module.execute(args)
+          # Update stats asynchronously - don't block on this
+          GenServer.cast(__MODULE__, {:increment_calls})
+          result
+        rescue
+          error ->
+            Logger.error("Tool execution error for #{tool_name}: #{inspect(error)}")
+            GenServer.cast(__MODULE__, {:increment_errors})
+            {:error, :execution_failed}
+        end
+
+      [] ->
+        GenServer.cast(__MODULE__, {:increment_errors})
+        {:error, :unknown_tool}
+    end
   end
 
   @doc """
   Gets tool details (module, description, parameters) for a tool.
 
   Returns `{:ok, details}` or `{:error, :not_found}`.
+
+  This is a fast ETS lookup that bypasses the GenServer.
   """
   @spec get_tool(String.t()) :: {:ok, map()} | {:error, :not_found}
   def get_tool(name) do
-    GenServer.call(__MODULE__, {:get_tool, name})
+    case :ets.lookup(@table, name) do
+      [{^name, tool_info}] ->
+        {:ok,
+         %{
+           name: name,
+           description: tool_info.description,
+           parameters: tool_info.schema,
+           module: tool_info.module
+         }}
+
+      [] ->
+        {:error, :not_found}
+    end
   end
 
   @doc """
@@ -107,7 +148,7 @@ defmodule Mana.Tools.Registry do
   """
   @spec tool_definitions(String.t()) :: [map()]
   def tool_definitions(_agent_name) do
-    GenServer.call(__MODULE__, :tool_definitions)
+    get_definitions()
   end
 
   @doc """
@@ -115,7 +156,10 @@ defmodule Mana.Tools.Registry do
   """
   @spec list_tools() :: [String.t()]
   def list_tools do
-    GenServer.call(__MODULE__, :list_tools)
+    case :ets.whereis(@table) do
+      :undefined -> []
+      _table -> :ets.select(@table, [{{:"$1", :_}, [], [:"$1"]}]) |> Enum.sort()
+    end
   end
 
   @doc """
@@ -139,25 +183,45 @@ defmodule Mana.Tools.Registry do
   """
   @spec get_definitions() :: [map()]
   def get_definitions do
-    GenServer.call(__MODULE__, :tool_definitions)
+    list_tools()
+    |> Enum.map(fn name ->
+      case get_tool(name) do
+        {:ok, details} ->
+          %{
+            type: "function",
+            function: %{
+              name: name,
+              description: details.description,
+              parameters: details.parameters
+            }
+          }
+
+        {:error, _} ->
+          nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
   end
 
   # Server Callbacks
 
   @impl true
   def init(_opts) do
-    state = %{
-      tools: %{},
-      stats: %{calls: 0, errors: 0}
-    }
+    # Create ETS table for fast public reads
+    :ets.new(@table, [
+      :set,
+      :named_table,
+      :public,
+      read_concurrency: true
+    ])
 
     # Register real tool implementations
-    state = register_real_tools(state)
+    register_expected_tools()
 
     # Verify all expected tools are registered
-    verify_tools_registered!(state)
+    verify_tools_registered!()
 
-    {:ok, state}
+    {:ok, %{stats: %{calls: 0, errors: 0}}}
   end
 
   @impl true
@@ -167,7 +231,7 @@ defmodule Mana.Tools.Registry do
       tool_name = tool_module.name()
 
       # Check for duplicates
-      if Map.has_key?(state.tools, tool_name) do
+      if :ets.member(@table, tool_name) do
         {:reply, {:error, :already_registered}, state}
       else
         tool_info = %{
@@ -176,9 +240,8 @@ defmodule Mana.Tools.Registry do
           schema: tool_module.parameters()
         }
 
-        new_tools = Map.put(state.tools, tool_name, tool_info)
-        new_state = %{state | tools: new_tools}
-        {:reply, :ok, new_state}
+        :ets.insert(@table, {tool_name, tool_info})
+        {:reply, :ok, state}
       end
     else
       {:reply, {:error, :invalid_behaviour}, state}
@@ -186,72 +249,9 @@ defmodule Mana.Tools.Registry do
   end
 
   @impl true
-  def handle_call({:execute, tool_name, args}, _from, state) do
-    case Map.get(state.tools, tool_name) do
-      nil ->
-        new_stats = %{state.stats | errors: state.stats.errors + 1}
-        {:reply, {:error, :unknown_tool}, %{state | stats: new_stats}}
-
-      %{module: module} ->
-        try do
-          result = module.execute(args)
-          new_calls = state.stats.calls + 1
-          new_stats = %{state.stats | calls: new_calls}
-          {:reply, result, %{state | stats: new_stats}}
-        rescue
-          error ->
-            Logger.error("Tool execution error for #{tool_name}: #{inspect(error)}")
-            new_stats = %{state.stats | errors: state.stats.errors + 1}
-            {:reply, {:error, :execution_failed}, %{state | stats: new_stats}}
-        end
-    end
-  end
-
-  @impl true
-  def handle_call({:get_tool, name}, _from, state) do
-    case Map.get(state.tools, name) do
-      nil ->
-        {:reply, {:error, :not_found}, state}
-
-      tool_info ->
-        details = %{
-          name: name,
-          description: tool_info.description,
-          parameters: tool_info.schema,
-          module: tool_info.module
-        }
-
-        {:reply, {:ok, details}, state}
-    end
-  end
-
-  @impl true
-  def handle_call(:tool_definitions, _from, state) do
-    definitions =
-      Enum.map(state.tools, fn {name, info} ->
-        %{
-          type: "function",
-          function: %{
-            name: name,
-            description: info.description,
-            parameters: info.schema
-          }
-        }
-      end)
-
-    {:reply, definitions, state}
-  end
-
-  @impl true
-  def handle_call(:list_tools, _from, state) do
-    tools = Map.keys(state.tools) |> Enum.sort()
-    {:reply, tools, state}
-  end
-
-  @impl true
   def handle_call(:get_stats, _from, state) do
     stats = %{
-      tools_registered: map_size(state.tools),
+      tools_registered: :ets.info(@table, :size),
       calls: state.stats.calls,
       errors: state.stats.errors
     }
@@ -259,23 +259,22 @@ defmodule Mana.Tools.Registry do
     {:reply, stats, state}
   end
 
+  @impl true
+  def handle_cast({:increment_calls}, state) do
+    new_stats = %{state.stats | calls: state.stats.calls + 1}
+    {:noreply, %{state | stats: new_stats}}
+  end
+
+  @impl true
+  def handle_cast({:increment_errors}, state) do
+    new_stats = %{state.stats | errors: state.stats.errors + 1}
+    {:noreply, %{state | stats: new_stats}}
+  end
+
   # Private Functions
 
-  defp register_real_tools(state) do
-    real_tools = [
-      Mana.Tools.FileOps.ListFiles,
-      Mana.Tools.FileOps.ReadFile,
-      Mana.Tools.FileOps.Grep,
-      Mana.Tools.FileEdit.CreateFile,
-      Mana.Tools.FileEdit.ReplaceInFile,
-      Mana.Tools.FileEdit.DeleteFile,
-      Mana.Tools.AgentTools.ListAgents,
-      Mana.Tools.AgentTools.InvokeAgent,
-      Mana.Tools.AgentTools.AskUser,
-      Mana.Tools.ShellExec
-    ]
-
-    Enum.reduce(real_tools, state, fn module, acc_state ->
+  defp register_expected_tools do
+    Enum.each(@expected_tools, fn module ->
       if behaviour_implemented?(module) do
         tool_name = module.name()
 
@@ -285,16 +284,20 @@ defmodule Mana.Tools.Registry do
           schema: module.parameters()
         }
 
-        %{acc_state | tools: Map.put(acc_state.tools, tool_name, tool_info)}
+        :ets.insert(@table, {tool_name, tool_info})
       else
         Logger.warning("Tool #{inspect(module)} does not implement Behaviour, skipping")
-        acc_state
       end
     end)
   end
 
-  defp verify_tools_registered!(state) do
-    registered = Map.keys(state.tools) |> MapSet.new()
+  defp verify_tools_registered! do
+    registered =
+      case :ets.whereis(@table) do
+        :undefined -> MapSet.new()
+        _table -> :ets.select(@table, [{{:"$1", :_}, [], [:"$1"]}]) |> MapSet.new()
+      end
+
     expected = Enum.map(@expected_tools, & &1.name()) |> MapSet.new()
     missing = MapSet.difference(expected, registered)
 
@@ -303,7 +306,8 @@ defmodule Mana.Tools.Registry do
       Logger.error("Tools.Registry: Missing expected tools: #{missing_list}")
       raise "Tool registration incomplete: #{missing_list}"
     else
-      Logger.info("Tools.Registry: All #{map_size(state.tools)} expected tools registered successfully")
+      tool_count = :ets.info(@table, :size)
+      Logger.info("Tools.Registry: All #{tool_count} expected tools registered successfully")
     end
   end
 
