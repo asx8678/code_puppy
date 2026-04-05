@@ -397,64 +397,62 @@ defmodule Mana.Agent.Runner do
   end
 
   defp process_stream(stream, handler_module, handler, session_id) do
-    try do
-      result =
-        Enum.reduce(stream, {[], "", []}, fn event, {evts, content, tc} = acc ->
-          case event do
-            {:part_start, type, meta} ->
-              part_id = generate_part_id()
-              {:ok, _new_handler} = handler_module.handle_part_start(handler, part_id, type, meta)
+    result =
+      Enum.reduce(stream, {[], "", []}, fn event, {evts, content, tc} = acc ->
+        case event do
+          {:part_start, type, meta} ->
+            part_id = generate_part_id()
+            {:ok, _new_handler} = handler_module.handle_part_start(handler, part_id, type, meta)
 
-              Callbacks.dispatch(:stream_event, [
-                :part_start,
-                %{part_id: part_id, type: type, metadata: meta},
-                session_id
-              ])
+            Callbacks.dispatch(:stream_event, [
+              :part_start,
+              %{part_id: part_id, type: type, metadata: meta},
+              session_id
+            ])
 
-              {evts ++ [{:part_start, part_id, type, meta}], content, tc}
+            {evts ++ [{:part_start, part_id, type, meta}], content, tc}
 
-            {:part_delta, _type, delta_content} ->
-              part_id = get_current_part_id(handler)
-              {:ok, _new_handler} = handler_module.handle_part_delta(handler, part_id, delta_content)
+          {:part_delta, _type, delta_content} ->
+            part_id = get_current_part_id(handler)
+            {:ok, _new_handler} = handler_module.handle_part_delta(handler, part_id, delta_content)
 
-              Callbacks.dispatch(:stream_event, [
-                :part_delta,
-                %{part_id: part_id, content: delta_content},
-                session_id
-              ])
+            Callbacks.dispatch(:stream_event, [
+              :part_delta,
+              %{part_id: part_id, content: delta_content},
+              session_id
+            ])
 
-              {evts ++ [{:part_delta, part_id, delta_content}], content <> delta_content, tc}
+            {evts ++ [{:part_delta, part_id, delta_content}], content <> delta_content, tc}
 
-            {:part_end, _type} ->
-              part_id = get_current_part_id(handler)
-              {:ok, _new_handler} = handler_module.handle_part_end(handler, part_id, %{})
+          {:part_end, _type} ->
+            part_id = get_current_part_id(handler)
+            {:ok, _new_handler} = handler_module.handle_part_end(handler, part_id, %{})
 
-              Callbacks.dispatch(:stream_event, [
-                :part_end,
-                %{part_id: part_id},
-                session_id
-              ])
+            Callbacks.dispatch(:stream_event, [
+              :part_end,
+              %{part_id: part_id},
+              session_id
+            ])
 
-              {evts ++ [{:part_end, part_id}], content, tc}
+            {evts ++ [{:part_end, part_id}], content, tc}
 
-            {:tool_call, tool_call} ->
-              {evts, content, tc ++ [tool_call]}
+          {:tool_call, tool_call} ->
+            {evts, content, tc ++ [tool_call]}
 
-            {:error, reason} ->
-              # Propagate error by throwing with accumulated state
-              throw({:streaming_error, reason, evts, content, tc})
+          {:error, reason} ->
+            # Propagate error by throwing with accumulated state
+            throw({:streaming_error, reason, evts, content, tc})
 
-            _ ->
-              acc
-          end
-        end)
+          _ ->
+            acc
+        end
+      end)
 
-      {:ok, result}
-    catch
-      {:streaming_error, reason, evts, _content, _tc} ->
-        # Return error with partial results for debugging/retries
-        {:error, reason, evts}
-    end
+    {:ok, result}
+  catch
+    {:streaming_error, reason, evts, _content, _tc} ->
+      # Return error with partial results for debugging/retries
+      {:error, reason, evts}
   end
 
   defp execute_tool_calls(tool_calls, _opts) do
