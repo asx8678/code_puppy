@@ -18,7 +18,8 @@ defmodule Mana.RateLimiter do
   @type model_state :: %{
           count: non_neg_integer(),
           state: :closed | :open | :half_open,
-          limit: non_neg_integer()
+          limit: non_neg_integer(),
+          idle_cycles: non_neg_integer()
         }
 
   @type t :: %__MODULE__{
@@ -57,9 +58,9 @@ defmodule Mana.RateLimiter do
 
   Returns :ok if allowed, {:error, :rate_limited} if blocked.
   """
-  @spec check(String.t()) :: :ok | {:error, :rate_limited}
+  @spec check(String.t()) :: :ok | {:ok, :probe} | {:error, :rate_limited}
   def check(model) do
-    GenServer.call(__MODULE__, {:check, model})
+    GenServer.call(__MODULE__, {:check, normalize(model)})
   end
 
   @doc """
@@ -69,15 +70,23 @@ defmodule Mana.RateLimiter do
   """
   @spec report_rate_limit(String.t()) :: :ok
   def report_rate_limit(model) do
-    GenServer.cast(__MODULE__, {:rate_limit, model})
+    GenServer.cast(__MODULE__, {:rate_limit, normalize(model)})
   end
 
   @doc """
-  Get current state for a model (for testing/debugging).
+  Report a successful request for a model.
+
+  When the circuit is half-open, a successful probe transitions
+  the circuit back to closed.
   """
+  @spec report_success(String.t()) :: :ok
+  def report_success(model) do
+    GenServer.call(__MODULE__, {:success, normalize(model)})
+  end
+
   @spec get_model_state(String.t()) :: model_state() | nil
   def get_model_state(model) do
-    GenServer.call(__MODULE__, {:get_state, model})
+    GenServer.call(__MODULE__, {:get_state, normalize(model)})
   end
 
   # ============================================================================
@@ -105,7 +114,9 @@ defmodule Mana.RateLimiter do
           Logger.warning("Rate limit exceeded for model #{model}, opening circuit")
           {:reply, {:error, :rate_limited}, %{state | models: new_models}}
         else
-          new_models = Map.put(state.models, model, %{model_state | count: new_count})
+          new_models =
+            Map.put(state.models, model, %{model_state | count: new_count, idle_cycles: 0})
+
           {:reply, :ok, %{state | models: new_models}}
         end
 
@@ -113,11 +124,26 @@ defmodule Mana.RateLimiter do
         {:reply, {:error, :rate_limited}, state}
 
       :half_open ->
-        new_models =
-          Map.put(state.models, model, %{model_state | state: :closed, count: 1})
+        new_models = Map.put(state.models, model, %{model_state | count: 1})
+        Logger.info("Circuit half-open for model #{model}, allowing probe request")
+        {:reply, {:ok, :probe}, %{state | models: new_models}}
+    end
+  end
 
-        Logger.info("Circuit half-open for model #{model}, allowing test request")
+  @impl true
+  def handle_call({:success, model}, _from, state) do
+    model_state = Map.get(state.models, model, default_model_state())
+
+    case model_state.state do
+      :half_open ->
+        new_models =
+          Map.put(state.models, model, %{model_state | state: :closed, count: 0, idle_cycles: 0})
+
+        Logger.info("Circuit closed for model #{model} after successful probe")
         {:reply, :ok, %{state | models: new_models}}
+
+      _ ->
+        {:reply, :ok, state}
     end
   end
 
@@ -144,7 +170,7 @@ defmodule Mana.RateLimiter do
 
   @impl true
   def handle_info(:recover, state) do
-    new_models =
+    processed_models =
       Map.new(state.models, fn {model, model_state} ->
         case model_state.state do
           :open ->
@@ -152,8 +178,15 @@ defmodule Mana.RateLimiter do
             {model, %{model_state | state: :half_open}}
 
           _ ->
-            {model, %{model_state | count: 0}}
+            idle = model_state.idle_cycles + 1
+            {model, %{model_state | count: 0, idle_cycles: idle}}
         end
+      end)
+
+    # Prune models idle for more than 10 recovery cycles
+    new_models =
+      Map.filter(processed_models, fn {_model, model_state} ->
+        model_state.state != :closed or model_state.idle_cycles <= 10
       end)
 
     schedule_recovery()
@@ -165,8 +198,10 @@ defmodule Mana.RateLimiter do
   # ============================================================================
 
   defp default_model_state do
-    %{count: 0, state: :closed, limit: @default_limit}
+    %{count: 0, state: :closed, limit: @default_limit, idle_cycles: 0}
   end
+
+  defp normalize(model) when is_binary(model), do: String.downcase(model)
 
   defp schedule_recovery do
     Process.send_after(self(), :recover, @recovery_interval)

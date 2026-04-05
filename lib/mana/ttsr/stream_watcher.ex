@@ -41,6 +41,18 @@ defmodule Mana.TTSR.StreamWatcher do
   # Client API
 
   @doc """
+  Child spec for DynamicSupervisor — transient restart so crashes are
+  restarted but normal exits are not.
+  """
+  def child_spec({session_id, rules}) do
+    %{
+      id: {__MODULE__, session_id},
+      start: {__MODULE__, :start_link, [session_id, rules]},
+      restart: :transient
+    }
+  end
+
+  @doc """
   Starts a StreamWatcher for the given session.
   """
   @spec start_link(String.t(), [Rule.t()]) :: GenServer.on_start()
@@ -50,6 +62,32 @@ defmodule Mana.TTSR.StreamWatcher do
       {session_id, rules},
       name: via_tuple(session_id)
     )
+  end
+
+  @doc """
+  Starts a StreamWatcher under the DynamicSupervisor.
+  """
+  @spec start_supervised(String.t(), [Rule.t()]) :: DynamicSupervisor.on_start_child()
+  def start_supervised(session_id, rules) do
+    DynamicSupervisor.start_child(
+      Mana.TTSR.WatcherSupervisor,
+      {__MODULE__, {session_id, rules}}
+    )
+  end
+
+  @doc """
+  Stops a supervised StreamWatcher for the given session.
+  """
+  @spec stop(String.t()) :: :ok
+  def stop(session_id) do
+    case find_watcher(session_id) do
+      nil ->
+        :ok
+
+      pid ->
+        DynamicSupervisor.terminate_child(Mana.TTSR.WatcherSupervisor, pid)
+        :ok
+    end
   end
 
   @doc """
@@ -103,24 +141,7 @@ defmodule Mana.TTSR.StreamWatcher do
 
   @impl true
   def init({session_id, rules}) do
-    # Registry should be started by the supervision tree.
-    # Ensure it exists, but don't crash if it's already started.
-    ensure_registry_started()
-
     {:ok, %__MODULE__{session_id: session_id, rules: rules}}
-  end
-
-  defp ensure_registry_started do
-    case Process.whereis(@registry_name) do
-      nil ->
-        case Registry.start_link(keys: :unique, name: @registry_name) do
-          {:ok, _} -> :ok
-          {:error, {:already_started, _}} -> :ok
-        end
-
-      _pid ->
-        :ok
-    end
   end
 
   @impl true

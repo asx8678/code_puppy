@@ -29,11 +29,12 @@ defmodule Mana.OAuth.Flow do
   - `:code_verifier` - The random verifier (43-128 chars)
   - `:code_challenge` - The S256 hash of the verifier
   """
-  @spec generate_pkce() :: %{code_verifier: String.t(), code_challenge: String.t()}
+  @spec generate_pkce() :: %{code_verifier: String.t(), code_challenge: String.t(), state: String.t()}
   def generate_pkce do
     code_verifier = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
     code_challenge = Base.url_encode64(:crypto.hash(:sha256, code_verifier), padding: false)
-    %{code_verifier: code_verifier, code_challenge: code_challenge}
+    state = Base.url_encode64(:crypto.strong_rand_bytes(16), padding: false)
+    %{code_verifier: code_verifier, code_challenge: code_challenge, state: state}
   end
 
   @doc """
@@ -44,16 +45,16 @@ defmodule Mana.OAuth.Flow do
 
   Returns `{:ok, pid}` on success.
   """
-  @spec start_callback_server(pos_integer()) :: {:ok, pid()} | {:error, term()}
-  def start_callback_server(port \\ @default_port) do
+  @spec start_callback_server(pos_integer(), String.t() | nil) :: {:ok, pid()} | {:error, term()}
+  def start_callback_server(port \\ @default_port, expected_state \\ nil) do
     parent = self()
 
-    # Start a simple TCP listener
-    case :gen_tcp.listen(port, [:binary, packet: :line, active: false, reuseaddr: true]) do
+    # Start a simple TCP listener (bind to localhost only for security)
+    case :gen_tcp.listen(port, [{:ip, {127, 0, 0, 1}}, :binary, packet: :line, active: false, reuseaddr: true]) do
       {:ok, listen_socket} ->
         pid =
           spawn_link(fn ->
-            accept_loop(listen_socket, parent)
+            accept_loop(listen_socket, parent, expected_state)
           end)
 
         {:ok, pid}
@@ -63,11 +64,11 @@ defmodule Mana.OAuth.Flow do
     end
   end
 
-  defp accept_loop(listen_socket, parent) do
+  defp accept_loop(listen_socket, parent, expected_state) do
     case :gen_tcp.accept(listen_socket, @default_timeout) do
       {:ok, socket} ->
-        handle_connection(socket, parent)
-        accept_loop(listen_socket, parent)
+        handle_connection(socket, parent, expected_state)
+        accept_loop(listen_socket, parent, expected_state)
 
       {:error, :timeout} ->
         Logger.warning("OAuth callback server timed out waiting for connection")
@@ -78,10 +79,10 @@ defmodule Mana.OAuth.Flow do
     end
   end
 
-  defp handle_connection(socket, parent) do
+  defp handle_connection(socket, parent, expected_state) do
     case :gen_tcp.recv(socket, 0, 5000) do
       {:ok, data} ->
-        handle_request_data(socket, parent, to_string(data))
+        handle_request_data(socket, parent, to_string(data), expected_state)
 
       {:error, reason} ->
         Logger.warning("Error receiving data from callback: #{inspect(reason)}")
@@ -89,8 +90,8 @@ defmodule Mana.OAuth.Flow do
     end
   end
 
-  defp handle_request_data(socket, parent, request) do
-    case extract_code(request) do
+  defp handle_request_data(socket, parent, request, expected_state) do
+    case extract_code(request, expected_state) do
       {:ok, code} ->
         send_success_response(socket, parent, code)
 
@@ -126,20 +127,43 @@ defmodule Mana.OAuth.Flow do
     :gen_tcp.close(socket)
   end
 
-  defp extract_code(request) do
-    # Extract code from query string like "GET /callback?code=xxx&state=yyy HTTP/1.1"
+  defp extract_code(request, expected_state) do
     case Regex.run(~r/GET\s+\/callback\?([^\s]+)\s+HTTP/i, request) do
       [_, query_string] ->
         params = URI.decode_query(query_string)
+        received_state = Map.get(params, "state")
 
-        case Map.get(params, "code") do
-          nil -> :error
-          code -> {:ok, code}
+        cond do
+          is_nil(expected_state) ->
+            # No state validation requested
+            get_code_param(params)
+
+          is_nil(received_state) ->
+            Logger.warning("OAuth callback missing state parameter — possible CSRF")
+            :error
+
+          secure_compare(received_state, expected_state) ->
+            get_code_param(params)
+
+          true ->
+            Logger.warning("OAuth state mismatch — possible CSRF attack")
+            :error
         end
 
       _ ->
         :error
     end
+  end
+
+  defp get_code_param(params) do
+    case Map.get(params, "code") do
+      nil -> :error
+      code -> {:ok, code}
+    end
+  end
+
+  defp secure_compare(a, b) when is_binary(a) and is_binary(b) do
+    byte_size(a) == byte_size(b) and :crypto.hash(:sha256, a) == :crypto.hash(:sha256, b)
   end
 
   defp success_html_response do
@@ -316,11 +340,11 @@ defmodule Mana.OAuth.Flow do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
 
     # Start callback server
-    case start_callback_server(port) do
+    case start_callback_server(port, pkce.state) do
       {:ok, server_pid} ->
         try do
           # Build authorization URL with PKCE params
-          auth_url_with_params = add_pkce_to_auth_url(auth_url, pkce.code_challenge)
+          auth_url_with_params = add_pkce_to_auth_url(auth_url, pkce.code_challenge, pkce.state)
 
           # Launch browser
           case launch_browser(auth_url_with_params) do
@@ -359,7 +383,7 @@ defmodule Mana.OAuth.Flow do
     end
   end
 
-  defp add_pkce_to_auth_url(auth_url, code_challenge) do
+  defp add_pkce_to_auth_url(auth_url, code_challenge, state) do
     uri = URI.parse(auth_url)
     existing_params = URI.decode_query(uri.query || "")
 
@@ -367,6 +391,7 @@ defmodule Mana.OAuth.Flow do
       existing_params
       |> Map.put("code_challenge", code_challenge)
       |> Map.put("code_challenge_method", "S256")
+      |> Map.put("state", state)
 
     %{uri | query: URI.encode_query(params)} |> URI.to_string()
   end

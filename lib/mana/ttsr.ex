@@ -51,12 +51,6 @@ defmodule Mana.TTSR do
     rules = RuleLoader.load()
     :persistent_term.put(@persistent_term_key, rules)
 
-    # Start registry if not already started
-    case Registry.start_link(keys: :unique, name: Mana.TTSR.Registry) do
-      {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> :ok
-    end
-
     {:ok, %{rules: rules}}
   end
 
@@ -115,6 +109,7 @@ defmodule Mana.TTSR do
   """
   def on_agent_run_end(_agent_name, _model_name, session_id, _success, _error, _response, _meta) do
     StreamWatcher.increment_turn(session_id)
+    if session_id, do: StreamWatcher.stop(session_id)
     :ok
   end
 
@@ -192,7 +187,11 @@ defmodule Mana.TTSR do
         {:ok, pid}
 
       [] ->
-        StreamWatcher.start_link(session_id, rules)
+        case StreamWatcher.start_supervised(session_id, rules) do
+          {:ok, pid} -> {:ok, pid}
+          {:error, {:already_started, pid}} -> {:ok, pid}
+          error -> error
+        end
     end
   end
 end

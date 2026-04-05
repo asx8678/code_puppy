@@ -95,6 +95,8 @@ defmodule Mana.Streaming.ConsoleHandler do
 
   @impl true
   def handle_part_delta(state, part_id, content) do
+    tracker = PartTracker.update_tokens(state.part_tracker, part_id, 0, 1)
+
     # Emit content to MessageBus as stream chunk with assistant role
     message =
       Message.new(:text, %{
@@ -112,7 +114,7 @@ defmodule Mana.Streaming.ConsoleHandler do
       state.session_id
     )
 
-    {:ok, state}
+    {:ok, %{state | part_tracker: tracker}}
   end
 
   @impl true
