@@ -179,13 +179,14 @@ defmodule Mana.Plugins.FilePermission do
     end
 
     if state.interactive do
-      # In non-interactive or yolo_mode, default to allowing
-      # In interactive mode, we would prompt the user
-      # For now, we default to allowing in non-critical paths
-      IO.puts("[Policy] #{reason}")
-      true
+      case Mana.Tools.UserApproval.request_file_approval(operation, %{path: file_path, reason: reason}) do
+        {:ok, true} -> true
+        {:ok, false} -> false
+        {:error, _} -> false
+      end
     else
-      true
+      Logger.warning("[FilePermission] Denied #{operation} on #{file_path} (non-interactive mode): #{reason}")
+      false
     end
   end
 end

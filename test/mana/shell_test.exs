@@ -32,6 +32,13 @@ defmodule Mana.ShellTest do
     :ok
   end
 
+  # Helper to register a permissive safety callback (for tests that just need commands to run)
+  defp allow_all_commands do
+    Registry.register(:run_shell_command, fn _ctx, _cmd, _state ->
+      %{safe: true, risk: :none}
+    end)
+  end
+
   # Helper to mock the safety check for dangerous commands
   defp block_dangerous_commands do
     Registry.register(:run_shell_command, fn _ctx, cmd, _state ->
@@ -46,6 +53,11 @@ defmodule Mana.ShellTest do
   end
 
   describe "run/2" do
+    setup do
+      allow_all_commands()
+      :ok
+    end
+
     test "executes safe commands" do
       assert {:ok, %Result{} = result} = Shell.run("echo hello")
 
@@ -125,7 +137,25 @@ defmodule Mana.ShellTest do
     end
   end
 
+  describe "run/2 fail-closed behavior" do
+    test "blocks commands when no safety callbacks registered" do
+      # No callbacks registered - fail-closed
+      assert {:error, {:blocked, reason}} = Shell.run("echo hello")
+      assert reason == "No safety plugin available"
+    end
+
+    test "blocks background commands when no safety callbacks registered" do
+      assert {:error, {:blocked, reason}} = Shell.run_background("echo hello")
+      assert reason == "No safety plugin available"
+    end
+  end
+
   describe "run_background/2" do
+    setup do
+      allow_all_commands()
+      :ok
+    end
+
     test "starts background process" do
       assert {:ok, ref} = Shell.run_background("sleep 2")
 
@@ -174,6 +204,11 @@ defmodule Mana.ShellTest do
   end
 
   describe "kill_all/0" do
+    setup do
+      allow_all_commands()
+      :ok
+    end
+
     test "terminates running processes" do
       # Start some background processes
       {:ok, _ref1} = Shell.run_background("sleep 10")
@@ -204,6 +239,11 @@ defmodule Mana.ShellTest do
   end
 
   describe "list_processes/0" do
+    setup do
+      allow_all_commands()
+      :ok
+    end
+
     test "returns empty list initially" do
       # Kill any existing
       Shell.kill_all()
@@ -229,6 +269,11 @@ defmodule Mana.ShellTest do
   end
 
   describe "integration" do
+    setup do
+      allow_all_commands()
+      :ok
+    end
+
     test "can run multiple commands sequentially" do
       assert {:ok, result1} = Shell.run("echo first")
       assert {:ok, result2} = Shell.run("echo second")

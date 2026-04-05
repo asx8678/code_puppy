@@ -100,7 +100,7 @@ defmodule Mana.Plugins.FilePermissionTest do
       assert result == false
     end
 
-    test "handles missing policy gracefully" do
+    test "denies when no policy loaded in non-interactive mode" do
       state = %{
         policy: nil,
         config: %{},
@@ -108,9 +108,9 @@ defmodule Mana.Plugins.FilePermissionTest do
         log_decisions: false
       }
 
-      # Should default to allowing when no policy loaded
+      # No policy + non-interactive = :ask_user -> denied (fail-closed)
       result = FilePermission.check_permission(nil, "/tmp/test.txt", :read, nil, nil, state)
-      assert result == true
+      assert result == false
     end
   end
 

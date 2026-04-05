@@ -171,19 +171,32 @@ defmodule Mana.Shell do
     context = %{cwd: Keyword.get(opts, :cwd)}
 
     case Mana.Callbacks.dispatch(:run_shell_command, [context, command, state]) do
-      {:ok, [{:ok, %{safe: _} = result} | _]} ->
-        result
-
-      {:ok, [%{safe: _} = result | _]} ->
-        result
+      {:ok, results} when is_list(results) and results != [] ->
+        results
+        |> Enum.map(&extract_assessment/1)
+        |> Enum.reject(&is_nil/1)
+        |> most_restrictive_assessment()
 
       {:ok, []} ->
-        # No callbacks registered, assume safe
-        %{safe: true, risk: :none}
+        require Logger
+        Logger.warning("[Shell] No safety callbacks registered \u2014 blocking command")
+        %{safe: false, risk: :unknown, reason: "No safety plugin available"}
 
-      {:error, _} ->
-        # Error in callbacks, assume safe (fail open for callbacks)
-        %{safe: true, risk: :none}
+      {:error, reason} ->
+        require Logger
+        Logger.error("[Shell] Safety callback error: #{inspect(reason)} \u2014 blocking command")
+        %{safe: false, risk: :unknown, reason: "Safety check failed"}
     end
+  end
+
+  defp extract_assessment({:ok, %{safe: _} = result}), do: result
+  defp extract_assessment(%{safe: _} = result), do: result
+  defp extract_assessment(_), do: nil
+
+  defp most_restrictive_assessment([]), do: %{safe: false, risk: :unknown, reason: "No valid safety assessments"}
+
+  defp most_restrictive_assessment(assessments) do
+    # If ANY assessment says unsafe, the command is unsafe
+    Enum.find(assessments, List.first(assessments), fn a -> a.safe == false end)
   end
 end
