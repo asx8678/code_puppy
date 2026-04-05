@@ -41,6 +41,18 @@ defmodule Mana.MixProject do
       # Core dependencies
       {:jason, "~> 1.4"},
 
+      # Runtime dependencies
+      {:phoenix_pubsub, "~> 2.1"},
+      {:dotenvy, "~> 0.8"},
+      {:nimble_options, "~> 1.1"},
+      {:req, "~> 0.5"},
+      {:finch, "~> 0.19"},
+      {:anthropix, "~> 0.6"},
+      {:ecto, "~> 3.12"},
+      {:earmark, "~> 1.4"},
+      {:owl, "~> 0.12"},
+      {:oauth2, "~> 2.1"},
+
       # Development dependencies
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},

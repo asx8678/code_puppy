@@ -1,0 +1,298 @@
+defmodule Mana.Models.Providers.Anthropic do
+  @moduledoc """
+  Anthropic Claude API provider implementation.
+
+  Uses Anthropix library if available, otherwise falls back to raw Req.
+  Supports both standard completions and SSE streaming.
+  """
+
+  @behaviour Mana.Models.Provider
+
+  alias Mana.Config
+
+  @default_base_url "https://api.anthropic.com"
+  @api_version "2023-06-01"
+  @messages_endpoint "/v1/messages"
+  @default_max_tokens 4096
+
+  @impl true
+  def provider_id, do: "anthropic"
+
+  @impl true
+  def validate_config(config) do
+    api_key = config[:api_key] || Config.api_key("anthropic")
+
+    if is_binary(api_key) and api_key != "" do
+      :ok
+    else
+      {:error, "Missing Anthropic API key"}
+    end
+  end
+
+  @impl true
+  def complete(messages, model, opts \\ []) do
+    api_key = get_api_key(opts)
+
+    case validate_config(%{api_key: api_key}) do
+      :ok ->
+        do_complete(messages, model, api_key, opts)
+
+      error ->
+        error
+    end
+  end
+
+  defp do_complete(messages, model, api_key, opts) do
+    url = @default_base_url <> @messages_endpoint
+
+    body = %{
+      "model" => model,
+      "messages" => convert_messages(messages),
+      "max_tokens" => Keyword.get(opts, :max_tokens, @default_max_tokens)
+    }
+
+    body = maybe_add_temperature(body, opts)
+    body = maybe_add_system_prompt(body, opts)
+    body = maybe_add_tools(body, opts)
+
+    headers = [
+      {"x-api-key", api_key},
+      {"anthropic-version", @api_version},
+      {"Content-Type", "application/json"}
+    ]
+
+    case Req.post(url, headers: headers, json: body, receive_timeout: 60_000) do
+      {:ok, %{status: 200, body: response_body}} ->
+        parse_completion_response(response_body, model)
+
+      {:ok, %{status: status, body: error_body}} ->
+        {:error, "HTTP #{status}: #{format_error(error_body)}"}
+
+      {:error, reason} ->
+        {:error, "Request failed: #{inspect(reason)}"}
+    end
+  end
+
+  @impl true
+  def stream(messages, model, opts \\ []) do
+    api_key = get_api_key(opts)
+
+    case validate_config(%{api_key: api_key}) do
+      :ok ->
+        do_stream(messages, model, api_key, opts)
+
+      error ->
+        Stream.resource(
+          fn -> error end,
+          fn
+            nil -> {:halt, nil}
+            {:error, _reason} = err -> {[err], nil}
+            err -> {[{:error, err}], nil}
+          end,
+          fn _ -> :ok end
+        )
+    end
+  end
+
+  defp do_stream(messages, model, api_key, opts) do
+    url = @default_base_url <> @messages_endpoint
+
+    body = %{
+      "model" => model,
+      "messages" => convert_messages(messages),
+      "max_tokens" => Keyword.get(opts, :max_tokens, @default_max_tokens),
+      "stream" => true
+    }
+
+    body = maybe_add_temperature(body, opts)
+    body = maybe_add_system_prompt(body, opts)
+    body = maybe_add_tools(body, opts)
+
+    headers = [
+      {"x-api-key", api_key},
+      {"anthropic-version", @api_version},
+      {"Content-Type", "application/json"},
+      {"Accept", "text/event-stream"}
+    ]
+
+    Stream.resource(
+      fn ->
+        %{buffer: "", done: false, request_started: false, body: body, url: url, headers: headers}
+      end,
+      fn
+        %{done: true} = state ->
+          {:halt, state}
+
+        %{request_started: false, body: body, url: url, headers: headers} = state ->
+          request = Req.new(method: :post, url: url, headers: headers, json: body, into: :self)
+
+          case Req.request(request) do
+            {:ok, %{status: 200} = response} ->
+              events = process_anthropic_stream(response.body)
+              {events, %{state | request_started: true}}
+
+            {:ok, %{status: status}} ->
+              {[{:error, "HTTP #{status}"}], %{state | done: true}}
+
+            {:error, reason} ->
+              {[{:error, "Request failed: #{inspect(reason)}"}], %{state | done: true}}
+          end
+      end,
+      fn _state -> :ok end
+    )
+  end
+
+  # SSE Processing for Anthropic
+
+  defp process_anthropic_stream(body) when is_list(body) do
+    body
+    |> Enum.flat_map(&extract_data_lines/1)
+    |> Enum.map(&parse_data_line/1)
+    |> Enum.flat_map(&parse_anthropic_event/1)
+  end
+
+  defp process_anthropic_stream(_), do: []
+
+  defp extract_data_lines(chunk) do
+    chunk
+    |> String.split("\n")
+    |> Enum.filter(&String.starts_with?(&1, "data: "))
+  end
+
+  defp parse_data_line(line) do
+    case String.trim_leading(line, "data: ") do
+      "[DONE]" -> :done
+      json -> decode_sse_json(json)
+    end
+  end
+
+  defp decode_sse_json(json) do
+    case Jason.decode(json) do
+      {:ok, decoded} -> decoded
+      {:error, _} -> {:error, "Invalid JSON: #{json}"}
+    end
+  end
+
+  defp parse_anthropic_event(:done), do: [{:part_end, :done}]
+  defp parse_anthropic_event({:error, _} = err), do: [err]
+
+  defp parse_anthropic_event(event) when is_map(event) do
+    case event["type"] do
+      "message_start" -> [{:part_start, :message}]
+      "content_block_start" -> parse_content_block_start(event)
+      "content_block_delta" -> parse_content_block_delta(event)
+      "content_block_stop" -> [{:part_end, :content}]
+      "message_delta" -> [{:part_end, :message}]
+      "message_stop" -> [{:part_end, :done}]
+      "error" -> parse_error_event(event)
+      _ -> []
+    end
+  end
+
+  defp parse_content_block_start(event) do
+    content_block = event["content_block"] || %{}
+    index = content_block["index"] || 0
+
+    case content_block["type"] do
+      "text" -> [{:part_start, :content}]
+      "tool_use" -> [{:part_start, {:tool_call, index}}]
+      _ -> []
+    end
+  end
+
+  defp parse_content_block_delta(event) do
+    delta = event["delta"] || %{}
+    index = event["index"] || 0
+
+    cond do
+      delta["text"] -> [{:part_delta, :content, delta["text"]}]
+      delta["partial_json"] -> [{:part_delta, {:tool_call, index}, delta["partial_json"]}]
+      true -> []
+    end
+  end
+
+  defp parse_error_event(event) do
+    error = event["error"] || %{}
+    [{:error, error["message"] || "Unknown error"}]
+  end
+
+  # Message conversion
+
+  defp convert_messages(messages) when is_list(messages) do
+    Enum.map(messages, fn msg ->
+      case msg do
+        %{"role" => role, "content" => content} ->
+          %{"role" => convert_role(role), "content" => content}
+
+        %{role: role, content: content} ->
+          %{"role" => convert_role(role), "content" => content}
+
+        _ ->
+          msg
+      end
+    end)
+  end
+
+  defp convert_messages(messages), do: messages
+
+  defp convert_role("system"), do: "assistant"
+  defp convert_role(role), do: role
+
+  # Response parsing
+
+  defp parse_completion_response(body, model) when is_map(body) do
+    content_blocks = body["content"] || []
+
+    content =
+      content_blocks
+      |> Enum.filter(fn block -> block["type"] == "text" end)
+      |> Enum.map_join("", fn block -> block["text"] || "" end)
+
+    usage = body["usage"] || %{}
+
+    {:ok,
+     %{
+       content: content,
+       usage: usage,
+       model: model
+     }}
+  end
+
+  defp parse_completion_response(_body, _model) do
+    {:error, "Invalid response format"}
+  end
+
+  # Helper functions
+
+  defp get_api_key(opts) do
+    Keyword.get(opts, :api_key) || Config.api_key("anthropic")
+  end
+
+  defp maybe_add_temperature(body, opts) do
+    case Keyword.get(opts, :temperature) do
+      nil -> body
+      temp -> Map.put(body, "temperature", temp)
+    end
+  end
+
+  defp maybe_add_system_prompt(body, opts) do
+    case Keyword.get(opts, :system) do
+      nil -> body
+      system -> Map.put(body, "system", system)
+    end
+  end
+
+  defp maybe_add_tools(body, opts) do
+    case Keyword.get(opts, :tools) do
+      nil -> body
+      tools -> Map.put(body, "tools", tools)
+    end
+  end
+
+  defp format_error(body) when is_map(body) do
+    error = body["error"] || %{}
+    error["message"] || inspect(body)
+  end
+
+  defp format_error(body), do: inspect(body)
+end

@@ -1,8 +1,8 @@
 defmodule Mana.Application do
   @moduledoc """
-  Application supervisor for the Mana plugin system.
+  OTP Application module for the Mana plugin system.
 
-  Starts the plugin manager and any other required services.
+  Starts the supervision tree with all core GenServers.
   """
 
   use Application
@@ -12,10 +12,19 @@ defmodule Mana.Application do
   @impl true
   def start(_type, _args) do
     children =
-      if Application.get_env(:mana, :start_manager, true) do
+      if Application.get_env(:mana, :auto_start, true) do
         [
-          # Plugin manager - the core service
-          Mana.Plugin.Manager
+          # Supervision tree start order:
+          # 1. Config.Store — needed by everything
+          # 2. Plugin.Manager — hooks for lifecycle
+          # 3. Callbacks.Registry — callback dispatch
+          # 4. MessageBus — message routing
+          # 5. Shell.Executor — shell command execution
+          {Mana.Config.Store, []},
+          {Mana.Plugin.Manager, []},
+          {Mana.Callbacks.Registry, []},
+          {Mana.MessageBus, []},
+          {Mana.Shell.Executor, []}
         ]
       else
         []
