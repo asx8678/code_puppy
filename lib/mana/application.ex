@@ -24,7 +24,19 @@ defmodule Mana.Application do
           {Mana.Plugin.Manager, []},
           {Mana.Callbacks.Registry, []},
           {Mana.MessageBus, []},
-          {Mana.Shell.Executor, []}
+          {Mana.Shell.Executor, []},
+          # 6. Models.Registry — provider dispatch
+          {Mana.Models.Registry, []},
+          # 7. Commands.Registry — slash command dispatch
+          {Mana.Commands.Registry, []},
+          # 8. Session.Store — session history
+          {Mana.Session.Store, []},
+          # 9. Agents.Registry — agent discovery
+          {Mana.Agents.Registry, []},
+          # 10. Agents.RunSupervisor — supervised agent runs
+          {Mana.Agents.RunSupervisor, []},
+          # 11. RateLimiter — per-model rate limiting
+          {Mana.RateLimiter, []}
         ]
       else
         []

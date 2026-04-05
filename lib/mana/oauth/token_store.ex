@@ -49,10 +49,14 @@ defmodule Mana.OAuth.TokenStore do
 
     case File.mkdir_p(dir) do
       :ok ->
+        # Restrict directory permissions to owner-only (0700)
+        File.chmod(dir, 0o700)
         path = Path.join(dir, "#{provider}.json")
 
         case File.write(path, Jason.encode!(tokens, pretty: true)) do
           :ok ->
+            # Restrict permissions to owner-only (0600) for security
+            File.chmod(path, 0o600)
             Logger.debug("Saved tokens for provider '#{provider}' to #{path}")
             :ok
 

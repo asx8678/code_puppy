@@ -164,9 +164,21 @@ defmodule Mana.Commands.Core do
 
     @impl true
     def execute([key, value], _context) do
-      key_atom = String.to_atom(key)
-      :ok = ConfigStore.put(key_atom, value)
-      {:ok, "Set #{key} to #{value}"}
+      key_atom =
+        try do
+          String.to_existing_atom(key)
+        rescue
+          ArgumentError ->
+            # Only allow known config keys to prevent atom table exhaustion
+            nil
+        end
+
+      if is_nil(key_atom) do
+        {:error, "Unknown config key: #{key}. Use /show to see available keys."}
+      else
+        :ok = ConfigStore.put(key_atom, value)
+        {:ok, "Set #{key} to #{value}"}
+      end
     end
 
     def execute(_args, _context) do
@@ -189,13 +201,23 @@ defmodule Mana.Commands.Core do
 
     @impl true
     def execute([key], _context) do
-      key_atom = String.to_atom(key)
-      value = ConfigStore.get(key_atom, nil)
+      key_atom =
+        try do
+          String.to_existing_atom(key)
+        rescue
+          ArgumentError -> nil
+        end
 
-      if value == nil do
-        {:ok, "#{key} is not set"}
+      if is_nil(key_atom) do
+        {:ok, "#{key} is not a known config key"}
       else
-        {:ok, "#{key} = #{inspect(value)}"}
+        value = ConfigStore.get(key_atom, nil)
+
+        if value == nil do
+          {:ok, "#{key} is not set"}
+        else
+          {:ok, "#{key} = #{inspect(value)}"}
+        end
       end
     end
 

@@ -399,12 +399,21 @@ defmodule Mana.Session.Store do
   end
 
   defp normalize_message_keys(message) when is_map(message) do
-    %{
-      role: message["role"],
-      content: message["content"],
-      timestamp: message["timestamp"]
+    base = %{
+      role: message["role"] || message[:role],
+      content: message["content"] || message[:content],
+      timestamp: message["timestamp"] || message[:timestamp]
     }
+
+    # Preserve tool-related fields if present
+    base
+    |> maybe_put(:tool_calls, message["tool_calls"] || message[:tool_calls])
+    |> maybe_put(:tool_call_id, message["tool_call_id"] || message[:tool_call_id])
+    |> maybe_put(:name, message["name"] || message[:name])
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp normalize_message_keys(_), do: %{role: nil, content: nil, timestamp: nil}
 end

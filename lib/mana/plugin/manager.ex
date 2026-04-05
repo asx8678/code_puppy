@@ -635,7 +635,7 @@ defmodule Mana.Plugin.Manager do
   defp register_hooks(hooks, plugin_name, existing_hooks) do
     Enum.reduce(hooks, existing_hooks, fn {hook, func}, acc ->
       func_with_metadata = {func, plugin_name}
-      Map.update(acc, hook, [func_with_metadata], &[func_with_metadata | &1])
+      Map.update(acc, hook, [func_with_metadata], &(&1 ++ [func_with_metadata]))
     end)
   end
 
