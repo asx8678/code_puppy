@@ -112,6 +112,22 @@ defmodule Mana.Tools.Registry do
     GenServer.call(__MODULE__, :get_stats)
   end
 
+  @doc """
+  Lists all registered tool names (alias for list_tools/0).
+  """
+  @spec list() :: [String.t()]
+  def list do
+    list_tools()
+  end
+
+  @doc """
+  Returns tool definitions for all registered tools.
+  """
+  @spec get_definitions() :: [map()]
+  def get_definitions do
+    GenServer.call(__MODULE__, :tool_definitions)
+  end
+
   # Server Callbacks
 
   @impl true

@@ -121,7 +121,7 @@ defmodule Mana.Callbacks do
       Mana.Callbacks.clear(:startup)
       :ok
   """
-  @spec clear(atom()) :: :ok | {:error, term()}
+  @spec clear(atom()) :: :ok
   def clear(phase) do
     Registry.clear(phase)
   end
@@ -137,6 +137,32 @@ defmodule Mana.Callbacks do
   @spec dispatch(atom(), list()) :: {:ok, list()} | {:error, term()}
   def dispatch(phase, args \\ []) do
     Registry.dispatch(phase, args)
+  end
+
+  @doc """
+  Triggers callbacks for a phase (alias for dispatch/2).
+
+  ## Examples
+
+      Mana.Callbacks.trigger(:startup, [])
+      {:ok, [:ok, :ok]}
+  """
+  @spec trigger(atom(), list()) :: {:ok, list()} | {:error, term()}
+  def trigger(phase, args \\ []) do
+    Registry.dispatch(phase, args)
+  end
+
+  @doc """
+  Returns all callbacks registered for a phase.
+
+  ## Examples
+
+      Mana.Callbacks.get_callbacks(:startup)
+      [&MyMod.on_startup/0]
+  """
+  @spec get_callbacks(atom()) :: list(fun())
+  def get_callbacks(phase) do
+    Registry.get_callbacks(phase)
   end
 
   @doc """

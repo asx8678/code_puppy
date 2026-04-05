@@ -20,6 +20,12 @@ defmodule Mana.Config.Paths do
   """
 
   @doc """
+  Returns the home configuration directory path (alias for config_dir/0).
+  """
+  @spec home_dir() :: String.t()
+  def home_dir, do: config_dir()
+
+  @doc """
   Returns the configuration directory path.
 
   Uses `XDG_CONFIG_HOME/mana` if set, otherwise falls back to `~/.mana/`.

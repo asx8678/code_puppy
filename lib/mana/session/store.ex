@@ -67,11 +67,19 @@ defmodule Mana.Session.Store do
   end
 
   @doc """
-  Creates a new session and returns its ID.
+  Creates a new session and returns its ID (alias for create_session/0).
   """
   @spec create_session() :: String.t()
   def create_session do
     GenServer.call(__MODULE__, :create_session)
+  end
+
+  @doc """
+  Gets a session by ID, returning its message history (alias for get_history/1).
+  """
+  @spec get_session(String.t()) :: [map()]
+  def get_session(session_id) do
+    get_history(session_id)
   end
 
   @doc """

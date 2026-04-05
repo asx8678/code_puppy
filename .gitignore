@@ -63,6 +63,9 @@ erl_crash.dump
 *.ez
 mana-*.tar
 
+# Dialyzer PLT files
+/priv/plts/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
