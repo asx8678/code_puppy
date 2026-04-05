@@ -282,7 +282,8 @@ defmodule Mana.OAuth.ClaudeCode do
 
   defp find_available_port do
     Enum.find(@callback_ports, fn port ->
-      case :gen_tcp.listen(port, [:binary, active: false]) do
+      # Bind to localhost only for security (not 0.0.0.0)
+      case :gen_tcp.listen(port, [{:ip, {127, 0, 0, 1}}, :binary, active: false]) do
         {:ok, sock} ->
           :gen_tcp.close(sock)
           true
