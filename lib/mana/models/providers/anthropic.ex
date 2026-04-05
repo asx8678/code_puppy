@@ -230,7 +230,7 @@ defmodule Mana.Models.Providers.Anthropic do
 
   defp parse_content_block_start(event) do
     content_block = event["content_block"] || %{}
-    index = content_block["index"] || 0
+    index = event["index"] || 0
 
     case content_block["type"] do
       "text" -> [{:part_start, :content}]

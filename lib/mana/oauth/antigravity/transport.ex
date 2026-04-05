@@ -345,10 +345,9 @@ defmodule Mana.OAuth.Antigravity.Transport do
   defp parse_sse_event(%{"type" => "message_start"}), do: []
   defp parse_sse_event(%{"type" => "message_stop"}), do: [{:part_end, 0, %{}}]
 
-  defp parse_sse_event(%{"type" => "content_block_start", "content_block" => block}) do
-    index = block["index"] || 0
+  defp parse_sse_event(%{"type" => "content_block_start", "index" => index, "content_block" => block}) do
     type = block["type"] || "text"
-    [{:part_start, index, safe_block_type(type), %{}}]
+    [{:part_start, index || 0, safe_block_type(type), %{}}]
   end
 
   defp parse_sse_event(%{"type" => "content_block_stop", "index" => index}) do
