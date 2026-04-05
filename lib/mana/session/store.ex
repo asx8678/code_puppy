@@ -164,15 +164,19 @@ defmodule Mana.Session.Store do
     # Ensure directories exist
     Paths.ensure_dirs()
 
-    # Load existing sessions from disk
+    # Defer disk I/O to handle_continue so init doesn't block
+    {:ok, %{sessions: %{}, active_session: nil}, {:continue, :load_sessions}}
+  end
+
+  @impl true
+  def handle_continue(:load_sessions, state) do
     sessions = load_all_sessions()
 
-    # Populate ETS
     Enum.each(sessions, fn {id, messages} ->
       :ets.insert(@table, {id, messages})
     end)
 
-    {:ok, %{sessions: sessions, active_session: nil}}
+    {:noreply, %{state | sessions: sessions}}
   end
 
   @impl true
@@ -289,6 +293,12 @@ defmodule Mana.Session.Store do
       end
 
     {:reply, :ok, %{state | active_session: valid_session}}
+  end
+
+  @impl true
+  def handle_info(msg, state) do
+    Logger.warning("[Mana.Session.Store] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
   end
 
   # Private Functions
@@ -408,8 +418,5 @@ defmodule Mana.Session.Store do
   defp normalize_message_keys(_), do: %{role: nil, content: nil, timestamp: nil}
 
   defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
-end
-l), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end
