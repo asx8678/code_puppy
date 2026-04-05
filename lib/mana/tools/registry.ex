@@ -33,6 +33,20 @@ defmodule Mana.Tools.Registry do
 
   require Logger
 
+  # List of expected tool modules that should be registered at startup
+  @expected_tools [
+    Mana.Tools.FileOps.ListFiles,
+    Mana.Tools.FileOps.ReadFile,
+    Mana.Tools.FileOps.Grep,
+    Mana.Tools.FileEdit.CreateFile,
+    Mana.Tools.FileEdit.ReplaceInFile,
+    Mana.Tools.FileEdit.DeleteFile,
+    Mana.Tools.AgentTools.ListAgents,
+    Mana.Tools.AgentTools.InvokeAgent,
+    Mana.Tools.AgentTools.AskUser,
+    Mana.Tools.ShellExec
+  ]
+
   # Client API
 
   @doc """
@@ -137,8 +151,11 @@ defmodule Mana.Tools.Registry do
       stats: %{calls: 0, errors: 0}
     }
 
-    # Register stub tools for Phase 1
-    state = register_stub_tools(state)
+    # Register real tool implementations
+    state = register_real_tools(state)
+
+    # Verify all expected tools are registered
+    verify_tools_registered!(state)
 
     {:ok, state}
   end
@@ -244,24 +261,21 @@ defmodule Mana.Tools.Registry do
 
   # Private Functions
 
-  defp behaviour_implemented?(module) do
-    Code.ensure_loaded?(module) and
-      function_exported?(module, :name, 0) and
-      function_exported?(module, :description, 0) and
-      function_exported?(module, :parameters, 0) and
-      function_exported?(module, :execute, 1)
-  end
-
-  defp register_stub_tools(state) do
-    stub_tools = [
-      Mana.Tools.Stubs.ListFiles,
-      Mana.Tools.Stubs.ReadFile,
-      Mana.Tools.Stubs.WriteFile,
-      Mana.Tools.Stubs.EditFile,
-      Mana.Tools.Stubs.RunShellCommand
+  defp register_real_tools(state) do
+    real_tools = [
+      Mana.Tools.FileOps.ListFiles,
+      Mana.Tools.FileOps.ReadFile,
+      Mana.Tools.FileOps.Grep,
+      Mana.Tools.FileEdit.CreateFile,
+      Mana.Tools.FileEdit.ReplaceInFile,
+      Mana.Tools.FileEdit.DeleteFile,
+      Mana.Tools.AgentTools.ListAgents,
+      Mana.Tools.AgentTools.InvokeAgent,
+      Mana.Tools.AgentTools.AskUser,
+      Mana.Tools.ShellExec
     ]
 
-    Enum.reduce(stub_tools, state, fn module, acc_state ->
+    Enum.reduce(real_tools, state, fn module, acc_state ->
       if behaviour_implemented?(module) do
         tool_name = module.name()
 
@@ -273,8 +287,31 @@ defmodule Mana.Tools.Registry do
 
         %{acc_state | tools: Map.put(acc_state.tools, tool_name, tool_info)}
       else
+        Logger.warning("Tool #{inspect(module)} does not implement Behaviour, skipping")
         acc_state
       end
     end)
+  end
+
+  defp verify_tools_registered!(state) do
+    registered = Map.keys(state.tools) |> MapSet.new()
+    expected = Enum.map(@expected_tools, & &1.name()) |> MapSet.new()
+    missing = MapSet.difference(expected, registered)
+
+    if MapSet.size(missing) > 0 do
+      missing_list = MapSet.to_list(missing) |> Enum.join(", ")
+      Logger.error("Tools.Registry: Missing expected tools: #{missing_list}")
+      raise "Tool registration incomplete: #{missing_list}"
+    else
+      Logger.info("Tools.Registry: All #{map_size(state.tools)} expected tools registered successfully")
+    end
+  end
+
+  defp behaviour_implemented?(module) do
+    Code.ensure_loaded?(module) and
+      function_exported?(module, :name, 0) and
+      function_exported?(module, :description, 0) and
+      function_exported?(module, :parameters, 0) and
+      function_exported?(module, :execute, 1)
   end
 end
