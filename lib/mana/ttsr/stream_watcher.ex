@@ -24,7 +24,8 @@ defmodule Mana.TTSR.StreamWatcher do
     tool_buffer: "",
     current_turn: 0,
     triggered_rules: MapSet.new(),
-    last_activity: nil
+    last_activity: nil,
+    byte_buffer: <<>>
   ]
 
   @typedoc "StreamWatcher state"
@@ -37,7 +38,8 @@ defmodule Mana.TTSR.StreamWatcher do
           tool_buffer: String.t(),
           current_turn: non_neg_integer(),
           triggered_rules: MapSet.t(String.t()),
-          last_activity: DateTime.t() | nil
+          last_activity: DateTime.t() | nil,
+          byte_buffer: binary()
         }
 
   # Client API
@@ -165,7 +167,7 @@ defmodule Mana.TTSR.StreamWatcher do
 
   def handle_cast(:increment_turn, state) do
     # Reset buffers and increment turn
-    {:noreply, %{state | current_turn: state.current_turn + 1, text_buffer: "", thinking_buffer: "", tool_buffer: ""}}
+    {:noreply, %{state | current_turn: state.current_turn + 1, text_buffer: "", thinking_buffer: "", tool_buffer: "", byte_buffer: <<>>}}
   end
 
   @impl true
@@ -239,7 +241,46 @@ defmodule Mana.TTSR.StreamWatcher do
     end)
   end
 
-  defp handle_stream_content(state, scope, content) do
+  # Splits binary into {valid_utf8_prefix, trailing_incomplete_bytes}
+  # This handles the case where an SSE chunk boundary falls in the middle
+  # of a multi-byte UTF-8 codepoint.
+  @doc false
+  defp split_valid_utf8(bin) when is_binary(bin) do
+    if String.valid?(bin) do
+      {bin, <<>>}
+    else
+      trim_invalid_trailing(bin)
+    end
+  end
+
+  defp trim_invalid_trailing(bin) do
+    size = byte_size(bin)
+    # UTF-8 codepoints are max 4 bytes, so check last 1-4 bytes
+    trim =
+      Enum.find(1..min(4, size), fn n ->
+        prefix = binary_part(bin, 0, size - n)
+        String.valid?(prefix)
+      end)
+
+    case trim do
+      nil ->
+        # Entire binary is invalid — buffer it all
+        {"", bin}
+
+      n ->
+        prefix = binary_part(bin, 0, size - n)
+        suffix = binary_part(bin, size - n, n)
+        {prefix, suffix}
+    end
+  end
+
+  defp handle_stream_content(state, scope, content) when is_binary(content) do
+    # Prepend any leftover bytes from previous chunk
+    full_content = state.byte_buffer <> content
+
+    # Split into valid UTF-8 prefix + possibly-incomplete trailing bytes
+    {valid, remainder} = split_valid_utf8(full_content)
+
     buffer_key =
       case scope do
         :thinking -> :thinking_buffer
@@ -250,16 +291,21 @@ defmodule Mana.TTSR.StreamWatcher do
     buffer = Map.get(state, buffer_key, "")
 
     {new_buffer, new_rules} =
-      Enum.reduce(String.graphemes(content), {buffer, state.rules}, fn char, {buf, rules} ->
-        updated_buffer = push_to_buffer(buf, char)
-        checked_rules = check_rules_for_scope(rules, updated_buffer, scope, state.current_turn)
-        {updated_buffer, checked_rules}
-      end)
+      if valid == "" do
+        {buffer, state.rules}
+      else
+        Enum.reduce(String.graphemes(valid), {buffer, state.rules}, fn char, {buf, rules} ->
+          updated_buffer = push_to_buffer(buf, char)
+          checked_rules = check_rules_for_scope(rules, updated_buffer, scope, state.current_turn)
+          {updated_buffer, checked_rules}
+        end)
+      end
 
     new_state =
       state
       |> Map.put(buffer_key, new_buffer)
       |> Map.put(:rules, new_rules)
+      |> Map.put(:byte_buffer, remainder)
 
     {:noreply, new_state}
   end
