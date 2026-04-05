@@ -300,8 +300,12 @@ defmodule Mana.Tools.Registry do
   defp verify_tools_registered! do
     registered =
       case :ets.whereis(@table) do
-        :undefined -> MapSet.new()
-        _table -> :ets.select(@table, [{{:"$1", :_}, [], [:"$1"]}]) |> MapSet.new()
+        :undefined ->
+          MapSet.new()
+
+        _table ->
+          tool_names = :ets.select(@table, [{{:"$1", :_}, [], [:"$1"]}])
+          MapSet.new(tool_names)
       end
 
     expected = Enum.map(@expected_tools, & &1.name()) |> MapSet.new()

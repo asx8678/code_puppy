@@ -120,16 +120,16 @@ defmodule Mana.TTSR.WatcherCleanup do
     Registry.select(Mana.TTSR.Registry, [
       {{:"$1", :"$2", :"$3"}, [], [{{:"$1", :"$2"}}]}
     ])
-    |> Enum.filter(fn {_session_id, pid} ->
-      stale_pid?(pid, now, threshold_seconds)
+    |> Enum.filter(fn {session_id, pid} ->
+      stale_session?(session_id, pid, now, threshold_seconds)
     end)
     |> Enum.map(fn {session_id, _pid} -> session_id end)
   end
 
-  defp stale_pid?(pid, now, threshold_seconds) do
+  defp stale_session?(session_id, pid, now, threshold_seconds) do
     case Process.alive?(pid) do
       true ->
-        last_activity = StreamWatcher.get_last_activity(pid)
+        last_activity = StreamWatcher.get_last_activity(session_id)
         stale?(last_activity, now, threshold_seconds)
 
       false ->
@@ -173,18 +173,18 @@ defmodule Mana.TTSR.WatcherCleanup do
     %{active: active, stale: stale}
   end
 
-  defp count_watcher({_session_id, pid}, {active_acc, stale_acc}, now, threshold_seconds) do
+  defp count_watcher({session_id, pid}, {active_acc, stale_acc}, now, threshold_seconds) do
     case Process.alive?(pid) do
       true ->
-        count_active_watcher(pid, active_acc, stale_acc, now, threshold_seconds)
+        count_active_watcher(session_id, active_acc, stale_acc, now, threshold_seconds)
 
       false ->
         {active_acc, stale_acc + 1}
     end
   end
 
-  defp count_active_watcher(pid, active_acc, stale_acc, now, threshold_seconds) do
-    last_activity = StreamWatcher.get_last_activity(pid)
+  defp count_active_watcher(session_id, active_acc, stale_acc, now, threshold_seconds) do
+    last_activity = StreamWatcher.get_last_activity(session_id)
 
     if stale?(last_activity, now, threshold_seconds) do
       {active_acc, stale_acc + 1}

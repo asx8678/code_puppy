@@ -130,7 +130,7 @@ defmodule Mana.Session.Store do
   @doc """
   Loads a session from disk.
   """
-  @spec load(String.t()) :: :ok | {:error, term()}
+  @spec load(String.t()) :: {:ok, [map()]} | {:error, term()}
   def load(session_id) do
     GenServer.call(__MODULE__, {:load, session_id})
   end
