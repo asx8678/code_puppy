@@ -202,6 +202,12 @@ defmodule Mana.Commands.Registry do
     {:reply, stats, state}
   end
 
+  @impl true
+  def handle_info(msg, state) do
+    Logger.debug("[Mana.Commands.Registry] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
   # Private Functions
 
   defp validate_and_register(command_module, state) do

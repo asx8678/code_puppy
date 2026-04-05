@@ -90,6 +90,13 @@ defmodule Mana.TTSR.WatcherCleanup do
   end
 
   @impl true
+  def handle_info(msg, state) do
+    Logger.debug("[Mana.TTSR.WatcherCleanup] Unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
+  # Private Functions
+  @impl true
   def handle_call(:stats, _from, state) do
     stats = gather_stats(state.inactivity_threshold_seconds)
     {:reply, stats, state}
