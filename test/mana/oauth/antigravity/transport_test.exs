@@ -130,9 +130,9 @@ defmodule Mana.OAuth.Antigravity.TransportTest do
       data = """
       data: {"type": "message_start"}
 
-      data: {"type": "content_block_start", "content_block": {"index": 0, "type": "text"}}
+      data: {"type": "content_block_start", "index": 0, "content_block": {"type": "text"}}
 
-      data: {"type": "content_block_delta", "delta": {"index": 0, "text": "Hello"}}
+      data: {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hello"}}
 
       data: {"type": "content_block_stop", "index": 0}
 
@@ -203,11 +203,30 @@ defmodule Mana.OAuth.Antigravity.TransportTest do
     end
 
     test "parses content_block_start events" do
-      data = "data: {\"type\": \"content_block_start\", \"content_block\": {\"index\": 2, \"type\": \"thinking\"}}\n\n"
+      # Index is at event level, not inside content_block (per Anthropic API spec)
+      data = "data: {\"type\": \"content_block_start\", \"index\": 2, \"content_block\": {\"type\": \"thinking\"}}\n\n"
 
       {events, _} = Transport.process_sse_data(data)
 
       assert {:part_start, 2, :thinking, %{}} in events
+    end
+
+    test "parses multi-tool-call streaming with correct indices" do
+      # Simulate multi-tool-call response with indices at event level
+      data = """
+      data: {"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": "tool_1", "name": "search"}}
+
+      data: {"type": "content_block_start", "index": 1, "content_block": {"type": "tool_use", "id": "tool_2", "name": "calculator"}}
+
+      data: {"type": "content_block_start", "index": 2, "content_block": {"type": "text"}}
+
+      """
+
+      {events, _} = Transport.process_sse_data(data)
+
+      assert {:part_start, 0, :tool_use, %{}} in events
+      assert {:part_start, 1, :tool_use, %{}} in events
+      assert {:part_start, 2, :text, %{}} in events
     end
 
     test "parses content_block_stop events" do
