@@ -46,16 +46,17 @@ defmodule Mana.Models.Providers.Ollama do
   @impl true
   def complete(messages, model, opts \\ []) do
     base_url = Keyword.get(opts, :base_url, @default_base_url)
-    api_key = Keyword.get(opts, :api_key)
 
     # Strip "ollama/" prefix from model name if present
     clean_model = strip_ollama_prefix(model)
 
     # Delegate to OpenAICompatible with Ollama base URL
+    # Ollama doesn't require an API key, but OpenAI provider validates it,
+    # so we pass a dummy key that won't be used
     opts =
       opts
       |> Keyword.put(:base_url, base_url)
-      |> Keyword.put_new(:api_key, api_key)
+      |> Keyword.put_new(:api_key, "not-needed")
 
     OpenAICompatible.complete(messages, clean_model, opts)
   end
@@ -63,16 +64,17 @@ defmodule Mana.Models.Providers.Ollama do
   @impl true
   def stream(messages, model, opts \\ []) do
     base_url = Keyword.get(opts, :base_url, @default_base_url)
-    api_key = Keyword.get(opts, :api_key)
 
     # Strip "ollama/" prefix from model name if present
     clean_model = strip_ollama_prefix(model)
 
     # Delegate to OpenAICompatible with Ollama base URL
+    # Ollama doesn't require an API key, but OpenAI provider validates it,
+    # so we pass a dummy key that won't be used
     opts =
       opts
       |> Keyword.put(:base_url, base_url)
-      |> Keyword.put_new(:api_key, api_key)
+      |> Keyword.put_new(:api_key, "not-needed")
 
     OpenAICompatible.stream(messages, clean_model, opts)
   end
