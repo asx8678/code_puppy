@@ -203,18 +203,8 @@ defmodule Mana.Session.Store do
         [] -> []
       end
 
-    # Normalize message keys and add timestamp, preserving tool fields
-    normalized = %{
-      role: message[:role] || message["role"],
-      content: message[:content] || message["content"]
-    }
-
-    # Preserve tool-related fields if present
-    normalized =
-      normalized
-      |> maybe_put(:tool_calls, message[:tool_calls] || message["tool_calls"])
-      |> maybe_put(:tool_call_id, message[:tool_call_id] || message["tool_call_id"])
-      |> maybe_put(:name, message[:name] || message["name"])
+    # Normalize message keys via Mana.Message, preserving all fields
+    normalized = Mana.Message.normalize_keys(message)
 
     message_with_timestamp =
       Map.put(normalized, :timestamp, System.system_time(:millisecond))
@@ -352,7 +342,7 @@ defmodule Mana.Session.Store do
 
   defp decode_messages(contents) do
     case Jason.decode(contents) do
-      {:ok, data} when is_list(data) -> Enum.map(data, &normalize_message_keys/1)
+      {:ok, data} when is_list(data) -> Mana.Message.normalize_list(data)
       _ -> []
     end
   end
@@ -396,9 +386,8 @@ defmodule Mana.Session.Store do
       {:ok, contents} ->
         case Jason.decode(contents) do
           {:ok, messages} when is_list(messages) ->
-            # Normalize keys to atoms
-            normalized = Enum.map(messages, &normalize_message_keys/1)
-            {:ok, normalized}
+            # Normalize keys to atoms via Mana.Message
+            {:ok, Mana.Message.normalize_list(messages)}
 
           _ ->
             {:error, :invalid_format}
@@ -408,23 +397,4 @@ defmodule Mana.Session.Store do
         {:error, reason}
     end
   end
-
-  defp normalize_message_keys(message) when is_map(message) do
-    base = %{
-      role: message["role"] || message[:role],
-      content: message["content"] || message[:content],
-      timestamp: message["timestamp"] || message[:timestamp]
-    }
-
-    # Preserve tool-related fields if present
-    base
-    |> maybe_put(:tool_calls, message["tool_calls"] || message[:tool_calls])
-    |> maybe_put(:tool_call_id, message["tool_call_id"] || message[:tool_call_id])
-    |> maybe_put(:name, message["name"] || message[:name])
-  end
-
-  defp normalize_message_keys(_), do: %{role: nil, content: nil, timestamp: nil}
-
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

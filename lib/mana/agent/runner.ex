@@ -396,7 +396,7 @@ defmodule Mana.Agent.Runner do
     end
   end
 
-  defp process_stream(stream, handler_module, handler, session_id) do
+  defp process_stream(stream, handler_module, handler, _session_id) do
     result =
       Enum.reduce(stream, {[], "", []}, fn event, {evts, content, tc} = acc ->
         case event do
@@ -404,35 +404,17 @@ defmodule Mana.Agent.Runner do
             part_id = generate_part_id()
             {:ok, _new_handler} = handler_module.handle_part_start(handler, part_id, type, meta)
 
-            Callbacks.dispatch(:stream_event, [
-              :part_start,
-              %{part_id: part_id, type: type, metadata: meta},
-              session_id
-            ])
-
             {evts ++ [{:part_start, part_id, type, meta}], content, tc}
 
           {:part_delta, _type, delta_content} ->
             part_id = get_current_part_id(handler)
             {:ok, _new_handler} = handler_module.handle_part_delta(handler, part_id, delta_content)
 
-            Callbacks.dispatch(:stream_event, [
-              :part_delta,
-              %{part_id: part_id, content: delta_content},
-              session_id
-            ])
-
             {evts ++ [{:part_delta, part_id, delta_content}], content <> delta_content, tc}
 
           {:part_end, _type} ->
             part_id = get_current_part_id(handler)
             {:ok, _new_handler} = handler_module.handle_part_end(handler, part_id, %{})
-
-            Callbacks.dispatch(:stream_event, [
-              :part_end,
-              %{part_id: part_id},
-              session_id
-            ])
 
             {evts ++ [{:part_end, part_id}], content, tc}
 
@@ -539,10 +521,10 @@ defmodule Mana.Agent.Runner do
   end
 
   # Tool call parsing helpers - handle different API formats
-  defp get_tool_name(%{"function" => %{"name" => name}}), do: name
   defp get_tool_name(%{function: %{name: name}}), do: name
-  defp get_tool_name(%{"name" => name}), do: name
+  defp get_tool_name(%{"function" => %{"name" => name}}), do: name
   defp get_tool_name(%{name: name}), do: name
+  defp get_tool_name(%{"name" => name}), do: name
   defp get_tool_name(_), do: "unknown"
 
   defp get_tool_args(tool_call) when is_map(tool_call) do
@@ -552,10 +534,10 @@ defmodule Mana.Agent.Runner do
 
   defp get_tool_args(_), do: %{}
 
-  defp extract_raw_args(%{"function" => %{"arguments" => args}}), do: args
   defp extract_raw_args(%{function: %{arguments: args}}), do: args
-  defp extract_raw_args(%{"arguments" => args}), do: args
+  defp extract_raw_args(%{"function" => %{"arguments" => args}}), do: args
   defp extract_raw_args(%{arguments: args}), do: args
+  defp extract_raw_args(%{"arguments" => args}), do: args
   defp extract_raw_args(_), do: "{}"
 
   defp parse_args(args) when is_binary(args) do
@@ -567,7 +549,7 @@ defmodule Mana.Agent.Runner do
 
   defp parse_args(args), do: args || %{}
 
-  defp get_tool_call_id(%{"id" => id}), do: id
   defp get_tool_call_id(%{id: id}), do: id
+  defp get_tool_call_id(%{"id" => id}), do: id
   defp get_tool_call_id(_), do: generate_part_id()
 end

@@ -291,7 +291,7 @@ defmodule Mana.Models.Providers.OpenAI do
         {:ok,
          %{
            content: content,
-           tool_calls: tool_calls,
+           tool_calls: Mana.Message.normalize_keys(tool_calls),
            usage: usage,
            model: model
          }}

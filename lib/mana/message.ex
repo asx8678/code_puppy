@@ -94,6 +94,70 @@ defmodule Mana.Message do
     raise ArgumentError, "Unknown message category: #{inspect(category)}"
   end
 
+  # ---------------------------------------------------------------------------
+  # Key normalization
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Normalizes message map keys from strings to atoms.
+
+  Called at ingestion boundaries (JSON decode, session load, provider response
+  parsing) to ensure consistent atom-keyed maps throughout the internal pipeline.
+
+  Handles nested structures: `tool_calls` lists and `function` maps are
+  recursively normalized.
+
+  ## Examples
+
+      iex> Mana.Message.normalize_keys(%{"role" => "user", "content" => "hi"})
+      %{role: "user", content: "hi"}
+
+      iex> Mana.Message.normalize_keys(%{role: "user", content: "hi"})
+      %{role: "user", content: "hi"}
+  """
+  @spec normalize_keys(map()) :: map()
+  def normalize_keys(%{} = msg) do
+    msg
+    |> Map.new(fn
+      {k, v} when is_binary(k) -> {String.to_atom(k), v}
+      pair -> pair
+    end)
+    |> maybe_normalize_nested()
+  end
+
+  @spec normalize_keys(list()) :: list()
+  def normalize_keys(list) when is_list(list), do: Enum.map(list, &normalize_keys/1)
+
+  @spec normalize_keys(any()) :: any()
+  def normalize_keys(other), do: other
+
+  defp maybe_normalize_nested(%{tool_calls: calls} = msg) when is_list(calls) do
+    %{msg | tool_calls: Enum.map(calls, &normalize_keys/1)}
+  end
+
+  defp maybe_normalize_nested(%{function: %{} = func} = msg) do
+    %{msg | function: normalize_keys(func)}
+  end
+
+  defp maybe_normalize_nested(msg), do: msg
+
+  @doc """
+  Normalizes a list of messages, applying `normalize_keys/1` to each.
+
+  Convenience function for use at ingestion boundaries that receive a list
+  of messages (e.g., session loading from disk).
+
+  ## Examples
+
+      iex> messages = [%{"role" => "user"}, %{"role" => "assistant"}]
+      iex> Mana.Message.normalize_list(messages)
+      [%{role: "user"}, %{role: "assistant"}]
+  """
+  @spec normalize_list([map()]) :: [map()]
+  def normalize_list(messages) when is_list(messages) do
+    Enum.map(messages, &normalize_keys/1)
+  end
+
   @doc """
   Generates a UUID v4 string.
 
