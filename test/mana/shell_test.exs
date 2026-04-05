@@ -10,14 +10,12 @@ defmodule Mana.ShellTest do
   alias Mana.Shell.Result
 
   setup do
+    # Start Callbacks.Registry with proper cleanup for tests
+    start_supervised!({Registry, max_backlog_size: 10, backlog_ttl: 1_000})
+
     # Start required GenServers with proper error handling
     case Store.start_link() do
       {:ok, _store} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
-    end
-
-    case Registry.start_link() do
-      {:ok, _registry} -> :ok
       {:error, {:already_started, _pid}} -> :ok
     end
 
@@ -27,14 +25,8 @@ defmodule Mana.ShellTest do
       {:error, {:already_started, _pid}} -> :ok
     end
 
-    # Initialize plugin manager
-    case Manager.start_link() do
-      {:ok, _manager} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
-    end
-
-    # Clear any existing callbacks to ensure clean state
-    Registry.clear(:run_shell_command)
+    # Initialize plugin manager (now delegates to Callbacks for hook handling)
+    start_supervised!({Manager, config: [plugins: []]})
 
     # Kill any running processes
     Mana.Shell.kill_all()
