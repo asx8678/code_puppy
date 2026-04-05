@@ -72,5 +72,14 @@ config :mana, :dangerous_command_patterns, [
   ~r/format\s/i
 ]
 
+# Agent Modules Configuration
+# Register concrete agent definitions that implement Mana.Agent behaviour
+config :mana,
+  agent_modules: [
+    Mana.Agents.Definitions.Assistant,
+    Mana.Agents.Definitions.Coder,
+    Mana.Agents.Definitions.Reviewer
+  ]
+
 # Import environment-specific config
 import_config "#{config_env()}.exs"
