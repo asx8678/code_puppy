@@ -145,17 +145,23 @@ defmodule Mana.Models.Settings do
   # Capability detection
 
   defp anthropic_supports_tools?(name) do
-    # Claude 3+ supports tools
+    # Claude 3+ and Claude 4+ support tools
+    # Handles both "claude-3-...", "claude-4-..." and "...-4-5", "...-4-6" patterns
     String.starts_with?(name, "claude-3") or
-      String.starts_with?(name, "claude-2.1")
+      String.starts_with?(name, "claude-4") or
+      String.starts_with?(name, "claude-2.1") or
+      Regex.match?(~r/-4-\d+$/, name)
   end
 
   defp anthropic_supports_vision?(name) do
-    # Claude 3 Sonnet and Opus support vision
+    # Claude 3 and 4 Sonnet and Opus support vision
+    # Handles both "claude-3-...", "claude-4-..." and version suffix patterns
     String.contains?(name, "sonnet") or
       String.contains?(name, "opus") or
       String.contains?(name, "haiku") or
-      String.starts_with?(name, "claude-3")
+      String.starts_with?(name, "claude-3") or
+      String.starts_with?(name, "claude-4") or
+      Regex.match?(~r/-4-\d+$/, name)
   end
 
   defp openai_supports_tools?(name) do
@@ -165,14 +171,17 @@ defmodule Mana.Models.Settings do
   end
 
   defp openai_supports_vision?(name) do
-    # Vision models contain "vision" in the name
-    String.contains?(name, "vision")
+    # GPT-4o models have built-in vision, older models use "vision" suffix
+    String.starts_with?(name, "gpt-4o") or
+      String.contains?(name, "vision")
   end
 
   # Max tokens detection
 
   defp get_max_tokens_for_model(name, :anthropic) do
     cond do
+      # Claude 4.x models (prefix or suffix pattern like "claude-4-..." or "...-4-5")
+      String.starts_with?(name, "claude-4") or Regex.match?(~r/-4-\d+$/, name) -> 200_000
       String.contains?(name, "opus") -> 128_000
       String.contains?(name, "sonnet") -> 128_000
       String.contains?(name, "haiku") -> 48_000

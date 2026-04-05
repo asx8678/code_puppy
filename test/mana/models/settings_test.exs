@@ -18,6 +18,20 @@ defmodule Mana.Models.SettingsTest do
       assert settings.temperature == 0.7
     end
 
+    test "returns settings for Claude 4.x models" do
+      settings = Settings.make("claude-opus-4-6")
+
+      assert settings.provider == :anthropic
+      assert settings.model_name == "claude-opus-4-6"
+      assert settings.supports_tools == true
+      assert settings.supports_vision == true
+
+      settings2 = Settings.make("claude-sonnet-4-5")
+      assert settings2.provider == :anthropic
+      assert settings2.supports_tools == true
+      assert settings2.supports_vision == true
+    end
+
     test "returns settings for GPT models" do
       settings = Settings.make("gpt-4")
 
@@ -25,6 +39,18 @@ defmodule Mana.Models.SettingsTest do
       assert settings.model_name == "gpt-4"
       assert settings.supports_tools == true
       assert settings.supports_vision == false
+    end
+
+    test "returns settings for GPT-4o models with vision" do
+      settings = Settings.make("gpt-4o")
+
+      assert settings.provider == :openai
+      assert settings.model_name == "gpt-4o"
+      assert settings.supports_tools == true
+      assert settings.supports_vision == true
+
+      settings2 = Settings.make("gpt-4o-mini")
+      assert settings2.supports_vision == true
     end
 
     test "returns settings for GPT-4 Vision models" do
@@ -80,6 +106,14 @@ defmodule Mana.Models.SettingsTest do
     test "returns appropriate max_tokens for Claude Opus" do
       settings = Settings.make("claude-3-opus-20240229")
       assert settings.max_tokens == 128_000
+    end
+
+    test "returns appropriate max_tokens for Claude 4.x models" do
+      settings = Settings.make("claude-opus-4-6")
+      assert settings.max_tokens == 200_000
+
+      settings2 = Settings.make("claude-sonnet-4-5")
+      assert settings2.max_tokens == 200_000
     end
 
     test "returns appropriate max_tokens for GPT-4o" do
