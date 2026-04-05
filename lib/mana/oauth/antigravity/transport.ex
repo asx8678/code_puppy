@@ -20,6 +20,16 @@ defmodule Mana.OAuth.Antigravity.Transport do
   @default_timeout 120_000
   @default_receive_timeout 60_000
 
+  # Whitelist of known SSE content block types.
+  # String.to_atom on untrusted data exhausts the BEAM atom table (~1M max, never GC'd).
+  @known_block_types %{
+    "text" => :text,
+    "tool_use" => :tool_use,
+    "tool_result" => :tool_result,
+    "thinking" => :thinking,
+    "image" => :image
+  }
+
   @doc """
   Make an API request with Antigravity envelope handling.
 
@@ -338,8 +348,7 @@ defmodule Mana.OAuth.Antigravity.Transport do
   defp parse_sse_event(%{"type" => "content_block_start", "content_block" => block}) do
     index = block["index"] || 0
     type = block["type"] || "text"
-    type_atom = String.to_atom(type)
-    [{:part_start, index, type_atom, %{}}]
+    [{:part_start, index, safe_block_type(type), %{}}]
   end
 
   defp parse_sse_event(%{"type" => "content_block_stop", "index" => index}) do
@@ -499,6 +508,10 @@ defmodule Mana.OAuth.Antigravity.Transport do
   # ============================================================================
   # Helper Functions
   # ============================================================================
+
+  defp safe_block_type(type) when is_binary(type) do
+    Map.get(@known_block_types, type, :unknown)
+  end
 
   defp get_token(nil), do: {:error, :no_account}
 
