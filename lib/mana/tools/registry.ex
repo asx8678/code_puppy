@@ -58,7 +58,14 @@ defmodule Mana.Tools.Registry do
     Mana.Tools.Browser.Find.ByText,
     Mana.Tools.Browser.Find.ByLabel,
     Mana.Tools.Browser.Page.New,
-    Mana.Tools.Browser.Page.List
+    Mana.Tools.Browser.Page.List,
+    # Terminal tools
+    Mana.Tools.Terminal.Open,
+    Mana.Tools.Terminal.RunCommand,
+    Mana.Tools.Terminal.SendKeys,
+    Mana.Tools.Terminal.ReadOutput,
+    Mana.Tools.Terminal.Close,
+    Mana.Tools.Terminal.Screenshot
   ]
 
   # Client API
