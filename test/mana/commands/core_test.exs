@@ -218,6 +218,10 @@ defmodule Mana.Commands.CoreTest do
       assert "/cd" in commands
       assert "/sessions" in commands
       assert "/session" in commands
+      assert "/diff" in commands
+      assert "/config" in commands
+      assert "/hooks" in commands
+      assert "/colors" in commands
     end
   end
 end
