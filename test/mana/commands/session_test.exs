@@ -10,6 +10,7 @@ defmodule Mana.Commands.SessionTest do
   alias Mana.Commands.Save
   alias Mana.Commands.Session
   alias Mana.Commands.Truncate
+  alias Mana.Models.Registry, as: ModelsRegistry
   alias Mana.Session.Store, as: SessionStore
 
   setup do
@@ -21,6 +22,7 @@ defmodule Mana.Commands.SessionTest do
 
   describe "Session command behaviour implementation" do
     test "implements Mana.Commands.Behaviour" do
+      Code.ensure_loaded?(Session)
       assert function_exported?(Session, :name, 0)
       assert function_exported?(Session, :description, 0)
       assert function_exported?(Session, :usage, 0)
@@ -101,22 +103,23 @@ defmodule Mana.Commands.SessionTest do
 
   describe "Save command behaviour implementation" do
     test "implements Mana.Commands.Behaviour" do
-      assert function_exported?(Mana.Commands.Save, :name, 0)
-      assert function_exported?(Mana.Commands.Save, :description, 0)
-      assert function_exported?(Mana.Commands.Save, :usage, 0)
-      assert function_exported?(Mana.Commands.Save, :execute, 2)
+      Code.ensure_loaded?(Save)
+      assert function_exported?(Save, :name, 0)
+      assert function_exported?(Save, :description, 0)
+      assert function_exported?(Save, :usage, 0)
+      assert function_exported?(Save, :execute, 2)
     end
 
     test "name returns '/save'" do
-      assert Mana.Commands.Save.name() == "/save"
+      assert Save.name() == "/save"
     end
 
     test "description returns expected string" do
-      assert Mana.Commands.Save.description() == "Save current session"
+      assert Save.description() == "Save current session"
     end
 
     test "usage returns expected string" do
-      assert Mana.Commands.Save.usage() == "/save"
+      assert Save.usage() == "/save"
     end
   end
 
@@ -129,7 +132,7 @@ defmodule Mana.Commands.SessionTest do
       # Add some messages
       SessionStore.append(session_id, %{role: "user", content: "Hello"})
 
-      assert {:ok, result} = Mana.Commands.Save.execute([], %{})
+      assert {:ok, result} = Save.execute([], %{})
       assert result == "Session saved."
     end
 
@@ -137,29 +140,30 @@ defmodule Mana.Commands.SessionTest do
       # Ensure no active session
       SessionStore.set_active_session(nil)
 
-      assert {:error, message} = Mana.Commands.Save.execute([], %{})
+      assert {:error, message} = Save.execute([], %{})
       assert message == "No active session to save"
     end
   end
 
   describe "Load command behaviour implementation" do
     test "implements Mana.Commands.Behaviour" do
-      assert function_exported?(Mana.Commands.Load, :name, 0)
-      assert function_exported?(Mana.Commands.Load, :description, 0)
-      assert function_exported?(Mana.Commands.Load, :usage, 0)
-      assert function_exported?(Mana.Commands.Load, :execute, 2)
+      Code.ensure_loaded?(Load)
+      assert function_exported?(Load, :name, 0)
+      assert function_exported?(Load, :description, 0)
+      assert function_exported?(Load, :usage, 0)
+      assert function_exported?(Load, :execute, 2)
     end
 
     test "name returns '/load'" do
-      assert Mana.Commands.Load.name() == "/load"
+      assert Load.name() == "/load"
     end
 
     test "description returns expected string" do
-      assert Mana.Commands.Load.description() == "Load a saved session"
+      assert Load.description() == "Load a saved session"
     end
 
     test "usage returns expected string" do
-      assert Mana.Commands.Load.usage() == "/load <session_id>"
+      assert Load.usage() == "/load <session_id>"
     end
   end
 
@@ -173,7 +177,7 @@ defmodule Mana.Commands.SessionTest do
       # Clear the session from memory (but keep on disk)
       SessionStore.clear(session_id)
 
-      assert {:ok, result} = Mana.Commands.Load.execute([session_id], %{})
+      assert {:ok, result} = Load.execute([session_id], %{})
       assert result == "Loaded session: #{session_id}"
 
       # Verify it's active
@@ -181,48 +185,49 @@ defmodule Mana.Commands.SessionTest do
     end
 
     test "returns usage when called with no args" do
-      assert {:ok, result} = Mana.Commands.Load.execute([], %{})
-      assert result == "Usage: #{Mana.Commands.Load.usage()}"
+      assert {:ok, result} = Load.execute([], %{})
+      assert result == "Usage: #{Load.usage()}"
     end
 
     test "returns error for non-existent session" do
-      assert {:error, message} = Mana.Commands.Load.execute(["nonexistent-session-12345"], %{})
+      assert {:error, message} = Load.execute(["nonexistent-session-12345"], %{})
       assert message =~ "Failed to load session"
     end
   end
 
   describe "Compact command behaviour implementation" do
     test "implements Mana.Commands.Behaviour" do
-      assert function_exported?(Mana.Commands.Compact, :name, 0)
-      assert function_exported?(Mana.Commands.Compact, :description, 0)
-      assert function_exported?(Mana.Commands.Compact, :usage, 0)
-      assert function_exported?(Mana.Commands.Compact, :execute, 2)
+      Code.ensure_loaded?(Compact)
+      assert function_exported?(Compact, :name, 0)
+      assert function_exported?(Compact, :description, 0)
+      assert function_exported?(Compact, :usage, 0)
+      assert function_exported?(Compact, :execute, 2)
     end
 
     test "name returns '/compact'" do
-      assert Mana.Commands.Compact.name() == "/compact"
+      assert Compact.name() == "/compact"
     end
 
     test "description returns expected string" do
-      assert Mana.Commands.Compact.description() == "Compact conversation history via summarization"
+      assert Compact.description() == "Compact conversation history via summarization"
     end
 
     test "usage returns expected string" do
-      assert Mana.Commands.Compact.usage() == "/compact"
+      assert Compact.usage() == "/compact"
     end
   end
 
   describe "Compact.execute/2" do
     setup do
       # Start the ModelsRegistry needed for summarization
-      start_supervised!({Mana.Models.Registry, []})
+      start_supervised!({ModelsRegistry, []})
       :ok
     end
 
     test "returns error when no active session" do
       SessionStore.set_active_session(nil)
 
-      assert {:error, message} = Mana.Commands.Compact.execute([], %{})
+      assert {:error, message} = Compact.execute([], %{})
       assert message == "No active session"
     end
 
@@ -230,7 +235,7 @@ defmodule Mana.Commands.SessionTest do
       session_id = SessionStore.create_session()
       SessionStore.set_active_session(session_id)
 
-      assert {:ok, result} = Mana.Commands.Compact.execute([], %{})
+      assert {:ok, result} = Compact.execute([], %{})
       assert result == "No messages to compact."
     end
 
@@ -246,7 +251,7 @@ defmodule Mana.Commands.SessionTest do
         SessionStore.append(session_id, %{role: "assistant", content: "Response #{i}"})
       end
 
-      result = Mana.Commands.Compact.execute([], %{})
+      result = Compact.execute([], %{})
 
       # Should return success with compaction stats
       assert {:ok, message} = result
@@ -256,22 +261,23 @@ defmodule Mana.Commands.SessionTest do
 
   describe "Truncate command behaviour implementation" do
     test "implements Mana.Commands.Behaviour" do
-      assert function_exported?(Mana.Commands.Truncate, :name, 0)
-      assert function_exported?(Mana.Commands.Truncate, :description, 0)
-      assert function_exported?(Mana.Commands.Truncate, :usage, 0)
-      assert function_exported?(Mana.Commands.Truncate, :execute, 2)
+      Code.ensure_loaded?(Truncate)
+      assert function_exported?(Truncate, :name, 0)
+      assert function_exported?(Truncate, :description, 0)
+      assert function_exported?(Truncate, :usage, 0)
+      assert function_exported?(Truncate, :execute, 2)
     end
 
     test "name returns '/truncate'" do
-      assert Mana.Commands.Truncate.name() == "/truncate"
+      assert Truncate.name() == "/truncate"
     end
 
     test "description returns expected string" do
-      assert Mana.Commands.Truncate.description() == "Truncate conversation to last N messages"
+      assert Truncate.description() == "Truncate conversation to last N messages"
     end
 
     test "usage returns expected string" do
-      assert Mana.Commands.Truncate.usage() == "/truncate <count>"
+      assert Truncate.usage() == "/truncate <count>"
     end
   end
 
@@ -279,7 +285,7 @@ defmodule Mana.Commands.SessionTest do
     test "returns error when no active session" do
       SessionStore.set_active_session(nil)
 
-      assert {:error, message} = Mana.Commands.Truncate.execute(["10"], %{})
+      assert {:error, message} = Truncate.execute(["10"], %{})
       assert message == "No active session"
     end
 
@@ -292,7 +298,7 @@ defmodule Mana.Commands.SessionTest do
         SessionStore.append(session_id, %{role: "user", content: "Message #{i}"})
       end
 
-      assert {:ok, result} = Mana.Commands.Truncate.execute(["5"], %{})
+      assert {:ok, result} = Truncate.execute(["5"], %{})
       assert result == "Truncated to 5 messages (removed 5)."
 
       # Verify only 5 remain
@@ -304,13 +310,13 @@ defmodule Mana.Commands.SessionTest do
       session_id = SessionStore.create_session()
       SessionStore.set_active_session(session_id)
 
-      assert {:error, message} = Mana.Commands.Truncate.execute(["invalid"], %{})
+      assert {:error, message} = Truncate.execute(["invalid"], %{})
       assert message =~ "Invalid count"
     end
 
     test "returns usage when called with no args" do
-      assert {:ok, result} = Mana.Commands.Truncate.execute([], %{})
-      assert result == "Usage: #{Mana.Commands.Truncate.usage()}"
+      assert {:ok, result} = Truncate.execute([], %{})
+      assert result == "Usage: #{Truncate.usage()}"
     end
   end
 end

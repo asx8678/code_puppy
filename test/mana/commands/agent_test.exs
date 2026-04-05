@@ -19,6 +19,7 @@ defmodule Mana.Commands.AgentTest do
 
   describe "behaviour implementation" do
     test "implements Mana.Commands.Behaviour" do
+      Code.ensure_loaded?(Agent)
       assert function_exported?(Agent, :name, 0)
       assert function_exported?(Agent, :description, 0)
       assert function_exported?(Agent, :usage, 0)

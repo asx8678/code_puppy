@@ -20,6 +20,7 @@ defmodule Mana.Tools.AgentToolsTest do
 
   describe "ListAgents" do
     test "implements Mana.Tools.Behaviour" do
+      Code.ensure_loaded?(AgentTools.ListAgents)
       assert function_exported?(AgentTools.ListAgents, :name, 0)
       assert function_exported?(AgentTools.ListAgents, :description, 0)
       assert function_exported?(AgentTools.ListAgents, :parameters, 0)
@@ -59,6 +60,7 @@ defmodule Mana.Tools.AgentToolsTest do
 
   describe "InvokeAgent" do
     test "implements Mana.Tools.Behaviour" do
+      Code.ensure_loaded?(AgentTools.InvokeAgent)
       assert function_exported?(AgentTools.InvokeAgent, :name, 0)
       assert function_exported?(AgentTools.InvokeAgent, :description, 0)
       assert function_exported?(AgentTools.InvokeAgent, :parameters, 0)
@@ -128,6 +130,7 @@ defmodule Mana.Tools.AgentToolsTest do
 
   describe "AskUser" do
     test "implements Mana.Tools.Behaviour" do
+      Code.ensure_loaded?(AgentTools.AskUser)
       assert function_exported?(AgentTools.AskUser, :name, 0)
       assert function_exported?(AgentTools.AskUser, :description, 0)
       assert function_exported?(AgentTools.AskUser, :parameters, 0)

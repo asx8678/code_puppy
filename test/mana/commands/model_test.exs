@@ -27,6 +27,7 @@ defmodule Mana.Commands.ModelTest do
 
   describe "Model command behaviour implementation" do
     test "implements Mana.Commands.Behaviour" do
+      Code.ensure_loaded?(Model)
       assert function_exported?(Model, :name, 0)
       assert function_exported?(Model, :description, 0)
       assert function_exported?(Model, :usage, 0)
@@ -105,6 +106,7 @@ defmodule Mana.Commands.ModelTest do
 
   describe "AddModel command behaviour implementation" do
     test "implements Mana.Commands.Behaviour" do
+      Code.ensure_loaded?(AddModel)
       assert function_exported?(AddModel, :name, 0)
       assert function_exported?(AddModel, :description, 0)
       assert function_exported?(AddModel, :usage, 0)
