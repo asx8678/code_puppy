@@ -37,7 +37,9 @@ defmodule Mana.Application do
           {Mana.Agents.RunSupervisor, []},
           # 11. RateLimiter — per-model rate limiting
           {Mana.RateLimiter, []},
-          # 12. TTSR Registry — stream watcher session registry
+          # 12. OAuth.RefreshManager — serialized token refresh
+          {Mana.OAuth.RefreshManager, []},
+          # 13. TTSR Registry — stream watcher session registry
           {Registry, keys: :unique, name: Mana.TTSR.Registry}
         ]
       else

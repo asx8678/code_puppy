@@ -10,6 +10,7 @@ defmodule Mana.OAuth.ClaudeCodeTest do
   import Mock
 
   alias Mana.OAuth.ClaudeCode
+  alias Mana.OAuth.RefreshManager
   alias Mana.OAuth.TokenStore
 
   setup do
@@ -23,6 +24,9 @@ defmodule Mana.OAuth.ClaudeCodeTest do
 
     # Create the directory
     File.mkdir_p!(temp_dir)
+
+    # Reset RefreshManager state for claude_code to ensure clean state between tests
+    RefreshManager.reset_provider("claude_code")
 
     on_exit(fn ->
       # Cleanup

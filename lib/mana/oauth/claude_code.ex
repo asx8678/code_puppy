@@ -41,7 +41,7 @@ defmodule Mana.OAuth.ClaudeCode do
 
   require Logger
 
-  alias Mana.OAuth.{Flow, TokenStore}
+  alias Mana.OAuth.{Flow, RefreshManager, TokenStore}
 
   # Anthropic OAuth config
   @client_id "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
@@ -323,16 +323,16 @@ defmodule Mana.OAuth.ClaudeCode do
   end
 
   defp get_token do
-    case TokenStore.load("claude_code") do
-      {:ok, tokens} ->
-        if TokenStore.expired?(tokens) do
-          refresh_token(tokens)
-        else
-          {:ok, tokens["access_token"]}
-        end
-
-      error ->
-        error
+    RefreshManager.refresh_if_needed("claude_code", fn tokens ->
+      do_refresh_token_call(tokens)
+      |> case do
+        {:ok, refreshed} -> {:ok, Map.put(refreshed, "access_token", refreshed["access_token"])}
+        error -> error
+      end
+    end)
+    |> case do
+      {:ok, tokens} -> {:ok, tokens["access_token"]}
+      error -> error
     end
   end
 
@@ -340,10 +340,24 @@ defmodule Mana.OAuth.ClaudeCode do
   Refreshes the access token using the refresh token.
 
   This function is public to allow the Heartbeat GenServer to trigger
-  token refreshes during long-running agent sessions.
+  token refreshes during long-running agent sessions. Uses RefreshManager
+  to serialize refresh attempts and prevent race conditions.
   """
   @spec refresh_token(map()) :: {:ok, String.t()} | {:error, term()}
-  def refresh_token(%{"refresh_token" => refresh}) do
+  def refresh_token(tokens) do
+    # Save the provided tokens to the store first so RefreshManager can load them
+    :ok = TokenStore.save("claude_code", tokens)
+
+    RefreshManager.execute_refresh("claude_code", fn _loaded_tokens ->
+      do_refresh_token_call(tokens)
+    end)
+    |> case do
+      {:ok, new_tokens} -> {:ok, new_tokens["access_token"]}
+      error -> error
+    end
+  end
+
+  defp do_refresh_token_call(%{"refresh_token" => refresh}) do
     body = %{
       grant_type: "refresh_token",
       refresh_token: refresh,
@@ -354,7 +368,7 @@ defmodule Mana.OAuth.ClaudeCode do
       {:ok, %{status: 200, body: tokens}} ->
         tokens = add_expires_at(tokens)
         TokenStore.save("claude_code", tokens)
-        {:ok, tokens["access_token"]}
+        {:ok, tokens}
 
       {:ok, %{status: status, body: body}} ->
         {:error, "Refresh failed: HTTP #{status} - #{inspect(body)}"}
@@ -364,18 +378,14 @@ defmodule Mana.OAuth.ClaudeCode do
     end
   end
 
-  def refresh_token(_), do: {:error, "No refresh token"}
+  defp do_refresh_token_call(_), do: {:error, "No refresh token"}
 
   defp refresh_and_retry(fun_name, messages, model, opts) do
-    case TokenStore.load("claude_code") do
-      {:ok, tokens} ->
-        case refresh_token(tokens) do
-          {:ok, _new_token} ->
-            apply(__MODULE__, fun_name, [messages, model, opts])
-
-          error ->
-            error
-        end
+    case RefreshManager.refresh_if_needed("claude_code", fn tokens ->
+           do_refresh_token_call(tokens)
+         end) do
+      {:ok, _tokens} ->
+        apply(__MODULE__, fun_name, [messages, model, opts])
 
       error ->
         error
