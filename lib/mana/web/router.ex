@@ -19,6 +19,7 @@ defmodule Mana.Web.Router do
   # Browser pipeline with standard web protections
   pipeline :browser do
     plug(:accepts, ["html"])
+    plug(Mana.Web.AuthPlug)
     plug(:fetch_session)
     plug(:fetch_live_flash)
     plug(:put_root_layout, html: {Mana.Web.Layouts, :root})

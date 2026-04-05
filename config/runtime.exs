@@ -5,6 +5,11 @@ import Config
 # This file is evaluated at runtime (on startup) and can access
 # environment variables and other runtime-only information.
 
+# Web Auth Token Configuration
+# Set MANA_WEB_TOKEN to require authentication for web interface access.
+# If not set (or empty), the web interface is open (dev mode).
+config :mana, :web_auth_token, System.get_env("MANA_WEB_TOKEN")
+
 # Web Endpoint Configuration
 config :mana, Mana.Web.Endpoint,
   url: [host: System.get_env("MANA_HOST", "localhost")],
