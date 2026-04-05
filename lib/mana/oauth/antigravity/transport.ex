@@ -406,6 +406,7 @@ defmodule Mana.OAuth.Antigravity.Transport do
 
   defp maybe_finish_event(nil), do: []
   defp maybe_finish_event("stop"), do: [{:part_end, 0, %{}}]
+  defp maybe_finish_event("tool_calls"), do: [{:part_end, :tool_calls, %{}}]
   defp maybe_finish_event(_), do: []
 
   defp parse_envelope_content(content) when is_list(content) do
