@@ -41,7 +41,7 @@ defmodule Mix.Tasks.Bench do
     bench_file = get_bench_file(args)
 
     unless File.exists?(bench_file) do
-      Mix.raise("""
+      Mix.shell().error("""
       Benchmark file not found: #{bench_file}
 
       Available benchmarks:
@@ -49,6 +49,8 @@ defmodule Mix.Tasks.Bench do
 
       Or provide a path to a custom .exs file.
       """)
+
+      exit({:shutdown, 1})
     end
 
     # Ensure benchee is available
@@ -99,7 +101,7 @@ defmodule Mix.Tasks.Bench do
   # Ensure Benchee dependency is available
   defp ensure_benchee do
     unless Code.ensure_loaded?(Benchee) do
-      Mix.raise("""
+      Mix.shell().error("""
       Benchee is not available.
 
       Please add to your mix.exs:
@@ -108,6 +110,8 @@ defmodule Mix.Tasks.Bench do
 
       Then run: mix deps.get
       """)
+
+      exit({:shutdown, 1})
     end
   end
 

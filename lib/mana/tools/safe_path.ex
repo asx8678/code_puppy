@@ -61,15 +61,11 @@ defmodule Mana.Tools.SafePath do
   @spec validate(String.t(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
   def validate(path, base_dir) when is_binary(path) and is_binary(base_dir) do
     with :ok <- check_null_bytes(path),
-         # Absolute paths with .. are suspicious - reject them
-         :ok <- check_absolute_traversal(path),
          {:ok, expanded_base} <- expand_path(base_dir),
-         # Expand relative paths relative to base_dir, not cwd
          {:ok, expanded_path} <- expand_path_relative_to_base(path, expanded_base),
          :ok <- check_traversal_in_expanded(expanded_path),
-         :ok <- check_relative_path_within_base(expanded_path, expanded_base, path),
-         {:ok, resolved_path} <- resolve_and_check_symlinks(expanded_path, expanded_base) do
-      {:ok, resolved_path}
+         :ok <- check_relative_path_within_base(expanded_path, expanded_base, path) do
+      resolve_and_check_symlinks(expanded_path, expanded_base)
     end
   end
 
@@ -203,15 +199,6 @@ defmodule Mana.Tools.SafePath do
     end
   end
 
-  defp check_absolute_traversal(path) do
-    # Absolute paths containing .. are suspicious
-    if Path.type(path) == :absolute and suspicious_traversal?(path) do
-      {:error, "Path escapes allowed directory"}
-    else
-      :ok
-    end
-  end
-
   # NOTE: Redundant safety net. Path.expand/1 already resolves ".." segments,
   # so expanded paths should never contain them. We keep this as defense-in-depth
   # in case Path.expand behavior changes or has edge cases we haven't considered.
@@ -244,25 +231,13 @@ defmodule Mana.Tools.SafePath do
     check_path_within_base(expanded_path, expanded_base)
   end
 
-
   # Detects symlinks via File.lstat/1 and validates their resolved targets
   # stay within the base directory. Non-existent paths (create operations)
   # pass through — the stat simply returns :enoent.
   defp resolve_and_check_symlinks(path, expanded_base) do
     case File.lstat(path) do
       {:ok, %File.Stat{type: :symlink}} ->
-        case File.read_link(path) do
-          {:ok, target} ->
-            real_path = Path.expand(target, Path.dirname(path))
-
-            case check_path_within_base(real_path, expanded_base) do
-              :ok -> {:ok, real_path}
-              {:error, _} -> {:error, "Symlink #{path} points outside base directory: #{real_path}"}
-            end
-
-          {:error, reason} ->
-            {:error, "Cannot resolve symlink #{path}: #{inspect(reason)}"}
-        end
+        resolve_symlink_target(path, expanded_base)
 
       {:ok, _} ->
         # Not a symlink — pass through
@@ -274,6 +249,21 @@ defmodule Mana.Tools.SafePath do
 
       {:error, reason} ->
         {:error, "Cannot stat #{path}: #{inspect(reason)}"}
+    end
+  end
+
+  defp resolve_symlink_target(path, expanded_base) do
+    case File.read_link(path) do
+      {:ok, target} ->
+        real_path = Path.expand(target, Path.dirname(path))
+
+        case check_path_within_base(real_path, expanded_base) do
+          :ok -> {:ok, real_path}
+          {:error, _} -> {:error, "Symlink #{path} points outside base directory: #{real_path}"}
+        end
+
+      {:error, reason} ->
+        {:error, "Cannot resolve symlink #{path}: #{inspect(reason)}"}
     end
   end
 

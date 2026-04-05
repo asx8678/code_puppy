@@ -359,8 +359,7 @@ defmodule Mana.Models.Providers.Anthropic do
         role = msg["role"] || msg[:role]
         role == "system" or role == :system
       end)
-      |> Enum.map(fn msg -> msg["content"] || msg[:content] end)
-      |> Enum.join("\n\n")
+      |> Enum.map_join("\n\n", fn msg -> msg["content"] || msg[:content] end)
 
     if system_text != "" and not Keyword.has_key?(opts, :system) do
       Map.put(body, "system", system_text)

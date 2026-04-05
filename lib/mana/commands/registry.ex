@@ -326,25 +326,28 @@ defmodule Mana.Commands.Registry do
 
     final_row =
       Enum.reduce(Enum.with_index(s1_chars, 1), prev_row, fn {c1, i}, prev ->
-        # Build current row
-        first_cell = i
-
-        {row_list, _} =
-          Enum.reduce(1..len2, {[first_cell], first_cell}, fn j, {acc, prev_val} ->
-            c2 = elem(s2_chars, j - 1)
-            cost = if c1 == c2, do: 0, else: 1
-
-            deletion = elem(prev, j) + 1
-            insertion = prev_val + 1
-            substitution = elem(prev, j - 1) + cost
-
-            val = min(deletion, min(insertion, substitution))
-            {acc ++ [val], val}
-          end)
-
-        :erlang.list_to_tuple(row_list)
+        build_distance_row(c1, i, prev, s2_chars, len2)
       end)
 
     elem(final_row, len2)
+  end
+
+  defp build_distance_row(c1, i, prev_row, s2_chars, len2) do
+    first_cell = i
+
+    {row_list, _} =
+      Enum.reduce(1..len2, {[first_cell], first_cell}, fn j, {acc, prev_val} ->
+        c2 = elem(s2_chars, j - 1)
+        cost = if c1 == c2, do: 0, else: 1
+
+        deletion = elem(prev_row, j) + 1
+        insertion = prev_val + 1
+        substitution = elem(prev_row, j - 1) + cost
+
+        val = min(deletion, min(insertion, substitution))
+        {acc ++ [val], val}
+      end)
+
+    :erlang.list_to_tuple(row_list)
   end
 end
