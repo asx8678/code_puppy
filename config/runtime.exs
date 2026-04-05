@@ -22,7 +22,10 @@ config :mana, Mana.Web.Endpoint,
       "MANA_SECRET_KEY_BASE",
       "dev-secret-key-base-min-64-bytes-long-for-testing-only-change-in-prod"
     ),
+  check_origin: System.get_env("MANA_CHECK_ORIGIN", "//localhost"),
   server: true
+
+config :mana, session_signing_salt: System.get_env("MANA_SIGNING_SALT", "mana_default_dev_salt")
 
 if config_env() == :prod do
   # Production logging

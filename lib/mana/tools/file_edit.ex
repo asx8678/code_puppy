@@ -37,6 +37,7 @@ defmodule Mana.Tools.FileEdit.CreateFile do
     content = Map.get(args, "content")
 
     with {:ok, cwd} <- SafePath.current_working_dir(),
+         {:ok, _safe_path} <- SafePath.validate(path, cwd),
          :ok <- ensure_parent_directory(path, cwd),
          :ok <- SafePath.safe_write(path, content, cwd) do
       {:ok, %{"created" => path, "size" => byte_size(content)}}

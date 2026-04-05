@@ -31,6 +31,11 @@ defmodule Mana.Web.Live.ChatLive do
 
   use Phoenix.LiveView
 
+  # DoS protection limits
+  @max_message_length 100_000   # 100KB per message
+  @max_stream_size   1_000_000  # 1MB stream output buffer cap
+  @max_messages      200         # Max messages retained in session history
+
   require Logger
 
   alias Mana.Agent.Runner
@@ -52,7 +57,8 @@ defmodule Mana.Web.Live.ChatLive do
        input: "",
        thinking: false,
        stream_output: "",
-       agent_pid: nil
+       agent_pid: nil,
+       current_task: nil
      )}
   end
 
@@ -63,31 +69,45 @@ defmodule Mana.Web.Live.ChatLive do
   end
 
   def handle_event("send", %{"message" => message}, socket) do
-    messages = socket.assigns.messages ++ [%{role: "user", content: message}]
+    cond do
+      byte_size(message) > @max_message_length ->
+        {:noreply, put_flash(socket, :error, "Message too long (max #{div(@max_message_length, 1000)}KB)")}
 
-    socket =
-      assign(socket,
-        messages: messages,
-        input: "",
-        thinking: true,
-        stream_output: ""
-      )
+      length(socket.assigns.messages) >= @max_messages ->
+        {:noreply, put_flash(socket, :error, "Session history full — please start a new session")}
 
-    agent_pid = socket.assigns.agent_pid
+      true ->
+        messages = socket.assigns.messages ++ [%{role: "user", content: message}]
 
-    Task.Supervisor.async_nolink(Mana.TaskSupervisor, fn ->
-      if String.starts_with?(message, "/") do
-        dispatch_command(message)
-      else
-        run_agent(socket.assigns.session_id, message, agent_pid)
-      end
-    end)
+        socket =
+          assign(socket,
+            messages: messages,
+            input: "",
+            thinking: true,
+            stream_output: ""
+          )
 
-    {:noreply, socket}
+        agent_pid = socket.assigns.agent_pid
+
+        task = Task.Supervisor.async_nolink(Mana.TaskSupervisor, fn ->
+          if String.starts_with?(message, "/") do
+            dispatch_command(message)
+          else
+            run_agent(socket.assigns.session_id, message, agent_pid)
+          end
+        end)
+
+        {:noreply, assign(socket, current_task: task)}
+    end
   end
 
   def handle_event("update_input", %{"value" => value}, socket) do
-    {:noreply, assign(socket, input: value)}
+    capped = if byte_size(value) > @max_message_length do
+      String.slice(value, 0, @max_message_length)
+    else
+      value
+    end
+    {:noreply, assign(socket, input: capped)}
   end
 
   @impl true
@@ -116,14 +136,33 @@ defmodule Mana.Web.Live.ChatLive do
     handle_agent_result(socket, {:agent_error, reason})
   end
 
-  def handle_info({:DOWN, _ref, :process, _pid, _reason}, socket) do
-    # Task completed normally
-    {:noreply, socket}
+  @impl true
+  def handle_info({ref, _result}, socket) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, assign(socket, thinking: false, current_task: nil)}
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, reason}, socket) do
+    if reason != :normal do
+      Logger.warning("Agent task failed: #{inspect(reason)}")
+    end
+
+    {:noreply, assign(socket, thinking: false, stream_output: "", current_task: nil)}
   end
 
   def handle_info({:stream_chunk, _type, chunk}, socket) do
-    # Append stream chunk to current output
-    {:noreply, assign(socket, stream_output: socket.assigns.stream_output <> chunk)}
+    new_output = socket.assigns.stream_output <> chunk
+
+    capped =
+      if byte_size(new_output) > @max_stream_size do
+        excess = byte_size(new_output) - @max_stream_size
+        binary_part(new_output, excess, @max_stream_size)
+      else
+        new_output
+      end
+
+    {:noreply, assign(socket, stream_output: capped)}
   end
 
   @impl true

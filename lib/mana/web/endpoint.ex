@@ -38,7 +38,7 @@ defmodule Mana.Web.Endpoint do
   @session_options [
     store: :cookie,
     key: "_mana_key",
-    signing_salt: "mana_web_salt",
+    signing_salt: Application.compile_env(:mana, :session_signing_salt, "mana_default_dev_salt"),
     same_site: "Lax"
   ]
 
@@ -57,6 +57,14 @@ defmodule Mana.Web.Endpoint do
 
   plug(Plug.MethodOverride)
   plug(Plug.Head)
+
+  plug(Plug.Static,
+    at: "/",
+    from: {:mana, "priv/static"},
+    gzip: false,
+    only: ~w(assets favicon.ico robots.txt)
+  )
+
   plug(Plug.Session, @session_options)
 
   # Router at the end of the pipeline

@@ -242,7 +242,10 @@ defmodule Mana.Web.ChatLiveTest do
         })
 
       result = ChatLive.handle_info({:DOWN, make_ref(), :process, self(), :normal}, socket)
-      assert {:noreply, ^socket} = result
+      assert {:noreply, new_socket} = result
+      assert new_socket.assigns.thinking == false
+      assert new_socket.assigns.stream_output == ""
+      assert new_socket.assigns.current_task == nil
     end
   end
 
