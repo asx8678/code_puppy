@@ -34,6 +34,8 @@ defmodule Mana.Agent.Runner do
   alias Mana.Session.Store
   alias Mana.Tools.Registry, as: ToolsRegistry
 
+  @telemetry_prefix [:mana, :agent, :run]
+
   @doc """
   Run agent synchronously — returns final response.
 
@@ -101,7 +103,36 @@ defmodule Mana.Agent.Runner do
     agent_def = agent_state.agent_def
     model_name = agent_state.model_name
     session_id = agent_state.session_id || generate_session_id()
+    agent_name = agent_def[:name] || "agent"
 
+    start_meta = %{agent_name: agent_name, model: model_name, session_id: session_id}
+
+    :telemetry.span(
+      @telemetry_prefix,
+      start_meta,
+      fn ->
+        do_run_with_state_inner(
+          agent_state,
+          user_message,
+          opts,
+          agent_def,
+          model_name,
+          session_id,
+          agent_name
+        )
+      end
+    )
+  end
+
+  defp do_run_with_state_inner(
+         agent_state,
+         user_message,
+         opts,
+         agent_def,
+         model_name,
+         session_id,
+         agent_name
+       ) do
     # 1. Build system prompt via Compositor
     system_prompt =
       agent_state.system_prompt || Compositor.assemble(agent_def, model_name)
@@ -119,25 +150,59 @@ defmodule Mana.Agent.Runner do
     tools = get_tool_schemas(agent_def)
 
     # 5. Fire :agent_run_start callback
-    agent_name = agent_def[:name] || "agent"
     Callbacks.dispatch(:agent_run_start, [agent_name, model_name, session_id])
 
     # Handle async option
-    if Keyword.get(opts, :async) do
-      try do
-        {:ok, _pid} =
-          Task.Supervisor.start_child(Mana.TaskSupervisor, fn ->
-            do_execute_loop(messages, model_name, tools, opts, session_id, agent_name, user_message)
-          end)
+    result =
+      if Keyword.get(opts, :async) do
+        try do
+          {:ok, _pid} =
+            Task.Supervisor.start_child(Mana.TaskSupervisor, fn ->
+              do_execute_loop(
+                messages,
+                model_name,
+                tools,
+                opts,
+                session_id,
+                agent_name,
+                user_message
+              )
+            end)
 
-        {:ok, :async_started}
-      catch
-        :exit, _ ->
-          # Task.Supervisor not available, run synchronously
-          do_execute_loop(messages, model_name, tools, opts, session_id, agent_name, user_message)
+          {:ok, :async_started}
+        catch
+          :exit, _ ->
+            # Task.Supervisor not available, run synchronously
+            do_execute_loop(
+              messages,
+              model_name,
+              tools,
+              opts,
+              session_id,
+              agent_name,
+              user_message
+            )
+        end
+      else
+        do_execute_loop(
+          messages,
+          model_name,
+          tools,
+          opts,
+          session_id,
+          agent_name,
+          user_message
+        )
       end
-    else
-      do_execute_loop(messages, model_name, tools, opts, session_id, agent_name, user_message)
+
+    stop_meta = %{agent_name: agent_name, model: model_name, session_id: session_id}
+
+    case result do
+      {:ok, _} = ok ->
+        {ok, Map.put(stop_meta, :success, true)}
+
+      {:error, reason} ->
+        {{:error, reason}, Map.merge(stop_meta, %{success: false, error: inspect(reason)})}
     end
   end
 
@@ -280,6 +345,17 @@ defmodule Mana.Agent.Runner do
     # Fire :agent_run_start callback
     Callbacks.dispatch(:agent_run_start, [agent_name, model_name, session_id])
 
+    # Emit telemetry start event
+    start_time = System.monotonic_time()
+
+    stream_meta = %{agent_name: agent_name, model: model_name, session_id: session_id}
+
+    :telemetry.execute(
+      @telemetry_prefix ++ [:start],
+      %{system_time: System.system_time()},
+      stream_meta
+    )
+
     Stream.resource(
       fn ->
         %{
@@ -292,14 +368,18 @@ defmodule Mana.Agent.Runner do
           user_message: user_message,
           tools: tools,
           opts: opts,
-          model_name: model_name
+          model_name: model_name,
+          telemetry_start_time: start_time,
+          telemetry_emitted: false
         }
       end,
       &stream_next/1,
-      fn state ->
-        # Cleanup - fire agent_run_end if not already done
-        # Handle both map state and :halt atom
-        if is_map(state) do
+      fn
+        %{telemetry_emitted: true} ->
+          :ok
+
+        state when is_map(state) ->
+          # Cleanup — fire agent_run_end and emit telemetry stop
           Callbacks.dispatch(:agent_run_end, [
             state.agent_name,
             state.model_name,
@@ -309,10 +389,48 @@ defmodule Mana.Agent.Runner do
             nil,
             %{}
           ])
-        end
 
-        :ok
+          emit_stream_telemetry_stop(state, nil)
+
+        _ ->
+          :ok
       end
+    )
+  end
+
+  defp emit_stream_telemetry_stop(state, final_content) do
+    duration = System.monotonic_time() - state.telemetry_start_time
+
+    stop_meta = %{
+      agent_name: state.agent_name,
+      model: state.model_name,
+      session_id: state.session_id,
+      success: true
+    }
+
+    extra = if final_content, do: %{response_length: String.length(final_content)}, else: %{}
+
+    :telemetry.execute(
+      @telemetry_prefix ++ [:stop],
+      Map.merge(%{duration: duration}, extra),
+      stop_meta
+    )
+  end
+
+  defp emit_stream_telemetry_exception(state, reason) do
+    duration = System.monotonic_time() - state.telemetry_start_time
+
+    :telemetry.execute(
+      @telemetry_prefix ++ [:exception],
+      %{duration: duration},
+      %{
+        agent_name: state.agent_name,
+        model: state.model_name,
+        session_id: state.session_id,
+        kind: :error,
+        reason: reason,
+        stacktrace: []
+      }
     )
   end
 
@@ -372,10 +490,13 @@ defmodule Mana.Agent.Runner do
             %{}
           ])
 
+          # Emit telemetry stop for successful stream completion
+          emit_stream_telemetry_stop(state, final_content)
+
           # Append final assistant message to events
           final_events = events ++ [{:done, final_content}]
 
-          {final_events, :halt}
+          {final_events, %{state | telemetry_emitted: true}}
         end
 
       {:error, reason, partial_events} ->
@@ -390,9 +511,12 @@ defmodule Mana.Agent.Runner do
           %{streaming_error: true, partial_event_count: length(partial_events)}
         ])
 
+        # Emit telemetry exception for stream error
+        emit_stream_telemetry_exception(state, reason)
+
         # Return error event to stream consumer
         error_events = partial_events ++ [{:error, reason}]
-        {error_events, :halt}
+        {error_events, %{state | telemetry_emitted: true}}
     end
   end
 
