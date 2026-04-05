@@ -363,7 +363,7 @@ defmodule Mana.OAuth.ClaudeCodeTest do
     test "requires mocking for full testing" do
       # This test verifies that start_oauth function exists and has correct signature
       # Full testing would require mocking the Flow module and browser launch
-      assert function_exported?(ClaudeCode, :start_oauth, 1)
+      assert Code.ensure_loaded?(ClaudeCode) and function_exported?(ClaudeCode, :start_oauth, 1)
     end
   end
 
