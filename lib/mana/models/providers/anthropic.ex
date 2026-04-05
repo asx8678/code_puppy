@@ -53,23 +53,7 @@ defmodule Mana.Models.Providers.Anthropic do
 
     body = maybe_add_temperature(body, opts)
 
-    # Extract system messages from the messages list for the system parameter
-    system_from_messages =
-      messages
-      |> Enum.filter(fn msg ->
-        role = msg["role"] || msg[:role]
-        role == "system" or role == :system
-      end)
-      |> Enum.map(fn msg -> msg["content"] || msg[:content] end)
-      |> Enum.join("\n\n")
-
-    body =
-      if system_from_messages != "" and not Keyword.has_key?(opts, :system) do
-        Map.put(body, "system", system_from_messages)
-      else
-        body
-      end
-
+    body = maybe_add_system_from_messages(body, messages, opts)
     body = maybe_add_system_prompt(body, opts)
     body = maybe_add_tools(body, opts)
 
@@ -82,6 +66,11 @@ defmodule Mana.Models.Providers.Anthropic do
     case Req.post(url, headers: headers, json: body, receive_timeout: 60_000) do
       {:ok, %{status: 200, body: response_body}} ->
         parse_completion_response(response_body, model)
+
+      {:ok, %{status: 429} = resp} ->
+        Mana.RateLimiter.report_rate_limit(model)
+        retry_after = parse_retry_after(resp)
+        {:error, "Rate limited (429), retry after #{retry_after}s: #{format_error(resp.body)}"}
 
       {:ok, %{status: status, body: error_body}} ->
         {:error, "HTTP #{status}: #{format_error(error_body)}"}
@@ -123,24 +112,7 @@ defmodule Mana.Models.Providers.Anthropic do
     }
 
     body = maybe_add_temperature(body, opts)
-
-    # Extract system messages from the messages list for the system parameter
-    system_from_messages =
-      messages
-      |> Enum.filter(fn msg ->
-        role = msg["role"] || msg[:role]
-        role == "system" or role == :system
-      end)
-      |> Enum.map(fn msg -> msg["content"] || msg[:content] end)
-      |> Enum.join("\n\n")
-
-    body =
-      if system_from_messages != "" and not Keyword.has_key?(opts, :system) do
-        Map.put(body, "system", system_from_messages)
-      else
-        body
-      end
-
+    body = maybe_add_system_from_messages(body, messages, opts)
     body = maybe_add_system_prompt(body, opts)
     body = maybe_add_tools(body, opts)
 
@@ -153,57 +125,84 @@ defmodule Mana.Models.Providers.Anthropic do
 
     Stream.resource(
       fn ->
-        %{buffer: "", done: false, url: url, headers: headers, body: body}
+        request =
+          Req.new(
+            method: :post,
+            url: url,
+            headers: headers,
+            json: body,
+            into: :self,
+            receive_timeout: 600_000
+          )
+
+        case Req.request(request) do
+          {:ok, %{status: 200} = resp} ->
+            {:streaming, resp, ""}
+
+          {:ok, %{status: 429} = resp} ->
+            Mana.RateLimiter.report_rate_limit(model)
+            retry_after = parse_retry_after(resp)
+            {:error, "Rate limited (429), retry after #{retry_after}s"}
+
+          {:ok, %{status: status, body: error_body}} ->
+            {:error, "HTTP #{status}: #{format_error(error_body)}"}
+
+          {:error, reason} ->
+            {:error, "Request failed: #{inspect(reason)}"}
+        end
       end,
       fn
-        %{done: true} = state ->
-          {:halt, state}
+        {:error, msg} ->
+          {[{:error, msg}], :halt}
 
-        %{url: url, headers: headers, body: body} = state ->
-          request = Req.new(method: :post, url: url, headers: headers, json: body, into: :self)
+        :halt ->
+          {:halt, :halt}
 
-          case Req.request(request) do
-            {:ok, %{status: 200} = response} ->
-              events = process_anthropic_stream(response.body)
-              done = Enum.any?(events, fn
-                {:part_end, :done} -> true
-                _ -> false
-              end)
-              {events, %{state | done: done}}
+        {:streaming, resp, buffer} ->
+          receive do
+            message ->
+              case Req.parse_message(resp, message) do
+                {:ok, [data: chunk]} ->
+                  {events, new_buffer} = parse_sse_chunk(buffer <> chunk)
+                  stream_events = Enum.flat_map(events, &parse_anthropic_event/1)
+                  {stream_events, {:streaming, resp, new_buffer}}
 
-            {:ok, %{status: status}} ->
-              {[{:error, "HTTP #{status}"}], %{state | done: true}}
+                {:ok, [:done]} ->
+                  {[{:part_end, :done}], :halt}
 
-            {:error, reason} ->
-              {[{:error, "Request failed: #{inspect(reason)}"}], %{state | done: true}}
+                :unknown ->
+                  {[], {:streaming, resp, buffer}}
+              end
+          after
+            60_000 -> {[{:error, :timeout}], :halt}
           end
       end,
-      fn _state -> :ok end
+      fn
+        {:streaming, resp, _} -> Req.cancel_async_response(resp)
+        _ -> :ok
+      end
     )
   end
 
   # SSE Processing for Anthropic
 
-  defp process_anthropic_stream(body) when is_list(body) do
-    body
-    |> Enum.flat_map(&extract_data_lines/1)
-    |> Enum.map(&parse_data_line/1)
-    |> Enum.flat_map(&parse_anthropic_event/1)
-  end
+  defp parse_sse_chunk(data) do
+    lines = String.split(data, "\n")
 
-  defp process_anthropic_stream(_), do: []
+    # Last element may be an incomplete line — keep it as the new buffer
+    {complete_lines, [remainder]} = Enum.split(lines, -1)
 
-  defp extract_data_lines(chunk) do
-    chunk
-    |> String.split("\n")
-    |> Enum.filter(&String.starts_with?(&1, "data: "))
-  end
+    events =
+      complete_lines
+      |> Enum.filter(&String.starts_with?(&1, "data: "))
+      |> Enum.map(fn line ->
+        case String.trim_leading(line, "data: ") do
+          "[DONE]" -> :done
+          json -> decode_sse_json(json)
+        end
+      end)
 
-  defp parse_data_line(line) do
-    case String.trim_leading(line, "data: ") do
-      "[DONE]" -> :done
-      json -> decode_sse_json(json)
-    end
+    {events, remainder}
   end
 
   defp decode_sse_json(json) do
@@ -352,6 +351,38 @@ defmodule Mana.Models.Providers.Anthropic do
       tools -> Map.put(body, "tools", tools)
     end
   end
+
+  defp maybe_add_system_from_messages(body, messages, opts) do
+    system_text =
+      messages
+      |> Enum.filter(fn msg ->
+        role = msg["role"] || msg[:role]
+        role == "system" or role == :system
+      end)
+      |> Enum.map(fn msg -> msg["content"] || msg[:content] end)
+      |> Enum.join("\n\n")
+
+    if system_text != "" and not Keyword.has_key?(opts, :system) do
+      Map.put(body, "system", system_text)
+    else
+      body
+    end
+  end
+
+  defp parse_retry_after(%{headers: headers}) do
+    case headers["retry-after"] do
+      [value | _] ->
+        case Integer.parse(value) do
+          {seconds, _} -> seconds
+          :error -> 60
+        end
+
+      _ ->
+        60
+    end
+  end
+
+  defp format_error(%{__struct__: _} = body), do: inspect(body)
 
   defp format_error(body) when is_map(body) do
     error = body["error"] || %{}

@@ -62,6 +62,11 @@ defmodule Mana.Models.Providers.OpenAI do
       {:ok, %{status: 200, body: response_body}} ->
         parse_completion_response(response_body, model)
 
+      {:ok, %{status: 429} = resp} ->
+        Mana.RateLimiter.report_rate_limit(model)
+        retry_after = parse_retry_after(resp)
+        {:error, "Rate limited (429), retry after #{retry_after}s: #{format_error(resp.body)}"}
+
       {:ok, %{status: status, body: error_body}} ->
         {:error, "HTTP #{status}: #{format_error(error_body)}"}
 
@@ -114,67 +119,76 @@ defmodule Mana.Models.Providers.OpenAI do
 
     Stream.resource(
       fn ->
-        %{buffer: "", done: false, url: url, headers: headers, body: body}
+        request =
+          Req.new(
+            method: :post,
+            url: url,
+            headers: headers,
+            json: body,
+            into: :self,
+            receive_timeout: 600_000
+          )
+
+        case Req.request(request) do
+          {:ok, %{status: 200} = resp} ->
+            {:streaming, resp, ""}
+
+          {:ok, %{status: 429} = resp} ->
+            Mana.RateLimiter.report_rate_limit(model)
+            retry_after = parse_retry_after(resp)
+            {:error, "Rate limited (429), retry after #{retry_after}s"}
+
+          {:ok, %{status: status, body: error_body}} ->
+            {:error, "HTTP #{status}: #{format_error(error_body)}"}
+
+          {:error, reason} ->
+            {:error, "Request failed: #{inspect(reason)}"}
+        end
       end,
       fn
-        %{done: true} = state ->
-          {:halt, state}
+        {:error, msg} ->
+          {[{:error, msg}], :halt}
 
-        %{url: url, headers: headers, body: body, buffer: buffer} = state ->
-          request = Req.new(method: :post, url: url, headers: headers, json: body, into: :self)
+        :halt ->
+          {:halt, :halt}
 
-          case Req.request(request) do
-            {:ok, %{status: 200} = response} ->
-              {events, new_buffer} = process_response_body(response.body, buffer)
-              done = stream_complete?(events)
-              {events, %{state | buffer: new_buffer, done: done}}
+        {:streaming, resp, buffer} ->
+          receive do
+            message ->
+              case Req.parse_message(resp, message) do
+                {:ok, [data: chunk]} ->
+                  {events, new_buffer} = parse_sse_chunk(buffer <> chunk)
+                  stream_events = Enum.flat_map(events, &parse_sse_event/1)
+                  {stream_events, {:streaming, resp, new_buffer}}
 
-            {:ok, %{status: status}} ->
-              {[{:error, "HTTP #{status}"}], %{state | done: true}}
+                {:ok, [:done]} ->
+                  {[{:part_end, :done}], :halt}
 
-            {:error, reason} ->
-              {[{:error, "Request failed: #{inspect(reason)}"}], %{state | done: true}}
+                :unknown ->
+                  {[], {:streaming, resp, buffer}}
+              end
+          after
+            60_000 -> {[{:error, :timeout}], :halt}
           end
       end,
-      fn _state -> :ok end
+      fn
+        {:streaming, resp, _} -> Req.cancel_async_response(resp)
+        _ -> :ok
+      end
     )
-  end
-
-
-  defp process_response_body(body, buffer) do
-    {parsed_events, new_buffer} =
-      Enum.reduce(body, {[], buffer}, fn chunk, {events, buf} ->
-        {new_events, new_buf} = process_sse_chunk(buf <> chunk)
-        {events ++ new_events, new_buf}
-      end)
-
-    stream_events = Enum.flat_map(parsed_events, &parse_sse_event/1)
-    {stream_events, new_buffer}
-  end
-
-  defp stream_complete?(events) do
-    Enum.any?(events, fn
-      {:part_end, :done} -> true
-      _ -> false
-    end)
   end
 
   # SSE Processing
 
-  defp process_sse_chunk(chunk) do
-    lines = String.split(chunk, "\n")
+  defp parse_sse_chunk(data) do
+    lines = String.split(data, "\n")
 
-    {events, remainder_lines} =
-      Enum.split_with(lines, fn line ->
-        String.starts_with?(line, "data: ") or line == ""
-      end)
+    # Last element may be an incomplete line — keep it as the new buffer
+    {complete_lines, [remainder]} = Enum.split(lines, -1)
 
-    # Join any non-matching lines as the remainder (partial data for next chunk)
-    remainder = Enum.join(remainder_lines, "\n")
-
-    parsed =
-      events
-      |> Enum.filter(&(&1 != ""))
+    events =
+      complete_lines
+      |> Enum.filter(&String.starts_with?(&1, "data: "))
       |> Enum.map(fn line ->
         case String.trim_leading(line, "data: ") do
           "[DONE]" -> :done
@@ -182,7 +196,7 @@ defmodule Mana.Models.Providers.OpenAI do
         end
       end)
 
-    {parsed, remainder}
+    {events, remainder}
   end
 
   defp decode_sse_json(json) do
@@ -313,6 +327,21 @@ defmodule Mana.Models.Providers.OpenAI do
       tools -> Map.put(body, "tools", tools)
     end
   end
+
+  defp parse_retry_after(%{headers: headers}) do
+    case headers["retry-after"] do
+      [value | _] ->
+        case Integer.parse(value) do
+          {seconds, _} -> seconds
+          :error -> 60
+        end
+
+      _ ->
+        60
+    end
+  end
+
+  defp format_error(%{__struct__: _} = body), do: inspect(body)
 
   defp format_error(body) when is_map(body) do
     error = body["error"] || %{}
