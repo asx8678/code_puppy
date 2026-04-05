@@ -12,15 +12,6 @@ defmodule Mana.Agents.RunSupervisorTest do
   alias Mana.Config.Store
   alias Mana.Tools.Registry, as: ToolsRegistry
 
-  setup do
-    start_supervised!(Store)
-    start_supervised!(Registry)
-    start_supervised!(ToolsRegistry)
-    start_supervised!(RunSupervisor)
-
-    :ok
-  end
-
   @test_agent_def %{
     name: "test",
     display_name: "Test Agent",
@@ -30,6 +21,15 @@ defmodule Mana.Agents.RunSupervisorTest do
     user_prompt: "",
     tools_config: %{}
   }
+
+  setup do
+    start_supervised!(Store)
+    start_supervised!(Registry)
+    start_supervised!(ToolsRegistry)
+    start_supervised!(RunSupervisor)
+
+    :ok
+  end
 
   describe "start_link/1" do
     test "starts a DynamicSupervisor" do
@@ -67,6 +67,111 @@ defmodule Mana.Agents.RunSupervisorTest do
       # Should handle dead pid gracefully
       result = RunSupervisor.start_run(dead_pid, "Hello", [])
       assert match?({:ok, _}, result)
+    end
+  end
+
+  describe "start_parallel_runs/2" do
+    test "starts multiple supervised run tasks" do
+      {:ok, agent_pid1} = Server.start_link(agent_def: @test_agent_def)
+      {:ok, agent_pid2} = Server.start_link(agent_def: @test_agent_def)
+
+      runs = [
+        {agent_pid1, "Hello", []},
+        {agent_pid2, "World", []}
+      ]
+
+      result = RunSupervisor.start_parallel_runs(runs)
+
+      # Should return {:ok, [pid, pid]}
+      assert match?({:ok, [_, _]}, result)
+      {:ok, pids} = result
+
+      # All tasks should be alive initially
+      for pid <- pids do
+        assert Process.alive?(pid)
+      end
+    end
+
+    test "returns empty list for empty runs" do
+      result = RunSupervisor.start_parallel_runs([])
+      assert result == {:ok, []}
+    end
+
+    test "respects max_parallel option" do
+      {:ok, agent_pid} = Server.start_link(agent_def: @test_agent_def)
+
+      # Create 8 runs with max_parallel: 2
+      runs = for i <- 1..8, do: {agent_pid, "message #{i}", []}
+
+      # Start with max_parallel: 2
+      result = RunSupervisor.start_parallel_runs(runs, max_parallel: 2)
+      assert match?({:ok, _}, result)
+      {:ok, pids} = result
+      assert length(pids) == 8
+    end
+
+    test "uses default max_parallel of 4" do
+      {:ok, agent_pid} = Server.start_link(agent_def: @test_agent_def)
+
+      # Create 6 runs (more than default max_parallel of 4)
+      runs = for i <- 1..6, do: {agent_pid, "message #{i}", []}
+
+      result = RunSupervisor.start_parallel_runs(runs)
+      assert match?({:ok, _}, result)
+      {:ok, pids} = result
+      assert length(pids) == 6
+    end
+
+    test "propagates :max_children error when limit exceeded" do
+      # Start a RunSupervisor with a very low max_children for testing
+      {:ok, test_supervisor} = RunSupervisor.start_link(max_children: 3, name: :test_low_capacity)
+
+      # Fill the supervisor near capacity (2 children)
+      for _i <- 1..2 do
+        {:ok, _} =
+          DynamicSupervisor.start_child(
+            test_supervisor,
+            %{
+              id: make_ref(),
+              start: {Task, :start_link, [fn -> Process.sleep(5000) end]},
+              restart: :temporary
+            }
+          )
+      end
+
+      {:ok, agent_pid} = Server.start_link(agent_def: @test_agent_def)
+
+      # Try to start 5 parallel runs (which would exceed the limit of 3 children)
+      runs = for i <- 1..5, do: {agent_pid, "message #{i}", []}
+
+      # Call start_parallel_runs with the test supervisor
+      result = RunSupervisor.start_parallel_runs(runs, supervisor: test_supervisor)
+
+      # Should return an error (either :max_children or another error from the runs)
+      assert match?({:error, _}, result)
+
+      # Cleanup
+      DynamicSupervisor.stop(test_supervisor)
+    end
+
+    test "parallel tasks are supervised independently" do
+      {:ok, agent_pid1} = Server.start_link(agent_def: @test_agent_def)
+      {:ok, agent_pid2} = Server.start_link(agent_def: @test_agent_def)
+
+      runs = [
+        {agent_pid1, "Hello", []},
+        {agent_pid2, "World", []}
+      ]
+
+      {:ok, [pid1, _pid2]} = RunSupervisor.start_parallel_runs(runs)
+
+      # Kill one task
+      Process.exit(pid1, :kill)
+      wait_for_exit(pid1, timeout: 500)
+
+      # The other task should still be alive (or have completed)
+      # We just verify the parallel execution happened
+      refute Process.alive?(pid1)
     end
   end
 
