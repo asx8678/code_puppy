@@ -81,9 +81,9 @@ defmodule Mana.Tools.AgentToolsTest do
       assert schema.type == "object"
       assert "agent_name" in schema.required
       assert "prompt" in schema.required
-      assert schema.properties["agent_name"].type == "string"
-      assert schema.properties["prompt"].type == "string"
-      assert schema.properties["session_id"].type == "string"
+      assert schema.properties[:agent_name].type == "string"
+      assert schema.properties[:prompt].type == "string"
+      assert schema.properties[:session_id].type == "string"
     end
 
     test "execute returns error for unknown agent" do
@@ -150,7 +150,7 @@ defmodule Mana.Tools.AgentToolsTest do
       schema = AgentTools.AskUser.parameters()
       assert schema.type == "object"
       assert "question" in schema.required
-      assert schema.properties["question"].type == "string"
+      assert schema.properties[:question].type == "string"
     end
 
     test "execute without question returns error" do

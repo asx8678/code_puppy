@@ -19,8 +19,10 @@ defmodule Mana.Application do
           # 2. Plugin.Manager — hooks for lifecycle
           # 3. Callbacks.Registry — callback dispatch
           # 4. MessageBus — message routing
-          # 5. Shell.Executor — shell command execution
-          {Mana.Config.Store, []},
+          # 5. Tools.Registry — tool registration and execution
+          {Mana.Tools.Registry, []},
+          # 6. Shell.Executor — shell command execution
+          {Mana.Shell.Executor, []},
           {Mana.Plugin.Manager, []},
           {Mana.Callbacks.Registry, []},
           {Mana.MessageBus, []},

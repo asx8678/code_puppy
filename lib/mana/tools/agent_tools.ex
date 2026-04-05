@@ -80,15 +80,15 @@ defmodule Mana.Tools.AgentTools do
       %{
         type: "object",
         properties: %{
-          "agent_name" => %{
+          agent_name: %{
             type: "string",
             description: "Name of agent to invoke"
           },
-          "prompt" => %{
+          prompt: %{
             type: "string",
             description: "Task prompt for the agent"
           },
-          "session_id" => %{
+          session_id: %{
             type: "string",
             description: "Session ID for the agent run (optional)"
           }
@@ -157,7 +157,7 @@ defmodule Mana.Tools.AgentTools do
       %{
         type: "object",
         properties: %{
-          "question" => %{
+          question: %{
             type: "string",
             description: "Question to ask the user"
           }

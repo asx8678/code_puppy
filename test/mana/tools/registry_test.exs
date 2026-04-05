@@ -83,14 +83,21 @@ defmodule Mana.Tools.RegistryTest do
       assert spec.restart == :permanent
     end
 
-    test "registers stub tools on startup" do
+    test "registers real tools on startup" do
       tools = Registry.list_tools()
 
+      # 10 real tools are registered on startup
       assert "list_files" in tools
       assert "read_file" in tools
-      assert "write_file" in tools
-      assert "edit_file" in tools
+      assert "grep" in tools
+      assert "create_file" in tools
+      assert "replace_in_file" in tools
+      assert "delete_file" in tools
+      assert "list_agents" in tools
+      assert "invoke_agent" in tools
+      assert "ask_user" in tools
       assert "run_shell_command" in tools
+      assert length(tools) == 10
     end
   end
 
@@ -158,10 +165,10 @@ defmodule Mana.Tools.RegistryTest do
       assert {:error, :not_found} = Registry.get_tool("unknown_tool")
     end
 
-    test "stub tools have correct schemas" do
+    test "real tools have correct schemas" do
       assert {:ok, details} = Registry.get_tool("list_files")
       assert details.parameters.type == "object"
-      assert details.parameters.properties.path != nil
+      assert details.parameters.properties[:directory] != nil
     end
   end
 
@@ -178,7 +185,7 @@ defmodule Mana.Tools.RegistryTest do
       assert test_tool_def.function.description == "A test tool"
     end
 
-    test "definitions include stub tools" do
+    test "definitions include real tools" do
       definitions = Registry.tool_definitions("any_agent")
 
       list_files_def = Enum.find(definitions, &(&1.function.name == "list_files"))
@@ -205,8 +212,8 @@ defmodule Mana.Tools.RegistryTest do
     test "returns initial stats" do
       stats = Registry.get_stats()
 
-      # 5 stub tools are registered on startup
-      assert stats.tools_registered == 5
+      # 10 real tools are registered on startup
+      assert stats.tools_registered == 10
       assert stats.calls == 0
       assert stats.errors == 0
     end
@@ -215,8 +222,8 @@ defmodule Mana.Tools.RegistryTest do
       Registry.register(TestTool)
 
       stats = Registry.get_stats()
-      # 5 stub tools + 1 new tool
-      assert stats.tools_registered == 6
+      # 10 real tools + 1 new tool
+      assert stats.tools_registered == 11
     end
 
     test "stats reflect tool calls" do
@@ -230,37 +237,63 @@ defmodule Mana.Tools.RegistryTest do
     end
   end
 
-  describe "stub tools" do
-    test "all stub tools return not_implemented" do
-      stubs = ["list_files", "read_file", "write_file", "edit_file", "run_shell_command"]
+  describe "real tools" do
+    test "real tools are registered and execute" do
+      # Real tools are registered, they don't return :not_implemented
+      # They either succeed or fail based on input
+      tools = Registry.list_tools()
 
-      Enum.each(stubs, fn tool ->
-        assert {:error, :not_implemented} = Registry.execute(tool, %{"path" => "/tmp/test"})
-      end)
+      assert "list_files" in tools
+      assert "read_file" in tools
+      assert "grep" in tools
+      assert "create_file" in tools
+      assert "replace_in_file" in tools
+      assert "delete_file" in tools
+      assert "list_agents" in tools
+      assert "invoke_agent" in tools
+      assert "ask_user" in tools
+      assert "run_shell_command" in tools
     end
 
-    test "stub tools have valid parameters" do
+    test "real tools have valid parameters" do
       assert {:ok, list_files} = Registry.get_tool("list_files")
-      assert list_files.parameters.properties.path != nil
-      assert list_files.parameters.properties.recursive != nil
+      assert list_files.parameters.properties[:directory] != nil
+      assert list_files.parameters.properties[:recursive] != nil
 
       assert {:ok, read_file} = Registry.get_tool("read_file")
-      assert read_file.parameters.properties.path != nil
-      assert read_file.parameters.properties.start_line != nil
+      assert read_file.parameters.properties[:file_path] != nil
+      assert read_file.parameters.properties[:start_line] != nil
 
-      assert {:ok, write_file} = Registry.get_tool("write_file")
-      assert write_file.parameters.properties.path != nil
-      assert write_file.parameters.properties.content != nil
+      assert {:ok, create_file} = Registry.get_tool("create_file")
+      assert create_file.parameters.properties[:file_path] != nil
+      assert create_file.parameters.properties[:content] != nil
 
-      assert {:ok, edit_file} = Registry.get_tool("edit_file")
-      assert edit_file.parameters.properties.path != nil
-      assert edit_file.parameters.properties.old_str != nil
-      assert edit_file.parameters.properties.new_str != nil
+      assert {:ok, replace_file} = Registry.get_tool("replace_in_file")
+      assert replace_file.parameters.properties[:file_path] != nil
+      assert replace_file.parameters.properties[:old_string] != nil
+      assert replace_file.parameters.properties[:new_string] != nil
+
+      assert {:ok, delete_file} = Registry.get_tool("delete_file")
+      assert delete_file.parameters.properties[:file_path] != nil
+
+      assert {:ok, grep} = Registry.get_tool("grep")
+      assert grep.parameters.properties[:search_string] != nil
+      assert grep.parameters.properties[:directory] != nil
 
       assert {:ok, shell} = Registry.get_tool("run_shell_command")
-      assert shell.parameters.properties.command != nil
-      assert shell.parameters.properties.cwd != nil
-      assert shell.parameters.properties.timeout != nil
+      assert shell.parameters.properties[:command] != nil
+      assert shell.parameters.properties[:cwd] != nil
+      assert shell.parameters.properties[:timeout] != nil
+
+      assert {:ok, list_agents} = Registry.get_tool("list_agents")
+      assert list_agents.parameters.type == "object"
+
+      assert {:ok, invoke_agent} = Registry.get_tool("invoke_agent")
+      assert invoke_agent.parameters.properties[:agent_name] != nil
+      assert invoke_agent.parameters.properties[:prompt] != nil
+
+      assert {:ok, ask_user} = Registry.get_tool("ask_user")
+      assert ask_user.parameters.properties[:question] != nil
     end
   end
 end
