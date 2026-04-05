@@ -250,7 +250,7 @@ defmodule Mana.OAuth.RefreshManager do
     # Spawn the actual refresh work with monitoring
     pid = self()
 
-    Task.start(fn ->
+    Task.Supervisor.start_child(Mana.TaskSupervisor, fn ->
       result =
         try do
           perform_refresh(provider, refresh_fn)

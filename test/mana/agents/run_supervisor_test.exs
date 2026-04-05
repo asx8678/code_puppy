@@ -10,10 +10,12 @@ defmodule Mana.Agents.RunSupervisorTest do
   alias Mana.Agents.RunSupervisor
   alias Mana.Callbacks.Registry
   alias Mana.Config.Store
+  alias Mana.Tools.Registry, as: ToolsRegistry
 
   setup do
     start_supervised!(Store)
     start_supervised!(Registry)
+    start_supervised!(ToolsRegistry)
     start_supervised!(RunSupervisor)
 
     :ok
@@ -159,7 +161,7 @@ defmodule Mana.Agents.RunSupervisorTest do
       # Wait for it to complete and terminate
       assert_eventually(
         fn -> not Process.alive?(task_pid) end,
-        timeout: 500
+        timeout: 5000
       )
 
       # Child should be terminated

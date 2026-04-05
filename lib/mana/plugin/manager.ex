@@ -711,7 +711,7 @@ defmodule Mana.Plugin.Manager do
       if mode == :async do
         # Fire and forget for async
         Enum.each(callbacks, fn {func, _plugin_name} ->
-          Task.start(fn ->
+          Task.Supervisor.start_child(Mana.TaskSupervisor, fn ->
             try do
               apply_callback(func, args)
             catch

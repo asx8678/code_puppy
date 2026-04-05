@@ -88,9 +88,8 @@ defmodule Mana.Agents.RunSupervisor do
                    {:error, reason}
                end
              after
-               # Terminate this child from the supervisor when done
-               _child_pid = self()
-               DynamicSupervisor.terminate_child(parent_supervisor, self())
+               # Exit the task process when done
+               exit(:normal)
              end
            end
          ]},

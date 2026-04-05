@@ -68,7 +68,7 @@ defmodule Mana.Agent.Runner do
     timeout = Keyword.get(opts, :timeout, 120_000)
 
     task =
-      Task.async(fn ->
+      Task.Supervisor.async_nolink(Mana.TaskSupervisor, fn ->
         do_run_with_state(agent_state, user_message, opts)
       end)
 
