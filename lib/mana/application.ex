@@ -67,6 +67,9 @@ defmodule Mana.Application do
       configure_headless_logging()
     end
 
+    # Attach telemetry handler for session metrics
+    Mana.TelemetryHandler.attach()
+
     children =
       if Application.get_env(:mana, :auto_start, true) do
         [

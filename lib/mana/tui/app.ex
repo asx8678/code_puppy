@@ -1,5 +1,5 @@
 defmodule Mana.TUI.App do
-  @moduledoc "Main TUI application loop with non-blocking input"
+  @moduledoc "Main TUI application loop with non-blocking input and tab completion"
 
   alias Mana.Agent.Runner
   alias Mana.Banner
@@ -7,9 +7,16 @@ defmodule Mana.TUI.App do
   alias Mana.Config
   alias Mana.MessageBus
   alias Mana.Session.Store
+  alias Mana.TUI.Completion
   alias Mana.TUI.Markdown
 
   require Logger
+
+  # Completion state tracks the in-progress tab cycle
+  defmodule CompletionState do
+    @moduledoc false
+    defstruct completions: [], cycle_index: -1, last_input: ""
+  end
 
   @doc "Start the TUI application"
   @spec start(keyword()) :: :ok
@@ -48,80 +55,279 @@ defmodule Mana.TUI.App do
       |> to_string()
     )
 
-    # Start input reader process for non-blocking input
-    input_pid = spawn_input_reader(self())
+    # Enable raw mode for character-by-character input (supports tab completion)
+    enable_raw_mode()
 
-    # Main loop with non-blocking input
-    loop(session_id, opts, input_pid)
+    # Start input reader process for non-blocking raw input
+    input_pid = spawn_raw_reader(self())
+
+    # Print initial prompt
+    redraw_prompt("")
+
+    # Main loop with non-blocking input and completion state
+    loop(session_id, opts, input_pid, %CompletionState{})
   end
 
-  # Spawns a separate process to read input and send it to the main process
-  defp spawn_input_reader(parent_pid) do
-    spawn(fn -> input_reader_loop(parent_pid) end)
+  # Enable raw mode on the terminal so we receive individual keystrokes
+  defp enable_raw_mode do
+    case :io.getopts(:standard_io) do
+      opts when is_list(opts) ->
+        # Merge raw options: binary, no echo, no canonical (raw)
+        :io.setopts(:standard_io, [:binary, {:echo, false}, {:canonical, false}])
+
+      _ ->
+        :ok
+    end
   end
 
-  # Input reader loop - runs in separate process to avoid blocking
-  defp input_reader_loop(parent_pid) do
-    prompt = IO.ANSI.format([:bright, :green, "❯ ", :reset]) |> to_string()
-    IO.write(prompt)
+  # Restore the terminal to cooked (line-buffered) mode
+  defp restore_terminal_mode do
+    try do
+      :io.setopts(:standard_io, [:binary, {:echo, true}, {:canonical, true}])
+    rescue
+      _ -> :ok
+    end
+  end
 
-    case IO.read(:line) do
+  # Spawns a separate process to read raw input and forward keystrokes/lines
+  defp spawn_raw_reader(parent_pid) do
+    spawn(fn -> raw_reader_loop(parent_pid) end)
+  end
+
+  # Raw reader loop — reads one byte/character at a time.
+  # Sends {:key, char} for printable chars and {:key, sequence} for special keys.
+  # On Enter (\n or \r), sends the accumulated line as {:input, line}.
+  defp raw_reader_loop(parent_pid) do
+    case IO.read(1) do
       :eof ->
         send(parent_pid, {:input, "/quit\n"})
 
       {:error, _} ->
         send(parent_pid, {:input, "/quit\n"})
 
-      line when is_binary(line) ->
-        send(parent_pid, {:input, line})
-        input_reader_loop(parent_pid)
+      <<9>> ->
+        # Tab key
+        send(parent_pid, {:key, :tab})
+        raw_reader_loop(parent_pid)
+
+      <<3>> ->
+        # Ctrl-C
+        send(parent_pid, {:key, :ctrl_c})
+        raw_reader_loop(parent_pid)
+
+      <<127>> ->
+        # Backspace (common terminal)
+        send(parent_pid, {:key, :backspace})
+        raw_reader_loop(parent_pid)
+
+      <<27>> ->
+        # Escape sequence — peek ahead for arrow keys etc.
+        handle_escape(parent_pid)
+        raw_reader_loop(parent_pid)
+
+      <<10>> ->
+        # Newline (\n) — Enter key
+        send(parent_pid, {:key, :enter})
+        raw_reader_loop(parent_pid)
+
+      <<13>> ->
+        # Carriage return (\r) — Enter key
+        send(parent_pid, {:key, :enter})
+        raw_reader_loop(parent_pid)
+
+      <<ch>> when ch >= 32 ->
+        # Printable character
+        send(parent_pid, {:key, <<ch>>})
+        raw_reader_loop(parent_pid)
+
+      _other ->
+        raw_reader_loop(parent_pid)
     end
   end
 
-  defp loop(session_id, opts, input_pid) do
+  # Handle ANSI escape sequences (arrow keys, etc.)
+  defp handle_escape(parent_pid) do
+    # Try to read the rest of the escape sequence with a small timeout
     receive do
-      {:input, input} ->
-        handle_input(input, session_id, opts, input_pid)
+      {:io_reply, _, <<91, 65>>} ->
+        # Up arrow: \e[A
+        send(parent_pid, {:key, :up})
+
+      {:io_reply, _, <<91, 66>>} ->
+        # Down arrow: \e[B
+        send(parent_pid, {:key, :down})
+
+      {:io_reply, _, <<91, 67>>} ->
+        # Right arrow: \e[C
+        send(parent_pid, {:key, :right})
+
+      {:io_reply, _, <<91, 68>>} ->
+        # Left arrow: \e[D
+        send(parent_pid, {:key, :left})
+
+      _ ->
+        :ok
+    after
+      20 -> :ok
+    end
+  end
+
+  # Main loop — processes key events and maintains a line buffer
+  # along with completion state for tab cycling.
+  defp loop(session_id, opts, input_pid, cs) do
+    receive do
+      {:key, :tab} ->
+        cs = handle_tab(cs, opts)
+        loop(session_id, opts, input_pid, cs)
+
+      {:key, :enter} ->
+        line = cs.last_input
+        # Move to new line, then process
+        IO.write("\n")
+        cs = %CompletionState{}
+        handle_input(line <> "\n", session_id, opts, input_pid)
+        loop(session_id, opts, input_pid, cs)
+
+      {:key, :backspace} ->
+        buffer = cs.last_input
+
+        new_buffer =
+          if byte_size(buffer) > 0 do
+            binary_part(buffer, 0, byte_size(buffer) - 1)
+          else
+            buffer
+          end
+
+        cs = reset_completion(new_buffer)
+        redraw_prompt(new_buffer)
+        loop(session_id, opts, input_pid, cs)
+
+      {:key, :ctrl_c} ->
+        IO.write("^C\n")
+        cs = %CompletionState{}
+        redraw_prompt("")
+        loop(session_id, opts, input_pid, cs)
+
+      {:key, ch} when is_binary(ch) ->
+        new_buffer = cs.last_input <> ch
+        cs = reset_completion(new_buffer)
+        redraw_prompt(new_buffer)
+        loop(session_id, opts, input_pid, cs)
+
+      {:key, _other} ->
+        # Ignore other special keys for now
+        loop(session_id, opts, input_pid, cs)
 
       {:message, %{type: :text} = msg} ->
+        # Clear current prompt line, print message, redraw prompt
+        IO.write("\r\e[K")
         IO.puts(IO.ANSI.format([:faint, msg.content, :reset]) |> to_string())
-        # Reprint prompt since message interrupted it
-        prompt = IO.ANSI.format([:bright, :green, "❯ ", :reset]) |> to_string()
-        IO.write(prompt)
-        loop(session_id, opts, input_pid)
+        redraw_prompt(cs.last_input)
+        loop(session_id, opts, input_pid, cs)
 
       {:message, _msg} ->
-        # Ignore other message types
-        loop(session_id, opts, input_pid)
+        loop(session_id, opts, input_pid, cs)
 
       _other ->
-        loop(session_id, opts, input_pid)
+        loop(session_id, opts, input_pid, cs)
     end
+  end
+
+  # Handle Tab key — complete or cycle through completions
+  defp handle_tab(%CompletionState{completions: [], last_input: input} = cs, _opts) do
+    # No active completions — compute new ones
+    {completions, common} = Completion.complete(input, %{})
+
+    case completions do
+      [] ->
+        # No matches — beep
+        IO.write("\a")
+        cs
+
+      [single] ->
+        # Single match — auto-complete
+        new_input = single <> " "
+        redraw_prompt(new_input)
+        %CompletionState{last_input: new_input}
+
+      _multiple ->
+        # Multiple matches — fill common prefix, show options, start cycling
+        if common != input and common != "" do
+          redraw_prompt(common)
+        end
+
+        # Display completions on a new line
+        display_completions(completions)
+        redraw_prompt(if common != "", do: common, else: input)
+
+        %CompletionState{
+          completions: completions,
+          cycle_index: 0,
+          last_input: if(common != "", do: common, else: input)
+        }
+    end
+  end
+
+  defp handle_tab(%CompletionState{completions: completions, cycle_index: idx} = cs, _opts)
+       when completions != [] do
+    # Already cycling — advance to next completion
+    {next_idx, selected} = Completion.cycle(idx, completions)
+    redraw_prompt(selected)
+    %CompletionState{cs | cycle_index: next_idx, last_input: selected}
+  end
+
+  # Reset completion state when user types new characters or backspaces
+  defp reset_completion(new_buffer) do
+    %CompletionState{last_input: new_buffer}
+  end
+
+  # Redraw the prompt with the current buffer contents
+  defp redraw_prompt(buffer) do
+    prompt = IO.ANSI.format([:bright, :green, "❯ ", :reset]) |> to_string()
+    # \r moves to start of line, \e[K clears to end of line
+    IO.write("\r\e[K#{prompt}#{buffer}")
+  end
+
+  # Display a list of completion options
+  defp display_completions(completions) do
+    formatted =
+      completions
+      |> Enum.map(&(IO.ANSI.format([:cyan, &1, :reset]) |> to_string()))
+      |> Enum.join("  ")
+
+    IO.write("\n#{formatted}\n")
   end
 
   defp handle_input(input, session_id, opts, input_pid) do
+    cs = %CompletionState{}
+
     case String.trim(input) do
       "" ->
-        loop(session_id, opts, input_pid)
+        redraw_prompt("")
+        loop(session_id, opts, input_pid, cs)
 
       "/quit" ->
         shutdown(session_id, input_pid)
 
       "/help" ->
         print_help()
-        loop(session_id, opts, input_pid)
+        redraw_prompt("")
+        loop(session_id, opts, input_pid, cs)
 
       "/clear" ->
         IO.write("\e[2J\e[H")
-        loop(session_id, opts, input_pid)
+        redraw_prompt("")
+        loop(session_id, opts, input_pid, cs)
 
       "/" <> command ->
         dispatch_command(command, session_id)
-        loop(session_id, opts, input_pid)
+        redraw_prompt("")
+        loop(session_id, opts, input_pid, cs)
 
       message ->
         run_agent(message, session_id, opts)
-        loop(session_id, opts, input_pid)
+        redraw_prompt("")
+        loop(session_id, opts, input_pid, cs)
     end
   end
 
@@ -219,6 +425,9 @@ defmodule Mana.TUI.App do
   end
 
   defp shutdown(session_id, input_pid) do
+    # Restore terminal before exiting
+    restore_terminal_mode()
+
     # Stop the input reader process
     Process.exit(input_pid, :kill)
 
