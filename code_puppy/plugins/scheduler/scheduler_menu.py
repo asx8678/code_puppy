@@ -18,6 +18,11 @@ try:
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
 
+from code_puppy.command_line.pagination import (
+    ensure_visible_page,
+    get_page_bounds,
+    get_total_pages,
+)
 from code_puppy.messaging import emit_error, emit_success, emit_warning
 from code_puppy.scheduler.config import (
     ScheduledTask,
@@ -95,9 +100,10 @@ class SchedulerMenu:
             return lines
 
         # Pagination
-        total_pages = (len(self.tasks) + PAGE_SIZE - 1) // PAGE_SIZE
-        start_idx = self.current_page * PAGE_SIZE
-        end_idx = min(start_idx + PAGE_SIZE, len(self.tasks))
+        total_pages = get_total_pages(len(self.tasks), PAGE_SIZE)
+        start_idx, end_idx = get_page_bounds(
+            self.current_page, len(self.tasks), PAGE_SIZE
+        )
 
         for i in range(start_idx, end_idx):
             task = self.tasks[i]
@@ -229,7 +235,12 @@ class SchedulerMenu:
         def _(event):
             if self.selected_idx > 0:
                 self.selected_idx -= 1
-                self.current_page = self.selected_idx // PAGE_SIZE
+                self.current_page = ensure_visible_page(
+                    self.selected_idx,
+                    self.current_page,
+                    len(self.tasks),
+                    PAGE_SIZE,
+                )
             self.update_display()
 
         @kb.add("down")
@@ -237,7 +248,12 @@ class SchedulerMenu:
         def _(event):
             if self.selected_idx < len(self.tasks) - 1:
                 self.selected_idx += 1
-                self.current_page = self.selected_idx // PAGE_SIZE
+                self.current_page = ensure_visible_page(
+                    self.selected_idx,
+                    self.current_page,
+                    len(self.tasks),
+                    PAGE_SIZE,
+                )
             self.update_display()
 
         @kb.add("left")
@@ -249,7 +265,7 @@ class SchedulerMenu:
 
         @kb.add("right")
         def _(event):
-            total_pages = (len(self.tasks) + PAGE_SIZE - 1) // PAGE_SIZE
+            total_pages = get_total_pages(len(self.tasks), PAGE_SIZE)
             if self.current_page < total_pages - 1:
                 self.current_page += 1
                 self.selected_idx = self.current_page * PAGE_SIZE

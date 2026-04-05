@@ -26,6 +26,12 @@ from code_puppy.agents import (
     get_current_agent,
     is_clone_agent_name)
 from code_puppy.command_line.model_picker_completion import load_model_names
+from code_puppy.command_line.pagination import (
+    ensure_visible_page,
+    get_page_bounds,
+    get_page_for_index,
+    get_total_pages,
+)
 from code_puppy.config import (
     clear_agent_pinned_model,
     get_agent_pinned_model,
@@ -292,9 +298,8 @@ def _render_menu_panel(
         List of (style, text) tuples for FormattedTextControl
     """
     lines = []
-    total_pages = (len(entries) + PAGE_SIZE - 1) // PAGE_SIZE if entries else 1
-    start_idx = page * PAGE_SIZE
-    end_idx = min(start_idx + PAGE_SIZE, len(entries))
+    total_pages = get_total_pages(len(entries), PAGE_SIZE)
+    start_idx, end_idx = get_page_bounds(page, len(entries), PAGE_SIZE)
 
     lines.append(("bold", "Agents"))
     lines.append(("fg:ansibrightblack", f" (Page {page + 1}/{total_pages})"))
@@ -458,7 +463,7 @@ async def interactive_agent_picker() -> str | None:
     result = [None]  # Selected agent name
     pending_action = [None]  # 'pin', 'clone', 'delete', or None
 
-    total_pages = [max(1, (len(entries) + PAGE_SIZE - 1) // PAGE_SIZE)]
+    total_pages = [get_total_pages(len(entries), PAGE_SIZE)]
 
     def get_current_entry() -> tuple[str, str, str | None]:
         if 0 <= selected_idx[0] < len(entries):
@@ -469,7 +474,7 @@ async def interactive_agent_picker() -> str | None:
         nonlocal entries
 
         entries = _get_agent_entries()
-        total_pages[0] = max(1, (len(entries) + PAGE_SIZE - 1) // PAGE_SIZE)
+        total_pages[0] = get_total_pages(len(entries), PAGE_SIZE)
 
         if not entries:
             selected_idx[0] = 0
@@ -486,7 +491,7 @@ async def interactive_agent_picker() -> str | None:
         else:
             selected_idx[0] = min(selected_idx[0], len(entries) - 1)
 
-        current_page[0] = selected_idx[0] // PAGE_SIZE
+        current_page[0] = get_page_for_index(selected_idx[0], PAGE_SIZE)
 
     # Build UI
     menu_control = FormattedTextControl(text="")
@@ -525,16 +530,24 @@ async def interactive_agent_picker() -> str | None:
     def _(event):
         if selected_idx[0] > 0:
             selected_idx[0] -= 1
-            # Update page if needed
-            current_page[0] = selected_idx[0] // PAGE_SIZE
+            current_page[0] = ensure_visible_page(
+                selected_idx[0],
+                current_page[0],
+                len(entries),
+                PAGE_SIZE,
+            )
             update_display()
 
     @kb.add("down")
     def _(event):
         if selected_idx[0] < len(entries) - 1:
             selected_idx[0] += 1
-            # Update page if needed
-            current_page[0] = selected_idx[0] // PAGE_SIZE
+            current_page[0] = ensure_visible_page(
+                selected_idx[0],
+                current_page[0],
+                len(entries),
+                PAGE_SIZE,
+            )
             update_display()
 
     @kb.add("left")

@@ -20,6 +20,12 @@ except ImportError:
     _HAS_PROMPT_TOOLKIT = False
 
 from code_puppy.command_line.command_registry import register_command
+from code_puppy.command_line.pagination import (
+    ensure_visible_page,
+    get_page_bounds,
+    get_page_for_index,
+    get_total_pages,
+)
 from code_puppy.messaging import emit_error, emit_info, emit_success
 from code_puppy.plugins.universal_constructor.models import UCToolInfo
 from code_puppy.plugins.universal_constructor.registry import get_registry
@@ -201,9 +207,8 @@ def _render_menu_panel(
         List of (style, text) tuples for FormattedTextControl
     """
     lines = []
-    total_pages = (len(tools) + PAGE_SIZE - 1) // PAGE_SIZE if tools else 1
-    start_idx = page * PAGE_SIZE
-    end_idx = min(start_idx + PAGE_SIZE, len(tools))
+    total_pages = get_total_pages(len(tools), PAGE_SIZE)
+    start_idx, end_idx = get_page_bounds(page, len(tools), PAGE_SIZE)
 
     lines.append(("bold", "UC Tools"))
     lines.append(("fg:ansibrightblack", f" (Page {page + 1}/{total_pages})"))
@@ -593,7 +598,7 @@ async def interactive_uc_picker() -> str | None:
     source_lines = [[]]  # Cached source lines
     source_error = [None]  # Error loading source
 
-    total_pages = [max(1, (len(tools) + PAGE_SIZE - 1) // PAGE_SIZE)]
+    total_pages = [get_total_pages(len(tools), PAGE_SIZE)]
 
     def get_current_tool() -> UCToolInfo | None:
         if 0 <= selected_idx[0] < len(tools):
@@ -603,7 +608,7 @@ async def interactive_uc_picker() -> str | None:
     def refresh_tools(selected_name: str | None = None) -> None:
         nonlocal tools
         tools = _get_tool_entries()
-        total_pages[0] = max(1, (len(tools) + PAGE_SIZE - 1) // PAGE_SIZE)
+        total_pages[0] = get_total_pages(len(tools), PAGE_SIZE)
 
         if not tools:
             selected_idx[0] = 0
@@ -620,7 +625,7 @@ async def interactive_uc_picker() -> str | None:
         else:
             selected_idx[0] = min(selected_idx[0], len(tools) - 1)
 
-        current_page[0] = selected_idx[0] // PAGE_SIZE
+        current_page[0] = get_page_for_index(selected_idx[0], PAGE_SIZE)
 
     # Build UI controls
     menu_control = FormattedTextControl(text="")
@@ -671,14 +676,24 @@ async def interactive_uc_picker() -> str | None:
     def _list_up(event):
         if selected_idx[0] > 0:
             selected_idx[0] -= 1
-            current_page[0] = selected_idx[0] // PAGE_SIZE
+            current_page[0] = ensure_visible_page(
+                selected_idx[0],
+                current_page[0],
+                len(tools),
+                PAGE_SIZE,
+            )
             update_list_display()
 
     @list_kb.add("down")
     def _list_down(event):
         if selected_idx[0] < len(tools) - 1:
             selected_idx[0] += 1
-            current_page[0] = selected_idx[0] // PAGE_SIZE
+            current_page[0] = ensure_visible_page(
+                selected_idx[0],
+                current_page[0],
+                len(tools),
+                PAGE_SIZE,
+            )
             update_list_display()
 
     @list_kb.add("left")

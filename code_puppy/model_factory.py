@@ -4,6 +4,8 @@ import os
 import pathlib
 from typing import Any, Callable
 
+import httpx
+
 # Light pydantic-ai imports needed at module scope for make_model_settings()
 from pydantic_ai.models.anthropic import AnthropicModelSettings
 from pydantic_ai.models.openai import OpenAIChatModelSettings
@@ -532,9 +534,9 @@ def _build_custom_openai(model_name: str, model_config: dict, config: dict) -> A
 
     url, headers, verify, api_key = get_custom_config(model_config)
     client = create_async_client(headers=headers, verify=verify)
-    provider_args: dict = dict(
-        base_url=url,
-        http_client=client)
+    provider_args: dict = {"base_url": url}
+    if isinstance(client, httpx.AsyncClient):
+        provider_args["http_client"] = client
     if api_key:
         provider_args["api_key"] = api_key
     provider = OpenAIProvider(**provider_args)
