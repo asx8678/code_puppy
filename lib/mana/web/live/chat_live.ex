@@ -131,7 +131,7 @@ defmodule Mana.Web.Live.ChatLive do
     <div class="chat-container">
       <h1>Mana Chat</h1>
 
-      <div class="messages" id="messages" phx-update="append">
+      <div class="messages" id="messages">
         <%= for msg <- @messages do %>
           <div class={["message", msg.role]}>
             <strong><%= msg.role %>:</strong>
