@@ -61,7 +61,17 @@ defmodule Mana.Agent.Runner do
 
   def run(agent_pid, user_message, opts) when is_pid(agent_pid) do
     agent_state = Server.get_state(agent_pid)
-    run(agent_state, user_message, opts)
+
+    case run(agent_state, user_message, opts) do
+      {:ok, response} ->
+        # Sync messages back to the Server
+        Server.add_message(agent_pid, %{role: "user", content: user_message})
+        Server.add_message(agent_pid, %{role: "assistant", content: response})
+        {:ok, response}
+
+      error ->
+        error
+    end
   end
 
   def run(agent_state, user_message, opts) when is_map(agent_state) do
@@ -348,54 +358,57 @@ defmodule Mana.Agent.Runner do
   end
 
   defp process_stream(stream, handler_module, handler, session_id) do
-    Enum.reduce(stream, {[], "", []}, fn event, {evts, content, tc} = acc ->
-      case event do
-        {:part_start, type, meta} ->
-          part_id = generate_part_id()
-          {:ok, _new_handler} = handler_module.handle_part_start(handler, part_id, type, meta)
+    {evts, content, tc, _part_id, _final_handler} =
+      Enum.reduce(stream, {[], "", [], nil, handler}, fn event, {evts, content, tc, current_part_id, hdlr} ->
+        case event do
+          {:part_start, type, meta} ->
+            part_id = generate_part_id()
+            {:ok, new_handler} = handler_module.handle_part_start(hdlr, part_id, type, meta)
 
-          Callbacks.dispatch(:stream_event, [
-            :part_start,
-            %{part_id: part_id, type: type, metadata: meta},
-            session_id
-          ])
+            Callbacks.dispatch(:stream_event, [
+              :part_start,
+              %{part_id: part_id, type: type, metadata: meta},
+              session_id
+            ])
 
-          {evts ++ [{:part_start, part_id, type, meta}], content, tc}
+            {evts ++ [{:part_start, part_id, type, meta}], content, tc, part_id, new_handler}
 
-        {:part_delta, _type, delta_content} ->
-          part_id = get_current_part_id(handler)
-          {:ok, _new_handler} = handler_module.handle_part_delta(handler, part_id, delta_content)
+          {:part_delta, _type, delta_content} ->
+            pid = current_part_id || "part-unknown"
+            {:ok, new_handler} = handler_module.handle_part_delta(hdlr, pid, delta_content)
 
-          Callbacks.dispatch(:stream_event, [
-            :part_delta,
-            %{part_id: part_id, content: delta_content},
-            session_id
-          ])
+            Callbacks.dispatch(:stream_event, [
+              :part_delta,
+              %{part_id: pid, content: delta_content},
+              session_id
+            ])
 
-          {evts ++ [{:part_delta, part_id, delta_content}], content <> delta_content, tc}
+            {evts ++ [{:part_delta, pid, delta_content}], content <> delta_content, tc, current_part_id, new_handler}
 
-        {:part_end, _type} ->
-          part_id = get_current_part_id(handler)
-          {:ok, _new_handler} = handler_module.handle_part_end(handler, part_id, %{})
+          {:part_end, _type} ->
+            pid = current_part_id || "part-unknown"
+            {:ok, new_handler} = handler_module.handle_part_end(hdlr, pid, %{})
 
-          Callbacks.dispatch(:stream_event, [
-            :part_end,
-            %{part_id: part_id},
-            session_id
-          ])
+            Callbacks.dispatch(:stream_event, [
+              :part_end,
+              %{part_id: pid},
+              session_id
+            ])
 
-          {evts ++ [{:part_end, part_id}], content, tc}
+            {evts ++ [{:part_end, pid}], content, tc, nil, new_handler}
 
-        {:tool_call, tool_call} ->
-          {evts, content, tc ++ [tool_call]}
+          {:tool_call, tool_call} ->
+            {evts, content, tc ++ [tool_call], current_part_id, hdlr}
 
-        {:error, _reason} ->
-          acc
+          {:error, _reason} ->
+            {evts, content, tc, current_part_id, hdlr}
 
-        _ ->
-          acc
-      end
-    end)
+          _ ->
+            {evts, content, tc, current_part_id, hdlr}
+        end
+      end)
+
+    {evts, content, tc}
   end
 
   defp execute_tool_calls(tool_calls, _opts) do
@@ -433,9 +446,15 @@ defmodule Mana.Agent.Runner do
   defp get_tool_schemas(agent_def) do
     available = Map.get(agent_def, :available_tools, []) || []
 
-    case ToolsRegistry.tool_definitions(List.first(available, "")) do
-      tools when is_list(tools) -> tools
-      _ -> []
+    if available == [] do
+      []
+    else
+      Enum.flat_map(available, fn tool_name ->
+        case ToolsRegistry.tool_definitions(tool_name) do
+          tools when is_list(tools) -> tools
+          _ -> []
+        end
+      end)
     end
   end
 
@@ -477,12 +496,6 @@ defmodule Mana.Agent.Runner do
 
   defp generate_part_id do
     "part-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
-  end
-
-  defp get_current_part_id(_handler) do
-    # In a real implementation, this would track the current active part
-    # For now, we generate a consistent ID based on time
-    "part-current"
   end
 
   # Tool call parsing helpers - handle different API formats

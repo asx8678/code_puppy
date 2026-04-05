@@ -117,19 +117,23 @@ defmodule Mana.Models.Providers.Anthropic do
 
     Stream.resource(
       fn ->
-        %{buffer: "", done: false, request_started: false, body: body, url: url, headers: headers}
+        %{buffer: "", done: false, url: url, headers: headers, body: body}
       end,
       fn
         %{done: true} = state ->
           {:halt, state}
 
-        %{request_started: false, body: body, url: url, headers: headers} = state ->
+        %{url: url, headers: headers, body: body} = state ->
           request = Req.new(method: :post, url: url, headers: headers, json: body, into: :self)
 
           case Req.request(request) do
             {:ok, %{status: 200} = response} ->
               events = process_anthropic_stream(response.body)
-              {events, %{state | request_started: true}}
+              done = Enum.any?(events, fn
+                {:part_end, :done} -> true
+                _ -> false
+              end)
+              {events, %{state | done: done}}
 
             {:ok, %{status: status}} ->
               {[{:error, "HTTP #{status}"}], %{state | done: true}}

@@ -481,7 +481,7 @@ defmodule Mana.Shell.Executor do
   end
 
   defp escape(command) do
-    String.replace(command, "'", "'\\''")
+    String.replace(command, "'", "'\''")
   end
 
   defp find_by_port(processes, port) do

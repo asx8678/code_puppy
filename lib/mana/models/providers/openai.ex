@@ -114,30 +114,32 @@ defmodule Mana.Models.Providers.OpenAI do
 
     Stream.resource(
       fn ->
-        request = Req.new(method: :post, url: url, headers: headers, json: body, into: :self)
-        %{request: request, buffer: "", done: false}
+        %{buffer: "", done: false, url: url, headers: headers, body: body}
       end,
-      &stream_next/1,
+      fn
+        %{done: true} = state ->
+          {:halt, state}
+
+        %{url: url, headers: headers, body: body, buffer: buffer} = state ->
+          request = Req.new(method: :post, url: url, headers: headers, json: body, into: :self)
+
+          case Req.request(request) do
+            {:ok, %{status: 200} = response} ->
+              {events, new_buffer} = process_response_body(response.body, buffer)
+              done = stream_complete?(events)
+              {events, %{state | buffer: new_buffer, done: done}}
+
+            {:ok, %{status: status}} ->
+              {[{:error, "HTTP #{status}"}], %{state | done: true}}
+
+            {:error, reason} ->
+              {[{:error, "Request failed: #{inspect(reason)}"}], %{state | done: true}}
+          end
+      end,
       fn _state -> :ok end
     )
   end
 
-  defp stream_next(%{done: true} = state), do: {:halt, state}
-
-  defp stream_next(%{request: request, buffer: buffer} = state) do
-    case Req.request(request) do
-      {:ok, %{status: 200} = response} ->
-        {events, new_buffer} = process_response_body(response.body, buffer)
-        done = stream_complete?(events)
-        {events, %{state | buffer: new_buffer, done: done}}
-
-      {:ok, %{status: status}} ->
-        {[{:error, "HTTP #{status}"}], %{state | done: true}}
-
-      {:error, reason} ->
-        {[{:error, "Request failed: #{inspect(reason)}"}], %{state | done: true}}
-    end
-  end
 
   defp process_response_body(body, buffer) do
     {parsed_events, new_buffer} =

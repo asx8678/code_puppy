@@ -153,12 +153,20 @@ defmodule Mana.Plugin.Manager do
   @spec trigger(Hook.hook_phase(), [term()], keyword()) :: {:ok, [term()]} | {:error, term()}
   def trigger(hook, args \\ [], opts \\ []) do
     # Reentrancy guard: if called from within the GenServer itself, execute directly
-    # to avoid deadlock when callbacks try to trigger other hooks
+    # to avoid deadlock when callbacks try to trigger other hooks.
+    # NOTE: We use the process dictionary to pass state during dispatch,
+    # because :sys.get_state sends a message to self() which deadlocks.
     if self() == GenServer.whereis(__MODULE__) do
-      # We're inside the GenServer process, execute directly
-      state = :sys.get_state(__MODULE__)
-      {results, _new_state} = do_trigger(hook, args, opts, state, :sync)
-      {:ok, results}
+      # We're inside the GenServer process — read state from process dictionary
+      case Process.get(:plugin_manager_state) do
+        nil ->
+          # Fallback: no state available, buffer the event for later
+          {:ok, []}
+
+        state ->
+          {results, _new_state} = do_trigger(hook, args, opts, state, :sync)
+          {:ok, results}
+      end
     else
       # Normal case: call through GenServer
       GenServer.call(__MODULE__, {:trigger, hook, args, opts}, Keyword.get(opts, :timeout, 5000))
@@ -346,7 +354,10 @@ defmodule Mana.Plugin.Manager do
 
   @impl true
   def handle_call({:trigger, hook, args, opts}, _from, state) do
+    # Store state in process dictionary for reentrant calls
+    Process.put(:plugin_manager_state, state)
     {results, new_state} = do_trigger(hook, args, opts, state, :sync)
+    Process.delete(:plugin_manager_state)
     {:reply, {:ok, results}, new_state}
   end
 
@@ -452,7 +463,9 @@ defmodule Mana.Plugin.Manager do
 
   @impl true
   def handle_cast({:trigger_async, hook, args}, state) do
+    Process.put(:plugin_manager_state, state)
     {_results, new_state} = do_trigger(hook, args, [continue_on_error: true], state, :async)
+    Process.delete(:plugin_manager_state)
     {:noreply, new_state}
   end
 
