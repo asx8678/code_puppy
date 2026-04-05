@@ -1,6 +1,8 @@
 defmodule Mix.Tasks.Mana do
   use Mix.Task
 
+  alias Mana.TUI.App
+
   @shortdoc "Start the Mana TUI"
 
   @moduledoc """
@@ -25,7 +27,7 @@ defmodule Mix.Tasks.Mana do
     opts = parse_args(args)
 
     # Start TUI
-    Mana.TUI.App.start(opts)
+    App.start(opts)
   end
 
   defp parse_args(args) do

@@ -127,6 +127,8 @@ defmodule Mana.TUI.App do
     end
   end
 
+  alias Mana.Agent.Builder
+
   defp run_agent(message, session_id, opts) do
     model = Keyword.get(opts, :model, Config.global_model_name())
 
@@ -140,7 +142,7 @@ defmodule Mana.TUI.App do
     }
 
     # Start agent server
-    case Mana.Agent.Builder.build_from_map(agent_def, model_name: model, session_id: session_id) do
+    case Builder.build_from_map(agent_def, model_name: model, session_id: session_id) do
       {:ok, agent_pid} ->
         case Runner.run(agent_pid, message, model: model) do
           {:ok, response} ->

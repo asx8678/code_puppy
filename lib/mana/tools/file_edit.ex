@@ -39,18 +39,22 @@ defmodule Mana.Tools.FileEdit.CreateFile do
     # Validate path safety
     with {:ok, cwd} <- SafePath.current_working_dir(),
          {:ok, safe_path} <- SafePath.validate(path, cwd) do
-      dir = Path.dirname(safe_path)
+      create_file_with_content(safe_path, content)
+    end
+  end
 
-      case File.mkdir_p(dir) do
-        :ok ->
-          case File.write(safe_path, content) do
-            :ok -> {:ok, %{"created" => safe_path, "size" => byte_size(content)}}
-            {:error, reason} -> {:error, "Failed to create #{safe_path}: #{reason}"}
-          end
+  defp create_file_with_content(safe_path, content) do
+    dir = Path.dirname(safe_path)
 
-        {:error, reason} ->
-          {:error, "Failed to create directory #{dir}: #{reason}"}
-      end
+    case File.mkdir_p(dir) do
+      :ok ->
+        case File.write(safe_path, content) do
+          :ok -> {:ok, %{"created" => safe_path, "size" => byte_size(content)}}
+          {:error, reason} -> {:error, "Failed to create #{safe_path}: #{reason}"}
+        end
+
+      {:error, reason} ->
+        {:error, "Failed to create directory #{dir}: #{reason}"}
     end
   end
 end
@@ -102,20 +106,24 @@ defmodule Mana.Tools.FileEdit.ReplaceInFile do
     # Validate path safety
     with {:ok, cwd} <- SafePath.current_working_dir(),
          {:ok, safe_path} <- SafePath.validate(path, cwd) do
-      case File.read(safe_path) do
-        {:ok, content} ->
-          if String.contains?(content, old) do
-            new_content = String.replace(content, old, new, global: false)
-            File.write!(safe_path, new_content)
-            diff = generate_diff(old, new)
-            {:ok, %{"replaced" => safe_path, "diff" => diff}}
-          else
-            {:error, "String not found in #{safe_path}"}
-          end
+      perform_replacement(safe_path, old, new)
+    end
+  end
 
-        {:error, reason} ->
-          {:error, "Failed to read #{safe_path}: #{reason}"}
-      end
+  defp perform_replacement(safe_path, old, new) do
+    case File.read(safe_path) do
+      {:ok, content} ->
+        if String.contains?(content, old) do
+          new_content = String.replace(content, old, new, global: false)
+          File.write!(safe_path, new_content)
+          diff = generate_diff(old, new)
+          {:ok, %{"replaced" => safe_path, "diff" => diff}}
+        else
+          {:error, "String not found in #{safe_path}"}
+        end
+
+      {:error, reason} ->
+        {:error, "Failed to read #{safe_path}: #{reason}"}
     end
   end
 
