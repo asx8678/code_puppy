@@ -499,28 +499,16 @@ defmodule Mana.Shell.Executor do
   defp reply_to_caller(caller, result), do: GenServer.reply(caller, {:ok, result})
 
   defp open_port(command, cwd) do
-    # Use a list format with :spawn_executable to avoid shell parsing issues
-    # This properly handles commands with spaces and quotes
-    Port.open({:spawn, shell_command(command)}, [
+    # Use spawn_executable for direct shell invocation
+    # This eliminates shell injection surface by passing command as argument, not string
+    Port.open({:spawn_executable, "/bin/sh"}, [
       :binary,
       :exit_status,
       :stderr_to_stdout,
       {:cd, cwd},
-      {:line, 1024}
+      {:line, 1024},
+      args: ["-c", command]
     ])
-  end
-
-  defp shell_command(command) do
-    # Use printf to properly escape the command, then execute with sh
-    # This ensures commands with spaces and quotes are handled correctly
-    escaped = escape(command)
-    "sh -c #{escaped}"
-  end
-
-  defp escape(command) do
-    # Use single quotes and escape embedded single quotes
-    # Wrap the entire command in single quotes for the shell
-    "'" <> String.replace(command, "'", "'\\''") <> "'"
   end
 
   defp find_by_port(processes, port) do
