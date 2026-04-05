@@ -66,7 +66,10 @@ defmodule Mana.MixProject do
 
       # Test dependencies
       {:ex_unit_notifier, "~> 1.3", only: :test},
-      {:mock, "~> 0.3", only: :test}
+      {:mock, "~> 0.3", only: :test},
+
+      # Benchmark dependencies
+      {:benchee, "~> 1.3", only: :dev, runtime: false}
     ]
   end
 
