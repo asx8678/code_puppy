@@ -9,6 +9,20 @@ defmodule Mana.Application do
 
   require Logger
 
+  # Web endpoint configuration - only start when server: true
+  defp web_endpoint_children do
+    endpoint_config = Application.get_env(:mana, Mana.Web.Endpoint, [])
+
+    if endpoint_config[:server] do
+      [
+        # Phoenix web endpoint - serves HTTP requests
+        {Mana.Web.Endpoint, []}
+      ]
+    else
+      []
+    end
+  end
+
   @impl true
   def start(_type, _args) do
     children =
@@ -53,6 +67,8 @@ defmodule Mana.Application do
       else
         []
       end
+
+    children = children ++ web_endpoint_children()
 
     opts = [strategy: :rest_for_one, name: Mana.Supervisor]
     Supervisor.start_link(children, opts)

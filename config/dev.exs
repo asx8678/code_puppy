@@ -14,3 +14,8 @@ config :logger, :console,
 config :mana, Mana.Plugin.Manager,
   backlog_ttl: 5_000,
   max_backlog_size: 50
+
+# Web endpoint dev configuration
+config :mana, Mana.Web.Endpoint,
+  adapter: Bandit.PhoenixAdapter,
+  server: true

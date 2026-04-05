@@ -33,4 +33,9 @@ defmodule Mana.Web.Router do
 
     live("/", Live.ChatLive, :index)
   end
+
+  # Health check endpoint (no auth required)
+  scope "/", Mana.Web do
+    get("/health", HealthController, :index)
+  end
 end
