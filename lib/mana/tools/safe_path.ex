@@ -168,31 +168,27 @@ defmodule Mana.Tools.SafePath do
   # ============================================================================
 
   defp expand_path(path) do
-    try do
-      expanded = Path.expand(path)
-      {:ok, expanded}
-    rescue
-      _ -> {:error, "Failed to expand path: #{path}"}
-    end
+    expanded = Path.expand(path)
+    {:ok, expanded}
+  rescue
+    _ -> {:error, "Failed to expand path: #{path}"}
   end
 
   # For relative paths, expand them relative to the base directory
   # For absolute paths, just expand them normally
   defp expand_path_relative_to_base(path, base_dir) do
-    try do
-      expanded =
-        if Path.type(path) == :relative do
-          # Expand relative to base_dir
-          Path.expand(path, base_dir)
-        else
-          # Absolute path - expand normally
-          Path.expand(path)
-        end
+    expanded =
+      if Path.type(path) == :relative do
+        # Expand relative to base_dir
+        Path.expand(path, base_dir)
+      else
+        # Absolute path - expand normally
+        Path.expand(path)
+      end
 
-      {:ok, expanded}
-    rescue
-      _ -> {:error, "Failed to expand path: #{path}"}
-    end
+    {:ok, expanded}
+  rescue
+    _ -> {:error, "Failed to expand path: #{path}"}
   end
 
   defp check_null_bytes(path) do
@@ -220,34 +216,19 @@ defmodule Mana.Tools.SafePath do
 
     # Count depth: go up one level for "..", down one for normal components
     # Skip the root component ("/" on Unix)
-    depth_result =
-      Enum.reduce(parts, {:ok, 0}, fn part, {:ok, depth} ->
-        cond do
-          # Root component - doesn't change depth
-          part == "/" ->
-            {:ok, depth}
-
-          # Current directory - doesn't change depth
-          part == "." ->
-            {:ok, depth}
-
-          # Parent directory - go up (decrease depth)
-          part == ".." ->
-            new_depth = depth - 1
-            # Negative depth means we went above root - that's traversal!
-            if new_depth < 0, do: {:error, "traversal"}, else: {:ok, new_depth}
-
-          # Normal directory/file - go down (increase depth)
-          true ->
-            {:ok, depth + 1}
-        end
-      end)
+    depth_result = Enum.reduce(parts, {:ok, 0}, &update_depth/2)
 
     case depth_result do
       {:error, _} -> {:error, "Path escapes allowed directory"}
       {:ok, _} -> :ok
     end
   end
+
+  defp update_depth("/", {:ok, depth}), do: {:ok, depth}
+  defp update_depth(".", {:ok, depth}), do: {:ok, depth}
+  defp update_depth("..", {:ok, depth}) when depth <= 0, do: {:error, "traversal"}
+  defp update_depth("..", {:ok, depth}), do: {:ok, depth - 1}
+  defp update_depth(_, {:ok, depth}), do: {:ok, depth + 1}
 
   defp check_relative_path_within_base(expanded_path, expanded_base, original_path) do
     # If the original path was absolute, allow it (as long as no traversal was detected)
