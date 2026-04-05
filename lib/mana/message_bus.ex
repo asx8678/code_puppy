@@ -58,6 +58,8 @@ defmodule Mana.MessageBus do
   alias Mana.MessageBus.RequestTracker
 
   @default_request_timeout 300_000
+  @request_stale_timeout 30_000
+  @cleanup_interval 10_000
 
   @doc """
   Starts the MessageBus GenServer.
@@ -278,6 +280,9 @@ defmodule Mana.MessageBus do
       request_counter: 0
     }
 
+    # Schedule periodic cleanup of stale requests
+    schedule_cleanup()
+
     {:ok, state}
   end
 
@@ -375,14 +380,54 @@ defmodule Mana.MessageBus do
   end
 
   @impl true
-  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
-    # Clean up dead listener
+  def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
+    # Check if this is a listener
     new_listeners = MapSet.delete(state.listeners, pid)
-    {:noreply, %{state | listeners: new_listeners}}
+
+    # Check if this is a caller of a pending request
+    new_state =
+      case find_request_by_monitor_ref(state.pending_requests, ref) do
+        nil ->
+          # No matching pending request, just listener cleanup
+          %{state | listeners: new_listeners}
+
+        {request_id, _request} ->
+          # Remove the stale pending request
+          {:ok, cleaned_state} = RequestTracker.remove(state, request_id)
+          %{cleaned_state | listeners: new_listeners}
+      end
+
+    {:noreply, new_state}
+  end
+
+  @impl true
+  def handle_info(:cleanup_stale_requests, state) do
+    {removed_count, new_state} = RequestTracker.cleanup_stale(state, @request_stale_timeout)
+
+    if removed_count > 0 do
+      Logger.warning("Cleaned up #{removed_count} stale pending request(s)")
+    end
+
+    # Schedule next cleanup
+    schedule_cleanup()
+
+    {:noreply, new_state}
   end
 
   @impl true
   def handle_info(_msg, state) do
     {:noreply, state}
+  end
+
+  # Private functions
+
+  defp find_request_by_monitor_ref(pending_requests, ref) do
+    Enum.find(pending_requests, fn {_id, %{monitor_ref: monitor_ref}} ->
+      monitor_ref == ref
+    end)
+  end
+
+  defp schedule_cleanup do
+    Process.send_after(self(), :cleanup_stale_requests, @cleanup_interval)
   end
 end
