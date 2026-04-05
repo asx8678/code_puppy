@@ -386,24 +386,22 @@ defmodule Mana.Models.Registry do
   defp merge_plugin_models(models) do
     # Try to dispatch to :register_model_type callbacks, but handle case
     # where Callbacks.Registry isn't started yet
-    try do
-      case Mana.Callbacks.dispatch(:register_model_type, []) do
-        {:ok, results} when is_list(results) ->
-          Enum.reduce(results, models, fn
-            %{name: name, config: config}, acc when is_binary(name) and is_map(config) ->
-              Map.put(acc, name, config)
+    case Mana.Callbacks.dispatch(:register_model_type, []) do
+      {:ok, results} when is_list(results) ->
+        Enum.reduce(results, models, fn
+          %{name: name, config: config}, acc when is_binary(name) and is_map(config) ->
+            Map.put(acc, name, config)
 
-            _, acc ->
-              acc
-          end)
+          _, acc ->
+            acc
+        end)
 
-        _ ->
-          models
-      end
-    rescue
-      _ -> models
-    catch
-      :exit, _ -> models
+      _ ->
+        models
     end
+  rescue
+    _ -> models
+  catch
+    :exit, _ -> models
   end
 end
