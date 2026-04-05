@@ -376,10 +376,10 @@ defmodule Mana.Pack.Agents.Retriever do
           # Determine which step failed by checking the reason
           failed_step =
             cond do
-              is_tuple(reason) && elem(reason, 0) == :fetch_failed -> :fetch
-              is_tuple(reason) && elem(reason, 0) == :checkout_failed -> :checkout
-              is_tuple(reason) && elem(reason, 0) == :pull_failed -> :pull
-              is_tuple(reason) && elem(reason, 0) == :merge_failed -> :merge
+              reason[:reason] == :fetch_failed -> :fetch
+              reason[:reason] == :checkout_failed -> :checkout
+              reason[:reason] == :pull_failed -> :pull
+              reason[:reason] == :merge_failed -> :merge
               true -> :unknown
             end
 

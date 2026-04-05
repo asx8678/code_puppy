@@ -200,8 +200,4 @@ defmodule Mana.Models.Settings do
       true -> @default_max_tokens
     end
   end
-
-  defp get_max_tokens_for_model(_name, _provider) do
-    @default_max_tokens
-  end
 end

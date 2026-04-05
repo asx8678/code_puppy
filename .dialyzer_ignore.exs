@@ -1,24 +1,26 @@
 # Dialyzer ignore patterns for Mana project
-# These are warnings that are either in non-core modules or related to external dependencies
+# Only upstream/stdlib issues and dialyzer limitations are suppressed here.
+# All fixable issues in our code should be fixed rather than suppressed.
 
 [
-  # DynamicSupervisor type is from Elixir standard library
+  # Mix module - Mix is a build tool, not available in runtime PLT
+  # These are upstream Elixir issues (Mix module functions not in PLT)
+  ~r/unknown_function.*Mix\.(shell|Task)/,
+  ~r/callback_info_missing.*Mix\.Task/,
+
+  # DynamicSupervisor type - stdlib type should be in PLT but sometimes isn't found
   ~r/unknown_type.*DynamicSupervisor\.on_start/,
 
-  # Mix.Task warnings - expected since Mix is not in PLT
-  ~r/callback_info_missing.*Mix\.Task/,
-  ~r/unknown_function.*Mix\.Task/,
+  # Task anonymous functions - no_return is expected for tasks that call exit(:normal)
+  # This is a dialyzer limitation with spawned processes
+  ~r/lib\/mana\/agents\/run_supervisor\.ex:.*no_return/,
 
-  # TUI modules are non-critical
-  ~r/lib\/mana\/tui\/.*pattern_match/,
-  ~r/lib\/mana\/tui\/markdown\.ex:.*render_ast/,
+  # MapSet opaque type mismatch - dialyzer limitation with ETS constructed MapSets
+  # The MapSet is built from ETS select results, which dialyzer tracks as raw Erlang :set
+  ~r/lib\/mana\/tools\/registry\.ex:.*call_without_opaque/,
 
-  # OAuth modules - complex async patterns
-  ~r/lib\/mana\/oauth\/.*pattern_match/,
-
-  # Commands session - type confusion from Map operations
-  ~r/lib\/mana\/commands\/session\.ex:.*pattern_match/,
-
-  # Models settings - provider matching patterns
-  ~r/lib\/mana\/models\/settings\.ex:.*pattern_match_cov/
+  # TUI markdown - dialyzer false positive
+  # render_ast is only called with list() from {:ok, ast, _} pattern match
+  # but dialyzer thinks the catch-all _ -> markdown case could pass a binary
+  ~r/lib\/mana\/tui\/markdown\.ex:.*call/
 ]

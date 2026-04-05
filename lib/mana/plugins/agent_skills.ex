@@ -319,8 +319,8 @@ defmodule Mana.Plugins.AgentSkills do
 
   defp get_current_session_id do
     # Try to get from process dictionary first (set by agent runner)
+    # Fall back to "default" for non-session contexts
     Process.get(:mana_session_id) ||
-      # Fall back to "default" for non-session contexts
       "default"
   end
 

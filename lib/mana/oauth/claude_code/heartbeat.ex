@@ -220,9 +220,6 @@ defmodule Mana.OAuth.ClaudeCode.Heartbeat do
 
       {:error, :not_found} ->
         Logger.debug("No Claude Code tokens found, skipping refresh")
-
-      {:error, reason} ->
-        Logger.warning("Error loading Claude Code tokens: #{inspect(reason)}")
     end
   end
 

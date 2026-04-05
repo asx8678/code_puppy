@@ -12,9 +12,11 @@ defmodule Mana.TUI.Markdown do
 
   @doc "Render Earmark AST to ANSI"
   @spec render_ast(list()) :: String.t()
-  def render_ast(ast) do
+  def render_ast(ast) when is_list(ast) do
     Enum.map_join(ast, "\n", &render_node/1)
   end
+
+  def render_ast(_), do: ""
 
   # Headings
   defp render_node({"h1", _attrs, children, _}) do

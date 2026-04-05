@@ -109,7 +109,7 @@ defmodule Mana.TTSR do
   """
   def on_agent_run_end(_agent_name, _model_name, session_id, _success, _error, _response, _meta) do
     StreamWatcher.increment_turn(session_id)
-    if session_id, do: StreamWatcher.stop(session_id)
+    StreamWatcher.stop(session_id)
     :ok
   end
 
