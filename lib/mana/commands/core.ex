@@ -360,7 +360,11 @@ defmodule Mana.Commands.Core do
       Show,
       Cd,
       Sessions,
-      Session
+      Session,
+      Mana.Commands.Diff,
+      Mana.Commands.Config,
+      Mana.Commands.Hooks,
+      Mana.Commands.Colors
     ]
 
     Enum.each(commands, fn module ->
