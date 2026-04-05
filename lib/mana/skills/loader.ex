@@ -3,13 +3,15 @@ defmodule Mana.Skills.Loader do
 
   @user_skills_dir Path.expand("~/.mana/skills")
   @project_skills_dir "./skills"
+  @priv_skills_dir "priv/skills"
 
   @doc "Discover and load all skills"
   @spec load() :: [map()]
   def load do
     user_skills = load_from_dir(@user_skills_dir)
     project_skills = load_from_dir(@project_skills_dir)
-    user_skills ++ project_skills
+    priv_skills = load_from_dir(Application.app_dir(:mana, @priv_skills_dir))
+    user_skills ++ project_skills ++ priv_skills
   end
 
   @doc "Load skills from a directory"
