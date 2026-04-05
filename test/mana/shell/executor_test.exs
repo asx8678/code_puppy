@@ -6,11 +6,8 @@ defmodule Mana.Shell.ExecutorTest do
   alias Mana.Shell.Result
 
   setup do
-    # Ensure executor is started (it may already be running from supervision tree)
-    case Executor.start_link() do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
-    end
+    # Ensure executor is started under the test supervisor
+    start_supervised!({Executor, []})
 
     # Kill any existing processes before each test
     Executor.kill_all()

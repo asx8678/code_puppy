@@ -221,7 +221,11 @@ defmodule Mana.TTSR.StreamWatcher do
     new = buffer <> char
 
     if String.length(new) > @buffer_size do
-      String.slice(new, -@buffer_size, @buffer_size)
+      # Use graphemes to ensure we don't split multi-byte UTF-8 codepoints
+      new
+      |> String.graphemes()
+      |> Enum.take(-@buffer_size)
+      |> Enum.join()
     else
       new
     end
