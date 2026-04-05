@@ -222,6 +222,7 @@ defmodule Mana.Commands.CoreTest do
       assert "/config" in commands
       assert "/hooks" in commands
       assert "/colors" in commands
+      assert "/skills" in commands
     end
   end
 end
