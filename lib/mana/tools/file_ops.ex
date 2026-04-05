@@ -198,28 +198,31 @@ defmodule Mana.Tools.FileOps.Grep do
     # Validate path safety
     with {:ok, cwd} <- SafePath.current_working_dir(),
          {:ok, safe_dir} <- SafePath.validate(dir, cwd) do
-      case System.cmd("rg", ["--json", pattern, safe_dir], stderr_to_stdout: true) do
-        {output, 0} ->
-          matches = parse_grep_output(output)
-          {:ok, %{"matches" => matches, "count" => length(matches)}}
+      handle_grep_result(System.cmd("rg", ["--json", pattern, safe_dir], stderr_to_stdout: true))
+    end
+  end
 
-        {output, 1} ->
-          # Exit code 1 means no matches found (not an error)
-          if String.contains?(output, "No files were searched") do
-            {:ok, %{"matches" => [], "count" => 0}}
-          else
-            # Check if output contains matches (some ripgrep versions return 1 with matches)
-            matches = parse_grep_output(output)
-            {:ok, %{"matches" => matches, "count" => length(matches)}}
-          end
+  defp handle_grep_result({output, 0}) do
+    matches = parse_grep_output(output)
+    {:ok, %{"matches" => matches, "count" => length(matches)}}
+  end
 
-        {output, _} ->
-          if String.contains?(output, "No files were searched") do
-            {:ok, %{"matches" => [], "count" => 0}}
-          else
-            {:error, "grep failed: #{output}"}
-          end
-      end
+  defp handle_grep_result({output, 1}) do
+    # Exit code 1 means no matches found (not an error)
+    if String.contains?(output, "No files were searched") do
+      {:ok, %{"matches" => [], "count" => 0}}
+    else
+      # Check if output contains matches (some ripgrep versions return 1 with matches)
+      matches = parse_grep_output(output)
+      {:ok, %{"matches" => matches, "count" => length(matches)}}
+    end
+  end
+
+  defp handle_grep_result({output, _}) do
+    if String.contains?(output, "No files were searched") do
+      {:ok, %{"matches" => [], "count" => 0}}
+    else
+      {:error, "grep failed: #{output}"}
     end
   end
 

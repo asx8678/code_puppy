@@ -304,7 +304,7 @@ defmodule Mana.Shell.ExecutorTest do
     test "get_dangerous_patterns returns configured patterns" do
       patterns = Executor.get_dangerous_patterns()
       assert is_list(patterns)
-      assert length(patterns) > 0
+      assert patterns != []
       assert Enum.all?(patterns, &match?(%Regex{}, &1))
     end
 
