@@ -5,6 +5,7 @@ defmodule Mana.MessageBusTest do
 
   use ExUnit.Case, async: false
 
+  import Mana.TestHelpers
   alias Mana.Message
   alias Mana.MessageBus
 
@@ -336,24 +337,26 @@ defmodule Mana.MessageBusTest do
     end
 
     test "automatically cleans up dead listeners" do
+      test_pid = self()
+
       # Create a temporary process that will be a listener
       temp_pid =
         spawn(fn ->
           :ok = MessageBus.add_listener(self())
+          send(test_pid, :listener_registered)
 
           receive do
             :stop -> :ok
           end
         end)
 
-      # Let it register
-      Process.sleep(50)
+      # Wait for listener to register
+      assert_receive :listener_registered, 1000
 
-      # Kill the process
+      # Kill the process and wait for cleanup
+      ref = Process.monitor(temp_pid)
       Process.exit(temp_pid, :kill)
-
-      # Wait for DOWN message to be processed
-      Process.sleep(100)
+      assert_receive {:DOWN, ^ref, _, _, _}, 1000
 
       # Emit should not crash even with dead listener in list
       message = Message.new(:text, %{content: "Test", role: :system})

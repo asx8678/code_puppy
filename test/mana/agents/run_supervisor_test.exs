@@ -5,6 +5,7 @@ defmodule Mana.Agents.RunSupervisorTest do
 
   use ExUnit.Case, async: false
 
+  import Mana.TestHelpers
   alias Mana.Agent.Server
   alias Mana.Agents.RunSupervisor
   alias Mana.Callbacks.Registry
@@ -58,8 +59,8 @@ defmodule Mana.Agents.RunSupervisorTest do
 
     test "requires valid agent pid" do
       dead_pid = spawn(fn -> :ok end)
-      # Let it die
-      Process.sleep(10)
+      # Wait for the spawned process to actually terminate
+      wait_for_exit(dead_pid, timeout: 100)
 
       # Should handle dead pid gracefully
       result = RunSupervisor.start_run(dead_pid, "Hello", [])
@@ -139,9 +140,9 @@ defmodule Mana.Agents.RunSupervisorTest do
 
       # Kill the task
       Process.exit(task_pid, :kill)
-      Process.sleep(50)
 
-      # Task should be dead and not restarted (temporary policy)
+      # Wait for the task to die (temporary restart policy means no restart)
+      wait_for_exit(task_pid, timeout: 500)
       refute Process.alive?(task_pid)
     end
 
@@ -156,7 +157,10 @@ defmodule Mana.Agents.RunSupervisorTest do
       {:ok, task_pid} = RunSupervisor.start_run(agent_pid, "test", timeout: 100)
 
       # Wait for it to complete and terminate
-      Process.sleep(200)
+      assert_eventually(
+        fn -> not Process.alive?(task_pid) end,
+        timeout: 500
+      )
 
       # Child should be terminated
       refute Process.alive?(task_pid)

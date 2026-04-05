@@ -5,6 +5,7 @@ defmodule Mana.Agents.RegistryTest do
 
   use ExUnit.Case, async: false
 
+  import Mana.TestHelpers
   alias Mana.Agents.Registry
 
   setup do
@@ -129,13 +130,15 @@ defmodule Mana.Agents.RegistryTest do
       old_state = :sys.get_state(pid)
       old_time = old_state.last_refresh
 
-      # Small delay to ensure time changes
-      Process.sleep(10)
-
       :ok = GenServer.call(pid, :refresh)
 
-      new_state = :sys.get_state(pid)
-      assert DateTime.compare(new_state.last_refresh, old_time) == :gt
+      assert_eventually(
+        fn ->
+          new_state = :sys.get_state(pid)
+          DateTime.compare(new_state.last_refresh, old_time) == :gt
+        end,
+        timeout: 100
+      )
     end
   end
 

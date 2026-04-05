@@ -1,6 +1,7 @@
 defmodule Mana.Shell.ExecutorTest do
   use ExUnit.Case
 
+  import Mana.TestHelpers
   alias Mana.Shell.Executor
   alias Mana.Shell.Result
 
@@ -13,7 +14,7 @@ defmodule Mana.Shell.ExecutorTest do
 
     # Kill any existing processes before each test
     Executor.kill_all()
-    Process.sleep(50)
+    assert_eventually(fn -> Executor.list_processes() == [] end, timeout: 500)
 
     :ok
   end
@@ -94,8 +95,8 @@ defmodule Mana.Shell.ExecutorTest do
 
       assert is_reference(ref)
 
-      # Give it time to complete
-      Process.sleep(200)
+      # Wait for the background process to complete
+      assert_eventually(fn -> Executor.list_processes() == [] end, timeout: 1000)
     end
 
     test "returns immediately without waiting" do
@@ -123,7 +124,7 @@ defmodule Mana.Shell.ExecutorTest do
       assert :ok = Executor.kill_all()
 
       # Wait for processes to be cleaned up
-      Process.sleep(100)
+      assert_eventually(fn -> Executor.list_processes() == [] end, timeout: 500)
 
       # Verify no processes remain
       assert Executor.list_processes() == []
@@ -132,13 +133,13 @@ defmodule Mana.Shell.ExecutorTest do
     test "marks killed processes as user_interrupted" do
       # Start a background process and wait for it to be listed
       assert {:ok, _ref} = Executor.execute_background("sleep 10", File.cwd!())
-      Process.sleep(50)
+      assert_eventually(fn -> Executor.list_processes() != [] end, timeout: 500)
 
       # Kill it
       :ok = Executor.kill_all()
 
       # Wait for cleanup
-      Process.sleep(100)
+      assert_eventually(fn -> Executor.list_processes() == [] end, timeout: 500)
     end
   end
 
@@ -146,7 +147,7 @@ defmodule Mana.Shell.ExecutorTest do
     test "returns empty list when no processes" do
       # First kill any existing
       Executor.kill_all()
-      Process.sleep(50)
+      assert_eventually(fn -> Executor.list_processes() == [] end, timeout: 500)
 
       assert Executor.list_processes() == []
     end
@@ -154,7 +155,7 @@ defmodule Mana.Shell.ExecutorTest do
     test "returns running processes" do
       # Kill any existing
       Executor.kill_all()
-      Process.sleep(50)
+      assert_eventually(fn -> Executor.list_processes() == [] end, timeout: 500)
 
       # Start a background process
       assert {:ok, _ref} = Executor.execute_background("sleep 2", File.cwd!())

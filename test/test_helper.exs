@@ -1,5 +1,7 @@
 ExUnit.start(exclude: [:external])
 
+Code.require_file("support/test_helpers.ex", __DIR__)
+
 # Configure test environment
 Application.put_env(:mana, Mana.Plugin.Manager,
   plugins: [],

@@ -1,6 +1,7 @@
 defmodule Mana.ShellTest do
   use ExUnit.Case
 
+  import Mana.TestHelpers
   alias Mana.Callbacks.Registry
   alias Mana.Config.Store
   alias Mana.Plugin.Manager
@@ -27,7 +28,7 @@ defmodule Mana.ShellTest do
 
     # Kill any running processes
     Mana.Shell.kill_all()
-    Process.sleep(50)
+    assert_eventually(fn -> Mana.Shell.list_processes() == [] end, timeout: 500)
 
     :ok
   end
@@ -214,24 +215,22 @@ defmodule Mana.ShellTest do
       {:ok, _ref1} = Shell.run_background("sleep 10")
       {:ok, _ref2} = Shell.run_background("sleep 10")
 
-      Process.sleep(50)
-
       # Verify they exist
+      assert_eventually(fn -> Shell.list_processes() != [] end, timeout: 500)
+
       assert Shell.list_processes() != []
 
       # Kill all
       assert :ok = Shell.kill_all()
 
-      Process.sleep(100)
-
       # Verify none remain
-      assert Shell.list_processes() == []
+      assert_eventually(fn -> Shell.list_processes() == [] end, timeout: 500)
     end
 
     test "is idempotent when no processes" do
       # Kill any existing
       Shell.kill_all()
-      Process.sleep(50)
+      assert_eventually(fn -> Shell.list_processes() == [] end, timeout: 500)
 
       # Should still work
       assert :ok = Shell.kill_all()
@@ -247,7 +246,7 @@ defmodule Mana.ShellTest do
     test "returns empty list initially" do
       # Kill any existing
       Shell.kill_all()
-      Process.sleep(50)
+      assert_eventually(fn -> Shell.list_processes() == [] end, timeout: 500)
 
       assert Shell.list_processes() == []
     end
@@ -255,7 +254,7 @@ defmodule Mana.ShellTest do
     test "returns running processes" do
       # Kill any existing
       Shell.kill_all()
-      Process.sleep(50)
+      assert_eventually(fn -> Shell.list_processes() == [] end, timeout: 500)
 
       # Start a process
       {:ok, _ref} = Shell.run_background("sleep 5")
@@ -292,7 +291,8 @@ defmodule Mana.ShellTest do
       assert is_reference(ref1)
       assert is_reference(ref2)
 
-      Process.sleep(200)
+      # Wait for background tasks to complete
+      assert_eventually(fn -> Shell.list_processes() == [] end, timeout: 1000)
     end
   end
 end

@@ -8,6 +8,7 @@ defmodule Mana.OAuth.ClaudeCode.HeartbeatTest do
 
   use ExUnit.Case, async: false
 
+  import Mana.TestHelpers
   import Mock
 
   alias Mana.OAuth.ClaudeCode.Heartbeat
@@ -134,12 +135,16 @@ defmodule Mana.OAuth.ClaudeCode.HeartbeatTest do
         # Trigger immediate refresh
         Heartbeat.refresh_now(test_name)
 
-        # Give the GenServer time to process
-        Process.sleep(100)
-
-        # Verify token was refreshed
-        {:ok, saved_tokens} = TokenStore.load("claude_code")
-        assert saved_tokens["access_token"] == "new_token"
+        # Wait for the GenServer to process and verify token was refreshed
+        assert_eventually(
+          fn ->
+            case TokenStore.load("claude_code") do
+              {:ok, saved} -> saved["access_token"] == "new_token"
+              _ -> false
+            end
+          end,
+          timeout: 1000
+        )
 
         GenServer.stop(pid)
       end
@@ -167,12 +172,14 @@ defmodule Mana.OAuth.ClaudeCode.HeartbeatTest do
       # Trigger refresh check manually
       Heartbeat.refresh_now(test_name)
 
-      # Wait briefly
-      Process.sleep(50)
-
       # Token should remain unchanged (no Req.post calls expected)
-      {:ok, saved_tokens} = TokenStore.load("claude_code")
-      assert saved_tokens["access_token"] == "valid_token"
+      assert_eventually(
+        fn ->
+          {:ok, saved_tokens} = TokenStore.load("claude_code")
+          saved_tokens["access_token"] == "valid_token"
+        end,
+        timeout: 200
+      )
 
       GenServer.stop(pid)
     end
@@ -189,11 +196,11 @@ defmodule Mana.OAuth.ClaudeCode.HeartbeatTest do
       # Trigger refresh manually
       Heartbeat.refresh_now(test_name)
 
-      # Wait briefly
-      Process.sleep(50)
-
       # Should still be active
-      assert Heartbeat.active?(test_name)
+      assert_eventually(
+        fn -> Heartbeat.active?(test_name) end,
+        timeout: 200
+      )
 
       GenServer.stop(pid)
     end
@@ -224,11 +231,11 @@ defmodule Mana.OAuth.ClaudeCode.HeartbeatTest do
         # Trigger the refresh attempt
         Heartbeat.refresh_now(test_name)
 
-        # Wait for the refresh attempt
-        Process.sleep(50)
-
         # Should still be active despite refresh failure
-        assert Heartbeat.active?(test_name)
+        assert_eventually(
+          fn -> Heartbeat.active?(test_name) end,
+          timeout: 200
+        )
 
         GenServer.stop(pid)
       end
@@ -258,11 +265,11 @@ defmodule Mana.OAuth.ClaudeCode.HeartbeatTest do
         # Trigger the refresh attempt
         Heartbeat.refresh_now(test_name)
 
-        # Wait for the refresh attempt
-        Process.sleep(50)
-
         # Should still be active despite network error
-        assert Heartbeat.active?(test_name)
+        assert_eventually(
+          fn -> Heartbeat.active?(test_name) end,
+          timeout: 200
+        )
 
         GenServer.stop(pid)
       end

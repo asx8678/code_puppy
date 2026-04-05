@@ -5,6 +5,7 @@ defmodule Mana.Tools.AgentToolsTest do
 
   use ExUnit.Case, async: false
 
+  import Mana.TestHelpers
   alias Mana.Agents.Registry, as: AgentsRegistry
   alias Mana.MessageBus
   alias Mana.Tools.AgentTools
@@ -160,8 +161,11 @@ defmodule Mana.Tools.AgentToolsTest do
     test "execute requests input via MessageBus" do
       # Spawn a task to provide the response
       Task.start(fn ->
-        # Wait a bit for the request to be registered
-        Process.sleep(50)
+        # Wait for the request to be registered
+        assert_eventually(
+          fn -> MessageBus.list_pending_requests() != [] end,
+          timeout: 500
+        )
 
         # Get pending requests and respond
         pending = MessageBus.list_pending_requests()

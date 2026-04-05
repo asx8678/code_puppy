@@ -1,6 +1,7 @@
 defmodule Mana.Plugin.ManagerTest do
   use ExUnit.Case
 
+  import Mana.TestHelpers
   alias Mana.Plugin.Manager
   alias Mana.TestSupport.MockPlugin
 
@@ -84,8 +85,11 @@ defmodule Mana.Plugin.ManagerTest do
 
       assert :ok = Manager.trigger_async(:startup, [])
 
-      # Give async tasks time to run
-      Process.sleep(100)
+      # Wait for async task to complete by checking stats
+      assert_eventually(
+        fn -> Manager.get_stats().triggers_total > 0 end,
+        timeout: 500
+      )
     end
   end
 

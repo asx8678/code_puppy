@@ -240,7 +240,6 @@ defmodule Mana.TTSR.StreamWatcherTest do
 
       # Stop the process gracefully
       GenServer.stop(pid, :normal)
-      Process.sleep(10)
 
       assert StreamWatcher.find_watcher(session_id) == nil
     end
