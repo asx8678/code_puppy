@@ -294,4 +294,73 @@ defmodule Mana.MessageTest do
       assert control.command == nil
     end
   end
+
+  describe "normalize_keys/1" do
+    test "converts string keys to existing atoms" do
+      # :role and :content are standard atoms that exist in the system
+      result = Message.normalize_keys(%{"role" => "user", "content" => "hi"})
+
+      assert result.role == "user"
+      assert result.content == "hi"
+      # Keys should be atoms since they exist
+      assert is_atom(elem(Enum.at(Map.to_list(result), 0), 0))
+    end
+
+    test "preserves atom keys" do
+      result = Message.normalize_keys(%{role: "user", content: "hi"})
+
+      assert result.role == "user"
+      assert result.content == "hi"
+    end
+
+    test "keeps unknown keys as strings for security" do
+      # Use a random string that definitely doesn't exist as an atom
+      unknown_key = "unknown_key_#{System.unique_integer([:positive])}"
+      result = Message.normalize_keys(%{unknown_key => "value"})
+
+      # Should keep as string since atom doesn't exist
+      assert Map.get(result, unknown_key) == "value"
+      refute result |> Map.keys() |> List.first() |> is_atom()
+    end
+
+    test "handles mixed known and unknown keys" do
+      unknown_key = "malicious_atom_#{System.unique_integer([:positive])}"
+      result = Message.normalize_keys(%{"role" => "user", unknown_key => "attack"})
+
+      # Known key converted to atom
+      assert result.role == "user"
+      # Unknown key stays as string
+      assert Map.get(result, unknown_key) == "attack"
+    end
+
+    test "handles nested tool_calls safely" do
+      unknown_key = "nested_unknown_#{System.unique_integer([:positive])}"
+
+      result =
+        Message.normalize_keys(%{
+          "tool_calls" => [
+            %{"function" => %{"name" => "test", unknown_key => "value"}}
+          ]
+        })
+
+      # Known keys converted
+      assert is_list(result.tool_calls)
+      # Unknown nested key stays as string
+      assert get_in(result, [:tool_calls, Access.at(0), :function, Access.key(unknown_key)]) == "value"
+    end
+
+    test "normalizes lists of maps" do
+      result = Message.normalize_keys([%{"role" => "user"}, %{"role" => "assistant"}])
+
+      assert length(result) == 2
+      assert List.first(result).role == "user"
+    end
+
+    test "passes through non-map values" do
+      assert Message.normalize_keys("string") == "string"
+      assert Message.normalize_keys(123) == 123
+      assert Message.normalize_keys(nil) == nil
+      assert Message.normalize_keys([1, 2, 3]) == [1, 2, 3]
+    end
+  end
 end
