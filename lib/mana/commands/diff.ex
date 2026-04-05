@@ -245,8 +245,7 @@ defmodule Mana.Commands.Diff do
   defp colorize_diff(diff_text) do
     diff_text
     |> String.split("\n")
-    |> Enum.map(&colorize_line/1)
-    |> Enum.join("\n")
+    |> Enum.map_join("\n", &colorize_line/1)
   end
 
   # Diff headers (---, +++, @@)

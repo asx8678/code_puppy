@@ -118,7 +118,7 @@ defmodule Mana.Pack.Agents.ShepherdTest do
 
       assert {:ok, result} = Shepherd.execute(task, [])
       assert result.verdict in [:approve, :changes_requested]
-      assert length(result.checks) >= 1
+      assert result.checks != []
     end
   end
 end

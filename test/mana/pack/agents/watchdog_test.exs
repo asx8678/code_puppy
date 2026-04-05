@@ -23,7 +23,7 @@ defmodule Mana.Pack.Agents.WatchdogTest do
 
       assert is_list(files)
       # Should find test files
-      assert length(files) > 0
+      assert files != []
     end
   end
 
@@ -81,7 +81,7 @@ defmodule Mana.Pack.Agents.WatchdogTest do
 
       findings = Watchdog.collect_findings(analysis, test_result, metadata)
 
-      assert length(findings) >= 1
+      assert findings != []
       assert Enum.any?(findings, &(&1[:type] == :test_failure))
     end
 

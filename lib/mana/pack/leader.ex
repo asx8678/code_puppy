@@ -335,7 +335,7 @@ defmodule Mana.Pack.Leader do
     end)
   end
 
-  defp query_ready_issues() do
+  defp query_ready_issues do
     case Bloodhound.execute(
            %{
              id: "planning-query",
@@ -360,8 +360,7 @@ defmodule Mana.Pack.Leader do
         {:ok, Enum.reject(Enum.map(list, &(&1["id"] || &1[:id])), &is_nil/1)}
 
       {:error, _} ->
-        {:ok,
-         output |> String.split("\n") |> Enum.map(&String.trim/1) |> Enum.filter(&String.starts_with?(&1, "bd-"))}
+        {:ok, output |> String.split("\n") |> Enum.map(&String.trim/1) |> Enum.filter(&String.starts_with?(&1, "bd-"))}
 
       _ ->
         {:ok, []}
@@ -376,6 +375,7 @@ defmodule Mana.Pack.Leader do
     sv = s[:verdict]
     wv = w[:verdict]
     status = if sv == :approve && wv == :approve, do: :approved, else: :rejected
+
     put_in(tasks[id].status, status)
     |> put_in([id, :shepherd_verdict], sv)
     |> put_in([id, :watchdog_verdict], wv)

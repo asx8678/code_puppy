@@ -72,7 +72,7 @@ defmodule Mana.Commands.Config do
     get_config_value(key)
   end
 
-  def execute(["set", key | value_parts], _context) when length(value_parts) > 0 do
+  def execute(["set", key | value_parts], _context) when value_parts != [] do
     value = Enum.join(value_parts, " ")
     set_config_value(key, value)
   end
@@ -219,11 +219,9 @@ defmodule Mana.Commands.Config do
   defp format_config_value(value), do: inspect(value)
 
   defp safe_to_atom(key) when is_binary(key) do
-    try do
-      String.to_existing_atom(key)
-    rescue
-      ArgumentError -> nil
-    end
+    String.to_existing_atom(key)
+  rescue
+    ArgumentError -> nil
   end
 
   defp safe_to_atom(key) when is_atom(key), do: key

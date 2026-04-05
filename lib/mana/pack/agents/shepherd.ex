@@ -350,26 +350,24 @@ defmodule Mana.Pack.Agents.Shepherd do
   end
 
   defp check_file_size(file_path, limit) do
-    try do
-      lines =
-        file_path
-        |> File.read!()
-        |> String.split("\n")
-        |> length()
+    lines =
+      file_path
+      |> File.read!()
+      |> String.split("\n")
+      |> length()
 
-      if lines > limit do
-        %{
-          file: file_path,
-          lines: lines,
-          limit: limit,
-          exceeds_by: lines - limit
-        }
-      else
-        nil
-      end
-    rescue
-      _ -> nil
+    if lines > limit do
+      %{
+        file: file_path,
+        lines: lines,
+        limit: limit,
+        exceeds_by: lines - limit
+      }
+    else
+      nil
     end
+  rescue
+    _ -> nil
   end
 
   @doc """

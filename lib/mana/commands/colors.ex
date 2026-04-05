@@ -254,8 +254,7 @@ defmodule Mana.Commands.Colors do
     if is_nil(key) do
       known =
         @banner_types
-        |> Enum.map(fn {k, _, _} -> k |> to_string() |> String.replace("banner_", "") end)
-        |> Enum.join(", ")
+        |> Enum.map_join(", ", fn {k, _, _} -> k |> to_string() |> String.replace("banner_", "") end)
 
       {:error, "Unknown banner: #{banner_name}\n\nAvailable banners: #{known}"}
     else
