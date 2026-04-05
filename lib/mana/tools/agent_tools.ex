@@ -167,8 +167,15 @@ defmodule Mana.Tools.AgentTools do
     end
 
     @impl true
-    def execute(%{"question" => question}) do
-      case MessageBus.request_input(question) do
+    def execute(%{"question" => question} = args) do
+      opts =
+        case Map.get(args, "timeout") do
+          nil -> []
+          timeout when is_integer(timeout) and timeout > 0 -> [timeout: timeout]
+          _ -> []
+        end
+
+      case MessageBus.request_input(question, opts) do
         {:ok, response} ->
           {:ok, %{"response" => response}}
 

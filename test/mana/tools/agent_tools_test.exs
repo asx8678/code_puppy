@@ -184,15 +184,16 @@ defmodule Mana.Tools.AgentToolsTest do
       assert response["response"] == "test response"
     end
 
-    @tag :skip
     test "execute handles timeout gracefully" do
-      # Skipped - requires timeout configuration support in AskUser tool
-      # The tool uses a 300s default timeout which exceeds ExUnit's 60s timeout
-      # Don't provide a response - should timeout quickly
-      result = AgentTools.AskUser.execute(%{"question" => "Test?"})
+      # Use a very short timeout so the request times out quickly
+      result =
+        AgentTools.AskUser.execute(%{
+          "question" => "Test?",
+          "timeout" => 50
+        })
 
-      # Result could be error due to timeout
-      assert is_tuple(result)
+      assert {:error, message} = result
+      assert message =~ "Failed to get user input"
     end
   end
 end
