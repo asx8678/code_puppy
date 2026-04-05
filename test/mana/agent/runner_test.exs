@@ -337,7 +337,7 @@ defmodule Mana.Agent.RunnerTest do
       history = SessionStore.get_history(session_id)
 
       # If the run succeeded and persisted, we should see the messages
-      if length(history) > 0 do
+      if history != [] do
         assert Enum.any?(history, fn msg ->
                  msg.content == "Test message" and msg.role == "user"
                end)
