@@ -44,6 +44,7 @@ defmodule Mana.Config do
       end
   """
 
+  alias Mana.Config.Paths
   alias Mana.Config.Store
 
   @config_keys %{
@@ -70,7 +71,7 @@ defmodule Mana.Config do
   """
   @spec home_dir() :: String.t()
   def home_dir do
-    Mana.Config.Paths.home_dir()
+    Paths.home_dir()
   end
 
   @doc """
