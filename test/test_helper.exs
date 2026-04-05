@@ -1,4 +1,4 @@
-ExUnit.start()
+ExUnit.start(exclude: [:external])
 
 # Configure test environment
 Application.put_env(:mana, Mana.Plugin.Manager,
