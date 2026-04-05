@@ -5,8 +5,8 @@ defmodule Mana.TUI.CompletionTest do
 
   use ExUnit.Case, async: false
 
-  alias Mana.TUI.Completion
   alias Mana.Commands.Registry, as: CommandRegistry
+  alias Mana.TUI.Completion
 
   @project_root File.cwd!()
 

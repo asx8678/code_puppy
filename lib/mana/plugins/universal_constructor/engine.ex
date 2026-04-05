@@ -118,11 +118,17 @@ defmodule Mana.Plugins.UniversalConstructor.Engine do
   end
 
   defp uc_agent?(path) do
-    with {:ok, content} <- File.read(path), do: String.contains?(content, @uc_agent_marker), else: (_ -> false)
+    case File.read(path) do
+      {:ok, content} -> String.contains?(content, @uc_agent_marker)
+      _ -> false
+    end
   end
 
   defp uc_tool?(path) do
-    with {:ok, content} <- File.read(path), do: String.contains?(content, @uc_tool_marker), else: (_ -> false)
+    case File.read(path) do
+      {:ok, content} -> String.contains?(content, @uc_tool_marker)
+      _ -> false
+    end
   end
 
   # ---------------------------------------------------------------------------

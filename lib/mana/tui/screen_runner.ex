@@ -74,22 +74,18 @@ defmodule Mana.TUI.ScreenRunner do
 
   # Safe IO.write that catches errors from missing IO devices
   defp safe_write(text) do
-    try do
-      IO.write(text)
-    rescue
-      ArgumentError -> :ok
-      ErlangError -> :ok
-    end
+    IO.write(text)
+  rescue
+    ArgumentError -> :ok
+    ErlangError -> :ok
   end
 
   # Safe IO.puts that catches errors from missing IO devices
   defp safe_puts(text) do
-    try do
-      IO.puts(text)
-    rescue
-      ArgumentError -> :ok
-      ErlangError -> :ok
-    end
+    IO.puts(text)
+  rescue
+    ArgumentError -> :ok
+    ErlangError -> :ok
   end
 
   # --- Private helpers ---

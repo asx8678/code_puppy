@@ -130,14 +130,14 @@ defmodule Mana.Plugins.UniversalConstructor.Template do
   end
 
   defp build_schema(params, required) do
-    props = params |> Enum.map(fn {k, v} -> "#{k}: #{inspect(v)}" end) |> Enum.join(", ")
+    props = Enum.map_join(params, ", ", fn {k, v} -> "#{k}: #{inspect(v)}" end)
     "%{type: \"object\", properties: %{#{props}}, required: #{inspect(required)}}"
   end
 
   defp build_pattern(params) when map_size(params) == 0, do: ""
 
   defp build_pattern(params) do
-    params |> Map.keys() |> Enum.map(fn k -> ~s("#{k}" => #{String.to_atom(k)}) end) |> Enum.join(", ")
+    Enum.map_join(Map.keys(params), ", ", fn k -> ~s("#{k}" => #{String.to_atom(k)}) end)
   end
 
   # ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ defmodule Mana.Plugins.UniversalConstructor.Template do
 
   defp sanitize(name, regex), do: String.replace(name, regex, "")
   defp camelize(name), do: Macro.camelize(name)
-  defp humanize(name), do: name |> String.split(~r/[-_]/) |> Enum.map(&String.capitalize/1) |> Enum.join(" ")
+  defp humanize(name), do: name |> String.split(~r/[-_]/) |> Enum.map_join(" ", &String.capitalize/1)
 
   defp default_tools do
     ~w(list_files read_file create_file replace_in_file delete_snippet grep run_shell_command ask_user_question)

@@ -36,14 +36,12 @@ defmodule Mana.Banner do
 
   # Check if a TTY is available for output.
   defp tty_available? do
-    try do
-      case :io.columns(:standard_io) do
-        {:ok, _} -> true
-        {:error, _} -> false
-      end
-    rescue
-      ArgumentError -> false
+    case :io.columns(:standard_io) do
+      {:ok, _} -> true
+      {:error, _} -> false
     end
+  rescue
+    ArgumentError -> false
   end
 
   @doc "Return version info line with banner"

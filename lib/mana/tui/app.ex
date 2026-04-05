@@ -22,11 +22,11 @@ defmodule Mana.TUI.App do
   @spec start(keyword()) :: :ok | {:error, :no_tty}
   def start(opts \\ []) do
     # Guard: refuse to start TUI in headless environments
-    unless tty_available?() do
+    if tty_available?() do
+      start_with_tty(opts)
+    else
       Logger.warning("No TTY available — skipping TUI. Set MANA_HEADLESS=true to silence this.")
       return_no_tty()
-    else
-      start_with_tty(opts)
     end
   end
 
@@ -97,47 +97,38 @@ defmodule Mana.TUI.App do
 
   # Safe IO.puts that catches errors from missing IO devices
   defp safe_puts(text) do
-    try do
-      IO.puts(text)
-    rescue
-      ArgumentError -> :ok
-      ErlangError -> :ok
-    end
+    IO.puts(text)
+  rescue
+    ArgumentError -> :ok
+    ErlangError -> :ok
   end
 
   # Safe IO.write that catches errors from missing IO devices
   defp safe_write(text) do
-    try do
-      IO.write(text)
-    rescue
-      ArgumentError -> :ok
-      ErlangError -> :ok
-    end
+    IO.write(text)
+  rescue
+    ArgumentError -> :ok
+    ErlangError -> :ok
   end
 
   # Enable raw mode on the terminal so we receive individual keystrokes
   defp enable_raw_mode do
-    try do
-      case :io.getopts(:standard_io) do
-        opts when is_list(opts) ->
-          # Merge raw options: binary, no echo, no canonical (raw)
-          :io.setopts(:standard_io, [:binary, {:echo, false}, {:canonical, false}])
+    case :io.getopts(:standard_io) do
+      opts when is_list(opts) ->
+        :io.setopts(:standard_io, [:binary, {:echo, false}, {:canonical, false}])
 
-        _ ->
-          :ok
-      end
-    rescue
-      ArgumentError -> :ok
+      _ ->
+        :ok
     end
+  rescue
+    ArgumentError -> :ok
   end
 
   # Restore the terminal to cooked (line-buffered) mode
   defp restore_terminal_mode do
-    try do
-      :io.setopts(:standard_io, [:binary, {:echo, true}, {:canonical, true}])
-    rescue
-      _ -> :ok
-    end
+    :io.setopts(:standard_io, [:binary, {:echo, true}, {:canonical, true}])
+  rescue
+    _ -> :ok
   end
 
   # Spawns a separate process to read raw input and forward keystrokes/lines
@@ -341,9 +332,9 @@ defmodule Mana.TUI.App do
   # Display a list of completion options
   defp display_completions(completions) do
     formatted =
-      completions
-      |> Enum.map(&(IO.ANSI.format([:cyan, &1, :reset]) |> to_string()))
-      |> Enum.join("  ")
+      Enum.map_join(completions, "  ", fn c ->
+        IO.ANSI.format([:cyan, c, :reset]) |> to_string()
+      end)
 
     safe_write("\n#{formatted}\n")
   end

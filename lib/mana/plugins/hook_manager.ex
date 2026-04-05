@@ -161,13 +161,11 @@ defmodule Mana.Plugins.HookManager do
   # ── Helpers ───────────────────────────────────────────────────────────────
 
   defp get_callbacks_safe(phase) do
-    try do
-      CallbacksRegistry.get_callbacks(phase)
-    rescue
-      _ -> []
-    catch
-      :exit, _ -> []
-    end
+    CallbacksRegistry.get_callbacks(phase)
+  rescue
+    _ -> []
+  catch
+    :exit, _ -> []
   end
 
   defp total_callbacks(entries) do

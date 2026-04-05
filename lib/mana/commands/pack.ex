@@ -154,7 +154,7 @@ defmodule Mana.Commands.Pack do
     ]
 
     lines =
-      if length(errors) > 0 do
+      if errors != [] do
         error_lines = Enum.map(errors, fn e -> "    #{inspect(e)}" end)
         lines ++ ["  #{@red}Errors:#{@reset}"] ++ error_lines
       else

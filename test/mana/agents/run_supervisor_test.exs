@@ -7,8 +7,8 @@ defmodule Mana.Agents.RunSupervisorTest do
 
   import Mana.TestHelpers
   alias Mana.Agent.Server
-  alias Mana.Agents.RunSupervisor
   alias Mana.Agents.Registry, as: AgentsRegistry
+  alias Mana.Agents.RunSupervisor
   alias Mana.Callbacks.Registry
   alias Mana.Config.Store
   alias Mana.Tools.Registry, as: ToolsRegistry

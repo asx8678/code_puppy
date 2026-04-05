@@ -155,7 +155,7 @@ defmodule Mana.Scheduler.Cron do
             "s" -> value
             "m" -> value * 60
             "h" -> value * 3600
-            "d" -> value * 86400
+            "d" -> value * 86_400
           end
 
         {:ok, seconds}

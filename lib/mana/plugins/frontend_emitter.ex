@@ -107,7 +107,7 @@ defmodule Mana.Plugins.FrontendEmitter do
       tool_name: tool_name,
       tool_args: sanitize_args(tool_args),
       duration_ms: duration_ms,
-      success: is_successful?(result),
+      success: successful?(result),
       result_summary: summarize_result(result)
     })
 
@@ -240,10 +240,10 @@ defmodule Mana.Plugins.FrontendEmitter do
 
   # ── Result Helpers ────────────────────────────────────────────────────────
 
-  defp is_successful?(nil), do: true
-  defp is_successful?(result) when is_map(result), do: not (Map.get(result, :error) || Map.get(result, "error"))
-  defp is_successful?(result) when is_boolean(result), do: result
-  defp is_successful?(_), do: true
+  defp successful?(nil), do: true
+  defp successful?(result) when is_map(result), do: not (Map.get(result, :error) || Map.get(result, "error"))
+  defp successful?(result) when is_boolean(result), do: result
+  defp successful?(_), do: true
 
   defp summarize_result(nil), do: "<no result>"
 
@@ -268,7 +268,7 @@ defmodule Mana.Plugins.FrontendEmitter do
 
   # ── Arg Extraction for invoke_agent ───────────────────────────────────────
 
-  defp extract_name(args, _kwargs) when is_list(args) and length(args) > 0, do: to_string(hd(args))
+  defp extract_name(args, _kwargs) when is_list(args) and args != [], do: to_string(hd(args))
   defp extract_name(_args, kwargs) when is_list(kwargs), do: extract_kw(kwargs, :agent_name)
   defp extract_name(_args, kwargs) when is_map(kwargs), do: Map.get(kwargs, :agent_name)
   defp extract_name(_, _), do: nil

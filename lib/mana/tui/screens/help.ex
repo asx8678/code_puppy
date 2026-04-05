@@ -89,7 +89,7 @@ defmodule Mana.TUI.Screens.Help do
     rendered_lines =
       visible
       |> Enum.with_index(offset)
-      |> Enum.map(fn {line, i} ->
+      |> Enum.map_join("\n", fn {line, i} ->
         if i == idx do
           # Highlight selected line
           IO.ANSI.format([:bright, :white, :reverse, pad_line(line.content, 58), :reset])
@@ -98,7 +98,6 @@ defmodule Mana.TUI.Screens.Help do
           line.content
         end
       end)
-      |> Enum.join("\n")
 
     # Page indicator
     page_info =

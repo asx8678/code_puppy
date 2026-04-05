@@ -38,14 +38,12 @@ defmodule Mana.Application do
   """
   @spec tty_available?() :: boolean()
   def tty_available? do
-    try do
-      case :io.columns(:standard_error) do
-        {:ok, _} -> true
-        {:error, _} -> false
-      end
-    rescue
-      ArgumentError -> false
+    case :io.columns(:standard_error) do
+      {:ok, _} -> true
+      {:error, _} -> false
     end
+  rescue
+    ArgumentError -> false
   end
 
   @doc """

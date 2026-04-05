@@ -5,8 +5,8 @@ defmodule Mana.Pack.SupervisorTest do
 
   use ExUnit.Case, async: false
 
-  alias Mana.Pack.Supervisor, as: PackSupervisor
   alias Mana.Pack.Leader
+  alias Mana.Pack.Supervisor, as: PackSupervisor
 
   test "starts and stops cleanly" do
     {:ok, pid} = PackSupervisor.start_link([])
@@ -31,7 +31,7 @@ defmodule Mana.Pack.SupervisorTest do
 
     # Verify it's a supervisor
     children = Supervisor.which_children(pid)
-    assert length(children) >= 1
+    assert children != []
 
     GenServer.stop(pid, :normal, 5_000)
   end

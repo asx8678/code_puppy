@@ -160,8 +160,7 @@ defmodule Mana.Scheduler.Runner do
       {:ok, jobs} ->
         due_jobs =
           jobs
-          |> Enum.filter(& &1.enabled)
-          |> Enum.filter(&Cron.job_due?(&1, now))
+          |> Enum.filter(&(&1.enabled and Cron.job_due?(&1, now)))
 
         if due_jobs != [] do
           Logger.info("[Scheduler.Runner] Found #{length(due_jobs)} due job(s)")

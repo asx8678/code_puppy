@@ -26,8 +26,8 @@ defmodule Mana.Commands.Model do
 
   alias Mana.Config.Store, as: ConfigStore
   alias Mana.Models.Registry, as: ModelsRegistry
-  alias Mana.TUI.Screens.ModelPicker
   alias Mana.TUI.ScreenRunner
+  alias Mana.TUI.Screens.ModelPicker
 
   @impl true
   def name, do: "/model"

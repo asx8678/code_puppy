@@ -77,10 +77,9 @@ defmodule Mana.TUI.Screens.ModelPicker do
     model_lines =
       entries
       |> Enum.with_index()
-      |> Enum.map(fn {entry, i} ->
+      |> Enum.map_join("\n", fn {entry, i} ->
         render_model_line(entry, i, idx, current)
       end)
-      |> Enum.join("\n")
 
     empty_msg =
       if entries == [] do
@@ -131,20 +130,18 @@ defmodule Mana.TUI.Screens.ModelPicker do
   end
 
   def handle_input(input, state) do
-    cond do
+    if Regex.match?(~r/^\d+$/, input) do
       # Numeric selection: "1", "3", etc.
-      Regex.match?(~r/^\d+$/, input) ->
-        case Integer.parse(input) do
-          {num, ""} ->
-            select_by_index(state, num - 1)
+      case Integer.parse(input) do
+        {num, ""} ->
+          select_by_index(state, num - 1)
 
-          _ ->
-            {:ok, state}
-        end
-
+        _ ->
+          {:ok, state}
+      end
+    else
       # Try exact name match
-      true ->
-        select_by_name(state, input)
+      select_by_name(state, input)
     end
   end
 

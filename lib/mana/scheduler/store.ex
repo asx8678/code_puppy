@@ -177,9 +177,8 @@ defmodule Mana.Scheduler.Store do
   defp read_jobs_file do
     path = jobs_file()
 
-    with {:ok, contents} <- File.read(path),
-         {:ok, data} <- Jason.decode(contents) do
-      {:ok, data}
+    with {:ok, contents} <- File.read(path) do
+      Jason.decode(contents)
     end
   end
 

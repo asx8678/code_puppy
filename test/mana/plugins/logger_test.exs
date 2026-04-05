@@ -52,7 +52,7 @@ defmodule Mana.Plugins.LoggerTest do
       hooks = Logger.hooks()
 
       assert is_list(hooks)
-      assert length(hooks) > 0
+      assert hooks != []
 
       for {phase, func} <- hooks do
         assert is_atom(phase)

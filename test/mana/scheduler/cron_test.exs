@@ -14,7 +14,7 @@ defmodule Mana.Scheduler.CronTest do
 
     test "parses hours" do
       assert {:ok, 3600} == Cron.parse_interval("1h")
-      assert {:ok, 21600} == Cron.parse_interval("6h")
+      assert {:ok, 21_600} == Cron.parse_interval("6h")
     end
 
     test "parses days" do

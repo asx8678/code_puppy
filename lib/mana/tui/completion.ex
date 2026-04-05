@@ -83,7 +83,7 @@ defmodule Mana.TUI.Completion do
     {0, ""}
   end
 
-  def cycle(index, completions) when is_list(completions) and length(completions) > 0 do
+  def cycle(index, completions) when is_list(completions) and completions != [] do
     count = length(completions)
     next = rem(index + 1, count)
     {next, Enum.at(completions, next)}
@@ -171,13 +171,11 @@ defmodule Mana.TUI.Completion do
   end
 
   defp safe_list_agents do
-    try do
-      AgentRegistry.list_agents()
-    rescue
-      _ -> nil
-    catch
-      _, _ -> nil
-    end
+    AgentRegistry.list_agents()
+  rescue
+    _ -> nil
+  catch
+    _, _ -> nil
   end
 
   # ---------------------------------------------------------------------------
@@ -215,25 +213,7 @@ defmodule Mana.TUI.Completion do
         |> Enum.sort()
         |> Enum.map(fn entry ->
           full = Path.join(dir, entry)
-
-          if File.dir?(full) do
-            # Preserve the original ~ prefix if present
-            if String.starts_with?(partial, "~/") do
-              "~/" <> String.trim_leading(full, Path.expand("~") <> "/") <> "/"
-            else
-              if dir == "." do
-                entry <> "/"
-              else
-                full <> "/"
-              end
-            end
-          else
-            if dir == "." do
-              entry
-            else
-              full
-            end
-          end
+          format_entry(entry, full, dir, partial)
         end)
         |> Enum.take(50)
 
@@ -245,6 +225,26 @@ defmodule Mana.TUI.Completion do
   # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------
+
+  defp format_entry(entry, full, dir, partial) do
+    cond do
+      File.dir?(full) and String.starts_with?(partial, "~/") ->
+        home = Path.expand("~") <> "/"
+        "~/" <> String.trim_leading(full, home) <> "/"
+
+      File.dir?(full) and dir == "." ->
+        entry <> "/"
+
+      File.dir?(full) ->
+        full <> "/"
+
+      dir == "." ->
+        entry
+
+      true ->
+        full
+    end
+  end
 
   @doc """
   Computes the longest common prefix shared by all strings in the list,
@@ -274,9 +274,9 @@ defmodule Mana.TUI.Completion do
     chars_a = String.graphemes(a)
     chars_b = String.graphemes(b)
 
-    Enum.zip(chars_a, chars_b)
+    chars_a
+    |> Enum.zip(chars_b)
     |> Enum.take_while(fn {ca, cb} -> ca == cb end)
-    |> Enum.map(fn {c, _} -> c end)
-    |> Enum.join()
+    |> Enum.map_join(fn {c, _} -> c end)
   end
 end

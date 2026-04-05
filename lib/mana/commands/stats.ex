@@ -182,11 +182,11 @@ defmodule Mana.Commands.Stats do
   defp native_to_ms(_total, _count), do: 0.0
 
   defp format_number(n) when n >= 1_000_000 do
-    Float.round(n / 1_000_000, 1) |> (fn f -> "#{f}M" end).()
+    "#{Float.round(n / 1_000_000, 1)}M"
   end
 
   defp format_number(n) when n >= 1_000 do
-    Float.round(n / 1_000, 1) |> (fn f -> "#{f}K" end).()
+    "#{Float.round(n / 1_000, 1)}K"
   end
 
   defp format_number(n), do: to_string(n)

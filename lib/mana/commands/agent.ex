@@ -26,8 +26,8 @@ defmodule Mana.Commands.Agent do
 
   alias Mana.Agents.Registry, as: AgentsRegistry
   alias Mana.Session.Store, as: SessionStore
-  alias Mana.TUI.Screens.AgentPicker
   alias Mana.TUI.ScreenRunner
+  alias Mana.TUI.Screens.AgentPicker
 
   @impl true
   def name, do: "/agent"

@@ -55,7 +55,7 @@ defmodule Mana.Plugins.OllamaSetupTest do
     test "returns help entries" do
       entries = OllamaSetup.command_help()
       assert is_list(entries)
-      assert length(entries) >= 1
+      assert entries != []
 
       names = Enum.map(entries, fn {name, _desc} -> name end)
       assert "ollama-setup" in names

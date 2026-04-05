@@ -294,14 +294,13 @@ defmodule Mana.Models.Providers.OpenAI do
 
   defp estimate_tokens(messages) when is_list(messages) do
     messages
-    |> Enum.map(fn msg ->
+    |> Enum.map_join(fn msg ->
       case msg do
         %{"content" => content} when is_binary(content) -> content
         %{content: content} when is_binary(content) -> content
         _ -> ""
       end
     end)
-    |> Enum.join()
     |> String.length()
     |> div(4)
   end

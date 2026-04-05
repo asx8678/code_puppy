@@ -403,11 +403,7 @@ defmodule Mana.Tools.Browser.Manager do
 
   @spec open_port(state()) :: {:ok, state()} | {:error, term()}
   defp open_port(%{script_path: script_path, node_path: node_path} = state) do
-    if not File.exists?(script_path) do
-      Logger.warning("[#{__MODULE__}] Bridge script not found at #{script_path}, using stub mode")
-      # Return ok without opening a port — execute calls will fail gracefully
-      {:ok, %{state | status: :ready}}
-    else
+    if File.exists?(script_path) do
       try do
         port =
           Port.open(
@@ -433,6 +429,10 @@ defmodule Mana.Tools.Browser.Manager do
           Logger.error("[#{__MODULE__}] Failed to open port: #{inspect(e)}")
           {:error, e}
       end
+    else
+      Logger.warning("[#{__MODULE__}] Bridge script not found at #{script_path}, using stub mode")
+      # Return ok without opening a port — execute calls will fail gracefully
+      {:ok, %{state | status: :ready}}
     end
   end
 
