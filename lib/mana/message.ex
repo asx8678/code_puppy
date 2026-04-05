@@ -122,7 +122,8 @@ defmodule Mana.Message do
   def normalize_keys(%{} = msg) do
     msg
     |> Map.new(fn
-      {k, v} when is_binary(k) -> {safe_to_atom(k), v}
+      {k, v} when is_binary(k) ->
+        {safe_to_atom(k), v}
 
       pair ->
         pair
