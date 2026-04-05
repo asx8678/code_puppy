@@ -11,6 +11,7 @@ defmodule Mana.Models.Providers.OpenAI do
   alias Mana.Models.Providers.SSE
   alias Mana.Streaming.SSEParser
 
+  @model_telemetry_prefix [:mana, :model, :request]
   @default_base_url "https://api.openai.com/v1"
   @chat_completions_endpoint "/chat/completions"
 
@@ -35,7 +36,41 @@ defmodule Mana.Models.Providers.OpenAI do
 
     case validate_config(%{api_key: api_key}) do
       :ok ->
-        do_complete(messages, model, api_key, base_url, opts)
+        start_meta = %{
+          provider: provider_id(),
+          model_name: model,
+          estimated_tokens: estimate_tokens(messages)
+        }
+
+        :telemetry.span(
+          @model_telemetry_prefix,
+          start_meta,
+          fn ->
+            result = do_complete(messages, model, api_key, base_url, opts)
+
+            case result do
+              {:ok, %{usage: usage}} = ok ->
+                tokens_in = usage["prompt_tokens"] || 0
+                tokens_out = usage["completion_tokens"] || 0
+
+                {ok,
+                 %{
+                   provider: provider_id(),
+                   model_name: model,
+                   tokens_in: tokens_in,
+                   tokens_out: tokens_out
+                 }}
+
+              {:error, reason} = err ->
+                {err,
+                 %{
+                   provider: provider_id(),
+                   model_name: model,
+                   error_type: classify_error(reason)
+                 }}
+            end
+          end
+        )
 
       error ->
         error
@@ -256,4 +291,33 @@ defmodule Mana.Models.Providers.OpenAI do
       tools -> Map.put(body, "tools", tools)
     end
   end
+
+  defp estimate_tokens(messages) when is_list(messages) do
+    messages
+    |> Enum.map(fn msg ->
+      case msg do
+        %{"content" => content} when is_binary(content) -> content
+        %{content: content} when is_binary(content) -> content
+        _ -> ""
+      end
+    end)
+    |> Enum.join()
+    |> String.length()
+    |> div(4)
+  end
+
+  defp estimate_tokens(_), do: 0
+
+  defp classify_error(reason) when is_binary(reason) do
+    cond do
+      String.contains?(reason, "429") -> :rate_limit
+      String.contains?(reason, "401") -> :auth
+      String.contains?(reason, "403") -> :auth
+      String.contains?(reason, "timeout") -> :timeout
+      String.contains?(reason, "Timeout") -> :timeout
+      true -> :unknown
+    end
+  end
+
+  defp classify_error(_), do: :unknown
 end

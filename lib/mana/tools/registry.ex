@@ -36,6 +36,7 @@ defmodule Mana.Tools.Registry do
   require Logger
 
   @table :mana_tools
+  @tool_telemetry_prefix [:mana, :tool, :call]
 
   # List of expected tool modules that should be registered at startup
   @expected_tools [
@@ -48,7 +49,16 @@ defmodule Mana.Tools.Registry do
     Mana.Tools.AgentTools.ListAgents,
     Mana.Tools.AgentTools.InvokeAgent,
     Mana.Tools.AgentTools.AskUser,
-    Mana.Tools.ShellExec
+    Mana.Tools.ShellExec,
+    # Browser tools
+    Mana.Tools.Browser.Navigate,
+    Mana.Tools.Browser.Click,
+    Mana.Tools.Browser.Screenshot,
+    Mana.Tools.Browser.Find.ByRole,
+    Mana.Tools.Browser.Find.ByText,
+    Mana.Tools.Browser.Find.ByLabel,
+    Mana.Tools.Browser.Page.New,
+    Mana.Tools.Browser.Page.List
   ]
 
   # Client API
@@ -97,23 +107,43 @@ defmodule Mana.Tools.Registry do
   """
   @spec execute(String.t(), map()) :: {:ok, term()} | {:error, term()}
   def execute(tool_name, args \\ %{}) do
+    start_meta = %{
+      tool_name: tool_name,
+      args_keys: args |> Map.keys() |> Enum.sort()
+    }
+
+    :telemetry.span(
+      @tool_telemetry_prefix,
+      start_meta,
+      fn -> do_execute(tool_name, args) end
+    )
+  end
+
+  defp do_execute(tool_name, args) do
     case :ets.lookup(@table, tool_name) do
       [{^tool_name, tool_info}] ->
         try do
           result = tool_info.module.execute(args)
           # Update stats asynchronously - don't block on this
           GenServer.cast(__MODULE__, {:increment_calls})
-          result
+
+          result_size =
+            case result do
+              {:ok, data} -> byte_size(inspect(data))
+              _ -> byte_size(inspect(result))
+            end
+
+          {result, %{tool_name: tool_name, result_size: result_size}}
         rescue
           error ->
             Logger.error("Tool execution error for #{tool_name}: #{inspect(error)}")
             GenServer.cast(__MODULE__, {:increment_errors})
-            {:error, :execution_failed}
+            {{:error, :execution_failed}, %{tool_name: tool_name, error: inspect(error)}}
         end
 
       [] ->
         GenServer.cast(__MODULE__, {:increment_errors})
-        {:error, :unknown_tool}
+        {{:error, :unknown_tool}, %{tool_name: tool_name, error: :unknown_tool}}
     end
   end
 
