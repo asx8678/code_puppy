@@ -12,6 +12,7 @@ config :mana, :web_auth_token, System.get_env("MANA_WEB_TOKEN")
 
 # Web Endpoint Configuration
 config :mana, Mana.Web.Endpoint,
+  adapter: Bandit.PhoenixAdapter,
   url: [host: System.get_env("MANA_HOST", "localhost")],
   http: [
     ip: {127, 0, 0, 1},
