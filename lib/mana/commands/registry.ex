@@ -75,11 +75,31 @@ defmodule Mana.Commands.Registry do
 
   Supports fuzzy matching if exact match fails.
   Returns the result of command execution.
+
+  ## Performance Note
+
+  This function performs command lookup via ETS (no GenServer blocking)
+  and executes the command in the caller's process for maximum concurrency.
+  Stats updates are performed asynchronously via cast.
   """
   @spec dispatch(String.t(), [String.t()], map()) ::
           :ok | {:ok, term()} | {:error, term()}
   def dispatch(command_name, args \\ [], context \\ %{}) do
-    GenServer.call(__MODULE__, {:dispatch, command_name, args, context})
+    {module, resolved_name} = resolve_command(command_name)
+
+    if module == nil do
+      # Update stats asynchronously - don't block on this
+      GenServer.cast(__MODULE__, {:increment_errors})
+      {:error, :unknown_command}
+    else
+      # Execute in caller's process - NOT in GenServer
+      result = execute_in_caller(module, resolved_name, args, context)
+
+      # Update stats asynchronously
+      GenServer.cast(__MODULE__, {:increment_dispatches})
+
+      result
+    end
   end
 
   @doc """
@@ -180,18 +200,6 @@ defmodule Mana.Commands.Registry do
   end
 
   @impl true
-  def handle_call({:dispatch, command_name, args, context}, _from, state) do
-    {module, resolved_name} = resolve_command(command_name)
-
-    if module == nil do
-      new_stats = %{state.stats | errors: state.stats.errors + 1}
-      {:reply, {:error, :unknown_command}, %{state | stats: new_stats}}
-    else
-      execute_command(module, resolved_name, args, context, state)
-    end
-  end
-
-  @impl true
   def handle_call(:get_stats, _from, state) do
     stats = %{
       commands_registered: :ets.info(@table, :size),
@@ -202,7 +210,55 @@ defmodule Mana.Commands.Registry do
     {:reply, stats, state}
   end
 
-  # Private Functions
+  @impl true
+  def handle_cast({:increment_dispatches}, state) do
+    new_stats = %{state.stats | dispatches: state.stats.dispatches + 1}
+    {:noreply, %{state | stats: new_stats}}
+  end
+
+  @impl true
+  def handle_cast({:increment_errors}, state) do
+    new_stats = %{state.stats | errors: state.stats.errors + 1}
+    {:noreply, %{state | stats: new_stats}}
+  end
+
+  # Executes command in the caller's process (not in GenServer)
+  # This eliminates the serialization bottleneck
+  defp execute_in_caller(module, resolved_name, args, context) do
+    module.execute(args, context)
+  rescue
+    error ->
+      Logger.error("Command execution error for #{resolved_name}: #{inspect(error)}")
+      # Update error stats asynchronously
+      GenServer.cast(__MODULE__, {:increment_errors})
+      {:error, :execution_failed}
+  end
+
+  # Resolve command via ETS lookup - no GenServer call needed
+  # Returns {module, resolved_name} or {nil, command_name}
+  defp resolve_command(command_name) do
+    case :ets.lookup(@table, command_name) do
+      [{^command_name, info}] ->
+        {info.module, command_name}
+
+      [] ->
+        resolve_fuzzy(command_name)
+    end
+  end
+
+  # Fuzzy matching via ETS - still no GenServer call
+  defp resolve_fuzzy(command_name) do
+    all_commands = :ets.select(@table, [{{:"$1", :_}, [], [:"$1"]}])
+
+    case find_closest_match(command_name, all_commands) do
+      {:ok, matched_name} ->
+        [{^matched_name, info}] = :ets.lookup(@table, matched_name)
+        {info.module, matched_name}
+
+      :error ->
+        {nil, command_name}
+    end
+  end
 
   defp validate_and_register(command_module, state) do
     if behaviour_implemented?(command_module) do
@@ -233,41 +289,6 @@ defmodule Mana.Commands.Registry do
 
       {:ok, :ok, state}
     end
-  end
-
-  defp resolve_command(command_name) do
-    case :ets.lookup(@table, command_name) do
-      [{^command_name, info}] ->
-        {info.module, command_name}
-
-      [] ->
-        resolve_fuzzy(command_name)
-    end
-  end
-
-  defp resolve_fuzzy(command_name) do
-    all_commands = :ets.select(@table, [{{:"$1", :_}, [], [:"$1"]}])
-
-    case find_closest_match(command_name, all_commands) do
-      {:ok, matched_name} ->
-        [{^matched_name, info}] = :ets.lookup(@table, matched_name)
-        {info.module, matched_name}
-
-      :error ->
-        {nil, command_name}
-    end
-  end
-
-  defp execute_command(module, resolved_name, args, context, state) do
-    result = module.execute(args, context)
-    new_dispatches = state.stats.dispatches + 1
-    new_stats = %{state.stats | dispatches: new_dispatches}
-    {:reply, result, %{state | stats: new_stats}}
-  rescue
-    error ->
-      Logger.error("Command execution error for #{resolved_name}: #{inspect(error)}")
-      new_stats = %{state.stats | errors: state.stats.errors + 1}
-      {:reply, {:error, :execution_failed}, %{state | stats: new_stats}}
   end
 
   defp behaviour_implemented?(module) do
