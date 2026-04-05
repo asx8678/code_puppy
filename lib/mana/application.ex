@@ -40,7 +40,6 @@ defmodule Mana.Application do
           {Mana.Plugin.Manager, []},
           {Mana.Callbacks.Registry, []},
           {Mana.MessageBus, []},
-          {Mana.Shell.Executor, []},
           # 6. Models.Registry — provider dispatch
           {Mana.Models.Registry, []},
           # 7. Commands.Registry — slash command dispatch
