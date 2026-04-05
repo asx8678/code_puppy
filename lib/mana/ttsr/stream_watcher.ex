@@ -23,7 +23,8 @@ defmodule Mana.TTSR.StreamWatcher do
     thinking_buffer: "",
     tool_buffer: "",
     current_turn: 0,
-    triggered_rules: MapSet.new()
+    triggered_rules: MapSet.new(),
+    last_activity: nil
   ]
 
   @typedoc "StreamWatcher state"
@@ -35,7 +36,8 @@ defmodule Mana.TTSR.StreamWatcher do
           thinking_buffer: String.t(),
           tool_buffer: String.t(),
           current_turn: non_neg_integer(),
-          triggered_rules: MapSet.t(String.t())
+          triggered_rules: MapSet.t(String.t()),
+          last_activity: DateTime.t() | nil
         }
 
   # Client API
@@ -137,31 +139,28 @@ defmodule Mana.TTSR.StreamWatcher do
     end
   end
 
+  @doc """
+  Returns the last activity timestamp for a session's watcher, if any.
+  """
+  @spec get_last_activity(String.t()) :: DateTime.t() | nil
+  def get_last_activity(session_id) do
+    case find_watcher(session_id) do
+      nil -> nil
+      pid -> GenServer.call(pid, :get_last_activity)
+    end
+  end
+
   # Server Callbacks
 
   @impl true
   def init({session_id, rules}) do
-    {:ok, %__MODULE__{session_id: session_id, rules: rules}}
+    {:ok, %__MODULE__{session_id: session_id, rules: rules, last_activity: DateTime.utc_now()}}
   end
 
   @impl true
-  def handle_cast({:stream_event, {:part_delta, _part_id, content}}, state) do
-    # Use current scope if tracked, otherwise default to :text
-    scope = state.current_scope || :text
-    handle_stream_content(state, scope, content)
-  end
-
-  def handle_cast({:stream_event, {:part_start, _part_id, type, _meta}}, state) do
-    # Track scope type for subsequent deltas
-    {:noreply, Map.put(state, :current_scope, type)}
-  end
-
-  def handle_cast({:stream_event, {:part_end, _part_id, _meta}}, state) do
-    {:noreply, Map.put(state, :current_scope, nil)}
-  end
-
-  def handle_cast({:stream_event, _other_event}, state) do
-    {:noreply, state}
+  def handle_cast({:stream_event, event}, state) do
+    new_state = %{state | last_activity: DateTime.utc_now()}
+    handle_stream_event(event, new_state)
   end
 
   def handle_cast(:increment_turn, state) do
@@ -182,7 +181,31 @@ defmodule Mana.TTSR.StreamWatcher do
     {:reply, pending, %{state | rules: new_rules}}
   end
 
+  @impl true
+  def handle_call(:get_last_activity, _from, state) do
+    {:reply, state.last_activity, state}
+  end
+
   # Private Functions
+
+  defp handle_stream_event({:part_delta, _part_id, content}, state) do
+    # Use current scope if tracked, otherwise default to :text
+    scope = state.current_scope || :text
+    handle_stream_content(state, scope, content)
+  end
+
+  defp handle_stream_event({:part_start, _part_id, type, _meta}, state) do
+    # Track scope type for subsequent deltas
+    {:noreply, Map.put(state, :current_scope, type)}
+  end
+
+  defp handle_stream_event({:part_end, _part_id, _meta}, state) do
+    {:noreply, Map.put(state, :current_scope, nil)}
+  end
+
+  defp handle_stream_event(_other_event, state) do
+    {:noreply, state}
+  end
 
   defp push_to_buffer(buffer, char) do
     new = buffer <> char
