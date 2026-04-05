@@ -77,27 +77,9 @@ defmodule Mana.TUI.Markdown do
     lines = String.split(code, "\n")
 
     if lang do
-      header = IO.ANSI.format([:bright, :yellow, "  #{lang}", :reset]) |> to_string()
-
-      numbered =
-        Enum.map_join(Enum.with_index(lines, 1), "\n", fn {line, n} ->
-          num = String.pad_leading(to_string(n), 3)
-
-          IO.ANSI.format([:faint, :white, "  #{num} │ ", :reset, line])
-          |> to_string()
-        end)
-
-      "#{header}\n#{numbered}"
+      render_code_with_lang(lang, lines)
     else
-      numbered =
-        Enum.map_join(Enum.with_index(lines, 1), "\n", fn {line, n} ->
-          num = String.pad_leading(to_string(n), 3)
-
-          IO.ANSI.format([:faint, :white, "  #{num} │ ", :reset, line])
-          |> to_string()
-        end)
-
-      numbered
+      render_code_without_lang(lines)
     end
   end
 
@@ -190,22 +172,7 @@ defmodule Mana.TUI.Markdown do
   end
 
   defp render_node({"thead", _attrs, children, _}) do
-    headers =
-      Enum.map_join(children, " | ", fn child ->
-        case child do
-          {"tr", _, cells, _} ->
-            Enum.map_join(cells, " | ", fn cell ->
-              case cell do
-                {"th", _, cell_children, _} -> render_children(cell_children)
-                _ -> ""
-              end
-            end)
-
-          _ ->
-            ""
-        end
-      end)
-
+    headers = render_header_rows(children)
     header_line = IO.ANSI.format([:bright, :cyan, headers, :reset]) |> to_string()
     separator = String.duplicate("-", String.length(headers))
     "#{header_line}\n#{separator}"
@@ -216,12 +183,7 @@ defmodule Mana.TUI.Markdown do
   end
 
   defp render_node({"tr", _attrs, children, _}) do
-    Enum.map_join(children, " | ", fn child ->
-      case child do
-        {"td", _, cell_children, _} -> render_children(cell_children)
-        _ -> ""
-      end
-    end)
+    Enum.map_join(children, " | ", &render_table_cell/1)
   end
 
   # Line break
@@ -237,7 +199,27 @@ defmodule Mana.TUI.Markdown do
 
   defp render_node(_), do: ""
 
-  # Helper functions
+  defp render_code_with_lang(lang, lines) do
+    header = IO.ANSI.format([:bright, :yellow, "  #{lang}", :reset]) |> to_string()
+    numbered = render_numbered_lines(lines)
+    "#{header}\n#{numbered}"
+  end
+
+  defp render_code_without_lang(lines) do
+    render_numbered_lines(lines)
+  end
+
+  defp render_numbered_lines(lines) do
+    Enum.map_join(Enum.with_index(lines, 1), "\n", &render_numbered_line/1)
+  end
+
+  defp render_numbered_line({line, n}) do
+    num = String.pad_leading(to_string(n), 3)
+
+    IO.ANSI.format([:faint, :white, "  #{num} │ ", :reset, line])
+    |> to_string()
+  end
+
   defp extract_language(attrs) do
     case attrs do
       [{"class", "language-" <> lang}] -> lang
@@ -245,6 +227,28 @@ defmodule Mana.TUI.Markdown do
       _ -> nil
     end
   end
+
+  defp render_header_rows(children) do
+    Enum.map_join(children, " | ", &render_header_row/1)
+  end
+
+  defp render_header_row({"tr", _, cells, _}) do
+    Enum.map_join(cells, " | ", &render_header_cell/1)
+  end
+
+  defp render_header_row(_), do: ""
+
+  defp render_header_cell({"th", _, cell_children, _}) do
+    render_children(cell_children)
+  end
+
+  defp render_header_cell(_), do: ""
+
+  defp render_table_cell({"td", _, cell_children, _}) do
+    render_children(cell_children)
+  end
+
+  defp render_table_cell(_), do: ""
 
   defp render_children(children) when is_list(children) do
     Enum.map_join(children, "", &render_node/1)
