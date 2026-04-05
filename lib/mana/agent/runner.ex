@@ -333,102 +333,128 @@ defmodule Mana.Agent.Runner do
 
     stream = provider.stream(state.messages, state.model_name, provider_opts)
 
-    {events, final_content, tool_calls} =
-      process_stream(stream, state.handler_module, state.handler, state.session_id)
+    case process_stream(stream, state.handler_module, state.handler, state.session_id) do
+      {:ok, {events, final_content, tool_calls}} ->
+        if tool_calls != [] and tool_calls != nil do
+          # Execute tool calls and continue loop
+          tool_messages = execute_tool_calls(tool_calls, state.opts)
 
-    if tool_calls != [] and tool_calls != nil do
-      # Execute tool calls and continue loop
-      tool_messages = execute_tool_calls(tool_calls, state.opts)
+          assistant_msg = %{
+            role: "assistant",
+            content: final_content,
+            tool_calls: tool_calls
+          }
 
-      assistant_msg = %{
-        role: "assistant",
-        content: final_content,
-        tool_calls: tool_calls
-      }
+          new_messages = state.messages ++ [assistant_msg] ++ tool_messages
 
-      new_messages = state.messages ++ [assistant_msg] ++ tool_messages
+          # Check compaction
+          new_messages = maybe_compact(new_messages, state.opts)
 
-      # Check compaction
-      new_messages = maybe_compact(new_messages, state.opts)
+          new_state = %{
+            state
+            | messages: new_messages,
+              iteration: state.iteration + 1,
+              handler: state.handler
+          }
 
-      new_state = %{
-        state
-        | messages: new_messages,
-          iteration: state.iteration + 1,
-          handler: state.handler
-      }
+          {events, new_state}
+        else
+          # Final response - save session and halt
+          save_session(state.session_id, state.user_message, final_content)
 
-      {events, new_state}
-    else
-      # Final response - save session and halt
-      save_session(state.session_id, state.user_message, final_content)
+          Callbacks.dispatch(:agent_run_end, [
+            state.agent_name,
+            state.model_name,
+            state.session_id,
+            true,
+            nil,
+            final_content,
+            %{}
+          ])
 
-      Callbacks.dispatch(:agent_run_end, [
-        state.agent_name,
-        state.model_name,
-        state.session_id,
-        true,
-        nil,
-        final_content,
-        %{}
-      ])
+          # Append final assistant message to events
+          final_events = events ++ [{:done, final_content}]
 
-      # Append final assistant message to events
-      final_events = events ++ [{:done, final_content}]
+          {final_events, :halt}
+        end
 
-      {final_events, :halt}
+      {:error, reason, partial_events} ->
+        # Propagate streaming error - fire callback with error info
+        Callbacks.dispatch(:agent_run_end, [
+          state.agent_name,
+          state.model_name,
+          state.session_id,
+          false,
+          reason,
+          nil,
+          %{streaming_error: true, partial_event_count: length(partial_events)}
+        ])
+
+        # Return error event to stream consumer
+        error_events = partial_events ++ [{:error, reason}]
+        {error_events, :halt}
     end
   end
 
   defp process_stream(stream, handler_module, handler, session_id) do
-    Enum.reduce(stream, {[], "", []}, fn event, {evts, content, tc} = acc ->
-      case event do
-        {:part_start, type, meta} ->
-          part_id = generate_part_id()
-          {:ok, _new_handler} = handler_module.handle_part_start(handler, part_id, type, meta)
+    try do
+      result =
+        Enum.reduce(stream, {[], "", []}, fn event, {evts, content, tc} = acc ->
+          case event do
+            {:part_start, type, meta} ->
+              part_id = generate_part_id()
+              {:ok, _new_handler} = handler_module.handle_part_start(handler, part_id, type, meta)
 
-          Callbacks.dispatch(:stream_event, [
-            :part_start,
-            %{part_id: part_id, type: type, metadata: meta},
-            session_id
-          ])
+              Callbacks.dispatch(:stream_event, [
+                :part_start,
+                %{part_id: part_id, type: type, metadata: meta},
+                session_id
+              ])
 
-          {evts ++ [{:part_start, part_id, type, meta}], content, tc}
+              {evts ++ [{:part_start, part_id, type, meta}], content, tc}
 
-        {:part_delta, _type, delta_content} ->
-          part_id = get_current_part_id(handler)
-          {:ok, _new_handler} = handler_module.handle_part_delta(handler, part_id, delta_content)
+            {:part_delta, _type, delta_content} ->
+              part_id = get_current_part_id(handler)
+              {:ok, _new_handler} = handler_module.handle_part_delta(handler, part_id, delta_content)
 
-          Callbacks.dispatch(:stream_event, [
-            :part_delta,
-            %{part_id: part_id, content: delta_content},
-            session_id
-          ])
+              Callbacks.dispatch(:stream_event, [
+                :part_delta,
+                %{part_id: part_id, content: delta_content},
+                session_id
+              ])
 
-          {evts ++ [{:part_delta, part_id, delta_content}], content <> delta_content, tc}
+              {evts ++ [{:part_delta, part_id, delta_content}], content <> delta_content, tc}
 
-        {:part_end, _type} ->
-          part_id = get_current_part_id(handler)
-          {:ok, _new_handler} = handler_module.handle_part_end(handler, part_id, %{})
+            {:part_end, _type} ->
+              part_id = get_current_part_id(handler)
+              {:ok, _new_handler} = handler_module.handle_part_end(handler, part_id, %{})
 
-          Callbacks.dispatch(:stream_event, [
-            :part_end,
-            %{part_id: part_id},
-            session_id
-          ])
+              Callbacks.dispatch(:stream_event, [
+                :part_end,
+                %{part_id: part_id},
+                session_id
+              ])
 
-          {evts ++ [{:part_end, part_id}], content, tc}
+              {evts ++ [{:part_end, part_id}], content, tc}
 
-        {:tool_call, tool_call} ->
-          {evts, content, tc ++ [tool_call]}
+            {:tool_call, tool_call} ->
+              {evts, content, tc ++ [tool_call]}
 
-        {:error, _reason} ->
-          acc
+            {:error, reason} ->
+              # Propagate error by throwing with accumulated state
+              throw({:streaming_error, reason, evts, content, tc})
 
-        _ ->
-          acc
-      end
-    end)
+            _ ->
+              acc
+          end
+        end)
+
+      {:ok, result}
+    catch
+      {:streaming_error, reason, evts, _content, _tc} ->
+        # Return error with partial results for debugging/retries
+        {:error, reason, evts}
+    end
   end
 
   defp execute_tool_calls(tool_calls, _opts) do
