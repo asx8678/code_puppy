@@ -7,6 +7,13 @@ defmodule Mana.Tools.FileOpsTest do
 
   alias Mana.Tools.FileOps.{Grep, ListFiles, ReadFile}
 
+  # Use a temp dir within the project so SafePath containment is satisfied.
+  defp project_tmp_dir do
+    dir = Path.join([File.cwd!(), "test", "tmp"])
+    File.mkdir_p!(dir)
+    dir
+  end
+
   describe "ListFiles" do
     test "behaviour implementation is correct" do
       assert ListFiles.name() == "list_files"
@@ -16,7 +23,7 @@ defmodule Mana.Tools.FileOpsTest do
 
     test "lists files in directory" do
       # Create temp directory with test files
-      temp_dir = Path.join(System.tmp_dir!(), "mana_test_#{System.unique_integer([:positive])}")
+      temp_dir = Path.join(project_tmp_dir(), "mana_test_#{System.unique_integer([:positive])}")
       File.mkdir_p!(temp_dir)
 
       File.write!(Path.join(temp_dir, "file1.txt"), "content1")
@@ -34,7 +41,7 @@ defmodule Mana.Tools.FileOpsTest do
     end
 
     test "lists files recursively" do
-      temp_dir = Path.join(System.tmp_dir!(), "mana_test_#{System.unique_integer([:positive])}")
+      temp_dir = Path.join(project_tmp_dir(), "mana_test_#{System.unique_integer([:positive])}")
       sub_dir = Path.join(temp_dir, "subdir")
       File.mkdir_p!(sub_dir)
 
@@ -54,7 +61,7 @@ defmodule Mana.Tools.FileOpsTest do
     end
 
     test "ignores patterns defined in IgnorePatterns" do
-      temp_dir = Path.join(System.tmp_dir!(), "mana_test_#{System.unique_integer([:positive])}")
+      temp_dir = Path.join(project_tmp_dir(), "mana_test_#{System.unique_integer([:positive])}")
       File.mkdir_p!(Path.join(temp_dir, ".git"))
       File.mkdir_p!(Path.join(temp_dir, "node_modules"))
 
@@ -90,8 +97,8 @@ defmodule Mana.Tools.FileOpsTest do
       assert message =~ "Path escapes allowed directory"
     end
 
-    test "allows absolute path (for accessing temp files, etc)" do
-      temp_dir = Path.join(System.tmp_dir!(), "safe_list_#{System.unique_integer([:positive])}")
+    test "allows absolute path within base directory" do
+      temp_dir = Path.join(project_tmp_dir(), "safe_list_#{System.unique_integer([:positive])}")
       File.mkdir_p!(temp_dir)
       File.write!(Path.join(temp_dir, "file.txt"), "content")
 
@@ -112,7 +119,7 @@ defmodule Mana.Tools.FileOpsTest do
     end
 
     test "reads entire file" do
-      temp_file = Path.join(System.tmp_dir!(), "read_test_#{System.unique_integer([:positive])}.txt")
+      temp_file = Path.join(project_tmp_dir(), "read_test_#{System.unique_integer([:positive])}.txt")
       content = "Line 1\nLine 2\nLine 3"
       File.write!(temp_file, content)
 
@@ -125,7 +132,7 @@ defmodule Mana.Tools.FileOpsTest do
     end
 
     test "reads file with line range" do
-      temp_file = Path.join(System.tmp_dir!(), "range_test_#{System.unique_integer([:positive])}.txt")
+      temp_file = Path.join(project_tmp_dir(), "range_test_#{System.unique_integer([:positive])}.txt")
       File.write!(temp_file, "Line 1\nLine 2\nLine 3\nLine 4\nLine 5")
 
       try do
@@ -141,7 +148,7 @@ defmodule Mana.Tools.FileOpsTest do
     end
 
     test "reads from start_line to end when num_lines not specified" do
-      temp_file = Path.join(System.tmp_dir!(), "to_end_test_#{System.unique_integer([:positive])}.txt")
+      temp_file = Path.join(project_tmp_dir(), "to_end_test_#{System.unique_integer([:positive])}.txt")
       File.write!(temp_file, "Line 1\nLine 2\nLine 3")
 
       try do
@@ -180,7 +187,7 @@ defmodule Mana.Tools.FileOpsTest do
     end
 
     test "searches for pattern in directory" do
-      temp_dir = Path.join(System.tmp_dir!(), "grep_test_#{System.unique_integer([:positive])}")
+      temp_dir = Path.join(project_tmp_dir(), "grep_test_#{System.unique_integer([:positive])}")
       File.mkdir_p!(temp_dir)
 
       File.write!(Path.join(temp_dir, "file1.txt"), "hello world")
@@ -198,7 +205,7 @@ defmodule Mana.Tools.FileOpsTest do
     end
 
     test "returns empty results when no matches found" do
-      temp_dir = Path.join(System.tmp_dir!(), "grep_empty_#{System.unique_integer([:positive])}")
+      temp_dir = Path.join(project_tmp_dir(), "grep_empty_#{System.unique_integer([:positive])}")
       File.mkdir_p!(temp_dir)
       File.write!(Path.join(temp_dir, "file.txt"), "content")
 

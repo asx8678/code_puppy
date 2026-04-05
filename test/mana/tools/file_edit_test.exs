@@ -7,6 +7,13 @@ defmodule Mana.Tools.FileEditTest do
 
   alias Mana.Tools.FileEdit.{CreateFile, DeleteFile, ReplaceInFile}
 
+  # Use a temp dir within the project so SafePath containment is satisfied.
+  defp project_tmp_dir do
+    dir = Path.join([File.cwd!(), "test", "tmp"])
+    File.mkdir_p!(dir)
+    dir
+  end
+
   describe "CreateFile" do
     test "behaviour implementation is correct" do
       assert CreateFile.name() == "create_file"
@@ -15,7 +22,7 @@ defmodule Mana.Tools.FileEditTest do
     end
 
     test "creates file with content" do
-      temp_file = Path.join(System.tmp_dir!(), "create_test_#{System.unique_integer([:positive])}.txt")
+      temp_file = Path.join(project_tmp_dir(), "create_test_#{System.unique_integer([:positive])}.txt")
       content = "Hello, World!"
 
       try do
@@ -29,7 +36,7 @@ defmodule Mana.Tools.FileEditTest do
     end
 
     test "creates parent directories if needed" do
-      temp_dir = Path.join(System.tmp_dir!(), "create_nested_#{System.unique_integer([:positive])}")
+      temp_dir = Path.join(project_tmp_dir(), "create_nested_#{System.unique_integer([:positive])}")
       temp_file = Path.join([temp_dir, "nested", "path", "file.txt"])
       content = "nested content"
 
@@ -79,7 +86,7 @@ defmodule Mana.Tools.FileEditTest do
     end
 
     test "replaces text in file" do
-      temp_file = Path.join(System.tmp_dir!(), "replace_test_#{System.unique_integer([:positive])}.txt")
+      temp_file = Path.join(project_tmp_dir(), "replace_test_#{System.unique_integer([:positive])}.txt")
       File.write!(temp_file, "Hello, World! This is a test.")
 
       try do
@@ -99,7 +106,7 @@ defmodule Mana.Tools.FileEditTest do
     end
 
     test "returns error when old string not found" do
-      temp_file = Path.join(System.tmp_dir!(), "replace_notfound_#{System.unique_integer([:positive])}.txt")
+      temp_file = Path.join(project_tmp_dir(), "replace_notfound_#{System.unique_integer([:positive])}.txt")
       File.write!(temp_file, "Hello, World!")
 
       try do
@@ -120,7 +127,7 @@ defmodule Mana.Tools.FileEditTest do
     end
 
     test "replaces only first occurrence" do
-      temp_file = Path.join(System.tmp_dir!(), "replace_first_#{System.unique_integer([:positive])}.txt")
+      temp_file = Path.join(project_tmp_dir(), "replace_first_#{System.unique_integer([:positive])}.txt")
       File.write!(temp_file, "foo bar foo baz foo")
 
       try do
@@ -158,7 +165,7 @@ defmodule Mana.Tools.FileEditTest do
     end
 
     test "generates correct diff format" do
-      temp_file = Path.join(System.tmp_dir!(), "diff_test_#{System.unique_integer([:positive])}.txt")
+      temp_file = Path.join(project_tmp_dir(), "diff_test_#{System.unique_integer([:positive])}.txt")
       File.write!(temp_file, "line1\nline2\nline3")
 
       try do
@@ -187,7 +194,7 @@ defmodule Mana.Tools.FileEditTest do
     end
 
     test "deletes existing file" do
-      temp_file = Path.join(System.tmp_dir!(), "delete_test_#{System.unique_integer([:positive])}.txt")
+      temp_file = Path.join(project_tmp_dir(), "delete_test_#{System.unique_integer([:positive])}.txt")
       File.write!(temp_file, "content")
 
       assert File.exists?(temp_file)
@@ -204,7 +211,7 @@ defmodule Mana.Tools.FileEditTest do
     end
 
     test "returns error for directory" do
-      temp_dir = Path.join(System.tmp_dir!(), "delete_dir_#{System.unique_integer([:positive])}")
+      temp_dir = Path.join(project_tmp_dir(), "delete_dir_#{System.unique_integer([:positive])}")
       File.mkdir_p!(temp_dir)
 
       try do

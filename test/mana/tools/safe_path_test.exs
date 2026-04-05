@@ -21,10 +21,18 @@ defmodule Mana.Tools.SafePathTest do
       assert expanded == "/project"
     end
 
-    test "allows absolute paths (no traversal check needed)" do
-      # Absolute paths are allowed as long as they don't contain traversal attempts
-      assert {:ok, "/etc/passwd"} = SafePath.validate("/etc/passwd", "/project")
-      assert {:ok, "/tmp/file.txt"} = SafePath.validate("/tmp/file.txt", "/project")
+    test "rejects absolute paths outside base directory" do
+      # Absolute paths outside the base directory are rejected — no bypasses
+      assert {:error, "Path escapes allowed directory"} =
+               SafePath.validate("/etc/passwd", "/project")
+
+      assert {:error, "Path escapes allowed directory"} =
+               SafePath.validate("/tmp/file.txt", "/project")
+    end
+
+    test "allows absolute paths within base directory" do
+      assert {:ok, "/project/lib/code.ex"} =
+               SafePath.validate("/project/lib/code.ex", "/project")
     end
 
     test "blocks relative paths escaping base directory via .." do
@@ -78,13 +86,21 @@ defmodule Mana.Tools.SafePathTest do
                SafePath.validate_many(paths, base)
     end
 
-    test "allows absolute paths in the list" do
+    test "rejects absolute paths outside base in list" do
       base = "/project"
       paths = ["file.txt", "/etc/passwd", "lib/code.ex"]
 
+      assert {:error, "Path escapes allowed directory"} =
+               SafePath.validate_many(paths, base)
+    end
+
+    test "allows absolute paths within base in list" do
+      base = "/project"
+      paths = ["file.txt", "/project/lib/deep/code.ex", "lib/code.ex"]
+
       assert {:ok, expanded} = SafePath.validate_many(paths, base)
       assert "/project/file.txt" in expanded
-      assert "/etc/passwd" in expanded
+      assert "/project/lib/deep/code.ex" in expanded
       assert "/project/lib/code.ex" in expanded
     end
 
@@ -179,16 +195,65 @@ defmodule Mana.Tools.SafePathTest do
       end
     end
 
-    test "allows absolute temp paths for file operations" do
-      # Absolute paths are allowed even if outside base
+    test "rejects absolute temp paths outside base directory" do
+      # Absolute paths outside base are now correctly rejected
       temp_file = Path.join(System.tmp_dir!(), "safe_path_abs_#{System.unique_integer([:positive])}.txt")
       File.write!(temp_file, "content")
 
       try do
-        # Should allow absolute path even though it's outside cwd
-        assert {:ok, ^temp_file} = SafePath.validate(temp_file, File.cwd!())
+        # Temp file is outside the project cwd — must be rejected
+        assert {:error, "Path escapes allowed directory"} =
+                 SafePath.validate(temp_file, File.cwd!())
       after
         File.rm(temp_file)
+      end
+    end
+
+    test "detects symlink pointing outside base directory" do
+      temp_dir = Path.join(System.tmp_dir!(), "safe_path_symlink_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      try do
+        # Create a symlink inside temp_dir that points to /etc/hosts
+        link_path = Path.join(temp_dir, "sneaky_link")
+        File.ln_s!("/etc/hosts", link_path)
+
+        assert {:error, msg} = SafePath.validate("sneaky_link", temp_dir)
+        assert msg =~ "Symlink"
+        assert msg =~ "points outside base directory"
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+
+    test "allows symlink pointing within base directory" do
+      temp_dir = Path.join(System.tmp_dir!(), "safe_path_symlink_ok_#{System.unique_integer([:positive])}")
+      nested_dir = Path.join(temp_dir, "nested")
+      File.mkdir_p!(nested_dir)
+
+      try do
+        target = Path.join(nested_dir, "real_file.txt")
+        File.write!(target, "hello")
+
+        link_path = Path.join(temp_dir, "good_link")
+        File.ln_s!(target, link_path)
+
+        assert {:ok, resolved} = SafePath.validate("good_link", temp_dir)
+        assert resolved == target
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+
+    test "passes through non-existent paths for create operations" do
+      temp_dir = Path.join(System.tmp_dir!(), "safe_path_create_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      try do
+        # File doesn't exist yet — should pass (create operation)
+        assert {:ok, _} = SafePath.validate("new_file.txt", temp_dir)
+      after
+        File.rm_rf!(temp_dir)
       end
     end
   end

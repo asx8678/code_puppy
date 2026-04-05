@@ -9,18 +9,18 @@ defmodule Mana.Tools.SafePath do
   ## Usage
 
       # Check if a path is safe
-      case SafePath.validate("/safe/path/to/file.txt", "/allowed/base") do
+      case SafePath.validate("lib/file.ex", "/allowed/base") do
         {:ok, expanded_path} -> # proceed with file operation
         {:error, reason} -> # reject the operation
       end
 
   ## Features
 
-  - Expands paths with `Path.expand/1` to resolve symlinks and relative paths
-  - Validates paths don't escape the allowed base directory via traversal
+  - Expands paths with `Path.expand/1` to normalize relative components
+  - ALL paths (relative and absolute) must resolve within the base directory
   - Rejects paths containing `..` that would escape the base
-  - Allows absolute paths that don't contain traversal attempts
-  - Thread-safe and pure functions (no side effects during validation)
+  - Detects symlinks via `File.lstat/1` and validates their targets
+  - Thread-safe with no side effects beyond stat calls during validation
   """
 
   require Logger
@@ -30,9 +30,9 @@ defmodule Mana.Tools.SafePath do
 
   The path validation rules:
   1. Must not contain null bytes (path injection)
-  2. If relative, must stay within the base directory (no `..` escapes)
-  3. If absolute, must not contain `..` segments (traversal attempt)
-  4. Must be expandable to an absolute path
+  2. Must not contain `..` traversal in absolute paths
+  3. Must expand to a path within the base directory (both relative AND absolute)
+  4. Symlinks must resolve to paths within the base directory
 
   ## Parameters
 
@@ -53,7 +53,10 @@ defmodule Mana.Tools.SafePath do
       {:error, "Path escapes allowed directory"}
 
       iex> SafePath.validate("/etc/passwd", "/project")
-      {:ok, "/etc/passwd"}
+      {:error, "Path escapes allowed directory"}
+
+      iex> SafePath.validate("/project/lib/code.ex", "/project")
+      {:ok, "/project/lib/code.ex"}
   """
   @spec validate(String.t(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
   def validate(path, base_dir) when is_binary(path) and is_binary(base_dir) do
@@ -64,8 +67,9 @@ defmodule Mana.Tools.SafePath do
          # Expand relative paths relative to base_dir, not cwd
          {:ok, expanded_path} <- expand_path_relative_to_base(path, expanded_base),
          :ok <- check_traversal_in_expanded(expanded_path),
-         :ok <- check_relative_path_within_base(expanded_path, expanded_base, path) do
-      {:ok, expanded_path}
+         :ok <- check_relative_path_within_base(expanded_path, expanded_base, path),
+         {:ok, resolved_path} <- resolve_and_check_symlinks(expanded_path, expanded_base) do
+      {:ok, resolved_path}
     end
   end
 
@@ -208,6 +212,9 @@ defmodule Mana.Tools.SafePath do
     end
   end
 
+  # NOTE: Redundant safety net. Path.expand/1 already resolves ".." segments,
+  # so expanded paths should never contain them. We keep this as defense-in-depth
+  # in case Path.expand behavior changes or has edge cases we haven't considered.
   defp check_traversal_in_expanded(expanded_path) do
     # Check if the expanded path contains any parent directory references
     # that would indicate a traversal attempt
@@ -230,16 +237,43 @@ defmodule Mana.Tools.SafePath do
   defp update_depth("..", {:ok, depth}), do: {:ok, depth - 1}
   defp update_depth(_, {:ok, depth}), do: {:ok, depth + 1}
 
-  defp check_relative_path_within_base(expanded_path, expanded_base, original_path) do
-    # If the original path was absolute, allow it (as long as no traversal was detected)
-    # If it was relative, it must be within the base directory after expansion
-    if Path.type(original_path) == :absolute do
-      :ok
-    else
-      # For relative paths, check they didn't escape the base after expansion
-      # This handles cases like base=/project and path=../../etc/passwd
-      # which would expand to something outside /project
-      check_path_within_base(expanded_path, expanded_base)
+  defp check_relative_path_within_base(expanded_path, expanded_base, _original_path) do
+    # ALL paths (relative or absolute) must resolve within the base directory.
+    # Previously absolute paths bypassed this check, allowing reads of any file
+    # on the system (e.g. /etc/shadow). That was a critical containment bypass.
+    check_path_within_base(expanded_path, expanded_base)
+  end
+
+
+  # Detects symlinks via File.lstat/1 and validates their resolved targets
+  # stay within the base directory. Non-existent paths (create operations)
+  # pass through — the stat simply returns :enoent.
+  defp resolve_and_check_symlinks(path, expanded_base) do
+    case File.lstat(path) do
+      {:ok, %File.Stat{type: :symlink}} ->
+        case File.read_link(path) do
+          {:ok, target} ->
+            real_path = Path.expand(target, Path.dirname(path))
+
+            case check_path_within_base(real_path, expanded_base) do
+              :ok -> {:ok, real_path}
+              {:error, _} -> {:error, "Symlink #{path} points outside base directory: #{real_path}"}
+            end
+
+          {:error, reason} ->
+            {:error, "Cannot resolve symlink #{path}: #{inspect(reason)}"}
+        end
+
+      {:ok, _} ->
+        # Not a symlink — pass through
+        {:ok, path}
+
+      {:error, :enoent} ->
+        # File doesn't exist yet (create operation) — pass through
+        {:ok, path}
+
+      {:error, reason} ->
+        {:error, "Cannot stat #{path}: #{inspect(reason)}"}
     end
   end
 
