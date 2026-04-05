@@ -279,37 +279,33 @@ defmodule Mana.Commands.Registry do
   end
 
   defp calculate_distance(s1, s2, _len1, len2) do
-    prev_row = 0..len2 |> Enum.to_list()
     s1_chars = String.graphemes(s1)
-    s2_chars = String.graphemes(s2)
+    s2_chars = :erlang.list_to_tuple(String.graphemes(s2))
 
-    {distance, _} =
-      Enum.reduce(s1_chars, {len2 + 1, prev_row}, fn c1, {_, prev} ->
-        build_distance_row(c1, s2_chars, prev, len2)
+    # Initial row: [0, 1, 2, ..., len2]
+    prev_row = :erlang.list_to_tuple(Enum.to_list(0..len2))
+
+    final_row =
+      Enum.reduce(Enum.with_index(s1_chars, 1), prev_row, fn {c1, i}, prev ->
+        # Build current row
+        first_cell = i
+
+        {row_list, _} =
+          Enum.reduce(1..len2, {[first_cell], first_cell}, fn j, {acc, prev_val} ->
+            c2 = elem(s2_chars, j - 1)
+            cost = if c1 == c2, do: 0, else: 1
+
+            deletion = elem(prev, j) + 1
+            insertion = prev_val + 1
+            substitution = elem(prev, j - 1) + cost
+
+            val = min(deletion, min(insertion, substitution))
+            {acc ++ [val], val}
+          end)
+
+        :erlang.list_to_tuple(row_list)
       end)
 
-    distance
-  end
-
-  defp build_distance_row(c1, s2_chars, prev_row, len2) do
-    curr = [length(prev_row)]
-
-    curr_row =
-      Enum.reduce(1..len2, curr, fn j, acc ->
-        calc_cell_value(c1, s2_chars, prev_row, acc, j)
-      end)
-
-    {List.last(curr_row), curr_row}
-  end
-
-  defp calc_cell_value(c1, s2_chars, prev_row, acc, j) do
-    cost = if c1 == Enum.at(s2_chars, j - 1), do: 0, else: 1
-
-    deletion = Enum.at(prev_row, j) + 1
-    insertion = List.last(acc) + 1
-    substitution = Enum.at(prev_row, j - 1) + cost
-
-    new_val = Enum.min([deletion, insertion, substitution])
-    acc ++ [new_val]
+    elem(final_row, len2)
   end
 end

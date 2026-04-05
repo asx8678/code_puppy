@@ -36,13 +36,15 @@ defmodule Mana.Application do
           # 10. Agents.RunSupervisor — supervised agent runs
           {Mana.Agents.RunSupervisor, []},
           # 11. RateLimiter — per-model rate limiting
-          {Mana.RateLimiter, []}
+          {Mana.RateLimiter, []},
+          # 12. TTSR Registry — stream watcher session registry
+          {Registry, keys: :unique, name: Mana.TTSR.Registry}
         ]
       else
         []
       end
 
-    opts = [strategy: :one_for_one, name: Mana.Supervisor]
+    opts = [strategy: :rest_for_one, name: Mana.Supervisor]
     Supervisor.start_link(children, opts)
   end
 end

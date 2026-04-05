@@ -51,7 +51,8 @@ defmodule Mana.Web.Live.ChatLive do
        messages: [],
        input: "",
        thinking: false,
-       stream_output: ""
+       stream_output: "",
+       agent_pid: nil
      )}
   end
 
@@ -62,10 +63,8 @@ defmodule Mana.Web.Live.ChatLive do
   end
 
   def handle_event("send", %{"message" => message}, socket) do
-    # Add user message to history
     messages = socket.assigns.messages ++ [%{role: "user", content: message}]
 
-    # Update socket state: show thinking indicator, clear input and stream
     socket =
       assign(socket,
         messages: messages,
@@ -74,12 +73,13 @@ defmodule Mana.Web.Live.ChatLive do
         stream_output: ""
       )
 
-    # Dispatch command or agent execution in async task
+    agent_pid = socket.assigns.agent_pid
+
     Task.async(fn ->
       if String.starts_with?(message, "/") do
         dispatch_command(message)
       else
-        run_agent(socket.assigns.session_id, message)
+        run_agent(socket.assigns.session_id, message, agent_pid)
       end
     end)
 
@@ -103,16 +103,17 @@ defmodule Mana.Web.Live.ChatLive do
     {:noreply, assign(socket, messages: messages, thinking: false)}
   end
 
+  def handle_info({ref, {:new_agent, pid, result}}, socket) when is_reference(ref) do
+    socket = assign(socket, agent_pid: pid)
+    handle_agent_result(socket, result)
+  end
+
   def handle_info({ref, {:agent_result, content}}, socket) when is_reference(ref) do
-    messages = socket.assigns.messages ++ [%{role: "assistant", content: content}]
-    {:noreply, assign(socket, messages: messages, thinking: false)}
+    handle_agent_result(socket, {:agent_result, content})
   end
 
   def handle_info({ref, {:agent_error, reason}}, socket) when is_reference(ref) do
-    messages =
-      socket.assigns.messages ++ [%{role: "assistant", content: "Error: #{reason}"}]
-
-    {:noreply, assign(socket, messages: messages, thinking: false)}
+    handle_agent_result(socket, {:agent_error, reason})
   end
 
   def handle_info({:DOWN, _ref, :process, _pid, _reason}, socket) do
@@ -286,25 +287,26 @@ defmodule Mana.Web.Live.ChatLive do
       {:command_error, "Failed to execute command"}
   end
 
-  defp run_agent(session_id, message) do
-    # Get current agent for the session
-    agent = AgentsRegistry.current_agent(session_id)
-
-    if agent do
-      # Start agent server if not running
-      case AgentServer.start_link(agent_def: agent) do
-        {:ok, pid} ->
-          execute_agent_run(pid, message, session_id)
-
-        {:error, {:already_started, pid}} ->
-          execute_agent_run(pid, message, session_id)
-
-        error ->
-          Logger.error("Failed to start agent server: #{inspect(error)}")
-          {:agent_error, "Failed to initialize agent"}
-      end
+  defp run_agent(session_id, message, agent_pid) do
+    if agent_pid && Process.alive?(agent_pid) do
+      # Reuse existing agent server
+      execute_agent_run(agent_pid, message, session_id)
     else
-      {:agent_error, "No agent available for session"}
+      # Create new agent server
+      agent = AgentsRegistry.current_agent(session_id)
+
+      if agent do
+        case AgentServer.start_link(agent_def: agent, session_id: session_id) do
+          {:ok, pid} ->
+            {:new_agent, pid, execute_agent_run(pid, message, session_id)}
+
+          {:error, reason} ->
+            Logger.error("Failed to start agent server: #{inspect(reason)}")
+            {:agent_error, "Failed to initialize agent"}
+        end
+      else
+        {:agent_error, "No agent available for session"}
+      end
     end
   end
 
@@ -317,5 +319,15 @@ defmodule Mana.Web.Live.ChatLive do
     error ->
       Logger.error("Agent run error: #{inspect(error)}")
       {:agent_error, "Agent execution failed"}
+  end
+
+  defp handle_agent_result(socket, {:agent_result, content}) do
+    messages = socket.assigns.messages ++ [%{role: "assistant", content: content}]
+    {:noreply, assign(socket, messages: messages, thinking: false)}
+  end
+
+  defp handle_agent_result(socket, {:agent_error, reason}) do
+    messages = socket.assigns.messages ++ [%{role: "assistant", content: "Error: #{reason}"}]
+    {:noreply, assign(socket, messages: messages, thinking: false)}
   end
 end

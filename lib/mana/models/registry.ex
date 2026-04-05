@@ -165,7 +165,19 @@ defmodule Mana.Models.Registry do
   """
   @spec complete([map()], String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def complete(messages, model, opts \\ []) do
-    GenServer.call(__MODULE__, {:complete, messages, model, opts})
+    case GenServer.call(__MODULE__, {:complete, messages, model, opts}) do
+      {:dispatch, provider, messages, model, opts} ->
+        try do
+          provider.complete(messages, model, opts)
+        rescue
+          e ->
+            Logger.error("Provider complete error: #{inspect(e)}")
+            {:error, :provider_error}
+        end
+
+      error ->
+        error
+    end
   end
 
   @doc """
@@ -186,9 +198,21 @@ defmodule Mana.Models.Registry do
         end
       end)
   """
-  @spec stream([map()], String.t(), keyword()) :: Enumerable.t()
+  @spec stream([map()], String.t(), keyword()) :: Enumerable.t() | {:error, term()}
   def stream(messages, model, opts \\ []) do
-    GenServer.call(__MODULE__, {:stream, messages, model, opts})
+    case GenServer.call(__MODULE__, {:stream, messages, model, opts}) do
+      {:dispatch, provider, messages, model, opts} ->
+        try do
+          provider.stream(messages, model, opts)
+        rescue
+          e ->
+            Logger.error("Provider stream error: #{inspect(e)}")
+            {:error, :provider_error}
+        end
+
+      error ->
+        error
+    end
   end
 
   @doc """
@@ -275,22 +299,9 @@ defmodule Mana.Models.Registry do
   def handle_call({:complete, messages, model, opts}, _from, state) do
     case get_provider_from_state(state, model) do
       {:ok, provider} ->
-        try do
-          result = provider.complete(messages, model, opts)
-
-          new_stats =
-            case result do
-              {:ok, _} -> %{state.stats | dispatches: state.stats.dispatches + 1}
-              {:error, _} -> %{state.stats | dispatches: state.stats.dispatches + 1, errors: state.stats.errors + 1}
-            end
-
-          {:reply, result, %{state | stats: new_stats}}
-        rescue
-          e ->
-            Logger.error("Provider complete error: #{inspect(e)}")
-            new_stats = %{state.stats | dispatches: state.stats.dispatches + 1, errors: state.stats.errors + 1}
-            {:reply, {:error, :provider_error}, %{state | stats: new_stats}}
-        end
+        # Return the provider and let the caller make the HTTP call
+        new_stats = %{state.stats | dispatches: state.stats.dispatches + 1}
+        {:reply, {:dispatch, provider, messages, model, opts}, %{state | stats: new_stats}}
 
       error ->
         new_stats = %{state.stats | errors: state.stats.errors + 1}
@@ -302,16 +313,8 @@ defmodule Mana.Models.Registry do
   def handle_call({:stream, messages, model, opts}, _from, state) do
     case get_provider_from_state(state, model) do
       {:ok, provider} ->
-        try do
-          result = provider.stream(messages, model, opts)
-          new_stats = %{state.stats | dispatches: state.stats.dispatches + 1}
-          {:reply, result, %{state | stats: new_stats}}
-        rescue
-          e ->
-            Logger.error("Provider stream error: #{inspect(e)}")
-            new_stats = %{state.stats | dispatches: state.stats.dispatches + 1, errors: state.stats.errors + 1}
-            {:reply, {:error, :provider_error}, %{state | stats: new_stats}}
-        end
+        new_stats = %{state.stats | dispatches: state.stats.dispatches + 1}
+        {:reply, {:dispatch, provider, messages, model, opts}, %{state | stats: new_stats}}
 
       error ->
         new_stats = %{state.stats | errors: state.stats.errors + 1}

@@ -83,7 +83,12 @@ defmodule Mana.TUI.App do
   defp read_input do
     prompt = IO.ANSI.format([:bright, :green, "❯ ", :reset]) |> to_string()
     IO.write(prompt)
-    IO.read(:line)
+
+    case IO.read(:line) do
+      :eof -> "/quit\n"
+      {:error, _} -> "/quit\n"
+      line when is_binary(line) -> line
+    end
   end
 
   defp dispatch_command(command, session_id) do

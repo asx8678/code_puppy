@@ -103,13 +103,24 @@ defmodule Mana.TTSR.StreamWatcher do
 
   @impl true
   def init({session_id, rules}) do
-    # Ensure registry is started
-    case Registry.start_link(keys: :unique, name: @registry_name) do
-      {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> :ok
-    end
+    # Registry should be started by the supervision tree.
+    # Ensure it exists, but don't crash if it's already started.
+    ensure_registry_started()
 
     {:ok, %__MODULE__{session_id: session_id, rules: rules}}
+  end
+
+  defp ensure_registry_started do
+    case Process.whereis(@registry_name) do
+      nil ->
+        case Registry.start_link(keys: :unique, name: @registry_name) do
+          {:ok, _} -> :ok
+          {:error, {:already_started, _}} -> :ok
+        end
+
+      _pid ->
+        :ok
+    end
   end
 
   @impl true

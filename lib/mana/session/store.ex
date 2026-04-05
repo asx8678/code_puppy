@@ -179,11 +179,7 @@ defmodule Mana.Session.Store do
   def handle_call(:create_session, _from, state) do
     session_id = generate_session_id()
     :ets.insert(@table, {session_id, []})
-
-    new_sessions = Map.put(state.sessions, session_id, [])
-    new_state = %{state | sessions: new_sessions, active_session: session_id}
-
-    {:reply, session_id, new_state}
+    {:reply, session_id, %{state | active_session: session_id}}
   end
 
   @impl true
@@ -225,8 +221,7 @@ defmodule Mana.Session.Store do
   @impl true
   def handle_call({:clear, session_id}, _from, state) do
     :ets.insert(@table, {session_id, []})
-    new_sessions = Map.put(state.sessions, session_id, [])
-    {:reply, :ok, %{state | sessions: new_sessions}}
+    {:reply, :ok, state}
   end
 
   @impl true
@@ -254,9 +249,8 @@ defmodule Mana.Session.Store do
 
   @impl true
   def handle_call(:list_sessions, _from, state) do
-    # Get from disk as well to show all available sessions
     disk_sessions = list_sessions_from_disk()
-    memory_sessions = Map.keys(state.sessions)
+    memory_sessions = :ets.select(@table, [{{:"$1", :_}, [], [:"$1"]}])
     all_sessions = Enum.uniq(disk_sessions ++ memory_sessions) |> Enum.sort()
     {:reply, all_sessions, state}
   end
@@ -270,17 +264,10 @@ defmodule Mana.Session.Store do
     file_path = session_file_path(session_id)
     File.rm(file_path)
 
-    # Update state
-    new_sessions = Map.delete(state.sessions, session_id)
-
     new_active =
-      if state.active_session == session_id do
-        nil
-      else
-        state.active_session
-      end
+      if state.active_session == session_id, do: nil, else: state.active_session
 
-    {:reply, :ok, %{state | sessions: new_sessions, active_session: new_active}}
+    {:reply, :ok, %{state | active_session: new_active}}
   end
 
   @impl true
@@ -421,5 +408,8 @@ defmodule Mana.Session.Store do
   defp normalize_message_keys(_), do: %{role: nil, content: nil, timestamp: nil}
 
   defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+end
+l), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

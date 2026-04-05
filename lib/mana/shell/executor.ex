@@ -363,32 +363,60 @@ defmodule Mana.Shell.Executor do
 
   def dangerous_command?(_), do: false
 
-  # Check if a pattern matches in a context where it would actually execute
-  # Pattern must be at start, after shell control operators, or is itself a dangerous operation
   defp matches_dangerous_in_context?(command, pattern) do
+    source = Regex.source(pattern)
+
     cond do
       # Match at the beginning of command
-      Regex.match?(~r/^#{pattern.source}/i, command) ->
+      match_at_start?(command, source) ->
         true
 
       # Match after shell control operators
-      Regex.match?(~r/[;&|]\s*#{pattern.source}/i, command) ->
+      match_after_operator?(command, source) ->
         true
 
-      # For raw device writes (> /dev/sd*), match anywhere as this is always dangerous
-      pattern.source =~ "dev/sd" and Regex.match?(pattern, command) ->
+      # For raw device writes, match anywhere
+      String.contains?(source, "dev/sd") and Regex.match?(pattern, command) ->
         true
 
       # Match in subshell context $()
-      Regex.match?(~r/\$\([^)]*#{pattern.source}/i, command) ->
+      match_in_subshell?(command, source) ->
         true
 
       # Match in backtick execution
-      Regex.match?(~r/`[^`]*#{pattern.source}/i, command) ->
+      match_in_backtick?(command, source) ->
         true
 
       true ->
         false
+    end
+  end
+
+  defp match_at_start?(command, source) do
+    case Regex.compile("^" <> source, "i") do
+      {:ok, re} -> Regex.match?(re, command)
+      _ -> false
+    end
+  end
+
+  defp match_after_operator?(command, source) do
+    case Regex.compile("[;&|]\\s*" <> source, "i") do
+      {:ok, re} -> Regex.match?(re, command)
+      _ -> false
+    end
+  end
+
+  defp match_in_subshell?(command, source) do
+    case Regex.compile("\\$\\([^)]*" <> source, "i") do
+      {:ok, re} -> Regex.match?(re, command)
+      _ -> false
+    end
+  end
+
+  defp match_in_backtick?(command, source) do
+    case Regex.compile("`[^`]*" <> source, "i") do
+      {:ok, re} -> Regex.match?(re, command)
+      _ -> false
     end
   end
 
