@@ -83,10 +83,11 @@ defmodule Mana.OAuth.ChatGPT do
           redirect_uri: @redirect_uri,
           scope: scopes,
           code_challenge: pkce.code_challenge,
-          code_challenge_method: "S256"
+          code_challenge_method: "S256",
+          state: pkce.state
         })
 
-    {:ok, server} = Flow.start_callback_server(1455)
+    {:ok, server} = Flow.start_callback_server(1455, pkce.state)
     Flow.launch_browser(auth_url)
 
     receive do

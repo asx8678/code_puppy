@@ -104,10 +104,11 @@ defmodule Mana.OAuth.ClaudeCode do
           redirect_uri: "http://localhost:#{port}/callback",
           scope: @scopes,
           code_challenge: pkce.code_challenge,
-          code_challenge_method: "S256"
+          code_challenge_method: "S256",
+          state: pkce.state
         })
 
-    {:ok, server} = Flow.start_callback_server(port)
+    {:ok, server} = Flow.start_callback_server(port, pkce.state)
     Flow.launch_browser(auth_url)
 
     receive do
