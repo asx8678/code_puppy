@@ -26,6 +26,8 @@ defmodule Mana.Commands.Model do
 
   alias Mana.Config.Store, as: ConfigStore
   alias Mana.Models.Registry, as: ModelsRegistry
+  alias Mana.TUI.Screens.ModelPicker
+  alias Mana.TUI.ScreenRunner
 
   @impl true
   def name, do: "/model"
@@ -70,7 +72,13 @@ defmodule Mana.Commands.Model do
   end
 
   def execute([], _context) do
-    {:ok, "Usage: #{usage()}"}
+    case ScreenRunner.run(ModelPicker) do
+      {:ok, model_name} ->
+        {:ok, "Model set to: #{model_name}"}
+
+      :ok ->
+        {:ok, "Model picker cancelled."}
+    end
   end
 
   def execute(_args, _context) do
