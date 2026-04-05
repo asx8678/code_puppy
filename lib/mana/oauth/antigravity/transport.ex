@@ -519,26 +519,4 @@ defmodule Mana.OAuth.Antigravity.Transport do
         {:error, reason}
     end
   end
-
-  defp get_token!(nil) do
-    raise "No account specified for Antigravity API request"
-  end
-
-  defp get_token!(account) when is_binary(account) do
-    provider_key = "antigravity_#{account}"
-
-    case TokenStore.load(provider_key) do
-      {:ok, %{"access_token" => token}} ->
-        token
-
-      {:ok, %{access_token: token}} ->
-        token
-
-      {:error, :not_found} ->
-        raise "No token found for Antigravity account: #{account}"
-
-      {:error, reason} ->
-        raise "Failed to load token for account #{account}: #{inspect(reason)}"
-    end
-  end
 end

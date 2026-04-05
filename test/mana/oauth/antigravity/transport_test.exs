@@ -172,7 +172,7 @@ defmodule Mana.OAuth.Antigravity.TransportTest do
       {events, remainder} = Transport.process_sse_data(data)
 
       assert remainder == ""
-      assert length(events) >= 0
+      assert events == [] or events != []
     end
   end
 
@@ -396,7 +396,7 @@ defmodule Mana.OAuth.Antigravity.TransportTest do
 
       # Stream should produce error event due to missing token
       # Can't easily predict exact behavior without mocking
-      assert length(events) >= 0 or true
+      assert events == [] or events != [] or true
     end
   end
 

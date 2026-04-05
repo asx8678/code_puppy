@@ -167,7 +167,7 @@ defmodule Mana.OAuth.AntigravityTest do
 
       # Mock selecting accounts - since we don't have real accounts loaded
       # just verify the mechanism works with empty or populated state
-      if length(state.accounts) > 0 do
+      if state.accounts != [] do
         # Should cycle through accounts
         account1 = GenServer.call(Antigravity, :select_account)
         account2 = GenServer.call(Antigravity, :select_account)
