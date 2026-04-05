@@ -254,9 +254,108 @@ defmodule Mana.Tools.SafePath do
     end
   end
 
-  # ============================================================================
-  # Private Functions
-  # ============================================================================
+  @doc """
+  Atomically reads from a validated path, minimizing TOCTOU window.
+
+  Similar to safe_write but for reading: validates, then re-validates
+  right before reading to detect symlink swap attacks.
+
+  ## Parameters
+
+  - `path` - The path to read from (relative or absolute)
+  - `cwd` - The allowed base directory
+
+  ## Returns
+
+  - `{:ok, content}` - File read successfully
+  - `{:error, reason}` - Validation failed or read failed
+  """
+  @spec safe_read(String.t(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  def safe_read(path, cwd) do
+    with {:ok, safe_path} <- validate(path, cwd),
+         # Re-validate: detect symlink swap between first validate and now
+         {:ok, ^safe_path} <- validate(path, cwd),
+         # Additional check: ensure the path is not a symlink (catches race conditions)
+         # Use the original expanded path, not the resolved symlink target
+         :ok <- check_not_symlink(expanded_path_for_check(path, cwd)),
+         {:ok, content} <- File.read(safe_path) do
+      {:ok, content}
+    else
+      {:ok, _different} ->
+        {:error, "Path resolution changed during read - possible symlink attack: #{path}"}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Atomically deletes a file at a validated path, minimizing TOCTOU window.
+
+  Validates the path, re-validates right before deletion, and ensures
+  the target is a regular file (not a symlink) at the moment of deletion.
+
+  ## Parameters
+
+  - `path` - The path to delete (relative or absolute)
+  - `cwd` - The allowed base directory
+
+  ## Returns
+
+  - `:ok` - File deleted successfully
+  - `{:error, reason}` - Validation failed or delete failed
+  """
+  @spec safe_delete(String.t(), String.t()) :: :ok | {:error, String.t()}
+  def safe_delete(path, cwd) do
+    with {:ok, safe_path} <- validate(path, cwd),
+         # Re-validate: detect symlink swap between first validate and now
+         {:ok, ^safe_path} <- validate(path, cwd),
+         # Additional check: ensure the path is not a symlink (catches race conditions)
+         # Use the original expanded path, not the resolved symlink target
+         :ok <- check_not_symlink(expanded_path_for_check(path, cwd)),
+         :ok <- File.rm(safe_path) do
+      :ok
+    else
+      {:ok, _different} ->
+        {:error, "Path resolution changed during delete - possible symlink attack: #{path}"}
+
+      {:error, reason} when is_atom(reason) ->
+        {:error, "Failed to delete #{path}: #{reason}"}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # Returns the expanded path without symlink resolution, for TOCTOU checks.
+  # This gives us the path as it would appear in the filesystem before symlink resolution.
+  defp expanded_path_for_check(path, cwd) do
+    if Path.type(path) == :relative do
+      Path.expand(path, cwd)
+    else
+      Path.expand(path)
+    end
+  end
+
+  # Returns :ok if it's a regular file or doesn't exist (for idempotent deletes).
+  # Returns error if it's a symlink (possible attack).
+  defp check_not_symlink(path) do
+    case File.lstat(path) do
+      {:ok, %File.Stat{type: :symlink}} ->
+        {:error, "Path is a symlink - possible race condition attack: #{path}"}
+
+      {:ok, _} ->
+        # Regular file or other non-symlink type
+        :ok
+
+      {:error, :enoent} ->
+        # File doesn't exist - ok for idempotent operations
+        :ok
+
+      {:error, reason} ->
+        {:error, "Cannot stat #{path}: #{inspect(reason)}"}
+    end
+  end
 
   defp expand_path(path) do
     expanded = Path.expand(path)

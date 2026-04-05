@@ -122,24 +122,19 @@ defmodule Mana.Tools.FileOps.ReadFile do
     start_line = Map.get(args, "start_line")
     num_lines = Map.get(args, "num_lines")
 
-    # Validate path safety
+    # Validate path safety and read atomically with TOCTOU protection
     with {:ok, cwd} <- SafePath.current_working_dir(),
-         {:ok, safe_path} <- SafePath.validate(file_path, cwd) do
-      case File.read(safe_path) do
-        {:ok, content} ->
-          result = extract_content(content, start_line, num_lines)
-          total_lines = content |> String.split("\n") |> length()
+         {:ok, safe_path} <- SafePath.validate(file_path, cwd),
+         {:ok, content} <- SafePath.safe_read(file_path, cwd) do
+      result = extract_content(content, start_line, num_lines)
+      total_lines = content |> String.split("\n") |> length()
 
-          {:ok,
-           %{
-             "content" => result,
-             "file_path" => safe_path,
-             "total_lines" => total_lines
-           }}
-
-        {:error, reason} ->
-          {:error, "Failed to read #{safe_path}: #{reason}"}
-      end
+      {:ok,
+       %{
+         "content" => result,
+         "file_path" => safe_path,
+         "total_lines" => total_lines
+       }}
     end
   end
 
