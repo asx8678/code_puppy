@@ -19,7 +19,7 @@ defmodule Mana.Tools.ShellExec do
       ShellExec.execute(%{
         "command" => "ls -la",
         "cwd" => "/tmp",
-        "timeout" => 60
+        "timeout" => 30
       })
       # => {:ok, %{"stdout" => "...", "stderr" => "", "exit_code" => 0}}
 
@@ -36,15 +36,18 @@ defmodule Mana.Tools.ShellExec do
 
   alias Mana.Shell.Executor
 
-  @default_timeout 60
+  @default_timeout 30
 
   @impl true
+  @spec name() :: String.t()
   def name, do: "run_shell_command"
 
   @impl true
+  @spec description() :: String.t()
   def description, do: "Execute a shell command with timeout and safety controls"
 
   @impl true
+  @spec parameters() :: map()
   def parameters do
     %{
       type: "object",
@@ -74,6 +77,7 @@ defmodule Mana.Tools.ShellExec do
   end
 
   @impl true
+  @spec execute(map()) :: {:ok, map()} | {:error, String.t()}
   def execute(args) do
     command = Map.get(args, "command")
     cwd = Map.get(args, "cwd", ".")
@@ -81,15 +85,37 @@ defmodule Mana.Tools.ShellExec do
     background = Map.get(args, "background", false)
 
     # Validate required parameter
-    if is_nil(command) or command == "" do
-      return_error("Missing required parameter: command")
+    with {:ok, command} <- validate_command(command),
+         {:ok, cwd} <- validate_cwd(cwd) do
+      # Convert timeout to milliseconds
+      timeout_ms = timeout_sec * 1000
+
+      if background do
+        execute_background(command, cwd)
+      else
+        execute_sync(command, cwd, timeout_ms)
+      end
     end
+  end
 
-    # Convert timeout to milliseconds
-    timeout_ms = timeout_sec * 1000
+  @spec validate_command(any()) :: {:ok, String.t()} | {:error, String.t()}
+  defp validate_command(nil), do: {:error, "Missing required parameter: command"}
+  defp validate_command(""), do: {:error, "Missing required parameter: command"}
 
+  defp validate_command(command) when is_binary(command) do
+    if String.trim(command) == "" do
+      {:error, "Missing required parameter: command"}
+    else
+      {:ok, command}
+    end
+  end
+
+  defp validate_command(_), do: {:error, "Missing required parameter: command"}
+
+  @spec validate_cwd(String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  defp validate_cwd(cwd) do
     # Resolve working directory
-    cwd =
+    resolved_cwd =
       if Path.type(cwd) == :relative do
         Path.expand(cwd, File.cwd!())
       else
@@ -97,17 +123,14 @@ defmodule Mana.Tools.ShellExec do
       end
 
     # Ensure directory exists
-    unless File.dir?(cwd) do
-      return_error("Working directory does not exist: #{cwd}")
-    end
-
-    if background do
-      execute_background(command, cwd)
+    if File.dir?(resolved_cwd) do
+      {:ok, resolved_cwd}
     else
-      execute_sync(command, cwd, timeout_ms)
+      {:error, "Working directory does not exist: #{resolved_cwd}"}
     end
   end
 
+  @spec execute_sync(String.t(), String.t(), integer()) :: {:ok, map()} | {:error, String.t()}
   defp execute_sync(command, cwd, timeout_ms) do
     case Executor.execute(command, cwd, timeout_ms) do
       {:ok, result} ->
@@ -127,6 +150,7 @@ defmodule Mana.Tools.ShellExec do
     end
   end
 
+  @spec execute_background(String.t(), String.t()) :: {:ok, map()} | {:error, String.t()}
   defp execute_background(command, cwd) do
     case Executor.execute_background(command, cwd) do
       {:ok, ref} ->
@@ -143,9 +167,5 @@ defmodule Mana.Tools.ShellExec do
       {:error, reason} ->
         {:error, "Background execution failed: #{reason}"}
     end
-  end
-
-  defp return_error(message) do
-    {:error, message}
   end
 end
