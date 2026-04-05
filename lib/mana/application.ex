@@ -24,9 +24,28 @@ defmodule Mana.Application do
   """
   @spec headless?() :: boolean()
   def headless? do
-    Process.whereis(:standard_error) == nil ||
-      System.get_env("MANA_HEADLESS") == "true" ||
+    not tty_available?() or
+      System.get_env("MANA_HEADLESS") == "true" or
       System.get_env("CONTAINER") == "true"
+  end
+
+  @doc """
+  Checks if a TTY (terminal) is available for IO operations.
+
+  Uses `:io.columns/1` which returns `{:error, _}` when there is no TTY.
+  This is more reliable than checking for specific process registrations
+  because it directly tests whether the IO device can handle terminal ops.
+  """
+  @spec tty_available?() :: boolean()
+  def tty_available? do
+    try do
+      case :io.columns(:standard_error) do
+        {:ok, _} -> true
+        {:error, _} -> false
+      end
+    rescue
+      ArgumentError -> false
+    end
   end
 
   @doc """
@@ -37,13 +56,13 @@ defmodule Mana.Application do
   """
   @spec configure_headless_logging() :: :ok
   def configure_headless_logging do
-    # Remove console backend if standard_error is not available
-    if Process.whereis(:standard_error) == nil do
+    try do
       Logger.remove_backend(:console)
-      :ok
-    else
-      :ok
+    rescue
+      _ -> :ok
     end
+
+    :ok
   end
 
   # Web endpoint configuration - only start when server: true

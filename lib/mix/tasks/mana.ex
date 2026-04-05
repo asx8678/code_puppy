@@ -16,6 +16,7 @@ defmodule Mix.Tasks.Mana do
 
     --model MODEL    Set the default model
     --session ID     Load a specific session
+    --headless       Run without TUI (for containers / non-TTY environments)
   """
 
   @impl Mix.Task
@@ -26,12 +27,21 @@ defmodule Mix.Tasks.Mana do
     # Parse args
     opts = parse_args(args)
 
-    # Start TUI
+    # Set headless env if requested
+    if Keyword.get(opts, :headless) do
+      System.put_env("MANA_HEADLESS", "true")
+    end
+
+    # Start TUI (will auto-detect headless environment)
     App.start(opts)
   end
 
   defp parse_args(args) do
-    {opts, _, _} = OptionParser.parse(args, strict: [model: :string, session: :string])
+    {opts, _, _} =
+      OptionParser.parse(args,
+        strict: [model: :string, session: :string, headless: :boolean]
+      )
+
     opts
   end
 end

@@ -24,10 +24,26 @@ defmodule Mana.Banner do
     |> to_string()
   end
 
-  @doc "Print the banner to stdout"
+  @doc "Print the banner to stdout. No-op in headless environments."
   @spec print() :: :ok
   def print do
-    IO.puts(render())
+    if tty_available?() do
+      IO.puts(render())
+    end
+
+    :ok
+  end
+
+  # Check if a TTY is available for output.
+  defp tty_available? do
+    try do
+      case :io.columns(:standard_io) do
+        {:ok, _} -> true
+        {:error, _} -> false
+      end
+    rescue
+      ArgumentError -> false
+    end
   end
 
   @doc "Return version info line with banner"

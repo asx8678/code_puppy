@@ -66,7 +66,13 @@ if config_env() == :prod do
               String.to_existing_atom("Elixir.#{module_str}")
             rescue
               ArgumentError ->
-                IO.warn("Unknown plugin module: #{module_str}")
+                # Safe warning that won't crash in headless environments
+                try do
+                  IO.warn("Unknown plugin module: #{module_str}")
+                rescue
+                  _ -> :ok
+                end
+
                 nil
             end
 

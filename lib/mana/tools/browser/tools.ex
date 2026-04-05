@@ -15,6 +15,20 @@ defmodule Mana.Tools.Browser.Tools do
   - `browser_find_by_label` — Find elements by accessible label
   - `browser_new_page` — Open a new browser tab
   - `browser_list_pages` — List open browser tabs
+  - `browser_hover` — Hover over an element
+  - `browser_set_text` — Set text in an input element
+  - `browser_get_text` — Get visible text content of an element
+  - `browser_get_value` — Get the value of a form element
+  - `browser_execute_js` — Execute arbitrary JavaScript
+  - `browser_scroll` — Scroll the page or an element
+  - `browser_scroll_to_element` — Scroll until an element is in view
+  - `browser_wait_for_element` — Wait for an element to appear
+  - `browser_wait_for_load` — Wait for a page load state
+  - `browser_save_workflow` — Save a recorded workflow
+  - `browser_list_workflows` — List saved workflows
+  - `browser_read_workflow` — Read workflow steps
+  - `browser_highlight_element` — Visually highlight an element
+  - `browser_clear_highlights` — Remove all visual highlights
 
   ## Architecture
 
@@ -42,7 +56,22 @@ defmodule Mana.Tools.Browser.Tools do
     Mana.Tools.Browser.Find.ByText,
     Mana.Tools.Browser.Find.ByLabel,
     Mana.Tools.Browser.Page.New,
-    Mana.Tools.Browser.Page.List
+    Mana.Tools.Browser.Page.List,
+    # New browser tools
+    Mana.Tools.Browser.Hover,
+    Mana.Tools.Browser.TextInput.SetText,
+    Mana.Tools.Browser.TextInput.GetText,
+    Mana.Tools.Browser.TextInput.GetValue,
+    Mana.Tools.Browser.ExecuteJs,
+    Mana.Tools.Browser.Scroll.ScrollPage,
+    Mana.Tools.Browser.Scroll.ScrollToElement,
+    Mana.Tools.Browser.Wait.WaitForElement,
+    Mana.Tools.Browser.Wait.WaitForLoad,
+    Mana.Tools.Browser.Workflow.SaveWorkflow,
+    Mana.Tools.Browser.Workflow.ListWorkflows,
+    Mana.Tools.Browser.Workflow.ReadWorkflow,
+    Mana.Tools.Browser.Highlight.HighlightElement,
+    Mana.Tools.Browser.Highlight.ClearHighlights
   ]
 
   # ---------------------------------------------------------------------------

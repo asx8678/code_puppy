@@ -19,8 +19,30 @@ defmodule Mana.TUI.App do
   end
 
   @doc "Start the TUI application"
-  @spec start(keyword()) :: :ok
+  @spec start(keyword()) :: :ok | {:error, :no_tty}
   def start(opts \\ []) do
+    # Guard: refuse to start TUI in headless environments
+    unless tty_available?() do
+      Logger.warning("No TTY available — skipping TUI. Set MANA_HEADLESS=true to silence this.")
+      return_no_tty()
+    else
+      start_with_tty(opts)
+    end
+  end
+
+  defp return_no_tty do
+    # In headless mode, start a simple loop that handles shutdown cleanly
+    # without any IO operations
+    receive do
+      :shutdown -> :ok
+    after
+      :timer.hours(24) -> :ok
+    end
+
+    {:error, :no_tty}
+  end
+
+  defp start_with_tty(opts) do
     # Create or load session
     session_id =
       case Keyword.get(opts, :session) do
@@ -50,7 +72,7 @@ defmodule Mana.TUI.App do
 
     version = Mana.version()
 
-    IO.puts(
+    safe_puts(
       IO.ANSI.format([:faint, "  v#{version}  •  Type /help for commands, /quit to exit\n", :reset])
       |> to_string()
     )
@@ -68,15 +90,44 @@ defmodule Mana.TUI.App do
     loop(session_id, opts, input_pid, %CompletionState{})
   end
 
+  # Check if a TTY is available for IO operations
+  defp tty_available? do
+    Mana.Application.tty_available?()
+  end
+
+  # Safe IO.puts that catches errors from missing IO devices
+  defp safe_puts(text) do
+    try do
+      IO.puts(text)
+    rescue
+      ArgumentError -> :ok
+      ErlangError -> :ok
+    end
+  end
+
+  # Safe IO.write that catches errors from missing IO devices
+  defp safe_write(text) do
+    try do
+      IO.write(text)
+    rescue
+      ArgumentError -> :ok
+      ErlangError -> :ok
+    end
+  end
+
   # Enable raw mode on the terminal so we receive individual keystrokes
   defp enable_raw_mode do
-    case :io.getopts(:standard_io) do
-      opts when is_list(opts) ->
-        # Merge raw options: binary, no echo, no canonical (raw)
-        :io.setopts(:standard_io, [:binary, {:echo, false}, {:canonical, false}])
+    try do
+      case :io.getopts(:standard_io) do
+        opts when is_list(opts) ->
+          # Merge raw options: binary, no echo, no canonical (raw)
+          :io.setopts(:standard_io, [:binary, {:echo, false}, {:canonical, false}])
 
-      _ ->
-        :ok
+        _ ->
+          :ok
+      end
+    rescue
+      ArgumentError -> :ok
     end
   end
 
@@ -203,7 +254,7 @@ defmodule Mana.TUI.App do
         loop(session_id, opts, input_pid, cs)
 
       {:key, :ctrl_c} ->
-        IO.write("^C\n")
+        safe_write("^C\n")
         cs = %CompletionState{}
         redraw_prompt("")
         loop(session_id, opts, input_pid, cs)
@@ -220,8 +271,8 @@ defmodule Mana.TUI.App do
 
       {:message, %{type: :text} = msg} ->
         # Clear current prompt line, print message, redraw prompt
-        IO.write("\r\e[K")
-        IO.puts(IO.ANSI.format([:faint, msg.content, :reset]) |> to_string())
+        safe_write("\r\e[K")
+        safe_puts(IO.ANSI.format([:faint, msg.content, :reset]) |> to_string())
         redraw_prompt(cs.last_input)
         loop(session_id, opts, input_pid, cs)
 
@@ -241,7 +292,7 @@ defmodule Mana.TUI.App do
     case completions do
       [] ->
         # No matches — beep
-        IO.write("\a")
+        safe_write("\a")
         cs
 
       [single] ->
@@ -284,7 +335,6 @@ defmodule Mana.TUI.App do
   # Redraw the prompt with the current buffer contents
   defp redraw_prompt(buffer) do
     prompt = IO.ANSI.format([:bright, :green, "❯ ", :reset]) |> to_string()
-    # \r moves to start of line, \e[K clears to end of line
     IO.write("\r\e[K#{prompt}#{buffer}")
   end
 
@@ -295,7 +345,7 @@ defmodule Mana.TUI.App do
       |> Enum.map(&(IO.ANSI.format([:cyan, &1, :reset]) |> to_string()))
       |> Enum.join("  ")
 
-    IO.write("\n#{formatted}\n")
+    safe_write("\n#{formatted}\n")
   end
 
   defp handle_input(input, session_id, opts, input_pid) do
@@ -315,7 +365,7 @@ defmodule Mana.TUI.App do
         loop(session_id, opts, input_pid, cs)
 
       "/clear" ->
-        IO.write("\e[2J\e[H")
+        safe_write("\e[2J\e[H")
         redraw_prompt("")
         loop(session_id, opts, input_pid, cs)
 
@@ -339,20 +389,20 @@ defmodule Mana.TUI.App do
 
     case Registry.dispatch(full_cmd, args, context) do
       {:ok, result} when is_binary(result) ->
-        IO.puts(IO.ANSI.format([:green, result, :reset]) |> to_string())
+        safe_puts(IO.ANSI.format([:green, result, :reset]) |> to_string())
 
       {:ok, result} ->
-        IO.puts(IO.ANSI.format([:green, inspect(result), :reset]) |> to_string())
+        safe_puts(IO.ANSI.format([:green, inspect(result), :reset]) |> to_string())
 
       :ok ->
         :ok
 
       {:error, :unknown_command} ->
-        IO.puts(IO.ANSI.format([:red, "Unknown command: #{full_cmd}", :reset]) |> to_string())
+        safe_puts(IO.ANSI.format([:red, "Unknown command: #{full_cmd}", :reset]) |> to_string())
         suggest_commands(full_cmd)
 
       {:error, reason} ->
-        IO.puts(IO.ANSI.format([:red, "Error: #{inspect(reason)}", :reset]) |> to_string())
+        safe_puts(IO.ANSI.format([:red, "Error: #{inspect(reason)}", :reset]) |> to_string())
     end
   end
 
@@ -365,7 +415,7 @@ defmodule Mana.TUI.App do
       end)
 
     if suggestions != [] do
-      IO.puts(
+      safe_puts(
         IO.ANSI.format([:faint, "Did you mean: #{Enum.join(suggestions, ", ")}?", :reset])
         |> to_string()
       )
@@ -377,7 +427,7 @@ defmodule Mana.TUI.App do
   defp run_agent(message, session_id, opts) do
     model = Keyword.get(opts, :model, Config.global_model_name())
 
-    IO.puts(IO.ANSI.format([:faint, "Thinking...", :reset]) |> to_string())
+    safe_puts(IO.ANSI.format([:faint, "Thinking...", :reset]) |> to_string())
 
     # Build a simple agent definition for general chat
     agent_def = %{
@@ -392,14 +442,14 @@ defmodule Mana.TUI.App do
         case Runner.run(agent_pid, message, model: model) do
           {:ok, response} ->
             rendered = Markdown.render(response)
-            IO.puts(rendered)
+            safe_puts(rendered)
 
           {:error, reason} ->
-            IO.puts(IO.ANSI.format([:red, "Error: #{inspect(reason)}", :reset]) |> to_string())
+            safe_puts(IO.ANSI.format([:red, "Error: #{inspect(reason)}", :reset]) |> to_string())
         end
 
       {:error, reason} ->
-        IO.puts(
+        safe_puts(
           IO.ANSI.format([:red, "Failed to start agent: #{inspect(reason)}", :reset])
           |> to_string()
         )
@@ -421,7 +471,7 @@ defmodule Mana.TUI.App do
       /quit          Exit Mana
     """
 
-    IO.puts(help_text)
+    safe_puts(help_text)
   end
 
   defp shutdown(session_id, input_pid) do
@@ -434,13 +484,13 @@ defmodule Mana.TUI.App do
     Store.set_active_session(session_id)
     Store.save(session_id)
     MessageBus.remove_listener(self())
-    IO.puts(IO.ANSI.format([:cyan, "Goodbye! 👋", :reset]) |> to_string())
+    safe_puts(IO.ANSI.format([:cyan, "Goodbye! 👋", :reset]) |> to_string())
     :ok
   end
 
   # Deprecated: kept for backwards compatibility
   def handle_message({:message, %{type: :text} = msg}) do
-    IO.puts(IO.ANSI.format([:faint, msg.content, :reset]) |> to_string())
+    safe_puts(IO.ANSI.format([:faint, msg.content, :reset]) |> to_string())
     :ok
   end
 

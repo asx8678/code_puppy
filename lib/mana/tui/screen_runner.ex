@@ -40,6 +40,14 @@ defmodule Mana.TUI.ScreenRunner do
   """
   @spec run(module(), keyword()) :: :ok | {:ok, term()} | {:error, term()}
   def run(screen_module, opts \\ []) do
+    if tty_available?() do
+      run_with_tty(screen_module, opts)
+    else
+      {:error, :no_tty}
+    end
+  end
+
+  defp run_with_tty(screen_module, opts) do
     # Initialise screen state
     with {:ok, state} <- init_screen(screen_module, opts) do
       # Spawn non-blocking input reader
@@ -53,9 +61,34 @@ defmodule Mana.TUI.ScreenRunner do
       Process.exit(input_pid, :kill)
 
       # Clear screen before returning control
-      IO.write("\e[2J\e[H")
+      safe_write("\e[2J\e[H")
 
       result
+    end
+  end
+
+  # Check if a TTY is available for IO operations
+  defp tty_available? do
+    Mana.Application.tty_available?()
+  end
+
+  # Safe IO.write that catches errors from missing IO devices
+  defp safe_write(text) do
+    try do
+      IO.write(text)
+    rescue
+      ArgumentError -> :ok
+      ErlangError -> :ok
+    end
+  end
+
+  # Safe IO.puts that catches errors from missing IO devices
+  defp safe_puts(text) do
+    try do
+      IO.puts(text)
+    rescue
+      ArgumentError -> :ok
+      ErlangError -> :ok
     end
   end
 
@@ -72,8 +105,8 @@ defmodule Mana.TUI.ScreenRunner do
   defp loop(module, state, input_pid) do
     # Render
     rendered = module.render(state)
-    IO.write("\e[2J\e[H")
-    IO.puts(rendered)
+    safe_write("\e[2J\e[H")
+    safe_puts(rendered)
     IO.write(prompt())
 
     # Wait for input
