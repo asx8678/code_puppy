@@ -49,6 +49,8 @@ defmodule Mana.Plugins.FilePermission do
 
   require Logger
 
+  alias Mana.Tools.UserApproval
+
   @impl true
   def name, do: "file_permission"
 
@@ -179,7 +181,7 @@ defmodule Mana.Plugins.FilePermission do
     end
 
     if state.interactive do
-      case Mana.Tools.UserApproval.request_file_approval(operation, %{path: file_path, reason: reason}) do
+      case UserApproval.request_file_approval(operation, %{path: file_path, reason: reason}) do
         {:ok, true} -> true
         {:ok, false} -> false
         {:error, _} -> false
