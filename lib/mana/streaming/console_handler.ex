@@ -95,7 +95,9 @@ defmodule Mana.Streaming.ConsoleHandler do
 
   @impl true
   def handle_part_delta(state, part_id, content) do
-    tracker = PartTracker.update_tokens(state.part_tracker, part_id, 0, 1)
+    # Calculate actual output tokens from content length
+    output_tokens = String.length(content)
+    tracker = PartTracker.update_tokens(state.part_tracker, part_id, 0, output_tokens)
 
     # Emit content to MessageBus as stream chunk with assistant role
     message =
@@ -119,7 +121,14 @@ defmodule Mana.Streaming.ConsoleHandler do
 
   @impl true
   def handle_part_end(state, part_id, meta) do
-    tracker = PartTracker.end_part(state.part_tracker, part_id)
+    # Extract token usage from metadata if available
+    input_tokens = get_in(meta, [:usage, :input_tokens]) || get_in(meta, [:usage, :prompt_tokens]) || 0
+    output_tokens = get_in(meta, [:usage, :output_tokens]) || get_in(meta, [:usage, :completion_tokens]) || 0
+
+    tracker =
+      state.part_tracker
+      |> PartTracker.update_tokens(part_id, input_tokens, output_tokens)
+      |> PartTracker.end_part(part_id)
 
     # Fire callback for TTSR and other listeners
     EventHandler.fire_stream_callback(
