@@ -218,7 +218,11 @@ defmodule Mana.OAuth.ClaudeCode do
         {:ok, parse_response(resp)}
 
       {:ok, %{status: 401}} ->
-        refresh_and_retry(:complete, messages, model, opts)
+        if Keyword.get(opts, :retried, false) do
+          {:error, "Authentication failed after token refresh"}
+        else
+          refresh_and_retry(:complete, messages, model, Keyword.put(opts, :retried, true))
+        end
 
       {:ok, %{status: status, body: body}} ->
         {:error, "Claude Code API error: #{status} - #{inspect(body)}"}

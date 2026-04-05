@@ -184,7 +184,11 @@ defmodule Mana.OAuth.ChatGPT do
             {:ok, parse_codex_response(body, model)}
 
           {:ok, %{status: 401}} ->
-            refresh_and_retry(:complete, messages, model, opts)
+            if Keyword.get(opts, :retried, false) do
+              {:error, "Authentication failed after token refresh"}
+            else
+              refresh_and_retry(:complete, messages, model, Keyword.put(opts, :retried, true))
+            end
 
           {:ok, %{status: status, body: body}} ->
             {:error, "ChatGPT API error: #{status} - #{inspect(body)}"}
