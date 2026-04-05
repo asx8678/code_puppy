@@ -13,6 +13,12 @@ defmodule Bench.StreamingBench do
 
   # Sample SSE event data
   @sample_sse_events Enum.map(1..100, fn i ->
+    """
+    event: message
+    data: #{Jason.encode!(%{"index" => i, "content" => "Hello #{i}", "type" => "delta"})}
+
+    """
+  end)
 
   @doc """
   Run all benchmarks.
