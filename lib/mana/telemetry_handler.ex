@@ -35,7 +35,12 @@ defmodule Mana.TelemetryHandler do
   def attach do
     ensure_table()
 
-    handler_id = {__MODULE__, self()}
+    # Use a constant handler ID so attach/0 is idempotent —
+    # calling it again detaches the old handler and re-attaches.
+    handler_id = {__MODULE__, :handler}
+
+    # Detach first if already attached (safe even if not)
+    :telemetry.detach(handler_id)
 
     :telemetry.attach_many(
       handler_id,
