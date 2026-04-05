@@ -57,9 +57,9 @@ By default, Code Puppy looks for skills in:
 2. **Download or clone a skill** into the directory:
 
    ```bash
-   # Example: Installing a docker skill
+   # Example: Installing a python-testing skill
    cd ~/.code_puppy/skills
-   git clone https://github.com/example/code-puppy-docker.git docker
+   git clone https://github.com/example/code-puppy-python-testing.git python-testing
    
    # Or manually create the skill directory
    mkdir my-custom-skill
@@ -81,10 +81,10 @@ By default, Code Puppy looks for skills in:
 
 ```
 ~/.code_puppy/skills/
-├── docker/
+├── python-testing/
 │   ├── SKILL.md          # Required: Skill instructions + metadata
-│   ├── docker-compose.yml # Optional: Supporting resource
-│   └── Dockerfile.template # Optional: Supporting resource
+│   ├── pytest.ini        # Optional: Supporting resource
+│   └── conftest.py.template # Optional: Supporting resource
 ├── kubernetes/
 │   ├── SKILL.md
 │   └── k8s-templates/
@@ -132,7 +132,7 @@ When you run `/skills`, you'll see:
 ├────────────┬─────────────────────┬──────────────────────────┤
 │ Status     │ Name                │ Description              │
 ├────────────┼─────────────────────┼──────────────────────────┤
-│ ✓ Enabled  │ docker              │ Docker containerization  │
+│ ✓ Enabled  │ python-testing      │ Python testing guides    │
 │ ✓ Enabled  │ kubernetes          │ K8s deployment guides    │
 │ ✗ Disabled │ security-audit      │ Security best practices  │
 └────────────┴─────────────────────┴──────────────────────────┘
@@ -163,8 +163,8 @@ When skills are enabled, Code Puppy automatically injects available skills into 
 ```xml
 <available_skills>
   <skill>
-    <name>docker</name>
-    <description>Expert guidance for Docker containerization, Dockerfile optimization, and docker-compose orchestration</description>
+    <name>python-testing</name>
+    <description>Expert guidance for Python testing with pytest, including fixtures, mocks, and coverage</description>
   </skill>
   <skill>
     <name>kubernetes</name>
@@ -192,8 +192,8 @@ Lists all available skills, optionally filtered by a search query.
 # List all skills
 list_or_search_skills()
 
-# Search for docker-related skills
-list_or_search_skills(query="docker")
+# Search for testing-related skills
+list_or_search_skills(query="testing")
 ```
 
 **Returns:**
@@ -211,7 +211,7 @@ Loads and activates a specific skill by name.
 
 **Example:**
 ```python
-activate_skill(skill_name="docker")
+activate_skill(skill_name="python-testing")
 ```
 
 **Returns:**
@@ -241,74 +241,70 @@ The `SKILL.md` file uses **YAML frontmatter** for metadata followed by **Markdow
 
 ```markdown
 ---
-name: docker-expert
-description: Expert guidance for Docker containerization, multi-stage builds, and compose orchestration
+name: python-testing
+description: Expert guidance for Python testing with pytest, including fixtures, mocks, and coverage
 version: 1.0.0
 author: Your Name
 tags:
-  - docker
-  - containers
-  - devops
-  - deployment
+  - python
+  - testing
+  - pytest
+  - quality
 ---
 
-# Docker Expert Skill
+# Python Testing Expert Skill
 
 ## When to Use This Skill
 
 Use this skill when the user needs help with:
-- Writing or optimizing Dockerfiles
-- Setting up docker-compose configurations
-- Container best practices and security
-- Multi-stage builds for smaller images
+- Writing or optimizing test suites
+- Setting up pytest configurations
+- Test best practices and patterns
+- Mocking and fixtures
 
 ## Instructions
 
-### 1. Dockerfile Best Practices
+### 1. Test Best Practices
 
 Always follow these principles:
 
-- Use specific base image tags (not `latest`)
-- Leverage multi-stage builds to minimize image size
-- Combine RUN commands to reduce layers
-- Use `.dockerignore` to exclude unnecessary files
+- Use descriptive test names that explain the behavior
+- Follow the Arrange-Act-Assert pattern
+- Keep tests independent and isolated
+- Use fixtures for shared setup
 
-### 2. Security Guidelines
+### 2. Test Organization
 
-- Run containers as non-root users
-- Scan images for vulnerabilities
-- Minimize installed packages
-- Use distroless or slim base images when possible
+- Group related tests in classes
+- Use markers to categorize tests
+- Keep test files alongside source or in tests/
 
 ### 3. Common Patterns
 
-```dockerfile
-# Multi-stage build example
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
+```python
+# Fixture example
+import pytest
 
-FROM node:18-alpine
-WORKDIR /app
-COPY --from=builder /app/node_modules ./node_modules
-COPY . .
-USER node
-CMD ["node", "server.js"]
+@pytest.fixture
+def sample_data():
+    return {"key": "value"}
+
+def test_with_fixture(sample_data):
+    assert sample_data["key"] == "value"
 ```
 
 ## Available Tools
 
 When this skill is activated, you can use standard file tools to:
-- Create Dockerfiles
-- Generate docker-compose.yml files
-- Set up .dockerignore
+- Create test files
+- Generate pytest.ini configurations
+- Set up conftest.py
 
 ## Resources
 
 This skill includes:
-- `docker-compose.yml.template` - Starter compose template
-- `.dockerignore.example` - Common ignore patterns
+- `pytest.ini.template` - Starter pytest configuration
+- `conftest.py.example` - Common fixture patterns
 ```
 
 ### Required Frontmatter Fields
@@ -363,7 +359,7 @@ These resources are listed when the skill is activated via the `resources` field
 
 ### Skill Naming Conventions
 
-- Use **kebab-case** (e.g., `docker-compose`, `python-testing`)
+- Use **kebab-case** (e.g., `python-testing`, `api-client`)
 - Keep names **descriptive but concise**
 - Avoid generic names like `utils` or `helpers`
 - Prefix domain-specific skills (e.g., `aws-s3`, `gcp-cloudrun`)
@@ -485,7 +481,7 @@ Skills may include instructions that:
 
 For maximum security:
 
-1. **Use a dedicated environment** (container, VM, or restricted user)
+1. **Use a dedicated environment** (VM or restricted user)
 2. **Limit file system access** to only necessary directories
 3. **Monitor network activity** when using new skills
 4. **Keep skills updated** to receive security patches
@@ -526,12 +522,12 @@ code-puppy
 /agent code-puppy
 
 # 4. The agent automatically knows about available skills
-# When you ask for docker help, it activates the docker skill
+# When you ask for testing help, it activates the testing skill
 
-# User: Help me containerize this Python app
-# Agent: I'll help you containerize this Python app. Let me activate the docker skill first.
-# [Agent calls activate_skill(skill_name="docker")]
-# [Agent follows skill instructions to create Dockerfile, .dockerignore, docker-compose.yml]
+# User: Help me write tests for this Python app
+# Agent: I'll help you write tests for this Python app. Let me activate the python-testing skill first.
+# [Agent calls activate_skill(skill_name="python-testing")]
+# [Agent follows skill instructions to create test files, pytest.ini, conftest.py]
 ```
 
 ---

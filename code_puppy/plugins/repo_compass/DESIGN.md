@@ -48,7 +48,6 @@ register_callback("get_model_system_prompt", _get_repo_context)
 6. `.gitignore` - Technology hints
 7. `docs/` folder - Documentation structure
 8. `Makefile` / `justfile` - Build commands
-9. `Dockerfile` / `docker-compose.yml` - Containerization
 
 **Discovery Algorithm:**
 ```python
@@ -61,7 +60,7 @@ IMPORTANT_FILES = [
     ".gitignore",
 ]
 DOCS_PATTERNS = ["docs/", "doc/", "documentation/"]
-BUILD_FILES = ["Makefile", "justfile", "Dockerfile"]
+BUILD_FILES = ["Makefile", "justfile"]
 
 def _discover_files(root: Path) -> dict:
     """Find and categorize important project files."""
@@ -221,7 +220,7 @@ code_puppy/plugins/repo_compass/
 - Performance optimization
 
 **Phase 3: Advanced Features**
-- More file types (Docker, CI configs)
+- More file types (CI configs, build files)
 - Tech stack detection from imports
 - Monorepo support with multiple contexts
 
