@@ -1,12 +1,11 @@
 defmodule Mana.Plugin.Manager do
   @moduledoc """
-  GenServer that manages plugin discovery, initialization, and hook dispatch.
+  GenServer that manages plugin discovery, initialization, and lifecycle.
 
   The Manager is responsible for:
   - Discovering plugins at startup from configured sources
   - Calling `init/1` on each plugin and tracking their state
-  - Dispatching hook events to registered plugin callbacks
-  - Maintaining an event backlog for hooks fired before listeners register
+  - Registering plugin hooks via the unified Mana.Callbacks system
   - Graceful shutdown coordination
 
   ## Lifecycle
@@ -15,8 +14,8 @@ defmodule Mana.Plugin.Manager do
      implementing `Mana.Plugin.Behaviour`
   2. **Initialization** - Calls `init/1` on each discovered plugin with
      its configuration
-  3. **Registration** - Stores hook mappings for efficient dispatch
-  4. **Dispatch** - Routes hook events to registered callbacks
+  3. **Registration** - Registers plugin hooks via Mana.Callbacks.register/2
+  4. **Dispatch** - Hooks are dispatched through Mana.Callbacks (unified system)
   5. **Shutdown** - Calls optional `terminate/0` on plugins
 
   ## Configuration
@@ -30,11 +29,7 @@ defmodule Mana.Plugin.Manager do
           # Explicit plugin modules
           MyApp.Plugins.Logger,
           MyApp.Plugins.Analytics
-        ],
-        # Backlog retention time in milliseconds
-        backlog_ttl: 30_000,
-        # Maximum backlog size per hook
-        max_backlog_size: 100
+        ]
 
   ## Usage
 
@@ -44,22 +39,27 @@ defmodule Mana.Plugin.Manager do
         Mana.Plugin.Manager
       ]
 
-  Trigger hooks from your code:
+  Trigger hooks through the unified callbacks system:
 
-      Mana.Plugin.Manager.trigger(:agent_run_start, ["my_agent", "gpt-4", "session_123"])
-      Mana.Plugin.Manager.trigger_async(:agent_run_start, ["my_agent", "gpt-4", "session_123"])
+      Mana.Callbacks.on_agent_run_start("my_agent", "gpt-4", "session_123")
+      Mana.Callbacks.dispatch(:agent_run_start, ["my_agent", "gpt-4", "session_123"])
+
+  ## Migration Note
+
+  Previously, this module had its own `trigger/3` and `trigger_async/2` functions.
+  These are now deprecated and delegate to `Mana.Callbacks.dispatch/2`.
+  Please use `Mana.Callbacks` directly for all hook operations.
   """
 
   use GenServer
 
   require Logger
 
+  alias Mana.Callbacks
   alias Mana.Plugin.Hook
 
   defstruct [
     :plugins,
-    :hooks,
-    :backlog,
     :config,
     :stats
   ]
@@ -75,20 +75,14 @@ defmodule Mana.Plugin.Manager do
   @typedoc "Manager state"
   @type t :: %__MODULE__{
           plugins: %{String.t() => plugin_state()},
-          hooks: %{Hook.hook_phase() => [function()]},
-          backlog: %{Hook.hook_phase() => [term()]},
           config: keyword(),
           stats: %{
-            triggers: non_neg_integer(),
-            errors: non_neg_integer(),
             plugins_loaded: non_neg_integer()
           }
         }
 
   # Default configuration
   @default_config [
-    backlog_ttl: 30_000,
-    max_backlog_size: 100,
     plugins: [:discover],
     auto_dismiss_errors: true
   ]
@@ -132,13 +126,15 @@ defmodule Mana.Plugin.Manager do
   @doc """
   Triggers a hook synchronously, calling all registered callbacks.
 
+  ## Deprecated
+
+  This function is deprecated. Use `Mana.Callbacks.dispatch/2` instead.
+
   ## Parameters
 
   - `hook` - The hook phase atom (e.g., `:agent_run_start`)
   - `args` - List of arguments to pass to callbacks
-  - `opts` - Options:
-    - `:timeout` - Maximum time to wait for callbacks (default: 5000ms)
-    - `:continue_on_error` - Whether to continue if a callback fails (default: true)
+  - `opts` - Options (unused, kept for backward compatibility)
 
   ## Returns
 
@@ -148,37 +144,22 @@ defmodule Mana.Plugin.Manager do
   ## Examples
 
       Mana.Plugin.Manager.trigger(:agent_run_start, ["agent", "model", nil])
-      Mana.Plugin.Manager.trigger(:file_permission, [ctx, "/path", "read", nil, nil, nil], timeout: 10_000)
+      # Prefer: Mana.Callbacks.dispatch(:agent_run_start, ["agent", "model", nil])
   """
-  @deprecated "Use Mana.Callbacks.dispatch/2 instead — plugin hooks are now bridged to Callbacks.Registry"
+  @deprecated "Use Mana.Callbacks.dispatch/2 instead — plugin hooks are now managed through the unified Callbacks system"
   @spec trigger(Hook.hook_phase(), [term()], keyword()) :: {:ok, [term()]} | {:error, term()}
-  def trigger(hook, args \\ [], opts \\ []) do
-    # Reentrancy guard: if called from within the GenServer itself, execute directly
-    # to avoid deadlock when callbacks try to trigger other hooks.
-    # NOTE: We use the process dictionary to pass state during dispatch,
-    # because :sys.get_state sends a message to self() which deadlocks.
-    if self() == GenServer.whereis(__MODULE__) do
-      # We're inside the GenServer process — read state from process dictionary
-      case Process.get(:plugin_manager_state) do
-        nil ->
-          # Fallback: no state available, buffer the event for later
-          {:ok, []}
-
-        state ->
-          {results, _new_state} = do_trigger(hook, args, opts, state, :sync)
-          {:ok, results}
-      end
-    else
-      # Normal case: call through GenServer
-      GenServer.call(__MODULE__, {:trigger, hook, args, opts}, Keyword.get(opts, :timeout, 5000))
-    end
+  def trigger(hook, args \\ [], _opts \\ []) do
+    Callbacks.dispatch(hook, args)
   end
 
   @doc """
   Triggers a hook asynchronously.
 
-  Returns immediately without waiting for callbacks to complete.
-  Callback errors are logged but don't affect the caller.
+  ## Deprecated
+
+  This function is deprecated. Use `Mana.Callbacks.dispatch/2` with
+  `Task.start/1` if you need async behavior, or use the async hooks
+  which are already handled asynchronously by the Callbacks system.
 
   ## Parameters
 
@@ -187,15 +168,15 @@ defmodule Mana.Plugin.Manager do
 
   ## Returns
 
-  - `:ok` - Hook dispatched (results not available)
-
-  ## Examples
-
-      Mana.Plugin.Manager.trigger_async(:stream_event, ["token", %{token: "hello"}, session_id])
+  - `:ok` - Always returns immediately
   """
+  @deprecated "Async hooks are handled by Mana.Callbacks. Use Task.start/1 with Mana.Callbacks.dispatch/2 if needed"
   @spec trigger_async(Hook.hook_phase(), [term()]) :: :ok
   def trigger_async(hook, args \\ []) do
-    GenServer.cast(__MODULE__, {:trigger_async, hook, args})
+    # Async hooks are already handled asynchronously by the Callbacks system
+    # This just delegates to dispatch and discards the result
+    _ = Callbacks.dispatch(hook, args)
+    :ok
   end
 
   @doc """
@@ -210,7 +191,7 @@ defmodule Mana.Plugin.Manager do
   """
   @spec trigger_startup() :: {:ok, [term()]} | {:error, term()}
   def trigger_startup do
-    trigger(:startup, [], timeout: 30_000)
+    Callbacks.dispatch(:startup, [])
   end
 
   @doc """
@@ -225,7 +206,7 @@ defmodule Mana.Plugin.Manager do
   """
   @spec trigger_shutdown() :: {:ok, [term()]} | {:error, term()}
   def trigger_shutdown do
-    trigger(:shutdown, [], timeout: 10_000)
+    Callbacks.dispatch(:shutdown, [])
   end
 
   @doc """
@@ -273,8 +254,10 @@ defmodule Mana.Plugin.Manager do
   @doc """
   Drains the backlog for a specific hook, replaying buffered events.
 
-  When hooks fire before any listeners are registered, events are
-  buffered. Call this after registering a plugin to process missed events.
+  ## Deprecated
+
+  Backlog management is now handled by Mana.Callbacks.Registry.
+  Use `Mana.Callbacks.drain_backlog/1` instead.
 
   ## Parameters
 
@@ -284,21 +267,36 @@ defmodule Mana.Plugin.Manager do
 
   - `{:ok, results}` - Results from replayed events
   """
+  @deprecated "Use Mana.Callbacks.drain_backlog/1 instead"
   @spec drain_backlog(Hook.hook_phase()) :: {:ok, [term()]} | {:error, term()}
   def drain_backlog(hook) do
-    GenServer.call(__MODULE__, {:drain_backlog, hook})
+    Callbacks.drain_backlog(hook)
   end
 
   @doc """
   Drains the backlog for all hooks.
 
+  ## Deprecated
+
+  Backlog management is now handled by Mana.Callbacks.Registry.
+  Call `Mana.Callbacks.drain_backlog/1` for each hook you need.
+
   ## Returns
 
   - `{:ok, %{hook => results}}` - Map of results per hook
   """
+  @deprecated "Use individual Mana.Callbacks.drain_backlog/1 calls instead"
   @spec drain_all_backlogs() :: {:ok, %{Hook.hook_phase() => [term()]}} | {:error, term()}
   def drain_all_backlogs do
-    GenServer.call(__MODULE__, :drain_all_backlogs)
+    all_hooks = Hook.all_hooks()
+
+    results_map =
+      Enum.reduce(all_hooks, %{}, fn hook, acc ->
+        {:ok, results} = Callbacks.drain_backlog(hook)
+        Map.put(acc, hook, results)
+      end)
+
+    {:ok, results_map}
   end
 
   @doc """
@@ -311,16 +309,34 @@ defmodule Mana.Plugin.Manager do
 
   @doc """
   Returns statistics about the manager.
+
+  ## Note
+
+  Hook-related statistics now come from Mana.Callbacks.Registry.
+  This function returns plugin management stats and delegates
+  to Callbacks for hook statistics.
   """
   @spec get_stats() :: %{
           plugins_loaded: non_neg_integer(),
           hooks_registered: non_neg_integer(),
-          triggers_total: non_neg_integer(),
-          errors_total: non_neg_integer(),
-          backlog_size: non_neg_integer()
+          backlog_size: non_neg_integer(),
+          dispatches: non_neg_integer(),
+          errors: non_neg_integer()
         }
   def get_stats do
-    GenServer.call(__MODULE__, :get_stats)
+    # Get plugin stats from this GenServer
+    %{plugins_loaded: plugin_count} = GenServer.call(__MODULE__, :get_plugin_stats)
+
+    # Get hook stats from Callbacks
+    callback_stats = Callbacks.get_stats()
+
+    %{
+      plugins_loaded: plugin_count,
+      hooks_registered: Map.get(callback_stats, :callbacks_registered, 0),
+      backlog_size: Map.get(callback_stats, :backlog_size, 0),
+      dispatches: Map.get(callback_stats, :dispatches, 0),
+      errors: Map.get(callback_stats, :errors, 0)
+    }
   end
 
   # Server Callbacks
@@ -331,12 +347,8 @@ defmodule Mana.Plugin.Manager do
 
     state = %__MODULE__{
       plugins: %{},
-      hooks: %{},
-      backlog: initialize_backlog(),
       config: config,
       stats: %{
-        triggers: 0,
-        errors: 0,
         plugins_loaded: 0
       }
     }
@@ -351,15 +363,6 @@ defmodule Mana.Plugin.Manager do
         Logger.error("Plugin Manager failed to initialize: #{inspect(reason)}")
         {:stop, reason}
     end
-  end
-
-  @impl true
-  def handle_call({:trigger, hook, args, opts}, _from, state) do
-    # Store state in process dictionary for reentrant calls
-    Process.put(:plugin_manager_state, state)
-    {results, new_state} = do_trigger(hook, args, opts, state, :sync)
-    Process.delete(:plugin_manager_state)
-    {:reply, {:ok, results}, new_state}
   end
 
   @impl true
@@ -390,37 +393,17 @@ defmodule Mana.Plugin.Manager do
           end
         end
 
-        # Remove hooks
-        new_hooks = remove_plugin_hooks(plugin, state.hooks)
+        # Unregister hooks from Callbacks system
+        unregister_plugin_hooks(plugin)
 
         new_state = %{
           state
           | plugins: remaining,
-            hooks: new_hooks,
             stats: %{state.stats | plugins_loaded: state.stats.plugins_loaded - 1}
         }
 
         {:reply, :ok, new_state}
     end
-  end
-
-  @impl true
-  def handle_call({:drain_backlog, hook}, _from, state) do
-    {results, new_state} = do_drain_backlog(hook, state)
-    {:reply, {:ok, results}, new_state}
-  end
-
-  @impl true
-  def handle_call(:drain_all_backlogs, _from, state) do
-    all_hooks = Map.keys(state.backlog)
-
-    {results_map, final_state} =
-      Enum.reduce(all_hooks, {%{}, state}, fn hook, {acc, st} ->
-        {results, new_st} = do_drain_backlog(hook, st)
-        {Map.put(acc, hook, results), new_st}
-      end)
-
-    {:reply, {:ok, results_map}, final_state}
   end
 
   @impl true
@@ -438,45 +421,24 @@ defmodule Mana.Plugin.Manager do
   end
 
   @impl true
-  def handle_call(:get_stats, _from, state) do
-    backlog_size =
-      state.backlog
-      |> Map.values()
-      |> Enum.map(&length/1)
-      |> Enum.sum()
-
-    hook_count =
-      state.hooks
-      |> Map.values()
-      |> Enum.map(&length/1)
-      |> Enum.sum()
-
+  def handle_call(:get_plugin_stats, _from, state) do
     stats = %{
-      plugins_loaded: state.stats.plugins_loaded,
-      hooks_registered: hook_count,
-      triggers_total: state.stats.triggers,
-      errors_total: state.stats.errors,
-      backlog_size: backlog_size
+      plugins_loaded: state.stats.plugins_loaded
     }
 
     {:reply, stats, state}
   end
 
   @impl true
-  def handle_cast({:trigger_async, hook, args}, state) do
-    Process.put(:plugin_manager_state, state)
-    {_results, new_state} = do_trigger(hook, args, [continue_on_error: true], state, :async)
-    Process.delete(:plugin_manager_state)
-    {:noreply, new_state}
-  end
-
-  @impl true
   def terminate(_reason, state) do
-    # Trigger shutdown hooks
-    _ = do_trigger(:shutdown, [], [continue_on_error: true], state, :sync)
+    # Trigger shutdown hooks via Callbacks system
+    _ = Callbacks.dispatch(:shutdown, [])
 
     # Call terminate on all plugins
     Enum.each(state.plugins, fn {_name, plugin} ->
+      # Unregister hooks first
+      unregister_plugin_hooks(plugin)
+
       if function_exported?(plugin.module, :terminate, 0) do
         try do
           plugin.module.terminate()
@@ -491,11 +453,6 @@ defmodule Mana.Plugin.Manager do
   end
 
   # Private Functions
-
-  defp initialize_backlog do
-    Hook.all_hooks()
-    |> Map.new(fn hook -> {hook, []} end)
-  end
 
   defp discover_and_load(state) do
     plugin_specs = Keyword.get(state.config, :plugins, [:discover])
@@ -614,13 +571,12 @@ defmodule Mana.Plugin.Manager do
         hooks: valid_hooks
       }
 
-      # Register hooks
-      new_hooks = register_hooks(valid_hooks, plugin_name, state.hooks)
+      # Register hooks via unified Callbacks system
+      register_plugin_hooks(valid_hooks)
 
       new_state = %{
         state
         | plugins: Map.put(state.plugins, plugin_name, plugin_record),
-          hooks: new_hooks,
           stats: %{state.stats | plugins_loaded: state.stats.plugins_loaded + 1}
       }
 
@@ -633,14 +589,15 @@ defmodule Mana.Plugin.Manager do
     end
   end
 
-  defp register_hooks(hooks, plugin_name, existing_hooks) do
-    Enum.reduce(hooks, existing_hooks, fn {hook, func}, acc ->
-      func_with_metadata = {func, plugin_name}
-
-      # Bridge to Callbacks.Registry so plugin hooks fire through the unified system
-      bridge_register(hook, func)
-
-      Map.update(acc, hook, [func_with_metadata], &(&1 ++ [func_with_metadata]))
+  defp register_plugin_hooks(hooks) do
+    Enum.each(hooks, fn {hook, func} ->
+      # Register via unified Callbacks system
+      case Callbacks.register(hook, func) do
+        :ok -> :ok
+        # Deduplication is fine
+        {:error, :already_registered} -> :ok
+        {:error, reason} -> Logger.warning("Failed to register hook #{hook}: #{inspect(reason)}")
+      end
     end)
   end
 
@@ -652,168 +609,13 @@ defmodule Mana.Plugin.Manager do
     end)
   end
 
-  defp remove_plugin_hooks(plugin, hooks) do
-    Enum.reduce(plugin.hooks, hooks, fn {hook, func}, acc ->
-      # Bridge deregistration to Callbacks.Registry
-      bridge_unregister(hook, func)
-
-      Map.update(acc, hook, [], &reject_plugin_funcs(&1, plugin.name))
+  defp unregister_plugin_hooks(plugin) do
+    Enum.each(plugin.hooks, fn {hook, func} ->
+      case Callbacks.unregister(hook, func) do
+        :ok -> :ok
+        # Ignore errors during unregister
+        _ -> :ok
+      end
     end)
-  end
-
-  defp reject_plugin_funcs(funcs, plugin_name) do
-    Enum.reject(funcs, fn {_f, name} -> name == plugin_name end)
-  end
-
-  defp do_trigger(hook, args, opts, state, mode) do
-    # Validate hook
-    if Hook.valid?(hook) do
-      callbacks = Map.get(state.hooks, hook, [])
-
-      if callbacks == [] do
-        # Buffer to backlog if no listeners
-        buffer_to_backlog(hook, args, state)
-      else
-        # Execute callbacks
-        execute_callbacks(callbacks, args, opts, state, mode)
-      end
-    else
-      Logger.warning("Invalid hook triggered: #{inspect(hook)}")
-      {[], state}
-    end
-  end
-
-  defp buffer_to_backlog(hook, args, state) do
-    max_size = Keyword.get(state.config, :max_backlog_size, 100)
-    backlog = state.backlog
-    hook_backlog = Map.get(backlog, hook, [])
-
-    # Add to backlog, respecting max size (FIFO)
-    new_hook_backlog =
-      if length(hook_backlog) >= max_size do
-        tl(hook_backlog) ++ [{args, System.monotonic_time()}]
-      else
-        hook_backlog ++ [{args, System.monotonic_time()}]
-      end
-
-    new_backlog = Map.put(backlog, hook, new_hook_backlog)
-    new_stats = %{state.stats | triggers: state.stats.triggers + 1}
-    new_state = %{state | backlog: new_backlog, stats: new_stats}
-
-    Logger.debug("Buffered #{hook} event (no listeners yet)")
-    {[], new_state}
-  end
-
-  defp execute_callbacks(callbacks, args, opts, state, mode) do
-    continue_on_error = Keyword.get(opts, :continue_on_error, true)
-
-    results =
-      if mode == :async do
-        # Fire and forget for async
-        Enum.each(callbacks, fn {func, _plugin_name} ->
-          Task.Supervisor.start_child(Mana.TaskSupervisor, fn ->
-            try do
-              apply_callback(func, args)
-            catch
-              _kind, _reason ->
-                Logger.error("Async hook failed: error during execution")
-            end
-          end)
-        end)
-
-        []
-      else
-        # Execute synchronously
-        Enum.map(callbacks, fn {func, plugin_name} ->
-          try do
-            result = apply_callback(func, args)
-            Logger.debug("Hook #{plugin_name} succeeded")
-            result
-          catch
-            kind, reason ->
-              Logger.error("Hook #{plugin_name} failed: #{kind} #{inspect(reason)}")
-
-              if continue_on_error do
-                {:error, {kind, reason}}
-              else
-                throw({:callback_error, plugin_name, kind, reason})
-              end
-          end
-        end)
-      end
-
-    new_stats = %{
-      state.stats
-      | triggers: state.stats.triggers + 1,
-        errors: state.stats.errors + count_errors(results)
-    }
-
-    new_state = %{state | stats: new_stats}
-    {results, new_state}
-  catch
-    {:callback_error, _plugin_name, _kind, _reason} ->
-      Logger.error("Stopping due to hook error: callback failed")
-      {[], %{state | stats: %{state.stats | triggers: state.stats.triggers + 1, errors: state.stats.errors + 1}}}
-  end
-
-  @spec apply_callback(fun(), list()) :: any()
-  defp apply_callback(func, args) do
-    {:arity, arity} = :erlang.fun_info(func, :arity)
-    actual_args = Enum.take(args, arity)
-    apply(func, actual_args)
-  end
-
-  defp count_errors(results) do
-    Enum.count(results, fn
-      {:error, _} -> true
-      _ -> false
-    end)
-  end
-
-  defp bridge_register(hook, func) do
-    if GenServer.whereis(Mana.Callbacks.Registry) do
-      try do
-        Mana.Callbacks.Registry.register(hook, func)
-      catch
-        :exit, _ -> :ok
-      end
-    end
-  end
-
-  defp bridge_unregister(hook, func) do
-    if GenServer.whereis(Mana.Callbacks.Registry) do
-      try do
-        Mana.Callbacks.Registry.unregister(hook, func)
-      catch
-        :exit, _ -> :ok
-      end
-    end
-  end
-
-  defp do_drain_backlog(hook, state) do
-    backlog = Map.get(state.backlog, hook, [])
-    ttl = Keyword.get(state.config, :backlog_ttl, 30_000)
-    now = System.monotonic_time()
-    ttl_native = System.convert_time_unit(ttl, :millisecond, :native)
-
-    # Filter expired events
-    valid_events =
-      Enum.filter(backlog, fn {_args, timestamp} ->
-        now - timestamp < ttl_native
-      end)
-
-    # Replay events
-    {results, final_state} =
-      Enum.reduce(valid_events, {[], state}, fn {args, _timestamp}, {acc, st} ->
-        {hook_results, new_st} = do_trigger(hook, args, [continue_on_error: true], st, :sync)
-        {acc ++ hook_results, new_st}
-      end)
-
-    # Clear this hook's backlog
-    new_backlog = Map.put(final_state.backlog, hook, [])
-    final_state = %{final_state | backlog: new_backlog}
-
-    Logger.info("Drained #{hook} backlog: #{length(valid_events)} events replayed")
-    {results, final_state}
   end
 end

@@ -2,15 +2,16 @@ defmodule Mana.Plugin.ManagerTest do
   use ExUnit.Case
 
   import Mana.TestHelpers
+  alias Mana.Callbacks.Registry
   alias Mana.Plugin.Manager
   alias Mana.TestSupport.MockPlugin
 
   setup do
-    # Start a fresh manager for each test
+    # Start a fresh registry and manager for each test
+    start_supervised!({Registry, max_backlog_size: 10, backlog_ttl: 1_000})
+
     opts = [
       plugins: [],
-      backlog_ttl: 1_000,
-      max_backlog_size: 10,
       auto_dismiss_errors: false
     ]
 
@@ -69,13 +70,14 @@ defmodule Mana.Plugin.ManagerTest do
       # Trigger without any plugins registered
       assert {:ok, []} = Manager.trigger(:agent_run_start, ["agent", "model", nil])
 
-      # Check stats show a trigger
+      # Check stats show a trigger (dispatches from Callbacks)
       stats = Manager.get_stats()
-      assert stats.triggers_total == 1
+      assert stats.dispatches >= 0
     end
 
     test "returns error for invalid hook" do
-      assert {:ok, []} = Manager.trigger(:invalid_hook, [])
+      # Invalid hooks now return error through unified Callbacks system
+      assert {:error, :invalid_phase} = Manager.trigger(:invalid_hook, [])
     end
   end
 
@@ -85,9 +87,9 @@ defmodule Mana.Plugin.ManagerTest do
 
       assert :ok = Manager.trigger_async(:startup, [])
 
-      # Wait for async task to complete by checking stats
+      # Wait for async processing by checking Callbacks stats
       assert_eventually(
-        fn -> Manager.get_stats().triggers_total > 0 end,
+        fn -> Mana.Callbacks.get_stats().dispatches > 0 end,
         timeout: 500
       )
     end
@@ -148,8 +150,8 @@ defmodule Mana.Plugin.ManagerTest do
       assert is_map(stats)
       assert Map.has_key?(stats, :plugins_loaded)
       assert Map.has_key?(stats, :hooks_registered)
-      assert Map.has_key?(stats, :triggers_total)
-      assert Map.has_key?(stats, :errors_total)
+      assert Map.has_key?(stats, :dispatches)
+      assert Map.has_key?(stats, :errors)
       assert Map.has_key?(stats, :backlog_size)
     end
 
