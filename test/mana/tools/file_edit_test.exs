@@ -51,6 +51,24 @@ defmodule Mana.Tools.FileEditTest do
                  "content" => "test"
                })
     end
+
+    test "blocks path traversal in file_path" do
+      assert {:error, message} =
+               CreateFile.execute(%{
+                 "file_path" => "../../../etc/malicious.txt",
+                 "content" => "hacked"
+               })
+
+      assert message =~ "Path escapes allowed directory"
+    end
+
+    test "blocks absolute path outside working directory" do
+      assert {:error, _} =
+               CreateFile.execute(%{
+                 "file_path" => "/etc/passwd",
+                 "content" => "modified"
+               })
+    end
   end
 
   describe "ReplaceInFile" do
@@ -128,6 +146,17 @@ defmodule Mana.Tools.FileEditTest do
                })
     end
 
+    test "blocks path traversal in file_path" do
+      assert {:error, message} =
+               ReplaceInFile.execute(%{
+                 "file_path" => "../../../etc/passwd",
+                 "old_string" => "root",
+                 "new_string" => "hacked"
+               })
+
+      assert message =~ "Path escapes allowed directory"
+    end
+
     test "generates correct diff format" do
       temp_file = Path.join(System.tmp_dir!(), "diff_test_#{System.unique_integer([:positive])}.txt")
       File.write!(temp_file, "line1\nline2\nline3")
@@ -184,6 +213,17 @@ defmodule Mana.Tools.FileEditTest do
       after
         File.rmdir(temp_dir)
       end
+    end
+
+    test "blocks path traversal in file_path" do
+      assert {:error, message} =
+               DeleteFile.execute(%{"file_path" => "../../../etc/passwd"})
+
+      assert message =~ "Path escapes allowed directory"
+    end
+
+    test "blocks absolute path outside working directory" do
+      assert {:error, _} = DeleteFile.execute(%{"file_path" => "/etc/passwd"})
     end
   end
 end
