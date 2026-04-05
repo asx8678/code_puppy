@@ -1,0 +1,198 @@
+defmodule Mana.TTSR.StreamWatcher do
+  @moduledoc """
+  GenServer that watches streaming events and triggers TTSR rules.
+
+  Maintains per-scope ring buffers (512 chars) to catch patterns
+  that straddle SSE chunk boundaries.
+  """
+
+  use GenServer
+
+  require Logger
+
+  alias Mana.TTSR.Rule
+
+  @buffer_size 512
+  @registry_name Mana.TTSR.Registry
+
+  defstruct [
+    :session_id,
+    :rules,
+    text_buffer: "",
+    thinking_buffer: "",
+    tool_buffer: "",
+    current_turn: 0,
+    triggered_rules: MapSet.new()
+  ]
+
+  @typedoc "StreamWatcher state"
+  @type t :: %__MODULE__{
+          session_id: String.t(),
+          rules: [Rule.t()],
+          text_buffer: String.t(),
+          thinking_buffer: String.t(),
+          tool_buffer: String.t(),
+          current_turn: non_neg_integer(),
+          triggered_rules: MapSet.t(String.t())
+        }
+
+  # Client API
+
+  @doc """
+  Starts a StreamWatcher for the given session.
+  """
+  @spec start_link(String.t(), [Rule.t()]) :: GenServer.on_start()
+  def start_link(session_id, rules) do
+    GenServer.start_link(
+      __MODULE__,
+      {session_id, rules},
+      name: via_tuple(session_id)
+    )
+  end
+
+  @doc """
+  Watches a stream event, updating buffers and checking for triggers.
+  """
+  @spec watch_event(String.t(), {atom(), any()}) :: :ok
+  def watch_event(session_id, event) do
+    case find_watcher(session_id) do
+      nil -> :ok
+      pid -> GenServer.cast(pid, {:stream_event, event})
+    end
+  end
+
+  @doc """
+  Returns all pending rules and clears their pending status.
+  """
+  @spec get_pending(String.t()) :: [Rule.t()]
+  def get_pending(session_id) do
+    case find_watcher(session_id) do
+      nil -> []
+      pid -> GenServer.call(pid, :get_pending)
+    end
+  end
+
+  @doc """
+  Increments the turn counter for a session.
+  """
+  @spec increment_turn(String.t()) :: :ok
+  def increment_turn(session_id) do
+    case find_watcher(session_id) do
+      nil -> :ok
+      pid -> GenServer.cast(pid, :increment_turn)
+    end
+  end
+
+  @doc """
+  Returns the current watcher pid for a session, if any.
+  """
+  @spec find_watcher(String.t()) :: pid() | nil
+  def find_watcher(session_id) do
+    case Registry.lookup(@registry_name, session_id) do
+      [{pid, _}] ->
+        if Process.alive?(pid), do: pid, else: nil
+
+      [] ->
+        nil
+    end
+  end
+
+  # Server Callbacks
+
+  @impl true
+  def init({session_id, rules}) do
+    # Ensure registry is started
+    case Registry.start_link(keys: :unique, name: @registry_name) do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
+    end
+
+    {:ok, %__MODULE__{session_id: session_id, rules: rules}}
+  end
+
+  @impl true
+  def handle_cast({:stream_event, {:stream_chunk, type, content}}, state) do
+    {buffer_key, buffer} =
+      case type do
+        :text -> {:text_buffer, state.text_buffer}
+        :thinking -> {:thinking_buffer, state.thinking_buffer}
+        :tool -> {:tool_buffer, state.tool_buffer}
+        _ -> {:text_buffer, state.text_buffer}
+      end
+
+    # Process each character through the buffer
+    {new_buffer, new_rules} =
+      Enum.reduce(String.graphemes(content), {buffer, state.rules}, fn char, {buf, rules} ->
+        updated_buffer = push_to_buffer(buf, char)
+        checked_rules = check_rules_for_scope(rules, updated_buffer, type, state.current_turn)
+        {updated_buffer, checked_rules}
+      end)
+
+    new_state =
+      state
+      |> Map.put(buffer_key, new_buffer)
+      |> Map.put(:rules, new_rules)
+
+    {:noreply, new_state}
+  end
+
+  def handle_cast({:stream_event, _}, state) do
+    {:noreply, state}
+  end
+
+  def handle_cast(:increment_turn, state) do
+    # Reset buffers and increment turn
+    {:noreply, %{state | current_turn: state.current_turn + 1, text_buffer: "", thinking_buffer: "", tool_buffer: ""}}
+  end
+
+  @impl true
+  def handle_call(:get_pending, _from, state) do
+    pending = Enum.filter(state.rules, & &1.pending)
+
+    # Clear pending flags
+    new_rules =
+      Enum.map(state.rules, fn rule ->
+        %{rule | pending: false}
+      end)
+
+    {:reply, pending, %{state | rules: new_rules}}
+  end
+
+  # Private Functions
+
+  defp push_to_buffer(buffer, char) do
+    new = buffer <> char
+
+    if String.length(new) > @buffer_size do
+      String.slice(new, -@buffer_size, @buffer_size)
+    else
+      new
+    end
+  end
+
+  defp check_rules_for_scope(rules, buffer, scope, current_turn) do
+    Enum.map(rules, fn rule ->
+      cond do
+        rule.pending ->
+          rule
+
+        rule.scope not in [scope, :all] ->
+          rule
+
+        not Rule.eligible?(rule, current_turn) ->
+          rule
+
+        Regex.match?(rule.trigger, buffer) ->
+          Logger.debug("TTSR rule '#{rule.name}' triggered in scope #{scope}")
+          %{rule | pending: true, triggered_at_turn: current_turn}
+
+        true ->
+          rule
+      end
+    end)
+  end
+
+  defp via_tuple(session_id) do
+    {:via, Registry, {@registry_name, session_id}}
+  end
+end

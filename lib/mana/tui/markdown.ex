@@ -58,47 +58,14 @@ defmodule Mana.TUI.Markdown do
   # Code blocks with language (language-class pattern)
   defp render_node({"pre", _attrs, [{"code", [{"class", "language-" <> lang}], [code], _}], _}) do
     lines = String.split(code, "\n")
-    header = IO.ANSI.format([:bright, :yellow, "  #{lang}", :reset]) |> to_string()
-
-    numbered =
-      Enum.map_join(lines, "\n", fn {line, n} ->
-        num = String.pad_leading(to_string(n), 3)
-
-        IO.ANSI.format([:faint, :white, "  #{num} │ ", :reset, line])
-        |> to_string()
-      end)
-
-    "#{header}\n#{numbered}"
+    render_code_block(lines, lang)
   end
 
   # Code blocks with or without language (general attrs pattern)
   defp render_node({"pre", _, [{"code", attrs, [code], _}], _}) when is_list(attrs) do
     lang = extract_language(attrs)
     lines = String.split(code, "\n")
-
-    if lang do
-      header = IO.ANSI.format([:bright, :yellow, "  #{lang}", :reset]) |> to_string()
-
-      numbered =
-        Enum.map_join(Enum.with_index(lines, 1), "\n", fn {line, n} ->
-          num = String.pad_leading(to_string(n), 3)
-
-          IO.ANSI.format([:faint, :white, "  #{num} │ ", :reset, line])
-          |> to_string()
-        end)
-
-      "#{header}\n#{numbered}"
-    else
-      numbered =
-        Enum.map_join(Enum.with_index(lines, 1), "\n", fn {line, n} ->
-          num = String.pad_leading(to_string(n), 3)
-
-          IO.ANSI.format([:faint, :white, "  #{num} │ ", :reset, line])
-          |> to_string()
-        end)
-
-      numbered
-    end
+    render_code_block(lines, lang)
   end
 
   # Inline code
@@ -190,22 +157,7 @@ defmodule Mana.TUI.Markdown do
   end
 
   defp render_node({"thead", _attrs, children, _}) do
-    headers =
-      Enum.map_join(children, " | ", fn child ->
-        case child do
-          {"tr", _, cells, _} ->
-            Enum.map_join(cells, " | ", fn cell ->
-              case cell do
-                {"th", _, cell_children, _} -> render_children(cell_children)
-                _ -> ""
-              end
-            end)
-
-          _ ->
-            ""
-        end
-      end)
-
+    headers = Enum.map_join(children, " | ", &extract_header_cells/1)
     header_line = IO.ANSI.format([:bright, :cyan, headers, :reset]) |> to_string()
     separator = String.duplicate("-", String.length(headers))
     "#{header_line}\n#{separator}"
@@ -238,6 +190,45 @@ defmodule Mana.TUI.Markdown do
   defp render_node(_), do: ""
 
   # Helper functions
+  defp extract_header_cells(child) do
+    case child do
+      {"tr", _, cells, _} -> Enum.map_join(cells, " | ", &extract_th_content/1)
+      _ -> ""
+    end
+  end
+
+  defp extract_th_content(cell) do
+    case cell do
+      {"th", _, cell_children, _} -> render_children(cell_children)
+      _ -> ""
+    end
+  end
+
+  defp render_code_block(lines, nil) do
+    format_numbered_lines(lines)
+  end
+
+  defp render_code_block(lines, lang) do
+    header = format_code_header(lang)
+    numbered = format_numbered_lines(lines)
+    "#{header}\n#{numbered}"
+  end
+
+  defp format_code_header(lang) do
+    IO.ANSI.format([:bright, :yellow, "  #{lang}", :reset]) |> to_string()
+  end
+
+  defp format_numbered_lines(lines) do
+    Enum.map_join(Enum.with_index(lines, 1), "\n", &format_numbered_line/1)
+  end
+
+  defp format_numbered_line({line, n}) do
+    num = String.pad_leading(to_string(n), 3)
+
+    IO.ANSI.format([:faint, :white, "  #{num} │ ", :reset, line])
+    |> to_string()
+  end
+
   defp extract_language(attrs) do
     case attrs do
       [{"class", "language-" <> lang}] -> lang
