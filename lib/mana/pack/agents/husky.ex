@@ -102,6 +102,9 @@ defmodule Mana.Pack.Agents.Husky do
     - `{:error, reason}`
   """
   @impl true
+  def name, do: "Husky 🐺"
+
+  @impl true
   @spec execute(Mana.Pack.Agent.task(), Mana.Pack.Agent.opts()) ::
           {:ok, map()} | {:error, term()}
   def execute(task, opts \\ []) do

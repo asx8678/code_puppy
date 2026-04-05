@@ -91,6 +91,9 @@ defmodule Mana.Pack.Agents.Retriever do
     - `{:error, reason}`
   """
   @impl true
+  def name, do: "Retriever 🦮"
+
+  @impl true
   @spec execute(Mana.Pack.Agent.task(), Mana.Pack.Agent.opts()) ::
           {:ok, map()} | {:error, term()}
   def execute(task, opts \\ []) do

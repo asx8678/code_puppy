@@ -21,6 +21,9 @@ defmodule Mana.Pack.Agent do
         @behaviour Mana.Pack.Agent
 
         @impl true
+        def name, do: "MyAgent 🐾"
+
+        @impl true
         def execute(task, opts) do
           # Implementation
           {:ok, result}
@@ -71,6 +74,18 @@ defmodule Mana.Pack.Agent do
   """
   @callback execute(task :: task(), opts :: opts()) ::
               {:ok, result :: result()} | {:error, reason :: reason()}
+
+  @doc """
+  Returns the agent's display name.
+
+  Used for logging, status reporting, and workflow coordination.
+
+  ## Examples
+
+      iex> Mana.Pack.Agents.Bloodhound.name()
+      "Bloodhound 🐕‍🦺"
+  """
+  @callback name() :: String.t()
 
   @doc """
   Gets a value from metadata by key, supporting both atom and string keys.
