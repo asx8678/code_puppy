@@ -34,6 +34,19 @@ defmodule Mana.ErrorClassifier do
           retryable: boolean()
         }
 
+  # Atom error lookup table
+  @atom_errors %{
+    :enoent => %{message: "File not found", severity: :warning, retryable: false},
+    :eacces => %{message: "Permission denied", severity: :error, retryable: false},
+    :eisdir => %{message: "Is a directory (expected file)", severity: :warning, retryable: false},
+    :enotdir => %{message: "Not a directory", severity: :warning, retryable: false},
+    :eexist => %{message: "File already exists", severity: :warning, retryable: false},
+    :enospc => %{message: "No space left on device", severity: :error, retryable: false},
+    :enomem => %{message: "Out of memory", severity: :error, retryable: false},
+    :einval => %{message: "Invalid argument", severity: :error, retryable: false},
+    :timeout => %{message: "Operation timed out", severity: :warning, retryable: true}
+  }
+
   @doc """
   Classify an exception or error term.
 
@@ -59,206 +72,37 @@ defmodule Mana.ErrorClassifier do
   """
   @spec classify(Exception.t() | term()) :: classification()
 
-  # File operation errors
-  def classify(%File.Error{reason: :enoent, path: path}) do
-    %{
-      message: "File not found: #{path}",
-      severity: :warning,
-      retryable: false
-    }
-  end
+  # File operation errors - delegated to helper
+  def classify(%File.Error{} = error), do: classify_file_error(error)
 
-  def classify(%File.Error{reason: :eacces, path: path}) do
-    %{
-      message: "Permission denied: #{path}",
-      severity: :error,
-      retryable: false
-    }
-  end
+  # JSON parsing errors - delegated to helper
+  def classify(%Jason.DecodeError{} = error), do: classify_json_error(error)
 
-  def classify(%File.Error{reason: :eisdir, path: path}) do
-    %{
-      message: "Expected a file but found a directory: #{path}",
-      severity: :warning,
-      retryable: false
-    }
-  end
+  # Pattern match failures and standard errors - delegated to helper
+  def classify(%MatchError{} = error), do: classify_standard_error(error)
+  def classify(%RuntimeError{} = error), do: classify_standard_error(error)
+  def classify(%ArgumentError{} = error), do: classify_standard_error(error)
+  def classify(%FunctionClauseError{} = error), do: classify_standard_error(error)
+  def classify(%KeyError{} = error), do: classify_standard_error(error)
+  def classify(%CaseClauseError{} = error), do: classify_standard_error(error)
+  def classify(%Protocol.UndefinedError{} = error), do: classify_standard_error(error)
 
-  def classify(%File.Error{reason: :enotdir, path: path}) do
-    %{
-      message: "Not a valid directory path: #{path}",
-      severity: :warning,
-      retryable: false
-    }
-  end
+  # Timeout errors - delegated to helper
+  def classify({:timeout, _server} = error), do: classify_timeout(error)
+  def classify(:timeout = error), do: classify_timeout(error)
 
-  def classify(%File.Error{reason: :eexist, path: path}) do
-    %{
-      message: "File already exists: #{path}",
-      severity: :warning,
-      retryable: false
-    }
-  end
-
-  def classify(%File.Error{reason: reason, path: path}) do
-    %{
-      message: "File error (#{reason}) on: #{path}",
-      severity: :error,
-      retryable: false
-    }
-  end
-
-  # JSON parsing errors
-  def classify(%Jason.DecodeError{data: data, position: position}) do
-    preview = String.slice(data, 0, 100)
-    message = if position, do: "Invalid JSON at position #{position}", else: "Invalid JSON"
-
-    %{
-      message: "#{message}: #{preview}",
-      severity: :error,
-      retryable: false
-    }
-  end
-
-  def classify(%Jason.DecodeError{data: data}) do
-    preview = String.slice(data, 0, 100)
-
-    %{
-      message: "Invalid JSON: #{preview}",
-      severity: :error,
-      retryable: false
-    }
-  end
-
-  # Pattern match failures
-  def classify(%MatchError{term: term}) do
-    %{
-      message: "Pattern match failed: #{inspect(term, limit: 100)}",
-      severity: :error,
-      retryable: false
-    }
-  end
-
-  # Runtime errors
-  def classify(%RuntimeError{message: msg}) do
-    %{
-      message: msg,
-      severity: :error,
-      retryable: true
-    }
-  end
-
-  # Argument errors
-  def classify(%ArgumentError{message: msg}) do
-    %{
-      message: "Invalid argument: #{msg}",
-      severity: :error,
-      retryable: false
-    }
-  end
-
-  # Function clause errors
-  def classify(%FunctionClauseError{module: module, function: function, arity: arity}) do
-    %{
-      message: "No matching function clause for #{module}.#{function}/#{arity}",
-      severity: :error,
-      retryable: false
-    }
-  end
-
-  # Key errors (missing map keys)
-  def classify(%KeyError{key: key, term: term}) do
-    %{
-      message: "Key #{inspect(key)} not found in #{inspect(term, limit: 50)}",
-      severity: :error,
-      retryable: false
-    }
-  end
-
-  # Case clause errors
-  def classify(%CaseClauseError{term: term}) do
-    %{
-      message: "No case clause matching: #{inspect(term, limit: 100)}",
-      severity: :error,
-      retryable: false
-    }
-  end
-
-  # Protocol errors
-  def classify(%Protocol.UndefinedError{protocol: protocol, value: value}) do
-    %{
-      message: "Protocol #{protocol} not implemented for #{inspect(value, limit: 50)}",
-      severity: :error,
-      retryable: false
-    }
-  end
-
-  # Timeout errors
-  def classify({:timeout, _server}) do
-    %{
-      message: "Operation timed out waiting for response",
-      severity: :warning,
-      retryable: true
-    }
-  end
-
-  def classify(:timeout) do
-    %{
-      message: "Operation timed out",
-      severity: :warning,
-      retryable: true
-    }
-  end
-
-  # Generic exception types - must come before the catch-all atom clause
+  # Generic exception types - delegated to helper
   def classify(%{__struct__: struct_name} = error) when is_atom(struct_name) do
-    # Check if it's a proper exception with __exception__ marker
-    if Map.get(error, :__exception__) do
-      message = if Exception.message(error), do: Exception.message(error), else: inspect(error, limit: 100)
-
-      %{
-        message: message,
-        severity: :error,
-        retryable: false
-      }
-    else
-      # Not a real exception, treat as unexpected error
-      %{
-        message: "Unexpected error: #{inspect(error, limit: 200)}",
-        severity: :error,
-        retryable: false
-      }
-    end
+    classify_generic_exception(error)
   end
 
-  # Atom errors - common Erlang/Elixir error atoms
+  # Atom errors - delegated to helper
   def classify(error) when is_atom(error) do
-    case error do
-      :enoent -> %{message: "File not found", severity: :warning, retryable: false}
-      :eacces -> %{message: "Permission denied", severity: :error, retryable: false}
-      :eisdir -> %{message: "Is a directory (expected file)", severity: :warning, retryable: false}
-      :enotdir -> %{message: "Not a directory", severity: :warning, retryable: false}
-      :eexist -> %{message: "File already exists", severity: :warning, retryable: false}
-      :enospc -> %{message: "No space left on device", severity: :error, retryable: false}
-      :enomem -> %{message: "Out of memory", severity: :error, retryable: false}
-      :einval -> %{message: "Invalid argument", severity: :error, retryable: false}
-      :timeout -> %{message: "Operation timed out", severity: :warning, retryable: true}
-      _ -> %{message: "Error: #{error}", severity: :error, retryable: false}
-    end
+    classify_atom_error(error)
   end
 
-  # Tuple errors (common in Erlang/Elixir)
-  def classify({:error, reason}) when is_atom(reason) do
-    classify(reason)
-  end
-
-  def classify({:error, reason}) do
-    %{
-      message: "Error: #{inspect(reason, limit: 100)}",
-      severity: :error,
-      retryable: false
-    }
-  end
+  # Tuple errors - delegated to helper
+  def classify({:error, _reason} = error), do: classify_tuple_error(error)
 
   # Catch-all for unknown error types
   def classify(error) do
@@ -267,6 +111,112 @@ defmodule Mana.ErrorClassifier do
       severity: :error,
       retryable: false
     }
+  end
+
+  # Private helper functions
+
+  defp classify_file_error(%{reason: :enoent, path: path}) do
+    %{message: "File not found: #{path}", severity: :warning, retryable: false}
+  end
+
+  defp classify_file_error(%{reason: :eacces, path: path}) do
+    %{message: "Permission denied: #{path}", severity: :error, retryable: false}
+  end
+
+  defp classify_file_error(%{reason: :eisdir, path: path}) do
+    %{message: "Expected a file but found a directory: #{path}", severity: :warning, retryable: false}
+  end
+
+  defp classify_file_error(%{reason: :enotdir, path: path}) do
+    %{message: "Not a valid directory path: #{path}", severity: :warning, retryable: false}
+  end
+
+  defp classify_file_error(%{reason: :eexist, path: path}) do
+    %{message: "File already exists: #{path}", severity: :warning, retryable: false}
+  end
+
+  defp classify_file_error(%{reason: reason, path: path}) do
+    %{message: "File error (#{reason}) on: #{path}", severity: :error, retryable: false}
+  end
+
+  defp classify_json_error(%{data: data, position: position}) do
+    preview = String.slice(data, 0, 100)
+    message = if position, do: "Invalid JSON at position #{position}", else: "Invalid JSON"
+    %{message: "#{message}: #{preview}", severity: :error, retryable: false}
+  end
+
+  defp classify_json_error(%{data: data}) do
+    preview = String.slice(data, 0, 100)
+    %{message: "Invalid JSON: #{preview}", severity: :error, retryable: false}
+  end
+
+  defp classify_standard_error(%MatchError{term: term}) do
+    %{message: "Pattern match failed: #{inspect(term, limit: 100)}", severity: :error, retryable: false}
+  end
+
+  defp classify_standard_error(%RuntimeError{message: msg}) do
+    %{message: msg, severity: :error, retryable: true}
+  end
+
+  defp classify_standard_error(%ArgumentError{message: msg}) do
+    %{message: "Invalid argument: #{msg}", severity: :error, retryable: false}
+  end
+
+  defp classify_standard_error(%FunctionClauseError{module: module, function: function, arity: arity}) do
+    %{
+      message: "No matching function clause for #{module}.#{function}/#{arity}",
+      severity: :error,
+      retryable: false
+    }
+  end
+
+  defp classify_standard_error(%KeyError{key: key, term: term}) do
+    %{
+      message: "Key #{inspect(key)} not found in #{inspect(term, limit: 50)}",
+      severity: :error,
+      retryable: false
+    }
+  end
+
+  defp classify_standard_error(%CaseClauseError{term: term}) do
+    %{message: "No case clause matching: #{inspect(term, limit: 100)}", severity: :error, retryable: false}
+  end
+
+  defp classify_standard_error(%Protocol.UndefinedError{protocol: protocol, value: value}) do
+    %{
+      message: "Protocol #{protocol} not implemented for #{inspect(value, limit: 50)}",
+      severity: :error,
+      retryable: false
+    }
+  end
+
+  defp classify_timeout({:timeout, _server}) do
+    %{message: "Operation timed out waiting for response", severity: :warning, retryable: true}
+  end
+
+  defp classify_timeout(:timeout) do
+    %{message: "Operation timed out", severity: :warning, retryable: true}
+  end
+
+  defp classify_generic_exception(error) do
+    if Map.get(error, :__exception__) do
+      message = Exception.message(error) || inspect(error, limit: 100)
+      %{message: message, severity: :error, retryable: false}
+    else
+      %{message: "Unexpected error: #{inspect(error, limit: 200)}", severity: :error, retryable: false}
+    end
+  end
+
+  defp classify_atom_error(error) do
+    Map.get(@atom_errors, error, %{message: "Error: #{error}", severity: :error, retryable: false})
+  end
+
+  defp classify_tuple_error({:error, reason}) when is_atom(reason) do
+    classify(reason)
+  end
+
+  defp classify_tuple_error({:error, reason}) do
+    %{message: "Error: #{inspect(reason, limit: 100)}", severity: :error, retryable: false}
   end
 
   @doc """

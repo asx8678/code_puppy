@@ -175,38 +175,11 @@ defmodule Mana.Plugins.ShellSafety do
   @spec classify_risk(String.t(), map()) :: risk_level()
   def classify_risk(command, state \\ %{}) do
     cond do
-      # Check for critical patterns first
-      matches_dangerous_pattern?(command) ->
-        :critical
-
-      # High risk: sudo (unless explicitly allowed)
-      String.contains?(command, "sudo") && !allow_sudo?(state) ->
-        :high
-
-      # High risk: overly permissive chmod
-      String.contains?(command, "chmod 777") ||
-          String.contains?(command, "chmod -R 777") ->
-        :high
-
-      # Medium risk: command chaining
-      String.contains?(command, "&&") ||
-        String.contains?(command, "||") ||
-          String.contains?(command, ";") ->
-        :medium
-
-      # Medium risk: redirects that might be destructive
-      String.contains?(command, "> /etc/") ||
-          String.contains?(command, "> ~/.") ->
-        :medium
-
-      # Low risk: other redirects
-      String.contains?(command, ">") ||
-          String.contains?(command, ">>") ->
-        :low
-
-      # No risk: safe command
-      true ->
-        :none
+      critical_risk?(command) -> :critical
+      high_risk?(command, state) -> :high
+      medium_risk?(command) -> :medium
+      low_risk?(command) -> :low
+      true -> :none
     end
   end
 
@@ -217,6 +190,42 @@ defmodule Mana.Plugins.ShellSafety do
   end
 
   # Private functions
+
+  defp critical_risk?(command) do
+    matches_dangerous_pattern?(command)
+  end
+
+  defp high_risk?(command, state) do
+    sudo_risk?(command, state) || chmod_risk?(command)
+  end
+
+  defp sudo_risk?(command, state) do
+    String.contains?(command, "sudo") && !allow_sudo?(state)
+  end
+
+  defp chmod_risk?(command) do
+    String.contains?(command, "chmod 777") ||
+      String.contains?(command, "chmod -R 777")
+  end
+
+  defp medium_risk?(command) do
+    chaining_risk?(command) || destructive_redirect?(command)
+  end
+
+  defp chaining_risk?(command) do
+    String.contains?(command, "&&") ||
+      String.contains?(command, "||") ||
+      String.contains?(command, ";")
+  end
+
+  defp destructive_redirect?(command) do
+    String.contains?(command, "> /etc/") ||
+      String.contains?(command, "> ~/.")
+  end
+
+  defp low_risk?(command) do
+    String.contains?(command, ">") || String.contains?(command, ">>")
+  end
 
   defp matches_dangerous_pattern?(command) do
     Enum.any?(@dangerous_patterns, fn pattern ->
