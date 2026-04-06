@@ -12,7 +12,7 @@ Covers:
 """
 
 import json
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import httpx
 import pytest
@@ -293,14 +293,15 @@ class TestModelInfo:
 class TestModelsDevRegistryAPIFetching:
     """Tests for API fetching and data loading."""
 
-    @patch("code_puppy.models_dev_parser.httpx.Client")
-    def test_fetch_from_api_success(
+    @pytest.mark.asyncio
+    @patch("code_puppy.models_dev_parser.httpx.AsyncClient")
+    async def test_fetch_from_api_success(
         self,
         mock_client_class,
     ):
-        """Test successful API fetch."""
-        mock_client = MagicMock()
-        mock_client_class.return_value.__enter__.return_value = mock_client
+        """Test successful API fetch using async create()."""
+        mock_client = AsyncMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
 
         api_data = {
             "anthropic": {
@@ -316,23 +317,26 @@ class TestModelsDevRegistryAPIFetching:
             }
         }
 
+        # Setup response mock - httpx Response methods are sync
         response = MagicMock()
         response.json.return_value = api_data
-        mock_client.get.return_value = response
+        response.raise_for_status = MagicMock()
+        mock_client.get = AsyncMock(return_value=response)
 
-        registry = ModelsDevRegistry()
+        registry = await ModelsDevRegistry.create()
         assert registry.data_source == "live:models.dev"
         assert len(registry.providers) == 1
         assert "anthropic" in registry.providers
 
-    @patch("code_puppy.models_dev_parser.httpx.Client")
-    def test_fetch_from_api_timeout(
+    @pytest.mark.asyncio
+    @patch("code_puppy.models_dev_parser.httpx.AsyncClient")
+    async def test_fetch_from_api_timeout(
         self,
         mock_client_class,
     ):
         """Test API timeout falls back to bundled JSON."""
-        mock_client = MagicMock()
-        mock_client_class.return_value.__enter__.return_value = mock_client
+        mock_client = AsyncMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
         mock_client.get.side_effect = httpx.TimeoutException(
             "Request timeout",
         )
@@ -352,24 +356,28 @@ class TestModelsDevRegistryAPIFetching:
             mock_open(read_data=json.dumps(bundled_data)),
         ):
             with patch("pathlib.Path.exists", return_value=True):
-                registry = ModelsDevRegistry()
+                registry = await ModelsDevRegistry.create()
                 assert "bundled:" in registry.data_source
 
-    @patch("code_puppy.models_dev_parser.httpx.Client")
-    def test_fetch_from_api_http_error(
+    @pytest.mark.asyncio
+    @patch("code_puppy.models_dev_parser.httpx.AsyncClient")
+    async def test_fetch_from_api_http_error(
         self,
         mock_client_class,
     ):
         """Test API HTTP error falls back to bundled JSON."""
-        mock_client = MagicMock()
-        mock_client_class.return_value.__enter__.return_value = mock_client
+        mock_client = AsyncMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
 
-        response = MagicMock()
+        response = AsyncMock()
         response.status_code = 500
-        response.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "Server error",
-            request=MagicMock(),
-            response=response,
+        # raise_for_status is NOT async in httpx
+        response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                "Server error",
+                request=MagicMock(),
+                response=response,
+            )
         )
         mock_client.get.return_value = response
 
@@ -382,17 +390,18 @@ class TestModelsDevRegistryAPIFetching:
             mock_open(read_data=json.dumps(bundled_data)),
         ):
             with patch("pathlib.Path.exists", return_value=True):
-                registry = ModelsDevRegistry()
+                registry = await ModelsDevRegistry.create()
                 assert "bundled:" in registry.data_source
 
-    @patch("code_puppy.models_dev_parser.httpx.Client")
-    def test_fetch_from_api_general_exception(
+    @pytest.mark.asyncio
+    @patch("code_puppy.models_dev_parser.httpx.AsyncClient")
+    async def test_fetch_from_api_general_exception(
         self,
         mock_client_class,
     ):
         """Test general exception during API fetch falls back to bundled."""
-        mock_client = MagicMock()
-        mock_client_class.return_value.__enter__.return_value = mock_client
+        mock_client = AsyncMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
         mock_client.get.side_effect = RuntimeError("Connection failed")
 
         bundled_data = {
@@ -404,7 +413,7 @@ class TestModelsDevRegistryAPIFetching:
             mock_open(read_data=json.dumps(bundled_data)),
         ):
             with patch("pathlib.Path.exists", return_value=True):
-                registry = ModelsDevRegistry()
+                registry = await ModelsDevRegistry.create()
                 assert "bundled:" in registry.data_source
 
 

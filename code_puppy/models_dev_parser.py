@@ -118,13 +118,17 @@ class ModelsDevRegistry:
     JSON file if the API is unavailable.
     """
 
-    def __init__(self, json_path: str | Path | None = None) -> None:
+    def __init__(self, json_path: str | Path | None = None, skip_live_api: bool = False) -> None:
         """
-        Initialize the registry by fetching from models.dev API or loading bundled JSON.
+        Initialize the registry by loading bundled JSON or from explicit path.
+
+        For async loading with live API fetch, use `await ModelsDevRegistry.create()`
+        instead of this constructor to prevent blocking.
 
         Args:
             json_path: Optional path to a local JSON file (for testing/offline use).
-                      If None, will try live API first, then bundled fallback.
+                      If None, will use bundled fallback (no live API fetch).
+            skip_live_api: If True, skip live API fetch (default for sync usage).
 
         Raises:
             FileNotFoundError: If no data source is available
@@ -138,17 +142,51 @@ class ModelsDevRegistry:
             str, list[str]
         ] = {}  # Maps provider_id to list of model IDs
         self.data_source: str = "unknown"  # Track where data came from
-        self._load_data()
 
-    def _fetch_from_api(self) -> dict[str, Any | None]:
-        """Fetch data from the live models.dev API.
+        # Sync init only loads from file (bundled or explicit path)
+        # Use create() for async loading with live API
+        self._load_data_sync(skip_live_api=skip_live_api)
+
+    @classmethod
+    async def create(cls, json_path: str | Path | None = None) -> "ModelsDevRegistry":
+        """Async factory method to create a registry with live API fetching.
+
+        This method is non-blocking and fetches from the live models.dev API first,
+        falling back to bundled JSON if unavailable.
+
+        Usage:
+            registry = await ModelsDevRegistry.create()
+
+        Args:
+            json_path: Optional path to a local JSON file (for testing/offline use).
+
+        Returns:
+            Initialized ModelsDevRegistry instance.
+
+        Raises:
+            FileNotFoundError: If no data source is available
+            json.JSONDecodeError: If the data contains invalid JSON
+            ValueError: If required fields are missing or malformed
+        """
+        instance = cls.__new__(cls)
+        instance.json_path = Path(json_path) if json_path else None
+        instance.providers = {}
+        instance.models = {}
+        instance.provider_models = {}
+        instance.data_source = "unknown"
+
+        await instance._load_data_async()
+        return instance
+
+    async def _fetch_from_api(self) -> dict[str, Any] | None:
+        """Fetch data from the live models.dev API asynchronously.
 
         Returns:
             Parsed JSON data if successful, None otherwise.
         """
         try:
-            with httpx.Client(timeout=10.0) as client:
-                response = client.get(MODELS_DEV_API_URL)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(MODELS_DEV_API_URL)
                 response.raise_for_status()
                 data = response.json()
                 if isinstance(data, dict) and len(data) > 0:
@@ -172,9 +210,12 @@ class ModelsDevRegistry:
         """Get the path to the bundled JSON file."""
         return Path(__file__).parent / BUNDLED_JSON_FILENAME
 
-    def _load_data(self) -> None:
-        """Load data from API or fallback sources, populating internal data structures."""
-        data: dict[str, Any | None] = None
+    def _load_data_sync(self, skip_live_api: bool = False) -> None:
+        """Load data synchronously from file sources only (no live API).
+
+        This is used by the sync constructor to avoid blocking.
+        """
+        data: dict[str, Any] | None = None
 
         # If explicit json_path provided, use that directly (for testing)
         if self.json_path:
@@ -188,8 +229,44 @@ class ModelsDevRegistry:
                 emit_error(f"Invalid JSON in {self.json_path}: {e}")
                 raise
         else:
-            # Try live API first
-            data = self._fetch_from_api()
+            # Fall back to bundled JSON (no live API in sync mode)
+            bundled_path = self._get_bundled_json_path()
+            if bundled_path.exists():
+                try:
+                    with open(bundled_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    self.data_source = f"bundled:{bundled_path.name}"
+                    emit_info(
+                        "📦 Using bundled models database (async create() for live fetch)"
+                    )
+                except json.JSONDecodeError as e:
+                    emit_error(f"Invalid JSON in bundled file {bundled_path}: {e}")
+                    raise
+            else:
+                raise FileNotFoundError(
+                    f"No data source available: bundled file not found at {bundled_path}"
+                )
+
+        self._parse_data(data)
+
+    async def _load_data_async(self) -> None:
+        """Load data asynchronously, trying live API first then falling back."""
+        data: dict[str, Any] | None = None
+
+        # If explicit json_path provided, use that directly (for testing)
+        if self.json_path:
+            if not self.json_path.exists():
+                raise FileNotFoundError(f"Models API file not found: {self.json_path}")
+            try:
+                with open(self.json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                self.data_source = f"file:{self.json_path}"
+            except json.JSONDecodeError as e:
+                emit_error(f"Invalid JSON in {self.json_path}: {e}")
+                raise
+        else:
+            # Try live API first (async - non-blocking)
+            data = await self._fetch_from_api()
             if data:
                 self.data_source = "live:models.dev"
                 emit_info("📡 Fetched latest models from models.dev")
@@ -212,6 +289,10 @@ class ModelsDevRegistry:
                         f"No data source available: models.dev API failed and bundled file not found at {bundled_path}"
                     )
 
+        self._parse_data(data)
+
+    def _parse_data(self, data: dict[str, Any] | None) -> None:
+        """Parse loaded data and populate internal data structures."""
         if not isinstance(data, dict):
             raise ValueError("Top-level JSON must be an object")
 

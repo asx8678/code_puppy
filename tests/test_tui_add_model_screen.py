@@ -217,18 +217,20 @@ class TestFormatHelpers:
 
 
 class TestLoadRegistry:
-    def test_load_registry_returns_registry_or_none(self) -> None:
+    @pytest.mark.asyncio
+    async def test_load_registry_returns_registry_or_none(self) -> None:
         from code_puppy.tui.screens.add_model_screen import _load_registry
 
-        result = _load_registry()
+        result = await _load_registry()
         # Either succeeds (ModelsDevRegistry) or returns None gracefully
         assert result is None or hasattr(result, "get_providers")
 
-    def test_load_registry_does_not_raise(self) -> None:
+    @pytest.mark.asyncio
+    async def test_load_registry_does_not_raise(self) -> None:
         from code_puppy.tui.screens.add_model_screen import _load_registry
 
         try:
-            _load_registry()
+            await _load_registry()
         except Exception as exc:  # pragma: no cover
             pytest.fail(f"_load_registry raised unexpectedly: {exc}")
 
