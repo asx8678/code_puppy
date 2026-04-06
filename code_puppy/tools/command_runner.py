@@ -915,7 +915,6 @@ def run_shell_command_streaming(
             _ACTIVE_STOP_EVENTS.discard(stop_event)
 
         if exit_code != 0:
-            time.sleep(1)
             return ShellCommandOutput(
                 success=False,
                 command=command,
