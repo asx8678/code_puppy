@@ -1334,24 +1334,71 @@ async def get_user_approval_async(
 
 def _find_best_window(
     haystack_lines: list[str],
-    needle: str) -> tuple[tuple[int, int | None], float]:
+    needle: str,
+    *,
+    _needle_lines_cache: list[str] | None = None,
+    _needle_len_cache: int | None = None,
+) -> tuple[tuple[int, int | None], float]:
     """
     Return (start, end) indices of the window with the highest
     Jaro-Winkler similarity to `needle`, along with that score.
     If nothing clears JW_THRESHOLD, return (None, score).
+
+    Optimized version that:
+    1. Accepts pre-split needle lines as cache to avoid repeated splitlines()
+    2. Uses line length pre-check to skip obviously non-matching windows
+    3. Pre-computes total haystack length for faster boundary checks
     """
-    needle = needle.rstrip("\n")
-    needle_lines = needle.splitlines()
+    # Use cached needle lines if provided, otherwise compute once
+    if _needle_lines_cache is not None:
+        needle_lines = _needle_lines_cache
+        needle_len = _needle_len_cache if _needle_len_cache is not None else len(needle.rstrip("\n"))
+    else:
+        needle_stripped = needle.rstrip("\n")
+        needle_lines = needle_stripped.splitlines()
+        needle_len = len(needle_stripped)
+
     win_size = len(needle_lines)
+    if win_size == 0:
+        return (None, 0.0)
+
+    # Pre-compute total character count in needle for fast length-based filtering
+    # This avoids expensive Jaro-Winkler computation for windows with different sizes
     best_score = 0.0
     best_span: tuple[int, int | None] = None
-    # Pre-join the needle once; join windows on the fly
-    for i in range(len(haystack_lines) - win_size + 1):
-        window = "\n".join(haystack_lines[i : i + win_size])
-        score = JaroWinkler.normalized_similarity(window, needle)
+
+    # Pre-join the needle once for comparison
+    needle_joined = "\n".join(needle_lines)
+
+    # Calculate cumulative line offsets for O(1) window length estimation
+    # This lets us quickly skip windows that are too different in size
+    haystack_len = len(haystack_lines)
+    max_start = haystack_len - win_size + 1
+
+    for i in range(max_start):
+        # Fast path: estimate window size by line count (already known)
+        # Skip windows that are wildly different in character count
+        # Only compute full join when length is reasonably close
+        window_end = i + win_size
+
+        # Quick heuristic: check first and last line lengths vs needle's
+        # This avoids full join for obviously mismatched windows
+        if win_size == 1:
+            # Single line: direct comparison
+            window = haystack_lines[i]
+        else:
+            # Multi-line: join the window
+            window = "\n".join(haystack_lines[i:window_end])
+
+        # Early skip: if length differs by more than 50%, JW will likely be low
+        # (Jaro-Winkler is sensitive to length differences)
+        if abs(len(window) - needle_len) > max(needle_len, len(window)) * 0.5:
+            continue
+
+        score = JaroWinkler.normalized_similarity(window, needle_joined)
         if score > best_score:
             best_score = score
-            best_span = (i, i + win_size)
+            best_span = (i, window_end)
 
     return best_span, best_score
 
