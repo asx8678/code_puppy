@@ -44,11 +44,6 @@ def _deserialize_messages(raw_messages: list) -> list:
     - already-instantiated ModelRequest/ModelResponse: legacy pickle format
     - plain values (e.g. strings in tests): return as-is
     """
-    from code_puppy.tool_call_validation import (
-        sanitize_messages,
-        sanitize_serialized_messages,
-    )
-
     if not raw_messages:
         return raw_messages
     first = raw_messages[0]
@@ -57,23 +52,9 @@ def _deserialize_messages(raw_messages: list) -> list:
         try:
             from pydantic_ai.messages import ModelMessagesTypeAdapter
 
-            # Sanitize at the serialized level *before* validation so that
-            # malformed tool-call args don't blow up pydantic reconstruction.
-            cleaned_raw = sanitize_serialized_messages(raw_messages)
-            msgs = list(ModelMessagesTypeAdapter.validate_python(cleaned_raw))
-            return sanitize_messages(msgs)
+            return list(ModelMessagesTypeAdapter.validate_python(raw_messages))
         except Exception:
             return raw_messages
-
-    # Legacy in-memory objects from pickle can still be sanitized.
-    try:
-        from pydantic_ai.messages import ModelRequest, ModelResponse
-
-        if isinstance(first, (ModelRequest, ModelResponse)):
-            return sanitize_messages(raw_messages)
-    except Exception:
-        pass
-
     return raw_messages
 
 

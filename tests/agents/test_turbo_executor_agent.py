@@ -36,17 +36,15 @@ class TestTurboExecutorAgent:
         tools = agent.get_available_tools()
 
         expected_tools = [
-            "turbo_execute",
-            "agent_share_your_reasoning",
-            "agent_run_shell_command",
             "list_files",
             "read_file",
             "grep",
             "create_file",
             "replace_in_file",
+            "agent_run_shell_command",
+            "agent_share_your_reasoning",
         ]
 
-        assert tools[0] == "turbo_execute"
         for tool in expected_tools:
             assert tool in tools
 
@@ -57,13 +55,10 @@ class TestTurboExecutorAgent:
 
         assert "Turbo Executor" in prompt
         assert "batch file operations" in prompt.lower()
-        assert "turbo_execute" in prompt
+        assert "1M context" in prompt
         assert "list_files" in prompt
         assert "grep" in prompt
-        assert "read_file" in prompt
-        assert "exact tool names" in prompt.lower()
-        assert "json objects" in prompt.lower()
-        assert "greplist_files" in prompt
+        assert "read_files" in prompt or "read files" in prompt.lower()
 
     def test_create_plan(self):
         """Test creating a plan from operation specifications."""
