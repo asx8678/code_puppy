@@ -27,6 +27,52 @@ MIN_REFRESH_BUFFER_SECONDS = 30
 logger = logging.getLogger(__name__)
 
 
+# Models that should NEVER be registered in claude_models.json, even if
+# returned by upstream or left behind in the file. Matched against both
+# the raw model name (e.g. ``claude-opus-4-5-20251101``) and the
+# prefixed form (e.g. ``claude-code-claude-opus-4-5-20251101``). Add an
+# entry here to permanently suppress a model in the UI/model picker.
+BLOCKED_CLAUDE_CODE_MODELS = frozenset({
+    "claude-opus-4-5-20251101",
+})
+
+
+def _is_blocked_claude_model(model_name: str) -> bool:
+    """Return True if a model should be filtered out of claude_models.json.
+
+    Accepts either the raw model name or the prefixed form.
+    """
+    if not model_name:
+        return False
+    name = model_name
+    prefix = CLAUDE_CODE_OAUTH_CONFIG.get("prefix", "claude-code-")
+    if prefix and name.startswith(prefix):
+        name = name[len(prefix):]
+    # Tolerate the ``-long`` variant suffix that the plugin appends.
+    if name.endswith("-long"):
+        name = name[: -len("-long")]
+    return (
+        name in BLOCKED_CLAUDE_CODE_MODELS
+        or model_name in BLOCKED_CLAUDE_CODE_MODELS
+    )
+
+
+def _filter_blocked_claude_models(models: list[str]) -> list[str]:
+    """Drop blocked models from a list of raw model names."""
+    if not models:
+        return models
+    kept: list[str] = []
+    dropped: list[str] = []
+    for m in models:
+        if _is_blocked_claude_model(m):
+            dropped.append(m)
+        else:
+            kept.append(m)
+    if dropped:
+        logger.info("Filtered blocked Claude Code models: %s", dropped)
+    return kept
+
+
 @dataclass
 class OAuthContext:
     """Runtime state for an in-progress OAuth flow."""
@@ -310,7 +356,17 @@ def load_claude_models() -> dict[str, Any]:
         models_path = get_claude_models_path()
         if models_path.exists():
             with open(models_path, "r", encoding="utf-8") as handle:
-                return json.load(handle)
+                data = json.load(handle)
+            if isinstance(data, dict):
+                blocked = [k for k in data if _is_blocked_claude_model(k)]
+                if blocked:
+                    logger.info(
+                        "Skipping blocked models from claude_models.json: %s",
+                        blocked,
+                    )
+                    for k in blocked:
+                        data.pop(k, None)
+            return data
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Failed to load Claude models: %s", exc)
     return {}
@@ -572,10 +628,13 @@ def _build_model_entry(model_name: str, access_token: str, context_length: int) 
 
 def add_models_to_extra_config(models: list[str]) -> bool:
     try:
+        # Drop permanently-blocked entries before any further processing.
+        models = _filter_blocked_claude_models(models)
         # Filter to only latest haiku, sonnet, and opus models
         filtered_models = filter_latest_claude_models(
             models, max_per_family={"default": 1, "opus": 3}
         )
+        filtered_models = _filter_blocked_claude_models(filtered_models)
 
         # Start fresh - overwrite the file on every auth instead of loading existing
         claude_models = {}

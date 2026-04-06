@@ -256,7 +256,17 @@ def load_chatgpt_models() -> dict[str, Any]:
         models_path = get_chatgpt_models_path()
         if models_path.exists():
             with open(models_path, "r", encoding="utf-8") as handle:
-                return json.load(handle)
+                data = json.load(handle)
+            if isinstance(data, dict):
+                blocked = [k for k in data if _is_blocked_chatgpt_model(k)]
+                if blocked:
+                    logger.info(
+                        "Skipping blocked models from chatgpt_models.json: %s",
+                        blocked,
+                    )
+                    for k in blocked:
+                        data.pop(k, None)
+            return data
     except Exception as exc:
         logger.error("Failed to load ChatGPT models: %s", exc)
     return {}
@@ -341,9 +351,62 @@ DEFAULT_CODEX_MODELS = [
     "gpt-5.3-instant",
     "gpt-5.3-codex-spark",
     "gpt-5.3-codex",
-    "gpt-5.2-codex",
-    "gpt-5.2",
 ]
+
+# Models that should NEVER be registered in chatgpt_models.json, even if
+# the /models endpoint returns them or they're somehow left behind in the
+# file. Matched against both the raw model name ("gpt-5.2") and the
+# prefixed form ("chatgpt-gpt-5.2"), as well as the full key for non-
+# prefixed entries like ``claude-3-opus``. Add an entry here to
+# permanently suppress a model in the UI/model picker.
+BLOCKED_CHATGPT_MODELS = frozenset({
+    # Stale Codex GPT-5.x variants
+    "gpt-5",
+    "gpt-5-codex",
+    "gpt-5-codex-mini",
+    "gpt-5.1",
+    "gpt-5.1-codex",
+    "gpt-5.1-codex-max",
+    "gpt-5.1-codex-mini",
+    "gpt-5.2",
+    "gpt-5.2-codex",
+    # Legacy ChatGPT models we no longer want surfaced
+    "gpt-4o",
+    "gpt-3.5-turbo",
+    # Misc legacy entries that historically lived in chatgpt_models.json
+    "claude-3-opus",
+})
+
+
+def _is_blocked_chatgpt_model(model_name: str) -> bool:
+    """Return True if a model should be filtered out of chatgpt_models.json.
+
+    Accepts either the raw model name (e.g. ``gpt-5.2``) or the
+    prefixed form (e.g. ``chatgpt-gpt-5.2``).
+    """
+    if not model_name:
+        return False
+    name = model_name
+    prefix = CHATGPT_OAUTH_CONFIG.get("prefix", "chatgpt-")
+    if prefix and name.startswith(prefix):
+        name = name[len(prefix):]
+    return name in BLOCKED_CHATGPT_MODELS or model_name in BLOCKED_CHATGPT_MODELS
+
+
+def _filter_blocked_chatgpt_models(models: list[str]) -> list[str]:
+    """Drop blocked models from a list of raw model names."""
+    if not models:
+        return models
+    kept: list[str] = []
+    dropped: list[str] = []
+    for m in models:
+        if _is_blocked_chatgpt_model(m):
+            dropped.append(m)
+        else:
+            kept.append(m)
+    if dropped:
+        logger.info("Filtered blocked ChatGPT models: %s", dropped)
+    return kept
 
 # Models that MUST always be registered, even if the /models endpoint
 # doesn't return them (e.g. newly launched, not yet in the API catalogue).
@@ -436,7 +499,9 @@ def fetch_chatgpt_models(access_token: str, account_id: str) -> list[str | None]
                         if model_id:
                             models.append(model_id)
                     if models:
-                        return _ensure_required_models(models)
+                        return _filter_blocked_chatgpt_models(
+                            _ensure_required_models(models)
+                        )
             except (json.JSONDecodeError, ValueError) as exc:
                 logger.warning("Failed to parse models response: %s", exc)
 
@@ -454,13 +519,26 @@ def fetch_chatgpt_models(access_token: str, account_id: str) -> list[str | None]
 
     # Return default models when API fails
     logger.info("Using default Codex models: %s", DEFAULT_CODEX_MODELS)
-    return DEFAULT_CODEX_MODELS
+    return _filter_blocked_chatgpt_models(list(DEFAULT_CODEX_MODELS))
 
 
 def add_models_to_extra_config(models: list[str]) -> bool:
     """Add ChatGPT models to chatgpt_models.json configuration."""
     try:
         chatgpt_models = load_chatgpt_models()
+        # Drop any entries already in the config that are now blocked,
+        # so stale files get cleaned up on next sync.
+        stale_blocked = [
+            name for name in list(chatgpt_models)
+            if _is_blocked_chatgpt_model(name)
+        ]
+        for name in stale_blocked:
+            chatgpt_models.pop(name, None)
+        if stale_blocked:
+            logger.info(
+                "Removed stale blocked models from config: %s", stale_blocked
+            )
+        models = _filter_blocked_chatgpt_models(models)
         added = 0
         for model_name in models:
             prefixed = f"{CHATGPT_OAUTH_CONFIG['prefix']}{model_name}"
