@@ -138,6 +138,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         self._tool_ids_cache = None
         # Cached context overhead tokens (invalidated by reload_code_generation_agent)
         self._cached_context_overhead: int | None = None
+        # Per-instance cache for get_model_name() to avoid repeated config lookups
+        self._model_name_cache: str | None = None
 
 
 
@@ -260,13 +262,24 @@ class BaseAgent(ABC, AgentPromptMixin):
     def get_model_name(self) -> str | None:
         """Get pinned model name for this agent, if specified.
 
+        Uses per-instance caching to avoid repeated config lookups.
+        Only caches when a pinned model is set (stable); always looks up
+        global model to avoid staleness when global model changes.
+
         Returns:
             Model name to use for this agent, or global default if none pinned.
         """
+        # Only use cache if we have a pinned model (stable)
+        if self._model_name_cache is not None:
+            return self._model_name_cache
+
         pinned = get_agent_pinned_model(self.name)
         if pinned == "" or pinned is None:
             return get_global_model_name()
-        return pinned
+
+        # Cache the pinned model and return it
+        self._model_name_cache = pinned
+        return self._model_name_cache
 
     def _clean_binaries(self, messages: list[ModelMessage]) -> list[ModelMessage]:
         """Remove BinaryContent items from message parts.
