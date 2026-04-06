@@ -1,5 +1,29 @@
 defmodule Mana.Plugins.CustomCommands do
-  @moduledoc "Loads custom commands from .mana/commands/ and .claude/commands/"
+  @moduledoc """
+  Loads custom markdown commands from multiple directories.
+
+  Scans the following directories in order (later directories override
+  earlier ones with the same command name — Map.merge last-wins convention):
+
+  1. `~/.mana/commands/` — Mana-native global commands (lowest)
+  2. `~/.code-puppy/commands/` — Code Puppy Python compatibility
+  3. `~/.claude/commands/` — Claude-compatible global commands
+  4. `<cwd>/.claude/commands/` — Project-local Claude commands
+  5. `<cwd>/.agents/commands/` — Project-local agent commands
+  6. `<cwd>/.github/prompts/` — GitHub Copilot prompts (*.prompt.md) (highest)
+
+  Path 6 gives `.github/prompts` highest precedence so that project-maintained
+  GitHub Copilot-style prompts override per-developer agent commands. This
+  mirrors how `.github/prompts` is typically committed to the repo while
+  `.agents/commands` may be developer-local.
+
+  Path 4 (`<cwd>/.claude/commands`) is included for symmetry with the global
+  `~/.claude/commands` path, matching Claude Code's project-local convention
+  and giving teams a second project-scoped location alongside `.agents/commands`.
+
+  Commands are stored in `:persistent_term` for O(1) read access.
+  Uses the `:custom_command` hook for dispatch (not Mana.Commands.Registry).
+  """
   @behaviour Mana.Plugin.Behaviour
 
   alias Mana.Config.Paths
@@ -25,45 +49,70 @@ defmodule Mana.Plugins.CustomCommands do
   end
 
   @doc """
-  Loads custom commands from .mana/commands/ and .claude/commands/ directories.
-  """
-  def load_commands do
-    paths = [
-      Path.join(Paths.config_dir(), "commands"),
-      Path.join(System.get_env("HOME", ""), ".claude/commands")
-    ]
+  Returns the default command search paths.
 
-    commands = Enum.flat_map(paths, &scan_directory/1)
+  Each entry is `{directory, suffix}` where `directory` is scanned for files
+  ending in `suffix`. The list is ordered by ascending precedence — later
+  entries override earlier ones when command names collide.
+
+  See the module doc for the full precedence rationale.
+  """
+  def default_paths do
+    home = System.get_env("HOME", "")
+    cwd = File.cwd!()
+
+    [
+      {Path.join(Paths.config_dir(), "commands"), ".md"},
+      {Path.join(home, ".code-puppy/commands"), ".md"},
+      {Path.join(home, ".claude/commands"), ".md"},
+      {Path.join(cwd, ".claude/commands"), ".md"},
+      {Path.join(cwd, ".agents/commands"), ".md"},
+      {Path.join(cwd, ".github/prompts"), ".prompt.md"}
+    ]
+  end
+
+  @doc """
+  Loads custom commands from the given `paths`, or `default_paths/0` if none.
+
+  Later entries in `paths` override earlier ones when command names collide
+  (project-local commands take precedence over global ones).
+  """
+  def load_commands(paths \\ default_paths()) do
+    commands =
+      paths
+      |> Enum.flat_map(fn {dir, suffix} -> scan_directory(dir, suffix) end)
+      |> Enum.into(%{})
+
     :persistent_term.put(@persistent_term_key, commands)
     :ok
   end
 
   @doc """
-  Returns the list of loaded custom commands.
+  Returns the list of loaded custom commands as `{name, content}` tuples.
   """
   def loaded_commands do
-    :persistent_term.get(@persistent_term_key, [])
+    :persistent_term.get(@persistent_term_key, %{}) |> Map.to_list()
   end
 
-  defp scan_directory(dir) do
+  defp scan_directory(dir, suffix) do
     case File.ls(dir) do
       {:ok, files} ->
-        process_files(files, dir)
+        process_files(files, dir, suffix)
 
       {:error, _} ->
         []
     end
   end
 
-  defp process_files(files, dir) do
+  defp process_files(files, dir, suffix) do
     files
-    |> Enum.filter(&String.ends_with?(&1, ".md"))
-    |> Enum.map(fn file -> load_file(dir, file) end)
+    |> Enum.filter(&String.ends_with?(&1, suffix))
+    |> Enum.map(fn file -> load_file(dir, file, suffix) end)
     |> Enum.reject(&is_nil/1)
   end
 
-  defp load_file(dir, file) do
-    name = Path.rootname(file)
+  defp load_file(dir, file, suffix) do
+    name = String.replace_suffix(file, suffix, "")
     full_path = Path.join(dir, file)
 
     case File.read(full_path) do
@@ -77,15 +126,15 @@ defmodule Mana.Plugins.CustomCommands do
   Returns {:ok, result} if executed, nil if command not found.
   """
   def execute_command(name, args) do
-    commands = loaded_commands()
+    commands = :persistent_term.get(@persistent_term_key, %{})
 
-    case Enum.find(commands, fn {cmd_name, _} -> cmd_name == name end) do
-      {_, template} ->
-        result = String.replace(template, "{{args}}", Enum.join(args, " "))
-        {:ok, result}
-
+    case Map.get(commands, name) do
       nil ->
         nil
+
+      template ->
+        result = String.replace(template, "{{args}}", Enum.join(args, " "))
+        {:ok, result}
     end
   end
 
