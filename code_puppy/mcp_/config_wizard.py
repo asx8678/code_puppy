@@ -12,6 +12,15 @@ from urllib.parse import urlparse
 from rich.text import Text
 
 from code_puppy.mcp_.manager import ServerConfig, get_mcp_manager
+from code_puppy.mcp_.mcp_security import (
+    CommandNotAllowedError,
+    InvalidArgumentError,
+    MCPSecurityError,
+    PathTraversalError,
+    is_command_allowed,
+    validate_arguments,
+    validate_working_directory,
+)
 from code_puppy.messaging import (
     emit_error,
     emit_info,
@@ -229,7 +238,7 @@ class MCPConfigWizard:
         return config
 
     def prompt_stdio_config(self, group_id: str = None) -> Dict | None:
-        """Prompt for Stdio server configuration."""
+        """Prompt for Stdio server configuration with security validation."""
         emit_info("Configuring Stdio server", message_group=group_id)
         emit_info("Examples:", message_group=group_id)
         emit_info(
@@ -238,36 +247,64 @@ class MCPConfigWizard:
         emit_info("  • python mcp_server.py", message_group=group_id)
         emit_info("  • node server.js", message_group=group_id)
 
-        # Command
-        command = prompt_ask("Enter command", default=None)
+        # Command - with whitelist validation
+        while True:
+            command = prompt_ask("Enter command", default=None)
 
-        if not command:
-            return None
+            if not command:
+                return None
+
+            # SECURITY: Check command against whitelist
+            if not is_command_allowed(command):
+                from code_puppy.mcp_.mcp_security import get_allowed_commands
+                allowed = get_allowed_commands()
+                emit_error(
+                    f"Command '{command}' is not in the allowed whitelist.",
+                    message_group=group_id)
+                emit_info(
+                    f"Allowed commands: {', '.join(sorted(allowed))}",
+                    message_group=group_id)
+                if not confirm_ask("Use this command anyway?", default=False):
+                    continue
+                # User chose to continue - security will be enforced at server creation
+
+            break
 
         config = {"type": "stdio", "command": command, "args": [], "timeout": 30}
 
-        # Arguments
+        # Arguments - with security validation
         args_str = prompt_ask("Enter arguments (space-separated)", default="")
         if args_str:
             # Simple argument parsing (handles quoted strings)
             import shlex
 
             try:
-                config["args"] = shlex.split(args_str)
+                raw_args = shlex.split(args_str)
             except ValueError:
-                config["args"] = args_str.split()
+                raw_args = args_str.split()
 
-        # Working directory (optional)
+            # SECURITY: Validate arguments
+            try:
+                config["args"] = validate_arguments(raw_args)
+            except InvalidArgumentError as e:
+                emit_error(f"Invalid arguments: {e}", message_group=group_id)
+                if not confirm_ask("Continue with these arguments?", default=False):
+                    return None
+                # Fall back to raw args (security will catch at server creation)
+                config["args"] = raw_args
+
+        # Working directory - with path traversal protection
         cwd = prompt_ask("Working directory (optional)", default="")
         if cwd:
-            import os
-
-            if os.path.isdir(os.path.expanduser(cwd)):
-                config["cwd"] = os.path.expanduser(cwd)
-            else:
+            try:
+                validated_cwd = validate_working_directory(cwd)
+                config["cwd"] = validated_cwd
+            except PathTraversalError as e:
                 emit_warning(
-                    f"Directory '{cwd}' not found, ignoring", message_group=group_id
+                    f"Invalid working directory: {e}", message_group=group_id
                 )
+                if not confirm_ask("Continue without working directory?", default=True):
+                    return None
 
         # Environment variables (optional)
         if confirm_ask("Add environment variables?", default=False):
@@ -394,6 +431,12 @@ class MCPConfigWizard:
             emit_error("✗ Failed to create server instance", message_group=group_id)
             return False
 
+        except MCPSecurityError as e:
+            # SECURITY: Handle security validation errors specially
+            emit_error(
+                f"✗ Security validation failed: {e}",
+                message_group=group_id)
+            return False
         except Exception as e:
             emit_error(f"✗ Configuration error: {e}", message_group=group_id)
             return False

@@ -24,6 +24,24 @@ from .mcp_logs import (
     list_servers_with_logs,
     read_logs,
     write_log)
+from .mcp_security import (
+    ALLOWED_COMMANDS,
+    CommandInjectionError,
+    CommandNotAllowedError,
+    InvalidArgumentError,
+    MCPSecurityError,
+    PathTraversalError,
+    detect_shell_injection,
+    get_allowed_commands,
+    is_command_allowed,
+    safe_expand_env_vars,
+    safe_expand_placeholders,
+    validate_arguments,
+    validate_command_whitelist,
+    validate_environment_variables,
+    validate_stdio_config,
+    validate_working_directory,
+)
 from .registry import ServerRegistry
 from .retry_manager import RetryManager, RetryStats, get_retry_manager, retry_mcp_call
 from .status_tracker import Event, ServerStatusTracker
@@ -61,4 +79,21 @@ __all__ = [
     "clear_logs",
     "list_servers_with_logs",
     "get_log_stats",
+    # Security module
+    "ALLOWED_COMMANDS",
+    "CommandInjectionError",
+    "CommandNotAllowedError",
+    "InvalidArgumentError",
+    "MCPSecurityError",
+    "PathTraversalError",
+    "detect_shell_injection",
+    "get_allowed_commands",
+    "is_command_allowed",
+    "safe_expand_env_vars",
+    "safe_expand_placeholders",
+    "validate_arguments",
+    "validate_command_whitelist",
+    "validate_environment_variables",
+    "validate_stdio_config",
+    "validate_working_directory",
 ]

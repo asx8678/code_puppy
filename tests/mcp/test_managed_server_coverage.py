@@ -373,29 +373,35 @@ class TestCreateServerStdio:
 
     def test_stdio_with_string_args(self):
         """Test STDIO server with string args (split into list)."""
+        # SECURITY: Must use allowed command from whitelist
         config = ServerConfig(
             id="test-id",
             name="test-server",
             type="stdio",
-            config={"command": "python", "args": "-m server --port 8080"},
+            config={"command": "python3", "args": "-m server --port 8080"},
         )
 
         with patch(
             "code_puppy.mcp_.managed_server.BlockingMCPServerStdio"
         ) as mock_stdio:
             mock_stdio.return_value = MagicMock()
-            ManagedMCPServer(config)
+            server = ManagedMCPServer(config)
+            
+            # Check if server was created successfully
+            assert server._pydantic_server is not None, f"Server creation failed: {server._error_message}"
+            assert mock_stdio.called, "BlockingMCPServerStdio was not called"
 
             call_kwargs = mock_stdio.call_args.kwargs
             assert call_kwargs["args"] == ["-m", "server", "--port", "8080"]
 
     def test_stdio_with_list_args(self):
         """Test STDIO server with list args."""
+        # SECURITY: Must use allowed command from whitelist
         config = ServerConfig(
             id="test-id",
             name="test-server",
             type="stdio",
-            config={"command": "python", "args": ["-m", "server"]},
+            config={"command": "python3", "args": ["-m", "server"]},
         )
 
         with patch(
@@ -587,19 +593,22 @@ class TestGetHttpClient:
     """Tests for _get_http_client method."""
 
     def test_creates_client_with_expanded_headers(self):
-        """Test that headers env vars are expanded."""
+        """Test that headers env vars are expanded with safe variables only.
+        
+        SECURITY: Only environment variables in the safe list are expanded.
+        """
         config = ServerConfig(
             id="test-id",
             name="test-server",
             type="sse",
             config={
                 "url": "http://localhost:8080",
-                "headers": {"Authorization": "Bearer $TEST_TOKEN"},
+                "headers": {"Authorization": "Bearer $USER"},  # USER is safe
             },
         )
 
         with (
-            patch.dict(os.environ, {"TEST_TOKEN": "secret123"}),
+            patch.dict(os.environ, {"USER": "testuser"}),
             patch("code_puppy.mcp_.managed_server.MCPServerSSE") as mock_sse,
             patch("code_puppy.mcp_.managed_server.create_async_client") as mock_create,
         ):
@@ -610,7 +619,8 @@ class TestGetHttpClient:
 
             mock_create.assert_called()
             call_kwargs = mock_create.call_args.kwargs
-            assert call_kwargs["headers"]["Authorization"] == "Bearer secret123"
+            # USER is in the safe env var list, so it should be expanded
+            assert call_kwargs["headers"]["Authorization"] == "Bearer testuser"
 
     def test_creates_client_with_custom_timeout(self):
         """Test that custom timeout is used."""
