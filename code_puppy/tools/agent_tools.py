@@ -163,6 +163,10 @@ def _sanitize_messages_for_dbos(messages: list[ModelMessage]) -> list[ModelMessa
     Returns:
         Sanitized list of ModelMessage objects safe for DBOS serialization.
     """
+    # Skip expensive JSON round-trip when DBOS is not enabled
+    if not get_use_dbos():
+        return messages
+
     if not messages:
         return messages
 
