@@ -71,6 +71,9 @@ mana-*.tar
 /mana/scheduler/
 /mana/sessions/
 
+# Prevent accidental nested mana/mana/ runtime artifacts
+mana/mana/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

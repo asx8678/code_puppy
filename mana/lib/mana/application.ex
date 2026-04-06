@@ -136,4 +136,10 @@ defmodule Mana.Application do
     opts = [strategy: :rest_for_one, name: Mana.Supervisor]
     Supervisor.start_link(children, opts)
   end
+
+  @impl true
+  def config_change(changed, _new, removed) do
+    Mana.Web.Endpoint.config_change(changed, removed)
+    :ok
+  end
 end
