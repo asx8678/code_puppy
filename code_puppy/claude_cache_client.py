@@ -601,6 +601,20 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
 
     @staticmethod
     def _inject_cache_control(body: bytes) -> bytes | None:
+        # Skip if SDK already injected cache_control (fast path avoids JSON parse)
+        # Check for the marker: "_cache_control_sdk_injected": true
+        # Note: We need to strip the marker even if we skip injection
+        if b'"_cache_control_sdk_injected"' in body:
+            try:
+                data = json.loads(body.decode("utf-8"))
+                if isinstance(data, dict) and "_cache_control_sdk_injected" in data:
+                    # Strip the marker before sending to Anthropic
+                    del data["_cache_control_sdk_injected"]
+                    return json.dumps(data).encode("utf-8")
+            except Exception:
+                pass  # Fall through to normal flow if stripping fails
+            return None
+
         try:
             data = json.loads(body.decode("utf-8"))
         except Exception:
@@ -634,9 +648,12 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         return json.dumps(data).encode("utf-8")
 
 
-def _inject_cache_control_in_payload(payload: dict[str, Any]) -> None:
-    """In-place cache_control injection on Anthropic messages.create payload."""
-
+def _inject_cache_control_in_payload(payload: dict[str, Any]) -> bool:
+    """In-place cache_control injection on Anthropic messages.create payload.
+    
+    Returns True if cache_control was injected, False otherwise.
+    """
+    injected = False
     messages = payload.get("messages")
     if isinstance(messages, list) and messages:
         last = messages[-1]
@@ -646,10 +663,12 @@ def _inject_cache_control_in_payload(payload: dict[str, Any]) -> None:
                 last_block = content[-1]
                 if isinstance(last_block, dict) and "cache_control" not in last_block:
                     last_block["cache_control"] = {"type": "ephemeral"}
+                    injected = True
 
-    # No extra markers in production mode; keep payload clean.
-    # (Function kept for potential future use.)
-    return
+    # Add marker so HTTP-level injection can skip redundant parsing
+    if injected:
+        payload["_cache_control_sdk_injected"] = True
+    return injected
 
 
 def patch_anthropic_client_messages(client: Any) -> None:
