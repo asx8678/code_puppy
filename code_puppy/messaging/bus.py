@@ -34,7 +34,7 @@ It also handles request/response correlation for user interactions:
 
 import asyncio
 import threading
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from .commands import (
@@ -97,6 +97,21 @@ class MessageBus:
         # Cache thread ID of the event loop for fast comparison in emit()
         self._loop_thread_id: int | None = None
 
+        # Wakeup callback for renderer notification
+        self._wakeup_callback: Callable[[], None] | None = None
+
+    def register_wakeup_callback(self, callback: Callable[[], None] | None) -> None:
+        """Register a callback to be called when new messages are emitted.
+
+        This allows the renderer to efficiently wake up its thread when
+        new messages arrive, instead of polling.
+
+        Args:
+            callback: Function to call when a message is emitted, or None to clear.
+        """
+        with self._lock:
+            self._wakeup_callback = callback
+
     # =========================================================================
     # Outgoing Messages (Agent → UI)
     # =========================================================================
@@ -142,6 +157,14 @@ class MessageBus:
                         self._put_to_outgoing(message)
             else:
                 self._put_to_outgoing(message)
+
+        # Signal the renderer to wake up and check for new messages
+        if self._wakeup_callback is not None:
+            try:
+                self._wakeup_callback()
+            except Exception:
+                # Don't let wakeup errors break message emission
+                pass
 
     def emit_text(
         self,

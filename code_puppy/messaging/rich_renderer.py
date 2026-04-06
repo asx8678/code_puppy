@@ -129,6 +129,7 @@ class RichConsoleRenderer:
         self._running = False
         self._thread: threading.Thread | None = None
         self._spinners: dict[str, object] = {}  # spinner_id -> status context
+        self._wakeup_event = threading.Event()  # For efficient thread wakeup
 
     @property
     def console(self) -> Console:
@@ -197,27 +198,35 @@ class RichConsoleRenderer:
         """
         self._running = False
         self._bus.mark_renderer_inactive()
+        self._wakeup()  # Wake up the loop so it can exit
 
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.0)
         self._thread = None
 
+    def _wakeup(self) -> None:
+        """Wake up the renderer thread to check for new messages."""
+        self._wakeup_event.set()
+
     def _consume_loop_sync(self) -> None:
         """Synchronous message consumption loop running in background thread."""
-        import time
-
         # First, process any buffered messages
         for msg in self._bus.get_buffered_messages():
             self._render_sync(msg)
         self._bus.clear_buffer()
 
-        # Then consume new messages
+        # Register wakeup callback so bus can signal us when new messages arrive
+        self._bus.register_wakeup_callback(self._wakeup)
+
+        # Then consume new messages with event-driven wakeup
         while self._running:
             message = self._bus.get_message_nowait()
             if message:
                 self._render_sync(message)
             else:
-                time.sleep(0.01)
+                # Wait until wakeup event or timeout (near-zero CPU when idle)
+                self._wakeup_event.wait(timeout=0.1)
+                self._wakeup_event.clear()
 
     def _render_sync(self, message: AnyMessage) -> None:
         """Render a message synchronously with error handling."""
