@@ -155,6 +155,7 @@ def _list_files(
     import sys
 
     results = []
+    seen_dirs = set()  # Track seen directories for O(1) duplicate check
     directory = os.path.abspath(os.path.expanduser(directory))
 
     # Plain text output for LLM consumption
@@ -271,14 +272,13 @@ def _list_files(
                         dir_path = os.path.dirname(file_path)
                         if dir_path:
                             # Add directory path components if they don't exist
+                            # Using seen_dirs set (defined at function scope) for O(1) lookup
                             path_parts = dir_path.split(os.sep)
                             for i in range(len(path_parts)):
                                 partial_path = os.sep.join(path_parts[: i + 1])
-                                # Check if we already added this directory
-                                if not any(
-                                    f.path == partial_path and f.type == "directory"
-                                    for f in results
-                                ):
+                                # Check if we already added this directory using set
+                                if partial_path not in seen_dirs:
+                                    seen_dirs.add(partial_path)
                                     results.append(
                                         ListedFile(
                                             path=partial_path,
