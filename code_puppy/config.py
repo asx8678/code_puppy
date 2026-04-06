@@ -203,6 +203,40 @@ _model_validation_cache = {}
 _default_model_cache = None
 _default_vision_model_cache = None
 
+# LRU cache for supported settings per model (cleared by clear_model_cache)
+_supported_settings_cache = None
+
+def _get_supported_settings_cache():
+    """Return the LRU cache function for supported settings, creating it if needed."""
+    global _supported_settings_cache
+    if _supported_settings_cache is None:
+
+        @lru_cache(maxsize=128)
+        def _cached_supported_settings(model_name: str) -> frozenset:
+            """Get supported settings for a model - cached to avoid repeated config loads."""
+            from code_puppy.model_factory import ModelFactory
+
+            models_config = ModelFactory.load_config()
+            model_config = models_config.get(model_name, {})
+            supported_settings = model_config.get("supported_settings")
+
+            if supported_settings is None:
+                # Default: assume common settings are supported for backwards compatibility
+                # For Anthropic/Claude models, include extended thinking settings
+                if model_name.startswith("claude-") or model_name.startswith("anthropic-"):
+                    base = ["temperature", "extended_thinking", "budget_tokens"]
+                    # Opus 4-6 models also support the effort setting
+                    lower = model_name.lower()
+                    if "opus-4-6" in lower or "4-6-opus" in lower:
+                        base.append("effort")
+                    return frozenset(base)
+                return frozenset(["temperature", "seed"])
+
+            return frozenset(supported_settings)
+
+        _supported_settings_cache = _cached_supported_settings
+    return _supported_settings_cache
+
 
 def ensure_config_exists():
     """
@@ -515,10 +549,14 @@ def _validate_model_exists(model_name: str) -> bool:
 
 def clear_model_cache():
     """Clear the model validation cache. Call this when models.json changes."""
-    global _model_validation_cache, _default_model_cache, _default_vision_model_cache
+    global _model_validation_cache, _default_model_cache, _default_vision_model_cache, _supported_settings_cache
     _model_validation_cache.clear()
     _default_model_cache = None
     _default_vision_model_cache = None
+    # Clear the lru_cache for supported settings
+    if _supported_settings_cache is not None:
+        _supported_settings_cache.cache_clear()
+        _supported_settings_cache = None
 
 
 def reset_session_model():
@@ -549,26 +587,8 @@ def model_supports_setting(model_name: str, setting: str) -> bool:
         return True
 
     try:
-        from code_puppy.model_factory import ModelFactory
-
-        models_config = ModelFactory.load_config()
-        model_config = models_config.get(model_name, {})
-
-        # Get supported_settings list, default to supporting common settings
-        supported_settings = model_config.get("supported_settings")
-
-        if supported_settings is None:
-            # Default: assume common settings are supported for backwards compatibility
-            # For Anthropic/Claude models, include extended thinking settings
-            if model_name.startswith("claude-") or model_name.startswith("anthropic-"):
-                base = ["temperature", "extended_thinking", "budget_tokens"]
-                # Opus 4-6 models also support the effort setting
-                lower = model_name.lower()
-                if "opus-4-6" in lower or "4-6-opus" in lower:
-                    base.append("effort")
-                return setting in base
-            return setting in ["temperature", "seed"]
-
+        cache_func = _get_supported_settings_cache()
+        supported_settings = cache_func(model_name)
         return setting in supported_settings
     except Exception:
         # If we can't check, assume supported for safety
