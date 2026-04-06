@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import pathlib
+import time
 from functools import lru_cache
 
 from code_puppy.session_storage import save_session
@@ -12,22 +13,33 @@ from code_puppy.session_storage import save_session
 _config_cache: configparser.ConfigParser | None = None
 _config_mtime: float = 0.0
 
+# --- mtime check debouncing (reduces stat syscall cost) ---
+_last_mtime_check = 0
+_cached_mtime = None
+
 
 def _get_config() -> configparser.ConfigParser:
     """Return a cached ConfigParser, re-reading only when the file changes."""
-    global _config_cache, _config_mtime
-    try:
-        mtime = os.path.getmtime(CONFIG_FILE)
-    except OSError:
-        # File doesn't exist — return a fresh (uncached) parser each time
-        # so that tests which mock ConfigParser or CONFIG_FILE work correctly.
-        cfg = configparser.ConfigParser()
-        cfg.read(CONFIG_FILE)
-        return cfg
-    if _config_cache is None or mtime != _config_mtime:
+    global _config_cache, _config_mtime, _last_mtime_check, _cached_mtime
+
+    now = time.time()
+
+    # Only re-check mtime after TTL expires (1 second debounce)
+    if now - _last_mtime_check > 1.0:
+        try:
+            _cached_mtime = os.path.getmtime(CONFIG_FILE)
+        except OSError:
+            # File doesn't exist — return a fresh (uncached) parser each time
+            # so that tests which mock ConfigParser or CONFIG_FILE work correctly.
+            cfg = configparser.ConfigParser()
+            cfg.read(CONFIG_FILE)
+            return cfg
+        _last_mtime_check = now
+
+    if _config_cache is None or _cached_mtime != _config_mtime:
         _config_cache = configparser.ConfigParser()
         _config_cache.read(CONFIG_FILE)
-        _config_mtime = mtime
+        _config_mtime = _cached_mtime
     return _config_cache
 
 
