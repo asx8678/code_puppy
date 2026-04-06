@@ -28,20 +28,40 @@ logger = logging.getLogger(__name__)
 
 CLOUD_MODELS: dict[str, dict[str, Any]] = {
     "kimi-k2.5:cloud": {
-        "context_length": 262144,  # 256k
+        "context_length": 262144,  # 256K
         "description": "Moonshot Kimi K2.5 (cloud)",
     },
     "glm-5:cloud": {
-        "context_length": 204800,  # 200k
-        "description": "ZhipuAI GLM-5 (cloud)",
+        "context_length": 202752,  # 198K (ollama card cites 202,752)
+        "description": "ZhipuAI GLM-5 744B-A40B (cloud)",
     },
     "minimax-m2.7:cloud": {
-        "context_length": 199680,  # 195k
+        "context_length": 200000,  # 200K (ollama states 200,000 tokens)
         "description": "MiniMax M2.7 (cloud)",
     },
     "qwen3.5:cloud": {
-        "context_length": 204800,  # 200k
-        "description": "Alibaba Qwen 3.5 (cloud)",
+        "context_length": 262144,  # 256K (397B-cloud alias)
+        "description": "Alibaba Qwen 3.5 397B (cloud)",
+    },
+    "gemma4:31b-cloud": {
+        "context_length": 262144,  # 256k
+        "description": "Google Gemma 4 31B (cloud)",
+    },
+    "qwen3-coder-next:cloud": {
+        "context_length": 262144,  # 256k
+        "description": "Alibaba Qwen 3 Coder Next (cloud)",
+    },
+    "devstral-2:123b-cloud": {
+        "context_length": 262144,  # 256k
+        "description": "Mistral Devstral-2 123B (cloud)",
+    },
+    "deepseek-v3.2:cloud": {
+        "context_length": 163840,  # 160k
+        "description": "DeepSeek V3.2 (cloud)",
+    },
+    "nemotron-cascade-2:30b": {
+        "context_length": 262144,  # 256k
+        "description": "NVIDIA Nemotron-Cascade-2 30B-A3B (local, ~24GB pull)",
     },
 }
 

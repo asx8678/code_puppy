@@ -113,7 +113,7 @@ class TestRegisterModel:
         assert "ollama-glm-5-cloud" in data
         entry = data["ollama-glm-5-cloud"]
         assert entry["type"] == "custom_openai"
-        assert entry["context_length"] == 131072
+        assert entry["context_length"] == 202752
 
     @patch("code_puppy.plugins.ollama_setup.register_callbacks.emit_success")
     @patch("code_puppy.plugins.ollama_setup.register_callbacks.emit_info")
@@ -142,6 +142,11 @@ class TestCloudModels:
             "glm-5:cloud",
             "minimax-m2.7:cloud",
             "qwen3.5:cloud",
+            "gemma4:31b-cloud",
+            "qwen3-coder-next:cloud",
+            "devstral-2:123b-cloud",
+            "deepseek-v3.2:cloud",
+            "nemotron-cascade-2:30b",
         }
         assert set(CLOUD_MODELS.keys()) == expected
 
