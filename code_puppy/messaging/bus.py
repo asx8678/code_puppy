@@ -583,15 +583,20 @@ def get_message_bus() -> MessageBus:
 
     Thread-safe. Creates the bus on first call.
 
+    Uses double-checked locking pattern to minimize contention:
+    - First check (no lock): Fast path for already-initialized bus
+    - Second check (with lock): Thread-safe initialization
+
     Returns:
         The global MessageBus instance.
     """
     global _global_bus
 
-    with _bus_lock:
-        if _global_bus is None:
-            _global_bus = MessageBus()
-        return _global_bus
+    if _global_bus is None:  # First check (no lock)
+        with _bus_lock:
+            if _global_bus is None:  # Second check (with lock)
+                _global_bus = MessageBus()
+    return _global_bus
 
 
 def reset_message_bus() -> None:
