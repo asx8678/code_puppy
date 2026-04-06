@@ -1,5 +1,6 @@
 import os
 import stat
+import subprocess
 from unittest.mock import patch
 
 import pytest
@@ -128,39 +129,43 @@ class TestFileOperationsExtended:
 
     # ==================== LIST FILES TESTS ====================
 
-    def test_list_nonexistent_directory(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_nonexistent_directory(self, tmp_path):
         """Test listing files in nonexistent directory."""
         nonexistent_dir = tmp_path / "does_not_exist"
-        result = _list_files(None, str(nonexistent_dir))
+        result = await _list_files(None, str(nonexistent_dir))
 
         assert result.content is not None
         assert "does not exist" in result.content
         assert "Error" in result.content
 
-    def test_list_file_as_directory(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_file_as_directory(self, tmp_path):
         """Test listing files when path points to a file, not directory."""
         test_file = tmp_path / "not_a_dir.txt"
         test_file.write_text("content")
 
-        result = _list_files(None, str(test_file))
+        result = await _list_files(None, str(test_file))
 
         assert result.content is not None
         assert "is not a directory" in result.content
         assert "Error" in result.content
 
-    def test_list_empty_directory(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_empty_directory(self, tmp_path):
         """Test listing an empty directory."""
         empty_dir = tmp_path / "empty"
         empty_dir.mkdir()
 
-        result = _list_files(None, str(empty_dir), recursive=False)
+        result = await _list_files(None, str(empty_dir), recursive=False)
 
         assert result.content is not None
         assert "0 directories" in result.content
         assert "0 files" in result.content
         assert "Summary" in result.content
 
-    def test_list_directory_with_files(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_directory_with_files(self, tmp_path):
         """Test listing directory with various file types."""
         # Create test files
         (tmp_path / "test.py").write_text("print('hello')")
@@ -168,7 +173,7 @@ class TestFileOperationsExtended:
         (tmp_path / "test.md").write_text("# Hello")
         (tmp_path / "subdir").mkdir()
 
-        result = _list_files(None, str(tmp_path), recursive=False)
+        result = await _list_files(None, str(tmp_path), recursive=False)
 
         assert result.content is not None
         assert "test.py" in result.content
@@ -178,7 +183,8 @@ class TestFileOperationsExtended:
         assert "3 files" in result.content  # Should count 3 files
         assert "1 directories" in result.content  # Should count 1 directory
 
-    def test_list_directory_recursive(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_directory_recursive(self, tmp_path):
         """Test recursive directory listing."""
         # Create nested structure
         (tmp_path / "root.py").write_text("# Root file")
@@ -189,7 +195,7 @@ class TestFileOperationsExtended:
         subdir2.mkdir()
         (subdir2 / "deep.py").write_text("# Deep file")
 
-        result = _list_files(None, str(tmp_path), recursive=True)
+        result = await _list_files(None, str(tmp_path), recursive=True)
 
         assert result.content is not None
         assert "root.py" in result.content
@@ -198,7 +204,8 @@ class TestFileOperationsExtended:
         assert "subdir1/" in result.content
         assert "subdir2/" in result.content
 
-    def test_list_directory_with_permission_denied(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_directory_with_permission_denied(self, tmp_path):
         """Test listing directory with permission issues."""
         # Create a subdirectory with no permissions
         restricted_dir = tmp_path / "restricted"
@@ -206,7 +213,7 @@ class TestFileOperationsExtended:
         restricted_dir.chmod(0o000)  # No permissions
 
         try:
-            result = _list_files(None, str(tmp_path), recursive=True)
+            result = await _list_files(None, str(tmp_path), recursive=True)
             # Should not crash, may or may not include restricted directory
             assert result.content is not None
         finally:
@@ -321,27 +328,30 @@ class TestFileOperationsExtended:
         # The content should contain replacement characters for invalid bytes
         assert "\ufffd" in result.content or len(result.content) > 0
 
-    def test_list_files_with_broken_symlinks(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_with_broken_symlinks(self, tmp_path):
         """Test listing directory with broken symbolic links."""
         # Create a broken symlink
         broken_link = tmp_path / "broken.txt"
         broken_link.symlink_to(tmp_path / "does_not_exist.txt")
 
-        result = _list_files(None, str(tmp_path), recursive=False)
+        result = await _list_files(None, str(tmp_path), recursive=False)
 
         # Should not crash, may show or ignore broken link
         assert result.content is not None
         assert isinstance(result, ListFileOutput)
 
-    @patch("subprocess.run")
-    def test_list_files_ripgrep_timeout(self, mock_run, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_ripgrep_timeout(self, tmp_path):
         """Test handling of ripgrep timeout during recursive listing."""
-        # Mock subprocess.run to raise TimeoutExpired
-        import subprocess
+        # Mock asyncio.to_thread to raise TimeoutExpired
+        import asyncio
 
-        mock_run.side_effect = subprocess.TimeoutExpired("rg", 30)
+        async def mock_to_thread(*args, **kwargs):
+            raise subprocess.TimeoutExpired("rg", 30)
 
-        result = _list_files(None, str(tmp_path), recursive=True)
+        with patch("code_puppy.tools.file_operations.asyncio.to_thread", mock_to_thread):
+            result = await _list_files(None, str(tmp_path), recursive=True)
 
         assert result.content is not None
         assert "timed out" in result.content
@@ -368,7 +378,8 @@ class TestFileOperationsExtended:
         assert result.error is None
         assert result.content == "special content"
 
-    def test_list_files_with_very_long_path(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_with_very_long_path(self, tmp_path):
         """Test listing with very long directory names."""
         # Create deeply nested directory with long names
         current = tmp_path
@@ -381,7 +392,7 @@ class TestFileOperationsExtended:
         final_file = current / "deep.txt"
         final_file.write_text("deep content")
 
-        result = _list_files(None, str(tmp_path), recursive=True)
+        result = await _list_files(None, str(tmp_path), recursive=True)
 
         assert result.content is not None
         assert "deep.txt" in result.content
@@ -398,7 +409,8 @@ class TestFileOperationsExtended:
         assert result.error is None
         assert result.content == "\nLine 3\n\n"
 
-    def test_list_files_permission_denied_recovery(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_permission_denied_recovery(self, tmp_path):
         """Test that listing continues even when some items can't be accessed."""
         # Create normal files
         (tmp_path / "file1.txt").write_text("content1")
@@ -411,7 +423,7 @@ class TestFileOperationsExtended:
         restricted.chmod(0o000)  # No permissions
 
         try:
-            result = _list_files(None, str(tmp_path), recursive=True)
+            result = await _list_files(None, str(tmp_path), recursive=True)
 
             # Should still show the accessible files
             assert "file1.txt" in result.content
@@ -463,7 +475,8 @@ class TestLargeFileHandling:
 class TestSymlinkHandling:
     """Test handling of symbolic links."""
 
-    def test_list_files_with_symlink(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_with_symlink(self, tmp_path):
         """Test listing files that include symlinks."""
         real_file = tmp_path / "real.txt"
         real_file.write_text("content")
@@ -472,7 +485,7 @@ class TestSymlinkHandling:
             symlink = tmp_path / "link.txt"
             symlink.symlink_to(real_file)
 
-            result = _list_files(None, str(tmp_path), recursive=False)
+            result = await _list_files(None, str(tmp_path), recursive=False)
 
             assert result.error is None
             assert result.content is not None
@@ -499,6 +512,7 @@ class TestSymlinkHandling:
 class TestBinaryFileDetection:
     """Test detection and handling of binary files."""
 
+    @pytest.mark.asyncio
     async def test_read_binary_file(self, tmp_path):
         """Test that binary files are handled appropriately."""
         binary_file = tmp_path / "binary.bin"
@@ -510,12 +524,13 @@ class TestBinaryFileDetection:
         assert result is not None
         assert isinstance(result, ReadFileOutput)
 
-    def test_list_files_ignores_binary_files(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_ignores_binary_files(self, tmp_path):
         """Test that binary files are shown in listings."""
         (tmp_path / "text.txt").write_text("text")
         (tmp_path / "binary.bin").write_bytes(b"\x00\x01")
 
-        result = _list_files(None, str(tmp_path), recursive=False)
+        result = await _list_files(None, str(tmp_path), recursive=False)
 
         assert result.content is not None
         # Both files should be listed
@@ -524,6 +539,7 @@ class TestBinaryFileDetection:
 class TestPathValidationAndNormalization:
     """Test path validation and normalization."""
 
+    @pytest.mark.asyncio
     async def test_read_file_with_relative_path(self, tmp_path, monkeypatch):
         """Test reading file with relative path."""
         test_file = tmp_path / "relative.txt"
@@ -537,14 +553,15 @@ class TestPathValidationAndNormalization:
         assert result.error is None
         assert "relative content" in result.content
 
-    def test_list_files_with_relative_path(self, tmp_path, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_list_files_with_relative_path(self, tmp_path, monkeypatch):
         """Test listing files with relative path."""
         (tmp_path / "file1.txt").write_text("content1")
         (tmp_path / "file2.txt").write_text("content2")
 
         monkeypatch.chdir(tmp_path)
 
-        result = _list_files(None, ".", recursive=False)
+        result = await _list_files(None, ".", recursive=False)
 
         assert result.error is None
         assert "file1.txt" in result.content
