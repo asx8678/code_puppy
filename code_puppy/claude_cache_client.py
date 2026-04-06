@@ -171,6 +171,57 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
             return False
 
     @staticmethod
+    def _transform_request_body(body: bytes) -> tuple[bytes | None, bool, bool]:
+        """Single-pass transform for tool prefixing and cache_control injection.
+
+        Parses the JSON body once and applies both transformations:
+        1. Prefixes tool names with TOOL_PREFIX for Claude Code OAuth compatibility
+        2. Injects cache_control into the last message's last content block
+
+        Returns: (transformed_body_or_None, tools_modified, cache_modified)
+        """
+        try:
+            data = json.loads(body.decode("utf-8"))
+        except Exception:
+            return None, False, False
+
+        if not isinstance(data, dict):
+            return None, False, False
+
+        tools_modified = False
+        cache_modified = False
+
+        # 1. Prefix tool names
+        tools = data.get("tools")
+        if isinstance(tools, list) and tools:
+            for tool in tools:
+                if isinstance(tool, dict) and "name" in tool:
+                    name = tool["name"]
+                    if name and not name.startswith(TOOL_PREFIX):
+                        tool["name"] = f"{TOOL_PREFIX}{name}"
+                        tools_modified = True
+
+        # 2. Inject cache_control into last message's last content block
+        messages = data.get("messages")
+        if isinstance(messages, list) and messages:
+            last = messages[-1]
+            if isinstance(last, dict):
+                content = last.get("content")
+                if isinstance(content, list) and content:
+                    last_block = content[-1]
+                    if (
+                        isinstance(last_block, dict)
+                        and "cache_control" not in last_block
+                    ):
+                        last_block["cache_control"] = {"type": "ephemeral"}
+                        cache_modified = True
+
+        if not tools_modified and not cache_modified:
+            return None, False, False
+
+        return json.dumps(data).encode("utf-8"), tools_modified, cache_modified
+
+    @staticmethod
     def _prefix_tool_names(body: bytes) -> bytes | None:
         """Prefix all tool names in the request body with TOOL_PREFIX.
 
@@ -301,17 +352,11 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                 # 2. Add ?beta=true query param
                 url = self._add_beta_query_param(url)
 
-                # 3. Prefix tool names in request body
+                # 3. Transform request body (tool prefixing + cache_control in one pass)
                 if body_bytes:
-                    prefixed_body = self._prefix_tool_names(body_bytes)
-                    if prefixed_body is not None:
-                        body_bytes = prefixed_body
-                        body_modified = True
-
-                    # 4. Inject cache_control
-                    cached_body = self._inject_cache_control(body_bytes)
-                    if cached_body is not None:
-                        body_bytes = cached_body
+                    transformed_body, _, _ = self._transform_request_body(body_bytes)
+                    if transformed_body is not None:
+                        body_bytes = transformed_body
                         body_modified = True
 
                 # Rebuild request if anything changed
