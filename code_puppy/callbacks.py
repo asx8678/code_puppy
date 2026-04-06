@@ -151,7 +151,24 @@ def count_callbacks(phase: PhaseType | None = None) -> int:
     return len(_callbacks.get(phase, []))
 
 
+def _ensure_plugins_loaded_for_phase(phase: PhaseType) -> None:
+    """Ensure all lazy-loaded plugins for a phase are imported.
+
+    This is called before triggering callbacks to ensure plugins that
+    registered for this phase via lazy loading are actually loaded.
+    """
+    try:
+        from code_puppy.plugins import ensure_plugins_loaded_for_phase
+        ensure_plugins_loaded_for_phase(phase)
+    except ImportError:
+        # Plugin system not available (shouldn't happen in normal operation)
+        pass
+
+
 def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> list[Any]:
+    # Ensure lazy-loaded plugins for this phase are loaded first
+    _ensure_plugins_loaded_for_phase(phase)
+
     callbacks = get_callbacks(phase)
     if not callbacks:
         logger.debug(f"No callbacks registered for phase '{phase}'")
@@ -189,6 +206,9 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> list[Any]:
 
 
 async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> list[Any]:
+    # Ensure lazy-loaded plugins for this phase are loaded first
+    _ensure_plugins_loaded_for_phase(phase)
+
     callbacks = get_callbacks(phase)
 
     if not callbacks:
