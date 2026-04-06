@@ -8,7 +8,7 @@ import httpx
 
 # Light pydantic-ai imports needed at module scope for make_model_settings()
 from pydantic_ai.models.anthropic import AnthropicModelSettings
-from pydantic_ai.models.openai import OpenAIChatModelSettings
+from pydantic_ai.models.openai import OpenAIChatModelSettings, OpenAIResponsesModelSettings
 from pydantic_ai.settings import ModelSettings
 
 from code_puppy.messaging import emit_warning
