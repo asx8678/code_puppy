@@ -79,7 +79,7 @@
   "gpt-5.2": {
     "type": "openai",
     "provider": "openai",
-    "name": "gpt-5.1",
+    "name": "gpt-5.2",
     "context_length": 272000,
     "supported_settings": ["temperature", "top_p", "reasoning_effort", "verbosity"],
     "supports_xhigh_reasoning": false

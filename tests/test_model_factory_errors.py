@@ -260,7 +260,7 @@ class TestModelFactoryErrors:
                 with pytest.raises(ValueError, match="could not be initialized"):
                     ModelFactory.get_model("openai-test", config_openai)
                 mock_warn.assert_called_with(
-                    "OPENAI_API_KEY is not set (check config or environment); skipping OpenAI model 'gpt-4'."
+                    "OPENAI_API_KEY is not set (check config or environment); skipping model 'gpt-4'."
                 )
 
             # Test Anthropic without API key
@@ -271,7 +271,7 @@ class TestModelFactoryErrors:
                 with pytest.raises(ValueError, match="could not be initialized"):
                     ModelFactory.get_model("anthropic-test", config_anthropic)
                 mock_warn.assert_called_with(
-                    "ANTHROPIC_API_KEY is not set (check config or environment); skipping Anthropic model 'claude-3'."
+                    "ANTHROPIC_API_KEY is not set (check config or environment); skipping model 'claude-3'."
                 )
 
             # Test Gemini without API key
@@ -280,7 +280,7 @@ class TestModelFactoryErrors:
                 with pytest.raises(ValueError, match="could not be initialized"):
                     ModelFactory.get_model("gemini-test", config_gemini)
                 mock_warn.assert_called_with(
-                    "GEMINI_API_KEY is not set (check config or environment); skipping Gemini model 'gemini-pro'."
+                    "GEMINI_API_KEY is not set (check config or environment); skipping model 'gemini-pro'."
                 )
 
             # Test ZAI models without API key
@@ -289,7 +289,7 @@ class TestModelFactoryErrors:
                 with pytest.raises(ValueError, match="could not be initialized"):
                     ModelFactory.get_model("zai-test", config_zai)
                 mock_warn.assert_called_with(
-                    "ZAI_API_KEY is not set (check config or environment); skipping ZAI coding model 'zai-model'."
+                    "ZAI_API_KEY is not set (check config or environment); skipping model 'zai-model'."
                 )
 
             # Test OpenRouter without API key
@@ -330,6 +330,9 @@ class TestModelFactoryErrors:
 
     def test_config_callback_exception_handling(self):
         """Test load_config() when callbacks raise exceptions."""
+        from code_puppy.model_factory import invalidate_model_config_cache
+
+        invalidate_model_config_cache()
         with patch(
             "code_puppy.model_factory.callbacks.get_callbacks",
             return_value=[lambda: None],

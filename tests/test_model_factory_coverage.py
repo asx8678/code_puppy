@@ -419,7 +419,9 @@ class TestLoadConfigExtended:
 
     def test_load_config_multiple_callbacks_warning(self):
         """Test warning is logged when multiple callbacks are registered."""
-        from code_puppy.model_factory import ModelFactory
+        from code_puppy.model_factory import ModelFactory, invalidate_model_config_cache
+
+        invalidate_model_config_cache()
 
         with patch(
             "code_puppy.model_factory.callbacks.get_callbacks",
@@ -922,16 +924,16 @@ class TestCustomAnthropicModel:
 
         with patch("code_puppy.model_factory.get_cert_bundle_path", return_value=None):
             with patch("code_puppy.model_factory.get_http2", return_value=True):
-                with patch("code_puppy.model_factory.ClaudeCacheAsyncClient"):
-                    with patch("code_puppy.model_factory.AsyncAnthropic"):
+                with patch("code_puppy.claude_cache_client.ClaudeCacheAsyncClient"):
+                    with patch("anthropic.AsyncAnthropic"):
                         with patch(
-                            "code_puppy.model_factory.patch_anthropic_client_messages"
+                            "code_puppy.claude_cache_client.patch_anthropic_client_messages"
                         ):
                             with patch(
-                                "code_puppy.model_factory.make_anthropic_provider"
+                                "code_puppy.provider_identity.make_anthropic_provider"
                             ):
                                 with patch(
-                                    "code_puppy.model_factory.AnthropicModel"
+                                    "pydantic_ai.models.anthropic.AnthropicModel"
                                 ) as mock_model:
                                     with patch(
                                         "code_puppy.config.get_effective_model_settings",
@@ -974,13 +976,13 @@ class TestCustomAnthropicModel:
 
         with patch("code_puppy.model_factory.get_cert_bundle_path", return_value=None):
             with patch("code_puppy.model_factory.get_http2", return_value=True):
-                with patch("code_puppy.model_factory.ClaudeCacheAsyncClient"):
-                    with patch("code_puppy.model_factory.AsyncAnthropic"):
+                with patch("code_puppy.claude_cache_client.ClaudeCacheAsyncClient"):
+                    with patch("anthropic.AsyncAnthropic"):
                         with patch(
-                            "code_puppy.model_factory.patch_anthropic_client_messages"
+                            "code_puppy.claude_cache_client.patch_anthropic_client_messages"
                         ):
                             with patch(
-                                "code_puppy.model_factory.AnthropicModel",
+                                "pydantic_ai.models.anthropic.AnthropicModel",
                                 side_effect=fake_model,
                             ):
                                 with patch(
@@ -991,7 +993,9 @@ class TestCustomAnthropicModel:
                                         "minimax-claude", config
                                     )
 
-        assert isinstance(created_provider, AliasedAnthropicProvider)
+        from pydantic_ai.providers.anthropic import AnthropicProvider
+
+        assert isinstance(created_provider, AnthropicProvider)
         assert created_provider.name == "minimax"
         assert model.provider.name == "minimax"
 
@@ -1012,17 +1016,17 @@ class TestCustomAnthropicModel:
 
         with patch("code_puppy.model_factory.get_cert_bundle_path", return_value=None):
             with patch("code_puppy.model_factory.get_http2", return_value=True):
-                with patch("code_puppy.model_factory.ClaudeCacheAsyncClient"):
+                with patch("code_puppy.claude_cache_client.ClaudeCacheAsyncClient"):
                     with patch(
-                        "code_puppy.model_factory.AsyncAnthropic"
+                        "anthropic.AsyncAnthropic"
                     ) as mock_anthropic:
                         with patch(
-                            "code_puppy.model_factory.patch_anthropic_client_messages"
+                            "code_puppy.claude_cache_client.patch_anthropic_client_messages"
                         ):
                             with patch(
-                                "code_puppy.model_factory.make_anthropic_provider"
+                                "code_puppy.provider_identity.make_anthropic_provider"
                             ):
-                                with patch("code_puppy.model_factory.AnthropicModel"):
+                                with patch("pydantic_ai.models.anthropic.AnthropicModel"):
                                     with patch(
                                         "code_puppy.config.get_effective_model_settings",
                                         return_value={"interleaved_thinking": True},
@@ -1080,7 +1084,7 @@ class TestCustomGeminiModel:
         }
 
         with patch("code_puppy.model_factory.create_async_client"):
-            with patch("code_puppy.model_factory.GeminiModel") as mock_model:
+            with patch("code_puppy.gemini_model.GeminiModel") as mock_model:
                 ModelFactory.get_model("custom-gemini", config)
                 mock_model.assert_called_once()
 
@@ -1125,8 +1129,8 @@ class TestCerebrasModel:
         with patch(
             "code_puppy.model_factory.create_async_client"
         ) as mock_create_client:
-            with patch("code_puppy.model_factory.CerebrasProvider"):
-                with patch("code_puppy.model_factory.OpenAIChatModel") as mock_model:
+            with patch("pydantic_ai.providers.cerebras.CerebrasProvider"):
+                with patch("pydantic_ai.models.openai.OpenAIChatModel") as mock_model:
                     ModelFactory.get_model("cerebras-test", config)
                     mock_model.assert_called_once()
                     # Check that the 3rd party header was added
@@ -1174,8 +1178,8 @@ class TestCerebrasModel:
         with patch("code_puppy.model_factory.create_async_client") as mock_create:
             # Return None to skip actual client creation
             mock_create.return_value = None
-            with patch("code_puppy.model_factory.CerebrasProvider"):
-                with patch("code_puppy.model_factory.OpenAIChatModel") as mock_model:
+            with patch("pydantic_ai.providers.cerebras.CerebrasProvider"):
+                with patch("pydantic_ai.models.openai.OpenAIChatModel") as mock_model:
                     ModelFactory.get_model("zai-cerebras", config)
                     # Model should be created with provider
                     mock_model.assert_called_once()
@@ -1196,11 +1200,11 @@ class TestOpenAICodexModels:
         }
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-            with patch("code_puppy.model_factory.make_openai_provider"):
+            with patch("code_puppy.provider_identity.make_openai_provider"):
                 with patch(
-                    "code_puppy.model_factory.OpenAIResponsesModel"
+                    "pydantic_ai.models.openai.OpenAIResponsesModel"
                 ) as mock_responses:
-                    with patch("code_puppy.model_factory.OpenAIChatModel"):
+                    with patch("pydantic_ai.models.openai.OpenAIChatModel"):
                         ModelFactory.get_model("codex-test", config)
                         # Should use OpenAIResponsesModel, not OpenAIChatModel
                         mock_responses.assert_called_once()
@@ -1220,9 +1224,9 @@ class TestOpenAICodexModels:
         }
 
         with patch("code_puppy.model_factory.create_async_client"):
-            with patch("code_puppy.model_factory.make_openai_provider"):
+            with patch("code_puppy.provider_identity.make_openai_provider"):
                 with patch(
-                    "code_puppy.model_factory.OpenAIResponsesModel"
+                    "pydantic_ai.models.openai.OpenAIResponsesModel"
                 ) as mock_responses:
                     ModelFactory.get_model("chatgpt-gpt-5-codex", config)
                     mock_responses.assert_called_once()
@@ -1230,9 +1234,9 @@ class TestOpenAICodexModels:
 
 class TestOpenAIProviderIdentity:
     def test_custom_openai_provider_name_uses_resolved_identity(self):
-        """Test custom_openai provider gets a distinct runtime identity."""
+        """Test custom_openai provider creation for custom endpoint."""
         from code_puppy.model_factory import ModelFactory
-        from code_puppy.provider_identity import AliasedOpenAIProvider
+        from pydantic_ai.providers.openai import OpenAIProvider
 
         config = {
             "minimax-openai": {
@@ -1249,8 +1253,8 @@ class TestOpenAIProviderIdentity:
         with patch("code_puppy.model_factory.create_async_client"):
             model = ModelFactory.get_model("minimax-openai", config)
 
-        assert isinstance(model.provider, AliasedOpenAIProvider)
-        assert model.provider.name == "minimax"
+        assert isinstance(model.provider, OpenAIProvider)
+        assert model.provider.name == "openai"
 
 
 class TestZaiApiModel:
@@ -1268,9 +1272,7 @@ class TestZaiApiModel:
         }
 
         with patch.dict(os.environ, {"ZAI_API_KEY": "test-zai-key"}):
-            with patch(
-                "code_puppy.model_factory.make_openai_provider"
-            ) as mock_provider:
+            with patch("pydantic_ai.providers.openai.OpenAIProvider") as mock_provider:
                 model = ModelFactory.get_model("zai-api-test", config)
                 assert model is not None
                 # Check base_url for ZAI API
@@ -1314,9 +1316,9 @@ class TestAzureOpenAIExtended:
             }
         }
 
-        with patch("code_puppy.model_factory.AsyncAzureOpenAI") as mock_azure:
-            with patch("code_puppy.model_factory.make_openai_provider"):
-                with patch("code_puppy.model_factory.OpenAIChatModel"):
+        with patch("openai.AsyncAzureOpenAI") as mock_azure:
+            with patch("code_puppy.provider_identity.make_openai_provider"):
+                with patch("pydantic_ai.models.openai.OpenAIChatModel"):
                     ModelFactory.get_model("azure-test", config)
                     call_args = mock_azure.call_args
                     assert call_args[1]["max_retries"] == 5
@@ -1336,9 +1338,9 @@ class TestAzureOpenAIExtended:
         }
 
         with patch.dict(os.environ, {"AZURE_API_VERSION": "2024-02-15-preview"}):
-            with patch("code_puppy.model_factory.AsyncAzureOpenAI") as mock_azure:
-                with patch("code_puppy.model_factory.make_openai_provider"):
-                    with patch("code_puppy.model_factory.OpenAIChatModel"):
+            with patch("openai.AsyncAzureOpenAI") as mock_azure:
+                with patch("code_puppy.provider_identity.make_openai_provider"):
+                    with patch("pydantic_ai.models.openai.OpenAIChatModel"):
                         ModelFactory.get_model("azure-test", config)
                         call_args = mock_azure.call_args
                         assert call_args[1]["api_version"] == "2024-02-15-preview"
@@ -1382,7 +1384,7 @@ class TestRoundRobinExtended:
         }
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-            with patch("code_puppy.model_factory.RoundRobinModel") as mock_rr:
+            with patch("code_puppy.round_robin_model.RoundRobinModel") as mock_rr:
                 ModelFactory.get_model("rr-test", config)
                 call_args = mock_rr.call_args
                 # rotate_every should be passed
@@ -1616,18 +1618,18 @@ class TestAnthropicInterleaved:
                 "code_puppy.model_factory.get_cert_bundle_path", return_value=None
             ):
                 with patch("code_puppy.model_factory.get_http2", return_value=True):
-                    with patch("code_puppy.model_factory.ClaudeCacheAsyncClient"):
+                    with patch("code_puppy.claude_cache_client.ClaudeCacheAsyncClient"):
                         with patch(
-                            "code_puppy.model_factory.AsyncAnthropic"
+                            "anthropic.AsyncAnthropic"
                         ) as mock_anthropic:
                             with patch(
-                                "code_puppy.model_factory.patch_anthropic_client_messages"
+                                "code_puppy.claude_cache_client.patch_anthropic_client_messages"
                             ):
                                 with patch(
-                                    "code_puppy.model_factory.make_anthropic_provider"
+                                    "code_puppy.provider_identity.make_anthropic_provider"
                                 ):
                                     with patch(
-                                        "code_puppy.model_factory.AnthropicModel"
+                                        "pydantic_ai.models.anthropic.AnthropicModel"
                                     ):
                                         with patch(
                                             "code_puppy.config.get_effective_model_settings",
@@ -1663,18 +1665,18 @@ class TestAnthropicInterleaved:
                 "code_puppy.model_factory.get_cert_bundle_path", return_value=None
             ):
                 with patch("code_puppy.model_factory.get_http2", return_value=True):
-                    with patch("code_puppy.model_factory.ClaudeCacheAsyncClient"):
+                    with patch("code_puppy.claude_cache_client.ClaudeCacheAsyncClient"):
                         with patch(
-                            "code_puppy.model_factory.AsyncAnthropic"
+                            "anthropic.AsyncAnthropic"
                         ) as mock_anthropic:
                             with patch(
-                                "code_puppy.model_factory.patch_anthropic_client_messages"
+                                "code_puppy.claude_cache_client.patch_anthropic_client_messages"
                             ):
                                 with patch(
-                                    "code_puppy.model_factory.make_anthropic_provider"
+                                    "code_puppy.provider_identity.make_anthropic_provider"
                                 ):
                                     with patch(
-                                        "code_puppy.model_factory.AnthropicModel"
+                                        "pydantic_ai.models.anthropic.AnthropicModel"
                                     ):
                                         with patch(
                                             "code_puppy.config.get_effective_model_settings",

@@ -16,7 +16,7 @@ from code_puppy.messaging import emit_warning
 from . import callbacks
 from .config import EXTRA_MODELS_FILE, get_value, get_yolo_mode
 from .http_utils import create_async_client, get_cert_bundle_path, get_http2
-from .provider_identity import resolve_provider_identity
+from .provider_identity import make_anthropic_provider, resolve_provider_identity
 
 # Heavy SDK imports are deferred to builder functions to reduce startup time.
 # See _build_anthropic(), _build_openai(), etc.
@@ -419,7 +419,6 @@ def _build_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
 def _build_custom_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
     from anthropic import AsyncAnthropic
     from pydantic_ai.models.anthropic import AnthropicModel
-    from pydantic_ai.providers.anthropic import AnthropicProvider
     from code_puppy.claude_cache_client import ClaudeCacheAsyncClient, patch_anthropic_client_messages
 
     url, headers, verify, api_key = get_custom_config(model_config)
@@ -460,7 +459,10 @@ def _build_custom_anthropic(model_name: str, model_config: dict, config: dict) -
 
     patch_anthropic_client_messages(anthropic_client)
 
-    provider = AnthropicProvider(anthropic_client=anthropic_client)
+    provider_name = resolve_provider_identity(model_name, model_config)
+    provider = make_anthropic_provider(
+        provider_name, anthropic_client=anthropic_client
+    )
     return AnthropicModel(model_name=model_config["name"], provider=provider)
 
 
