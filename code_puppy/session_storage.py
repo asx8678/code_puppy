@@ -12,7 +12,8 @@ import json
 import os
 import logging
 
-# pickle is lazy-imported inside _load_raw_bytes() for legacy format only
+# SECURITY FIX #zvx9: Pickle has been completely removed to prevent RCE attacks.
+# Session files now use only secure msgpack serialization with HMAC integrity.
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
@@ -39,10 +40,11 @@ def _msgpack_default(obj: Any) -> Any:
 def _deserialize_messages(raw_messages: list) -> list:
     """Restore serialized dicts back to pydantic-ai message objects.
 
-    Handles three cases:
+    Handles two cases:
     - dicts with 'kind' key: new msgpack format, validate via TypeAdapter
-    - already-instantiated ModelRequest/ModelResponse: legacy pickle format
     - plain values (e.g. strings in tests): return as-is
+
+    SECURITY FIX #zvx9: Legacy pickle format support has been removed.
     """
     if not raw_messages:
         return raw_messages
@@ -113,7 +115,11 @@ def _get_hmac_key() -> bytes:
 
 
 def _load_raw_bytes(raw: bytes) -> Any:
-    """Deserialize session file bytes, handling msgpack, legacy-signed, and plain pickle."""
+    """Deserialize session file bytes, handling msgpack and legacy-signed formats.
+
+    SECURITY FIX #zvx9: Pickle deserialization has been removed to prevent RCE attacks.
+    Legacy pickle sessions will return an error message and empty data.
+    """
     # New msgpack format: magic header followed by HMAC + msgpack payload
     if raw.startswith(_MSGPACK_MAGIC):
         # Format: MAGIC (8 bytes) + HMAC (32 bytes) + msgpack payload
@@ -144,31 +150,36 @@ def _load_raw_bytes(raw: bytes) -> Any:
         return msgpack.unpackb(msgpack_data, raw=False)
 
     # Legacy signed format: CPSESSION\x01 + 32-byte signature + pickle
+    # SECURITY FIX #zvx9: Pickle deserialization removed - RCE vulnerability
     if raw.startswith(_LEGACY_SIGNED_HEADER):
-        offset = len(_LEGACY_SIGNED_HEADER) + _LEGACY_SIGNATURE_SIZE
-        pickle_data = raw[offset:]
-        warnings.warn(
-            "Loading session from legacy signed format. "
-            "Re-save this session to migrate to the new MessagePack format. "
-            "Legacy format support will be removed in a future version.",
-            DeprecationWarning,
-            stacklevel=2,
+        logger.error(
+            "Session file uses legacy pickle format (CPSESSION). "
+            "This format is no longer supported due to security vulnerabilities (RCE risk). "
+            "Please remove this session file and start a new session. "
+            "Session file location: See error details below."
         )
-        import pickle  # noqa: S403 — lazy import for legacy format only
+        raise ValueError(
+            "Legacy pickle session format is no longer supported due to security "
+            "vulnerabilities (RCE risk - CVE-class). This session file uses the old "
+            "CPSESSION format with pickle deserialization which allows arbitrary "
+            "code execution. Please delete this session file and create a new session. "
+            "See https://docs.python.org/3/library/pickle.html#security for details."
+        )
 
-        return pickle.loads(pickle_data)  # noqa: S301
-
-    # Plain pickle (original format) - with deprecation warning
-    warnings.warn(
-        "Loading session from legacy pickle format. "
-        "Re-save this session to migrate to the MessagePack format. "
-        "Pickle support will be removed in a future version.",
-        DeprecationWarning,
-        stacklevel=2,
+    # Plain pickle (original format) - SECURITY FIX #zvx9: Removed
+    # SECURITY: This would be an RCE vulnerability if pickle.loads() was used
+    logger.error(
+        "Session file uses legacy pickle format. "
+        "This format is no longer supported due to security vulnerabilities (RCE risk). "
+        "Please remove this session file and start a new session."
     )
-    import pickle  # noqa: S403 — lazy import for legacy format only
-
-    return pickle.loads(raw)  # noqa: S301
+    raise ValueError(
+        "Legacy pickle session format is no longer supported due to security "
+        "vulnerabilities (RCE risk - CVE-class). This session file uses pickle "
+        "deserialization which allows arbitrary code execution. Please delete this "
+        "session file and create a new session. "
+        "See https://docs.python.org/3/library/pickle.html#security for details."
+    )
 
 
 SessionHistory = list[Any]

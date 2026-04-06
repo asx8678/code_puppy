@@ -271,21 +271,15 @@ def test_load_session_msgpack_round_trip(
 # ---------------------------------------------------------------------------
 
 
-def test_load_raw_bytes_falls_back_to_pickle_with_warning():
-    """_load_raw_bytes() should fall back to pickle and emit a DeprecationWarning."""
+def test_load_raw_bytes_rejects_pickle_for_security():
+    """_load_raw_bytes() should reject pickle format for security (RCE risk)."""
     payload = {"messages": ["hello", "world"], "compacted_hashes": []}
     legacy_bytes = pickle.dumps(payload)
 
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        result = _load_raw_bytes(legacy_bytes)
-
-    assert result == payload
-    deprecation_warnings = [
-        w for w in caught if issubclass(w.category, DeprecationWarning)
-    ]
-    assert len(deprecation_warnings) == 1
-    assert "pickle" in str(deprecation_warnings[0].message).lower()
+    # SECURITY FIX #zvx9: Pickle is rejected entirely, not deprecated
+    import pytest
+    with pytest.raises(ValueError, match="pickle|RCE|security|CVE"):
+        _load_raw_bytes(legacy_bytes)
 
 
 def test_load_raw_bytes_prefers_msgpack():
