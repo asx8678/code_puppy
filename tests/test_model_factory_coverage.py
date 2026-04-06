@@ -13,6 +13,7 @@ Targets the 206 uncovered lines including:
 """
 
 import os
+from collections.abc import Mapping
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -534,7 +535,7 @@ class TestLoadConfigExtended:
                                 with patch("logging.getLogger"):
                                     # Should fall back to plain JSON loading
                                     config = ModelFactory.load_config()
-                                    assert isinstance(config, dict)
+                                    assert isinstance(config, Mapping)
 
 
 class TestClaudeCodeModel:
