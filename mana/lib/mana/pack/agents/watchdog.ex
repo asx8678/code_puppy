@@ -299,67 +299,54 @@ defmodule Mana.Pack.Agents.Watchdog do
   def run_tests(%{command: command}, cwd, timeout) do
     start_time = System.monotonic_time(:millisecond)
 
-    try do
-      case Mana.Pack.CommandRunner.run(command.command, command.args,
-             cd: cwd,
-             stderr_to_stdout: true,
-             parallelism: true,
-             timeout: timeout
-           ) do
-        {:ok, output} ->
-          stats = parse_test_output(output, command.type)
+    case Mana.Pack.CommandRunner.run(command.command, command.args,
+           cd: cwd,
+           stderr_to_stdout: true,
+           parallelism: true,
+           timeout: timeout
+         ) do
+      {:ok, output} ->
+        stats = parse_test_output(output, command.type)
 
-          %{
-            status: :passed,
-            exit_code: 0,
-            output: output,
-            passed: stats.passed,
-            failed: stats.failed,
-            skipped: stats.skipped,
-            duration_ms: System.monotonic_time(:millisecond) - start_time
-          }
+        %{
+          status: :passed,
+          exit_code: 0,
+          output: output,
+          passed: stats.passed,
+          failed: stats.failed,
+          skipped: stats.skipped,
+          duration_ms: System.monotonic_time(:millisecond) - start_time
+        }
 
-        {:error, {:exit_code, _code, output}} ->
-          stats = parse_test_output(output, command.type)
+      {:error, {:exit_code, _code, output}} ->
+        stats = parse_test_output(output, command.type)
 
-          %{
-            status: :failed,
-            exit_code: 1,
-            output: output,
-            passed: stats.passed,
-            failed: stats.failed,
-            skipped: stats.skipped,
-            duration_ms: System.monotonic_time(:millisecond) - start_time
-          }
+        %{
+          status: :failed,
+          exit_code: 1,
+          output: output,
+          passed: stats.passed,
+          failed: stats.failed,
+          skipped: stats.skipped,
+          duration_ms: System.monotonic_time(:millisecond) - start_time
+        }
 
-        {:error, :timeout} ->
-          %{
-            status: :timeout,
-            exit_code: -1,
-            output: "Tests timed out after #{timeout}ms",
-            passed: 0,
-            failed: 0,
-            skipped: 0,
-            duration_ms: timeout
-          }
+      {:error, :timeout} ->
+        %{
+          status: :timeout,
+          exit_code: -1,
+          output: "Tests timed out after #{timeout}ms",
+          passed: 0,
+          failed: 0,
+          skipped: 0,
+          duration_ms: timeout
+        }
 
-        {:error, reason} ->
-          %{
-            status: :error,
-            exit_code: -1,
-            output: "Test execution failed: #{inspect(reason)}",
-            passed: 0,
-            failed: 0,
-            skipped: 0,
-            duration_ms: System.monotonic_time(:millisecond) - start_time
-          }
-      end
-    rescue
-      e ->
+      {:error, reason} ->
         %{
           status: :error,
           exit_code: -1,
-          output: "Test execution failed: #{inspect(e)}",
+          output: "Test execution failed: #{inspect(reason)}",
           passed: 0,
           failed: 0,
           skipped: 0,

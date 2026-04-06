@@ -142,24 +142,18 @@ defmodule Mana.Pack.Agents.Husky do
         [cd: cwd, stderr_to_stdout: true, parallelism: true, env: base_env]
       end
 
-    try do
-      case Mana.Pack.CommandRunner.run(command, args, Keyword.put(cmd_opts, :timeout, timeout)) do
-        {:ok, output} ->
-          {:ok, %{stdout: output, stderr: "", exit_code: 0}}
+    case Mana.Pack.CommandRunner.run(command, args, Keyword.put(cmd_opts, :timeout, timeout)) do
+      {:ok, output} ->
+        {:ok, %{stdout: output, stderr: "", exit_code: 0}}
 
-        {:error, {:exit_code, _code, output}} ->
-          {:ok, %{stdout: output, stderr: output, exit_code: 1}}
+      {:error, {:exit_code, _code, output}} ->
+        {:ok, %{stdout: output, stderr: output, exit_code: 1}}
 
-        {:error, :timeout} ->
-          {:error, %{reason: :timeout, timeout_ms: timeout}}
+      {:error, :timeout} ->
+        {:error, %{reason: :timeout, timeout_ms: timeout}}
 
-        {:error, reason} ->
-          {:error, reason}
-      end
-    rescue
-      e ->
-        Logger.error("Husky execution failed: #{inspect(e)}")
-        {:error, %{reason: :execution_failed, details: inspect(e)}}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

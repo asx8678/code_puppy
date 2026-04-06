@@ -179,13 +179,7 @@ defmodule Mana.Models.Registry do
   def complete(messages, model, opts \\ []) do
     case GenServer.call(__MODULE__, {:complete, messages, model, opts}) do
       {:dispatch, provider, messages, model, opts} ->
-        try do
-          provider.complete(messages, model, opts)
-        rescue
-          e ->
-            Logger.error("Provider complete error: #{inspect(e)}")
-            {:error, :provider_error}
-        end
+        provider.complete(messages, model, opts)
 
       error ->
         error
@@ -214,13 +208,7 @@ defmodule Mana.Models.Registry do
   def stream(messages, model, opts \\ []) do
     case GenServer.call(__MODULE__, {:stream, messages, model, opts}) do
       {:dispatch, provider, messages, model, opts} ->
-        try do
-          provider.stream(messages, model, opts)
-        rescue
-          e ->
-            Logger.error("Provider stream error: #{inspect(e)}")
-            {:error, :provider_error}
-        end
+        provider.stream(messages, model, opts)
 
       error ->
         error
@@ -410,8 +398,8 @@ defmodule Mana.Models.Registry do
   end
 
   defp merge_plugin_models(models) do
-    # Try to dispatch to :register_model_type callbacks, but handle case
-    # where Callbacks.Registry isn't started yet
+    # Registry can be started in tests without Callbacks.Registry; keep this
+    # startup-boundary fallback so model registry initialization remains stable.
     case Mana.Callbacks.dispatch(:register_model_type, []) do
       {:ok, results} when is_list(results) ->
         Enum.reduce(results, models, fn

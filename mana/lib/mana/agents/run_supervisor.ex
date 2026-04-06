@@ -248,8 +248,6 @@ defmodule Mana.Agents.RunSupervisor do
              result =
                try do
                  Runner.run(agent_pid, message, merged_opts)
-               rescue
-                 e -> {:error, Exception.message(e)}
                after
                  if Process.alive?(agent_pid),
                    do: GenServer.stop(agent_pid, :normal, 5_000)

@@ -262,8 +262,9 @@ defmodule Mana.OAuth.RefreshManager do
           perform_refresh(provider, refresh_fn)
         catch
           kind, reason ->
+            require Logger
             Logger.error("Token refresh crashed for '#{provider}': #{kind} - #{inspect(reason)}")
-            {:error, "Refresh crashed: #{kind}"}
+            {:error, {:refresh_crashed, kind, reason}}
         end
 
       send(pid, {:refresh_complete, provider, result})

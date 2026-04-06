@@ -209,10 +209,6 @@ defmodule Mana.Agents.Registry do
   # Discover agents from JSON configuration files
   defp discover_json_agents do
     JsonLoader.discover()
-  rescue
-    e ->
-      Logger.error("Failed to load JSON agents: #{inspect(e)}")
-      []
   end
 
   # Discover agent modules from the application configuration
@@ -220,26 +216,20 @@ defmodule Mana.Agents.Registry do
     case Application.get_env(:mana, :agent_modules, []) do
       modules when is_list(modules) ->
         Enum.flat_map(modules, fn mod ->
-          try do
-            if Code.ensure_loaded?(mod) and function_exported?(mod, :name, 0) do
-              [
-                %{
-                  "name" => mod.name(),
-                  "display_name" => mod.display_name(),
-                  "description" => mod.description(),
-                  "system_prompt" => mod.system_prompt(),
-                  "available_tools" => mod.available_tools(),
-                  "_source" => "module:#{inspect(mod)}"
-                }
-              ]
-            else
-              Logger.warning("Agent module #{inspect(mod)} is not properly loaded")
-              []
-            end
-          rescue
-            e ->
-              Logger.error("Failed to load agent module #{inspect(mod)}: #{inspect(e)}")
-              []
+          if Code.ensure_loaded?(mod) and function_exported?(mod, :name, 0) do
+            [
+              %{
+                "name" => mod.name(),
+                "display_name" => mod.display_name(),
+                "description" => mod.description(),
+                "system_prompt" => mod.system_prompt(),
+                "available_tools" => mod.available_tools(),
+                "_source" => "module:#{inspect(mod)}"
+              }
+            ]
+          else
+            Logger.warning("Agent module #{inspect(mod)} is not properly loaded")
+            []
           end
         end)
 

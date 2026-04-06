@@ -84,29 +84,23 @@ defmodule Mana.Pack.Agents.Bloodhound do
 
     Logger.debug("Bloodhound executing: bd #{Enum.join(command, " ")}")
 
-    try do
-      case Mana.Pack.CommandRunner.run("bd", command,
-             cd: cwd,
-             stderr_to_stdout: true,
-             parallelism: true,
-             timeout: timeout
-           ) do
-        {:ok, output} ->
-          {:ok, %{stdout: output, stderr: "", exit_code: 0}}
+    case Mana.Pack.CommandRunner.run("bd", command,
+           cd: cwd,
+           stderr_to_stdout: true,
+           parallelism: true,
+           timeout: timeout
+         ) do
+      {:ok, output} ->
+        {:ok, %{stdout: output, stderr: "", exit_code: 0}}
 
-        {:error, {:exit_code, _code, output}} ->
-          {:ok, %{stdout: output, stderr: output, exit_code: 1}}
+      {:error, {:exit_code, _code, output}} ->
+        {:ok, %{stdout: output, stderr: output, exit_code: 1}}
 
-        {:error, :timeout} ->
-          {:error, %{reason: :timeout, timeout_ms: timeout}}
+      {:error, :timeout} ->
+        {:error, %{reason: :timeout, timeout_ms: timeout}}
 
-        {:error, reason} ->
-          {:error, reason}
-      end
-    rescue
-      e ->
-        Logger.error("Bloodhound execution failed: #{inspect(e)}")
-        {:error, %{reason: :execution_failed, details: inspect(e)}}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
