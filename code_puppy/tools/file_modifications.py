@@ -6,9 +6,11 @@ Key guarantees
 2. **Full traceback logging** for unexpected errors via `_log_error`.
 3. Helper functions stay print-free and return a `diff` key, while agent-tool wrappers handle
    all console output.
+4. **Async-first API** – all public functions are async and run blocking I/O in thread pools.
 """
 
 
+import asyncio
 import difflib
 import json
 import os
@@ -400,7 +402,7 @@ def _write_to_file(
         return {"error": str(exc), "diff": ""}
 
 
-def delete_snippet_from_file(
+async def delete_snippet_from_file(
     context: RunContext, file_path: str, snippet: str, message_group: str | None = None
 ) -> dict[str, Any]:
     # Use the plugin system for permission handling with operation data
@@ -417,7 +419,8 @@ def delete_snippet_from_file(
     ):
         return _create_rejection_response(file_path)
 
-    res = _delete_snippet_from_file(
+    res = await asyncio.to_thread(
+        _delete_snippet_from_file,
         context, file_path, snippet, message_group=message_group
     )
     diff = res.get("diff", "")
@@ -426,7 +429,7 @@ def delete_snippet_from_file(
     return res
 
 
-def write_to_file(
+async def write_to_file(
     context: RunContext,
     path: str,
     content: str,
@@ -446,7 +449,8 @@ def write_to_file(
     ):
         return _create_rejection_response(path)
 
-    res = _write_to_file(
+    res = await asyncio.to_thread(
+        _write_to_file,
         context, path, content, overwrite=overwrite, message_group=message_group
     )
     diff = res.get("diff", "")
@@ -457,7 +461,7 @@ def write_to_file(
     return res
 
 
-def replace_in_file(
+async def replace_in_file(
     context: RunContext,
     path: str,
     replacements: list[dict[str, str]],
@@ -476,14 +480,16 @@ def replace_in_file(
     ):
         return _create_rejection_response(path)
 
-    res = _replace_in_file(context, path, replacements, message_group=message_group)
+    res = await asyncio.to_thread(
+        _replace_in_file, context, path, replacements, message_group=message_group
+    )
     diff = res.get("diff", "")
     if diff:
         _emit_diff_message(path, "modify", diff)
     return res
 
 
-def _edit_file(
+async def _edit_file(
     context: RunContext, payload: EditFilePayload, group_id: str | None = None
 ) -> dict[str, Any]:
     """
@@ -525,7 +531,7 @@ def _edit_file(
 
     try:
         if isinstance(payload, DeleteSnippetPayload):
-            return delete_snippet_from_file(
+            return await delete_snippet_from_file(
                 context, file_path, payload.delete_snippet, message_group=group_id
             )
         elif isinstance(payload, ReplacementsPayload):
@@ -534,7 +540,7 @@ def _edit_file(
                 {"old_str": rep.old_str, "new_str": rep.new_str}
                 for rep in payload.replacements
             ]
-            return replace_in_file(
+            return await replace_in_file(
                 context, file_path, replacements_dict, message_group=group_id
             )
         elif isinstance(payload, ContentPayload):
@@ -546,7 +552,7 @@ def _edit_file(
                     "message": f"File '{file_path}' exists. Set 'overwrite': true to replace.",
                     "changed": False,
                 }
-            return write_to_file(
+            return await write_to_file(
                 context,
                 file_path,
                 payload.content,
@@ -572,7 +578,7 @@ def _edit_file(
         }
 
 
-def _delete_file(
+async def _delete_file(
     context: RunContext, file_path: str, message_group: str | None = None
 ) -> dict[str, Any]:
     file_path = os.path.abspath(file_path)
@@ -591,37 +597,39 @@ def _delete_file(
     ):
         return _create_rejection_response(file_path)
 
-    try:
+    def _do_delete():
         if not os.path.exists(file_path) or not os.path.isfile(file_path):
-            res = {"error": f"File '{file_path}' does not exist.", "diff": ""}
-        else:
-            with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
-                original = f.read()
-            # Sanitize any surrogate characters from reading
-            try:
-                original = original.encode("utf-8", errors="surrogatepass").decode(
-                    "utf-8", errors="replace"
-                )
-            except (UnicodeEncodeError, UnicodeDecodeError):
-                pass
-            from code_puppy.config import get_diff_context_lines
-
-            diff_text = "".join(
-                difflib.unified_diff(
-                    original.splitlines(keepends=True),
-                    [],
-                    fromfile=f"a/{os.path.basename(file_path)}",
-                    tofile=f"b/{os.path.basename(file_path)}",
-                    n=get_diff_context_lines())
+            return {"error": f"File '{file_path}' does not exist.", "diff": ""}
+        with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
+            original = f.read()
+        # Sanitize any surrogate characters from reading
+        try:
+            original = original.encode("utf-8", errors="surrogatepass").decode(
+                "utf-8", errors="replace"
             )
-            os.remove(file_path)
-            res = {
-                "success": True,
-                "path": file_path,
-                "message": f"File '{file_path}' deleted successfully.",
-                "changed": True,
-                "diff": diff_text,
-            }
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+        from code_puppy.config import get_diff_context_lines
+
+        diff_text = "".join(
+            difflib.unified_diff(
+                original.splitlines(keepends=True),
+                [],
+                fromfile=f"a/{os.path.basename(file_path)}",
+                tofile=f"b/{os.path.basename(file_path)}",
+                n=get_diff_context_lines())
+        )
+        os.remove(file_path)
+        return {
+            "success": True,
+            "path": file_path,
+            "message": f"File '{file_path}' deleted successfully.",
+            "changed": True,
+            "diff": diff_text,
+        }
+
+    try:
+        res = await asyncio.to_thread(_do_delete)
     except Exception as exc:
         _log_error("Unhandled exception in delete_file", exc)
         res = {"error": str(exc), "diff": ""}
@@ -649,7 +657,7 @@ def register_edit_file(agent):
         stacklevel=2)
 
     @agent.tool
-    def edit_file(
+    async def edit_file(
         context: RunContext,
         payload: EditFilePayload | str = "") -> dict[str, Any]:
         """Comprehensive file editing tool supporting multiple modification strategies.
@@ -690,7 +698,7 @@ def register_edit_file(agent):
                 }
 
         # Call _edit_file which will extract file_path from payload and handle group_id generation
-        result = _edit_file(context, payload)
+        result = await _edit_file(context, payload)
         if "diff" in result:
             del result["diff"]
 
@@ -710,14 +718,14 @@ def register_delete_file(agent):
     """Register only the delete_file tool."""
 
     @agent.tool
-    def delete_file(context: RunContext, file_path: str = "") -> dict[str, Any]:
+    async def delete_file(context: RunContext, file_path: str = "") -> dict[str, Any]:
         """Safely delete files with comprehensive logging and diff generation.
 
         Shows exactly what content was removed via diff output.
         """
         # Generate group_id for delete_file tool execution
         group_id = generate_group_id("delete_file", file_path)
-        result = _delete_file(context, file_path, message_group=group_id)
+        result = await _delete_file(context, file_path, message_group=group_id)
         if "diff" in result:
             del result["diff"]
 
@@ -747,14 +755,14 @@ def register_create_file(agent):
     _write_file = write_to_file
 
     @agent.tool
-    def create_file(
+    async def create_file(
         context: RunContext,
         file_path: str = "",
         content: str = "",
         overwrite: bool = False) -> dict[str, Any]:
         """Create a new file or overwrite an existing one with the provided content."""
         group_id = generate_group_id("create_file", file_path)
-        result = _write_file(
+        result = await _write_file(
             context, file_path, content, overwrite, message_group=group_id
         )
         if "diff" in result:
@@ -796,7 +804,7 @@ def register_replace_in_file(agent):
     """Register the replace_in_file tool for targeted text replacements."""
 
     @agent.tool
-    def replace_in_file(
+    async def replace_in_file(
         context: RunContext,
         file_path: str = "",
         replacements: list[InlineReplacement] = []) -> dict[str, Any]:
@@ -810,7 +818,7 @@ def register_replace_in_file(agent):
         replacements_dict = [
             {"old_str": r["old_str"], "new_str": r["new_str"]} for r in replacements
         ]
-        result = _replace_in_file_helper(
+        result = await _replace_in_file_helper(
             context, file_path, replacements_dict, message_group=group_id
         )
         if "diff" in result:
@@ -839,13 +847,13 @@ def register_delete_snippet(agent):
     _remove_snippet = delete_snippet_from_file
 
     @agent.tool
-    def delete_snippet(
+    async def delete_snippet(
         context: RunContext,
         file_path: str = "",
         snippet: str = "") -> dict[str, Any]:
         """Remove the first occurrence of a text snippet from a file."""
         group_id = generate_group_id("delete_snippet", file_path)
-        result = _remove_snippet(context, file_path, snippet, message_group=group_id)
+        result = await _remove_snippet(context, file_path, snippet, message_group=group_id)
         if "diff" in result:
             del result["diff"]
 
