@@ -18,6 +18,7 @@ import base64
 import json
 import logging
 import time
+from functools import lru_cache
 from typing import Any, Callable, MutableMapping
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
@@ -45,6 +46,35 @@ except ImportError:  # pragma: no cover - optional dep
     AsyncAnthropic = None  # type: ignore
 
 
+@lru_cache(maxsize=16)
+def _get_jwt_iat(token: str) -> int:
+    """Decode a JWT and return its 'iat' (issued at) claim.
+    
+    Cached with LRU to avoid repeated decoding of the same token.
+    Returns 0 if the token can't be decoded or has no 'iat' claim.
+    """
+    try:
+        # JWT format: header.payload.signature
+        # We only need the payload (second part)
+        parts = token.split(".")
+        if len(parts) != 3:
+            return 0
+
+        # Decode the payload (base64url encoded)
+        payload_b64 = parts[1]
+        # Add padding if needed (base64url doesn't require padding)
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += "=" * padding
+
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        payload = json.loads(payload_bytes.decode("utf-8"))
+
+        return int(payload.get("iat", 0))
+    except Exception:
+        return 0
+
+
 class ClaudeCacheAsyncClient(httpx.AsyncClient):
     """Async HTTP client with Claude Code OAuth transformations.
 
@@ -61,21 +91,24 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         """Decode a JWT and return its age in seconds.
 
         Returns None if the token can't be decoded or has no timestamp claims.
-        Uses 'iat' (issued at) if available, otherwise calculates from 'exp'.
+        Uses cached 'iat' (issued at) value if available, otherwise calculates from 'exp'.
         """
         if not token:
             return None
 
         try:
-            # JWT format: header.payload.signature
-            # We only need the payload (second part)
+            # Use cached JWT iat extraction to avoid repeated decoding
+            iat = _get_jwt_iat(token)
+            if iat:
+                return time.time() - iat
+
+            # Fall back to calculating from 'exp' claim
+            # (We still decode here as the cache only covers iat extraction)
             parts = token.split(".")
             if len(parts) != 3:
                 return None
 
-            # Decode the payload (base64url encoded)
             payload_b64 = parts[1]
-            # Add padding if needed (base64url doesn't require padding)
             padding = 4 - len(payload_b64) % 4
             if padding != 4:
                 payload_b64 += "=" * padding
@@ -84,15 +117,6 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
             payload = json.loads(payload_bytes.decode("utf-8"))
 
             now = time.time()
-
-            # Prefer 'iat' (issued at) claim if available
-            if "iat" in payload:
-                iat = float(payload["iat"])
-                age = now - iat
-                return age
-
-            # Fall back to calculating from 'exp' claim
-            # Assume tokens are typically valid for TOKEN_MAX_AGE_SECONDS
             if "exp" in payload:
                 exp = float(payload["exp"])
                 # If exp is in the future, calculate how long until expiry
