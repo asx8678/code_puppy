@@ -11,6 +11,7 @@ commands before execution and can block dangerous operations. The PolicyEngine
 provides additional rule-based command filtering.
 """
 import asyncio
+from collections import deque
 import ctypes
 import os
 import select
@@ -842,8 +843,8 @@ def run_shell_command_streaming(
             **{
                 "success": False,
                 "command": command,
-                "stdout": "\n".join(stdout_lines[-256:]),
-                "stderr": "\n".join(stderr_lines[-256:]),
+                "stdout": "\n".join(list(stdout_lines)[-256:]),
+                "stderr": "\n".join(list(stderr_lines)[-256:]),
                 "exit_code": -9,
                 "execution_time": execution_time,
                 "timeout": True,
@@ -898,8 +899,8 @@ def run_shell_command_streaming(
         _unregister_process(process)
 
         # Apply line length limits to stdout/stderr before returning
-        truncated_stdout = stdout_lines[-256:]
-        truncated_stderr = stderr_lines[-256:]
+        truncated_stdout = list(stdout_lines)[-256:]
+        truncated_stderr = list(stderr_lines)[-256:]
 
         # Emit structured ShellOutputMessage for the UI (skip for silent sub-agents)
         if not silent:
@@ -943,8 +944,8 @@ def run_shell_command_streaming(
             success=False,
             command=command,
             error=f"Error during streaming execution: {str(e)}",
-            stdout="\n".join(stdout_lines[-256:]),
-            stderr="\n".join(stderr_lines[-256:]),
+            stdout="\n".join(list(stdout_lines)[-256:]),
+            stderr="\n".join(list(stderr_lines)[-256:]),
             exit_code=-1,
             timeout=False)
 
@@ -1266,14 +1267,14 @@ async def _run_command_inner(
         if stdout:
             stdout_lines = stdout.split("\n")
             truncated_stdout = "\n".join(
-                [_truncate_line(line) for line in stdout_lines[-256:]]
+                [_truncate_line(line) for line in list(stdout_lines)[-256:]]
             )
 
         truncated_stderr = None
         if stderr:
             stderr_lines = stderr.split("\n")
             truncated_stderr = "\n".join(
-                [_truncate_line(line) for line in stderr_lines[-256:]]
+                [_truncate_line(line) for line in list(stderr_lines)[-256:]]
             )
 
         return ShellCommandOutput(
