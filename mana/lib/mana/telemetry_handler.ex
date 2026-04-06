@@ -25,6 +25,11 @@ defmodule Mana.TelemetryHandler do
   @model_stop [:mana, :model, :request, :stop]
   @model_exception [:mana, :model, :request, :exception]
 
+  # Registry stat events (replacing GenServer.cast-based stats)
+  @callbacks_dispatch [:mana, :callbacks, :registry, :dispatch]
+  @tools_registry_call [:mana, :tools, :registry, :call]
+  @tools_registry_error [:mana, :tools, :registry, :error]
+
   # ── Public API ────────────────────────────────────────────────
 
   @doc """
@@ -50,7 +55,10 @@ defmodule Mana.TelemetryHandler do
         @tool_stop,
         @tool_exception,
         @model_stop,
-        @model_exception
+        @model_exception,
+        @callbacks_dispatch,
+        @tools_registry_call,
+        @tools_registry_error
       ],
       &__MODULE__.__handle_event__/4,
       nil
@@ -86,6 +94,21 @@ defmodule Mana.TelemetryHandler do
     :ok
   end
 
+  @doc """
+  Returns a single counter value from telemetry aggregates.
+  """
+  @spec get_counter(atom(), atom()) :: non_neg_integer()
+  def get_counter(category, field) do
+    ensure_table()
+
+    key = {category, field}
+
+    case :ets.lookup(@table, key) do
+      [{^key, value}] when is_integer(value) -> value
+      [] -> 0
+    end
+  end
+
   # ── Telemetry handler callback ────────────────────────────────
 
   @doc false
@@ -110,6 +133,15 @@ defmodule Mana.TelemetryHandler do
 
       [:mana, :model, :request, :exception] ->
         handle_model_exception(measurements, metadata)
+
+      [:mana, :callbacks, :registry, :dispatch] ->
+        handle_callbacks_dispatch(measurements, metadata)
+
+      [:mana, :tools, :registry, :call] ->
+        handle_tools_registry_call(measurements, metadata)
+
+      [:mana, :tools, :registry, :error] ->
+        handle_tools_registry_error(measurements, metadata)
 
       _ ->
         :ok
@@ -253,6 +285,21 @@ defmodule Mana.TelemetryHandler do
     end
   end
 
+  # ── Registry stat handling (replacing GenServer.cast-based stats) ───────────
+
+  defp handle_callbacks_dispatch(measurements, _metadata) do
+    count = Map.get(measurements, :count, 1)
+    increment(:callbacks, :dispatches, count)
+  end
+
+  defp handle_tools_registry_call(_measurements, _metadata) do
+    increment(:tools_registry, :calls)
+  end
+
+  defp handle_tools_registry_error(_measurements, _metadata) do
+    increment(:tools_registry, :errors)
+  end
+
   # ── ETS helpers ───────────────────────────────────────────────
 
   defp ensure_table do
@@ -302,15 +349,6 @@ defmodule Mana.TelemetryHandler do
   end
 
   defp add_sub_category(base, _), do: base
-
-  defp get_counter(category, field) do
-    key = {category, field}
-
-    case :ets.lookup(@table, key) do
-      [{^key, value}] -> value
-      [] -> 0
-    end
-  end
 
   defp get_all_tools do
     match_spec = [

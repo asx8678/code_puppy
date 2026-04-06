@@ -14,7 +14,9 @@ defmodule Mana.Tools.Registry do
   - ETS table `:mana_tools` for fast concurrent reads
   - GenServer only handles registrations (writes)
   - Tool execution happens in caller's process (no bottleneck)
-  - Stats updates are asynchronous via cast
+  - Stats are emitted as telemetry events on each call
+    (`[:mana, :tools, :registry, :call|error]`) and aggregated by
+    `Mana.TelemetryHandler`
 
   ## Usage
 
@@ -127,7 +129,9 @@ defmodule Mana.Tools.Registry do
 
   This function performs tool lookup via ETS (no GenServer blocking)
   and executes the tool in the caller's process for maximum concurrency.
-  Stats updates are performed asynchronously via cast.
+  Stats are emitted as telemetry events on each call
+  (`[:mana, :tools, :registry, :call|error]`) and aggregated by
+  `Mana.TelemetryHandler`.
   """
   @spec execute(String.t(), map()) :: {:ok, term()} | {:error, term()}
   def execute(tool_name, args \\ %{}) do
@@ -148,8 +152,13 @@ defmodule Mana.Tools.Registry do
       [{^tool_name, tool_info}] ->
         try do
           result = tool_info.module.execute(args)
-          # Update stats asynchronously - don't block on this
-          GenServer.cast(__MODULE__, {:increment_calls})
+
+          # Emit telemetry event for stat tracking (replaces GenServer.cast)
+          :telemetry.execute(
+            [:mana, :tools, :registry, :call],
+            %{count: 1},
+            %{tool_name: tool_name}
+          )
 
           result_size =
             case result do
@@ -161,12 +170,23 @@ defmodule Mana.Tools.Registry do
         rescue
           error ->
             Logger.error("Tool execution error for #{tool_name}: #{inspect(error)}")
-            GenServer.cast(__MODULE__, {:increment_errors})
+
+            :telemetry.execute(
+              [:mana, :tools, :registry, :error],
+              %{count: 1},
+              %{tool_name: tool_name}
+            )
+
             {{:error, :execution_failed}, %{tool_name: tool_name, error: inspect(error)}}
         end
 
       [] ->
-        GenServer.cast(__MODULE__, {:increment_errors})
+        :telemetry.execute(
+          [:mana, :tools, :registry, :error],
+          %{count: 1},
+          %{tool_name: tool_name}
+        )
+
         {{:error, :unknown_tool}, %{tool_name: tool_name, error: :unknown_tool}}
     end
   end
@@ -275,7 +295,7 @@ defmodule Mana.Tools.Registry do
     # Verify all expected tools are registered
     verify_tools_registered!()
 
-    {:ok, %{stats: %{calls: 0, errors: 0}}}
+    {:ok, %{}}
   end
 
   @impl true
@@ -306,23 +326,11 @@ defmodule Mana.Tools.Registry do
   def handle_call(:get_stats, _from, state) do
     stats = %{
       tools_registered: :ets.info(@table, :size),
-      calls: state.stats.calls,
-      errors: state.stats.errors
+      calls: Mana.TelemetryHandler.get_counter(:tools_registry, :calls),
+      errors: Mana.TelemetryHandler.get_counter(:tools_registry, :errors)
     }
 
     {:reply, stats, state}
-  end
-
-  @impl true
-  def handle_cast({:increment_calls}, state) do
-    new_stats = %{state.stats | calls: state.stats.calls + 1}
-    {:noreply, %{state | stats: new_stats}}
-  end
-
-  @impl true
-  def handle_cast({:increment_errors}, state) do
-    new_stats = %{state.stats | errors: state.stats.errors + 1}
-    {:noreply, %{state | stats: new_stats}}
   end
 
   @impl true

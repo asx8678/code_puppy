@@ -317,7 +317,6 @@ defmodule Mana.Models.Registry do
   def handle_call({:complete, messages, model, opts}, _from, state) do
     case get_provider_from_state(state, model) do
       {:ok, provider} ->
-        # Return the provider and let the caller make the HTTP call
         new_stats = %{state.stats | dispatches: state.stats.dispatches + 1}
         {:reply, {:dispatch, provider, messages, model, opts}, %{state | stats: new_stats}}
 

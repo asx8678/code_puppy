@@ -68,6 +68,10 @@ defmodule Mana.Tools.RegistryTest do
     # Start a fresh registry for each test
     start_supervised!({Registry, []})
 
+    # Attach telemetry handler and reset counters
+    Mana.TelemetryHandler.attach()
+    Mana.TelemetryHandler.reset()
+
     :ok
   end
 
@@ -158,6 +162,48 @@ defmodule Mana.Tools.RegistryTest do
 
       stats = Registry.get_stats()
       assert stats.calls == 1
+    end
+
+    test "emits :tools_registry :call telemetry on successful execution" do
+      Registry.register(TestTool)
+
+      ref = make_ref()
+
+      :telemetry.attach(
+        {__MODULE__, :tools_call, ref},
+        [:mana, :tools, :registry, :call],
+        fn _e, measurements, metadata, _ ->
+          send(self(), {:tools_call, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach({__MODULE__, :tools_call, ref}) end)
+
+      Registry.execute("test_tool", %{"arg1" => "x"})
+
+      assert_receive {:tools_call, %{count: 1}, %{tool_name: "test_tool"}}, 1000
+    end
+
+    test "emits :tools_registry :error telemetry on execution failure" do
+      Registry.register(ErrorTool)
+
+      ref = make_ref()
+
+      :telemetry.attach(
+        {__MODULE__, :tools_error, ref},
+        [:mana, :tools, :registry, :error],
+        fn _e, measurements, metadata, _ ->
+          send(self(), {:tools_error, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach({__MODULE__, :tools_error, ref}) end)
+
+      Registry.execute("error_tool", %{})
+
+      assert_receive {:tools_error, %{count: 1}, %{tool_name: "error_tool"}}, 1000
     end
   end
 

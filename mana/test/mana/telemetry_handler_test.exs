@@ -220,6 +220,35 @@ defmodule Mana.TelemetryHandlerTest do
     end
   end
 
+  describe "registry stat events" do
+    test "tracks callbacks registry dispatch counters" do
+      :telemetry.execute(
+        [:mana, :callbacks, :registry, :dispatch],
+        %{count: 3},
+        %{phase: :startup}
+      )
+
+      assert TelemetryHandler.get_counter(:callbacks, :dispatches) == 3
+    end
+
+    test "tracks tools registry call and error counters" do
+      :telemetry.execute(
+        [:mana, :tools, :registry, :call],
+        %{count: 1},
+        %{tool_name: "list_files"}
+      )
+
+      :telemetry.execute(
+        [:mana, :tools, :registry, :error],
+        %{count: 1},
+        %{tool_name: "bad_tool"}
+      )
+
+      assert TelemetryHandler.get_counter(:tools_registry, :calls) == 1
+      assert TelemetryHandler.get_counter(:tools_registry, :errors) == 1
+    end
+  end
+
   describe "get_stats/0" do
     test "returns zero defaults when no events fired" do
       stats = TelemetryHandler.get_stats()
