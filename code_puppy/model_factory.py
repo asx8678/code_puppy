@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import pathlib
+from types import MappingProxyType
 from typing import Any, Callable
 
 import httpx
@@ -880,7 +881,7 @@ class ModelFactory:
 
         # Return cache if valid
         if _model_config_cache is not None and current_mtimes == _model_config_mtimes:
-            return _model_config_cache.copy()
+            return MappingProxyType(_model_config_cache)
 
         load_model_config_callbacks = callbacks.get_callbacks("load_model_config")
         if len(load_model_config_callbacks) > 0:
@@ -955,7 +956,7 @@ class ModelFactory:
         _model_config_mtimes.clear()
         _model_config_mtimes.update(current_mtimes)
 
-        return config
+        return MappingProxyType(config)
 
     @staticmethod
     def get_model(model_name: str, config: dict[str, Any]) -> Any:
