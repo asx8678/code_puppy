@@ -149,6 +149,9 @@ class RoundRobinModel(Model):
         model_request_parameters: ModelRequestParameters) -> ModelResponse:
         """Make a request using the next available model in the round-robin sequence."""
         from code_puppy.model_availability import availability_service
+        from code_puppy.tool_call_validation import sanitize_messages
+
+        messages = sanitize_messages(messages)
 
         current_model = self._get_next_model()
         merged_settings, prepared_params = current_model.prepare_request(
@@ -174,6 +177,10 @@ class RoundRobinModel(Model):
         model_request_parameters: ModelRequestParameters,
         run_context: RunContext[Any] | None = None) -> AsyncIterator[StreamedResponse]:
         """Make a streaming request using the next model in the round-robin sequence."""
+        from code_puppy.tool_call_validation import sanitize_messages
+
+        messages = sanitize_messages(messages)
+
         current_model = self._get_next_model()
         # Use prepare_request to merge settings and customize parameters
         merged_settings, prepared_params = current_model.prepare_request(
