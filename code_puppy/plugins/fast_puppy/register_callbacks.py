@@ -50,10 +50,10 @@ def _has_maturin() -> bool:
         return True
     # Try as Python module
     try:
-        subprocess.run(
+        result = subprocess.run(
             [sys.executable, "-m", "maturin", "--version"],
             capture_output=True, timeout=10)
-        return True
+        return result.returncode == 0
     except Exception:
         return False
 
@@ -106,11 +106,17 @@ def _try_auto_build() -> bool:
     if not _has_maturin():
         # Try to install maturin
         try:
-            subprocess.run(
+            install_result = subprocess.run(
                 [sys.executable, "-m", "pip", "install", "maturin"],
-                capture_output=True, timeout=60)
-        except Exception:
-            logger.debug("Could not install maturin")
+                capture_output=True, text=True, timeout=60)
+            if install_result.returncode != 0:
+                stderr = install_result.stderr.strip() if install_result.stderr else ""
+                logger.debug(
+                    "pip install maturin failed (rc=%d): %s",
+                    install_result.returncode, stderr)
+                return False
+        except Exception as exc:
+            logger.debug("Could not install maturin: %s", exc)
             return False
 
     emit_info("🐕⚡ Fast Puppy: Building Rust acceleration module (first time only)...")
@@ -135,8 +141,8 @@ def _try_auto_build() -> bool:
                 _ba.rust_truncation_indices = bridge.truncation_indices
                 _ba.serialize_messages_for_rust = bridge.serialize_messages_for_rust
                 _ba.is_rust_enabled = bridge.is_rust_enabled
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to re-export Rust symbols into base_agent: %s", exc)
 
         if bridge.RUST_AVAILABLE:
             emit_info("🐕⚡ Fast Puppy: Rust module compiled and ready — Zoom! Zoom!")
@@ -172,7 +178,7 @@ def _write_persisted_preference(enabled: bool) -> None:
 
         set_config_value(CONFIG_KEY, str(enabled).lower())
     except Exception:
-        pass
+        logger.warning("Failed to persist fast_puppy preference to config")
 
 
 def _on_startup():

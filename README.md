@@ -159,6 +159,24 @@ Please review this code for security issues." > .claude/commands/review.md
 /review with focus on authentication
 ```
 
+## Rust Acceleration (Optional)
+
+Code Puppy ships as a pure-Python package and works perfectly without Rust.
+If you want extra speed, an optional `code_puppy_core` Rust extension can accelerate message serialization and other hot paths.
+The default hatchling-based install does **not** build the Rust crate — you must compile it manually as shown below.
+
+**Building from source:**
+
+```bash
+# Prerequisites: Rust toolchain (https://rustup.rs) and maturin
+pip install maturin
+cd code_puppy_core
+maturin develop --release
+```
+
+Once built, the extension is detected automatically at startup.
+Use `/fast_puppy enable|disable` to toggle, or just ignore it — pure-Python mode is the default.
+
 ## Requirements
 
 - Python 3.11+
