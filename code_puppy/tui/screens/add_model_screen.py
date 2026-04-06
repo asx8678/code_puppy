@@ -22,12 +22,12 @@ from code_puppy.tui.widgets.searchable_list import SearchableList, SearchableLis
 # ---------------------------------------------------------------------------
 
 
-def _load_registry():
-    """Load the ModelsDevRegistry, returning None on failure."""
+async def _load_registry():
+    """Load the ModelsDevRegistry asynchronously, returning None on failure."""
     try:
         from code_puppy.models_dev_parser import ModelsDevRegistry
 
-        return ModelsDevRegistry()
+        return await ModelsDevRegistry.create()
     except Exception:
         return None
 
@@ -208,9 +208,9 @@ class AddModelScreen(MenuScreen):
             )
         yield Footer()
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         """Load registry and populate the provider list."""
-        self._registry = _load_registry()
+        self._registry = await _load_registry()
         self._show_providers()
 
     # --- Step rendering ----------------------------------------------------
