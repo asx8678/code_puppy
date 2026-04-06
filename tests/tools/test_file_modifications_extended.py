@@ -17,7 +17,8 @@ from code_puppy.tools.file_modifications import (
 class TestFileModificationsExtended:
     """Extended tests for file_modifications.py covering edge cases and error recovery."""
 
-    def test_apply_simple_modification(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_apply_simple_modification(self, tmp_path):
         """Test basic file modification with content replacement."""
         # Create test file
         test_file = tmp_path / "test.py"
@@ -29,14 +30,15 @@ class TestFileModificationsExtended:
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is True
         assert result["changed"] is True
         assert test_file.read_text() == "print('hello modified')"
         assert "diff" in result
 
-    def test_apply_replacements_modification(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_apply_replacements_modification(self, tmp_path):
         """Test targeted text replacements."""
         test_file = tmp_path / "config.py"
         test_file.write_text(
@@ -56,7 +58,7 @@ author = "test"
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is True
         assert result["changed"] is True
@@ -65,7 +67,8 @@ author = "test"
         assert 'version = "2.0.0"' in content
         assert 'author = "test"' in content  # Should remain unchanged
 
-    def test_apply_delete_snippet_modification(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_apply_delete_snippet_modification(self, tmp_path):
         """Test snippet deletion functionality."""
         test_file = tmp_path / "code.py"
         test_file.write_text(
@@ -82,7 +85,7 @@ def hello():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is True
         assert result["changed"] is True
@@ -91,7 +94,8 @@ def hello():
         assert "def hello()" in content
         assert 'return "hello"' in content
 
-    def test_invalid_patch_nonexistent_file(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_invalid_patch_nonexistent_file(self, tmp_path):
         """Test error handling for non-existent files."""
         nonexistent_file = tmp_path / "doesnotexist.py"
 
@@ -101,7 +105,7 @@ def hello():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         # Error responses may have different structures
         assert "success" not in result or result["success"] is False
@@ -109,7 +113,8 @@ def hello():
         error_text = (result.get("error", "") + result.get("message", "")).lower()
         assert "does not exist" in error_text or "no such file" in error_text
 
-    def test_invalid_patch_snippet_not_found(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_invalid_patch_snippet_not_found(self, tmp_path):
         """Test error handling when snippet to delete is not found."""
         test_file = tmp_path / "test.py"
         test_file.write_text("print('hello')")
@@ -119,13 +124,14 @@ def hello():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         # Error responses may have different structures
         assert "success" not in result or result["success"] is False
         assert "snippet not found" in result.get("error", "").lower()
 
-    def test_invalid_patch_replacement_not_found(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_invalid_patch_replacement_not_found(self, tmp_path):
         """Test error handling when replacement text is not found."""
         test_file = tmp_path / "test.py"
         test_file.write_text("print('existing code')")
@@ -136,7 +142,7 @@ def hello():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         # Error responses may have different structures
         assert "success" not in result or result["success"] is False
@@ -145,7 +151,8 @@ def hello():
             or "jw < 0.95" in result.get("error", "").lower()
         )
 
-    def test_overwrite_protection(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_overwrite_protection(self, tmp_path):
         """Test that existing files are protected without overwrite flag."""
         test_file = tmp_path / "existing.py"
         test_file.write_text("original content")
@@ -157,13 +164,14 @@ def hello():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is False
         assert "exists" in result.get("message", "").lower()
         assert test_file.read_text() == "original content"  # Unchanged
 
-    def test_no_changes_scenario(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_no_changes_scenario(self, tmp_path):
         """Test handling when no changes would be made."""
         test_file = tmp_path / "test.py"
         original_content = "print('hello')"
@@ -179,13 +187,14 @@ def hello():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is False
         assert result["changed"] is False
         assert "no changes" in result.get("message", "").lower()
 
-    def test_line_number_handling_multiline_replacement(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_line_number_handling_multiline_replacement(self, tmp_path):
         """Test line number handling with multiline replacements."""
         test_file = tmp_path / "multiline.py"
         test_file.write_text(
@@ -211,7 +220,7 @@ def func3():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is True
         assert result["changed"] is True
@@ -221,7 +230,8 @@ def func3():
         assert "def func1():" in content  # Should remain
         assert "def func3():" in content  # Should remain
 
-    def test_error_recovery_file_permissions(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_error_recovery_file_permissions(self, tmp_path):
         """Test error recovery when file permissions prevent modification."""
         test_file = tmp_path / "readonly.py"
         test_file.write_text("original content")
@@ -235,7 +245,7 @@ def func3():
             )
 
             mock_context = Mock()
-            result = _edit_file(mock_context, payload)
+            result = await _edit_file(mock_context, payload)
 
             # Should handle the permission error gracefully
             # Error responses may have different structures
@@ -248,7 +258,8 @@ def func3():
             # Restore permissions for cleanup
             os.chmod(test_file, 0o644)
 
-    def test_multiple_replacements_order(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_multiple_replacements_order(self, tmp_path):
         """Test that multiple replacements are applied in order."""
         test_file = tmp_path / "order_test.py"
         test_file.write_text("var_a = 1")
@@ -263,12 +274,13 @@ def func3():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is True
         assert test_file.read_text() == "var_a = final"
 
-    def test_special_characters_handling(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_special_characters_handling(self, tmp_path):
         """Test handling of special characters in replacements."""
         test_file = tmp_path / "special.py"
         test_file.write_text('text = "Hello "World"!\nNew line"')
@@ -284,14 +296,15 @@ def func3():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is True
         content = test_file.read_text()
         assert "Python" in content
         assert "\tTabbed" in content
 
-    def test_large_file_handling(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_large_file_handling(self, tmp_path):
         """Test handling of larger files."""
         test_file = tmp_path / "large.py"
 
@@ -308,7 +321,7 @@ def func3():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is True
         content = test_file.read_text()
@@ -316,7 +329,8 @@ def func3():
         assert "line_49 = 49" in content  # Should remain
         assert "line_51 = 51" in content  # Should remain
 
-    def test_unicode_content_handling(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_unicode_content_handling(self, tmp_path):
         """Test handling of Unicode characters in file content."""
         test_file = tmp_path / "unicode.py"
         unicode_content = "# 测试文件\nprint('Hello 世界! 🌍')\nemoji = 🐕"
@@ -330,7 +344,7 @@ def func3():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is True
         content = test_file.read_text(encoding="utf-8")
@@ -338,7 +352,8 @@ def func3():
         assert "# 测试文件" in content  # Should remain
         assert "emoji = 🐕" in content  # Should remain
 
-    def test_empty_file_handling(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_empty_file_handling(self, tmp_path):
         """Test handling of empty files."""
         test_file = tmp_path / "empty.py"
         test_file.write_text("")
@@ -348,12 +363,13 @@ def func3():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is True
         assert test_file.read_text() == "# New content"
 
-    def test_directory_creation(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_directory_creation(self, tmp_path):
         """Test that directories are created when needed."""
         nested_file = tmp_path / "nested" / "deep" / "file.py"
 
@@ -362,13 +378,14 @@ def func3():
         )
 
         mock_context = Mock()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is True
         assert nested_file.exists()
         assert nested_file.read_text() == "print('in nested dir')"
 
-    def test_edit_file_function_variants(self):
+    @pytest.mark.asyncio
+    async def test_edit_file_function_variants(self):
         """Test the _edit_file function with different payload variants."""
         # Test the main _edit_file function directly
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
@@ -383,7 +400,7 @@ def func3():
                 file_path=temp_path, content="print('modified')", overwrite=True
             )
 
-            result = _edit_file(mock_context, payload)
+            result = await _edit_file(mock_context, payload)
 
             # Verify the result structure
             assert result["success"] is True
@@ -393,17 +410,20 @@ def func3():
         finally:
             os.unlink(temp_path)
 
-    def test_json_payload_parsing(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_json_payload_parsing(self, tmp_path):
         """Test JSON string payload parsing for the edit_file tool."""
         # Skip this test for now as it requires complex agent mocking
         pytest.skip("Mock-based test requires complex setup")
 
-    def test_malformed_json_payload(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_malformed_json_payload(self, tmp_path):
         """Test handling of malformed JSON payloads."""
         # Skip this test for now as it requires complex agent mocking
         pytest.skip("Mock-based test requires complex setup")
 
-    def test_unknown_payload_type(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_unknown_payload_type(self, tmp_path):
         """Test handling of unknown payload types."""
         mock_context = Mock()
 
@@ -414,7 +434,7 @@ def func3():
                 self.unknown_field = "unknown"
 
         payload = UnknownPayload()
-        result = _edit_file(mock_context, payload)
+        result = await _edit_file(mock_context, payload)
 
         assert result["success"] is False
         assert "unknown payload type" in result["message"].lower()
@@ -423,7 +443,8 @@ def func3():
 class TestEncodingAndSpecialCharacters:
     """Test handling of various encodings and special characters."""
 
-    def test_edit_file_utf8_content(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_edit_file_utf8_content(self, tmp_path):
         """Test editing file with UTF-8 content including emojis."""
         test_file = tmp_path / "unicode.py"
         test_file.write_text("# Python file\nprint('Hello')\n")
@@ -434,12 +455,13 @@ class TestEncodingAndSpecialCharacters:
             overwrite=True,
         )
 
-        result = _edit_file(None, content)
+        result = await _edit_file(None, content)
 
         assert result["success"] is True
         assert test_file.read_text() == "# Unicode test\nprint('你好世界 🚀')\n"
 
-    def test_edit_file_mixed_line_endings(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_edit_file_mixed_line_endings(self, tmp_path):
         """Test handling of mixed line endings (CRLF/LF)."""
         test_file = tmp_path / "mixed.txt"
         test_file.write_text("line1\r\nline2\nline3\r\n")
@@ -449,11 +471,12 @@ class TestEncodingAndSpecialCharacters:
             replacements=[{"old_str": "line2", "new_str": "line2_modified"}],
         )
 
-        result = _edit_file(None, payload)
+        result = await _edit_file(None, payload)
 
         assert result["success"] is True or result["changed"] is True
 
-    def test_edit_file_special_regex_chars(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_edit_file_special_regex_chars(self, tmp_path):
         """Test replacements with special regex characters."""
         test_file = tmp_path / "regex.txt"
         test_file.write_text("pattern: [a-z]+\nmore: (test)\n")
@@ -463,7 +486,7 @@ class TestEncodingAndSpecialCharacters:
             replacements=[{"old_str": "[a-z]+", "new_str": "[A-Z]+"}],
         )
 
-        result = _edit_file(None, payload)
+        result = await _edit_file(None, payload)
 
         assert result["success"] is True
 
@@ -471,7 +494,8 @@ class TestEncodingAndSpecialCharacters:
 class TestFileSizeAndPerformance:
     """Test handling of large files and performance characteristics."""
 
-    def test_edit_large_file_replacement(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_edit_large_file_replacement(self, tmp_path):
         """Test replacing content in a large file."""
         test_file = tmp_path / "large.txt"
         # Create file with 1000 lines
@@ -483,12 +507,13 @@ class TestFileSizeAndPerformance:
             replacements=[{"old_str": "Line 500", "new_str": "LINE 500"}],
         )
 
-        result = _edit_file(None, payload)
+        result = await _edit_file(None, payload)
 
         assert result["success"] is True
         assert "LINE 500" in test_file.read_text()
 
-    def test_delete_snippet_large_content(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_delete_snippet_large_content(self, tmp_path):
         """Test deleting snippet from large content."""
         test_file = tmp_path / "large_delete.txt"
         content = "start\n" + ("x\n" * 1000) + "end\n"
@@ -499,7 +524,7 @@ class TestFileSizeAndPerformance:
             delete_snippet="x\n",
         )
 
-        result = _edit_file(None, payload)
+        result = await _edit_file(None, payload)
 
         assert result["success"] is True or result["changed"] is True
 
@@ -507,7 +532,8 @@ class TestFileSizeAndPerformance:
 class TestFileModificationSafety:
     """Test safety features in file modification."""
 
-    def test_edit_file_path_traversal_prevention(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_edit_file_path_traversal_prevention(self, tmp_path):
         """Test that path traversal attempts are handled safely."""
         # Attempt to edit outside allowed directory
         dangerous_path = str(tmp_path / "../../../etc/passwd")
@@ -518,12 +544,13 @@ class TestFileModificationSafety:
             overwrite=True,
         )
 
-        result = _edit_file(None, content)
+        result = await _edit_file(None, content)
 
         # Should either fail or normalize the path safely
         assert result is not None
 
-    def test_edit_file_backup_preservation(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_edit_file_backup_preservation(self, tmp_path):
         """Test that backups of original content are handled appropriately."""
         test_file = tmp_path / "backup.txt"
         test_file.write_text("original content")
@@ -533,18 +560,19 @@ class TestFileModificationSafety:
             replacements=[{"old_str": "original", "new_str": "modified"}],
         )
 
-        result = _edit_file(None, payload)
+        result = await _edit_file(None, payload)
 
         assert result["success"] is True
         # Original file should be modified
         assert "modified" in test_file.read_text()
 
-    def test_delete_file_only_regular_files(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_delete_file_only_regular_files(self, tmp_path):
         """Test that delete only works on regular files, not directories."""
         test_dir = tmp_path / "testdir"
         test_dir.mkdir()
 
-        result = _delete_file(None, str(test_dir))
+        result = await _delete_file(None, str(test_dir))
 
         # Should contain error or success=False
         assert "error" in result or result.get("success") is False

@@ -46,10 +46,10 @@ MODELS_PER_PAGE = 15
 SETTING_DEFINITIONS: dict[str] = {
     "temperature": {
         "name": "Temperature",
-        "description": "Controls randomness (0.0-1.0). Lower = more deterministic, higher = more creative.",
+        "description": "Controls randomness (0.0-2.0). Lower = more deterministic, higher = more creative.",
         "type": "numeric",
         "min": 0.0,
-        "max": 1.0,
+        "max": 2.0,
         "step": 0.05,
         "default": None,  # None means use model default
         "format": "{:.2f}",
