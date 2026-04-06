@@ -419,19 +419,30 @@ class RichConsoleRenderer:
             files = stats["files"]
             subdirs = sorted(stats["subdirs"])
 
-            # Calculate total size including subdirectories (recursive)
+            # Memoization caches for recursive calculations (local to this render call)
+            size_cache: dict[str, int] = {}
+            file_count_cache: dict[str, int] = {}
+
+            # Calculate total size including subdirectories (recursive) with memoization
             def get_recursive_size(d: str) -> int:
+                if d in size_cache:
+                    return size_cache[d]
                 s = dir_stats.get(d, {"files": [], "subdirs": set(), "total_size": 0})
                 size = s["total_size"]
                 for sub in s["subdirs"]:
                     size += get_recursive_size(sub)
+                size_cache[d] = size
                 return size
 
+            # Calculate total file count including subdirectories (recursive) with memoization
             def get_recursive_file_count(d: str) -> int:
+                if d in file_count_cache:
+                    return file_count_cache[d]
                 s = dir_stats.get(d, {"files": [], "subdirs": set(), "total_size": 0})
                 count = len(s["files"])
                 for sub in s["subdirs"]:
                     count += get_recursive_file_count(sub)
+                file_count_cache[d] = count
                 return count
 
             indent = "    " * depth
