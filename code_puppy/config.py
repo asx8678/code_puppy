@@ -33,10 +33,13 @@ def _get_config() -> configparser.ConfigParser:
 
 def _invalidate_config() -> None:
     """Force next _get_config() call to re-read from disk."""
-    global _config_cache
+    global _config_cache, _model_context_length_cache
     _config_cache = None
     # Also invalidate the protected token count cache
     get_protected_token_count.cache_clear()
+    # Clear model context length cache since config changes
+    # may affect model resolution
+    _model_context_length_cache.clear()
 
 
 # Truthy string values recognized by _is_truthy() — module-level to avoid
@@ -275,21 +278,43 @@ def get_allow_recursion() -> bool:
     return _is_truthy(get_value("allow_recursion"), default=True)
 
 
-def get_model_context_length() -> int:
+# Cache for model context lengths - cleared when config is invalidated
+_model_context_length_cache: dict[str, int] = {}
+
+
+def _get_model_context_length(model_name: str) -> int:
     """
-    Get the context length for the currently configured model from models.json
+    Get context length for a model, with caching.
+    Cache is cleared when _invalidate_config() is called.
     """
+    # Check cache first
+    if model_name in _model_context_length_cache:
+        return _model_context_length_cache[model_name]
+
+    # Lookup in config
     try:
         from code_puppy.model_factory import ModelFactory
 
         model_configs = ModelFactory.load_config()
-        model_name = get_global_model_name()
-
-        # Get context length from model config
         model_config = model_configs.get(model_name, {})
-        context_length = model_config.get("context_length", 128000)  # Default value
+        context_length = model_config.get("context_length", 128000)
+        result = int(context_length)
+    except Exception:
+        result = 128000
 
-        return int(context_length)
+    # Store in cache
+    _model_context_length_cache[model_name] = result
+    return result
+
+
+def get_model_context_length() -> int:
+    """
+    Get the context length for the currently configured model from models.json.
+    Results are cached per-model to avoid repeated config lookups.
+    """
+    try:
+        model_name = get_global_model_name()
+        return _get_model_context_length(model_name)
     except Exception:
         # Fallback to default context length if anything goes wrong
         return 128000
