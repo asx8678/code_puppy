@@ -94,6 +94,9 @@ class MessageBus:
         # Session context for multi-agent tracking
         self._current_session_id: str | None = None
 
+        # Cache thread ID of the event loop for fast comparison in emit()
+        self._loop_thread_id: int | None = None
+
     # =========================================================================
     # Outgoing Messages (Agent → UI)
     # =========================================================================
@@ -125,11 +128,8 @@ class MessageBus:
             # could cause get_message_nowait to miss the message). For true
             # cross-thread calls, use call_soon_threadsafe.
             if self._event_loop is not None:
-                try:
-                    running_loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    running_loop = None
-                if running_loop is self._event_loop:
+                # Fast path: compare thread IDs instead of calling get_running_loop()
+                if threading.current_thread().ident == self._loop_thread_id:
                     # Already on the event loop thread - put directly
                     self._put_to_outgoing(message)
                 else:
@@ -271,6 +271,7 @@ class MessageBus:
         # Capture the loop for cross-thread call_soon_threadsafe usage
         if self._event_loop is None:
             self._event_loop = loop
+            self._loop_thread_id = threading.current_thread().ident
         future: asyncio.Future[str] = loop.create_future()
 
         with self._lock:
@@ -322,6 +323,7 @@ class MessageBus:
         loop = asyncio.get_running_loop()
         if self._event_loop is None:
             self._event_loop = loop
+            self._loop_thread_id = threading.current_thread().ident
         future: asyncio.Future[tuple[bool, str | None]] = loop.create_future()
 
         with self._lock:
@@ -368,6 +370,7 @@ class MessageBus:
         loop = asyncio.get_running_loop()
         if self._event_loop is None:
             self._event_loop = loop
+            self._loop_thread_id = threading.current_thread().ident
         future: asyncio.Future[tuple[int, str]] = loop.create_future()
 
         with self._lock:
@@ -421,11 +424,8 @@ class MessageBus:
             # immediate delivery. For true cross-thread calls, use
             # call_soon_threadsafe.
             if self._event_loop is not None:
-                try:
-                    running_loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    running_loop = None
-                if running_loop is self._event_loop:
+                # Fast path: compare thread IDs instead of calling get_running_loop()
+                if threading.current_thread().ident == self._loop_thread_id:
                     # Already on the event loop thread - put directly
                     self._put_to_incoming(command)
                 else:
@@ -479,6 +479,7 @@ class MessageBus:
         # Capture the running loop for cross-thread puts
         if self._event_loop is None:
             self._event_loop = asyncio.get_running_loop()
+            self._loop_thread_id = threading.current_thread().ident
         return await self._outgoing.get()
 
     def get_message_nowait(self) -> AnyMessage | None:
@@ -504,6 +505,7 @@ class MessageBus:
         # Capture the running loop for cross-thread puts
         if self._event_loop is None:
             self._event_loop = asyncio.get_running_loop()
+            self._loop_thread_id = threading.current_thread().ident
         return await self._incoming.get()
 
     # =========================================================================
