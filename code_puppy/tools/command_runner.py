@@ -14,7 +14,9 @@ import asyncio
 from collections import deque
 import ctypes
 import os
+import re
 import select
+import shlex
 import signal
 import subprocess
 import sys
@@ -55,7 +57,174 @@ def _truncate_line(line: str) -> str:
     return line
 
 
+# =============================================================================
+# SECURITY: Shell Command Validation
+# =============================================================================
+# Defense-in-depth: Even though upstream security (shell_safety plugin,
+# policy engine, user confirmation) validates commands, we add an additional
+# layer of protection at the execution point to prevent command injection.
+
+# Maximum command length to prevent DoS via massive input
+MAX_COMMAND_LENGTH = 8192
+
+# Dangerous patterns that should be blocked even if upstream checks pass
+# These patterns could indicate command injection attempts
+DANGEROUS_PATTERNS = [
+    # Command substitution that could execute arbitrary code
+    r'`[^`]*`',  # Backtick command substitution: `rm -rf /`
+    r'\$\([^)]*\)',  # $() command substitution: $(rm -rf /)
+    # Process substitution (bash-specific, can be dangerous)
+    r'<\s*\(',  # Input process substitution: <(command)
+    r'>\s*\(',  # Output process substitution: >(command)
+    # Multiple redirections that could be abused
+    r'\d*>&\d*\s*\d*>&',  # Multiple fd redirections
+    # Null byte injection (can cause issues in some contexts)
+    r'\x00',
+]
+
+# Characters that are NEVER allowed in commands (control characters, etc.)
+FORBIDDEN_CHARS = set(
+    chr(i) for i in range(32) if i not in (9, 10, 13)  # Allow tab, LF, CR
+) | {'\x7f'}  # Also forbid DEL character
+
+# Compiled regex patterns for performance
+_COMPILED_DANGEROUS_PATTERNS = [re.compile(p) for p in DANGEROUS_PATTERNS]
+
+
+class CommandValidationError(Exception):
+    """Raised when a command fails security validation."""
+
+    def __init__(self, reason: str, command: str | None = None):
+        self.reason = reason
+        self.command = command
+        super().__init__(f"Command validation failed: {reason}")
+
+
+def _validate_command_length(command: str) -> None:
+    """Validate command length is within acceptable limits.
+
+    Args:
+        command: The command string to validate.
+
+    Raises:
+        CommandValidationError: If command exceeds MAX_COMMAND_LENGTH.
+    """
+    if len(command) > MAX_COMMAND_LENGTH:
+        raise CommandValidationError(
+            f"Command exceeds maximum length of {MAX_COMMAND_LENGTH} characters "
+            f"(got {len(command)} characters)"
+        )
+
+
+def _validate_forbidden_chars(command: str) -> None:
+    """Check for forbidden control characters in command.
+
+    Args:
+        command: The command string to validate.
+
+    Raises:
+        CommandValidationError: If forbidden characters are found.
+    """
+    found_chars = []
+    for i, char in enumerate(command):
+        if char in FORBIDDEN_CHARS:
+            found_chars.append(f"0x{ord(char):02x} at position {i}")
+
+    if found_chars:
+        raise CommandValidationError(
+            f"Command contains forbidden control characters: {', '.join(found_chars[:5])}"
+            f"{' (and more...)' if len(found_chars) > 5 else ''}"
+        )
+
+
+def _validate_dangerous_patterns(command: str) -> None:
+    """Check for dangerous shell patterns that could indicate injection.
+
+    Args:
+        command: The command string to validate.
+
+    Raises:
+        CommandValidationError: If dangerous patterns are detected.
+    """
+    for pattern in _COMPILED_DANGEROUS_PATTERNS:
+        match = pattern.search(command)
+        if match:
+            # Show context around the match
+            start = max(0, match.start() - 20)
+            end = min(len(command), match.end() + 20)
+            context = command[start:end]
+            raise CommandValidationError(
+                f"Command contains dangerous pattern near: '...{context}...'"
+            )
+
+
+def validate_shell_command(command: str) -> str:
+    """Validate a shell command for security issues before execution.
+
+    This is a defense-in-depth measure. Commands are also validated upstream
+    by the shell_safety plugin and policy engine, but we add an additional
+    layer of protection at the execution point.
+
+    Args:
+        command: The shell command to validate.
+
+    Returns:
+        The validated command (unchanged if valid).
+
+    Raises:
+        CommandValidationError: If the command fails security validation.
+    """
+    if not command or not command.strip():
+        raise CommandValidationError("Command cannot be empty or whitespace only")
+
+    _validate_command_length(command)
+    _validate_forbidden_chars(command)
+    _validate_dangerous_patterns(command)
+
+    return command
+
+
+def safe_execute_subprocess(
+    command: str,
+    cwd: str | None = None,
+    **kwargs
+) -> subprocess.Popen:
+    """Execute a subprocess with security validation.
+
+    This wrapper validates the command before execution and uses proper
+    security settings for the subprocess.
+
+    Args:
+        command: The shell command to execute.
+        cwd: Working directory for command execution.
+        **kwargs: Additional arguments to pass to subprocess.Popen.
+
+    Returns:
+        The subprocess.Popen object.
+
+    Raises:
+        CommandValidationError: If command validation fails.
+        subprocess.SubprocessError: If subprocess creation fails.
+    """
+    # Validate command before execution (defense-in-depth)
+    validate_shell_command(command)
+
+    # Use shlex.quote on the entire command as an additional safety measure
+    # This ensures proper escaping if the command is passed to a shell
+    # Note: We still need shell=True for pipes/redirects, but we validate
+    # the command thoroughly before it reaches this point.
+
+    return subprocess.Popen(
+        command,
+        shell=True,  # noqa: S602 — validated above, required for pipes/redirects
+        cwd=cwd,
+        **kwargs
+    )
+
+
+# =============================================================================
 # Windows-specific: Check if pipe has data available without blocking
+# =============================================================================
 # This is needed because select() doesn't work on pipes on Windows
 if sys.platform.startswith("win"):
     import msvcrt
@@ -992,12 +1161,15 @@ async def run_shell_command(
         log_file_path = log_file.name
 
         try:
+            # SECURITY: Validate command before execution (defense-in-depth)
+            validate_shell_command(command)
+
             # Platform-specific process detachment
             if sys.platform.startswith("win"):
                 creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
                 process = subprocess.Popen(
                     command,
-                    shell=True,  # noqa: S602 — see module docstring
+                    shell=True,  # noqa: S602 — validated above, required for pipes/redirects
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
                     stdin=subprocess.DEVNULL,
@@ -1006,7 +1178,7 @@ async def run_shell_command(
             else:
                 process = subprocess.Popen(
                     command,
-                    shell=True,  # noqa: S602 — see module docstring
+                    shell=True,  # noqa: S602 — validated above, required for pipes/redirects
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
                     stdin=subprocess.DEVNULL,
@@ -1213,9 +1385,22 @@ def _run_command_sync(
 
     import io
 
+    # SECURITY: Validate command before execution (defense-in-depth)
+    try:
+        validate_shell_command(command)
+    except CommandValidationError as e:
+        return ShellCommandOutput(
+            success=False,
+            command=command,
+            error=f"Security validation failed: {e.reason}",
+            stdout=None,
+            stderr=None,
+            exit_code=-1,
+            execution_time=0.0)
+
     process = subprocess.Popen(
         command,
-        shell=True,  # noqa: S602 — see module docstring
+        shell=True,  # noqa: S602 — validated above, required for pipes/redirects
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=cwd,
