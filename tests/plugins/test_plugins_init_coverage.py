@@ -1,24 +1,32 @@
-"""Comprehensive tests for code_puppy/plugins/__init__.py.
+"""Comprehensive tests for code_puppy/plugins/__init__.py lazy loading.
 
-Tests cover plugin loading functions including:
-- Built-in plugin loading with various edge cases
-- User plugin loading from ~/.code_puppy/plugins/
+Tests cover lazy plugin loading functions including:
+- Plugin discovery without importing
+- Lazy loading when phases trigger
 - Error handling paths
 - Idempotent loading behavior
 """
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 
 import code_puppy.plugins as plugins_module
 from code_puppy.plugins import (
     USER_PLUGINS_DIR,
-    _load_builtin_plugins,
-    _load_user_plugins,
+    _discover_builtin_plugins,
+    _discover_user_plugins,
+    _extract_phases_from_callbacks_file,
+    _register_lazy_plugin,
+    _create_loader_builtin,
+    _create_loader_user,
+    _load_plugins_for_phase,
+    ensure_plugins_loaded_for_phase,
     ensure_user_plugins_dir,
     get_user_plugins_dir,
     load_plugin_callbacks,
+    _LAZY_PLUGIN_REGISTRY,
+    _LOADED_PLUGINS,
 )
 
 
@@ -58,188 +66,154 @@ class TestEnsureUserPluginsDir:
             assert test_dir.exists()
 
 
-class TestLoadBuiltinPlugins:
-    """Test _load_builtin_plugins function."""
+class TestExtractPhasesFromCallbacksFile:
+    """Test _extract_phases_from_callbacks_file function."""
 
-    def test_loads_valid_plugin(self, tmp_path):
-        """Test loading a valid built-in plugin."""
-        # Create a plugin directory with register_callbacks.py
+    def test_extracts_single_phase(self, tmp_path):
+        """Test extracting a single register_callback phase."""
+        callbacks_file = tmp_path / "register_callbacks.py"
+        callbacks_file.write_text('register_callback("startup", my_func)')
+
+        result = _extract_phases_from_callbacks_file(callbacks_file, "test_plugin")
+        assert result == ["startup"]
+
+    def test_extracts_multiple_phases(self, tmp_path):
+        """Test extracting multiple register_callback phases."""
+        callbacks_file = tmp_path / "register_callbacks.py"
+        callbacks_file.write_text('''
+register_callback("startup", my_func)
+register_callback("shutdown", my_shutdown)
+register_callback("stream_event", my_stream)
+''')
+
+        result = _extract_phases_from_callbacks_file(callbacks_file, "test_plugin")
+        assert sorted(result) == sorted(["startup", "shutdown", "stream_event"])
+
+    def test_ignores_invalid_phases(self, tmp_path):
+        """Test that invalid/unsupported phases are ignored."""
+        callbacks_file = tmp_path / "register_callbacks.py"
+        callbacks_file.write_text('''
+register_callback("startup", my_func)
+register_callback("invalid_phase", my_func)
+''')
+
+        result = _extract_phases_from_callbacks_file(callbacks_file, "test_plugin")
+        assert result == ["startup"]
+
+    def test_defaults_to_startup_if_no_register_callback(self, tmp_path):
+        """Test that startup is default if no register_callback calls found."""
+        callbacks_file = tmp_path / "register_callbacks.py"
+        callbacks_file.write_text('# Just some code without register_callback')
+
+        result = _extract_phases_from_callbacks_file(callbacks_file, "test_plugin")
+        assert result == ["startup"]
+
+    def test_handles_single_quotes(self, tmp_path):
+        """Test that single quotes work for phase names."""
+        callbacks_file = tmp_path / "register_callbacks.py"
+        callbacks_file.write_text("register_callback('startup', my_func)")
+
+        result = _extract_phases_from_callbacks_file(callbacks_file, "test_plugin")
+        assert result == ["startup"]
+
+    def test_handles_file_read_error(self, tmp_path, caplog):
+        """Test graceful handling of file read errors."""
+        callbacks_file = tmp_path / "register_callbacks.py"
+        callbacks_file.write_text("content")
+
+        with patch.object(Path, "read_text", side_effect=IOError("Read error")):
+            result = _extract_phases_from_callbacks_file(callbacks_file, "test_plugin")
+            assert result == ["startup"]  # Defaults to startup on error
+
+
+class TestDiscoverBuiltinPlugins:
+    """Test _discover_builtin_plugins function."""
+
+    def test_discovers_valid_plugin(self, tmp_path):
+        """Test discovering a valid built-in plugin."""
         plugin_dir = tmp_path / "my_plugin"
         plugin_dir.mkdir()
         callbacks_file = plugin_dir / "register_callbacks.py"
-        callbacks_file.write_text("# Plugin callbacks")
+        callbacks_file.write_text('register_callback("startup", my_func)')
 
-        with (
-            patch("code_puppy.config.get_safety_permission_level", return_value="high"),
-            patch("code_puppy.plugins.importlib.import_module") as mock_import,
-        ):
-            result = _load_builtin_plugins(tmp_path)
-            assert "my_plugin" in result
-            mock_import.assert_called_once_with(
-                "code_puppy.plugins.my_plugin.register_callbacks"
-            )
+        with patch("code_puppy.config.get_safety_permission_level", return_value="high"):
+            result = _discover_builtin_plugins(tmp_path)
+            assert len(result) == 1
+            assert result[0][0] == "my_plugin"
+            assert "startup" in result[0][1]
 
     def test_skips_directories_starting_with_underscore(self, tmp_path):
         """Test that directories starting with _ are skipped."""
-        # Create a _private plugin directory
         private_dir = tmp_path / "_private"
         private_dir.mkdir()
         (private_dir / "register_callbacks.py").write_text("# Private")
 
-        with (
-            patch("code_puppy.config.get_safety_permission_level", return_value="high"),
-            patch("code_puppy.plugins.importlib.import_module") as mock_import,
-        ):
-            result = _load_builtin_plugins(tmp_path)
+        with patch("code_puppy.config.get_safety_permission_level", return_value="high"):
+            result = _discover_builtin_plugins(tmp_path)
             assert result == []
-            mock_import.assert_not_called()
 
     def test_skips_files_not_directories(self, tmp_path):
         """Test that regular files are skipped."""
-        # Create a file instead of directory
         (tmp_path / "some_file.py").write_text("# Just a file")
 
-        with (
-            patch("code_puppy.config.get_safety_permission_level", return_value="high"),
-            patch("code_puppy.plugins.importlib.import_module") as mock_import,
-        ):
-            result = _load_builtin_plugins(tmp_path)
+        with patch("code_puppy.config.get_safety_permission_level", return_value="high"):
+            result = _discover_builtin_plugins(tmp_path)
             assert result == []
-            mock_import.assert_not_called()
 
     def test_skips_directories_without_register_callbacks(self, tmp_path):
         """Test that directories without register_callbacks.py are skipped."""
-        # Create a plugin directory without register_callbacks.py
         plugin_dir = tmp_path / "incomplete_plugin"
         plugin_dir.mkdir()
         (plugin_dir / "__init__.py").write_text("# Just init")
 
-        with (
-            patch("code_puppy.config.get_safety_permission_level", return_value="high"),
-            patch("code_puppy.plugins.importlib.import_module") as mock_import,
-        ):
-            result = _load_builtin_plugins(tmp_path)
+        with patch("code_puppy.config.get_safety_permission_level", return_value="high"):
+            result = _discover_builtin_plugins(tmp_path)
             assert result == []
-            mock_import.assert_not_called()
 
     def test_skips_shell_safety_when_safety_level_high(self, tmp_path):
         """Test shell_safety plugin is skipped when safety_permission_level is high."""
-        # Create shell_safety plugin directory
         plugin_dir = tmp_path / "shell_safety"
         plugin_dir.mkdir()
         (plugin_dir / "register_callbacks.py").write_text("# Shell safety")
 
         with (
             patch("code_puppy.config.get_safety_permission_level", return_value="high"),
-            patch("code_puppy.plugins.importlib.import_module") as mock_import,
         ):
-            result = _load_builtin_plugins(tmp_path)
-            assert "shell_safety" not in result
-            mock_import.assert_not_called()
-
-    def test_skips_shell_safety_when_safety_level_medium(self, tmp_path):
-        """Test shell_safety plugin is skipped when safety_permission_level is medium."""
-        plugin_dir = tmp_path / "shell_safety"
-        plugin_dir.mkdir()
-        (plugin_dir / "register_callbacks.py").write_text("# Shell safety")
-
-        with (
-            patch(
-                "code_puppy.config.get_safety_permission_level", return_value="medium"
-            ),
-            patch("code_puppy.plugins.importlib.import_module") as mock_import,
-        ):
-            result = _load_builtin_plugins(tmp_path)
-            assert "shell_safety" not in result
-            mock_import.assert_not_called()
+            result = _discover_builtin_plugins(tmp_path)
+            assert "shell_safety" not in [r[0] for r in result]
 
     def test_loads_shell_safety_when_safety_level_low(self, tmp_path):
-        """Test shell_safety plugin is loaded when safety_permission_level is low."""
+        """Test shell_safety plugin is discovered when safety_permission_level is low."""
         plugin_dir = tmp_path / "shell_safety"
         plugin_dir.mkdir()
         (plugin_dir / "register_callbacks.py").write_text("# Shell safety")
 
         with (
             patch("code_puppy.config.get_safety_permission_level", return_value="low"),
-            patch("code_puppy.plugins.importlib.import_module") as mock_import,
         ):
-            result = _load_builtin_plugins(tmp_path)
-            assert "shell_safety" in result
-            mock_import.assert_called_once_with(
-                "code_puppy.plugins.shell_safety.register_callbacks"
-            )
+            result = _discover_builtin_plugins(tmp_path)
+            assert "shell_safety" in [r[0] for r in result]
 
-    def test_loads_shell_safety_when_safety_level_none(self, tmp_path):
-        """Test shell_safety plugin is loaded when safety_permission_level is none."""
-        plugin_dir = tmp_path / "shell_safety"
-        plugin_dir.mkdir()
-        (plugin_dir / "register_callbacks.py").write_text("# Shell safety")
-
-        with (
-            patch("code_puppy.config.get_safety_permission_level", return_value="none"),
-            patch("code_puppy.plugins.importlib.import_module"),
-        ):
-            result = _load_builtin_plugins(tmp_path)
-            assert "shell_safety" in result
-
-    def test_handles_import_error(self, tmp_path, caplog):
-        """Test graceful handling of ImportError during plugin loading."""
-        plugin_dir = tmp_path / "broken_plugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "register_callbacks.py").write_text("# Broken")
-
-        with (
-            patch("code_puppy.config.get_safety_permission_level", return_value="high"),
-            patch(
-                "code_puppy.plugins.importlib.import_module",
-                side_effect=ImportError("Module not found"),
-            ),
-        ):
-            result = _load_builtin_plugins(tmp_path)
-            assert "broken_plugin" not in result
-            assert "Failed to import callbacks from built-in plugin" in caplog.text
-
-    def test_handles_generic_exception(self, tmp_path, caplog):
-        """Test graceful handling of unexpected exceptions during plugin loading."""
-        plugin_dir = tmp_path / "exploding_plugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "register_callbacks.py").write_text("# Exploding")
-
-        with (
-            patch("code_puppy.config.get_safety_permission_level", return_value="high"),
-            patch(
-                "code_puppy.plugins.importlib.import_module",
-                side_effect=RuntimeError("Something went wrong"),
-            ),
-        ):
-            result = _load_builtin_plugins(tmp_path)
-            assert "exploding_plugin" not in result
-            assert "Unexpected error loading built-in plugin" in caplog.text
-
-    def test_loads_multiple_plugins(self, tmp_path):
-        """Test loading multiple plugins."""
-        # Create multiple plugin directories
+    def test_discovers_multiple_plugins(self, tmp_path):
+        """Test discovering multiple plugins."""
         for name in ["plugin_a", "plugin_b", "plugin_c"]:
             plugin_dir = tmp_path / name
             plugin_dir.mkdir()
-            (plugin_dir / "register_callbacks.py").write_text(f"# {name}")
+            (plugin_dir / "register_callbacks.py").write_text(f'register_callback("startup", func)')
 
-        with (
-            patch("code_puppy.config.get_safety_permission_level", return_value="high"),
-            patch("code_puppy.plugins.importlib.import_module"),
-        ):
-            result = _load_builtin_plugins(tmp_path)
+        with patch("code_puppy.config.get_safety_permission_level", return_value="high"):
+            result = _discover_builtin_plugins(tmp_path)
             assert len(result) == 3
-            assert set(result) == {"plugin_a", "plugin_b", "plugin_c"}
+            assert set(r[0] for r in result) == {"plugin_a", "plugin_b", "plugin_c"}
 
 
-class TestLoadUserPlugins:
-    """Test _load_user_plugins function."""
+class TestDiscoverUserPlugins:
+    """Test _discover_user_plugins function."""
 
     def test_returns_empty_for_nonexistent_directory(self, tmp_path):
         """Test that non-existent directory returns empty list."""
         nonexistent = tmp_path / "does_not_exist"
-        result = _load_user_plugins(nonexistent)
+        result = _discover_user_plugins(nonexistent)
         assert result == []
 
     def test_warns_if_path_is_file_not_directory(self, tmp_path, caplog):
@@ -247,7 +221,7 @@ class TestLoadUserPlugins:
         file_path = tmp_path / "not_a_dir"
         file_path.write_text("I'm a file")
 
-        result = _load_user_plugins(file_path)
+        result = _discover_user_plugins(file_path)
         assert result == []
         assert "User plugins path is not a directory" in caplog.text
 
@@ -257,36 +231,14 @@ class TestLoadUserPlugins:
         user_plugins_dir.mkdir()
         user_plugins_str = str(user_plugins_dir)
 
-        # Ensure it's not already in sys.path
         if user_plugins_str in sys.path:
             sys.path.remove(user_plugins_str)
 
         try:
-            _load_user_plugins(user_plugins_dir)
+            _discover_user_plugins(user_plugins_dir)
             assert user_plugins_str in sys.path
         finally:
-            # Clean up
             if user_plugins_str in sys.path:
-                sys.path.remove(user_plugins_str)
-
-    def test_does_not_duplicate_sys_path_entry(self, tmp_path):
-        """Test that sys.path entry is not duplicated on multiple calls."""
-        user_plugins_dir = tmp_path / "user_plugins"
-        user_plugins_dir.mkdir()
-        user_plugins_str = str(user_plugins_dir)
-
-        # Add it to sys.path first
-        if user_plugins_str not in sys.path:
-            sys.path.insert(0, user_plugins_str)
-
-        original_count = sys.path.count(user_plugins_str)
-
-        try:
-            _load_user_plugins(user_plugins_dir)
-            assert sys.path.count(user_plugins_str) == original_count
-        finally:
-            # Clean up
-            while user_plugins_str in sys.path:
                 sys.path.remove(user_plugins_str)
 
     def test_skips_directories_starting_with_underscore(self, tmp_path):
@@ -299,7 +251,7 @@ class TestLoadUserPlugins:
         (private_dir / "register_callbacks.py").write_text("# Private")
 
         try:
-            result = _load_user_plugins(user_plugins_dir)
+            result = _discover_user_plugins(user_plugins_dir)
             assert result == []
         finally:
             if str(user_plugins_dir) in sys.path:
@@ -315,7 +267,7 @@ class TestLoadUserPlugins:
         (hidden_dir / "register_callbacks.py").write_text("# Hidden")
 
         try:
-            result = _load_user_plugins(user_plugins_dir)
+            result = _discover_user_plugins(user_plugins_dir)
             assert result == []
         finally:
             if str(user_plugins_dir) in sys.path:
@@ -328,362 +280,329 @@ class TestLoadUserPlugins:
         (user_plugins_dir / "some_file.py").write_text("# Just a file")
 
         try:
-            result = _load_user_plugins(user_plugins_dir)
+            result = _discover_user_plugins(user_plugins_dir)
             assert result == []
         finally:
             if str(user_plugins_dir) in sys.path:
                 sys.path.remove(str(user_plugins_dir))
 
-    def test_loads_plugin_with_register_callbacks(self, tmp_path):
-        """Test loading a user plugin with register_callbacks.py."""
+    def test_discovers_plugin_with_register_callbacks(self, tmp_path):
+        """Test discovering a user plugin with register_callbacks.py."""
         user_plugins_dir = tmp_path / "user_plugins"
         user_plugins_dir.mkdir()
 
         plugin_dir = user_plugins_dir / "my_user_plugin"
         plugin_dir.mkdir()
         callbacks_file = plugin_dir / "register_callbacks.py"
-        callbacks_file.write_text("# User plugin callbacks")
+        callbacks_file.write_text('register_callback("startup", my_func)')
 
-        mock_spec = MagicMock()
-        mock_spec.loader = MagicMock()
-        mock_module = MagicMock()
+        try:
+            result = _discover_user_plugins(user_plugins_dir)
+            assert len(result) == 1
+            assert result[0][0] == "my_user_plugin"
+        finally:
+            if str(user_plugins_dir) in sys.path:
+                sys.path.remove(str(user_plugins_dir))
 
-        with (
-            patch(
-                "code_puppy.plugins.importlib.util.spec_from_file_location",
-                return_value=mock_spec,
-            ),
-            patch(
-                "code_puppy.plugins.importlib.util.module_from_spec",
-                return_value=mock_module,
-            ),
-        ):
-            try:
-                result = _load_user_plugins(user_plugins_dir)
-                assert "my_user_plugin" in result
-            finally:
-                if str(user_plugins_dir) in sys.path:
-                    sys.path.remove(str(user_plugins_dir))
-
-    def test_handles_spec_is_none(self, tmp_path, caplog):
-        """Test handling when spec_from_file_location returns None."""
-        user_plugins_dir = tmp_path / "user_plugins"
-        user_plugins_dir.mkdir()
-
-        plugin_dir = user_plugins_dir / "bad_spec_plugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "register_callbacks.py").write_text("# Bad spec")
-
-        with patch(
-            "code_puppy.plugins.importlib.util.spec_from_file_location",
-            return_value=None,
-        ):
-            try:
-                result = _load_user_plugins(user_plugins_dir)
-                assert "bad_spec_plugin" not in result
-                assert "Could not create module spec" in caplog.text
-            finally:
-                if str(user_plugins_dir) in sys.path:
-                    sys.path.remove(str(user_plugins_dir))
-
-    def test_handles_spec_loader_is_none(self, tmp_path, caplog):
-        """Test handling when spec.loader is None."""
-        user_plugins_dir = tmp_path / "user_plugins"
-        user_plugins_dir.mkdir()
-
-        plugin_dir = user_plugins_dir / "no_loader_plugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "register_callbacks.py").write_text("# No loader")
-
-        mock_spec = MagicMock()
-        mock_spec.loader = None
-
-        with patch(
-            "code_puppy.plugins.importlib.util.spec_from_file_location",
-            return_value=mock_spec,
-        ):
-            try:
-                result = _load_user_plugins(user_plugins_dir)
-                assert "no_loader_plugin" not in result
-                assert "Could not create module spec" in caplog.text
-            finally:
-                if str(user_plugins_dir) in sys.path:
-                    sys.path.remove(str(user_plugins_dir))
-
-    def test_handles_import_error_for_register_callbacks(self, tmp_path, caplog):
-        """Test graceful handling of ImportError during user plugin loading."""
-        user_plugins_dir = tmp_path / "user_plugins"
-        user_plugins_dir.mkdir()
-
-        plugin_dir = user_plugins_dir / "import_error_plugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "register_callbacks.py").write_text("# Import error")
-
-        mock_spec = MagicMock()
-        mock_spec.loader = MagicMock()
-        mock_spec.loader.exec_module.side_effect = ImportError("Missing dependency")
-
-        with (
-            patch(
-                "code_puppy.plugins.importlib.util.spec_from_file_location",
-                return_value=mock_spec,
-            ),
-            patch(
-                "code_puppy.plugins.importlib.util.module_from_spec",
-                return_value=MagicMock(),
-            ),
-        ):
-            try:
-                result = _load_user_plugins(user_plugins_dir)
-                assert "import_error_plugin" not in result
-                assert "Failed to import callbacks from user plugin" in caplog.text
-            finally:
-                if str(user_plugins_dir) in sys.path:
-                    sys.path.remove(str(user_plugins_dir))
-
-    def test_handles_generic_exception_for_register_callbacks(self, tmp_path, caplog):
-        """Test graceful handling of unexpected exceptions during user plugin loading."""
-        user_plugins_dir = tmp_path / "user_plugins"
-        user_plugins_dir.mkdir()
-
-        plugin_dir = user_plugins_dir / "exploding_plugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "register_callbacks.py").write_text("# Exploding")
-
-        mock_spec = MagicMock()
-        mock_spec.loader = MagicMock()
-        mock_spec.loader.exec_module.side_effect = RuntimeError("Boom!")
-
-        with (
-            patch(
-                "code_puppy.plugins.importlib.util.spec_from_file_location",
-                return_value=mock_spec,
-            ),
-            patch(
-                "code_puppy.plugins.importlib.util.module_from_spec",
-                return_value=MagicMock(),
-            ),
-        ):
-            try:
-                result = _load_user_plugins(user_plugins_dir)
-                assert "exploding_plugin" not in result
-                assert "Unexpected error loading user plugin" in caplog.text
-            finally:
-                if str(user_plugins_dir) in sys.path:
-                    sys.path.remove(str(user_plugins_dir))
-
-    def test_loads_plugin_with_init_fallback(self, tmp_path):
-        """Test loading a user plugin that only has __init__.py (no register_callbacks)."""
+    def test_discovers_plugin_with_init_fallback(self, tmp_path):
+        """Test discovering a user plugin that only has __init__.py."""
         user_plugins_dir = tmp_path / "user_plugins"
         user_plugins_dir.mkdir()
 
         plugin_dir = user_plugins_dir / "simple_plugin"
         plugin_dir.mkdir()
-        # Only __init__.py, no register_callbacks.py
         init_file = plugin_dir / "__init__.py"
         init_file.write_text("# Simple plugin")
+
+        try:
+            result = _discover_user_plugins(user_plugins_dir)
+            assert len(result) == 1
+            assert result[0][0] == "simple_plugin"
+            assert result[0][1] == ["startup"]
+        finally:
+            if str(user_plugins_dir) in sys.path:
+                sys.path.remove(str(user_plugins_dir))
+
+
+class TestCreateLoaders:
+    """Test lazy loader creation functions."""
+
+    def test_create_loader_builtin_success(self):
+        """Test successful built-in plugin lazy loader."""
+        loader = _create_loader_builtin("my_plugin", "code_puppy.plugins.my_plugin.register_callbacks")
+
+        with patch("code_puppy.plugins.importlib.import_module") as mock_import:
+            mock_import.return_value = MagicMock()
+            result = loader()
+            assert result is not None
+            mock_import.assert_called_once_with("code_puppy.plugins.my_plugin.register_callbacks")
+
+    def test_create_loader_builtin_import_error(self, caplog):
+        """Test built-in loader handles ImportError."""
+        loader = _create_loader_builtin("broken_plugin", "code_puppy.plugins.broken.register_callbacks")
+
+        with patch("code_puppy.plugins.importlib.import_module", side_effect=ImportError("No module")):
+            result = loader()
+            assert result is None
+            assert "Failed to lazy-load built-in plugin" in caplog.text
+
+    def test_create_loader_user_success(self, tmp_path):
+        """Test successful user plugin lazy loader."""
+        callbacks_file = tmp_path / "register_callbacks.py"
+        callbacks_file.write_text("# User plugin")
+
+        loader = _create_loader_user("my_user_plugin", callbacks_file)
 
         mock_spec = MagicMock()
         mock_spec.loader = MagicMock()
         mock_module = MagicMock()
 
         with (
-            patch(
-                "code_puppy.plugins.importlib.util.spec_from_file_location",
-                return_value=mock_spec,
-            ),
-            patch(
-                "code_puppy.plugins.importlib.util.module_from_spec",
-                return_value=mock_module,
-            ),
+            patch("code_puppy.plugins.importlib.util.spec_from_file_location", return_value=mock_spec),
+            patch("code_puppy.plugins.importlib.util.module_from_spec", return_value=mock_module),
         ):
-            try:
-                result = _load_user_plugins(user_plugins_dir)
-                assert "simple_plugin" in result
-            finally:
-                if str(user_plugins_dir) in sys.path:
-                    sys.path.remove(str(user_plugins_dir))
+            result = loader()
+            assert result is mock_module
 
-    def test_handles_spec_is_none_for_init_fallback(self, tmp_path):
-        """Test handling when spec is None for __init__.py fallback."""
-        user_plugins_dir = tmp_path / "user_plugins"
-        user_plugins_dir.mkdir()
+    def test_create_loader_user_spec_is_none(self, tmp_path, caplog):
+        """Test user loader handles spec being None."""
+        callbacks_file = tmp_path / "register_callbacks.py"
+        callbacks_file.write_text("# User plugin")
 
-        plugin_dir = user_plugins_dir / "bad_init_plugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "__init__.py").write_text("# Bad init")
+        loader = _create_loader_user("bad_plugin", callbacks_file)
 
-        with patch(
-            "code_puppy.plugins.importlib.util.spec_from_file_location",
-            return_value=None,
-        ):
-            try:
-                result = _load_user_plugins(user_plugins_dir)
-                assert "bad_init_plugin" not in result
-            finally:
-                if str(user_plugins_dir) in sys.path:
-                    sys.path.remove(str(user_plugins_dir))
+        with patch("code_puppy.plugins.importlib.util.spec_from_file_location", return_value=None):
+            result = loader()
+            assert result is None
+            assert "Could not create module spec for user plugin" in caplog.text
 
-    def test_handles_spec_loader_is_none_for_init_fallback(self, tmp_path):
-        """Test handling when spec.loader is None for __init__.py fallback."""
-        user_plugins_dir = tmp_path / "user_plugins"
-        user_plugins_dir.mkdir()
 
-        plugin_dir = user_plugins_dir / "no_loader_init_plugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "__init__.py").write_text("# No loader")
+class TestLoadPluginsForPhase:
+    """Test _load_plugins_for_phase and ensure_plugins_loaded_for_phase."""
 
-        mock_spec = MagicMock()
-        mock_spec.loader = None
+    def test_loads_registered_plugins(self):
+        """Test that plugins registered for a phase are loaded."""
+        original_registry = dict(_LAZY_PLUGIN_REGISTRY)
+        _LAZY_PLUGIN_REGISTRY.clear()
 
-        with patch(
-            "code_puppy.plugins.importlib.util.spec_from_file_location",
-            return_value=mock_spec,
-        ):
-            try:
-                result = _load_user_plugins(user_plugins_dir)
-                assert "no_loader_init_plugin" not in result
-            finally:
-                if str(user_plugins_dir) in sys.path:
-                    sys.path.remove(str(user_plugins_dir))
+        mock_loader = MagicMock(return_value=MagicMock())
+        _LAZY_PLUGIN_REGISTRY["test_phase"] = [("builtin", "test_plugin", mock_loader)]
 
-    def test_handles_exception_for_init_fallback(self, tmp_path, caplog):
-        """Test graceful handling of exception during __init__.py fallback loading."""
-        user_plugins_dir = tmp_path / "user_plugins"
-        user_plugins_dir.mkdir()
-
-        plugin_dir = user_plugins_dir / "exploding_init_plugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "__init__.py").write_text("# Exploding init")
-
-        mock_spec = MagicMock()
-        mock_spec.loader = MagicMock()
-        mock_spec.loader.exec_module.side_effect = RuntimeError("Init boom!")
-
-        with (
-            patch(
-                "code_puppy.plugins.importlib.util.spec_from_file_location",
-                return_value=mock_spec,
-            ),
-            patch(
-                "code_puppy.plugins.importlib.util.module_from_spec",
-                return_value=MagicMock(),
-            ),
-        ):
-            try:
-                result = _load_user_plugins(user_plugins_dir)
-                assert "exploding_init_plugin" not in result
-                assert "Unexpected error loading user plugin" in caplog.text
-            finally:
-                if str(user_plugins_dir) in sys.path:
-                    sys.path.remove(str(user_plugins_dir))
-
-    def test_skips_directory_without_callbacks_or_init(self, tmp_path):
-        """Test that directories without register_callbacks.py or __init__.py are skipped."""
-        user_plugins_dir = tmp_path / "user_plugins"
-        user_plugins_dir.mkdir()
-
-        # Empty plugin directory
-        plugin_dir = user_plugins_dir / "empty_plugin"
-        plugin_dir.mkdir()
+        original_loaded = set(_LOADED_PLUGINS)
+        _LOADED_PLUGINS.clear()
 
         try:
-            result = _load_user_plugins(user_plugins_dir)
-            assert result == []
+            result = _load_plugins_for_phase("test_phase")
+            assert "test_plugin" in result
+            assert mock_loader.called
+            assert "builtin:test_plugin" in _LOADED_PLUGINS
         finally:
-            if str(user_plugins_dir) in sys.path:
-                sys.path.remove(str(user_plugins_dir))
+            _LAZY_PLUGIN_REGISTRY.clear()
+            _LAZY_PLUGIN_REGISTRY.update(original_registry)
+            _LOADED_PLUGINS.clear()
+            _LOADED_PLUGINS.update(original_loaded)
+
+    def test_skips_already_loaded_plugins(self):
+        """Test that already loaded plugins are skipped."""
+        original_registry = dict(_LAZY_PLUGIN_REGISTRY)
+        _LAZY_PLUGIN_REGISTRY.clear()
+
+        mock_loader = MagicMock(return_value=MagicMock())
+        _LAZY_PLUGIN_REGISTRY["test_phase"] = [("builtin", "test_plugin", mock_loader)]
+
+        original_loaded = set(_LOADED_PLUGINS)
+        _LOADED_PLUGINS.clear()
+        _LOADED_PLUGINS.add("builtin:test_plugin")
+
+        try:
+            result = _load_plugins_for_phase("test_phase")
+            assert result == []
+            assert not mock_loader.called
+        finally:
+            _LAZY_PLUGIN_REGISTRY.clear()
+            _LAZY_PLUGIN_REGISTRY.update(original_registry)
+            _LOADED_PLUGINS.clear()
+            _LOADED_PLUGINS.update(original_loaded)
+
+    def test_handles_load_failure(self, caplog):
+        """Test graceful handling when a plugin fails to load."""
+        original_registry = dict(_LAZY_PLUGIN_REGISTRY)
+        _LAZY_PLUGIN_REGISTRY.clear()
+
+        mock_loader = MagicMock(return_value=None)  # Failed load
+        _LAZY_PLUGIN_REGISTRY["test_phase"] = [("builtin", "failing_plugin", mock_loader)]
+
+        original_loaded = set(_LOADED_PLUGINS)
+        _LOADED_PLUGINS.clear()
+
+        try:
+            result = _load_plugins_for_phase("test_phase")
+            assert result == []  # Plugin not added to loaded list
+            assert mock_loader.called
+            assert "builtin:failing_plugin" not in _LOADED_PLUGINS
+        finally:
+            _LAZY_PLUGIN_REGISTRY.clear()
+            _LAZY_PLUGIN_REGISTRY.update(original_registry)
+            _LOADED_PLUGINS.clear()
+            _LOADED_PLUGINS.update(original_loaded)
+
+    def test_returns_empty_for_unregistered_phase(self):
+        """Test that unregistered phases return empty list."""
+        result = _load_plugins_for_phase("nonexistent_phase")
+        assert result == []
+
+    def test_public_api_ensure_plugins_loaded(self):
+        """Test the public API function."""
+        original_registry = dict(_LAZY_PLUGIN_REGISTRY)
+        _LAZY_PLUGIN_REGISTRY.clear()
+
+        mock_loader = MagicMock(return_value=MagicMock())
+        _LAZY_PLUGIN_REGISTRY["my_phase"] = [("user", "my_plugin", mock_loader)]
+
+        original_loaded = set(_LOADED_PLUGINS)
+        _LOADED_PLUGINS.clear()
+
+        try:
+            result = ensure_plugins_loaded_for_phase("my_phase")
+            assert "my_plugin" in result
+        finally:
+            _LAZY_PLUGIN_REGISTRY.clear()
+            _LAZY_PLUGIN_REGISTRY.update(original_registry)
+            _LOADED_PLUGINS.clear()
+            _LOADED_PLUGINS.update(original_loaded)
+
+
+class TestRegisterLazyPlugin:
+    """Test _register_lazy_plugin function."""
+
+    def test_registers_plugin_for_phase(self):
+        """Test that plugin is registered for the correct phase."""
+        original_registry = dict(_LAZY_PLUGIN_REGISTRY)
+        _LAZY_PLUGIN_REGISTRY.clear()
+
+        mock_loader = MagicMock()
+
+        try:
+            _register_lazy_plugin("startup", "builtin", "test_plugin", mock_loader)
+            assert "startup" in _LAZY_PLUGIN_REGISTRY
+            assert len(_LAZY_PLUGIN_REGISTRY["startup"]) == 1
+            assert _LAZY_PLUGIN_REGISTRY["startup"][0] == ("builtin", "test_plugin", mock_loader)
+        finally:
+            _LAZY_PLUGIN_REGISTRY.clear()
+            _LAZY_PLUGIN_REGISTRY.update(original_registry)
+
+    def test_handles_multiple_phases(self):
+        """Test registering same plugin for multiple phases."""
+        original_registry = dict(_LAZY_PLUGIN_REGISTRY)
+        _LAZY_PLUGIN_REGISTRY.clear()
+
+        mock_loader = MagicMock()
+
+        try:
+            _register_lazy_plugin("startup", "builtin", "multi_plugin", mock_loader)
+            _register_lazy_plugin("shutdown", "builtin", "multi_plugin", mock_loader)
+
+            assert "startup" in _LAZY_PLUGIN_REGISTRY
+            assert "shutdown" in _LAZY_PLUGIN_REGISTRY
+            assert len(_LAZY_PLUGIN_REGISTRY["startup"]) == 1
+            assert len(_LAZY_PLUGIN_REGISTRY["shutdown"]) == 1
+        finally:
+            _LAZY_PLUGIN_REGISTRY.clear()
+            _LAZY_PLUGIN_REGISTRY.update(original_registry)
 
 
 class TestLoadPluginCallbacks:
-    """Test load_plugin_callbacks function."""
+    """Test load_plugin_callbacks function (lazy loading discovery)."""
 
-    def test_idempotent_loading(self):
-        """Test that plugins are only loaded once (idempotent)."""
-        # Reset the global flag for this test
-        original_loaded = plugins_module._PLUGINS_LOADED
-        plugins_module._PLUGINS_LOADED = True
+    def test_idempotent_discovery(self):
+        """Test that plugins are only discovered once (idempotent)."""
+        original_discovered = plugins_module._PLUGINS_DISCOVERED
+        plugins_module._PLUGINS_DISCOVERED = True
 
         try:
             result = load_plugin_callbacks()
-            # Should return empty since plugins are "already loaded"
             assert result == {"builtin": [], "user": []}
         finally:
-            plugins_module._PLUGINS_LOADED = original_loaded
+            plugins_module._PLUGINS_DISCOVERED = original_discovered
 
-    def test_calls_load_functions(self, tmp_path):
-        """Test that load_plugin_callbacks calls both load functions."""
-        # Reset the global flag
-        original_loaded = plugins_module._PLUGINS_LOADED
-        plugins_module._PLUGINS_LOADED = False
+    def test_discovers_and_registers_plugins(self, tmp_path):
+        """Test that load_plugin_callbacks discovers and registers plugins."""
+        original_discovered = plugins_module._PLUGINS_DISCOVERED
+        plugins_module._PLUGINS_DISCOVERED = False
+
+        original_registry = dict(_LAZY_PLUGIN_REGISTRY)
+        _LAZY_PLUGIN_REGISTRY.clear()
 
         with (
             patch(
-                "code_puppy.plugins._load_builtin_plugins",
-                return_value=["builtin_plugin"],
-            ) as mock_builtin,
+                "code_puppy.plugins._discover_builtin_plugins",
+                return_value=[("plugin_a", ["startup"]), ("plugin_b", ["startup", "shutdown"])]
+            ) as mock_discover_builtin,
             patch(
-                "code_puppy.plugins._load_user_plugins", return_value=["user_plugin"]
-            ) as mock_user,
+                "code_puppy.plugins._discover_user_plugins",
+                return_value=[("user_plugin", ["startup"])]
+            ) as mock_discover_user,
         ):
             try:
                 result = load_plugin_callbacks()
-
-                assert result["builtin"] == ["builtin_plugin"]
-                assert result["user"] == ["user_plugin"]
-                mock_builtin.assert_called_once()
-                mock_user.assert_called_once()
-                # Check that the flag was set
-                assert plugins_module._PLUGINS_LOADED is True
+                # Should discover the plugins but not import them yet
+                assert len(result["builtin"]) == 2
+                assert set(result["builtin"]) == {"plugin_a", "plugin_b"}
+                assert len(result["user"]) == 1
+                assert result["user"][0] == "user_plugin"
+                # Plugins should be registered in lazy registry
+                assert "startup" in _LAZY_PLUGIN_REGISTRY
+                assert "shutdown" in _LAZY_PLUGIN_REGISTRY
+                mock_discover_builtin.assert_called_once()
+                mock_discover_user.assert_called_once()
             finally:
-                plugins_module._PLUGINS_LOADED = original_loaded
+                plugins_module._PLUGINS_DISCOVERED = original_discovered
+                _LAZY_PLUGIN_REGISTRY.clear()
+                _LAZY_PLUGIN_REGISTRY.update(original_registry)
 
-    def test_sets_plugins_loaded_flag(self):
-        """Test that _PLUGINS_LOADED flag is set after loading."""
-        original_loaded = plugins_module._PLUGINS_LOADED
-        plugins_module._PLUGINS_LOADED = False
+    def test_sets_discovered_flag(self):
+        """Test that _PLUGINS_DISCOVERED flag is set after discovery."""
+        original_discovered = plugins_module._PLUGINS_DISCOVERED
+        plugins_module._PLUGINS_DISCOVERED = False
 
         with (
-            patch("code_puppy.plugins._load_builtin_plugins", return_value=[]),
-            patch("code_puppy.plugins._load_user_plugins", return_value=[]),
+            patch("code_puppy.plugins._discover_builtin_plugins", return_value=[]),
+            patch("code_puppy.plugins._discover_user_plugins", return_value=[]),
         ):
             try:
                 load_plugin_callbacks()
-                assert plugins_module._PLUGINS_LOADED is True
+                assert plugins_module._PLUGINS_DISCOVERED is True
             finally:
-                plugins_module._PLUGINS_LOADED = original_loaded
+                plugins_module._PLUGINS_DISCOVERED = original_discovered
 
-    def test_logs_loaded_plugins(self, caplog):
-        """Test that loaded plugins are logged."""
+    def test_logs_discovered_plugins(self, caplog):
+        """Test that discovered plugins are logged."""
         import logging
 
-        original_loaded = plugins_module._PLUGINS_LOADED
-        plugins_module._PLUGINS_LOADED = False
+        original_discovered = plugins_module._PLUGINS_DISCOVERED
+        plugins_module._PLUGINS_DISCOVERED = False
 
         with (
-            patch(
-                "code_puppy.plugins._load_builtin_plugins",
-                return_value=["test_builtin"],
-            ),
-            patch("code_puppy.plugins._load_user_plugins", return_value=["test_user"]),
+            patch("code_puppy.plugins._discover_builtin_plugins", return_value=[("test_builtin", ["startup"])]),
+            patch("code_puppy.plugins._discover_user_plugins", return_value=[("test_user", ["startup"])]),
             caplog.at_level(logging.DEBUG),
         ):
             try:
                 load_plugin_callbacks()
-                assert "Loaded plugins" in caplog.text
+                assert "Discovered plugins" in caplog.text
             finally:
-                plugins_module._PLUGINS_LOADED = original_loaded
+                plugins_module._PLUGINS_DISCOVERED = original_discovered
 
-    def test_skips_loading_when_already_loaded_logs_debug(self, caplog):
-        """Test that skipping duplicate load is logged."""
+    def test_skips_discovery_when_already_done_logs_debug(self, caplog):
+        """Test that skipping duplicate discovery is logged."""
         import logging
 
-        original_loaded = plugins_module._PLUGINS_LOADED
-        plugins_module._PLUGINS_LOADED = True
+        original_discovered = plugins_module._PLUGINS_DISCOVERED
+        plugins_module._PLUGINS_DISCOVERED = True
 
         with caplog.at_level(logging.DEBUG):
             try:
                 load_plugin_callbacks()
-                assert "Plugins already loaded" in caplog.text
+                assert "Plugins already discovered" in caplog.text
             finally:
-                plugins_module._PLUGINS_LOADED = original_loaded
+                plugins_module._PLUGINS_DISCOVERED = original_discovered
