@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import pathlib
+from functools import lru_cache
 
 from code_puppy.session_storage import save_session
 
@@ -34,6 +35,8 @@ def _invalidate_config() -> None:
     """Force next _get_config() call to re-read from disk."""
     global _config_cache
     _config_cache = None
+    # Also invalidate the protected token count cache
+    get_protected_token_count.cache_clear()
 
 
 # Truthy string values recognized by _is_truthy() — module-level to avoid
@@ -1126,6 +1129,7 @@ def get_grep_output_verbose():
     return _is_truthy(get_value("grep_output_verbose"), default=False)
 
 
+@lru_cache(maxsize=256)
 def get_protected_token_count():
     """
     Returns the user-configured protected token count for message history compaction.
