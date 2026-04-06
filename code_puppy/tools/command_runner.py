@@ -648,8 +648,8 @@ def run_shell_command_streaming(
 
     ABSOLUTE_TIMEOUT_SECONDS = 270
 
-    stdout_lines = []
-    stderr_lines = []
+    stdout_lines = deque(maxlen=256)
+    stderr_lines = deque(maxlen=256)
 
     stdout_thread = None
     stderr_thread = None
