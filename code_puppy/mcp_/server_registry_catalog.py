@@ -6,6 +6,11 @@ A curated collection of MCP servers that can be easily searched and installed.
 from dataclasses import dataclass, field
 from typing import Any
 
+from code_puppy.mcp_.mcp_security import (
+    CommandInjectionError,
+    safe_expand_placeholders,
+)
+
 
 @dataclass
 class MCPServerRequirements:
@@ -89,8 +94,18 @@ class MCPServerTemplate:
     def to_server_config(self, custom_name: str | None = None, **cmd_args) -> dict[str, Any]:
         """Convert template to server configuration with optional overrides.
 
-        Replaces placeholders in the config with actual values.
-        Placeholders are in the format ${ARG_NAME} in args array.
+        SECURITY: All placeholder replacements are validated to prevent
+        command injection attacks. Placeholders are in the format ${ARG_NAME}.
+
+        Args:
+            custom_name: Optional custom name for the server
+            **cmd_args: Command line arguments to substitute
+
+        Returns:
+            Server configuration dictionary
+
+        Raises:
+            CommandInjectionError: If cmd_args contain dangerous content
         """
         import copy
 
@@ -106,12 +121,14 @@ class MCPServerTemplate:
             for arg in config["args"]:
                 # Check if this arg contains a placeholder like ${db_path}
                 if isinstance(arg, str) and "${" in arg:
-                    # Replace all placeholders in this arg
-                    new_arg = arg
-                    for key, value in cmd_args.items():
-                        placeholder = f"${{{key}}}"
-                        if placeholder in new_arg:
-                            new_arg = new_arg.replace(placeholder, str(value))
+                    # SECURITY: Use safe expansion that validates substituted values
+                    try:
+                        new_arg = safe_expand_placeholders(arg, cmd_args)
+                    except CommandInjectionError as e:
+                        # Re-raise with more context
+                        raise CommandInjectionError(
+                            f"Security violation in argument '{arg}': {e}"
+                        ) from e
                     new_args.append(new_arg)
                 else:
                     new_args.append(arg)
@@ -121,13 +138,14 @@ class MCPServerTemplate:
         if "env" in config:
             for env_key, env_value in config["env"].items():
                 if isinstance(env_value, str) and "${" in env_value:
-                    # Replace all placeholders in env values
-                    new_value = env_value
-                    for key, value in cmd_args.items():
-                        placeholder = f"${{{key}}}"
-                        if placeholder in new_value:
-                            new_value = new_value.replace(placeholder, str(value))
-                    config["env"][env_key] = new_value
+                    # SECURITY: Use safe expansion for env values too
+                    try:
+                        new_value = safe_expand_placeholders(env_value, cmd_args)
+                        config["env"][env_key] = new_value
+                    except CommandInjectionError as e:
+                        raise CommandInjectionError(
+                            f"Security violation in env var '{env_key}': {e}"
+                        ) from e
 
         return config
 

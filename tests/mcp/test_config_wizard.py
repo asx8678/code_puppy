@@ -442,15 +442,18 @@ class TestPromptStdioConfig:
     @patch("code_puppy.mcp_.config_wizard.confirm_ask")
     @patch("code_puppy.mcp_.config_wizard.emit_info")
     @patch("code_puppy.mcp_.config_wizard.emit_warning")
+    @patch("code_puppy.mcp_.config_wizard.emit_error")
     def test_prompt_stdio_config_basic(
-        self, mock_warn, mock_info, mock_confirm, mock_prompt, wizard
+        self, mock_error, mock_warn, mock_info, mock_confirm, mock_prompt, wizard
     ):
         """Test basic Stdio configuration."""
-        mock_prompt.side_effect = ["python server.py", "", "", "30"]
-        mock_confirm.side_effect = [False, False]  # No cwd, no env
+        # Inputs: command (allowed - no confirmation needed), args, cwd, timeout
+        mock_prompt.side_effect = ["python3", "", "", "30"]
+        # Confirmations: skip env vars only
+        mock_confirm.side_effect = [False]
         config = wizard.prompt_stdio_config()
         assert config["type"] == "stdio"
-        assert config["command"] == "python server.py"
+        assert config["command"] == "python3"
         assert config["args"] == []
         assert config["timeout"] == 30
 
@@ -458,43 +461,51 @@ class TestPromptStdioConfig:
     @patch("code_puppy.mcp_.config_wizard.confirm_ask")
     @patch("code_puppy.mcp_.config_wizard.emit_info")
     @patch("code_puppy.mcp_.config_wizard.emit_warning")
+    @patch("code_puppy.mcp_.config_wizard.emit_error")
     def test_prompt_stdio_config_with_args(
-        self, mock_warn, mock_info, mock_confirm, mock_prompt, wizard
+        self, mock_error, mock_warn, mock_info, mock_confirm, mock_prompt, wizard
     ):
         """Test Stdio configuration with arguments."""
-        mock_prompt.side_effect = ["python", "-m server", "", "30"]
-        mock_confirm.side_effect = [False, False]  # No cwd, no env
+        mock_prompt.side_effect = ["python3", "-m server", "", "30"]
+        # Confirmations: skip env vars only
+        mock_confirm.side_effect = [False]
         config = wizard.prompt_stdio_config()
-        assert config["command"] == "python"
+        assert config["command"] == "python3"
         assert config["args"] == ["-m", "server"]
 
     @patch("code_puppy.mcp_.config_wizard.prompt_ask")
     @patch("code_puppy.mcp_.config_wizard.confirm_ask")
     @patch("code_puppy.mcp_.config_wizard.emit_info")
     @patch("code_puppy.mcp_.config_wizard.emit_warning")
+    @patch("code_puppy.mcp_.config_wizard.emit_error")
     def test_prompt_stdio_config_with_cwd(
-        self, mock_warn, mock_info, mock_confirm, mock_prompt, wizard
+        self, mock_error, mock_warn, mock_info, mock_confirm, mock_prompt, wizard
     ):
         """Test Stdio configuration with working directory."""
-        mock_prompt.side_effect = ["python server.py", "", "/tmp", "30"]
-        mock_confirm.side_effect = [False, False]  # No env
-        with patch("os.path.isdir", return_value=True):
-            with patch("os.path.expanduser", return_value="/tmp"):
-                config = wizard.prompt_stdio_config()
+        mock_prompt.side_effect = ["npx", "", "/tmp", "30"]
+        # Confirmations: skip env
+        mock_confirm.side_effect = [False]
+        with patch("code_puppy.mcp_.config_wizard.validate_working_directory", return_value="/tmp"):
+            config = wizard.prompt_stdio_config()
         assert config["cwd"] == "/tmp"
 
     @patch("code_puppy.mcp_.config_wizard.prompt_ask")
     @patch("code_puppy.mcp_.config_wizard.confirm_ask")
     @patch("code_puppy.mcp_.config_wizard.emit_info")
     @patch("code_puppy.mcp_.config_wizard.emit_warning")
+    @patch("code_puppy.mcp_.config_wizard.emit_error")
     def test_prompt_stdio_config_invalid_cwd(
-        self, mock_warn, mock_info, mock_confirm, mock_prompt, wizard
+        self, mock_error, mock_warn, mock_info, mock_confirm, mock_prompt, wizard
     ):
         """Test Stdio configuration with invalid working directory."""
-        mock_prompt.side_effect = ["python server.py", "", "/nonexistent", "30"]
-        mock_confirm.side_effect = [False, False]  # No env
-        with patch("os.path.isdir", return_value=False):
+        mock_prompt.side_effect = ["npx", "", "/nonexistent", "30"]
+        # Confirmations: continue without cwd after error, skip env
+        mock_confirm.side_effect = [True, False]
+        with patch("code_puppy.mcp_.config_wizard.validate_working_directory") as mock_validate:
+            from code_puppy.mcp_.mcp_security import PathTraversalError
+            mock_validate.side_effect = PathTraversalError("Path not allowed")
             config = wizard.prompt_stdio_config()
+        # Should not have cwd when validation fails
         assert "cwd" not in config
         mock_warn.assert_called()
 
@@ -502,12 +513,14 @@ class TestPromptStdioConfig:
     @patch("code_puppy.mcp_.config_wizard.confirm_ask")
     @patch("code_puppy.mcp_.config_wizard.emit_info")
     @patch("code_puppy.mcp_.config_wizard.emit_warning")
+    @patch("code_puppy.mcp_.config_wizard.emit_error")
     def test_prompt_stdio_config_with_env(
-        self, mock_warn, mock_info, mock_confirm, mock_prompt, wizard
+        self, mock_error, mock_warn, mock_info, mock_confirm, mock_prompt, wizard
     ):
         """Test Stdio configuration with environment variables."""
-        mock_prompt.side_effect = ["python server.py", "", "", "30"]
-        mock_confirm.return_value = True  # Add env vars
+        mock_prompt.side_effect = ["npx", "", "", "30"]
+        # Confirmations: add env vars (True)
+        mock_confirm.side_effect = [True]
         with patch.object(wizard, "prompt_env_vars", return_value={"DEBUG": "1"}):
             config = wizard.prompt_stdio_config()
         assert config["env"] == {"DEBUG": "1"}

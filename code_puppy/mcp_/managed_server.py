@@ -1,5 +1,4 @@
-"""
-ManagedMCPServer wrapper class implementation.
+"""ManagedMCPServer wrapper class implementation.
 
 This module provides a managed wrapper around pydantic-ai MCP server classes
 that adds management capabilities while maintaining 100% compatibility.
@@ -23,31 +22,29 @@ from pydantic_ai.mcp import (
 
 from code_puppy.http_utils import create_async_client
 from code_puppy.mcp_.blocking_startup import BlockingMCPServerStdio
+from code_puppy.mcp_.mcp_security import (
+    MCPSecurityError,
+    safe_expand_env_vars,
+    validate_stdio_config,
+)
 
 
+# DEPRECATED: Use safe_expand_env_vars from mcp_security module instead
+# Keeping for backward compatibility but using secure implementation
 def _expand_env_vars(value: Any) -> Any:
     """
     Recursively expand environment variables in config values.
 
-    Supports $VAR and ${VAR} syntax. Works with:
-    - Strings: expands env vars
-    - Dicts: recursively expands all string values
-    - Lists: recursively expands all string elements
-    - Other types: returned as-is
+    SECURITY WARNING: This now uses safe_expand_env_vars from mcp_security
+    to prevent command injection through malicious environment variables.
 
     Args:
         value: The value to expand env vars in
 
     Returns:
-        The value with env vars expanded
+        The value with only safe env vars expanded
     """
-    if isinstance(value, str):
-        return os.path.expandvars(value)
-    elif isinstance(value, dict):
-        return {k: _expand_env_vars(v) for k, v in value.items()}
-    elif isinstance(value, list):
-        return [_expand_env_vars(item) for item in value]
-    return value
+    return safe_expand_env_vars(value)
 
 
 class ServerState(Enum):
@@ -161,8 +158,12 @@ class ManagedMCPServer:
         """
         Create appropriate pydantic-ai server based on config type.
 
+        SECURITY: All stdio configurations are validated through
+        validate_stdio_config() to prevent command injection attacks.
+
         Raises:
             ValueError: If server type is unsupported or config is invalid
+            MCPSecurityError: If security validation fails
             Exception: If server creation fails
         """
         server_type = self.config.type.lower()
@@ -194,12 +195,25 @@ class ManagedMCPServer:
                 )
 
             elif server_type == "stdio":
-                if "command" not in config:
+                # SECURITY: Validate stdio configuration before use
+                # This prevents command injection and path traversal attacks
+                try:
+                    validated_config = validate_stdio_config(config)
+                except MCPSecurityError as e:
+                    # Log security violation and re-raise
+                    from code_puppy.messaging import emit_error
+                    emit_error(
+                        f"SECURITY: MCP server '{self.config.name}' blocked: {e}",
+                        style="red bold"
+                    )
+                    raise
+
+                if "command" not in validated_config:
                     raise ValueError("Stdio server requires 'command' in config")
 
-                # Handle command and arguments (expand env vars)
-                command = _expand_env_vars(config["command"])
-                args = config.get("args", [])
+                # Handle command and arguments (expand env vars safely)
+                command = _expand_env_vars(validated_config["command"])
+                args = validated_config.get("args", [])
                 if isinstance(args, str):
                     # If args is a string, split it then expand
                     args = [_expand_env_vars(a) for a in args.split()]
@@ -209,16 +223,16 @@ class ManagedMCPServer:
                 # Prepare arguments for MCPServerStdio
                 stdio_kwargs = {"command": command, "args": list(args) if args else []}
 
-                # Add optional parameters if provided (expand env vars in env and cwd)
-                if "env" in config:
-                    stdio_kwargs["env"] = _expand_env_vars(config["env"])
-                if "cwd" in config:
-                    stdio_kwargs["cwd"] = _expand_env_vars(config["cwd"])
+                # Add optional parameters if provided (expand env vars safely)
+                if "env" in validated_config:
+                    stdio_kwargs["env"] = _expand_env_vars(validated_config["env"])
+                if "cwd" in validated_config:
+                    stdio_kwargs["cwd"] = _expand_env_vars(validated_config["cwd"])
                 # Default timeout of 60s for stdio servers - some servers like Serena take a while to start
                 # Users can override this in their config
-                stdio_kwargs["timeout"] = config.get("timeout", 60)
-                if "read_timeout" in config:
-                    stdio_kwargs["read_timeout"] = config["read_timeout"]
+                stdio_kwargs["timeout"] = validated_config.get("timeout", 60)
+                if "read_timeout" in validated_config:
+                    stdio_kwargs["read_timeout"] = validated_config["read_timeout"]
 
                 # Use BlockingMCPServerStdio for proper initialization blocking and stderr capture
                 # Create a unique message group for this server
@@ -251,7 +265,7 @@ class ManagedMCPServer:
                 # The workaround is to pass headers directly and let pydantic-ai
                 # create the http_client internally.
                 if config.get("headers"):
-                    # Expand environment variables in headers
+                    # Expand environment variables in headers safely
                     http_kwargs["headers"] = _expand_env_vars(config["headers"])
 
                 self._pydantic_server = MCPServerStreamableHTTP(
@@ -268,17 +282,20 @@ class ManagedMCPServer:
         """
         Create httpx.AsyncClient with headers from config.
 
+        SECURITY: Headers are sanitized to prevent injection attacks.
+
         Returns:
             Configured async HTTP client with custom headers
         """
         headers = self.config.config.get("headers", {})
 
-        # Expand environment variables in headers
+        # Expand environment variables in headers safely
         resolved_headers = {}
         if isinstance(headers, dict):
             for k, v in headers.items():
                 if isinstance(v, str):
-                    resolved_headers[k] = os.path.expandvars(v)
+                    # Use safe expansion that prevents command injection
+                    resolved_headers[k] = _expand_env_vars(v)
                 else:
                     resolved_headers[k] = v
 
