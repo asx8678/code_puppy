@@ -173,17 +173,8 @@ defmodule Mana.Plugins.OllamaSetup do
 
   defp register_model_with_registry(%{"name" => name} = model) do
     config = build_model_config(model)
-
-    try do
-      Mana.Models.Registry.register_model(name, config)
-      Logger.info("[OllamaSetup] Registered model: #{name}")
-    rescue
-      _ ->
-        Logger.debug("[OllamaSetup] Could not register model #{name} — Registry may not be started")
-    catch
-      :exit, _ ->
-        Logger.debug("[OllamaSetup] Could not register model #{name} — Registry not available")
-    end
+    Mana.Models.Registry.register_model(name, config)
+    Logger.info("[OllamaSetup] Registered model: #{name}")
   end
 
   defp register_model_with_registry(_), do: :ok

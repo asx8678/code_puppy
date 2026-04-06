@@ -365,10 +365,6 @@ defmodule Mana.Pack.Leader do
       _ ->
         {:ok, []}
     end
-  rescue
-    e ->
-      Logger.error("Pack Leader: Failed to parse ready output: #{inspect(e)}")
-      {:ok, []}
   end
 
   defp process_review_result({id, {:ok, s}, {:ok, w}}, tasks) do

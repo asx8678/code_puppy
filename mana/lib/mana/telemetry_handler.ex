@@ -314,14 +314,7 @@ defmodule Mana.TelemetryHandler do
 
   defp increment(category, field, amount \\ 1) do
     key = {category, field}
-
-    try do
-      :ets.update_counter(@table, key, amount)
-    rescue
-      ArgumentError ->
-        # Key doesn't exist yet — insert it
-        :ets.insert(@table, {key, amount})
-    end
+    :ets.update_counter(@table, key, {2, amount}, {key, 0})
   end
 
   defp get_category(category) do

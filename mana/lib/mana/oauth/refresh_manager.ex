@@ -257,15 +257,7 @@ defmodule Mana.OAuth.RefreshManager do
     pid = self()
 
     Task.Supervisor.start_child(Mana.TaskSupervisor, fn ->
-      result =
-        try do
-          perform_refresh(provider, refresh_fn)
-        catch
-          kind, reason ->
-            Logger.error("Token refresh crashed for '#{provider}': #{kind} - #{inspect(reason)}")
-            {:error, "Refresh crashed: #{kind}"}
-        end
-
+      result = perform_refresh(provider, refresh_fn)
       send(pid, {:refresh_complete, provider, result})
     end)
 

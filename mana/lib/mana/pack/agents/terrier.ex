@@ -84,34 +84,28 @@ defmodule Mana.Pack.Agents.Terrier do
 
     Logger.debug("Terrier executing: git #{Enum.join(command, " ")}")
 
-    try do
-      case Mana.Pack.CommandRunner.run("git", command,
-             cd: cwd,
-             stderr_to_stdout: true,
-             parallelism: true,
-             timeout: timeout
-           ) do
-        {:ok, output} ->
-          {:ok, %{stdout: output, stderr: "", exit_code: 0}}
+    case Mana.Pack.CommandRunner.run("git", command,
+           cd: cwd,
+           stderr_to_stdout: true,
+           parallelism: true,
+           timeout: timeout
+         ) do
+      {:ok, output} ->
+        {:ok, %{stdout: output, stderr: "", exit_code: 0}}
 
-        {:error, {:exit_code, _code, output}} ->
-          # Check if this is a "already exists" error which we can handle gracefully
-          if String.contains?(output, "already exists") or String.contains?(output, "already checked out") do
-            {:ok, %{stdout: output, stderr: output, exit_code: 0, warning: :already_exists}}
-          else
-            {:error, %{reason: :git_error, stdout: output, exit_code: 1}}
-          end
+      {:error, {:exit_code, _code, output}} ->
+        # Check if this is a "already exists" error which we can handle gracefully
+        if String.contains?(output, "already exists") or String.contains?(output, "already checked out") do
+          {:ok, %{stdout: output, stderr: output, exit_code: 0, warning: :already_exists}}
+        else
+          {:error, %{reason: :git_error, stdout: output, exit_code: 1}}
+        end
 
-        {:error, :timeout} ->
-          {:error, %{reason: :timeout, timeout_ms: timeout}}
+      {:error, :timeout} ->
+        {:error, %{reason: :timeout, timeout_ms: timeout}}
 
-        {:error, reason} ->
-          {:error, reason}
-      end
-    rescue
-      e ->
-        Logger.error("Terrier execution failed: #{inspect(e)}")
-        {:error, %{reason: :execution_failed, details: inspect(e)}}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

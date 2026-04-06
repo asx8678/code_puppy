@@ -73,14 +73,8 @@ defmodule Mana.Web.HealthController do
         0
 
       pid ->
-        try do
-          %{active: active} = Supervisor.count_children(pid)
-          active
-        catch
-          :exit, _ ->
-            Logger.warning("Health check: Failed to count children on Mana.Supervisor")
-            0
-        end
+        %{active: active} = Supervisor.count_children(pid)
+        active
     end
   end
 

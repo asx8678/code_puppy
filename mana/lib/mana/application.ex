@@ -54,12 +54,7 @@ defmodule Mana.Application do
   """
   @spec configure_headless_logging() :: :ok
   def configure_headless_logging do
-    try do
-      Logger.remove_backend(:console)
-    rescue
-      _ -> :ok
-    end
-
+    _ = Logger.remove_backend(:console)
     :ok
   end
 

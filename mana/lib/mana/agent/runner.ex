@@ -155,24 +155,8 @@ defmodule Mana.Agent.Runner do
     # Handle async option
     result =
       if Keyword.get(opts, :async) do
-        try do
-          {:ok, _pid} =
-            Task.Supervisor.start_child(Mana.TaskSupervisor, fn ->
-              do_execute_loop(
-                messages,
-                model_name,
-                tools,
-                opts,
-                session_id,
-                agent_name,
-                user_message
-              )
-            end)
-
-          {:ok, :async_started}
-        catch
-          :exit, _ ->
-            # Task.Supervisor not available, run synchronously
+        {:ok, _pid} =
+          Task.Supervisor.start_child(Mana.TaskSupervisor, fn ->
             do_execute_loop(
               messages,
               model_name,
@@ -182,7 +166,9 @@ defmodule Mana.Agent.Runner do
               agent_name,
               user_message
             )
-        end
+          end)
+
+        {:ok, :async_started}
       else
         do_execute_loop(
           messages,

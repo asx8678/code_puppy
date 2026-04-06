@@ -385,6 +385,7 @@ defmodule Mana.Plugins.AgentSkills do
   defp persist_active_skill_names(skills) do
     names = Enum.map(skills, & &1.name)
 
+    # ConfigStore may not be running during plugin init (e.g. in tests)
     try do
       Mana.Config.Store.put(@active_skills_config_key, names)
     rescue
@@ -395,6 +396,7 @@ defmodule Mana.Plugins.AgentSkills do
   end
 
   defp restore_active_skills do
+    # ConfigStore may not be running during plugin init (e.g. in tests)
     names =
       try do
         Mana.Config.Store.get(@active_skills_config_key, [])

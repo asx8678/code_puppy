@@ -182,56 +182,45 @@ defmodule Mana.Pack.Agents.Shepherd do
 
     result =
       if command do
-        try do
-          case Mana.Pack.CommandRunner.run(command, args,
-                 cd: cwd,
-                 stderr_to_stdout: true,
-                 parallelism: true,
-                 timeout: timeout
-               ) do
-            {:ok, output} ->
-              %{
-                name: check_name,
-                status: :passed,
-                exit_code: 0,
-                output: output,
-                duration_ms: System.monotonic_time(:millisecond) - start_time
-              }
+        case Mana.Pack.CommandRunner.run(command, args,
+               cd: cwd,
+               stderr_to_stdout: true,
+               parallelism: true,
+               timeout: timeout
+             ) do
+          {:ok, output} ->
+            %{
+              name: check_name,
+              status: :passed,
+              exit_code: 0,
+              output: output,
+              duration_ms: System.monotonic_time(:millisecond) - start_time
+            }
 
-            {:error, {:exit_code, _code, output}} ->
-              %{
-                name: check_name,
-                status: :failed,
-                exit_code: 1,
-                output: output,
-                duration_ms: System.monotonic_time(:millisecond) - start_time
-              }
+          {:error, {:exit_code, _code, output}} ->
+            %{
+              name: check_name,
+              status: :failed,
+              exit_code: 1,
+              output: output,
+              duration_ms: System.monotonic_time(:millisecond) - start_time
+            }
 
-            {:error, :timeout} ->
-              %{
-                name: check_name,
-                status: :timeout,
-                exit_code: -1,
-                output: "Check timed out after #{timeout}ms",
-                duration_ms: timeout
-              }
+          {:error, :timeout} ->
+            %{
+              name: check_name,
+              status: :timeout,
+              exit_code: -1,
+              output: "Check timed out after #{timeout}ms",
+              duration_ms: timeout
+            }
 
-            {:error, reason} ->
-              %{
-                name: check_name,
-                status: :error,
-                exit_code: -1,
-                output: "Execution failed: #{inspect(reason)}",
-                duration_ms: System.monotonic_time(:millisecond) - start_time
-              }
-          end
-        rescue
-          e ->
+          {:error, reason} ->
             %{
               name: check_name,
               status: :error,
               exit_code: -1,
-              output: "Execution failed: #{inspect(e)}",
+              output: "Execution failed: #{inspect(reason)}",
               duration_ms: System.monotonic_time(:millisecond) - start_time
             }
         end
@@ -353,24 +342,24 @@ defmodule Mana.Pack.Agents.Shepherd do
   end
 
   defp check_file_size(file_path, limit) do
-    lines =
-      file_path
-      |> File.read!()
-      |> String.split("\n")
-      |> length()
+    case File.read(file_path) do
+      {:ok, content} ->
+        lines = length(String.split(content, "\n"))
 
-    if lines > limit do
-      %{
-        file: file_path,
-        lines: lines,
-        limit: limit,
-        exceeds_by: lines - limit
-      }
-    else
-      nil
+        if lines > limit do
+          %{
+            file: file_path,
+            lines: lines,
+            limit: limit,
+            exceeds_by: lines - limit
+          }
+        else
+          nil
+        end
+
+      {:error, _} ->
+        nil
     end
-  rescue
-    _ -> nil
   end
 
   @doc """
