@@ -88,6 +88,10 @@ class MessageBus:
         self._startup_buffer: list[AnyMessage] = []
         self._has_active_renderer = False
 
+        # Lock-free fast path: Event is set when renderer is active.
+        # Used in emit() to avoid acquiring lock when no subscribers.
+        self._renderer_event = threading.Event()
+
         # Request/Response correlation: prompt_id → Future (for async usage)
         self._pending_requests: dict[str, asyncio.Future[Any]] = {}
 
@@ -126,14 +130,27 @@ class MessageBus:
         Args:
             message: The message to emit.
         """
-        # Auto-tag message with current session if not already set
+        # Lock-free fast path: check if renderer is active without acquiring lock.
+        # This avoids lock contention in the common case of emit with no subscribers.
+        if not self._renderer_event.is_set():
+            # No active renderer - buffer the message without acquiring lock
+            with self._lock:
+                if message.session_id is None and self._current_session_id is not None:
+                    message.session_id = self._current_session_id
+                self._startup_buffer.append(message)
+                # Prevent unbounded buffer growth in headless mode
+                if len(self._startup_buffer) > self._maxsize:
+                    self._startup_buffer = self._startup_buffer[-self._maxsize :]
+            return
+
+        # Renderer is active - need to acquire lock for session tagging and delivery
         with self._lock:
             if message.session_id is None and self._current_session_id is not None:
                 message.session_id = self._current_session_id
 
+            # Double-check renderer status (could have changed)
             if not self._has_active_renderer:
                 self._startup_buffer.append(message)
-                # Prevent unbounded buffer growth in headless mode
                 if len(self._startup_buffer) > self._maxsize:
                     self._startup_buffer = self._startup_buffer[-self._maxsize :]
                 return
@@ -559,6 +576,8 @@ class MessageBus:
         """
         with self._lock:
             self._has_active_renderer = True
+        # Lock-free fast path: signal that renderer is ready
+        self._renderer_event.set()
 
     def mark_renderer_inactive(self) -> None:
         """Mark that no renderer is currently active.
@@ -567,6 +586,8 @@ class MessageBus:
         """
         with self._lock:
             self._has_active_renderer = False
+        # Lock-free fast path: clear renderer ready signal
+        self._renderer_event.clear()
 
     @property
     def has_active_renderer(self) -> bool:
