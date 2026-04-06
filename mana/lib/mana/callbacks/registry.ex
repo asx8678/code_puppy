@@ -13,7 +13,8 @@ defmodule Mana.Callbacks.Registry do
 
   - `callbacks`: Map of phase to ordered list of callback functions
   - `backlog`: Map of phase to buffered events with timestamps
-  - `stats`: Dispatch and error counters
+  - Stats are emitted as telemetry events and aggregated by
+    `Mana.TelemetryHandler` (see `:callbacks` counter family)
 
   ## Usage
 
@@ -138,8 +139,12 @@ defmodule Mana.Callbacks.Registry do
             end
           end)
 
-        # Update stats with unique count
-        GenServer.cast(__MODULE__, {:increment_stats, :dispatches, length(unique_callbacks)})
+        # Emit telemetry event for dispatch tracking (replaces GenServer.cast)
+        :telemetry.execute(
+          [:mana, :callbacks, :registry, :dispatch],
+          %{count: length(unique_callbacks)},
+          %{phase: phase}
+        )
 
         {:ok, results}
       end
@@ -192,7 +197,6 @@ defmodule Mana.Callbacks.Registry do
      %{
        callbacks: %{},
        backlog: %{},
-       stats: %{dispatches: 0, errors: 0},
        config: %{
          max_backlog_size: max_backlog,
          backlog_ttl_ms: backlog_ttl
@@ -257,8 +261,8 @@ defmodule Mana.Callbacks.Registry do
       |> Enum.sum()
 
     stats = %{
-      dispatches: state.stats.dispatches,
-      errors: state.stats.errors,
+      dispatches: Mana.TelemetryHandler.get_counter(:callbacks, :dispatches),
+      errors: Mana.TelemetryHandler.get_counter(:callbacks, :errors),
       callbacks_registered: count_callbacks(state.callbacks),
       backlog_size: backlog_size
     }
@@ -283,13 +287,6 @@ defmodule Mana.Callbacks.Registry do
       end
 
     {:noreply, %{state | backlog: Map.put(state.backlog, phase, backlog)}}
-  end
-
-  @impl true
-  def handle_cast({:increment_stats, :dispatches, count}, state) do
-    new_dispatches = state.stats.dispatches + count
-    new_stats = %{state.stats | dispatches: new_dispatches}
-    {:noreply, %{state | stats: new_stats}}
   end
 
   @impl true

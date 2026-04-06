@@ -11,6 +11,11 @@ defmodule Mana.Models.RegistryTest do
     # Start the registry for each test with unique name
     test_name = :"registry_#{System.unique_integer([:positive])}"
     {:ok, pid} = Registry.start_link(name: test_name)
+
+    # Attach telemetry handler and reset counters
+    Mana.TelemetryHandler.attach()
+    Mana.TelemetryHandler.reset()
+
     %{registry: pid, registry_name: test_name}
   end
 

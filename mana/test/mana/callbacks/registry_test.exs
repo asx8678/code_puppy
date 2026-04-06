@@ -11,6 +11,10 @@ defmodule Mana.Callbacks.RegistryTest do
     # Start a fresh registry for each test
     start_supervised!({Registry, max_backlog_size: 10, backlog_ttl: 1_000})
 
+    # Attach telemetry handler and reset counters
+    Mana.TelemetryHandler.attach()
+    Mana.TelemetryHandler.reset()
+
     :ok
   end
 
@@ -207,6 +211,30 @@ defmodule Mana.Callbacks.RegistryTest do
 
       stats = Registry.get_stats()
       assert stats.dispatches == 1
+    end
+
+    test "emits telemetry for dispatch stats" do
+      test_pid = self()
+      ref = make_ref()
+
+      :telemetry.attach(
+        {__MODULE__, :callbacks_dispatch, ref},
+        [:mana, :callbacks, :registry, :dispatch],
+        fn _event_name, measurements, metadata, _config ->
+          send(test_pid, {:callbacks_dispatch_event, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn ->
+        :telemetry.detach({__MODULE__, :callbacks_dispatch, ref})
+      end)
+
+      callback = fn -> :ok end
+      Registry.register(:startup, callback)
+      Registry.dispatch(:startup, [])
+
+      assert_receive {:callbacks_dispatch_event, %{count: 1}, %{phase: :startup}}
     end
 
     test "executes callbacks in caller process" do
