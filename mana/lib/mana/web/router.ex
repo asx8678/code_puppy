@@ -34,8 +34,14 @@ defmodule Mana.Web.Router do
     live("/", Live.ChatLive, :index)
   end
 
-  # Health check endpoint (no auth required)
+  # Health check endpoints (no auth required)
   scope "/", Mana.Web do
+    # Legacy endpoint at /health (preserved for backward compatibility)
     get("/health", HealthController, :index)
+  end
+
+  # API health check endpoint with detailed supervisor status
+  scope "/api", Mana.Web do
+    get("/health", HealthController, :check)
   end
 end
