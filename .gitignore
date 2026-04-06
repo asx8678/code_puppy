@@ -54,23 +54,24 @@ code_puppy/bundled_skills/
 evals/logs/
 
 # Elixir/Mana build artifacts
-/_build/
-/cover/
-/deps/
-/doc/
-/.fetch
+/mana/_build/
+/mana/cover/
+/mana/deps/
+/mana/doc/
+/mana/.fetch
 erl_crash.dump
 *.ez
 mana-*.tar
 
 # Dialyzer PLT files
-/priv/plts/
+/mana/priv/plts/
+
+# Mana runtime data (sessions, scheduler state)
+/mana/agents/
+/mana/scheduler/
+/mana/sessions/
 
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
 .beads-credential-key
-
-# Ignore top-level mana/ build output, but not test/mana/
-^mana/
-/mana/
