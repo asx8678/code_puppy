@@ -114,18 +114,23 @@ defmodule Mana.Agent.Server do
     model_name = Keyword.get(opts, :model_name, Config.global_model_name())
     session_id = Keyword.get(opts, :session_id)
 
-    system_prompt = Compositor.assemble(agent_def, model_name)
-
     state = %__MODULE__{
       id: generate_id(),
       agent_def: agent_def,
       model_name: model_name,
-      system_prompt: system_prompt,
+      system_prompt: nil,
       session_id: session_id,
       started_at: DateTime.utc_now()
     }
 
-    {:ok, state}
+    # Defer system prompt assembly so init/1 returns quickly
+    {:ok, state, {:continue, :initialize}}
+  end
+
+  @impl true
+  def handle_continue(:initialize, state) do
+    system_prompt = Compositor.assemble(state.agent_def, state.model_name)
+    {:noreply, %{state | system_prompt: system_prompt}}
   end
 
   @impl true

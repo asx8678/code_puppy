@@ -353,15 +353,20 @@ defmodule Mana.Plugin.Manager do
       }
     }
 
-    # Discover and load plugins
+    # Defer plugin discovery and loading so init/1 returns quickly
+    {:ok, state, {:continue, :initialize}}
+  end
+
+  @impl true
+  def handle_continue(:initialize, state) do
     case discover_and_load(state) do
       {:ok, loaded_state} ->
         Logger.info("Plugin Manager initialized with #{loaded_state.stats.plugins_loaded} plugins")
-        {:ok, loaded_state}
+        {:noreply, loaded_state}
 
       {:error, reason} ->
         Logger.error("Plugin Manager failed to initialize: #{inspect(reason)}")
-        {:stop, reason}
+        {:stop, reason, state}
     end
   end
 
