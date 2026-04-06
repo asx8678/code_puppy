@@ -671,6 +671,10 @@ class TestValidateModel:
 # Model context length
 # ---------------------------------------------------------------------------
 class TestModelContextLength:
+    def setup_method(self):
+        # Clear cache before each test to ensure clean state
+        cp_config._model_context_length_cache.clear()
+
     def test_from_config(self):
         with patch(
             "code_puppy.model_factory.ModelFactory.load_config",
