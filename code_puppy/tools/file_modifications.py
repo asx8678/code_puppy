@@ -255,7 +255,11 @@ def _replace_in_file(
     path: str,
     replacements: list[dict[str, str]],
     message_group: str | None = None) -> dict[str, Any]:
-    """Robust replacement engine with explicit edge‑case reporting."""
+    """Robust replacement engine with explicit edge‑case reporting.
+
+    Optimized to cache splitlines() results and avoid repeated string operations.
+    Uses cached line arrays and pre-computed needle lines for fuzzy matching.
+    """
     file_path = os.path.abspath(path)
     diff_text = ""
     try:
@@ -274,17 +278,37 @@ def _replace_in_file(
             pass
 
         modified = original
+        # Cache splitlines result to avoid repeated calls
+        modified_lines: list[str] | None = None
+
         for rep in replacements:
             old_snippet = rep.get("old_str", "")
             new_snippet = rep.get("new_str", "")
 
+            # Fast path: exact match
             if old_snippet and old_snippet in modified:
                 modified = modified.replace(old_snippet, new_snippet, 1)
+                # Invalidate cached lines since content changed
+                modified_lines = None
                 continue
 
+            # Lazy initialization of cached lines
+            if modified_lines is None:
+                modified_lines = modified.splitlines()
+
             had_trailing_newline = modified.endswith("\n")
-            orig_lines = modified.splitlines()
-            loc, score = _find_best_window(orig_lines, old_snippet)
+
+            # Pre-compute needle lines and length for cache
+            needle_stripped = old_snippet.rstrip("\n")
+            needle_lines = needle_stripped.splitlines()
+            needle_len = len(needle_stripped)
+
+            loc, score = _find_best_window(
+                modified_lines,
+                old_snippet,
+                _needle_lines_cache=needle_lines,
+                _needle_len_cache=needle_len,
+            )
 
             if score < 0.95 or loc is None:
                 return {
@@ -295,17 +319,20 @@ def _replace_in_file(
                 }
 
             start, end = loc
-            prefix = "\n".join(orig_lines[:start])
-            suffix = "\n".join(orig_lines[end:])
+            # Build new content using cached line array with direct indexing
             parts = []
-            if prefix:
-                parts.append(prefix)
+            if start > 0:
+                parts.append("\n".join(modified_lines[:start]))
             parts.append(new_snippet.rstrip("\n"))
-            if suffix:
-                parts.append(suffix)
+            if end < len(modified_lines):
+                parts.append("\n".join(modified_lines[end:]))
             modified = "\n".join(parts)
             if had_trailing_newline and not modified.endswith("\n"):
                 modified += "\n"
+
+            # Update cached lines to reflect the change
+            # Re-split only if we need to do more replacements
+            modified_lines = None  # Will be recomputed on next iteration if needed
 
         if modified == original:
             emit_warning(
