@@ -299,8 +299,8 @@ class TurboOrchestrator:
                 # Fall through to native Python on failure
                 pass
 
-        # Fallback to native Python implementation
-        result = await asyncio.to_thread(_list_files, None, directory, recursive)
+        # Fallback to native Python implementation (now async)
+        result = await _list_files(None, directory, recursive)
 
         return {
             "content": result.content,
@@ -335,8 +335,8 @@ class TurboOrchestrator:
                 # Fall through to native Python on failure
                 pass
 
-        # Fallback to native Python implementation
-        result = await asyncio.to_thread(_grep, None, search_string, directory)
+        # Fallback to native Python implementation (now async)
+        result = await _grep(None, search_string, directory)
 
         return {
             "matches": [

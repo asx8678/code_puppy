@@ -8,6 +8,8 @@ import os
 import subprocess
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from code_puppy.tools.file_operations import (
     GrepOutput,
     ListFileOutput,
@@ -127,13 +129,14 @@ class TestSanitizeString:
 class TestGrepFunction:
     """Test the _grep search function."""
 
-    def test_grep_basic_search(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_grep_basic_search(self, tmp_path):
         """Test basic grep search functionality."""
         # Create a test file with searchable content
         test_file = tmp_path / "search_me.py"
         test_file.write_text("def hello_world():\n    print('Hello')\n")
 
-        result = _grep(None, "hello_world", str(tmp_path))
+        result = await _grep(None, "hello_world", str(tmp_path))
 
         assert isinstance(result, GrepOutput)
         # Should find the match (if ripgrep is available)
@@ -141,80 +144,91 @@ class TestGrepFunction:
             assert len(result.matches) > 0
             assert any("hello_world" in (m.line_content or "") for m in result.matches)
 
-    def test_grep_no_matches(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_grep_no_matches(self, tmp_path):
         """Test grep when no matches are found."""
         test_file = tmp_path / "no_match.py"
         test_file.write_text("completely different content\n")
 
-        result = _grep(None, "xyz123_nonexistent_string_abc", str(tmp_path))
+        result = await _grep(None, "xyz123_nonexistent_string_abc", str(tmp_path))
 
         assert isinstance(result, GrepOutput)
         if result.error is None:
             assert len(result.matches) == 0
 
-    def test_grep_multiple_matches(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_grep_multiple_matches(self, tmp_path):
         """Test grep with multiple matches."""
         test_file = tmp_path / "multi.py"
         content = "\n".join([f"line_{i} pattern_to_find" for i in range(10)])
         test_file.write_text(content)
 
-        result = _grep(None, "pattern_to_find", str(tmp_path))
+        result = await _grep(None, "pattern_to_find", str(tmp_path))
 
         if result.error is None:
             assert len(result.matches) >= 1
 
-    def test_grep_with_tilde_path(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_grep_with_tilde_path(self, tmp_path):
         """Test grep expands tilde in paths."""
         # Create test file
         test_file = tmp_path / "tilde_test.py"
         test_file.write_text("searchable content here\n")
 
         with patch.dict(os.environ, {"HOME": str(tmp_path)}):
-            result = _grep(None, "searchable", "~")
+            result = await _grep(None, "searchable", "~")
             assert isinstance(result, GrepOutput)
 
-    def test_grep_sanitizes_search_string(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_grep_sanitizes_search_string(self, tmp_path):
         """Test that grep sanitizes the search string."""
         test_file = tmp_path / "sanitize_test.py"
         test_file.write_text("normal content\n")
 
         # Search with a string containing a surrogate (will be sanitized)
         search = "normal" + chr(0xD800)
-        result = _grep(None, search, str(tmp_path))
+        result = await _grep(None, search, str(tmp_path))
         assert isinstance(result, GrepOutput)
 
-    @patch("subprocess.run")
-    def test_grep_timeout_handling(self, mock_run, tmp_path):
+    @pytest.mark.asyncio
+    async def test_grep_timeout_handling(self, tmp_path):
         """Test grep handles timeout gracefully."""
-        mock_run.side_effect = subprocess.TimeoutExpired("rg", 30)
+        def mock_run(*args, **kwargs):
+            raise subprocess.TimeoutExpired("rg", 30)
 
-        result = _grep(None, "test", str(tmp_path))
+        with patch("code_puppy.tools.file_operations.asyncio.to_thread", side_effect=mock_run):
+            result = await _grep(None, "test", str(tmp_path))
 
         assert result.error is not None
         assert "timed out" in result.error
         assert result.matches == []
 
-    @patch("subprocess.run")
-    def test_grep_file_not_found_error(self, mock_run, tmp_path):
+    @pytest.mark.asyncio
+    async def test_grep_file_not_found_error(self, tmp_path):
         """Test grep handles FileNotFoundError (ripgrep not installed)."""
-        mock_run.side_effect = FileNotFoundError("rg not found")
+        def mock_run(*args, **kwargs):
+            raise FileNotFoundError("rg not found")
 
-        result = _grep(None, "test", str(tmp_path))
+        with patch("code_puppy.tools.file_operations.asyncio.to_thread", side_effect=mock_run):
+            result = await _grep(None, "test", str(tmp_path))
 
         assert result.error is not None
         assert "ripgrep" in result.error.lower() or "not found" in result.error.lower()
 
-    @patch("subprocess.run")
-    def test_grep_generic_exception(self, mock_run, tmp_path):
+    @pytest.mark.asyncio
+    async def test_grep_generic_exception(self, tmp_path):
         """Test grep handles generic exceptions."""
-        mock_run.side_effect = RuntimeError("Unexpected error")
+        def mock_run(*args, **kwargs):
+            raise RuntimeError("Unexpected error")
 
-        result = _grep(None, "test", str(tmp_path))
+        with patch("code_puppy.tools.file_operations.asyncio.to_thread", side_effect=mock_run):
+            result = await _grep(None, "test", str(tmp_path))
 
         assert result.error is not None
         assert "error" in result.error.lower()
 
-    def test_grep_ripgrep_not_found(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_grep_ripgrep_not_found(self, tmp_path):
         """Test grep when ripgrep is not available."""
         # Mock both shutil.which and os.path.exists to ensure rg is not found
         with (
@@ -224,39 +238,42 @@ class TestGrepFunction:
                 side_effect=lambda p: not (p.endswith("rg") or p.endswith("rg.exe")),
             ),
         ):
-            result = _grep(None, "test", str(tmp_path))
+            result = await _grep(None, "test", str(tmp_path))
 
         assert result.error is not None
         assert "ripgrep" in result.error.lower()
 
-    def test_grep_long_line_truncation(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_grep_long_line_truncation(self, tmp_path):
         """Test that very long matching lines are truncated."""
         test_file = tmp_path / "long_line.py"
         # Create a line longer than 512 characters with the pattern
         long_content = "findme" + "x" * 600 + "\n"
         test_file.write_text(long_content)
 
-        result = _grep(None, "findme", str(tmp_path))
+        result = await _grep(None, "findme", str(tmp_path))
 
         if result.error is None and len(result.matches) > 0:
             # Content should be truncated to max 512 chars
             for match in result.matches:
                 assert len(match.line_content or "") <= 512
 
-    def test_grep_json_decode_error_handling(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_grep_json_decode_error_handling(self, tmp_path):
         """Test that invalid JSON lines in ripgrep output are skipped."""
         test_file = tmp_path / "test.py"
         test_file.write_text("content\n")
 
         # This should work normally - JSON decode errors are internal to parsing
-        result = _grep(None, "content", str(tmp_path))
+        result = await _grep(None, "content", str(tmp_path))
         assert isinstance(result, GrepOutput)
 
 
 class TestListFilesRipgrepHandling:
     """Test _list_files handling of ripgrep edge cases."""
 
-    def test_list_files_ripgrep_not_found_recursive(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_ripgrep_not_found_recursive(self, tmp_path):
         """Test list_files error when ripgrep not found for recursive listing."""
         # Mock both shutil.which and os.path.exists to ensure rg is not found
         with (
@@ -266,12 +283,13 @@ class TestListFilesRipgrepHandling:
                 side_effect=lambda p: not (p.endswith("rg") or p.endswith("rg.exe")),
             ),
         ):
-            result = _list_files(None, str(tmp_path), recursive=True)
+            result = await _list_files(None, str(tmp_path), recursive=True)
 
         assert result.error is not None
         assert "ripgrep" in result.error.lower() or "rg" in result.error.lower()
 
-    def test_list_files_non_recursive_without_ripgrep(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_non_recursive_without_ripgrep(self, tmp_path):
         """Test non-recursive listing works without ripgrep."""
         # Create some files
         (tmp_path / "file1.txt").write_text("content1")
@@ -279,18 +297,20 @@ class TestListFilesRipgrepHandling:
 
         # Non-recursive should work even with mocked ripgrep
         with patch("shutil.which", return_value=None):
-            result = _list_files(None, str(tmp_path), recursive=False)
+            result = await _list_files(None, str(tmp_path), recursive=False)
 
         assert result.error is None
         assert "file1.txt" in result.content
         assert "file2.py" in result.content
 
-    @patch("subprocess.run")
-    def test_list_files_general_exception(self, mock_run, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_general_exception(self, tmp_path):
         """Test list_files handles general exceptions."""
-        mock_run.side_effect = RuntimeError("Unexpected error occurred")
+        def mock_run(*args, **kwargs):
+            raise RuntimeError("Unexpected error occurred")
 
-        result = _list_files(None, str(tmp_path), recursive=True)
+        with patch("code_puppy.tools.file_operations.asyncio.to_thread", side_effect=mock_run):
+            result = await _list_files(None, str(tmp_path), recursive=True)
 
         assert result.error is not None
         assert "error" in result.error.lower()
@@ -299,7 +319,8 @@ class TestListFilesRipgrepHandling:
 class TestListFilesNonRecursiveMode:
     """Test _list_files non-recursive mode handling."""
 
-    def test_non_recursive_skips_hidden_dirs(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_non_recursive_skips_hidden_dirs(self, tmp_path):
         """Test that non-recursive mode skips hidden directories."""
         hidden_dir = tmp_path / ".hidden"
         hidden_dir.mkdir()
@@ -308,12 +329,13 @@ class TestListFilesNonRecursiveMode:
         visible_file = tmp_path / "visible.txt"
         visible_file.write_text("visible")
 
-        result = _list_files(None, str(tmp_path), recursive=False)
+        result = await _list_files(None, str(tmp_path), recursive=False)
 
         assert "visible.txt" in result.content
         assert ".hidden" not in result.content
 
-    def test_non_recursive_handles_oserror(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_non_recursive_handles_oserror(self, tmp_path):
         """Test non-recursive mode handles OSError in listdir."""
         # Create a file with no permissions
         restricted = tmp_path / "restricted"
@@ -322,17 +344,18 @@ class TestListFilesNonRecursiveMode:
 
         try:
             # Listing parent should still work
-            result = _list_files(None, str(tmp_path), recursive=False)
+            result = await _list_files(None, str(tmp_path), recursive=False)
             assert result.content is not None
         finally:
             restricted.chmod(0o755)
 
-    def test_non_recursive_file_size_oserror(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_non_recursive_file_size_oserror(self, tmp_path):
         """Test that OSError when getting file size is handled."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("content")
 
-        result = _list_files(None, str(tmp_path), recursive=False)
+        result = await _list_files(None, str(tmp_path), recursive=False)
 
         # Should still list the file
         assert "test.txt" in result.content
@@ -341,7 +364,8 @@ class TestListFilesNonRecursiveMode:
 class TestHomeDirectoryDetection:
     """Test home directory detection with context parameter."""
 
-    def test_home_dir_with_context_limits_recursion(self):
+    @pytest.mark.asyncio
+    async def test_home_dir_with_context_limits_recursion(self):
         """Test that home directory detection limits recursion when context is provided."""
         # Get actual home directory
         home = os.path.expanduser("~")
@@ -350,7 +374,7 @@ class TestHomeDirectoryDetection:
         mock_context = MagicMock()
 
         # Listing home with context should auto-limit recursion
-        result = _list_files(mock_context, home, recursive=True)
+        result = await _list_files(mock_context, home, recursive=True)
 
         # Should contain warning about limiting recursion
         # (unless it's actually a project directory)
@@ -433,30 +457,33 @@ class TestReadFileUnicodeHandling:
 class TestFileSizeFormatting:
     """Test the format_size helper function by triggering different size ranges."""
 
-    def test_bytes_format(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_bytes_format(self, tmp_path):
         """Test formatting for small files (bytes)."""
         small_file = tmp_path / "small.txt"
         small_file.write_text("x" * 100)  # 100 bytes
 
-        result = _list_files(None, str(tmp_path), recursive=False)
+        result = await _list_files(None, str(tmp_path), recursive=False)
 
         assert "100 B" in result.content
 
-    def test_kilobytes_format(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_kilobytes_format(self, tmp_path):
         """Test formatting for KB-sized files."""
         kb_file = tmp_path / "kb_file.txt"
         kb_file.write_text("x" * 2048)  # 2 KB
 
-        result = _list_files(None, str(tmp_path), recursive=False)
+        result = await _list_files(None, str(tmp_path), recursive=False)
 
         assert "KB" in result.content
 
-    def test_megabytes_format(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_megabytes_format(self, tmp_path):
         """Test formatting for MB-sized files."""
         mb_file = tmp_path / "mb_file.txt"
         mb_file.write_text("x" * (1024 * 1024 + 100))  # ~1 MB
 
-        result = _list_files(None, str(tmp_path), recursive=False)
+        result = await _list_files(None, str(tmp_path), recursive=False)
 
         assert "MB" in result.content
 
@@ -517,7 +544,8 @@ class TestRegisterFunctions:
 
         assert "grep" in registered_tools
 
-    def test_list_files_recursion_disabled_by_config(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_recursion_disabled_by_config(self, tmp_path):
         """Test that recursion is disabled when config says so."""
         from code_puppy.tools.file_operations import register_list_files
 
@@ -538,7 +566,7 @@ class TestRegisterFunctions:
             # Create a mock context
             mock_ctx = MagicMock()
 
-            result = list_files_tool(mock_ctx, str(tmp_path), recursive=True)
+            result = await list_files_tool(mock_ctx, str(tmp_path), recursive=True)
 
             # Should have warning about recursion being disabled
             assert result.error is not None
@@ -633,36 +661,39 @@ class TestReadFileOutputModel:
 class TestEdgeCasesInListFiles:
     """Test additional edge cases in _list_files."""
 
-    def test_list_files_with_empty_path_in_results(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_with_empty_path_in_results(self, tmp_path):
         """Test handling of items with empty paths."""
         # Create normal files
         (tmp_path / "normal.txt").write_text("content")
 
-        result = _list_files(None, str(tmp_path), recursive=False)
+        result = await _list_files(None, str(tmp_path), recursive=False)
 
         assert result.content is not None
         assert "normal.txt" in result.content
 
-    def test_list_files_recursive_file_processing(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_recursive_file_processing(self, tmp_path):
         """Test recursive file processing with nested directories."""
         # Create nested structure
         subdir = tmp_path / "level1" / "level2"
         subdir.mkdir(parents=True)
         (subdir / "deep.py").write_text("# deep file")
 
-        result = _list_files(None, str(tmp_path), recursive=True)
+        result = await _list_files(None, str(tmp_path), recursive=True)
 
         assert "deep.py" in result.content
         assert "level1" in result.content
         assert "level2" in result.content
 
-    def test_list_files_handles_stat_errors(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_handles_stat_errors(self, tmp_path):
         """Test that stat errors on individual files don't crash listing."""
         # Create a file
         test_file = tmp_path / "test.txt"
         test_file.write_text("content")
 
-        result = _list_files(None, str(tmp_path), recursive=False)
+        result = await _list_files(None, str(tmp_path), recursive=False)
 
         assert result.error is None
         assert "test.txt" in result.content
@@ -671,22 +702,24 @@ class TestEdgeCasesInListFiles:
 class TestIgnoreFileCleanup:
     """Test that temporary ignore files are cleaned up."""
 
-    def test_list_files_cleans_up_ignore_file(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_list_files_cleans_up_ignore_file(self, tmp_path):
         """Test that temporary ignore file is cleaned up after listing."""
         (tmp_path / "test.txt").write_text("content")
 
         # List files should create and then clean up temp ignore file
-        result = _list_files(None, str(tmp_path), recursive=True)
+        result = await _list_files(None, str(tmp_path), recursive=True)
 
         # Should complete without errors
         assert result is not None
 
-    def test_grep_cleans_up_ignore_file(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_grep_cleans_up_ignore_file(self, tmp_path):
         """Test that temporary ignore file is cleaned up after grep."""
         test_file = tmp_path / "search.py"
         test_file.write_text("searchable content\n")
 
-        result = _grep(None, "searchable", str(tmp_path))
+        result = await _grep(None, "searchable", str(tmp_path))
 
         # Should complete without errors
         assert result is not None

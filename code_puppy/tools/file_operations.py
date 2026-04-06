@@ -149,7 +149,7 @@ def would_match_directory(pattern: str, directory: str) -> bool:
     return False
 
 
-def _list_files(
+async def _list_files(
     context: RunContext, directory: str = ".", recursive: bool = True
 ) -> ListFileOutput:
     import sys
@@ -223,8 +223,11 @@ def _list_files(
             cmd.extend(["--ignore-file", ignore_file])
             cmd.append(directory)
 
-            # Run ripgrep to get file listing
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            # Run ripgrep to get file listing in a thread pool to avoid blocking the event loop
+            def _run_ripgrep_list():
+                return subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+
+            result = await asyncio.to_thread(_run_ripgrep_list)
 
             # Process the output lines
             files = result.stdout.strip().split("\n") if result.stdout.strip() else []
@@ -586,7 +589,7 @@ def _sanitize_string(text: str) -> str:
         )
 
 
-def _grep(context: RunContext, search_string: str, directory: str = ".") -> GrepOutput:
+async def _grep(context: RunContext, search_string: str, directory: str = ".") -> GrepOutput:
     import json
     import os
     import shlex
@@ -661,15 +664,19 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
             parts = [search_string]
         cmd.extend(parts)
         cmd.append(directory)
-        # Use encoding with error handling to handle files with invalid UTF-8
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            encoding="utf-8",
-            errors="replace",  # Replace invalid chars instead of crashing
-        )
+
+        # Run ripgrep in a thread pool to avoid blocking the event loop
+        def _run_ripgrep():
+            return subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                encoding="utf-8",
+                errors="replace",  # Replace invalid chars instead of crashing
+            )
+
+        result = await asyncio.to_thread(_run_ripgrep)
 
         # Parse the JSON output from ripgrep
         for line in result.stdout.strip().split("\n"):
@@ -748,7 +755,7 @@ def register_list_files(agent):
     from code_puppy.config import get_allow_recursion
 
     @agent.tool
-    def list_files(
+    async def list_files(
         context: RunContext, directory: str = ".", recursive: bool = True
     ) -> ListFileOutput:
         """List files and directories with intelligent filtering and safety features.
@@ -759,7 +766,7 @@ def register_list_files(agent):
         if recursive and not get_allow_recursion():
             warning = "Recursion disabled globally for list_files - returning non-recursive results"
             recursive = False
-        result = _list_files(context, directory, recursive)
+        result = await _list_files(context, directory, recursive)
 
         # The structured FileListingMessage is already emitted by _list_files
         # No need to emit again here
@@ -791,11 +798,11 @@ def register_grep(agent):
     """Register only the grep tool."""
 
     @agent.tool
-    def grep(
+    async def grep(
         context: RunContext, search_string: str = "", directory: str = "."
     ) -> GrepOutput:
         """Recursively search for text patterns across files using ripgrep (rg).
 
         search_string supports ripgrep flag syntax (regex, -i for case-insensitive, etc).
         """
-        return _grep(context, search_string, directory)
+        return await _grep(context, search_string, directory)
