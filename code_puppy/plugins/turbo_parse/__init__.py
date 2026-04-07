@@ -4,6 +4,8 @@ Provides fast code parsing capabilities using the turbo_parse Rust module.
 Falls back to pure Python implementations when Rust module is unavailable.
 """
 
+import importlib.util
+
 __version__ = "0.1.0"
 
 # Plugin exports (for future expansion)
@@ -19,8 +21,4 @@ def is_turbo_parse_available() -> bool:
     Returns:
         True if the Rust module is installed and functional, False otherwise.
     """
-    try:
-        import turbo_parse
-        return True
-    except ImportError:
-        return False
+    return importlib.util.find_spec("turbo_parse") is not None
