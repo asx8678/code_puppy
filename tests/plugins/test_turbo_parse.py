@@ -1264,3 +1264,370 @@ class TestParseCodeToolDocumentation:
         
         assert parse_code.__doc__ is not None
         assert len(parse_code.__doc__) > 50  # Has substantial documentation
+
+
+# ============================================================================
+# Tests for /parse Slash Command
+# ============================================================================
+
+class TestParseSlashCommandHelp:
+    """Tests for the /parse help subcommand and help registration."""
+    
+    def test_parse_help_returns_tuple_list(self):
+        """Test that _parse_help returns list of tuples."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _parse_help
+        
+        result = _parse_help()
+        
+        assert isinstance(result, list)
+        for item in result:
+            assert isinstance(item, tuple)
+            assert len(item) == 2
+            assert isinstance(item[0], str)
+            assert isinstance(item[1], str)
+    
+    def test_parse_help_includes_all_commands(self):
+        """Test that help includes all /parse subcommands."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _parse_help
+        
+        result = _parse_help()
+        commands = [item[0] for item in result]
+        
+        assert "parse" in commands
+        assert "parse status" in commands
+        assert "parse parse_path <path>" in commands
+        assert "parse help" in commands
+
+
+class TestParseSlashCommandStatus:
+    """Tests for the /parse status subcommand."""
+    
+    def test_format_status_output_includes_key_sections(self):
+        """Test that status output includes key information sections."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _format_status_output
+        
+        output = _format_status_output()
+        
+        assert "Turbo Parse Status" in output
+        assert "Available:" in output
+        assert "Version:" in output
+        assert "Statistics:" in output
+    
+    def test_format_status_output_handles_errors_gracefully(self):
+        """Test that status output handles health_check errors gracefully."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _format_status_output
+        
+        with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks.health_check", side_effect=Exception("test error")):
+            output = _format_status_output()
+            # Should still return a string with error info
+            assert isinstance(output, str)
+            assert "Error" in output
+
+
+class TestParseSlashCommandPath:
+    """Tests for the /parse parse_path subcommand."""
+    
+    def test_get_language_from_extension_python(self):
+        """Test language detection for Python files."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _get_language_from_extension
+        
+        assert _get_language_from_extension("test.py") == "python"
+        assert _get_language_from_extension("/path/to/file.py") == "python"
+    
+    def test_get_language_from_extension_rust(self):
+        """Test language detection for Rust files."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _get_language_from_extension
+        
+        assert _get_language_from_extension("test.rs") == "rust"
+    
+    def test_get_language_from_extension_javascript(self):
+        """Test language detection for JavaScript files."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _get_language_from_extension
+        
+        assert _get_language_from_extension("test.js") == "javascript"
+        assert _get_language_from_extension("test.jsx") == "javascript"
+    
+    def test_get_language_from_extension_typescript(self):
+        """Test language detection for TypeScript files."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _get_language_from_extension
+        
+        assert _get_language_from_extension("test.ts") == "typescript"
+        assert _get_language_from_extension("test.tsx") == "typescript"
+    
+    def test_get_language_from_extension_elixir(self):
+        """Test language detection for Elixir files."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _get_language_from_extension
+        
+        assert _get_language_from_extension("test.ex") == "elixir"
+        assert _get_language_from_extension("test.exs") == "elixir"
+        assert _get_language_from_extension("test.heex") == "elixir"
+    
+    def test_get_language_from_extension_unknown(self):
+        """Test language detection for unknown extensions."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _get_language_from_extension
+        
+        assert _get_language_from_extension("test.txt") is None
+        assert _get_language_from_extension("test.md") is None
+        assert _get_language_from_extension("file.no_extension") is None
+    
+    def test_handle_parse_path_nonexistent_path(self):
+        """Test parse_path handles non-existent paths gracefully."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_path
+        
+        result = _handle_parse_path("/nonexistent/path/to/file.py")
+        
+        assert "❌ Path not found" in result
+    
+    def test_handle_parse_path_single_file_mocked(self):
+        """Test parse_path with a single file (mocked)."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_path
+        
+        mock_result = {
+            "success": True,
+            "language": "python",
+            "parse_time_ms": 1.5,
+            "errors": [],
+        }
+        
+        with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks._parse_file", return_value=mock_result):
+            with mock.patch("pathlib.Path.exists", return_value=True):
+                with mock.patch("pathlib.Path.is_file", return_value=True):
+                    result = _handle_parse_path("/fake/path.py")
+                    
+                    assert "✅" in result
+                    assert "/fake/path.py" in result
+                    assert "python" in result
+                    assert "1.5" in result
+    
+    def test_handle_parse_path_directory_mocked(self):
+        """Test parse_path with a directory (mocked)."""
+        from pathlib import Path
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_path
+        
+        mock_result = {
+            "results": [
+                {"file_path": "/fake/file1.py", "success": True, "language": "python"},
+                {"file_path": "/fake/file2.py", "success": True, "language": "python"},
+            ],
+            "total_time_ms": 5.0,
+            "files_processed": 2,
+            "success_count": 2,
+            "error_count": 0,
+        }
+        
+        with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks._parse_files_batch", return_value=mock_result):
+            with mock.patch("pathlib.Path.is_dir", return_value=True):
+                with mock.patch("pathlib.Path.exists", return_value=True):
+                    with mock.patch("pathlib.Path.rglob") as mock_rglob:
+                        mock_rglob.return_value = [Path("/fake/file1.py"), Path("/fake/file2.py")]
+                        result = _handle_parse_path("/fake/dir")
+                        
+                        assert "📁" in result
+                        assert "succeeded" in result or "failed" in result
+
+
+class TestParseSlashCommandHandler:
+    """Tests for the main _handle_parse_command function."""
+    
+    def test_handle_parse_command_returns_none_for_wrong_command(self):
+        """Test that handler returns None for non-parse commands."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_command
+        
+        result = _handle_parse_command("/other command", "other")
+        
+        assert result is None
+    
+    def test_handle_parse_command_handles_no_subcommand(self):
+        """Test that handler shows help when no subcommand provided."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_command
+        
+        with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks.emit_info") as mock_emit:
+            result = _handle_parse_command("/parse", "parse")
+            
+            assert result is True
+            mock_emit.assert_called_once()
+    
+    def test_handle_parse_command_status_subcommand(self):
+        """Test that handler processes status subcommand."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_command
+        
+        with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks.emit_info") as mock_emit:
+            with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks._format_status_output", return_value="test status"):
+                result = _handle_parse_command("/parse status", "parse")
+                
+                assert result is True
+                mock_emit.assert_called_once_with("test status")
+    
+    def test_handle_parse_command_parse_path_with_path(self):
+        """Test that handler processes parse_path subcommand with path."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_command
+        
+        with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks.emit_info") as mock_emit:
+            with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks._handle_parse_path", return_value="test result"):
+                result = _handle_parse_command("/parse parse_path ./test.py", "parse")
+                
+                assert result is True
+                mock_emit.assert_called_once_with("test result")
+    
+    def test_handle_parse_command_parse_path_missing_path(self):
+        """Test that handler shows error when parse_path is missing path."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_command
+        
+        with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks.emit_error") as mock_error:
+            with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks.emit_info") as mock_info:
+                result = _handle_parse_command("/parse parse_path", "parse")
+                
+                assert result is True
+                mock_error.assert_called_once()
+                mock_info.assert_called_once()
+    
+    def test_handle_parse_command_help_subcommand(self):
+        """Test that handler processes help subcommand."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_command
+        
+        with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks.emit_info") as mock_emit:
+            with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks._handle_parse_help", return_value="test help"):
+                result = _handle_parse_command("/parse help", "parse")
+                
+                assert result is True
+                mock_emit.assert_called_once_with("test help")
+    
+    def test_handle_parse_command_unknown_subcommand(self):
+        """Test that handler shows error for unknown subcommand."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_command
+        
+        with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks.emit_error") as mock_error:
+            with mock.patch("code_puppy.plugins.turbo_parse.register_callbacks.emit_info") as mock_info:
+                result = _handle_parse_command("/parse unknown", "parse")
+                
+                assert result is True
+                mock_error.assert_called_once()
+                mock_info.assert_called_once()
+
+
+class TestParseSlashCommandHelpContent:
+    """Tests for the _handle_parse_help function content."""
+    
+    def test_handle_parse_help_returns_string(self):
+        """Test that _handle_parse_help returns a string."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_help
+        
+        result = _handle_parse_help()
+        
+        assert isinstance(result, str)
+    
+    def test_handle_parse_help_includes_usage(self):
+        """Test that help includes usage information."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_help
+        
+        result = _handle_parse_help()
+        
+        assert "Usage:" in result or "usage" in result.lower()
+    
+    def test_handle_parse_help_includes_subcommands(self):
+        """Test that help includes all subcommands."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_help
+        
+        result = _handle_parse_help()
+        
+        assert "status" in result.lower()
+        assert "parse_path" in result
+        assert "help" in result.lower()
+    
+    def test_handle_parse_help_includes_languages(self):
+        """Test that help mentions supported languages."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_help
+        
+        result = _handle_parse_help()
+        
+        assert "Languages" in result or "languages" in result.lower()
+
+
+class TestParseSlashCommandFormatResult:
+    """Tests for the _format_parse_result helper function."""
+    
+    def test_format_parse_result_success(self):
+        """Test formatting a successful parse result."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _format_parse_result
+        
+        result = {
+            "success": True,
+            "language": "python",
+            "parse_time_ms": 2.5,
+            "errors": [],
+        }
+        
+        output = _format_parse_result(result, "/test/file.py")
+        
+        assert "✅" in output
+        assert "/test/file.py" in output
+        assert "python" in output
+        assert "2.5" in output
+    
+    def test_format_parse_result_failure(self):
+        """Test formatting a failed parse result."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _format_parse_result
+        
+        result = {
+            "success": False,
+            "language": "python",
+            "parse_time_ms": 0.5,
+            "errors": [{"message": "Syntax error"}],
+        }
+        
+        output = _format_parse_result(result, "/test/file.py")
+        
+        assert "❌" in output
+        assert "/test/file.py" in output
+        assert "Syntax error" in output
+    
+    def test_format_parse_result_with_symbols(self):
+        """Test formatting a parse result with symbols."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _format_parse_result
+        
+        result = {
+            "success": True,
+            "language": "python",
+            "parse_time_ms": 3.0,
+            "errors": [],
+            "symbols": [{"name": "foo"}, {"name": "bar"}],
+        }
+        
+        output = _format_parse_result(result, "/test/file.py")
+        
+        assert "✅" in output
+        assert "2 symbols extracted" in output
+
+
+class TestParseSlashCommandIntegration:
+    """Integration tests for the /parse slash command."""
+    
+    def test_handle_parse_path_real_file(self, tmp_path):
+        """Test parse_path with a real temporary file."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_path
+        
+        # Create a test Python file
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def hello():\n    pass\n")
+        
+        result = _handle_parse_path(str(test_file))
+        
+        # Should succeed (or gracefully fail if turbo_parse unavailable)
+        assert isinstance(result, str)
+        assert "test.py" in result
+    
+    def test_handle_parse_path_real_directory(self, tmp_path):
+        """Test parse_path with a real temporary directory."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _handle_parse_path
+        
+        # Create test files
+        (tmp_path / "test1.py").write_text("x = 1")
+        (tmp_path / "test2.py").write_text("y = 2")
+        (tmp_path / "readme.md").write_text("# Hello")
+        
+        result = _handle_parse_path(str(tmp_path))
+        
+        # Should find the Python files
+        assert isinstance(result, str)
+        assert "test1.py" in result or "test2.py" in result
+        assert ".py" in result
