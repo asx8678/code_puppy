@@ -108,7 +108,7 @@ The code_puppy codebase demonstrates good architectural patterns with plugin ext
 
 **Fix:** Use a single lock acquisition for the entire method or use atomic operations.
 
-### HIGH-7: API Module - 0% Test Coverage (10 Files)
+### ~~HIGH-7: API Module - 0% Test Coverage~~ ✅ FIXED
 **File:** `code_puppy/api/*` (app.py, pty_manager.py, websocket.py + 6 routers)  
 **Category:** Testing - Critical Gap  
 **Description:** All 10 files in the API module show 0% coverage. FastAPI application factory, PTY session management, WebSocket terminal—all critical infrastructure completely untested.
@@ -118,7 +118,7 @@ The code_puppy codebase demonstrates good architectural patterns with plugin ext
 2. Add integration tests for API endpoints using `httpx.AsyncClient`
 3. Add PTY-specific tests mocking subprocess execution
 
-### HIGH-8: CLI Runner Completely Untested
+### ~~HIGH-8: CLI Runner Completely Untested~~ ✅ FIXED
 **File:** `code_puppy/cli_runner.py` (510 statements)  
 **Category:** Testing - Critical Gap  
 **Description:** The main CLI entry point has zero coverage. Contains critical bootstrapping logic: argument parsing, initial config loading, first-run detection.
@@ -138,7 +138,7 @@ The code_puppy codebase demonstrates good architectural patterns with plugin ext
 2. Test plugin isolation (corruption of agent state)
 3. Test behavior when plugin hangs during registration
 
-### HIGH-10: MCP Health Monitor Untested
+### ~~HIGH-10: MCP Health Monitor Untested~~ ✅ FIXED
 **File:** `code_puppy/mcp_/health_monitor.py` (222 statements)  
 **Category:** Testing - Critical Gap  
 **Description:** Critical infrastructure for MCP server health monitoring has zero coverage. Contains failure detection, circuit breaker integration, restart logic—no tests verify behavior.
@@ -209,10 +209,10 @@ The code_puppy codebase demonstrates good architectural patterns with plugin ext
 
 | ID | File:Line | Category | Description | Fix |
 |----|-----------|----------|-------------|-----|
-| MED-27 | `chatgpt_codex_client.py` (155 stmts) | Coverage | OAuth-based client has no test coverage; JWT handling, token refresh untested. | Add tests mirroring `test_claude_cache_client.py` |
-| MED-28 | `terminal_utils.py` (177 stmts), `status_display.py` (113 stmts) | Coverage | Terminal detection, status display formatting untested. | Add tests mocking `shutil.get_terminal_size`, test ANSI handling |
-| MED-29 | `gemini_code_assist.py` (176 stmts), `gemini_model.py` (375 stmts) | Coverage | Tests exist but coverage shows 0%—may not be running in CI. | Verify test execution; add model request/response tests |
-| MED-30 | `scheduler/daemon.py` (160 stmts), `config.py` (86 stmts) | Coverage | Cross-platform daemon management may be platform-specific in CI. | Ensure tests run on all platforms; add mocked lifecycle tests |
+| ~~MED-27~~ | `chatgpt_codex_client.py` (155 stmts) | Coverage | OAuth-based client has no test coverage; JWT handling, token refresh untested. | Add tests mirroring `test_claude_cache_client.py` |
+| ~~MED-28~~ | `terminal_utils.py` (177 stmts), `status_display.py` (113 stmts) | Coverage | Terminal detection, status display formatting untested. | Add tests mocking `shutil.get_terminal_size`, test ANSI handling |
+| ~~MED-29~~ | `gemini_code_assist.py` (176 stmts), `gemini_model.py` (375 stmts) | Coverage | Tests exist but coverage shows 0%—may not be running in CI. | Verify test execution; add model request/response tests |
+| ~~MED-30~~ | `scheduler/daemon.py` (160 stmts), `config.py` (86 stmts) | Coverage | Cross-platform daemon management may be platform-specific in CI. | Ensure tests run on all platforms; add mocked lifecycle tests |
 
 ---
 
@@ -231,7 +231,7 @@ Too many LOW findings to list fully (21 total). Key items called out:
 ### Notable LOW Findings
 
 - **LOW-1:** `plugins/claude_code_oauth/config.py:16`, `plugins/chatgpt_oauth/config.py:15` - Hardcoded OAuth client IDs should be configurable
-- **LOW-2:** `claude_cache_client.py:259-264` - Token refresh logs at INFO level; debug logging could include token data in exceptions
+- ~~**LOW-2:**~~ *(NOT FOUND)* `claude_cache_client.py:259-264` - Token refresh logs at INFO level; debug logging could include token data in exceptions
 - **LOW-3:** `claude_cache_client.py:101-143` - Manual JWT decoding bypasses built-in security checks
 - **LOW-4:** `command_line/clipboard.py:98-115` - Clipboard operations use subprocess with user-controlled content
 - **LOW-5:** `config.py:13-18` - Module-level mutable globals accessed without explicit synchronization
