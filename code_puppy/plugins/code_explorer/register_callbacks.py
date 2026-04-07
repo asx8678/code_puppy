@@ -51,7 +51,6 @@ from pydantic_ai import RunContext
 from code_puppy.callbacks import register_callback
 from code_puppy.code_context import (
     CodeExplorer,
-    enhance_read_file_result,
     explore_directory as _explore_directory,
     format_outline,
     get_code_context as _get_code_context,
@@ -61,16 +60,12 @@ from code_puppy.messaging import emit_info, emit_error
 
 logger = logging.getLogger(__name__)
 
-# Global explorer instance for caching
-_explorer_instance: Optional[CodeExplorer] = None
-
 
 def _get_explorer() -> CodeExplorer:
-    """Get or create the global CodeExplorer instance."""
-    global _explorer_instance
-    if _explorer_instance is None:
-        _explorer_instance = CodeExplorer(enable_cache=True)
-    return _explorer_instance
+    """Get the global CodeExplorer instance."""
+    from code_puppy.code_context import get_explorer_instance
+
+    return get_explorer_instance()
 
 
 def _on_startup():
@@ -216,7 +211,9 @@ def _register_explore_directory_tool(agent):
 
                 # Count languages
                 if ctx.language:
-                    language_counts[ctx.language] = language_counts.get(ctx.language, 0) + 1
+                    language_counts[ctx.language] = (
+                        language_counts.get(ctx.language, 0) + 1
+                    )
 
                 total_symbols += ctx.symbol_count
 
@@ -335,14 +332,14 @@ def _format_file_context(context: Dict[str, Any]) -> str:
         f"Tokens: {context.get('num_tokens', 0)}",
     ]
 
-    if context.get('symbols_available'):
-        outline = context.get('outline', {})
-        symbols = outline.get('symbols', [])
+    if context.get("symbols_available"):
+        outline = context.get("outline", {})
+        symbols = outline.get("symbols", [])
 
         # Count by kind
-        classes = [s for s in symbols if s.get('kind') in ('class', 'struct')]
-        functions = [s for s in symbols if s.get('kind') in ('function', 'method')]
-        imports = [s for s in symbols if s.get('kind') == 'import']
+        classes = [s for s in symbols if s.get("kind") in ("class", "struct")]
+        functions = [s for s in symbols if s.get("kind") in ("function", "method")]
+        imports = [s for s in symbols if s.get("kind") == "import"]
 
         lines.append(f"   Symbols: {len(symbols)} total")
         if classes:
@@ -357,19 +354,19 @@ def _format_file_context(context: Dict[str, Any]) -> str:
             lines.append("   Outline:")
             for symbol in symbols[:10]:  # Show first 10
                 kind_icon = {
-                    'class': '🏛️',
-                    'struct': '🏛️',
-                    'function': '⚡',
-                    'method': '🔹',
-                    'import': '📦',
-                }.get(symbol.get('kind'), '•')
+                    "class": "🏛️",
+                    "struct": "🏛️",
+                    "function": "⚡",
+                    "method": "🔹",
+                    "import": "📦",
+                }.get(symbol.get("kind"), "•")
                 line_info = f" (L{symbol.get('start_line', 0)})"
                 lines.append(f"      {kind_icon} {symbol.get('name')}{line_info}")
 
             if len(symbols) > 10:
                 lines.append(f"      ... and {len(symbols) - 10} more")
 
-    if context.get('error'):
+    if context.get("error"):
         lines.append(f"   ⚠️ {context['error']}")
 
     return "\n".join(lines)
@@ -377,8 +374,6 @@ def _format_file_context(context: Dict[str, Any]) -> str:
 
 def _handle_explore_file(path_str: str) -> str:
     """Handle the /explore file <path> subcommand."""
-    import asyncio
-
     try:
         # Use the async version through the explorer
         context = _get_code_context(path_str, include_content=False)
@@ -411,8 +406,8 @@ def _handle_explore_dir(path_str: str) -> str:
         for lang, ctxs in sorted(by_language.items()):
             lines.append(f"\n🔸 {lang.upper()} ({len(ctxs)} files):")
             for ctx in ctxs:
-                file_name = ctx.get('file_path', 'unknown').split('/')[-1]
-                sym_count = ctx.get('symbol_count', 0)
+                file_name = ctx.get("file_path", "unknown").split("/")[-1]
+                sym_count = ctx.get("symbol_count", 0)
                 lines.append(f"   • {file_name} ({sym_count} symbols)")
 
         return "\n".join(lines)

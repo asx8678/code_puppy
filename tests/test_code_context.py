@@ -362,9 +362,11 @@ class TestCodeExplorer:
 
     def test_is_supported_file(self, explorer):
         """Test supported file detection."""
-        with patch.object(explorer, '_detect_language', return_value='python'):
-            with patch('code_puppy.code_context.is_language_supported', return_value=True):
-                assert explorer._is_supported_file("test.py") is True
+        # _is_supported_file simply checks if _detect_language returns a value
+        assert explorer._is_supported_file("test.py") is True
+        assert explorer._is_supported_file("test.rs") is True
+        assert explorer._is_supported_file("test.txt") is False
+        assert explorer._is_supported_file("test.unknown") is False
 
     def test_explore_file_not_found(self, explorer):
         """Test exploring a non-existent file."""
