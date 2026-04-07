@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 import json
 import os
 from unittest.mock import mock_open, patch
@@ -322,7 +323,7 @@ class TestModelFactoryErrors:
             with patch("code_puppy.config.EXTRA_MODELS_FILE", bad_extra):
                 # Should load bundled models successfully despite bad extra file
                 config = ModelFactory.load_config()
-                assert isinstance(config, dict)
+                assert isinstance(config, (dict, Mapping))
                 # Bundled models.json has entries
                 assert len(config) > 0
         finally:

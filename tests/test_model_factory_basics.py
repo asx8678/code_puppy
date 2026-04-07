@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 import json
 import os
 from unittest.mock import MagicMock, mock_open, patch
@@ -26,7 +27,7 @@ class TestModelFactoryBasics:
         with patch("builtins.open", mock_open(read_data=json.dumps(test_config))):
             config = ModelFactory.load_config()
 
-            assert isinstance(config, dict)
+            assert isinstance(config, (dict, Mapping))
             assert "claude-3-5-sonnet" in config
             assert "gpt-4" in config
             assert config["claude-3-5-sonnet"]["type"] == "anthropic"
