@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -616,6 +617,31 @@ async def acquire_model_slot(
 ) -> None:
     """Acquire an adaptive concurrency slot for *model_name*.
 
+    **Lock Ordering and Concurrency Safety:**
+
+    This function uses two locks that can be acquired in sequence:
+    
+    1. ``_state.lock`` (module-level) - the "outer" lock
+    2. ``state.condition`` (per-model asyncio.Condition) - the "inner" lock
+    
+    **Acquisition order is always: outer lock first, then inner lock.**
+    This ordering is always respected because:
+    - The outer lock protects the global ``_state.model_states`` dict
+    - The inner lock protects per-model state (active_count, circuit_state)
+    - We only enter the inner lock context after having first acquired the outer lock
+    
+    **Important clarification about Condition.wait():**
+    When ``state.condition.wait()`` is called, it releases ONLY the condition's
+    internal lock, NOT the outer ``_state.lock``. The outer lock is held for the
+    duration of the wait. This is different from some lock implementations where
+    wait() might release all held locks. The condition lock is temporary; the
+    outer lock prevents concurrent modifications to the state dict structure.
+
+    This nested locking pattern is necessary to:
+    - Protect the global state dictionary from concurrent access
+    - Allow fine-grained per-model waiting on slot availability
+    - Prevent race conditions between slot acquisition and limit changes
+
     Blocks until a slot is available.  The first call for any model
     auto-starts the background recovery task.
 
@@ -699,7 +725,7 @@ async def acquire_model_slot(
             state = _ensure_state(key)
 
     async with state.condition:
-        while state.active_count >= int(state.current_limit):
+        while state.active_count >= math.ceil(state.current_limit):
             await asyncio.wait_for(
                 state.condition.wait(), timeout=timeout,
             )

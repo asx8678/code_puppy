@@ -357,8 +357,8 @@ class TestConcurrencyEnforcement:
         tasks = [hold_slot() for _ in range(10)]
         await asyncio.gather(*tasks)
 
-        # With limit 2.5 (int() → 2), should not exceed 2
-        assert max_concurrent <= 2
+        # With limit 2.5 (math.ceil() → 3), should not exceed 3
+        assert max_concurrent <= 3
         assert max_concurrent >= 1
 
 
