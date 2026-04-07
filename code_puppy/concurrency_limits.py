@@ -10,6 +10,7 @@ Configuration is read from ~/.code_puppy/concurrency.toml with sensible defaults
 
 import asyncio
 import logging
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,9 @@ _tool_calls_semaphore: asyncio.Semaphore | None = None
 
 # Cached config
 _cached_config: dict[str, int] | None = None
+
+# Lock for thread-safe semaphore initialization
+_semaphore_init_lock = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -79,9 +83,11 @@ def _get_file_ops_semaphore() -> asyncio.Semaphore:
     """Get or create the file operations semaphore."""
     global _file_ops_semaphore
     if _file_ops_semaphore is None:
-        config = _read_config()
-        _file_ops_semaphore = asyncio.Semaphore(config.file_ops_limit)
-        logger.debug("File ops semaphore initialized with limit %d", config.file_ops_limit)
+        with _semaphore_init_lock:
+            if _file_ops_semaphore is None:  # Double-checked locking
+                config = _read_config()
+                _file_ops_semaphore = asyncio.Semaphore(config.file_ops_limit)
+                logger.debug("File ops semaphore initialized with limit %d", config.file_ops_limit)
     return _file_ops_semaphore
 
 
@@ -89,9 +95,11 @@ def _get_api_calls_semaphore() -> asyncio.Semaphore:
     """Get or create the API calls semaphore."""
     global _api_calls_semaphore
     if _api_calls_semaphore is None:
-        config = _read_config()
-        _api_calls_semaphore = asyncio.Semaphore(config.api_calls_limit)
-        logger.debug("API calls semaphore initialized with limit %d", config.api_calls_limit)
+        with _semaphore_init_lock:
+            if _api_calls_semaphore is None:  # Double-checked locking
+                config = _read_config()
+                _api_calls_semaphore = asyncio.Semaphore(config.api_calls_limit)
+                logger.debug("API calls semaphore initialized with limit %d", config.api_calls_limit)
     return _api_calls_semaphore
 
 
@@ -99,9 +107,11 @@ def _get_tool_calls_semaphore() -> asyncio.Semaphore:
     """Get or create the tool calls semaphore."""
     global _tool_calls_semaphore
     if _tool_calls_semaphore is None:
-        config = _read_config()
-        _tool_calls_semaphore = asyncio.Semaphore(config.tool_calls_limit)
-        logger.debug("Tool calls semaphore initialized with limit %d", config.tool_calls_limit)
+        with _semaphore_init_lock:
+            if _tool_calls_semaphore is None:  # Double-checked locking
+                config = _read_config()
+                _tool_calls_semaphore = asyncio.Semaphore(config.tool_calls_limit)
+                logger.debug("Tool calls semaphore initialized with limit %d", config.tool_calls_limit)
     return _tool_calls_semaphore
 
 
