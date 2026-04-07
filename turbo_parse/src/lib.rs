@@ -352,7 +352,6 @@ fn health_check<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
 /// # Arguments
 /// * `paths` - List of file paths to parse (Python list of strings)
 /// * `max_workers` - Optional maximum number of worker threads (default: all cores)
-/// * `timeout_ms` - Optional timeout for entire batch in milliseconds (default: no timeout)
 ///
 /// # Returns
 /// Dict with:
@@ -380,14 +379,13 @@ fn health_check<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
 ///     print(f"  {r['language']}: success={r['success']}")
 /// ```
 #[pyfunction]
-#[pyo3(signature = (paths, max_workers = None, timeout_ms = None))]
+#[pyo3(signature = (paths, max_workers = None))]
 fn parse_files_batch<'py>(
     py: Python<'py>,
     paths: Vec<String>,
     max_workers: Option<usize>,
-    timeout_ms: Option<u64>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let options = BatchParseOptions { max_workers, timeout_ms };
+    let options = BatchParseOptions { max_workers, timeout_ms: None };
     
     // Release GIL during CPU-intensive batch parsing
     let result: BatchParseResult = py.detach(|| {

@@ -29,17 +29,20 @@ impl Default for BatchParseOptions {
 
 impl BatchParseOptions {
     /// Create new batch parse options with defaults.
+    #[cfg(test)]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set the maximum number of worker threads.
+    #[cfg(test)]
     pub fn with_max_workers(mut self, workers: usize) -> Self {
         self.max_workers = Some(workers);
         self
     }
 
     /// Set the timeout for the batch operation.
+    #[allow(dead_code)]
     pub fn with_timeout_ms(mut self, timeout: u64) -> Self {
         self.timeout_ms = Some(timeout);
         self
@@ -152,6 +155,7 @@ pub fn parse_files_batch(
 }
 
 /// Internal parallel parsing implementation.
+#[allow(dead_code)]
 fn parse_files_parallel(
     paths: &[String],
     _timeout_ms: Option<u64>,
