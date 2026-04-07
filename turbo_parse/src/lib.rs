@@ -4,6 +4,7 @@ use std::sync::OnceLock;
 mod batch;
 mod cache;
 mod diagnostics;
+mod incremental;
 mod parser;
 mod registry;
 mod stats;
@@ -12,6 +13,7 @@ mod symbols;
 use batch::{parse_files_batch as _parse_files_batch, BatchParseOptions, BatchParseResult};
 use cache::{ParseCache, CacheKey, CacheValue, compute_content_hash, DEFAULT_CACHE_CAPACITY};
 use diagnostics::{extract_diagnostics, SyntaxDiagnostics};
+use incremental::{parse_with_edits, InputEdit};
 use parser::{parse_file as _parse_file, parse_source as _parse_source, ParseResult};
 use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError};
 use stats::{record_parse_operation, get_full_stats};
@@ -601,6 +603,7 @@ fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_source, m)?)?;
     m.add_function(wrap_pyfunction!(parse_files_batch, m)?)?;
     m.add_function(wrap_pyfunction!(extract_syntax_diagnostics, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_with_edits, m)?)?;
     // Cache functions from main
     // Symbol extraction functions added
     m.add_function(wrap_pyfunction!(init_cache, m)?)?;
@@ -619,6 +622,8 @@ fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Symbol extraction functions
     m.add_function(wrap_pyfunction!(extract_symbols, m)?)?;
     m.add_function(wrap_pyfunction!(extract_symbols_from_file, m)?)?;
+    // Add pyclass types
+    m.add_class::<InputEdit>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("DEFAULT_CACHE_CAPACITY", DEFAULT_CACHE_CAPACITY)?;
     Ok(())

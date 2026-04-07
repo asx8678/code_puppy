@@ -14,6 +14,7 @@ High-performance parsing with tree-sitter and PyO3 bindings for Code Puppy.
 - **Symbol Extraction**: Extract functions, classes, methods, imports with precise location info
 - **Diagnostics**: Syntax error detection with detailed position information
 - **Caching**: LRU cache for parsed trees to avoid re-parsing unchanged files
+- **Incremental Parsing**: Fast re-parsing with tree reuse for editor-like use cases
 - **Batch Processing**: Parallel file parsing across all CPU cores
 - **Python Integration**: Seamless PyO3 bindings for use in Python applications
 
@@ -276,6 +277,76 @@ for i, file_result in enumerate(result['results']):
     print(f"  {files[i]}: {file_result['language']} - success={file_result['success']}")
 ```
 
+### Incremental Parsing
+
+For editor-like scenarios where small edits are made to existing documents,
+turbo_parse supports incremental parsing. This reuses the previous parse tree
+and applies text edits, resulting in significantly faster re-parsing for small
+changes.
+
+**When to use incremental parsing:**
+- Real-time editor scenarios (typing, small edits)
+- Large files with localized changes
+- IDE features requiring frequent re-parsing
+
+**When NOT to use incremental parsing:**
+- Initial parse of a document
+- Massive structural changes (better to do full re-parse)
+- When you don't have access to the previous parse tree
+
+```python
+import turbo_parse
+
+# Initial parse of a document
+source = "def hello(): pass"
+result = turbo_parse.parse_source(source, "python")
+
+# Make an edit: change "pass" to "return 42"
+new_source = "def hello(): return 42"
+
+# Create an InputEdit describing the change
+# The edit describes what changed between old and new source
+edit = turbo_parse.InputEdit(
+    start_byte=12,        # Start position in old source
+    old_end_byte=16,      # End of "pass" in old source
+    new_end_byte=21,      # End of "return 42" in new source
+    start_position=(0, 12),     # (line, column) in old source
+    old_end_position=(0, 16),     # (line, column) end of old text
+    new_end_position=(0, 21)      # (line, column) end of new text
+)
+
+# Incremental re-parse
+new_result = turbo_parse.parse_with_edits(
+    new_source,
+    "python",
+    result["tree"],  # Previous tree from parse_source/parse_file
+    [edit]           # List of edits applied
+)
+
+print(f"Success: {new_result['success']}")
+print(f"Parse time: {new_result['parse_time_ms']:.2f}ms")
+print(f"Tree updated incrementally")
+```
+
+**InputEdit fields:**
+- `start_byte` - Byte offset where edit starts in old document
+- `old_end_byte` - Byte offset where replaced region ended in old document
+- `new_end_byte` - Byte offset where new text ends in new document
+- `start_position` - (line, column) tuple where edit starts (0-indexed)
+- `old_end_position` - (line, column) where old text ended
+- `new_end_position` - (line, column) where new text ends
+
+**Multiple edits:**
+You can apply multiple sequential edits in a single incremental parse:
+
+```python
+edits = [
+    turbo_parse.InputEdit(0, 0, 5, (0, 0), (0, 0), (0, 5)),     # Insert at start
+    turbo_parse.InputEdit(10, 15, 20, (0, 10), (0, 15), (0, 20)), # Replace middle
+]
+result = turbo_parse.parse_with_edits(new_source, "python", old_tree, edits)
+```
+
 ### Using the Cache
 
 ```python
@@ -466,6 +537,13 @@ turbo_parse is organized into several modules that work together:
 │  │ tree-sitter │  │   queries   │  │   ERROR/MISSING     │  │
 │  │   parsing   │  │    (TSQL)   │  │     node walk       │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │                  incremental.rs                      │   │
+│  │  • InputEdit struct — edit descriptors               │   │
+│  │  • parse_with_edits — incremental re-parsing         │   │
+│  │  • Tree::edit() + Parser::parse_with() integration    │   │
+│  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────┬───────────────────────────────────┘
                           │
 ┌─────────────────────────▼───────────────────────────────────┐
@@ -553,8 +631,20 @@ turbo_parse is organized into several modules that work together:
   - Per-language usage histogram
   - Cache statistics integration
 
+#### `incremental` — Incremental Parsing
+- **Purpose**: Fast re-parsing for editor-like use cases with localized changes
+- **Key Functions**: `parse_with_edits()`
+- **Types**: `InputEdit` — describes text edits with byte and position offsets
+- **Features**:
+  - Tree reuse via `Tree::edit()` and `Parser::parse_with()`
+  - Edit descriptors with byte offsets and line/column positions
+  - Multiple sequential edits support
+  - GIL release during CPU-intensive re-parsing
+- **Use Cases**: Real-time editors, large file editing, IDE features
+
 ### Data Flow
 
+#### Standard Parse Flow
 1. **Parse Request** → `parse_source()` or `parse_file()`
 2. **Language Detection** → `registry::get_language()`
 3. **Cache Check** → `cache::get()` (if enabled)
@@ -564,6 +654,12 @@ turbo_parse is organized into several modules that work together:
 7. **Metrics Recording** → `stats::record_parse()`
 8. **Cache Store** → `cache::put()` (if enabled)
 9. **Return Result** → Python dict with tree, timing, errors
+
+#### Incremental Parse Flow
+1. **Edit Notification** → User provides `InputEdit` descriptors
+2. **Tree Edit Application** → `Tree::edit()` applies changes
+3. **Incremental Parse** → `Parser::parse_with(old_tree)` reuses tree (GIL released)
+4. **Result Return** → Updated tree with minimal re-parsing
 
 ## Known Gaps
 

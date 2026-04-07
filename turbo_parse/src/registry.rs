@@ -151,6 +151,27 @@ pub fn list_supported_languages() -> Vec<String> {
     global_registry().supported_languages()
 }
 
+/// Normalize a language name to its canonical form.
+///
+/// Handles case-insensitivity and common aliases.
+///
+/// # Examples
+/// * "py" -> "python"
+/// * "js" -> "javascript"
+/// * "ts" -> "typescript"
+/// * "ex" | "exs" -> "elixir"
+/// * "PYTHON" -> "python"
+pub fn normalize_language(name: &str) -> String {
+    let normalized = name.to_lowercase();
+    match normalized.as_str() {
+        "py" => "python".to_string(),
+        "js" => "javascript".to_string(),
+        "ts" => "typescript".to_string(),
+        "ex" | "exs" => "elixir".to_string(),
+        _ => normalized,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -301,5 +322,21 @@ mod tests {
         assert!(langs.contains(&"typescript".to_string()));
         assert!(langs.contains(&"tsx".to_string()));
         assert!(langs.contains(&"elixir".to_string()));
+    }
+
+    #[test]
+    fn test_normalize_language() {
+        assert_eq!(normalize_language("py"), "python");
+        assert_eq!(normalize_language("python"), "python");
+        assert_eq!(normalize_language("PYTHON"), "python");
+        assert_eq!(normalize_language("js"), "javascript");
+        assert_eq!(normalize_language("javascript"), "javascript");
+        assert_eq!(normalize_language("ts"), "typescript");
+        assert_eq!(normalize_language("typescript"), "typescript");
+        assert_eq!(normalize_language("ex"), "elixir");
+        assert_eq!(normalize_language("exs"), "elixir");
+        assert_eq!(normalize_language("elixir"), "elixir");
+        assert_eq!(normalize_language("rust"), "rust");
+        assert_eq!(normalize_language("tsx"), "tsx");
     }
 }
