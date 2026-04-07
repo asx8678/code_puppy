@@ -4,10 +4,12 @@ use std::sync::OnceLock;
 mod cache;
 mod parser;
 mod registry;
+mod symbols;
 
 use cache::{ParseCache, CacheKey, CacheValue, compute_content_hash, DEFAULT_CACHE_CAPACITY};
 use parser::{parse_file as _parse_file, parse_source as _parse_source, ParseResult};
 use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError};
+use symbols::{extract_symbols as _extract_symbols, SymbolOutline, extract_symbols_from_file as _extract_symbols_from_file};
 
 /// Global singleton cache instance
 static GLOBAL_CACHE: OnceLock<ParseCache> = OnceLock::new();
@@ -352,13 +354,80 @@ fn convert_json_to_py<'py>(py: Python<'py>, value: &serde_json::Value) -> PyResu
     Ok(py_dict)
 }
 
+/// Extract symbols from source code.
+///
+/// # Arguments
+/// * `source` - The source code to analyze
+/// * `language` - The language identifier (e.g., "python", "rust")
+///
+/// # Returns
+/// Dict with:
+///   - language: String - the detected/specified language
+///   - symbols: List[Dict] - list of symbols with name, kind, position info
+///   - extraction_time_ms: f64 - time taken to extract
+///   - success: bool - whether extraction succeeded
+///   - errors: List[str] - any extraction errors
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+/// result = turbo_parse.extract_symbols("def hello(): pass", "python")
+/// print(result["symbols"])  # [{"name": "hello", "kind": "function", ...}]
+/// ```
+#[pyfunction]
+#[pyo3(signature = (source, language))]
+fn extract_symbols<'py>(py: Python<'py>, source: &str, language: &str) -> PyResult<Bound<'py, PyAny>> {
+    // Release GIL during CPU-intensive symbol extraction
+    let outline: SymbolOutline = py.detach(|| {
+        _extract_symbols(source, language)
+    });
+
+    convert_json_to_py(py, &serde_json::to_value(&outline).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e))
+    })?)
+}
+
+/// Extract symbols from a file.
+///
+/// # Arguments
+/// * `path` - Path to the file
+/// * `language` - Optional language override (detected from extension if not provided)
+///   Supported extensions: .py, .rs, .js, .jsx, .ts, .tsx, .ex, .exs
+///
+/// # Returns
+/// Dict with:
+///   - language: String - the detected/specified language
+///   - symbols: List[Dict] - list of symbols with name, kind, position info
+///   - extraction_time_ms: f64 - time taken to extract
+///   - success: bool - whether extraction succeeded
+///   - errors: List[str] - any extraction errors
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+/// result = turbo_parse.extract_symbols_from_file("test.py")
+/// print(result["symbols"])  # [{"name": "...", "kind": "...", ...}]
+/// ```
+#[pyfunction]
+#[pyo3(signature = (path, language = None))]
+fn extract_symbols_from_file<'py>(py: Python<'py>, path: &str, language: Option<&str>) -> PyResult<Bound<'py, PyAny>> {
+    // Release GIL during file I/O and CPU-intensive symbol extraction
+    let outline: SymbolOutline = py.detach(|| {
+        _extract_symbols_from_file(path, language)
+    });
+
+    convert_json_to_py(py, &serde_json::to_value(&outline).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e))
+    })?)
+}
+
 /// The turbo_parse Python module.
 #[pymodule]
 fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(health_check, m)?)?;
     m.add_function(wrap_pyfunction!(parse_file, m)?)?;
     m.add_function(wrap_pyfunction!(parse_source, m)?)?;
-    // Cache functions from main
+    // Cache functions
     m.add_function(wrap_pyfunction!(init_cache, m)?)?;
     m.add_function(wrap_pyfunction!(cache_get, m)?)?;
     m.add_function(wrap_pyfunction!(cache_put, m)?)?;
@@ -368,10 +437,13 @@ fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cache_stats, m)?)?;
     m.add_function(wrap_pyfunction!(compute_hash, m)?)?;
     m.add_function(wrap_pyfunction!(get_cache_info, m)?)?;
-    // Language registry functions from feature branch
+    // Language registry functions
     m.add_function(wrap_pyfunction!(is_language_supported, m)?)?;
     m.add_function(wrap_pyfunction!(get_language, m)?)?;
     m.add_function(wrap_pyfunction!(supported_languages, m)?)?;
+    // Symbol extraction functions
+    m.add_function(wrap_pyfunction!(extract_symbols, m)?)?;
+    m.add_function(wrap_pyfunction!(extract_symbols_from_file, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("DEFAULT_CACHE_CAPACITY", DEFAULT_CACHE_CAPACITY)?;
     Ok(())
