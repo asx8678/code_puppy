@@ -420,13 +420,14 @@ class BaseAgent(ABC, AgentPromptMixin):
                 case dict():
                     result = json.dumps(part.content)
                 case list():
-                    result = ""
+                    result_parts = []
                     for item in part.content:
                         match item:
                             case str():
-                                result += item + "\n"
+                                result_parts.append(item)
                             case BinaryContent():
-                                result += f"BinaryContent={hash(item.data)}\n"
+                                result_parts.append(f"BinaryContent={hash(item.data)}")
+                    result = "\n".join(result_parts)
                 case _:
                     result = str(part.content)
 
