@@ -4,36 +4,11 @@ import hashlib
 import os
 import secrets
 import sys
-import threading
 import time
 from pathlib import Path
 from typing import Callable
 
-# Thread-local storage for dedicated event loops (used by _run_async_sync)
-_loop_local = threading.local()
-
-
-def _run_async_sync(coro):
-    """Run a coroutine in a dedicated background thread's event loop.
-
-    This is more reliable than asyncio.run() for nested calls and cases
-    where an event loop may already exist in the current thread.
-
-    Args:
-        coro: The coroutine to run
-
-    Returns:
-        The result of the coroutine
-    """
-    # Check if we have a dedicated loop in this thread
-    if not hasattr(_loop_local, 'loop') or _loop_local.loop is None or _loop_local.loop.is_closed():
-        _loop_local.loop = asyncio.new_event_loop()
-        _loop_local.thread = threading.Thread(target=_loop_local.loop.run_forever, daemon=True)
-        _loop_local.thread.start()
-
-    # Submit the coroutine to the dedicated loop
-    future = asyncio.run_coroutine_threadsafe(coro, _loop_local.loop)
-    return future.result()
+from code_puppy.async_utils import run_async_sync
 
 
 try:
@@ -959,7 +934,7 @@ def arrow_select(message: str, choices: list[str]) -> str:
     Raises:
         KeyboardInterrupt: If user cancels with Ctrl-C
     """
-    return _run_async_sync(arrow_select_async(message, choices))
+    return run_async_sync(arrow_select_async(message, choices))
 
 
 def get_user_approval(
@@ -984,7 +959,7 @@ def get_user_approval(
         - confirmed: True if approved, False if rejected
         - user_feedback: Optional feedback text if user provided it
     """
-    return _run_async_sync(get_user_approval_async(title, content, preview, border_style, puppy_name))
+    return run_async_sync(get_user_approval_async(title, content, preview, border_style, puppy_name))
 
 
 async def get_user_approval_async(
