@@ -1,44 +1,3 @@
-//! Turbo Parse — High-performance parsing with tree-sitter and PyO3 bindings.
-//!
-//! This crate provides fast parsing, symbol extraction, and syntax highlighting
-//! for multiple programming languages using tree-sitter grammars.
-//!
-//! # Features
-//!
-//! - `python` (default): Enable Python bindings via PyO3
-//! - `dynamic-grammars`: Enable runtime loading of grammar libraries
-//!
-//! # Security Note: Dynamic Grammars
-//!
-//! When the `dynamic-grammars` feature is enabled, this crate can load
-//! external shared libraries (.so/.dylib/.dll files). This carries security
-//! implications:
-//!
-//! 1. **Only load libraries from trusted sources** — Dynamic libraries
-//!    execute native code with the same privileges as the application.
-//!
-//! 2. **Path validation** — The crate includes path traversal protection,
-//!    but you should still validate paths before calling `register_grammar()`.
-//!
-//! 3. **Allowed directories** — For production use, configure allowed
-//!    directories to restrict where grammars can be loaded from.
-//!
-//! 4. **Library integrity** — Consider verifying checksums of grammar
-//!    libraries before loading them.
-//!
-//! Example secure usage:
-//! ```python
-//! import turbo_parse
-//!
-//! # Only allow loading from specific directory
-//! # (configure via DynamicGrammarLoader)
-//!
-//! # Register a grammar
-//! result = turbo_parse.register_grammar("go", "/path/to/tree-sitter-go.so")
-//! if result["success"]:
-//!     print(f"Grammar loaded: version {result['version']}")
-//! ```
-
 use pyo3::prelude::*;
 use std::sync::OnceLock;
 
@@ -49,6 +8,7 @@ mod dynamic;
 mod folds;
 mod highlights;
 mod incremental;
+mod injection;
 mod parser;
 mod registry;
 mod stats;
@@ -61,6 +21,7 @@ use diagnostics::{extract_diagnostics, SyntaxDiagnostics};
 use folds::{get_folds as _get_folds, get_folds_from_file as _get_folds_from_file, FoldResult};
 use highlights::{get_highlights as _get_highlights, get_highlights_from_file as _get_highlights_from_file, HighlightResult};
 use incremental::{parse_with_edits, InputEdit};
+use injection::{get_injections as _get_injections, get_injections_from_file as _get_injections_from_file, parse_injections, InjectionRange, InjectionResult, ParsedInjectionResult};
 use parser::{parse_file as _parse_file, parse_source as _parse_source, ParseResult};
 use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError, register_dynamic_grammar, is_dynamic_grammar_registered, unregister_dynamic_grammar};
 use stats::{record_parse_operation, get_full_stats};
@@ -954,41 +915,137 @@ fn dynamic_grammars_enabled() -> bool {
 ///   - library_extension: str - the expected file extension (.so, .dylib, .dll)
 ///   - loaded_count: int - number of dynamic grammars currently loaded
 #[pyfunction]
-fn dynamic_grammar_info<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    use crate::dynamic::{global_loader, DYLIB_EXTENSION};
-    
-    let loader = global_loader();
-    let loaded = loader.list_loaded();
-    
-    let platform = if cfg!(target_os = "linux") {
-        "linux"
-    } else if cfg!(target_os = "macos") {
-        "macos"
-    } else if cfg!(target_os = "windows") {
-        "windows"
-    } else {
-        "unknown"
-    };
-    
-    let result = serde_json::json!({
-        "enabled": cfg!(feature = "dynamic-grammars"),
-        "platform": platform,
-        "library_extension": DYLIB_EXTENSION,
-        "loaded_count": loaded.len(),
-        "loaded_grammars": loaded.iter().map(|g| {
-            serde_json::json!({
-                "name": g.name,
-                "path": g.library_path.to_string_lossy().to_string(),
-                "version": g.version,
-                "has_external_scanner": g.has_external_scanner,
-            })
-        }).collect::<Vec<_>>(),
+/// Detect language injections in source code.
+///
+/// Identifies regions of embedded languages within the source code,
+/// such as SQL in Python strings or HTML in template literals.
+///
+/// # Arguments
+/// * `source` - The source code to analyze
+/// * `parent_language` - The language identifier of the host code (e.g., "python", "elixir")
+///
+/// # Returns
+/// Dict with:
+///   - parent_language: String - the language of the host code
+///   - injections: List[Dict] - list of detected injection ranges
+///   - detection_time_ms: f64 - time taken to detect injections
+///   - success: bool - whether detection succeeded
+///   - errors: List[str] - any errors encountered
+///
+/// Each injection contains:
+///   - parent_language: str - the host language
+///   - injected_language: str - the detected embedded language (e.g., "sql", "html")
+///   - start_byte: int - starting byte position (0-indexed)
+///   - end_byte: int - ending byte position (0-indexed, exclusive)
+///   - content: str - the actual content of the injection
+///   - node_kind: str - the AST node kind that triggered detection
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+/// source = '''
+/// query = """
+/// SELECT * FROM users WHERE id = %s
+/// """
+/// cursor.execute(query)
+/// '''
+/// result = turbo_parse.get_injections(source, "python")
+/// for injection in result["injections"]:
+///     print(f"Found {injection['injected_language']} at bytes {injection['start_byte']}-{injection['end_byte']}")
+/// ```
+#[pyfunction]
+#[pyo3(signature = (source, parent_language))]
+fn get_injections<'py>(py: Python<'py>, source: &str, parent_language: &str) -> PyResult<Bound<'py, PyAny>> {
+    // Release GIL during CPU-intensive detection
+    let result: InjectionResult = py.detach(|| {
+        _get_injections(source, parent_language)
     });
-    
-    convert_json_to_py(py, &result)
+
+    convert_json_to_py(py, &serde_json::to_value(&result).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e))
+    })?)
 }
 
-/// The turbo_parse Python module.
+/// Detect language injections from a file.
+///
+/// # Arguments
+/// * `path` - Path to the file
+/// * `language` - Optional language override (detected from extension if not provided)
+///
+/// # Returns
+/// Dict with injection detection results (same format as get_injections).
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+/// result = turbo_parse.get_injections_from_file("app.py")
+/// print(f"Found {len(result['injections'])} embedded language regions")
+/// ```
+#[pyfunction]
+#[pyo3(signature = (path, language = None))]
+fn get_injections_from_file<'py>(py: Python<'py>, path: &str, language: Option<&str>) -> PyResult<Bound<'py, PyAny>> {
+    // Release GIL during file I/O and CPU-intensive detection
+    let result: InjectionResult = py.detach(|| {
+        _get_injections_from_file(path, language)
+    });
+
+    convert_json_to_py(py, &serde_json::to_value(&result).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e))
+    })?)
+}
+
+/// Parse detected injections with their respective grammars.
+///
+/// Takes injection detection results and parses each embedded language
+/// with its appropriate tree-sitter grammar, returning ASTs for each.
+///
+/// # Arguments
+/// * `injection_result` - The result from get_injections (Python dict)
+///
+/// # Returns
+/// Dict with:
+///   - parent_language: String - the host language
+///   - parsed_injections: List[Dict] - parsed injections with ASTs
+///   - total_time_ms: f64 - time taken for the entire operation
+///   - all_succeeded: bool - whether all injections parsed successfully
+///   - language_counts: Dict[str, int] - count of injections by language
+///
+/// Each parsed injection contains:
+///   - range: Dict - the injection range information
+///   - tree: Dict or None - the parsed AST
+///   - parse_success: bool - whether parsing succeeded
+///   - parse_errors: List[str] - any parse errors
+///   - parse_time_ms: f64 - time taken to parse
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+/// source = "query = '''SELECT * FROM users'''"
+/// detection = turbo_parse.get_injections(source, "python")
+/// parsed = turbo_parse.parse_injections(detection)
+/// for inj in parsed["parsed_injections"]:
+///     if inj["parse_success"]:
+///         print(f"Parsed {inj['range']['injected_language']} successfully")
+/// ```
+#[pyfunction]
+fn parse_injections_py<'py>(py: Python<'py>, injection_result: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    // Convert Python dict to InjectionResult
+    let json_module = py.import("json")?;
+    let json_str: String = json_module.call_method1("dumps", (injection_result,))?.extract()?;
+    let result: InjectionResult = serde_json::from_str(&json_str)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid injection result: {}", e)))?;
+
+    // Parse injections with GIL released
+    let parsed: ParsedInjectionResult = py.detach(|| {
+        parse_injections(&result)
+    });
+
+    convert_json_to_py(py, &serde_json::to_value(&parsed).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e))
+    })?)
+}
+
+/// Helper to convert serde_json::Value to Python object.
 #[pymodule]
 fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(health_check, m)?)?;
@@ -1029,8 +1086,13 @@ fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(list_registered_grammars, m)?)?;
     m.add_function(wrap_pyfunction!(dynamic_grammars_enabled, m)?)?;
     m.add_function(wrap_pyfunction!(dynamic_grammar_info, m)?)?;
+    // Injection detection functions
+    m.add_function(wrap_pyfunction!(get_injections, m)?)?;
+    m.add_function(wrap_pyfunction!(get_injections_from_file, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_injections_py, m)?)?;
     // Add pyclass types
     m.add_class::<InputEdit>()?;
+    m.add_class::<InjectionRange>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("DEFAULT_CACHE_CAPACITY", DEFAULT_CACHE_CAPACITY)?;
     Ok(())
