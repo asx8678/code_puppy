@@ -193,11 +193,10 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> list[Any]:
                 # Try to get the running event loop
                 try:
                     loop = asyncio.get_running_loop()
-                    # We're inside a running event loop - use run_coroutine_threadsafe
-                    # NB: result is a Task/Future, not the callback's return value.
-                    # Callers should handle non-dict results gracefully.
-                    future = asyncio.run_coroutine_threadsafe(result, loop)
-                    results.append(future.result())
+                    # We're inside a running event loop - schedule without blocking
+                    # Use ensure_future to fire on the existing loop and return the Task
+                    task = asyncio.ensure_future(result)
+                    results.append(task)
                     continue
                 except RuntimeError:
                     # No running loop - we're in a sync/worker thread context
@@ -453,13 +452,7 @@ async def on_pre_tool_call(
         child.metadata["_parent_ref"] = parent
         set_current_run_context(child)
 
-    try:
-        return await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
-    finally:
-        # Cleanup: if _trigger_callbacks raised, we still need to restore
-        # the context so on_post_tool_call doesn't double-restore.
-        # Note: on_post_tool_call will see the context is already gone and skip.
-        pass
+    return await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
 
 
 async def on_post_tool_call(
