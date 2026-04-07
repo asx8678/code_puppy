@@ -192,11 +192,12 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> list[Any]:
             if asyncio.iscoroutine(result):
                 # Try to get the running event loop
                 try:
-                    asyncio.get_running_loop()
+                    loop = asyncio.get_running_loop()
+                    # We're inside a running event loop - use run_coroutine_threadsafe
                     # NB: result is a Task/Future, not the callback's return value.
                     # Callers should handle non-dict results gracefully.
-                    future = asyncio.ensure_future(result)
-                    results.append(future)
+                    future = asyncio.run_coroutine_threadsafe(result, loop)
+                    results.append(future.result())
                     continue
                 except RuntimeError:
                     # No running loop - we're in a sync/worker thread context
