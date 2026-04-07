@@ -311,7 +311,6 @@ class TestModelFactoryErrors:
 
     def test_load_config_general_exception_handling(self):
         """Test load_config() handles general exceptions gracefully for extra models."""
-        from collections.abc import Mapping
         import tempfile
 
         # Create a malformed extra-models file
@@ -323,7 +322,7 @@ class TestModelFactoryErrors:
             with patch("code_puppy.config.EXTRA_MODELS_FILE", bad_extra):
                 # Should load bundled models successfully despite bad extra file
                 config = ModelFactory.load_config()
-                assert isinstance(config, Mapping)
+                assert isinstance(config, dict)
                 # Bundled models.json has entries
                 assert len(config) > 0
         finally:

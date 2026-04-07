@@ -217,7 +217,7 @@ class TestOpus46EffortSetting:
         from code_puppy.model_factory import make_model_settings
 
         with patch(
-            "code_puppy.model_factory.get_effective_model_settings",
+            "code_puppy.config.get_effective_model_settings",
             return_value={"effort": "low", "extended_thinking": "adaptive"},
         ):
             settings = make_model_settings("claude-opus-4-6", max_tokens=4096)

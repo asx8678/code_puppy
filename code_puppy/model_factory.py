@@ -15,16 +15,7 @@ from pydantic_ai.settings import ModelSettings
 from code_puppy.messaging import emit_warning
 
 from . import callbacks
-from .config import (
-    EXTRA_MODELS_FILE,
-    get_effective_model_settings,
-    get_openai_reasoning_effort,
-    get_openai_reasoning_summary,
-    get_openai_verbosity,
-    get_value,
-    get_yolo_mode,
-    model_supports_setting,
-)
+from .config import EXTRA_MODELS_FILE, get_value, get_yolo_mode
 from .http_utils import create_async_client, get_cert_bundle_path, get_http2
 from .provider_identity import make_anthropic_provider, resolve_provider_identity
 
@@ -146,6 +137,13 @@ def make_model_settings(
     Returns:
         Appropriate ModelSettings subclass instance for the model.
     """
+    from code_puppy.config import (
+        get_effective_model_settings,
+        get_openai_reasoning_effort,
+        get_openai_reasoning_summary,
+        get_openai_verbosity,
+        model_supports_setting)
+
     model_settings_dict: dict = {}
 
     # Calculate max_tokens if not explicitly provided
