@@ -20,6 +20,7 @@ wheels/
 .venv
 
 .coverage
+coverage.json
 
 # Session memory
 .puppy_session_memory.json
