@@ -2,10 +2,18 @@
 //!
 //! Provides lazy-initialized access to tree-sitter Language objects
 //! for Python, Rust, JavaScript, TypeScript, TSX, and Elixir.
+//!
+//! Supports dynamic grammar loading when the `dynamic-grammars` feature is enabled.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::OnceLock;
 use tree_sitter::Language;
+
+use crate::dynamic::DynamicLoadError;
+
+#[cfg(feature = "dynamic-grammars")]
+use crate::dynamic::{global_loader, load_dynamic_grammar};
 
 /// Errors that can occur when working with the language registry.
 #[derive(Debug, Clone, PartialEq)]
@@ -14,6 +22,8 @@ pub enum RegistryError {
     UnsupportedLanguage(String),
     /// Failed to initialize the language grammar.
     InitializationError(String),
+    /// Dynamic loading is not available for this language.
+    DynamicLoadingDisabled,
 }
 
 impl std::fmt::Display for RegistryError {
@@ -24,6 +34,9 @@ impl std::fmt::Display for RegistryError {
             }
             RegistryError::InitializationError(msg) => {
                 write!(f, "Failed to initialize language: {}", msg)
+            }
+            RegistryError::DynamicLoadingDisabled => {
+                write!(f, "Dynamic grammar loading is disabled")
             }
         }
     }
@@ -127,6 +140,9 @@ impl Default for LanguageRegistry {
 // Global static instance for lazy initialization
 static GLOBAL_REGISTRY: OnceLock<LanguageRegistry> = OnceLock::new();
 
+// Runtime-registered dynamic grammars (name -> library path)
+static DYNAMIC_GRAMMARS: OnceLock<std::sync::Mutex<HashMap<String, String>>> = OnceLock::new();
+
 /// Get the global language registry instance.
 ///
 /// The registry is initialized lazily on first access.
@@ -134,21 +150,187 @@ pub fn global_registry() -> &'static LanguageRegistry {
     GLOBAL_REGISTRY.get_or_init(LanguageRegistry::default)
 }
 
+/// Get dynamic grammars registry.
+fn dynamic_grammars() -> &'static std::sync::Mutex<HashMap<String, String>> {
+    DYNAMIC_GRAMMARS.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+/// Register a dynamic grammar at runtime.
+///
+/// This adds a dynamic grammar to the registry with fallback support.
+/// If loading fails, the grammar will not be registered and an error
+/// will be returned.
+///
+/// # Arguments
+/// * `name` - The language name/identifier
+/// * `library_path` - Path to the compiled grammar library (.so/.dylib/.dll)
+///
+/// # Returns
+/// Ok(()) on success, or RegistryError if loading fails.
+#[cfg(feature = "dynamic-grammars")]
+pub fn register_dynamic_grammar(name: &str, library_path: &str) -> Result<(), RegistryError> {
+    use std::path::PathBuf;
+    
+    // Load the grammar using the dynamic loader
+    let path = PathBuf::from(library_path);
+    load_dynamic_grammar(name, &path)?;
+    
+    // Store the registration
+    let mut grammars = dynamic_grammars().lock().unwrap();
+    grammars.insert(name.to_string(), library_path.to_string());
+    
+    Ok(())
+}
+
+/// Stub implementation when feature is not enabled.
+#[cfg(not(feature = "dynamic-grammars"))]
+pub fn register_dynamic_grammar(_name: &str, _library_path: &str) -> Result<(), RegistryError> {
+    Err(RegistryError::DynamicLoadingDisabled)
+}
+
+/// Unregister a dynamic grammar.
+pub fn unregister_dynamic_grammar(name: &str) -> bool {
+    let mut grammars = dynamic_grammars().lock().unwrap();
+    grammars.remove(name).is_some()
+}
+
+/// Check if a dynamic grammar is registered.
+pub fn is_dynamic_grammar_registered(name: &str) -> bool {
+    let grammars = dynamic_grammars().lock().unwrap();
+    grammars.contains_key(name)
+}
+
+/// List all registered dynamic grammars.
+pub fn list_registered_dynamic_grammars() -> Vec<(String, String)> {
+    let grammars = dynamic_grammars().lock().unwrap();
+    grammars.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+}
+
 /// Get a language by name using the global registry.
 ///
 /// This is the convenience function exposed to Python.
+/// Falls back to dynamic loading if the language is not a built-in.
 pub fn get_language(name: &str) -> Result<&'static Language, RegistryError> {
-    global_registry().get(name)
+    // First try the built-in registry
+    match global_registry().get(name) {
+        Ok(lang) => Ok(lang),
+        Err(RegistryError::UnsupportedLanguage(_)) => {
+            // Try dynamic grammars
+            #[cfg(feature = "dynamic-grammars")]
+            {
+                use crate::dynamic::global_loader;
+                
+                let normalized = normalize_language(name);
+                
+                // Check if it's registered
+                if is_dynamic_grammar_registered(&normalized) {
+                    // Try to get from the loader
+                    let loader = global_loader();
+                    if let Some(grammar) = loader.get_grammar(&normalized) {
+                        // We need to return a reference that lives as long as 'static
+                        // The LoadedGrammar is stored in an Arc in the loader
+                        // This is safe because the loader keeps the library loaded
+                        let lang_ptr = &grammar.language as *const Language;
+                        return unsafe { Ok(&*lang_ptr) };
+                    }
+                }
+                
+                // Check if it's already loaded (but not registered through the registry API)
+                let loader = global_loader();
+                if let Some(grammar) = loader.get_grammar(&normalized) {
+                    let lang_ptr = &grammar.language as *const Language;
+                    return unsafe { Ok(&*lang_ptr) };
+                }
+            }
+            
+            Err(RegistryError::UnsupportedLanguage(name.to_string()))
+        }
+        Err(e) => Err(e),
+    }
 }
 
-/// Check if a language is supported.
+/// Get a language with fallback to built-in if dynamic loading fails.
+///
+/// This is useful when you want to prefer a dynamic grammar but fall back
+/// to the built-in one if the dynamic version isn't available.
+pub fn get_language_with_fallback(name: &str) -> Option<&'static Language> {
+    // Try dynamic first
+    #[cfg(feature = "dynamic-grammars")]
+    {
+        let normalized = normalize_language(name);
+        let loader = global_loader();
+        
+        if let Some(grammar) = loader.get_grammar(&normalized) {
+            let lang_ptr = &grammar.language as *const Language;
+            return unsafe { Some(&*lang_ptr) };
+        }
+    }
+    
+    // Fall back to built-in
+    global_registry().get(name).ok()
+}
+
+/// Check if a language is supported (including dynamic grammars).
 pub fn is_language_supported(name: &str) -> bool {
-    global_registry().is_supported(name)
+    // Check built-in
+    if global_registry().is_supported(name) {
+        return true;
+    }
+    
+    // Check dynamic grammars
+    #[cfg(feature = "dynamic-grammars")]
+    {
+        let normalized = normalize_language(name);
+        let loader = global_loader();
+        if loader.is_loaded(&normalized) {
+            return true;
+        }
+    }
+    
+    false
 }
 
-/// Get all supported language names.
+/// Get all supported language names (including dynamic).
 pub fn list_supported_languages() -> Vec<String> {
-    global_registry().supported_languages()
+    let mut langs = global_registry().supported_languages();
+    
+    // Add dynamic grammars
+    #[cfg(feature = "dynamic-grammars")]
+    {
+        let loader = global_loader();
+        let dynamic = loader.list_loaded();
+        for grammar in dynamic {
+            if !langs.contains(&grammar.name) {
+                langs.push(grammar.name);
+            }
+        }
+    }
+    
+    langs.sort();
+    langs
+}
+
+/// Load a grammar dynamically and make it available.
+///
+/// This is a higher-level API that loads a grammar and automatically
+/// registers it for future lookups.
+#[cfg(feature = "dynamic-grammars")]
+pub fn load_and_register_grammar(name: &str, path: &Path) -> Result<Language, RegistryError> {
+    use crate::dynamic::load_dynamic_grammar;
+    
+    let lang = load_dynamic_grammar(name, path)?;
+    
+    // Register in the path registry
+    let mut grammars = dynamic_grammars().lock().unwrap();
+    grammars.insert(name.to_string(), path.to_string_lossy().to_string());
+    
+    Ok(lang)
+}
+
+/// Stub when feature is not enabled.
+#[cfg(not(feature = "dynamic-grammars"))]
+pub fn load_and_register_grammar(_name: &str, _path: &Path) -> Result<Language, RegistryError> {
+    Err(RegistryError::DynamicLoadingDisabled)
 }
 
 /// Normalize a language name to its canonical form.
@@ -338,5 +520,23 @@ mod tests {
         assert_eq!(normalize_language("elixir"), "elixir");
         assert_eq!(normalize_language("rust"), "rust");
         assert_eq!(normalize_language("tsx"), "tsx");
+    }
+
+    #[test]
+    fn test_dynamic_grammar_registration() {
+        // These tests don't require the feature to be enabled
+        // as they test the stub implementation
+        
+        // Test that the registry functions exist
+        assert!(!is_dynamic_grammar_registered("test"));
+        assert!(list_registered_dynamic_grammars().is_empty());
+        assert!(!unregister_dynamic_grammar("test"));
+    }
+
+    #[test]
+    fn test_error_display() {
+        assert!(RegistryError::UnsupportedLanguage("test".to_string()).to_string().contains("Unsupported"));
+        assert!(RegistryError::InitializationError("test".to_string()).to_string().contains("Failed"));
+        assert!(RegistryError::DynamicLoadingDisabled.to_string().contains("disabled"));
     }
 }

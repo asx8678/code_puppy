@@ -9,6 +9,7 @@ license = "MIT"
 [features]
 default = ["python"]
 python = ["dep:pyo3"]
+dynamic-grammars = ["dep:libloading"]
 
 [lib]
 name = "turbo_parse"
@@ -45,6 +46,8 @@ sha2 = "0.10"
 # Parallelism
 rayon = "1.10"
 streaming-iterator = "0.1"
+# Dynamic grammar loading (optional)
+libloading = { version = "0.8", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
