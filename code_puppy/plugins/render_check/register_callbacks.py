@@ -133,7 +133,7 @@ def _test_syntax(console) -> None:
 def _test_progress(console) -> None:
     from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 
-    _print_header(console, "6. Progress Bar (2 seconds)")
+    _print_header(console, "6. Progress Bar (0.5 seconds)")
     try:
         with Progress(
             SpinnerColumn(),
@@ -145,7 +145,7 @@ def _test_progress(console) -> None:
         ) as progress:
             task = progress.add_task("rendering test…", total=20)
             for _ in range(20):
-                time.sleep(0.1)
+                time.sleep(0.025)
                 progress.advance(task)
     except Exception as e:
         console.print(f"[red]Progress test failed:[/red] {e}")
