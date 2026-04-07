@@ -719,7 +719,11 @@ class RichConsoleRenderer:
             sys.stdout.flush()
         else:
             # Normal line: use Rich for nice formatting
-            text = Text.from_ansi(msg.line)
+            # Fast-path: skip ANSI parsing for plain text (no escape codes)
+            if "\033[" in msg.line:
+                text = Text.from_ansi(msg.line)
+            else:
+                text = Text(msg.line)
             self._console.print(text, style="dim")
 
     def _render_shell_output(self, msg: ShellOutputMessage) -> None:
