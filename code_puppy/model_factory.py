@@ -259,7 +259,7 @@ def make_model_settings(
             model_settings_dict["thinking_enabled"] = True
         if "thinking_level" not in model_settings_dict:
             model_settings_dict["thinking_level"] = "low"
-        # Recreate settings with Gemini thinking config
+        # Recreate settings with thinking config
         model_settings = ModelSettings(**model_settings_dict)
 
     return model_settings
