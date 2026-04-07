@@ -107,4 +107,5 @@ dev = [
     "ruff>=0.15.8",
     "pexpect>=4.9.0",
     "maturin>=1.12.6",
+    "hypothesis>=6.150.0",
 ]
