@@ -11,6 +11,7 @@ import threading
 import time
 import uuid
 from abc import ABC, abstractmethod
+from functools import lru_cache
 from typing import (
     Any,
     Callable,
@@ -108,6 +109,23 @@ _reload_count = 0
 
 
 logger = logging.getLogger(__name__)
+
+
+# LRU cache for JSON schema serialization to avoid redundant work
+# in estimate_context_overhead_tokens(). Schemas are static, so caching
+# provides significant performance benefits for repeated token estimations.
+@lru_cache(maxsize=128)
+def _serialize_schema_to_json(schema_tuple: tuple[tuple[str, Any], ...]) -> str:
+    """Serialize a tool schema (as sorted tuple) to JSON string.
+    
+    Args:
+        schema_tuple: Schema dict converted to sorted tuple for hashability.
+        
+    Returns:
+        JSON string representation of the schema with sorted keys.
+    """
+    schema_dict = dict(schema_tuple)
+    return json.dumps(schema_dict, sort_keys=True)
 
 
 class BaseAgent(ABC, AgentPromptMixin):
@@ -555,11 +573,13 @@ class BaseAgent(ABC, AgentPromptMixin):
                         # Tools may have a schema attribute or we can try to get it from annotations
                         schema = getattr(tool_func, "schema", None)
                         if schema:
-                            schema_str = (
-                                json.dumps(schema)
-                                if isinstance(schema, dict)
-                                else str(schema)
-                            )
+                            # Use LRU cached serialization to avoid redundant JSON encoding
+                            # Schemas are static, so caching eliminates repeated work
+                            if isinstance(schema, dict):
+                                schema_tuple = tuple(sorted(schema.items()))
+                                schema_str = _serialize_schema_to_json(schema_tuple)
+                            else:
+                                schema_str = str(schema)
                             total_tokens += self.estimate_token_count(schema_str)
                         else:
                             # Try to get schema from function annotations
@@ -592,11 +612,12 @@ class BaseAgent(ABC, AgentPromptMixin):
                     # Estimate tokens from parameter schema (inputSchema)
                     input_schema = tool_def.get("inputSchema")
                     if input_schema:
-                        schema_str = (
-                            json.dumps(input_schema)
-                            if isinstance(input_schema, dict)
-                            else str(input_schema)
-                        )
+                        # Use LRU cached serialization for MCP tool schemas too
+                        if isinstance(input_schema, dict):
+                            schema_tuple = tuple(sorted(input_schema.items()))
+                            schema_str = _serialize_schema_to_json(schema_tuple)
+                        else:
+                            schema_str = str(input_schema)
                         total_tokens += self.estimate_token_count(schema_str)
                 except Exception:
                     logger.debug("Failed to process tool for token counting", exc_info=True)

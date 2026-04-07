@@ -1631,6 +1631,8 @@ def auto_save_session_if_enabled() -> bool:
 
     This function is non-blocking - the actual save operation happens in a
     background thread to avoid blocking the main execution flow during file I/O.
+    Token counting is done once on the main thread and passed to the background
+    thread to avoid redundant computation.
     """
     if not get_auto_save_session():
         return False
@@ -1650,7 +1652,15 @@ def auto_save_session_if_enabled() -> bool:
         session_name = get_current_autosave_session_name()
         autosave_dir = pathlib.Path(AUTOSAVE_DIR)
 
+        # Precompute total tokens once on the main thread - this is the only
+        # token computation on the user-facing path. The background thread
+        # will reuse this precomputed value instead of recomputing.
+        total_tokens = sum(
+            current_agent.estimate_tokens_for_message(msg) for msg in history
+        )
+
         # Submit to background thread - non-blocking
+        # Pass precomputed_total so the save operation doesn't recompute tokens
         save_session_async(
             history=history,
             session_name=session_name,
@@ -1658,13 +1668,10 @@ def auto_save_session_if_enabled() -> bool:
             timestamp=now.isoformat(),
             token_estimator=current_agent.estimate_tokens_for_message,
             auto_saved=True,
-            compacted_hashes=list(current_agent.get_compacted_message_hashes())
+            compacted_hashes=list(current_agent.get_compacted_message_hashes()),
+            precomputed_total=total_tokens,
         )
 
-        # Estimate tokens for the info message (quick operation)
-        total_tokens = sum(
-            current_agent.estimate_tokens_for_message(msg) for msg in history
-        )
         emit_info(
             f"🐾 Auto-saved session: {len(history)} messages ({total_tokens} tokens)"
         )
