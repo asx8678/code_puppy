@@ -108,8 +108,31 @@ _reload_count = 0
 
 
 logger = logging.getLogger(__name__)
+
+
 class BaseAgent(ABC, AgentPromptMixin):
     """Base class for all agent configurations."""
+
+    __slots__ = (
+        "id",
+        "_message_history",
+        "_compacted_message_hashes",
+        "_message_history_hashes",
+        "_code_generation_agent",
+        "_last_model_name",
+        "_puppy_rules",
+        "cur_model",
+        "_mcp_tool_definitions_cache",
+        "_cached_system_prompt",
+        "_cached_tool_defs",
+        "_delayed_compaction_requested",
+        "_tool_ids_cache",
+        "_cached_context_overhead",
+        "_model_name_cache",
+        "pydantic_agent",
+        "_mcp_servers",
+        "_rust_per_message_tokens",
+    )
 
     def __init__(self):
         self.id = str(uuid.uuid7())  # time-sortable for chronological ordering
