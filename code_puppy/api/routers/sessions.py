@@ -124,10 +124,11 @@ def _load_session_sync(file_path: Path) -> Any:
         except Exception:
             pass  # Fall through to pickle
 
-    # Legacy pickle fallback
-    import pickle  # noqa: S403
-    with open(file_path, "rb") as f:
-        return pickle.load(f)  # noqa: S301
+    # SECURITY FIX j0ha/l1en: Pickle fallback removed - RCE vulnerability
+    raise ValueError(
+        "Legacy pickle session format is no longer supported due to security "
+        "vulnerabilities (RCE risk - CVE-class). Please migrate to msgpack format."
+    )
 
 
 @router.get("/")

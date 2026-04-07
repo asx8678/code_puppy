@@ -243,6 +243,16 @@ def prompt_for_file_permission(
     """
     yolo_mode = get_yolo_mode()
 
+    # SECURITY FIX p8wo/8y6x: Even in yolo_mode, protect sensitive paths
+    # Check sensitive paths BEFORE yolo_mode bypass
+    from code_puppy.tools.file_operations import _is_sensitive_path
+    if _is_sensitive_path(file_path):
+        emit_warning(
+            f"SECURITY: Access to sensitive path blocked even in yolo_mode: {file_path}",
+            message_group=message_group
+        )
+        return False, "Access to sensitive paths (SSH keys, credentials) is never allowed"
+
     # Skip confirmation only if in yolo mode (removed TTY check for better compatibility)
     if yolo_mode:
         return True, None

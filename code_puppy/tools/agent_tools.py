@@ -332,13 +332,11 @@ def _load_session_history(session_id: str) -> list[ModelMessage]:
         except Exception:
             pass  # Fall through to pickle or return empty
 
+    # SECURITY FIX j0ha/l1en: Pickle completely removed - RCE vulnerability
     if pkl_path.exists():
-        try:
-            import pickle  # noqa: S403 — legacy format only
-            with open(pkl_path, "rb") as f:
-                return pickle.load(f)  # noqa: S301
-        except Exception:
-            return []
+        # Legacy pickle format no longer supported due to security (RCE risk)
+        # Files must be migrated to msgpack format
+        return []
 
     return []
 
