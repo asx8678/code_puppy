@@ -14,6 +14,8 @@ class TestModelFactoryBasics:
     @patch("code_puppy.model_factory.callbacks.get_callbacks", return_value=[])
     def test_load_config_basic(self, mock_callbacks, mock_exists):
         """Test basic config loading from models.json."""
+        from collections.abc import Mapping
+
         test_config = {
             "claude-3-5-sonnet": {
                 "type": "anthropic",
@@ -26,7 +28,7 @@ class TestModelFactoryBasics:
         with patch("builtins.open", mock_open(read_data=json.dumps(test_config))):
             config = ModelFactory.load_config()
 
-            assert isinstance(config, dict)
+            assert isinstance(config, Mapping)
             assert "claude-3-5-sonnet" in config
             assert "gpt-4" in config
             assert config["claude-3-5-sonnet"]["type"] == "anthropic"

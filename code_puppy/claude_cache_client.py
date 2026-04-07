@@ -40,6 +40,14 @@ TOOL_PREFIX = "cp_"
 # User-Agent to send with Claude Code OAuth requests
 CLAUDE_CLI_USER_AGENT = "claude-cli/2.1.2 (external, cli)"
 
+# Always-required betas for Claude Code OAuth (module-level constant)
+_REQUIRED_BETAS_BASE = [
+    "oauth-2025-04-20",
+    "interleaved-thinking-2025-05-14",
+]
+
+_CLAUDE_CODE_BETA = "claude-code-20250219"
+
 try:
     from anthropic import AsyncAnthropic
 except ImportError:  # pragma: no cover - optional dep
@@ -294,18 +302,16 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         incoming_beta = headers.get("anthropic-beta", "")
         incoming_betas = [b.strip() for b in incoming_beta.split(",") if b.strip()]
 
-        # Always-required betas for Claude Code OAuth
-        required_betas = [
-            "oauth-2025-04-20",
-            "interleaved-thinking-2025-05-14",
-        ]
-        if "claude-code-20250219" in incoming_betas:
-            required_betas.append("claude-code-20250219")
+        # Start with base required betas
+        merged = list(_REQUIRED_BETAS_BASE)
+        required_set = set(_REQUIRED_BETAS_BASE)
 
-        # Merge: start with required, then append any extras from the
-        # incoming headers that aren't already in the required set.
-        merged = list(required_betas)
-        required_set = set(required_betas)
+        # Add optional claude-code beta if present in incoming
+        if _CLAUDE_CODE_BETA in incoming_betas:
+            merged.append(_CLAUDE_CODE_BETA)
+            required_set.add(_CLAUDE_CODE_BETA)
+
+        # Append any extras from incoming that aren't already in the required set
         for beta in incoming_betas:
             if beta not in required_set:
                 merged.append(beta)
@@ -347,15 +353,8 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                     refreshed_token = self._refresh_claude_oauth_token()
                     if refreshed_token:
                         logger.info("Proactively refreshed token before request")
-                        # Rebuild request with new token
-                        headers = dict(request.headers)
-                        self._update_auth_headers(headers, refreshed_token)
-                        body_bytes = self._extract_body_bytes(request)
-                        request = self.build_request(
-                            method=request.method,
-                            url=request.url,
-                            headers=headers,
-                            content=body_bytes)
+                        # Update headers only (skip full rebuild for header-only change)
+                        self._update_auth_headers(request.headers, refreshed_token)
                         request.extensions["claude_oauth_refresh_attempted"] = True
             except Exception as exc:
                 logger.debug("Error during proactive token refresh check: %s", exc)
