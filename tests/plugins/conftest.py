@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import importlib.util
 import sys
+from pathlib import Path
+from typing import Generator
+from unittest import mock
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -86,12 +91,6 @@ def model_request_params() -> ModelRequestParameters:
 # ============================================================================
 # Turbo Parse Fixtures
 # ============================================================================
-
-import importlib.util
-from contextlib import contextmanager
-from pathlib import Path
-from typing import Generator
-from unittest import mock
 
 
 @pytest.fixture(scope="session")
