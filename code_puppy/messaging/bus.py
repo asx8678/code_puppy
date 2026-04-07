@@ -65,6 +65,21 @@ class MessageBus:
     Manages outgoing messages, incoming commands, and request/response correlation.
     """
 
+    __slots__ = (
+        "_maxsize",
+        "_lock",
+        "_outgoing",
+        "_incoming",
+        "_event_loop",
+        "_startup_buffer",
+        "_has_active_renderer",
+        "_renderer_event",
+        "_pending_requests",
+        "_current_session_id",
+        "_loop_thread_id",
+        "_wakeup_callback",
+    )
+
     def __init__(self, maxsize: int = 1000) -> None:
         """Initialize the MessageBus.
 
