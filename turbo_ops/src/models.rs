@@ -56,65 +56,6 @@ fn default_priority() -> u32 {
     100
 }
 
-impl TurboOperation {
-    /// Create a new list_files operation
-    pub fn list_files(directory: &str, recursive: bool) -> Self {
-        Self {
-            op_type: OperationType::ListFiles,
-            args: serde_json::json!({
-                "directory": directory,
-                "recursive": recursive
-            }),
-            id: None,
-            priority: 100,
-        }
-    }
-
-    /// Create a new grep operation
-    pub fn grep(search_string: &str, directory: &str) -> Self {
-        Self {
-            op_type: OperationType::Grep,
-            args: serde_json::json!({
-                "search_string": search_string,
-                "directory": directory
-            }),
-            id: None,
-            priority: 100,
-        }
-    }
-
-    /// Create a new read_files operation
-    pub fn read_files(file_paths: Vec<String>, start_line: Option<usize>, num_lines: Option<usize>) -> Self {
-        let mut args = serde_json::json!({
-            "file_paths": file_paths
-        });
-        if let Some(start) = start_line {
-            args["start_line"] = serde_json::json!(start);
-        }
-        if let Some(num) = num_lines {
-            args["num_lines"] = serde_json::json!(num);
-        }
-        Self {
-            op_type: OperationType::ReadFiles,
-            args,
-            id: None,
-            priority: 100,
-        }
-    }
-
-    /// Set a custom ID for this operation
-    pub fn with_id(mut self, id: String) -> Self {
-        self.id = Some(id);
-        self
-    }
-
-    /// Set a custom priority for this operation
-    pub fn with_priority(mut self, priority: u32) -> Self {
-        self.priority = priority;
-        self
-    }
-}
-
 /// Result of executing a single operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperationResult {
@@ -209,11 +150,6 @@ impl BatchResult {
             started_at,
             completed_at: chrono::Utc::now().to_rfc3339(),
         }
-    }
-
-    /// Get all error results
-    pub fn get_errors(&self) -> Vec<&OperationResult> {
-        self.results.iter().filter(|r| !r.is_success()).collect()
     }
 }
 
