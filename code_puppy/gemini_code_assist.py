@@ -311,12 +311,15 @@ class StreamedResponse:
         self._model_name = model_name
         self._usage: RequestUsage | None = None
         self._timestamp = datetime.now(timezone.utc)
+        # Track tool calls during streaming
+        self._tool_calls: list[ToolCallPart] = []
+        self._text_content = ""
 
     def __aiter__(self) -> AsyncIterator[str]:
         return self._iter_chunks()
 
     async def _iter_chunks(self) -> AsyncIterator[str]:
-        """Iterate over SSE chunks from the response."""
+        """Iterate over SSE chunks from the response, tracking text and tool calls."""
         async for line in self._response.aiter_lines():
             line = line.strip()
 
@@ -337,12 +340,21 @@ class StreamedResponse:
                             input_tokens=meta.get("promptTokenCount", 0),
                             output_tokens=meta.get("candidatesTokenCount", 0))
 
-                    # Extract text from candidates
+                    # Extract parts from candidates (both text and function calls)
                     for candidate in inner.get("candidates", []):
                         content = candidate.get("content", {})
                         for part in content.get("parts", []):
                             if "text" in part:
-                                yield part["text"]
+                                text = part["text"]
+                                self._text_content += text
+                                yield text
+                            elif "functionCall" in part:
+                                func_call = part["functionCall"]
+                                tool_call = ToolCallPart(
+                                    tool_name=func_call["name"],
+                                    args=func_call.get("args", {}),
+                                    tool_call_id=str(uuid.uuid4()))
+                                self._tool_calls.append(tool_call)
 
                 except json.JSONDecodeError:
                     logger.warning("Failed to parse SSE data: %s", data_str)
@@ -350,16 +362,14 @@ class StreamedResponse:
 
     async def get_response_parts(self) -> list[ModelResponsePart]:
         """Get all response parts after streaming is complete."""
-        text_content = ""
-        tool_calls = []
-
-        async for chunk in self:
-            text_content += chunk
+        # Drain the iterator if not already consumed
+        async for _ in self:
+            pass
 
         parts: list[ModelResponsePart] = []
-        if text_content:
-            parts.append(TextPart(content=text_content))
-        parts.extend(tool_calls)
+        if self._text_content:
+            parts.append(TextPart(content=self._text_content))
+        parts.extend(self._tool_calls)
 
         return parts
 
