@@ -23,6 +23,9 @@ from .constants import (
 
 logger = logging.getLogger(__name__)
 
+# Module-level cache for resolved $ref references to avoid redundant deep copies
+_resolved_cache: dict[str, Any] = {}
+
 
 def _flatten_union_to_object(union_items: list, defs: dict, resolve_fn) -> dict:
     """Flatten a union of object types into a single object with all properties.
@@ -45,8 +48,16 @@ def _flatten_union_to_object(union_items: list, defs: dict, resolve_fn) -> dict:
                 ref_name = ref_path[8:]
             elif ref_path.startswith("#/definitions/"):
                 ref_name = ref_path[14:]
-            if ref_name and ref_name in defs:
-                item = copy.deepcopy(defs[ref_name])
+            if ref_name:
+                # Check cache first
+                if ref_name in _resolved_cache:
+                    item = _resolved_cache[ref_name]
+                elif ref_name in defs:
+                    resolved_val = copy.deepcopy(defs[ref_name])
+                    _resolved_cache[ref_name] = resolved_val
+                    item = resolved_val
+                else:
+                    continue
             else:
                 continue
 
@@ -186,11 +197,16 @@ def _inline_refs(schema: dict, simplify_unions: bool = False) -> dict:
                     ref_name = ref_path[14:]
 
                 if ref_name and ref_name in defs:
-                    # Return the resolved definition (recursively resolve it too)
-                    resolved = resolve_refs(copy.deepcopy(defs[ref_name]))
+                    # Check cache first, then deep copy if needed
+                    if ref_name in _resolved_cache:
+                        resolved = _resolved_cache[ref_name]
+                    else:
+                        resolved = resolve_refs(copy.deepcopy(defs[ref_name]))
+                        _resolved_cache[ref_name] = resolved
                     # Merge any other properties from the original object
                     other_props = {k: v for k, v in obj.items() if k != "$ref"}
                     if other_props:
+                        resolved = dict(resolved)
                         resolved.update(resolve_refs(other_props))
                     return resolved
                 else:
