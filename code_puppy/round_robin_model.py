@@ -1,5 +1,5 @@
+import asyncio
 import logging
-import threading
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
@@ -45,7 +45,7 @@ class RoundRobinModel(Model):
     _model_name: str = field(repr=False)
     _rotate_every: int = field(default=1, repr=False)
     _request_count: int = field(default=0, repr=False)
-    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
     def __init__(
         self,
@@ -68,7 +68,7 @@ class RoundRobinModel(Model):
         self._current_index = 0
         self._request_count = 0
         self._rotate_every = rotate_every
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
 
     @property
     def model_name(self) -> str:
@@ -88,7 +88,7 @@ class RoundRobinModel(Model):
         """Base URL from the current model."""
         return self.models[self._current_index].base_url
 
-    def _get_next_model(self) -> Model:
+    async def _get_next_model(self) -> Model:
         """Get the next available model in the round-robin sequence.
 
         Consults :data:`~code_puppy.model_availability.model_availability_service`
@@ -96,7 +96,7 @@ class RoundRobinModel(Model):
         with consumed attempt).  If *all* models are unavailable the method falls
         back to the plain round-robin choice so callers always receive a model.
         """
-        with self._lock:
+        async with self._lock:
             n = len(self.models)
             # Build a candidate list: starting at _current_index, wrap around.
             ordered_names = [
@@ -104,20 +104,19 @@ class RoundRobinModel(Model):
                 for i in range(n)
             ]
 
-        result = model_availability_service.select_first_available(ordered_names)
+            result = model_availability_service.select_first_available(ordered_names)
 
-        if result.selected_model is not None:
-            # Find the Model object that matches the selected name.
-            for m in self.models:
-                if m.model_name == result.selected_model:
-                    if result.skipped:
-                        logger.debug(
-                            "round_robin: skipped %d unavailable model(s), using %s",
-                            len(result.skipped),
-                            result.selected_model,
-                        )
-                    # Advance index by the number of models we skipped + 1.
-                    with self._lock:
+            if result.selected_model is not None:
+                # Find the Model object that matches the selected name.
+                for m in self.models:
+                    if m.model_name == result.selected_model:
+                        if result.skipped:
+                            logger.debug(
+                                "round_robin: skipped %d unavailable model(s), using %s",
+                                len(result.skipped),
+                                result.selected_model,
+                            )
+                        # Advance index by the number of models we skipped + 1.
                         skip_count = len(result.skipped)
                         self._request_count += 1
                         if self._request_count >= self._rotate_every:
@@ -125,16 +124,15 @@ class RoundRobinModel(Model):
                                 self._current_index + skip_count + 1
                             ) % n
                             self._request_count = 0
-                    return m
+                        return m
 
-        # All models unavailable – fall back to plain round-robin to avoid
-        # a hard failure.  The upstream caller can still raise if needed.
-        logger.warning(
-            "round_robin: all %d model(s) marked unavailable; falling back to "
-            "plain round-robin selection",
-            len(self.models),
-        )
-        with self._lock:
+            # All models unavailable – fall back to plain round-robin to avoid
+            # a hard failure.  The upstream caller can still raise if needed.
+            logger.warning(
+                "round_robin: all %d model(s) marked unavailable; falling back to "
+                "plain round-robin selection",
+                len(self.models),
+            )
             model = self.models[self._current_index]
             self._request_count += 1
             if self._request_count >= self._rotate_every:
@@ -150,7 +148,7 @@ class RoundRobinModel(Model):
         """Make a request using the next available model in the round-robin sequence."""
         from code_puppy.model_availability import availability_service
 
-        current_model = self._get_next_model()
+        current_model = await self._get_next_model()
         merged_settings, prepared_params = current_model.prepare_request(
             model_settings, model_request_parameters
         )
@@ -176,7 +174,7 @@ class RoundRobinModel(Model):
         """Make a streaming request using the next model in the round-robin sequence."""
         from code_puppy.model_availability import availability_service
 
-        current_model = self._get_next_model()
+        current_model = await self._get_next_model()
         # Use prepare_request to merge settings and customize parameters
         merged_settings, prepared_params = current_model.prepare_request(
             model_settings, model_request_parameters
