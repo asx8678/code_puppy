@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/turbo_executor/orchestrator.py
+# hypothesis_version: 6.151.11
+
+[0.0, 1000, '.', 'Plan must have an id', 'Unknown error', 'content', 'directory', 'error', 'failed_operations', 'file_path', 'file_paths', 'files', 'line_content', 'line_number', 'matches', 'native_python', 'num_lines', 'num_tokens', 'orchestrator', 'recursive', 'search_string', 'source', 'start_line', 'success', 'successful_reads', 'total_files', 'total_matches', 'total_operations', 'turbo_ops']

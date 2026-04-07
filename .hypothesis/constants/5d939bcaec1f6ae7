@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/terminal_utils.py
+# hypothesis_version: 6.151.11
+
+['\x1b[0m', '  • iTerm2 (macOS)', '24bit', '=', 'ALACRITTY_SOCKET', 'COLORTERM', 'Console', 'ITERM_SESSION_ID', 'KITTY_WINDOW_ID', 'TERM', 'WT_SESSION', 'Windows', '[/]', '[bold bright_red]', 'iterm2', 'reset', 'truecolor', 'unknown', 'vte-256color', 'xterm-direct', 'xterm-truecolor', '─', '━']

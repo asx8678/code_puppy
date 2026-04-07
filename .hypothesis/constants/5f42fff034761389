@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/antigravity_oauth/register_callbacks.py
+# hypothesis_version: 6.151.11
+
+[200, 400, 1000, 3600, ', ', 'Antigravity', 'Content-Type', 'Free Tier (limited)', 'Unknown', 'access_token', 'antigravity', 'antigravity-add', 'antigravity-auth', 'antigravity-logout', 'antigravity-plugin', 'antigravity-status', 'callback_port_range', 'callback_timeout', 'claude', 'code', 'custom_command', 'custom_command_help', 'email', 'expires_at', 'free-tier', 'gemini', 'handler', 'localhost', 'name', 'oauth_source', 'project_id', 'refresh_token', 'register_model_type', 'standard-tier', 'state', 'type', 'utf-8']

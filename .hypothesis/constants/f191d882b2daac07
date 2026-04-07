@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/agents/agent_creator_agent.py
+# hypothesis_version: 6.151.11
+
+['Agent Creator 🏗️', 'Unknown', 'Validation errors:\n', 'agent-creator', 'ask_user_question', 'context_length', 'create_file', 'delete_snippet', 'description', 'invoke_agent', 'list_agents', 'list_files', 'name', 'read_file', 'replace_in_file', 'system_prompt', 'tools', 'type', 'utf-8', 'w', '✅', '❌']

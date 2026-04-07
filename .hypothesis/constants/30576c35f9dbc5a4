@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/app_runner.py
+# hypothesis_version: 6.151.11
+
+['*', '--agent', '--bridge-mode', '--interactive', '--model', '--prompt', '--version', '-a', '-i', '-m', '-p', '-v', '1', 'Agent setup error', 'CODE PUPPY', 'CODE_PUPPY_BRIDGE', 'DBOS_APP_VERSION', 'DBOS_CONDUCTOR_KEY', 'DBOS_LOG_LEVEL', 'ERROR', 'NO_VERSION_UPDATE', 'ansi_shadow', 'application_version', 'bridge_mode', 'bright_blue', 'bright_cyan', 'bright_green', 'command', 'conductor_key', 'dbos-code-puppy', 'log_level', 'name', 'on', 'run_admin_server', 'store_true', 'system_database_url', 'true', 'version', 'version_check', 'yes']

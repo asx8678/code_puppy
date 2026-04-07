@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/hook_engine/executor.py
+# hypothesis_version: 6.151.11
+
+[0.0, 1000.0, 1000, '\nBlocking hooks:', '1', '<unserializable>', 'CLAUDE_CODE_HOOK', 'CLAUDE_FILE_PATH', 'CLAUDE_HOOK_EVENT', 'CLAUDE_PROJECT_DIR', 'CLAUDE_TOOL_INPUT', 'CLAUDE_TOOL_NAME', 'No hooks executed', 'codepuppy-session', 'cwd', 'default', 'duration_ms', 'event_type', 'file', 'hook_event_name', 'permission_mode', 'prompt', 'replace', 'result', 'session_id', 'tool_duration_ms', 'tool_input', 'tool_name', 'tool_result', 'utf-8']

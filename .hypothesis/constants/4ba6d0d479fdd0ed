@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/api/app.py
+# hypothesis_version: 6.151.11
+
+[30.0, 404, 504, '*', '/', '/api/agents', '/api/commands', '/api/config', '/api/sessions', '/docs', '/health', '/redoc', '/terminal', '/ws/', '1.0.0', 'Code Puppy API', 'agents', 'api_server.pid', 'commands', 'config', 'detail', 'error', 'healthy', 'sessions', 'status', 'templates', 'terminal.html', 'text/html', 'timeout', 'upgrade', 'websocket', '✓ PID file removed']

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/tui/widgets/info_bar.py
+# hypothesis_version: 6.151.11
+
+[' │ ', '#ib-agent', '#ib-model', '#ib-rate', '#ib-status', 'Ready', 'ib-agent', 'ib-model', 'ib-rate', 'ib-status', 'info-bar--agent', 'info-bar--model', 'info-bar--rate', 'info-bar--sep', 'info-bar--status', '🐶 —', '🤖 —']

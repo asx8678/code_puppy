@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/tools/browser/browser_locators.py
+# hypothesis_version: 6.151.11
+
+[100, 10000, 'all', 'browser_find_buttons', 'browser_find_by_role', 'browser_find_by_text', 'browser_find_links', 'browser_xpath_query', 'button', 'buttons', 'class', 'count', 'elements', 'error', 'exact', 'filtered_count', 'href', 'id', 'index', 'input', 'label_text', 'link', 'links', 'name', 'placeholder', 'placeholder_text', 'role', 'search_text', 'success', 'tag', 'test_id', 'text', 'text_filter', 'textarea', 'total_count', 'type', 'value', 'visible', 'xpath']

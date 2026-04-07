@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/antigravity_oauth/oauth.py
+# hypothesis_version: 6.151.11
+
+[200, 3600, '+', '-', '/', '; ', '=', 'Authorization', 'Client-Metadata', 'Content-Type', 'GEMINI', 'IDE_UNSPECIFIED', 'PLATFORM_UNSPECIFIED', 'S256', 'User-Agent', 'X-Goog-Api-Client', '_', 'access_token', 'access_type', 'allowedTiers', 'application/json', 'authorization_code', 'client_id', 'client_secret', 'code', 'code_challenge', 'code_verifier', 'consent', 'done', 'email', 'expires_in', 'free-tier', 'grant_type', 'id', 'ideType', 'isDefault', 'metadata', 'offline', 'platform', 'pluginType', 'projectId', 'prompt', 'redirect_uri', 'refresh_token', 'response', 'response_type', 'scope', 'standard-tier', 'state', 'tierId', 'utf-8', 'verifier']

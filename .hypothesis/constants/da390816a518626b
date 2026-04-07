@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/antigravity_oauth/token.py
+# hypothesis_version: 6.151.11
+
+[1000, 3600, 'Content-Type', 'access_token', 'client_id', 'client_secret', 'error', 'error_description', 'expires_in', 'grant_type', 'invalid_grant', 'refresh_token', '|']

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/tools/ask_user_question/renderers.py
+# hypothesis_version: 6.151.11
+
+['( )', '?', '? Help', 'Cancel', 'Ctrl+C', 'Ctrl+S', 'Ctrl+S Submit', 'Enter', 'Enter Next', 'Esc', 'G', 'Jump to first option', 'Jump to last option', 'Move down', 'Move up', 'Navigation:', 'Next question', 'Other:', 'Previous question', 'Selection:', 'Space', 'Space Select', 'Space Toggle', 'Submit all answers', 'Tab', 'Toggle this help', '[ ]', 'a', 'g', 'h', 'j', 'k', 'l', 'n', 'truecolor']

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/model_availability.py
+# hypothesis_version: 6.151.11
+
+['capacity', 'quota', 'retry_once_per_turn', 'sticky_retry', 'terminal', 'unknown']

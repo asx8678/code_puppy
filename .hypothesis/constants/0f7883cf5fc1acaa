@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/mcp_/managed_server.py
+# hypothesis_version: 6.151.11
+
+[30.0, 'args', 'command', 'config', 'cwd', 'deps', 'enabled', 'env', 'error', 'error_message', 'headers', 'http', 'http_client', 'id', 'mcp_tool_call', 'name', 'quarantined', 'read_timeout', 'red bold', 'running', 'server_available', 'sse', 'start_time', 'starting', 'state', 'stdio', 'stop_time', 'stopped', 'stopping', 'timeout', 'type', 'uptime_seconds', 'url']

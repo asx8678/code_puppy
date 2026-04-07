@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/fast_puppy/register_callbacks.py
+# hypothesis_version: 6.151.11
+
+[300, '--manifest-path', '--release', '--version', '-m', '1', 'Cargo.toml', 'RUST_AVAILABLE', 'Rust build error: %s', 'Rust build timed out', 'active', 'build', 'code_puppy_core', 'custom_command', 'custom_command_help', 'develop', 'disable', 'disabled', 'enable', 'enable_fast_puppy', 'enabled', 'fast_puppy', 'install', 'installed', 'maturin', 'on', 'pip', 'rustc', 'startup', 'status', 'true', 'yes', '⚡', '🐍', '💤', '🔧']

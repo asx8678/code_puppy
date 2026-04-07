@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/error_classifier/register_callbacks.py
+# hypothesis_version: 6.151.11
+
+['agent_exception', 'agent_run_end']

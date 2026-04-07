@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/tools/ask_user_question/tui_loop.py
+# hypothesis_version: 6.151.11
+
+[0.01, '\x1b', ' Peek behind', ' Submit', '<any>', '?', 'Ctrl+S', 'G', 'Questions', 'Tab', 'a', 'backspace', 'c-c', 'c-s', 'down', 'enter', 'escape', 'g', 'h', 'j', 'k', 'l', 'left', 'n', 'right', 'space', 'tab', 'up']
