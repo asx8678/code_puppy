@@ -1,10 +1,12 @@
 use pyo3::prelude::*;
 use std::sync::OnceLock;
 
+mod batch;
 mod cache;
 mod parser;
 mod registry;
 
+use batch::{parse_files_batch as _parse_files_batch, BatchParseOptions, BatchParseResult};
 use cache::{ParseCache, CacheKey, CacheValue, compute_content_hash, DEFAULT_CACHE_CAPACITY};
 use parser::{parse_file as _parse_file, parse_source as _parse_source, ParseResult};
 use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError};
@@ -342,6 +344,69 @@ fn health_check<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     Ok(py_dict)
 }
 
+/// Parse multiple files in parallel using all available CPU cores.
+///
+/// This function releases the GIL during parsing, allowing other
+/// Python threads to execute while parsing happens in parallel.
+///
+/// # Arguments
+/// * `paths` - List of file paths to parse (Python list of strings)
+/// * `max_workers` - Optional maximum number of worker threads (default: all cores)
+/// * `timeout_ms` - Optional timeout for entire batch in milliseconds (default: no timeout)
+///
+/// # Returns
+/// Dict with:
+///   - results: List[Dict] - individual parse results for each file
+///   - total_time_ms: float - time taken for entire batch
+///   - files_processed: int - number of files processed
+///   - success_count: int - number of files successfully parsed
+///   - error_count: int - number of files that failed
+///   - all_succeeded: bool - true if all files succeeded
+///
+/// Each result in the results list contains:
+///   - language: str - detected language
+///   - tree: dict or None - serialized AST
+///   - parse_time_ms: float - individual file parse time
+///   - success: bool - whether this file succeeded
+///   - errors: list - any parse errors for this file
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+/// paths = ["file1.py", "file2.rs", "file3.js"]
+/// result = turbo_parse.parse_files_batch(paths, max_workers=4)
+/// print(f"Processed {result['files_processed']} files in {result['total_time_ms']}ms")
+/// for r in result['results']:
+///     print(f"  {r['language']}: success={r['success']}")
+/// ```
+#[pyfunction]
+#[pyo3(signature = (paths, max_workers = None, timeout_ms = None))]
+fn parse_files_batch<'py>(
+    py: Python<'py>,
+    paths: Vec<String>,
+    max_workers: Option<usize>,
+    timeout_ms: Option<u64>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let options = BatchParseOptions { max_workers, timeout_ms };
+    
+    // Release GIL during CPU-intensive batch parsing
+    let result: BatchParseResult = py.detach(|| {
+        _parse_files_batch(paths, options)
+    });
+
+    convert_batch_result_to_py(py, &result)
+}
+
+/// Helper to convert BatchParseResult to Python dict.
+fn convert_batch_result_to_py<'py>(py: Python<'py>, result: &BatchParseResult) -> PyResult<Bound<'py, PyAny>> {
+    let json_str = serde_json::to_string(result)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e)))?;
+
+    let json_module = py.import("json")?;
+    let py_dict = json_module.call_method1("loads", (json_str,))?;
+    Ok(py_dict)
+}
+
 /// Helper to convert serde_json::Value to Python object.
 fn convert_json_to_py<'py>(py: Python<'py>, value: &serde_json::Value) -> PyResult<Bound<'py, PyAny>> {
     let json_str = serde_json::to_string(value)
@@ -358,6 +423,7 @@ fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(health_check, m)?)?;
     m.add_function(wrap_pyfunction!(parse_file, m)?)?;
     m.add_function(wrap_pyfunction!(parse_source, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_files_batch, m)?)?;
     // Cache functions from main
     m.add_function(wrap_pyfunction!(init_cache, m)?)?;
     m.add_function(wrap_pyfunction!(cache_get, m)?)?;
