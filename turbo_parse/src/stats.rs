@@ -65,11 +65,6 @@ impl Metrics {
         *self.total_parses.read()
     }
 
-    /// Get the total parse time across all operations
-    pub fn total_parse_time_ms(&self) -> f64 {
-        *self.total_parse_time_ms.read()
-    }
-
     /// Calculate the average parse time in milliseconds
     pub fn average_parse_time_ms(&self) -> f64 {
         let total_parses = *self.total_parses.read();
