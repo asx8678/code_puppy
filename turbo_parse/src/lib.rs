@@ -45,6 +45,40 @@ fn cache_get<'py>(py: Python<'py>, file_path: &str, content_hash: &str) -> PyRes
     }
 }
 
+/// Remove a specific entry from the cache
+///
+/// Args:
+///   file_path: Path to the file
+///   content_hash: SHA256 hash of the content
+///
+/// Returns:
+///   True if an entry was removed, False if not found
+#[pyfunction]
+fn cache_remove(_py: Python<'_>, file_path: &str, content_hash: &str) -> PyResult<bool> {
+    let cache = GLOBAL_CACHE.get_or_init(ParseCache::new);
+    let key = CacheKey::with_hash(file_path, content_hash);
+    
+    match cache.remove(&key) {
+        Some(_) => Ok(true),
+        None => Ok(false),
+    }
+}
+
+/// Check if an entry exists in the cache (without updating LRU order)
+///
+/// Args:
+///   file_path: Path to the file
+///   content_hash: SHA256 hash of the content
+///
+/// Returns:
+///   True if entry exists, False otherwise
+#[pyfunction]
+fn cache_contains(file_path: &str, content_hash: &str) -> bool {
+    let cache = GLOBAL_CACHE.get_or_init(ParseCache::new);
+    let key = CacheKey::with_hash(file_path, content_hash);
+    cache.contains(&key)
+}
+
 /// Put a value into the cache
 ///
 /// Args:
@@ -174,6 +208,8 @@ fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(init_cache, m)?)?;
     m.add_function(wrap_pyfunction!(cache_get, m)?)?;
     m.add_function(wrap_pyfunction!(cache_put, m)?)?;
+    m.add_function(wrap_pyfunction!(cache_remove, m)?)?;
+    m.add_function(wrap_pyfunction!(cache_contains, m)?)?;
     m.add_function(wrap_pyfunction!(cache_clear, m)?)?;
     m.add_function(wrap_pyfunction!(cache_stats, m)?)?;
     m.add_function(wrap_pyfunction!(compute_hash, m)?)?;

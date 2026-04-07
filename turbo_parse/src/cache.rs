@@ -162,6 +162,7 @@ impl ParseCache {
         let removed = cache.pop(key);
         if removed.is_some() {
             stats.size = stats.size.saturating_sub(1);
+            stats.evictions += 1;
         }
         removed
     }
@@ -206,6 +207,7 @@ impl CacheStats {
     }
 
     /// Total accesses (hits + misses)
+    #[allow(dead_code)]
     pub fn total_accesses(&self) -> u64 {
         self.hits + self.misses
     }
