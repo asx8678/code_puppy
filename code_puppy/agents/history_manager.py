@@ -78,7 +78,7 @@ class MessageHistoryMixin:
         """
         self._compacted_message_hashes.add(message_hash)
 
-    def restore_compacted_hashes(self, hashes: List) -> None:
+    def restore_compacted_hashes(self, hashes: list) -> None:
         """Restore compacted hashes from a previous session.
 
         Args:
