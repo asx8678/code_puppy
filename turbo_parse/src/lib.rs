@@ -4,6 +4,7 @@ use std::sync::OnceLock;
 mod batch;
 mod cache;
 mod diagnostics;
+mod highlights;
 mod incremental;
 mod parser;
 mod registry;
@@ -14,6 +15,7 @@ pub mod queries;
 use batch::{parse_files_batch as _parse_files_batch, BatchParseOptions, BatchParseResult};
 use cache::{ParseCache, CacheKey, CacheValue, compute_content_hash, DEFAULT_CACHE_CAPACITY};
 use diagnostics::{extract_diagnostics, SyntaxDiagnostics};
+use highlights::{get_highlights as _get_highlights, get_highlights_from_file as _get_highlights_from_file, HighlightCapture, HighlightResult};
 use incremental::{parse_with_edits, InputEdit};
 use parser::{parse_file as _parse_file, parse_source as _parse_source, ParseResult};
 use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError};
@@ -595,6 +597,84 @@ fn extract_symbols_from_file<'py>(py: Python<'py>, path: &str, language: Option<
     })?)
 }
 
+/// Get syntax highlights for source code.
+///
+/// Extracts syntax highlighting regions from source code using tree-sitter
+/// queries. Returns ordered captures with byte positions and capture names
+/// following Helix Editor conventions.
+///
+/// # Arguments
+/// * `source` - The source code to analyze
+/// * `language` - The language identifier (e.g., "python", "rust", "javascript")
+///
+/// # Returns
+/// Dict with:
+///   - language: String - the detected/specified language
+///   - captures: List[Dict] - list of highlight captures
+///   - extraction_time_ms: f64 - time taken to extract
+///   - success: bool - whether extraction succeeded
+///   - errors: List[str] - any extraction errors
+///
+/// Each capture contains:
+///   - start_byte: int - start byte position (0-indexed, inclusive)
+///   - end_byte: int - end byte position (0-indexed, exclusive)
+///   - capture_name: str - capture name (e.g., "keyword", "string", "function")
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+/// result = turbo_parse.get_highlights("def hello(): pass", "python")
+/// print(f"Found {len(result['captures'])} highlight regions")
+/// for cap in result['captures']:
+///     print(f"  {cap['capture_name']}: bytes {cap['start_byte']}-{cap['end_byte']}")
+/// ```
+#[pyfunction]
+#[pyo3(signature = (source, language))]
+fn get_highlights<'py>(py: Python<'py>, source: &str, language: &str) -> PyResult<Bound<'py, PyAny>> {
+    // Release GIL during CPU-intensive query execution
+    let result: HighlightResult = py.detach(|| {
+        _get_highlights(source, language)
+    });
+
+    convert_json_to_py(py, &serde_json::to_value(&result).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e))
+    })?)
+}
+
+/// Get syntax highlights for a file.
+///
+/// # Arguments
+/// * `path` - Path to the file
+/// * `language` - Optional language override (detected from extension if not provided)
+///   Supported extensions: .py, .rs, .js, .jsx, .ts, .tsx, .ex, .exs
+///
+/// # Returns
+/// Dict with:
+///   - language: String - the detected/specified language
+///   - captures: List[Dict] - list of highlight captures
+///   - extraction_time_ms: f64 - time taken to extract
+///   - success: bool - whether extraction succeeded
+///   - errors: List[str] - any extraction errors
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+/// result = turbo_parse.get_highlights_from_file("test.py")
+/// print(f"Found {len(result['captures'])} highlight regions")
+/// ```
+#[pyfunction]
+#[pyo3(signature = (path, language = None))]
+fn get_highlights_from_file<'py>(py: Python<'py>, path: &str, language: Option<&str>) -> PyResult<Bound<'py, PyAny>> {
+    // Release GIL during file I/O and CPU-intensive query execution
+    let result: HighlightResult = py.detach(|| {
+        _get_highlights_from_file(path, language)
+    });
+
+    convert_json_to_py(py, &serde_json::to_value(&result).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e))
+    })?)
+}
+
 /// The turbo_parse Python module.
 #[pymodule]
 fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -623,8 +703,12 @@ fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Symbol extraction functions
     m.add_function(wrap_pyfunction!(extract_symbols, m)?)?;
     m.add_function(wrap_pyfunction!(extract_symbols_from_file, m)?)?;
+    // Highlight extraction functions
+    m.add_function(wrap_pyfunction!(get_highlights, m)?)?;
+    m.add_function(wrap_pyfunction!(get_highlights_from_file, m)?)?;
     // Add pyclass types
     m.add_class::<InputEdit>()?;
+    m.add_class::<HighlightCapture>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("DEFAULT_CACHE_CAPACITY", DEFAULT_CACHE_CAPACITY)?;
     Ok(())
