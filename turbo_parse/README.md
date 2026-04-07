@@ -1084,25 +1084,53 @@ string
 
 ### Language Injection
 
-**Status**: Not supported  
-**Impact**: Medium
+**Status**: ✅ Supported (v0.1.0+)  
+**Impact**: High
 
-Embedded languages (language injection) are not yet supported:
+Language injection detection is now supported! It can detect embedded languages within source code:
 
 ```python
-# SQL within Python string - not recognized as SQL
-query = """
-SELECT * FROM users WHERE id = %s
-"""
+import turbo_parse
+
+# Detect SQL in Python strings
+source = '''
+def get_users(cursor, user_id):
+    query = """
+    SELECT u.id, u.name, u.email
+    FROM users u
+    WHERE u.id = %s AND u.active = true
+    ORDER BY u.name
+    """
+    cursor.execute(query, (user_id,))
+    return cursor.fetchall()
+'''
+
+result = turbo_parse.get_injections(source, "python")
+for injection in result["injections"]:
+    print(f"Found {injection['injected_language']} at bytes {injection['start_byte']}-{injection['end_byte']}")
+    # Output: Found sql at bytes 35-152
+
+# Parse the detected injections
+parsed = turbo_parse.parse_injections_py(result)
+for inj in parsed["parsed_injections"]:
+    if inj["parse_success"]:
+        print(f"Parsed {inj['range']['injected_language']} successfully")
 ```
 
-```javascript
-// CSS within styled-components - not recognized as CSS
-const Button = styled.button`
-  background: blue;
-  color: white;
-`;
-```
+**Supported injection patterns:**
+
+| Parent Language | Detected Injection | Pattern |
+|----------------|-------------------|---------|
+| Python | SQL | Triple-quoted strings with SQL keywords + cursor/execute context |
+| Python | HTML | Triple-quoted strings starting with `<` |
+| Python | JSON | Triple-quoted strings with `{` or `[` structure |
+| Elixir | HEEx | `~H` sigil content |
+| Elixir | EEx | `~E` sigil content |
+| Elixir | SQL | Triple-quoted strings with SQL keywords |
+| HTML | JavaScript | `<script>` tag content |
+| HTML | CSS | `<style>` tag content |
+
+**Nested injections** are also supported (e.g., JavaScript inside HTML inside Python strings).
 
 ### TypeScript Complex Types
 
@@ -1168,6 +1196,9 @@ See [CI.md](./CI.md) for detailed information about:
 | **Symbol Extraction** |||
 | `extract_symbols()` | `(source: str, language: str) -> dict` | Extract symbols (outline) from source |
 | `extract_symbols_from_file()` | `(path: str, language: str=None) -> dict` | Extract symbols from file |
+| `get_injections()` | `(source: str, parent_language: str) -> dict` | Detect embedded language injections |
+| `get_injections_from_file()` | `(path: str, language: str=None) -> dict` | Detect injections from file |
+| `parse_injections_py()` | `(injection_result: dict) -> dict` | Parse detected injections with appropriate grammars |
 | **Syntax Highlighting** ⭐ |||
 | `get_highlights()` | `(source: str, language: str) -> dict` | Extract syntax highlighting captures |
 | `get_highlights_from_file()` | `(path: str, language: str=None) -> dict` | Extract highlights from file |

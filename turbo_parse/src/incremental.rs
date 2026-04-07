@@ -18,26 +18,27 @@ use crate::registry::{get_language, normalize_language, RegistryError};
 use pyo3::prelude::*;
 
 /// Describes a text edit for incremental parsing.
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg(feature = "python")]
+#[pyclass]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InputEdit {
     /// Byte offset where the edit starts in the old document
-    #[cfg_attr(feature = "python", pyo3(get))]
+    #[pyo3(get)]
     pub start_byte: usize,
     /// Byte offset where the replaced region ended in the old document
-    #[cfg_attr(feature = "python", pyo3(get))]
+    #[pyo3(get)]
     pub old_end_byte: usize,
     /// Byte offset where the new text ends in the new document
-    #[cfg_attr(feature = "python", pyo3(get))]
+    #[pyo3(get)]
     pub new_end_byte: usize,
     /// Line and column where the edit starts (row, column)
-    #[cfg_attr(feature = "python", pyo3(get))]
+    #[pyo3(get)]
     pub start_position: (usize, usize),
     /// Line and column where the replaced region ended (row, column)
-    #[cfg_attr(feature = "python", pyo3(get))]
+    #[pyo3(get)]
     pub old_end_position: (usize, usize),
     /// Line and column where the new text ends (row, column)
-    #[cfg_attr(feature = "python", pyo3(get))]
+    #[pyo3(get)]
     pub new_end_position: (usize, usize),
 }
 
@@ -134,17 +135,18 @@ mod python_impl {
 }
 
 /// Serialized tree data used to reconstruct a Tree for incremental parsing.
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg(feature = "python")]
+#[pyclass]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializedTree {
     /// The language identifier
-    #[cfg_attr(feature = "python", pyo3(get))]
+    #[pyo3(get)]
     pub language: String,
     /// The source code that was parsed
-    #[cfg_attr(feature = "python", pyo3(get))]
+    #[pyo3(get)]
     pub source: String,
     /// Whether the tree had errors
-    #[cfg_attr(feature = "python", pyo3(get))]
+    #[pyo3(get)]
     pub had_errors: bool,
 }
 
