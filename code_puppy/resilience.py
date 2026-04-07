@@ -8,9 +8,10 @@ the agent pack system and general tool execution.
 from __future__ import annotations
 
 import asyncio
-import inspect
 import functools
+import inspect
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -20,6 +21,32 @@ logger = logging.getLogger(__name__)
 
 P = ParamSpec("P")
 T = TypeVar("T")
+
+# Thread-local storage for dedicated event loops (used by _run_async)
+_loop_local = threading.local()
+
+
+def _run_async(coro):
+    """Run a coroutine in a dedicated background thread's event loop.
+    
+    This is more reliable than asyncio.run() for nested calls and cases
+    where an event loop may already exist in the current thread.
+    
+    Args:
+        coro: The coroutine to run
+        
+    Returns:
+        The result of the coroutine
+    """
+    # Check if we have a dedicated loop in this thread
+    if not hasattr(_loop_local, 'loop') or _loop_local.loop is None or _loop_local.loop.is_closed():
+        _loop_local.loop = asyncio.new_event_loop()
+        _loop_local.thread = threading.Thread(target=_loop_local.loop.run_forever, daemon=True)
+        _loop_local.thread.start()
+    
+    # Submit the coroutine to the dedicated loop
+    future = asyncio.run_coroutine_threadsafe(coro, _loop_local.loop)
+    return future.result()
 
 
 class CircuitState(Enum):
@@ -226,6 +253,9 @@ def with_retry_sync(
 ) -> T:
     """Synchronous version of with_retry.
     
+    This is a thin wrapper around the async with_retry function that
+    runs it using a dedicated background thread's event loop.
+    
     Args:
         func: Synchronous function to execute
         config: Retry configuration
@@ -233,26 +263,7 @@ def with_retry_sync(
     Returns:
         Result from successful execution
     """
-    cfg = config or RetryConfig()
-    last_error: Exception | None = None
-    
-    for attempt in range(cfg.max_attempts):
-        try:
-            return func()
-        except cfg.retryable_exceptions as e:
-            last_error = e
-            if attempt < cfg.max_attempts - 1:
-                delay = min(
-                    cfg.base_delay * (cfg.exponential_base ** attempt),
-                    cfg.max_delay,
-                )
-                if cfg.on_retry:
-                    cfg.on_retry(attempt + 1, e, delay)
-                logger.warning(f"Retry {attempt + 1}/{cfg.max_attempts} after error: {e}")
-                time.sleep(delay)
-    
-    assert last_error is not None
-    raise last_error
+    return _run_async(with_retry(func, config))
 
 
 async def with_fallback(

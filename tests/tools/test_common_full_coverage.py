@@ -628,26 +628,35 @@ class TestArrowSelectAsync:
 
 
 class TestArrowSelect:
-    def test_raises_in_async_context(self):
-        """arrow_select raises RuntimeError when called from async context."""
+    def test_calls_async_version(self):
+        """arrow_select now delegates to arrow_select_async via _run_async_sync."""
         from code_puppy.tools.common import arrow_select
 
-        async def _inner():
-            with pytest.raises(RuntimeError, match="arrow_select_async"):
-                arrow_select("Pick:", ["a", "b"])
+        with patch(
+            "code_puppy.tools.common.arrow_select_async",
+            new_callable=AsyncMock,
+            return_value="a",
+        ) as mock_async:
+            with patch("code_puppy.tools.common._run_async_sync") as mock_runner:
+                mock_runner.return_value = "a"
+                result = arrow_select("Pick:", ["a", "b"])
+                assert result == "a"
+                # Verify _run_async_sync was called with arrow_select_async coro
+                mock_runner.assert_called_once()
 
-        asyncio.run(_inner())
-
-    def test_cancel_raises_keyboard_interrupt(self):
+    def test_keyboard_interrupt_on_cancel(self):
+        """arrow_select propagates KeyboardInterrupt when result is None."""
         from code_puppy.tools.common import arrow_select
 
-        with patch("code_puppy.tools.common.Application") as MockApp:
-            app_instance = MagicMock()
-            MockApp.return_value = app_instance
-            app_instance.run = MagicMock()  # result stays None
-
-            with pytest.raises(KeyboardInterrupt):
-                arrow_select("Pick:", ["a", "b"])
+        with patch(
+            "code_puppy.tools.common.arrow_select_async",
+            new_callable=AsyncMock,
+            side_effect=KeyboardInterrupt,
+        ):
+            with patch("code_puppy.tools.common._run_async_sync") as mock_runner:
+                mock_runner.side_effect = KeyboardInterrupt
+                with pytest.raises(KeyboardInterrupt):
+                    arrow_select("Pick:", ["a", "b"])
 
 
 # ---------------------------------------------------------------------------
@@ -659,7 +668,11 @@ class TestGetUserApproval:
     def test_approve(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch("code_puppy.tools.common.arrow_select", return_value="✓ Approve"):
+        with patch(
+            "code_puppy.tools.common.arrow_select_async",
+            new_callable=AsyncMock,
+            return_value="✓ Approve",
+        ):
             with patch("code_puppy.tools.common.Console"):
                 with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
                     with patch("code_puppy.tools.common.emit_info"):
@@ -673,7 +686,11 @@ class TestGetUserApproval:
     def test_reject(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch("code_puppy.tools.common.arrow_select", return_value="✗ Reject"):
+        with patch(
+            "code_puppy.tools.common.arrow_select_async",
+            new_callable=AsyncMock,
+            return_value="✗ Reject",
+        ):
             with patch("code_puppy.tools.common.Console"):
                 with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
                     with patch("code_puppy.tools.common.emit_info"):
@@ -688,7 +705,8 @@ class TestGetUserApproval:
         from code_puppy.tools.common import get_user_approval
 
         with patch(
-            "code_puppy.tools.common.arrow_select",
+            "code_puppy.tools.common.arrow_select_async",
+            new_callable=AsyncMock,
             return_value="💬 Reject with feedback (tell Biscuit what to change)",
         ):
             with patch("code_puppy.tools.common.Prompt") as MockPrompt:
@@ -709,7 +727,11 @@ class TestGetUserApproval:
     def test_reject_with_empty_feedback(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch("code_puppy.tools.common.arrow_select", return_value="💬 feedback"):
+        with patch(
+            "code_puppy.tools.common.arrow_select_async",
+            new_callable=AsyncMock,
+            return_value="💬 feedback",
+        ):
             with patch("code_puppy.tools.common.Prompt") as MockPrompt:
                 MockPrompt.ask.return_value = "  "
                 with patch("code_puppy.tools.common.Console"):
@@ -728,7 +750,9 @@ class TestGetUserApproval:
         from code_puppy.tools.common import get_user_approval
 
         with patch(
-            "code_puppy.tools.common.arrow_select", side_effect=KeyboardInterrupt
+            "code_puppy.tools.common.arrow_select_async",
+            new_callable=AsyncMock,
+            side_effect=KeyboardInterrupt,
         ):
             with patch("code_puppy.tools.common.Console"):
                 with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
@@ -742,7 +766,11 @@ class TestGetUserApproval:
     def test_eof_error(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch("code_puppy.tools.common.arrow_select", side_effect=EOFError):
+        with patch(
+            "code_puppy.tools.common.arrow_select_async",
+            new_callable=AsyncMock,
+            side_effect=EOFError,
+        ):
             with patch("code_puppy.tools.common.Console"):
                 with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
                     with patch("code_puppy.tools.common.emit_info"):
@@ -755,7 +783,11 @@ class TestGetUserApproval:
     def test_with_preview(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch("code_puppy.tools.common.arrow_select", return_value="✓ Approve"):
+        with patch(
+            "code_puppy.tools.common.arrow_select_async",
+            new_callable=AsyncMock,
+            return_value="✓ Approve",
+        ):
             with patch("code_puppy.tools.common.Console"):
                 with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
                     with patch("code_puppy.tools.common.emit_info"):
@@ -775,7 +807,11 @@ class TestGetUserApproval:
     def test_with_text_content(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch("code_puppy.tools.common.arrow_select", return_value="✓ Approve"):
+        with patch(
+            "code_puppy.tools.common.arrow_select_async",
+            new_callable=AsyncMock,
+            return_value="✓ Approve",
+        ):
             with patch("code_puppy.tools.common.Console"):
                 with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
                     with patch("code_puppy.tools.common.emit_info"):
@@ -788,7 +824,11 @@ class TestGetUserApproval:
     def test_default_puppy_name(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch("code_puppy.tools.common.arrow_select", return_value="✓ Approve"):
+        with patch(
+            "code_puppy.tools.common.arrow_select_async",
+            new_callable=AsyncMock,
+            return_value="✓ Approve",
+        ):
             with patch("code_puppy.tools.common.Console"):
                 with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
                     with patch("code_puppy.tools.common.emit_info"):

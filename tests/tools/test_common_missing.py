@@ -1,6 +1,6 @@
 """Tests for remaining coverage gaps in code_puppy/tools/common.py."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from rich.text import Text
@@ -192,7 +192,11 @@ class TestFormatDiffWithColors:
 
 
 class TestGetUserApproval:
-    @patch("code_puppy.tools.common.arrow_select", return_value="\u2713 Approve")
+    @patch(
+        "code_puppy.tools.common.arrow_select_async",
+        new_callable=AsyncMock,
+        return_value="\u2713 Approve",
+    )
     @patch("code_puppy.tools.common.Console")
     @patch("code_puppy.tools.common.emit_info")
     @patch("code_puppy.tools.command_runner.set_awaiting_user_input")
@@ -206,7 +210,11 @@ class TestGetUserApproval:
         assert approved is True
         assert feedback is None
 
-    @patch("code_puppy.tools.common.arrow_select", return_value="\u2717 Reject")
+    @patch(
+        "code_puppy.tools.common.arrow_select_async",
+        new_callable=AsyncMock,
+        return_value="\u2717 Reject",
+    )
     @patch("code_puppy.tools.common.Console")
     @patch("code_puppy.tools.common.emit_info")
     @patch("code_puppy.tools.command_runner.set_awaiting_user_input")
@@ -220,7 +228,8 @@ class TestGetUserApproval:
         assert approved is False
 
     @patch(
-        "code_puppy.tools.common.arrow_select",
+        "code_puppy.tools.common.arrow_select_async",
+        new_callable=AsyncMock,
         return_value="\U0001f4ac Reject with feedback (tell Rex what to change)",
     )
     @patch("code_puppy.tools.common.Prompt")
@@ -238,7 +247,11 @@ class TestGetUserApproval:
         assert approved is False
         assert feedback == "fix it"
 
-    @patch("code_puppy.tools.common.arrow_select", side_effect=KeyboardInterrupt)
+    @patch(
+        "code_puppy.tools.common.arrow_select_async",
+        new_callable=AsyncMock,
+        side_effect=KeyboardInterrupt,
+    )
     @patch("code_puppy.tools.common.Console")
     @patch("code_puppy.tools.common.emit_info")
     @patch("code_puppy.tools.common.emit_error")
@@ -252,7 +265,11 @@ class TestGetUserApproval:
         approved, feedback = get_user_approval("Test", "content", puppy_name="Rex")
         assert approved is False
 
-    @patch("code_puppy.tools.common.arrow_select", return_value="\u2713 Approve")
+    @patch(
+        "code_puppy.tools.common.arrow_select_async",
+        new_callable=AsyncMock,
+        return_value="\u2713 Approve",
+    )
     @patch("code_puppy.tools.common.Console")
     @patch("code_puppy.tools.common.emit_info")
     @patch("code_puppy.tools.command_runner.set_awaiting_user_input")
@@ -270,7 +287,11 @@ class TestGetUserApproval:
         )
         assert approved is True
 
-    @patch("code_puppy.tools.common.arrow_select", return_value="\u2713 Approve")
+    @patch(
+        "code_puppy.tools.common.arrow_select_async",
+        new_callable=AsyncMock,
+        return_value="\u2713 Approve",
+    )
     @patch("code_puppy.tools.common.Console")
     @patch("code_puppy.tools.common.emit_info")
     @patch("code_puppy.tools.command_runner.set_awaiting_user_input")
@@ -283,7 +304,11 @@ class TestGetUserApproval:
         approved, _ = get_user_approval("Test", Text("hello"), puppy_name="Rex")
         assert approved is True
 
-    @patch("code_puppy.tools.common.arrow_select", return_value="\u2713 Approve")
+    @patch(
+        "code_puppy.tools.common.arrow_select_async",
+        new_callable=AsyncMock,
+        return_value="\u2713 Approve",
+    )
     @patch("code_puppy.tools.common.Console")
     @patch("code_puppy.tools.common.emit_info")
     @patch("code_puppy.tools.command_runner.set_awaiting_user_input")

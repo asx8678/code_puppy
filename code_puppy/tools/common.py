@@ -4,9 +4,37 @@ import hashlib
 import os
 import secrets
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Callable
+
+# Thread-local storage for dedicated event loops (used by _run_async_sync)
+_loop_local = threading.local()
+
+
+def _run_async_sync(coro):
+    """Run a coroutine in a dedicated background thread's event loop.
+
+    This is more reliable than asyncio.run() for nested calls and cases
+    where an event loop may already exist in the current thread.
+
+    Args:
+        coro: The coroutine to run
+
+    Returns:
+        The result of the coroutine
+    """
+    # Check if we have a dedicated loop in this thread
+    if not hasattr(_loop_local, 'loop') or _loop_local.loop is None or _loop_local.loop.is_closed():
+        _loop_local.loop = asyncio.new_event_loop()
+        _loop_local.thread = threading.Thread(target=_loop_local.loop.run_forever, daemon=True)
+        _loop_local.thread.start()
+
+    # Submit the coroutine to the dedicated loop
+    future = asyncio.run_coroutine_threadsafe(coro, _loop_local.loop)
+    return future.result()
+
 
 try:
     from prompt_toolkit import Application
@@ -919,6 +947,8 @@ async def arrow_select_async(
 def arrow_select(message: str, choices: list[str]) -> str:
     """Show an arrow-key navigable selector (synchronous version).
 
+    This is a thin wrapper around arrow_select_async to avoid code duplication.
+
     Args:
         message: The prompt message to display
         choices: List of choice strings
@@ -929,83 +959,7 @@ def arrow_select(message: str, choices: list[str]) -> str:
     Raises:
         KeyboardInterrupt: If user cancels with Ctrl-C
     """
-
-    selected_index = [0]  # Mutable container for selected index
-    result = [None]  # Mutable container for result
-
-    def get_formatted_text():
-        """Generate the formatted text for display."""
-        lines = [f"<b>{message}</b>", ""]
-        for i, choice in enumerate(choices):
-            if i == selected_index[0]:
-                lines.append(f"<ansigreen>❯ {choice}</ansigreen>")
-            else:
-                lines.append(f"  {choice}")
-        lines.append("")
-        lines.append(
-            "<ansicyan>(Use ↑↓ or Ctrl+P/N to select, Enter to confirm)</ansicyan>"
-        )
-        return HTML("\n".join(lines))
-
-    # Key bindings
-    kb = KeyBindings()
-
-    @kb.add("up")
-    @kb.add("c-p")  # Ctrl+P = previous (Emacs-style)
-    def move_up(event):
-        selected_index[0] = (selected_index[0] - 1) % len(choices)
-        event.app.invalidate()  # Force redraw to update preview
-
-    @kb.add("down")
-    @kb.add("c-n")  # Ctrl+N = next (Emacs-style)
-    def move_down(event):
-        selected_index[0] = (selected_index[0] + 1) % len(choices)
-        event.app.invalidate()  # Force redraw to update preview
-
-    @kb.add("enter")
-    def accept(event):
-        result[0] = choices[selected_index[0]]
-        event.app.exit()
-
-    @kb.add("c-c")  # Ctrl-C
-    def cancel(event):
-        result[0] = None
-        event.app.exit()
-
-    # Layout
-    control = FormattedTextControl(get_formatted_text)
-    layout = Layout(Window(content=control))
-
-    # Application
-    app = Application(
-        layout=layout,
-        key_bindings=kb,
-        full_screen=False)
-
-    # Flush output before prompt_toolkit takes control
-    sys.stdout.flush()
-    sys.stderr.flush()
-
-    # Check if we're already in an async context
-    try:
-        asyncio.get_running_loop()
-        # We're in an async context - can't use app.run()
-        # Caller should use arrow_select_async instead
-        raise RuntimeError(
-            "arrow_select() called from async context. Use arrow_select_async() instead."
-        )
-    except RuntimeError as e:
-        if "no running event loop" in str(e).lower():
-            # No event loop, safe to use app.run()
-            app.run()
-        else:
-            # Re-raise if it's our error message
-            raise
-
-    if result[0] is None:
-        raise KeyboardInterrupt()
-
-    return result[0]
+    return _run_async_sync(arrow_select_async(message, choices))
 
 
 def get_user_approval(
@@ -1015,6 +969,8 @@ def get_user_approval(
     border_style: str = "dim white",
     puppy_name: str | None = None) -> tuple[bool, str | None]:
     """Show a beautiful approval panel with arrow-key selector.
+
+    This is a thin wrapper around get_user_approval_async to avoid code duplication.
 
     Args:
         title: Title for the panel (e.g., "File Operation", "Shell Command")
@@ -1028,147 +984,7 @@ def get_user_approval(
         - confirmed: True if approved, False if rejected
         - user_feedback: Optional feedback text if user provided it
     """
-    import time
-
-    from code_puppy.tools.command_runner import set_awaiting_user_input
-
-    if puppy_name is None:
-        from code_puppy.config import get_puppy_name
-
-        puppy_name = get_puppy_name().title()
-
-    # Build panel content
-    if isinstance(content, str):
-        panel_content = Text(content)
-    else:
-        panel_content = content
-
-    # Add preview if provided
-    if preview:
-        panel_content.append("\n\n", style="")
-        panel_content.append("Preview of changes:", style="bold underline")
-        panel_content.append("\n", style="")
-        formatted_preview = format_diff_with_colors(preview)
-
-        # Handle both string (text mode) and Text object (highlight mode)
-        if isinstance(formatted_preview, Text):
-            preview_text = formatted_preview
-        else:
-            preview_text = Text.from_markup(formatted_preview)
-
-        panel_content.append(preview_text)
-
-        # Mark that we showed a diff preview
-        try:
-            from code_puppy.plugins.file_permission_handler.register_callbacks import (
-                set_diff_already_shown)
-
-            set_diff_already_shown(True)
-        except ImportError:
-            pass
-
-    # Create panel
-    panel = Panel(
-        panel_content,
-        title=f"[bold white]{title}[/bold white]",
-        border_style=border_style,
-        padding=(1, 2))
-
-    # Pause spinners BEFORE showing panel
-    set_awaiting_user_input(True)
-    # Also explicitly pause spinners to ensure they're fully stopped
-    try:
-        from code_puppy.messaging.spinner import pause_all_spinners
-
-        pause_all_spinners()
-    except (ImportError, Exception):
-        pass
-
-    time.sleep(0.3)  # Let spinners fully stop
-
-    # Display panel
-    local_console = Console()
-    emit_info("")
-    local_console.print(panel)
-    emit_info("")
-
-    # Flush and buffer before selector
-    sys.stdout.flush()
-    sys.stderr.flush()
-    time.sleep(0.1)
-
-    user_feedback = None
-    confirmed = False
-
-    try:
-        # Final flush
-        sys.stdout.flush()
-
-        # Show arrow-key selector
-        choice = arrow_select(
-            "💭 What would you like to do?",
-            [
-                "✓ Approve",
-                "✗ Reject",
-                f"💬 Reject with feedback (tell {puppy_name} what to change)",
-            ])
-
-        if choice == "✓ Approve":
-            confirmed = True
-        elif choice == "✗ Reject":
-            confirmed = False
-        else:
-            # User wants to provide feedback
-            confirmed = False
-            emit_info("")
-            emit_info(f"Tell {puppy_name} what to change:")
-            user_feedback = Prompt.ask(
-                "[bold green]➤[/bold green]",
-                default="").strip()
-
-            if not user_feedback:
-                user_feedback = None
-
-    except (KeyboardInterrupt, EOFError):
-        emit_error("Cancelled by user")
-        confirmed = False
-
-    finally:
-        set_awaiting_user_input(False)
-
-        # Force Rich console to reset display state to prevent artifacts
-        try:
-            # Clear Rich's internal display state to prevent artifacts
-            local_console.file.write("\r")  # Return to start of line
-            local_console.file.write("\x1b[K")  # Clear current line
-            local_console.file.flush()
-        except Exception:
-            pass
-
-        # Ensure streams are flushed
-        sys.stdout.flush()
-        sys.stderr.flush()
-
-    # Show result BEFORE resuming spinners (no puppy litter!)
-    emit_info("")
-    if not confirmed:
-        if user_feedback:
-            emit_error("Rejected with feedback!")
-            emit_warning(f'Telling {puppy_name}: "{user_feedback}"')
-        else:
-            emit_error("Rejected.")
-    else:
-        emit_success("Approved!")
-
-    # NOW resume spinners after showing the result
-    try:
-        from code_puppy.messaging.spinner import resume_all_spinners
-
-        resume_all_spinners()
-    except (ImportError, Exception):
-        pass
-
-    return confirmed, user_feedback
+    return _run_async_sync(get_user_approval_async(title, content, preview, border_style, puppy_name))
 
 
 async def get_user_approval_async(
