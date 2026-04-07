@@ -2,6 +2,11 @@
 
 Plugins are discovered at startup but only imported when their callbacks are first triggered.
 This reduces cold-start time by deferring heavy imports until they're actually needed.
+
+SECURITY WARNING:
+User plugins (from ~/.code_puppy/plugins/) execute arbitrary Python code with full system
+privileges. A malicious plugin can perform any action the user can perform (delete files,
+steal credentials, install malware, etc.). Only install plugins from trusted sources.
 """
 
 import importlib
@@ -52,12 +57,12 @@ def _create_loader_builtin(plugin_name: str, module_name: str) -> Callable:
 def _create_loader_user(plugin_name: str, callbacks_file: Path) -> Callable:
     """Create a lazy loader function for a user plugin.
     
-    SECURITY FIX c9z0: User plugins execute with full privileges via exec_module().
-    Added warnings and allowlist requirement for user plugin security.
+    SECURITY: User plugins execute with full system privileges via exec_module().
+    A malicious plugin can perform any action the user account can perform.
     """
     def _load():
         try:
-            # SECURITY FIX c9z0: Check if user plugins are enabled
+            # SECURITY: Check if user plugins are enabled
             from code_puppy.config import get_value
             user_plugins_enabled = get_value("enable_user_plugins")
             if user_plugins_enabled is None:
@@ -80,10 +85,10 @@ def _create_loader_user(plugin_name: str, callbacks_file: Path) -> Callable:
                     )
                     return None
             
-            # Log security warning when loading
+            # SECURITY WARNING: Loading user plugin with full system privileges
             logger.warning(
-                f"SECURITY: Loading user plugin '{plugin_name}' from {callbacks_file}. "
-                f"This plugin will execute with full system privileges!"
+                "Loading user plugin %s from %s — executes arbitrary Python code with full system privileges",
+                plugin_name, callbacks_file
             )
             
             module_name = f"{plugin_name}.register_callbacks"
@@ -94,8 +99,8 @@ def _create_loader_user(plugin_name: str, callbacks_file: Path) -> Callable:
 
             module = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = module
-            # SECURITY: exec_module() executes arbitrary Python code
-            # This is the attack surface for RCE via malicious plugins
+            # SECURITY: exec_module() executes arbitrary Python code with full privileges.
+            # This is the primary RCE attack surface - only load trusted plugins!
             spec.loader.exec_module(module)
             return module
         except ImportError as e:
@@ -217,7 +222,53 @@ def _discover_user_plugins(user_plugins_dir: Path) -> list[tuple[str, list[str]]
             and not item.name.startswith(".")
         ):
             plugin_name = item.name
+
+            # SECURITY: Validate plugin name doesn't contain path traversal sequences
+            if ".." in plugin_name or "/" in plugin_name or "\\" in plugin_name or "\x00" in plugin_name:
+                logger.warning(
+                    "SECURITY: Skipping user plugin with suspicious name: %s",
+                    plugin_name
+                )
+                continue
+
             callbacks_file = item / "register_callbacks.py"
+
+            # SECURITY: Path traversal protection - verify resolved path is inside plugins dir
+            try:
+                callbacks_abs = callbacks_file.resolve()
+                plugins_abs = user_plugins_dir.resolve()
+                # Check if the resolved path is within the plugins directory
+                if not str(callbacks_abs).startswith(str(plugins_abs) + "/"):
+                    logger.warning(
+                        "SECURITY: User plugin %s attempted path traversal outside plugins directory. Skipping.",
+                        plugin_name
+                    )
+                    continue
+            except (OSError, ValueError) as e:
+                logger.warning(
+                    "SECURITY: Could not resolve path for user plugin %s: %s. Skipping.",
+                    plugin_name, e
+                )
+                continue
+
+            # SECURITY: Check for symlinks pointing outside plugin directory
+            try:
+                if callbacks_file.is_symlink():
+                    link_target = callbacks_file.readlink()
+                    if link_target.is_absolute():
+                        target_abs = link_target.resolve()
+                        if not str(target_abs).startswith(str(plugins_abs) + "/"):
+                            logger.warning(
+                                "SECURITY: User plugin %s has symlink pointing outside plugins directory. Skipping.",
+                                plugin_name
+                            )
+                            continue
+            except (OSError, ValueError) as e:
+                logger.warning(
+                    "SECURITY: Could not check symlink for user plugin %s: %s. Skipping.",
+                    plugin_name, e
+                )
+                continue
 
             if callbacks_file.exists():
                 phases = _extract_phases_from_callbacks_file(callbacks_file, plugin_name)
