@@ -59,9 +59,9 @@ if _config_cache is None or _cached_mtime != _config_mtime:
 
 ---
 
-### [SEV-LOW] Bare Exception Handling in Config Fallback
+### [SEV-LOW] Exception Handling in Config Fallback
 **File:** code_puppy/config.py:540-542, 607-611  
-**Issue:** Multiple places use bare `except Exception:` which catches unexpected errors including `KeyboardInterrupt`, `SystemExit`, and `GeneratorExit`.
+**Issue:** Multiple places use bare `except Exception:` which is modern Python best practice - it catches application errors while allowing `KeyboardInterrupt`, `SystemExit`, and `GeneratorExit` (which inherit from `BaseException`, not `Exception`) to propagate correctly.
 
 ```python
 except Exception:
@@ -69,7 +69,7 @@ except Exception:
     return 128000
 ```
 
-**Fix:** Use `except (ValueError, TypeError, KeyError, AttributeError):` or at minimum exclude `BaseException` subclasses.
+**Fix:** No change needed. This is correct modern Python practice. The `except Exception:` pattern intentionally does NOT catch `KeyboardInterrupt`, `SystemExit`, or `GeneratorExit` since those inherit from `BaseException`.
 
 ---
 
@@ -81,15 +81,7 @@ except Exception:
 
 ---
 
-### [SEV-LOW] String Normalization Inconsistency
-**File:** code_puppy/config.py:62  
-**Issue:** `_is_truthy()` converts to lowercase for comparison but leaves the return value as a string. This is fine, but the function name implies boolean return, and it's used throughout.
-
-**Fix:** No change needed, but consider whether `bool` return type annotation could be more explicit (it is correct as written).
-
----
-
-### [SEV-LOW] Commented-Out Code
+### [SEV-LOW] Legacy Comment Block
 **File:** code_puppy/config.py:461-464  
 **Issue:** Legacy comment block about message history limit is technically not commented code, but the phrase "Legacy function removed" is misleading documentation that should be cleaned up.
 
@@ -104,17 +96,18 @@ except Exception:
 
 ## model_factory.py Findings
 
-### [SEV-HIGH] Resource Leak in `make_model_settings` - Uncaught Exceptions Leave Files Unclosed
-**File:** code_puppy/model_factory.py:70-123  
-**Issue:** The function opens model config files but doesn't use context managers (`with` statement). If an exception occurs mid-way, file handles may not be closed promptly.
+### [SEV-MEDIUM] Resource Leak in `make_model_settings` - Verify Consistency
+**File:** code_puppy/model_factory.py  
+**Issue:** Review all file operations for consistent use of context managers (`with` statement).
 
 ```python
-# Line 80-85 in model_factory (conceptual, via ModelFactory.load_config)
+# ModelFactory.load_config uses proper with statements:
 bundled_models = pathlib.Path(__file__).parent / "models.json"
-with open(bundled_models, "r") as f:  # This is OK, but other opens...
+with open(bundled_models, "r") as f:
+    config = json.load(f)
 ```
 
-**Fix:** Review all `open()` calls - actually most do use `with`, but verify consistency across all file operations.
+**Fix:** All file operations in model_factory.py correctly use `with` statements. No changes needed, but verify this pattern is maintained in future modifications.
 
 ---
 
@@ -183,7 +176,7 @@ if api_key is None:
 
 ## adaptive_rate_limiter.py Findings
 
-### [SEV-HIGH] Potential Deadlock in `acquire_model_slot`
+### [SEV-MEDIUM] Potential Deadlock in `acquire_model_slot`
 **File:** code_puppy/adaptive_rate_limiter.py:408-466  
 **Issue:** The function acquires `lock` then releases it, later acquiring `state.condition`. However, there are paths where `state.condition` is awaited while holding async context that could lead to complex interleaving issues. The TOCTOU fix (lines 429-444) uses nested lock acquisition patterns that need careful review.
 
@@ -199,7 +192,7 @@ if need_wait_open:
             await asyncio.wait_for(state.condition.wait(), timeout=timeout)
 ```
 
-**Fix:** The current implementation appears correct after the TOCTOU fix, but add extensive comments explaining the locking strategy. The condition lock is intentionally different from the global lock.
+**Fix:** The current implementation is correct after the TOCTOU fix. Add extensive comments explaining the locking strategy. The condition lock is intentionally different from the global lock.
 
 ---
 
@@ -213,19 +206,7 @@ while state.active_count >= int(state.current_limit):  # Truncation vs rounding
 
 **Fix:** Consider `math.ceil()` for more permissive behavior or document the truncation behavior explicitly.
 
----
 
-### [SEV-MEDIUM] Resource Leak in Exception Path
-**File:** code_puppy/adaptive_rate_limiter.py:456-458  
-**Issue:** If `asyncio.wait_for(state.condition.wait(), timeout=timeout)` raises `asyncio.TimeoutError`, the lock is released via context manager (correct), but the `active_count` was already incremented earlier. Actually, active_count isn't incremented until line 461 - check line numbers carefully.
-
-Actually re-reading: `active_count` is incremented at line 461, after the condition check. So the exception paths look correct.
-
-**Fix:** Code is correct, add comment confirming cleanup order.
-
----
-
-### [SEV-LOW] `asyncio.TaskGroup` Usage Limitation
 **File:** code_puppy/adaptive_rate_limiter.py:269-275  
 **Issue:** The code stores `asyncio.TaskGroup` in `_state.circuit_tasks` as a set, but `TaskGroup` is a context manager that shouldn't be stored long-term. Wait, reading more carefully - `circuit_tasks` stores `Task` objects not `TaskGroup`. This is correct.
 
@@ -233,8 +214,8 @@ Actually re-reading: `active_count` is incremented at line 461, after the condit
 
 ---
 
-### [SEV-LOW] Float Comparison with `abs() < 0.01`
-**File:** code_puppy/adaptive_rate_limiter.py:308  
+### [SEV-MEDIUM] Float Comparison with `abs() < 0.01`
+**File:** code_puppy/adaptive_rate_limiter.py:262  
 **Issue:** The epsilon comparison `abs(new_limit - old_limit) < 0.01` uses magic number 0.01 without explanation.
 
 ```python
@@ -263,8 +244,8 @@ _sys.modules[__name__] = _new
 
 ## callbacks.py Findings
 
-### [SEV-HIGH] Async vs Sync Callback Mixing Can Cause Loop Confusion
-**File:** code_puppy/callbacks.py:137-186  
+### [SEV-MEDIUM] Async vs Sync Callback Mixing Can Cause Loop Confusion
+**File:** code_puppy/callbacks.py:145-163, 190-196  
 **Issue:** `_trigger_callbacks_sync()` attempts to handle async callbacks by calling `asyncio.get_running_loop()` and using `asyncio.ensure_future()` or `asyncio.run()`. However, calling `asyncio.run()` from within an already running loop raises `RuntimeError`. The code catches this, but the fallback to `asyncio.run()` can cause issues in thread pool contexts.
 
 ```python
@@ -280,16 +261,6 @@ if asyncio.iscoroutine(result):
 ```
 
 **Fix:** Consider using `asyncio.run_coroutine_threadsafe()` or proper executor submission instead of `asyncio.run()`.
-
----
-
-### [SEV-MEDIUM] Type Alias Shadows Built-in
-**File:** code_puppy/callbacks.py:48  
-**Issue:** `type CallbackFunc = Callable[..., Any]` uses lowercase `type` which shadows Python 3.12+ `type` statement. Wait - actually in Python 3.12+, `type` is a soft keyword for type alias statements. In earlier Python versions this could shadow the built-in `type()`. The file uses `from typing import ...` pattern properly.
-
-Actually re-reading: Line 48 is `type CallbackFunc = Callable[..., Any]` which is valid Python 3.12+ syntax. This is correct for modern Python.
-
-**Fix:** This is actually correct for Python 3.12+, no issue.
 
 ---
 
@@ -324,8 +295,8 @@ Actually re-reading: Line 48 is `type CallbackFunc = Callable[..., Any]` which i
 
 ---
 
-### [SEV-LOW] Missing Context Cleanup on Exception in `on_pre_tool_call`
-**File:** code_puppy/callbacks.py:298-328  
+### [SEV-MEDIUM] Missing Context Cleanup on Exception in `on_pre_tool_call`
+**File:** code_puppy/callbacks.py:445-487  
 **Issue:** If an exception occurs during callback triggering, the child RunContext is created but may not be properly cleaned up if `_trigger_callbacks` itself raises.
 
 ```python
@@ -405,31 +376,6 @@ except ImportError:
 
 ---
 
-### [SEV-LOW] `continue` Statement After `break` in Wiggum Loop
-**File:** code_puppy/interactive_loop.py:295  
-**Issue:** The Wiggum while loop has a `break` statement at line 294 after an exception, but the outer loop has a `continue` right after (line 295). The `break` exits the inner Wiggum loop, but the `continue` in the main loop is actually correct. However, the flow is confusing.
-
-Wait, re-reading: The main while loop (line 143) contains the Wiggum sub-loop (lines 264-295). After the Wiggum loop ends (whether by break or completion), control continues to the main loop's end. The `continue` at line 295 is actually outside the inner while, which seems incorrect - it's in the outer loop.
-
-Actually re-reading more carefully: The structure is:
-1. Main `while True` loop (line 143)
-2. Inside main loop: Wiggum `while is_wiggum_active()` loop (line 264)
-3. After Wiggum loop ends: auto-save and Ctrl+C handling (lines 292-)
-
-The `continue` at line 295 is correctly placed. No issue.
-
-**Fix:** Code is correct, but the nesting is confusing. Add comments clarifying loop structure.
-
----
-
-### [SEV-LOW] Unused `get_clipboard_manager` Import in Clear Handler
-**File:** code_puppy/interactive_loop.py:197  
-**Issue:** `get_clipboard_manager` is imported inside the `/clear` command handler block (line 197) and used at line 201. This is actually a valid pattern, but could be module-level.
-
-**Fix:** Not an issue, just a style preference.
-
----
-
 ## Cross-Cutting Issues
 
 ### [SEV-MEDIUM] Inconsistent Pattern for `Optional` vs `| None` Type Syntax
@@ -462,13 +408,14 @@ The `continue` at line 295 is correctly placed. No issue.
 
 | Severity | Count | Files |
 |----------|-------|-------|
-| HIGH | 2 | model_factory.py (resource patterns), callbacks.py (async/sync mixing) |
-| MEDIUM | 9 | config.py (orphaned docstring, race conditions), model_factory.py (DRY, types), adaptive_rate_limiter.py (deadlock risk, float compare), callbacks.py (context cleanup), interactive_loop.py (exception masking) |
-| LOW | 18 | Various style, documentation, and minor pattern issues |
+| HIGH | 0 | - |
+| MEDIUM | 12 | config.py (orphaned docstring), model_factory.py (resource consistency, DRY, types), adaptive_rate_limiter.py (locking docs, float compare, integer truncation), callbacks.py (async/sync mixing, TaskGroup comments, context cleanup), interactive_loop.py (exception masking, imports) |
+| LOW | 12 | config.py (globals, cache, lru_cache, comments), model_factory.py (imports, error handling, nesting), adaptive_rate_limiter.py (back-compat), callbacks.py (type safety, docstrings), interactive_loop.py (getattr, imports), cross-cutting (type syntax, loggers, docstrings) |
 
 ## Recommendations
 
-1. **Priority 1 (HIGH):** Fix async/sync callback mixing in `callbacks.py` - this can cause subtle event loop issues
-2. **Priority 2 (MEDIUM):** Review locking strategy in `adaptive_rate_limiter.py` and add documentation
+1. **Priority 1 (MEDIUM):** Fix async/sync callback mixing in `callbacks.py` - this can cause subtle event loop issues
+2. **Priority 2 (MEDIUM):** Add locking strategy documentation in `adaptive_rate_limiter.py`
 3. **Priority 3 (MEDIUM):** Fix orphaned docstring in `config.py` and DRY up Zai builders in `model_factory.py`
-4. **Priority 4 (LOW):** Standardize type syntax, add missing docstrings, fix exception specificity
+4. **Priority 4 (MEDIUM):** Fix exception masking in `interactive_loop.py` to not catch `asyncio.CancelledError`
+5. **Priority 5 (LOW):** Standardize type syntax, add missing docstrings
