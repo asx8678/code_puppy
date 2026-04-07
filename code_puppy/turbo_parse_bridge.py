@@ -88,6 +88,58 @@ except ImportError:
             "error": "turbo_parse module not available - syntax diagnostics disabled",
         }
 
+    def parse_files_batch(paths: list[str], **kwargs: Any) -> dict[str, Any]:  # noqa: ARG001
+        """Fallback for parse_files_batch when Rust module is unavailable.
+
+        Returns an error result for all files indicating the Rust module is not available.
+        """
+        results = []
+        for _path in paths:
+            results.append({
+                "language": "unknown",
+                "tree": None,
+                "parse_time_ms": 0.0,
+                "success": False,
+                "errors": [{
+                    "message": "turbo_parse module not available - parsing disabled",
+                    "severity": "error",
+                }],
+            })
+        return {
+            "results": results,
+            "total_time_ms": 0.0,
+            "files_processed": len(paths),
+            "success_count": 0,
+            "error_count": len(paths),
+            "all_succeeded": len(paths) == 0,
+        }
+
+    def extract_symbols(source: str, language: str) -> dict[str, Any]:  # noqa: ARG001
+        """Fallback for extract_symbols when Rust module is unavailable.
+
+        Returns empty symbols with error indicating the Rust module is not available.
+        """
+        return {
+            "language": language,
+            "symbols": [],
+            "extraction_time_ms": 0.0,
+            "success": False,
+            "errors": ["turbo_parse module not available - symbol extraction disabled"],
+        }
+
+    def extract_symbols_from_file(path: str, language: str | None = None) -> dict[str, Any]:  # noqa: ARG001
+        """Fallback for extract_symbols_from_file when Rust module is unavailable.
+
+        Returns empty symbols with error indicating the Rust module is not available.
+        """
+        return {
+            "language": language or "unknown",
+            "symbols": [],
+            "extraction_time_ms": 0.0,
+            "success": False,
+            "errors": ["turbo_parse module not available - symbol extraction disabled"],
+        }
+
 
 # --- Turbo Parse toggle -----------------------------------------------------
 # When True (default), Rust acceleration is used at runtime if the module
@@ -122,6 +174,9 @@ __all__ = [
     "supported_languages",
     "parse_file",
     "parse_source",
+    "parse_files_batch",
+    "extract_symbols",
+    "extract_symbols_from_file",
     "extract_syntax_diagnostics",
     "is_turbo_parse_enabled",
     "set_turbo_parse_enabled",
