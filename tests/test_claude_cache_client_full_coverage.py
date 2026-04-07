@@ -1131,3 +1131,126 @@ class TestSendFlow:
                 result = await c.send(req)
                 # Should still succeed despite rebuild failure
                 assert result.status_code == 200
+
+
+# --- JWT Age Caching ---
+
+
+class TestJWTAgeCaching:
+    """Test JWT age caching to avoid repeated base64+JSON decoding."""
+
+    def test_cache_is_initialized_empty(self):
+        """Test that cache fields are initialized correctly."""
+        c = ClaudeCacheAsyncClient()
+        assert c._cached_token is None
+        assert c._cached_iat == 0
+
+    def test_cache_populated_on_first_decode(self):
+        """Test that cache is populated when first decoding a token."""
+        iat = time.time() - 600
+        token = _create_jwt(iat=iat)
+
+        c = ClaudeCacheAsyncClient()
+        age = c._get_jwt_age_seconds(token)
+
+        # Cache should be populated
+        assert c._cached_token == token
+        assert c._cached_iat == int(iat)
+        # Age should be correct
+        assert 590 <= age <= 610
+
+    def test_cache_hit_avoids_repeated_decoding(self):
+        """Test that subsequent calls with the same token use the cache."""
+        iat = time.time() - 600
+        token = _create_jwt(iat=iat)
+
+        c = ClaudeCacheAsyncClient()
+
+        # First call - cache miss, should decode
+        age1 = c._get_jwt_age_seconds(token)
+        assert c._cached_token == token
+
+        # Second call - cache hit, should use cached value
+        age2 = c._get_jwt_age_seconds(token)
+        assert c._cached_token == token
+
+        # Both ages should be similar (accounting for slight time difference)
+        assert abs(age1 - age2) < 1.0
+
+    def test_cache_cleared_on_token_change(self):
+        """Test that different token clears the cache."""
+        iat1 = time.time() - 600
+        token1 = _create_jwt(iat=iat1)
+
+        iat2 = time.time() - 1200
+        token2 = _create_jwt(iat=iat2)
+
+        c = ClaudeCacheAsyncClient()
+
+        # First token
+        c._get_jwt_age_seconds(token1)
+        assert c._cached_token == token1
+        assert c._cached_iat == int(iat1)
+
+        # Second token - should update cache
+        c._get_jwt_age_seconds(token2)
+        assert c._cached_token == token2
+        assert c._cached_iat == int(iat2)
+
+    def test_cache_not_used_for_exp_only_tokens(self):
+        """Test that tokens with only exp claim don't cache (only iat is cached)."""
+        exp = time.time() + 1800
+        token = _create_jwt(exp=exp)
+
+        c = ClaudeCacheAsyncClient()
+        age = c._get_jwt_age_seconds(token)
+
+        # Cache should not be updated (iat = 0 means no valid iat claim)
+        assert c._cached_token is None
+        assert c._cached_iat == 0
+        # But age should still be calculated
+        assert age is not None
+
+    def test_token_refresh_clears_cache(self):
+        """Test that token refresh clears the JWT cache."""
+        iat = time.time() - 600
+        token = _create_jwt(iat=iat)
+
+        c = ClaudeCacheAsyncClient(headers={"Authorization": "Bearer old"})
+
+        # Prime the cache
+        c._get_jwt_age_seconds(token)
+        assert c._cached_token == token
+        assert c._cached_iat == int(iat)
+
+        # Mock refresh token to return a new token
+        mock_module = MagicMock()
+        mock_module.refresh_access_token = MagicMock(return_value="new_token")
+        with patch.dict(
+            "sys.modules",
+            {
+                "code_puppy.plugins.claude_code_oauth": MagicMock(),
+                "code_puppy.plugins.claude_code_oauth.utils": mock_module,
+            },
+        ):
+            c._refresh_claude_oauth_token()
+
+            # Cache should be cleared
+            assert c._cached_token is None
+            assert c._cached_iat == 0
+
+    def test_falling_back_to_exp_when_no_iat(self):
+        """Test that cache is only used for iat claims, not exp fallback."""
+        # Token with both iat and exp - iat should be preferred and cached
+        iat = time.time() - 600
+        exp = time.time() + 3000
+        token_both = _create_jwt(iat=iat, exp=exp)
+
+        c = ClaudeCacheAsyncClient()
+        age = c._get_jwt_age_seconds(token_both)
+
+        # Cache should be populated with iat
+        assert c._cached_token == token_both
+        assert c._cached_iat == int(iat)
+        # Age should be calculated from iat (~600 secs)
+        assert 590 <= age <= 610

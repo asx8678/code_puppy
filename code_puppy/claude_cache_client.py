@@ -97,20 +97,32 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         # Performance tracking
         self._request_build_time_saved_ms = 0.0
         self._requests_optimized = 0
+        # JWT age caching: avoid repeated base64+JSON decoding on every request
+        self._cached_token: str | None = None
+        self._cached_iat: int = 0
 
     def _get_jwt_age_seconds(self, token: str | None) -> float | None:
         """Decode a JWT and return its age in seconds.
 
         Returns None if the token can't be decoded or has no timestamp claims.
-        Uses cached 'iat' (issued at) value if available, otherwise calculates from 'exp'.
+        Uses cached 'iat' (issued at) value when the same token is passed,
+        avoiding repeated base64+JSON decoding on every API request.
         """
         if not token:
             return None
 
         try:
-            # Use cached JWT iat extraction to avoid repeated decoding
+            # Check instance cache first to avoid repeated decoding
+            if self._cached_token == token and self._cached_iat:
+                return time.time() - self._cached_iat
+
+            # Cache miss: decode the token
+            # Use cached JWT iat extraction function
             iat = _get_jwt_iat(token)
             if iat:
+                # Update instance cache
+                self._cached_token = token
+                self._cached_iat = iat
                 return time.time() - iat
 
             # Fall back to calculating from 'exp' claim
@@ -667,6 +679,9 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
             refreshed_token = refresh_access_token(force=True)
             if refreshed_token:
                 self._update_auth_headers(self.headers, refreshed_token)
+                # Clear JWT age cache when token changes
+                self._cached_token = None
+                self._cached_iat = 0
                 logger.info("Successfully refreshed Claude Code OAuth token")
             else:
                 logger.warning("Token refresh returned None")
