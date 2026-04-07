@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tree_sitter::{Node, Parser, Tree};
 
 use crate::registry::{get_language, RegistryError};
+use crate::symbols::normalize_language;
 
 /// A single parse error with location information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,17 +110,6 @@ fn detect_language_from_path(path: &str) -> Option<String> {
     }
 }
 
-/// Normalize language name (handle aliases).
-fn normalize_language(name: &str) -> String {
-    let normalized = name.to_lowercase();
-    match normalized.as_str() {
-        "py" => "python".to_string(),
-        "js" => "javascript".to_string(),
-        "ts" => "typescript".to_string(),
-        "ex" => "elixir".to_string(),
-        _ => normalized,
-    }
-}
 
 /// Serialize a tree-sitter node to JSON.
 fn serialize_node(node: Node, source: &str) -> serde_json::Value {

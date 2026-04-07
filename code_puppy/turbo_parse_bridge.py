@@ -14,6 +14,8 @@ try:
         parse_file,
         parse_source,
         parse_files_batch,
+        extract_symbols,
+        extract_symbols_from_file,
     )
 
     TURBO_PARSE_AVAILABLE = True
@@ -73,34 +75,6 @@ except ImportError:
             }],
         }
 
-    def parse_files_batch(
-        paths: list[str],
-        max_workers: int | None = None,
-    ) -> dict[str, Any]:
-        """Fallback for parse_files_batch when Rust module is unavailable.
-        
-        Returns an error dict indicating the Rust module is not available.
-        All files are marked as failed.
-        """
-        return {
-            "results": [
-                {
-                    "language": "unknown",
-                    "tree": None,
-                    "parse_time_ms": 0.0,
-                    "success": False,
-                    "errors": [{
-                        "message": "turbo_parse module not available - batch parsing disabled",
-                        "severity": "error",
-                    }],
-                }
-                for _ in paths
-            ],
-            "total_time_ms": 0.0,
-            "files_processed": len(paths),
-            "success_count": 0,
-            "error_count": len(paths),
-            "all_succeeded": len(paths) == 0,
         }
 
 
@@ -137,7 +111,6 @@ __all__ = [
     "supported_languages",
     "parse_file",
     "parse_source",
-    "parse_files_batch",
     "is_turbo_parse_enabled",
     "set_turbo_parse_enabled",
     "get_turbo_parse_status",
