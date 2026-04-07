@@ -299,18 +299,18 @@ def save_session(
                 "Falling back to round-trip sanitization."
             )
             try:
+                # Optimized path: dump to JSON then parse directly to dicts.
+                # This avoids the expensive validate_json() -> dump_python() round-trip
+                # through pydantic model objects. We go directly from JSON bytes to
+                # plain dicts which is what msgpack needs anyway.
                 json_data = ModelMessagesTypeAdapter.dump_json(history)
-                sanitized_history = ModelMessagesTypeAdapter.validate_json(json_data)
+                serializable_history = json.loads(json_data)
             except Exception as e2:
                 # Log the sanitization failure so we can track if this becomes a recurring issue
                 logger.warning(
                     f"Message sanitization failed in save_session: {e2}. Using original history."
                 )
-                sanitized_history = history
-
-            serializable_history = ModelMessagesTypeAdapter.dump_python(
-                sanitized_history, mode="json"
-            )
+                serializable_history = history
     except Exception:
         # Fallback for non-pydantic history (e.g. tests with plain strings)
         serializable_history = history

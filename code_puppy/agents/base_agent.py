@@ -725,7 +725,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                     "Rust fallback in filter_huge_messages: %s", exc, exc_info=True
                 )
         filtered = [m for m in messages if self.estimate_tokens_for_message(m) < 50000]
-        pruned = self.prune_interrupted_tool_calls(filtered)
+        # Pass serialized_messages through to avoid re-serialization
+        pruned = self.prune_interrupted_tool_calls(filtered, serialized_messages=serialized_messages)
         return pruned
 
     def _find_safe_split_index(
@@ -1121,14 +1122,16 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         if not messages_to_summarize:
             # Nothing to summarize, so just return the original sequence
-            return self.prune_interrupted_tool_calls(messages), []
+            # Pass serialized_messages to avoid re-serialization
+            return self.prune_interrupted_tool_calls(messages, serialized_messages=serialized_messages), []
 
         try:
             new_messages = self._binary_split_summarize(messages_to_summarize)
 
             if not new_messages:
                 # Summarization produced nothing (e.g., all messages pruned)
-                return self.prune_interrupted_tool_calls(messages), []
+                # Pass serialized_messages to avoid re-serialization
+                return self.prune_interrupted_tool_calls(messages, serialized_messages=serialized_messages), []
 
             compacted: list[ModelMessage] = [system_message] + new_messages
 
