@@ -455,6 +455,129 @@ async def _list_files(
     return ListFileOutput(content="\n".join(output_lines))
 
 
+# ---------------------------------------------------------------------------
+# Security helpers
+# SECURITY FIX peis/wslg/p8wo/8y6x: path validation & sensitive-path blocking
+# ---------------------------------------------------------------------------
+
+def _is_sensitive_path(file_path: str) -> bool:
+    """Check if a path points to a sensitive file/directory.
+
+    Used by file_operations and the file_permission_handler plugin to block
+    access to credentials, SSH keys, and other secrets — even in yolo_mode.
+
+    SECURITY FIX peis/wslg/p8wo/8y6x: sensitive-path blocklist.
+
+    Args:
+        file_path: Path to check (may be relative, absolute, or contain ~).
+
+    Returns:
+        True if the path points to a sensitive location and should be blocked.
+    """
+    if not file_path:
+        return False
+
+    # Normalize: expand ~, resolve symlinks, make absolute
+    try:
+        expanded = os.path.abspath(os.path.expanduser(file_path))
+        # Resolve symlinks so we catch symlink-based bypass attempts.
+        # Use realpath which doesn't require the file to exist.
+        resolved = os.path.realpath(expanded)
+    except (OSError, ValueError):
+        # If we can't normalize, treat it as NOT sensitive (let other
+        # checks handle invalid paths); validate_file_path will catch
+        # genuinely bad input.
+        return False
+
+    home = os.path.expanduser("~")
+
+    # Directory prefixes that are always sensitive (any file under them)
+    sensitive_dir_prefixes = [
+        os.path.join(home, ".ssh"),
+        os.path.join(home, ".aws"),
+        os.path.join(home, ".gnupg"),
+        os.path.join(home, ".gcp"),
+        os.path.join(home, ".config", "gcloud"),
+        os.path.join(home, ".azure"),
+        os.path.join(home, ".kube"),
+        os.path.join(home, ".docker"),
+    ]
+
+    # Exact-match sensitive files
+    sensitive_exact_files = {
+        os.path.join(home, ".netrc"),
+        os.path.join(home, ".pgpass"),
+        os.path.join(home, ".my.cnf"),
+        "/etc/shadow",
+        "/etc/sudoers",
+        "/etc/master.passwd",  # BSD/macOS
+    }
+
+    # Check directory prefixes (with trailing separator to avoid
+    # "/home/user/.sshfoo" matching "/home/user/.ssh")
+    for prefix in sensitive_dir_prefixes:
+        prefix_with_sep = prefix + os.sep
+        if resolved == prefix or resolved.startswith(prefix_with_sep):
+            return True
+
+    # Check exact-match files
+    if resolved in sensitive_exact_files:
+        return True
+
+    # Check for private key files by extension anywhere
+    sensitive_extensions = {".pem", ".key", ".p12", ".pfx", ".keystore"}
+    _, ext = os.path.splitext(resolved)
+    if ext.lower() in sensitive_extensions:
+        # Only block .pem/.key if they live in a directory that sounds
+        # credential-ish — otherwise legitimate project files would be blocked.
+        parent_lower = os.path.dirname(resolved).lower()
+        if any(tok in parent_lower for tok in ("secret", "cred", "key", "cert", "private")):
+            return True
+
+    return False
+
+
+def validate_file_path(file_path: str, operation: str) -> tuple[bool, str | None]:
+    """Validate a file path before performing an operation on it.
+
+    SECURITY FIX peis/wslg: path validation + sensitive-path blocking.
+
+    Checks performed:
+      1. Non-empty string
+      2. No null bytes (directory traversal / injection attempts)
+      3. Not a sensitive path (SSH keys, AWS creds, etc.)
+
+    Args:
+        file_path: The path the tool wants to access.
+        operation: The operation being performed ("read", "write", "delete", etc.).
+                   Currently used only for error messages; may be used for
+                   operation-specific policy in the future.
+
+    Returns:
+        (is_valid, error_message) tuple:
+          - (True, None)  if the path passes all checks
+          - (False, "...") with a human-readable reason otherwise
+    """
+    if not file_path or not isinstance(file_path, str):
+        return False, "File path cannot be empty"
+
+    # Null byte check — prevents C-string truncation tricks
+    if "\x00" in file_path:
+        return False, "File path contains null byte"
+
+    # Sensitive-path blocklist (enforced for all operations,
+    # including reads, because even read-only access to ~/.ssh/id_rsa
+    # is a credential-exfiltration vector).
+    if _is_sensitive_path(file_path):
+        return (
+            False,
+            f"Access to sensitive path blocked ({operation}): "
+            "SSH keys, cloud credentials, and system secrets are never accessible.",
+        )
+
+    return True, None
+
+
 async def _read_file(
     context: RunContext,
     file_path: str,
