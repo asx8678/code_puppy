@@ -13,6 +13,7 @@ Tests cover:
 - Valid plugin loading (happy path)
 """
 
+import logging
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -153,48 +154,116 @@ raise RuntimeError("Plugin crashed during exec_module!")
 class TestPluginPathTraversal:
     """Test that plugin names with path traversal sequences are rejected."""
 
-    def test_plugin_name_with_double_dot_rejected(
+    def test_dotdot_plugin_name_rejected(
         self,
         tmp_path: Path,
         enable_user_plugins,
         reset_plugin_state,
+        caplog,
     ):
-        """Plugin names containing '..' should be rejected as potential path traversal attacks."""
+        """Plugin names containing '..' should be rejected as potential path traversal attacks.
+
+        Uses behavioral testing with mocked iterdir to avoid source inspection.
+        """
         from code_puppy.plugins import _discover_user_plugins
 
         plugins_dir = tmp_path / "plugins"
         plugins_dir.mkdir()
 
-        # Create a plugin with '..' in the name (simulating path traversal)
-        # Note: On most filesystems, you can't actually create a directory with '..' in the name,
-        # but we can mock the directory listing to simulate it
-        malicious_plugin_dir = plugins_dir / ".."
-        # We won't actually create this, but test via mocking
+        # Mock a directory entry with '..' in the name
+        mock_item = MagicMock(spec=Path)
+        mock_item.name = "evil..plugin"
+        mock_item.is_dir.return_value = True
 
-        # Instead, create a valid directory and mock its name
-        valid_dir = plugins_dir / "malicious_dotdot"
-        valid_dir.mkdir()
+        with patch.object(Path, 'iterdir', return_value=[mock_item]):
+            with caplog.at_level(logging.WARNING):
+                discovered = list(_discover_user_plugins(plugins_dir))
 
-        # Write a dummy callbacks file
-        (valid_dir / "register_callbacks.py").write_text("pass")
+        # Plugin with '..' in name should not be discovered
+        assert not any("evil..plugin" in str(p) for _, p in discovered)
+        # Security warning should be logged
+        assert any("SECURITY" in msg and "evil..plugin" in msg for msg in caplog.messages)
 
-        # Now test the actual security check by creating a mocked directory
-        mock_dir = MagicMock()
-        mock_dir.name = "malicious..plugin"  # Contains '..' sequence
-        mock_dir.is_dir.return_value = True
-        mock_dir.__truediv__ = lambda self, other: plugins_dir / other
-        mock_dir.iterdir = MagicMock(return_value=[])
+    def test_forward_slash_plugin_name_rejected(
+        self,
+        tmp_path: Path,
+        enable_user_plugins,
+        reset_plugin_state,
+        caplog,
+    ):
+        """Plugin names containing '/' should be rejected as potential path traversal attacks."""
+        from code_puppy.plugins import _discover_user_plugins
 
-        # The actual file system check won't catch this because we can't create '..' dirs,
-        # but the code has a check for '..' in the plugin name
-        # Let's manually verify the check exists in the code
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
 
-        # Read the source and verify the security check is present
-        from code_puppy import plugins as plugins_module
-        import inspect
+        # Mock a directory entry with '/' in the name
+        mock_item = MagicMock(spec=Path)
+        mock_item.name = "evil/plugin"
+        mock_item.is_dir.return_value = True
 
-        source = inspect.getsource(plugins_module._discover_user_plugins)
-        assert '".." in plugin_name' in source or "'..' in plugin_name" in source
+        with patch.object(Path, 'iterdir', return_value=[mock_item]):
+            with caplog.at_level(logging.WARNING):
+                discovered = list(_discover_user_plugins(plugins_dir))
+
+        # Plugin with '/' in name should not be discovered
+        assert not any("evil/plugin" in str(p) for _, p in discovered)
+        # Security warning should be logged
+        assert any("SECURITY" in msg and "evil/plugin" in msg for msg in caplog.messages)
+
+    def test_backslash_plugin_name_rejected(
+        self,
+        tmp_path: Path,
+        enable_user_plugins,
+        reset_plugin_state,
+        caplog,
+    ):
+        """Plugin names containing '\\' should be rejected as potential path traversal attacks."""
+        from code_puppy.plugins import _discover_user_plugins
+
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+
+        # Mock a directory entry with '\\' in the name
+        mock_item = MagicMock(spec=Path)
+        mock_item.name = "evil\\plugin"
+        mock_item.is_dir.return_value = True
+
+        with patch.object(Path, 'iterdir', return_value=[mock_item]):
+            with caplog.at_level(logging.WARNING):
+                discovered = list(_discover_user_plugins(plugins_dir))
+
+        # Plugin with '\\' in name should not be discovered
+        assert not any("evil\\plugin" in str(p) for _, p in discovered)
+        # Security warning should be logged
+        assert any("SECURITY" in msg and "evil\\plugin" in msg for msg in caplog.messages)
+
+    def test_null_byte_plugin_name_rejected(
+        self,
+        tmp_path: Path,
+        enable_user_plugins,
+        reset_plugin_state,
+        caplog,
+    ):
+        """Plugin names containing '\\x00' should be rejected as potential attacks."""
+        from code_puppy.plugins import _discover_user_plugins
+
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+
+        # Mock a directory entry with null byte in the name
+        mock_item = MagicMock(spec=Path)
+        mock_item.name = "evil\x00plugin"
+        mock_item.is_dir.return_value = True
+
+        with patch.object(Path, 'iterdir', return_value=[mock_item]):
+            with caplog.at_level(logging.WARNING):
+                discovered = list(_discover_user_plugins(plugins_dir))
+
+        # Plugin with null byte in name should not be discovered
+        assert len(discovered) == 0
+        # Security warning should be logged
+        assert any("SECURITY" in msg for msg in caplog.messages)
 
     def test_plugin_directory_path_traversal_protection(
         self,
@@ -202,7 +271,7 @@ class TestPluginPathTraversal:
         enable_user_plugins,
         reset_plugin_state,
     ):
-        """Verify that the path traversal check rejects plugins outside the plugins dir."""
+        """Verify that normal plugins are discovered correctly."""
         from code_puppy.plugins import _discover_user_plugins
 
         plugins_dir = tmp_path / "plugins"
@@ -218,36 +287,6 @@ class TestPluginPathTraversal:
         # Test normal case - should work
         discovered = _discover_user_plugins(plugins_dir)
         assert any(name == "test_plugin" for name, _ in discovered)
-
-        # Verify security check is in the code
-        import inspect
-        from code_puppy import plugins as plugins_module
-
-        source = inspect.getsource(plugins_module._discover_user_plugins)
-        # Check for path traversal protection
-        assert "resolve" in source.lower()
-        assert "startswith" in source.lower()
-
-
-# ============================================================================
-# Test: Plugin name with '/' in it
-# ============================================================================
-
-
-class TestPluginNameSlash:
-    """Test that plugin names with '/' characters are rejected."""
-
-    def test_plugin_name_with_forward_slash_rejected_in_code(
-        self,
-        tmp_path: Path,
-    ):
-        """Verify the code contains check for '/' in plugin name."""
-        import inspect
-        from code_puppy import plugins as plugins_module
-
-        source = inspect.getsource(plugins_module._discover_user_plugins)
-        # Check for forward slash rejection
-        assert '"/" in plugin_name' in source or "'/' in plugin_name" in source
 
 
 # ============================================================================
@@ -309,18 +348,37 @@ sys.modules["__injected_by_malicious_plugin__"] = "compromised"
         # Cleanup
         del sys.modules["__injected_by_malicious_plugin__"]
 
-    def test_plugin_security_warning_documented(
+    def test_security_warning_logged_for_suspicious_plugin(
         self,
+        tmp_path: Path,
+        enable_user_plugins,
+        reset_plugin_state,
+        caplog,
     ):
-        """Verify that the code contains appropriate security warnings."""
-        import inspect
-        from code_puppy import plugins as plugins_module
+        """Verify that a security warning is logged when a bad plugin is detected.
 
-        source = inspect.getsource(plugins_module)
+        Uses behavioral testing with mocked iterdir and caplog instead of source inspection.
+        """
+        from code_puppy.plugins import _discover_user_plugins
 
-        # Check for security warnings in the code
-        assert "SECURITY" in source or "security" in source.lower()
-        assert "full system privileges" in source.lower() or "arbitrary" in source.lower()
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+
+        # Mock a directory entry with '..' in the name to trigger security warning
+        mock_item = MagicMock(spec=Path)
+        mock_item.name = "suspicious..plugin"
+        mock_item.is_dir.return_value = True
+
+        with patch.object(Path, 'iterdir', return_value=[mock_item]):
+            with caplog.at_level(logging.WARNING):
+                list(_discover_user_plugins(plugins_dir))
+
+        # Check that a security warning was logged
+        security_warnings = [
+            msg for msg in caplog.messages
+            if "SECURITY" in msg and "suspicious" in msg
+        ]
+        assert len(security_warnings) > 0, "Expected security warning in logs"
 
 
 # ============================================================================
@@ -541,24 +599,12 @@ class TestSymlinkSecurity:
         assert callbacks_file.is_symlink()
         assert shared_file.resolve().is_relative_to(plugins_dir.resolve())
 
-        # This should be discovered (symlink points within plugins dir)
+        # Internal symlinks (relative or pointing within plugins dir) should be discovered
         discovered = _discover_user_plugins(plugins_dir)
         plugin_names = {name for name, _ in discovered}
 
-        # Internal symlinks are currently NOT allowed due to the strict check
-        # that rejects ALL symlinks pointing outside (the check doesn't distinguish
-        # between internal and external for symlinks - it checks if the symlink
-        # target is within the plugins directory)
-        #
-        # Actually, re-reading the code: it checks if an absolute symlink points
-        # outside. Internal symlinks that are relative should work.
-
-        # The current code checks absolute symlinks, so relative symlinks should pass
-        # But they may fail the "startswith" check if the resolved path differs
-        # This test documents the current behavior
-
-        # NOTE: The behavior depends on whether the symlink is relative or absolute
-        # and how path resolution works. This test documents actual behavior.
+        # Internal symlinks pointing within the plugins directory should be allowed
+        assert "symlinked_plugin" in plugin_names
 
     def test_symlink_security_check_exists(
         self,
