@@ -23,8 +23,8 @@
 
 ## [SEV-LOW] Hardcoded OAuth Client IDs in Configuration
 **File:** 
-- `plugins/claude_code_oauth/config.py:12`
-- `plugins/chatgpt_oauth/config.py:13`
+- `plugins/claude_code_oauth/config.py:13`
+- `plugins/chatgpt_oauth/config.py:15`
 
 **Issue:** OAuth client IDs are hardcoded in source code:
 - Claude Code: `"9d1c250a-e61b-44d9-88ed-5944d1962f5e"`
@@ -37,8 +37,8 @@ While client IDs are generally considered public information in OAuth2, they ide
 ---
 
 ## [SEV-CRITICAL] Arbitrary Code Execution via User Plugins
-**File:** `plugins/__init__.py:102-145`
-**Issue:** The user plugin loader executes arbitrary Python code via `spec.loader.exec_module(module)` (line 134). While there are security checks (lines 105-122) that require `enable_user_plugins=true` and optionally an allowlist, the warning messages indicate this executes with "full system privileges". A malicious plugin could:
+**File:** `plugins/__init__.py:52-104`
+**Issue:** The user plugin loader executes arbitrary Python code via `spec.loader.exec_module(module)` (line 99). While there are security checks (lines 75-96) that require `enable_user_plugins=true` and optionally an allowlist, the warning messages indicate this executes with "full system privileges". A malicious plugin could:
 - Steal stored OAuth tokens from `~/.code_puppy/`
 - Modify the codebase
 - Install persistent malware
@@ -129,7 +129,7 @@ Between these steps, another process could potentially read the file with defaul
 ---
 
 ## [SEV-LOW] Unsafe JWT Decoding (No Algorithm Validation)
-**File:** `claude_cache_client.py:115-143`
+**File:** `claude_cache_client.py:101-143`
 **Issue:** The `_get_jwt_age_seconds()` function manually decodes JWT tokens without using a proper JWT library. This bypasses built-in security checks like algorithm validation. While the code currently doesn't verify signatures, future modifications could inadvertently introduce vulnerabilities if the parsing logic is changed.
 
 **Fix:** Use a proper JWT library (e.g., `PyJWT`) for all JWT operations, even when signature verification is intentionally disabled. Add explicit options: `jwt.decode(token, options={"verify_signature": False, "verify_exp": False, "verify_iat": False})`
@@ -186,7 +186,7 @@ subprocess.run(
 ---
 
 ## [SEV-MEDIUM] Rate Limiter Circuit Breaker State Manipulation
-**File:** `adaptive_rate_limiter.py:700-720`
+**File:** `adaptive_rate_limiter.py:648-683`
 **Issue:** The `acquire_model_slot()` function checks circuit breaker state under a lock but then waits outside the lock:
 ```python
 async with lock:
@@ -234,7 +234,7 @@ This is a TOCTOU race condition where the state could change between the check a
 ---
 
 ## [SEV-HIGH] Path Traversal in Plugin Loading
-**File:** `plugins/__init__.py:127-134`
+**File:** `plugins/__init__.py:88-99`
 **Issue:** The user plugin loader constructs the module path from user-controlled directory contents:
 ```python
 callbacks_file = USER_PLUGINS_DIR / plugin_name / "register_callbacks.py"
@@ -277,11 +277,11 @@ While `plugin_name` comes from directory listing (not direct user input), symlin
 | Severity | Count |
 |----------|-------|
 | CRITICAL | 1 |
-| HIGH | 4 |
-| MEDIUM | 7 |
-| LOW | 7 |
+| HIGH | 3 |
+| MEDIUM | 6 |
+| LOW | 8 |
 
-**Total Findings:** 19
+**Total Findings:** 18
 
 ---
 
