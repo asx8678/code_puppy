@@ -260,13 +260,14 @@ def _save_session_history(
 
     sessions_dir = _get_subagent_sessions_dir()
 
-    # Save msgpack file with JSON-serialized message history.
-    # We store the pydantic-ai JSON payload inside msgpack so datetime-bearing
-    # messages round-trip safely without relying on msgpack extension hooks.
+    # Save msgpack file with JSON-serializable message history.
+    # Use dump_python to get serializable dicts directly (avoids JSON round-trip).
+    # This eliminates triple serialization: dump_python → msgpack instead of
+    # dump_json → msgpack → validate_json.
     from pydantic_ai.messages import ModelMessagesTypeAdapter
     payload = {
         "format": "pydantic-ai-json",
-        "payload": ModelMessagesTypeAdapter.dump_json(message_history),
+        "payload": ModelMessagesTypeAdapter.dump_python(message_history, mode="json"),
     }
     msgpack_path = sessions_dir / f"{session_id}.msgpack"
     atomic_write_msgpack(msgpack_path, payload)
@@ -324,10 +325,9 @@ def _load_session_history(session_id: str) -> list[ModelMessage]:
             data = msgpack.unpackb(raw, raw=False)
             from pydantic_ai.messages import ModelMessagesTypeAdapter
             if isinstance(data, dict) and data.get("format") == "pydantic-ai-json":
-                payload = data.get("payload", b"[]")
-                if isinstance(payload, str):
-                    payload = payload.encode("utf-8")
-                return ModelMessagesTypeAdapter.validate_json(payload)
+                payload = data.get("payload", [])
+                # payload is already Python dicts from dump_python, validate them
+                return ModelMessagesTypeAdapter.validate_python(payload)
             return ModelMessagesTypeAdapter.validate_python(data)
         except Exception:
             pass  # Fall through to pickle or return empty
