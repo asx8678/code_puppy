@@ -6,7 +6,6 @@
 //! This is significantly faster than full re-parsing for editor-like use cases
 //! where users make small, localized edits.
 
-use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use tree_sitter::{InputEdit as TSInputEdit, Node, Parser, Point, Tree};
@@ -15,82 +14,36 @@ use crate::diagnostics::extract_diagnostics;
 use crate::parser::{ParseError, ParseResult};
 use crate::registry::{get_language, normalize_language, RegistryError};
 
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
 /// Describes a text edit for incremental parsing.
-///
-/// This struct matches tree-sitter's InputEdit structure and describes
-/// how a region of text has changed between two versions of a document.
-///
-/// # Fields
-/// * `start_byte` - Byte offset where the edit starts in the old document
-/// * `old_end_byte` - Byte offset where the replaced region ended in the old document
-/// * `new_end_byte` - Byte offset where the new text ends in the new document
-/// * `start_position` - Line/column where the edit starts (as [row, column])
-/// * `old_end_position` - Line/column where the replaced region ended (as [row, column])
-/// * `new_end_position` - Line/column where the new text ends (as [row, column])
-///
-/// # Example
-/// ```python
-/// from turbo_parse import InputEdit
-///
-/// # Inserting "hello" at position (line 0, column 5)
-/// edit = InputEdit(
-///     start_byte=5,
-///     old_end_byte=5,
-///     new_end_byte=10,
-///     start_position=(0, 5),
-///     old_end_position=(0, 5),
-///     new_end_position=(0, 10)
-/// )
-/// ```
-#[pyclass]
+#[cfg_attr(feature = "python", pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InputEdit {
     /// Byte offset where the edit starts in the old document
-    #[pyo3(get)]
+    #[cfg_attr(feature = "python", pyo3(get))]
     pub start_byte: usize,
     /// Byte offset where the replaced region ended in the old document
-    #[pyo3(get)]
+    #[cfg_attr(feature = "python", pyo3(get))]
     pub old_end_byte: usize,
     /// Byte offset where the new text ends in the new document
-    #[pyo3(get)]
+    #[cfg_attr(feature = "python", pyo3(get))]
     pub new_end_byte: usize,
     /// Line and column where the edit starts (row, column)
-    #[pyo3(get)]
+    #[cfg_attr(feature = "python", pyo3(get))]
     pub start_position: (usize, usize),
     /// Line and column where the replaced region ended (row, column)
-    #[pyo3(get)]
+    #[cfg_attr(feature = "python", pyo3(get))]
     pub old_end_position: (usize, usize),
     /// Line and column where the new text ends (row, column)
-    #[pyo3(get)]
+    #[cfg_attr(feature = "python", pyo3(get))]
     pub new_end_position: (usize, usize),
 }
 
-#[pymethods]
 impl InputEdit {
     /// Create a new InputEdit describing a text change.
-    ///
-    /// # Arguments
-    /// * `start_byte` - Byte offset where the edit starts
-    /// * `old_end_byte` - Byte offset where the old text ended
-    /// * `new_end_byte` - Byte offset where the new text ends
-    /// * `start_position` - Tuple of (line, column) where edit starts
-    /// * `old_end_position` - Tuple of (line, column) where old text ended
-    /// * `new_end_position` - Tuple of (line, column) where new text ends
-    ///
-    /// # Example
-    /// ```python
-    /// edit = InputEdit(
-    ///     start_byte=10,
-    ///     old_end_byte=15,
-    ///     new_end_byte=20,
-    ///     start_position=(0, 10),
-    ///     old_end_position=(0, 15),
-    ///     new_end_position=(0, 20)
-    /// )
-    /// ```
-    #[new]
-    #[pyo3(signature = (start_byte, old_end_byte, new_end_byte, start_position, old_end_position, new_end_position))]
-    fn new(
+    pub fn new(
         start_byte: usize,
         old_end_byte: usize,
         new_end_byte: usize,
@@ -108,45 +61,8 @@ impl InputEdit {
         }
     }
 
-    /// Convert to a JSON-serializable dict representation.
-    fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let dict = serde_json::json!({
-            "start_byte": self.start_byte,
-            "old_end_byte": self.old_end_byte,
-            "new_end_byte": self.new_end_byte,
-            "start_position": self.start_position,
-            "old_end_position": self.old_end_position,
-            "new_end_position": self.new_end_position,
-        });
-
-        let json_str = serde_json::to_string(&dict)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e)))?;
-
-        let json_module = py.import("json")?;
-        let py_dict = json_module.call_method1("loads", (json_str,))?;
-        Ok(py_dict)
-    }
-
-    fn __repr__(&self) -> String {
-        format!(
-            "InputEdit(start_byte={}, old_end_byte={}, new_end_byte={}, start_position={:?}, old_end_position={:?}, new_end_position={:?})",
-            self.start_byte,
-            self.old_end_byte,
-            self.new_end_byte,
-            self.start_position,
-            self.old_end_position,
-            self.new_end_position,
-        )
-    }
-
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
-    }
-}
-
-impl InputEdit {
     /// Convert to tree-sitter's native InputEdit type.
-    fn to_ts_edit(&self) -> TSInputEdit {
+    pub fn to_ts_edit(&self) -> TSInputEdit {
         TSInputEdit {
             start_byte: self.start_byte,
             old_end_byte: self.old_end_byte,
@@ -158,37 +74,108 @@ impl InputEdit {
     }
 }
 
+#[cfg(feature = "python")]
+mod python_impl {
+    use super::*;
+    use pyo3::prelude::*;
+
+    #[pymethods]
+    impl InputEdit {
+        #[new]
+        #[pyo3(signature = (start_byte, old_end_byte, new_end_byte, start_position, old_end_position, new_end_position))]
+        fn py_new(
+            start_byte: usize,
+            old_end_byte: usize,
+            new_end_byte: usize,
+            start_position: (usize, usize),
+            old_end_position: (usize, usize),
+            new_end_position: (usize, usize),
+        ) -> Self {
+            Self::new(
+                start_byte,
+                old_end_byte,
+                new_end_byte,
+                start_position,
+                old_end_position,
+                new_end_position,
+            )
+        }
+
+        fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+            let dict = serde_json::json!({
+                "start_byte": self.start_byte,
+                "old_end_byte": self.old_end_byte,
+                "new_end_byte": self.new_end_byte,
+                "start_position": self.start_position,
+                "old_end_position": self.old_end_position,
+                "new_end_position": self.new_end_position,
+            });
+
+            let json_str = serde_json::to_string(&dict)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e)))?;
+
+            let json_module = py.import("json")?;
+            let py_dict = json_module.call_method1("loads", (json_str,))?;
+            Ok(py_dict)
+        }
+
+        fn __repr__(&self) -> String {
+            format!(
+                "InputEdit(start_byte={}, old_end_byte={}, new_end_byte={}, start_position={:?}, old_end_position={:?}, new_end_position={:?})",
+                self.start_byte, self.old_end_byte, self.new_end_byte,
+                self.start_position, self.old_end_position, self.new_end_position,
+            )
+        }
+
+        fn __eq__(&self, other: &Self) -> bool {
+            self == other
+        }
+    }
+
+    #[pymethods]
+    impl SerializedTree {
+        #[new]
+        #[pyo3(signature = (language, source, had_errors = false))]
+        fn py_new(language: String, source: String, had_errors: bool) -> Self {
+            Self::new(language, source, had_errors)
+        }
+    }
+}
+
 /// Serialized tree data used to reconstruct a Tree for incremental parsing.
-///
-/// This holds the minimal information needed to apply edits to an existing tree.
-/// Note: tree-sitter's Tree contains internal state that cannot be fully
-/// serialized, so we use the previous source along with tree reference
-/// for true incremental parsing.
-#[pyclass]
+#[cfg_attr(feature = "python", pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializedTree {
     /// The language identifier
-    #[pyo3(get)]
+    #[cfg_attr(feature = "python", pyo3(get))]
     pub language: String,
     /// The source code that was parsed
-    #[pyo3(get)]
+    #[cfg_attr(feature = "python", pyo3(get))]
     pub source: String,
     /// Whether the tree had errors
-    #[pyo3(get)]
+    #[cfg_attr(feature = "python", pyo3(get))]
     pub had_errors: bool,
 }
 
-#[pymethods]
 impl SerializedTree {
     /// Create a new serialized tree reference.
-    #[new]
-    #[pyo3(signature = (language, source, had_errors = false))]
-    fn new(language: String, source: String, had_errors: bool) -> Self {
+    pub fn new(language: String, source: String, had_errors: bool) -> Self {
         Self {
             language,
             source,
             had_errors,
         }
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl SerializedTree {
+    /// Create a new serialized tree reference (Python constructor).
+    #[new]
+    #[pyo3(signature = (language, source, had_errors = false))]
+    fn py_new(language: String, source: String, had_errors: bool) -> Self {
+        Self::new(language, source, had_errors)
     }
 }
 
@@ -397,15 +384,7 @@ fn serialize_tree(tree: &Tree, source: &str) -> serde_json::Value {
 }
 
 /// Python-exposed function for incremental parsing with edits.
-///
-/// # Arguments
-/// * `source` - The source code to parse (after edits)
-/// * `language` - The language identifier
-/// * `old_tree_json` - Previous tree JSON (from parse_source/parse_file result), or None
-/// * `edits` - List of InputEdit objects describing the changes
-///
-/// # Returns
-/// Dict with parse result (same format as parse_source)
+#[cfg(feature = "python")]
 #[pyfunction]
 #[pyo3(signature = (source, language, _old_tree_json = None, edits = None))]
 pub fn parse_with_edits<'py>(
@@ -415,19 +394,10 @@ pub fn parse_with_edits<'py>(
     _old_tree_json: Option<Bound<'py, PyAny>>,
     edits: Option<Vec<InputEdit>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    // Since we can't actually reconstruct a tree-sitter Tree from JSON,
-    // we do a fresh parse with GIL released. The incremental benefits
-    // come when the caller maintains the Tree object directly.
-    // For Python API, we provide the same interface but currently
-    // fall back to fresh parse (future: maintain tree context).
-
     let edits_vec = edits.unwrap_or_default();
 
     // Release GIL during CPU-intensive parsing
     let result: ParseResult = py.detach(|| {
-        // Without true tree reconstruction, we do a fresh parse
-        // But we use parse_with_edits_internal for API consistency
-        // and future incremental support
         parse_with_edits_internal(source, language, None, &edits_vec)
     });
 
