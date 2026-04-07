@@ -8,9 +8,9 @@ name = "_code_puppy_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.28", features = ["extension-module"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+pyo3 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 rustc-hash = "2"
 rmp-serde = "1"
 xxhash-rust = { version = "0.8", features = ["xxh32"] }
