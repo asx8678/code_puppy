@@ -53,7 +53,8 @@ def _get_jwt_iat(token: str) -> int:
     """Decode a JWT and return its 'iat' (issued at) claim.
     
     Cached with LRU to avoid repeated decoding of the same token.
-    Returns 0 if the token can't be decoded or has no 'iat' claim.
+    Returns 0 if the token can't be decoded or has no valid 'iat' claim.
+    Validates that 'iat' is numeric and within reasonable bounds.
     """
     try:
         # JWT format: header.payload.signature
@@ -72,7 +73,15 @@ def _get_jwt_iat(token: str) -> int:
         payload_bytes = base64.urlsafe_b64decode(payload_b64)
         payload = json.loads(payload_bytes.decode("utf-8"))
 
-        return int(payload.get("iat", 0))
+        iat = payload.get("iat")
+        # Validate iat is a number
+        if not isinstance(iat, (int, float)):
+            return 0
+        # Validate iat is positive and not absurdly large (max 10 years in future)
+        now = time.time()
+        if iat <= 0 or iat > now + 86400 * 365 * 10:
+            return 0
+        return int(iat)
     except Exception:
         return 0
 
@@ -141,7 +150,14 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
 
             now = time.time()
             if "exp" in payload:
-                exp = float(payload["exp"])
+                exp = payload["exp"]
+                # Validate exp is a number
+                if not isinstance(exp, (int, float)):
+                    return None
+                exp = float(exp)
+                # Validate exp is within reasonable bounds
+                if exp <= 0 or exp > now + 86400 * 365 * 100:  # max 100 years in future
+                    return None
                 # If exp is in the future, calculate how long until expiry
                 # and assume the token was issued TOKEN_MAX_AGE_SECONDS before expiry
                 time_until_exp = exp - now
