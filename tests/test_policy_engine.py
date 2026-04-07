@@ -299,3 +299,27 @@ def test_policy_config_project_overrides_user(tmp_path):
 
     # Higher-priority project rule wins
     assert isinstance(eng.check("sensitive_tool"), Deny)
+
+
+# ---------------------------------------------------------------------------
+# PolicyRule regex compilation tests
+# ---------------------------------------------------------------------------
+
+def test_policy_rule_with_regex_pattern_compiles():
+    """Regression test: PolicyRule with command_pattern should compile without error."""
+    rule = PolicyRule(
+        tool_name="run_shell_command",
+        command_pattern=r"^git\b",
+        decision="allow",
+    )
+    assert rule._compiled_command is not None
+
+
+def test_policy_rule_with_args_pattern_compiles():
+    """Regression test: PolicyRule with args_pattern should compile without error."""
+    rule = PolicyRule(
+        tool_name="run_shell_command",
+        args_pattern=r"dangerous",
+        decision="deny",
+    )
+    assert rule._compiled_args is not None

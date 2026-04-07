@@ -6,6 +6,7 @@ Consolidates permission logic from shell_safety and file_permission_handler.
 Inspired by Gemini CLI's PolicyEngine.
 """
 
+import concurrent.futures
 import json
 import logging
 import re
@@ -18,6 +19,16 @@ from code_puppy.permission_decision import Allow, AskUser, Deny, PermissionDecis
 logger = logging.getLogger(__name__)
 
 Decision = Literal["allow", "deny", "ask_user"]
+
+
+def _safe_regex_search(pattern: re.Pattern, text: str, timeout: float = 1.0) -> bool | None:
+    """Search with timeout protection against ReDoS. Returns match result or None on timeout."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(pattern.search, text)
+        try:
+            return future.result(timeout=timeout) is not None
+        except concurrent.futures.TimeoutError:
+            return None  # Timeout - treat as non-match
 
 
 @dataclass
@@ -48,20 +59,14 @@ class PolicyRule:
         # SECURITY FIX bxj9/evrr/hpsq: Add ReDoS protection with regex timeouts
         if self.command_pattern:
             try:
-                # Use regex timeout to prevent ReDoS attacks
-                self._compiled_command = re.compile(
-                    self.command_pattern,
-                    timeout=1.0  # 1 second timeout for ReDoS protection
-                )
+                # Use standard re.compile - timeout protection happens at search time
+                self._compiled_command = re.compile(self.command_pattern)
             except re.PatternError as e:
                 logger.warning(f"Invalid command_pattern regex: {e}")
                 self._compiled_command = None
         if self.args_pattern:
             try:
-                self._compiled_args = re.compile(
-                    self.args_pattern,
-                    timeout=1.0  # 1 second timeout for ReDoS protection
-                )
+                self._compiled_args = re.compile(self.args_pattern)
             except re.PatternError as e:
                 logger.warning(f"Invalid args_pattern regex: {e}")
                 self._compiled_args = None
@@ -104,18 +109,28 @@ class PolicyEngine:
             # SECURITY FIX: Wrap regex with timeout protection
             try:
                 if rule._compiled_command:
-                    with re.Timeout(1.0):  # 1 second timeout
-                        if not rule._compiled_command.search(str(command)):
-                            continue
+                    result = _safe_regex_search(rule._compiled_command, str(command), timeout=1.0)
+                    if result is None:
+                        # ReDoS timeout detected
+                        logger.warning(
+                            f"ReDoS timeout: pattern took too long for tool={tool_name}"
+                        )
+                        continue
+                    if not result:
+                        continue
                 if rule._compiled_args and stringified:
-                    with re.Timeout(1.0):  # 1 second timeout
-                        if not rule._compiled_args.search(stringified):
-                            continue
-            except re.TimeoutError:
-                # ReDoS attempt detected - skip this rule and log warning
-                logger.warning(
-                    f"ReDoS timeout: pattern took too long for tool={tool_name}"
-                )
+                    result = _safe_regex_search(rule._compiled_args, stringified, timeout=1.0)
+                    if result is None:
+                        # ReDoS timeout detected
+                        logger.warning(
+                            f"ReDoS timeout: pattern took too long for tool={tool_name}"
+                        )
+                        continue
+                    if not result:
+                        continue
+            except Exception as e:
+                # Unexpected error during regex search
+                logger.warning(f"Regex error for tool={tool_name}: {e}")
                 continue
             return rule
 

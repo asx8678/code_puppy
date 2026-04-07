@@ -8,6 +8,7 @@ import importlib
 import importlib.util
 import logging
 import sys
+import threading
 from pathlib import Path
 from typing import Callable, TYPE_CHECKING
 
@@ -29,6 +30,9 @@ _LAZY_PLUGIN_REGISTRY: dict[str, list[tuple[str, str, Callable]]] = {}
 
 # Track which plugins have been fully loaded to prevent duplicate imports
 _LOADED_PLUGINS: set[str] = set()
+
+# Lock for thread-safe access to _LOADED_PLUGINS
+_plugin_load_lock = threading.Lock()
 
 
 def _create_loader_builtin(plugin_name: str, module_name: str) -> Callable:
@@ -294,15 +298,17 @@ def _load_plugins_for_phase(phase: str) -> list[str]:
     plugins_to_load = _LAZY_PLUGIN_REGISTRY.get(phase, [])
 
     for plugin_type, plugin_name, load_func in plugins_to_load:
-        # Skip if already loaded
+        # Skip if already loaded (with lock for thread safety)
         plugin_key = f"{plugin_type}:{plugin_name}"
-        if plugin_key in _LOADED_PLUGINS:
-            continue
+        with _plugin_load_lock:
+            if plugin_key in _LOADED_PLUGINS:
+                continue
 
         # Load the plugin
         result = load_func()
         if result is not None:
-            _LOADED_PLUGINS.add(plugin_key)
+            with _plugin_load_lock:
+                _LOADED_PLUGINS.add(plugin_key)
             loaded.append(plugin_name)
             logger.debug(f"Lazy-loaded {plugin_type} plugin '{plugin_name}' for phase '{phase}'")
 
