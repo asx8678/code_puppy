@@ -70,7 +70,6 @@ The /parse command provides CLI access to the turbo_parse functionality:
 """
 
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -78,14 +77,13 @@ from typing import Any, Dict, List, Optional
 from pydantic_ai import RunContext
 
 from code_puppy.callbacks import register_callback
-from code_puppy.messaging import emit_info, emit_success, emit_warning, emit_error
+from code_puppy.messaging import emit_info, emit_error
 from code_puppy.plugins.turbo_parse import is_turbo_parse_available
 from code_puppy.turbo_parse_bridge import (
     parse_source as _parse_source,
     parse_file as _parse_file,
     parse_files_batch as _parse_files_batch,
     extract_symbols as _extract_symbols,
-    extract_symbols_from_file as _extract_symbols_from_file,
     extract_syntax_diagnostics as _extract_diagnostics,
     is_language_supported,
     supported_languages,
@@ -395,7 +393,7 @@ def _format_status_output() -> str:
     # Stats
     try:
         stats_data = stats()
-        lines.append(f"\n📊 Statistics:")
+        lines.append("\n📊 Statistics:")
         lines.append(f"  Total Parses: {stats_data.get('total_parses', 0)}")
         lines.append(f"  Avg Parse Time: {stats_data.get('average_parse_time_ms', 0.0):.2f}ms")
         lines.append(f"  Cache Hits: {stats_data.get('cache_hits', 0)}")
