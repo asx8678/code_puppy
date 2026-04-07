@@ -45,10 +45,26 @@ class PolicyRule:
     )
 
     def __post_init__(self) -> None:
+        # SECURITY FIX bxj9/evrr/hpsq: Add ReDoS protection with regex timeouts
         if self.command_pattern:
-            self._compiled_command = re.compile(self.command_pattern)
+            try:
+                # Use regex timeout to prevent ReDoS attacks
+                self._compiled_command = re.compile(
+                    self.command_pattern,
+                    timeout=1.0  # 1 second timeout for ReDoS protection
+                )
+            except re.PatternError as e:
+                logger.warning(f"Invalid command_pattern regex: {e}")
+                self._compiled_command = None
         if self.args_pattern:
-            self._compiled_args = re.compile(self.args_pattern)
+            try:
+                self._compiled_args = re.compile(
+                    self.args_pattern,
+                    timeout=1.0  # 1 second timeout for ReDoS protection
+                )
+            except re.PatternError as e:
+                logger.warning(f"Invalid args_pattern regex: {e}")
+                self._compiled_args = None
 
 
 class PolicyEngine:
@@ -85,15 +101,21 @@ class PolicyEngine:
         for rule in self._rules:
             if not self._matches_tool(rule, tool_name):
                 continue
-            if rule._compiled_command and not rule._compiled_command.search(
-                str(command)
-            ):
-                continue
-            if (
-                rule._compiled_args
-                and stringified
-                and not rule._compiled_args.search(stringified)
-            ):
+            # SECURITY FIX: Wrap regex with timeout protection
+            try:
+                if rule._compiled_command:
+                    with re.Timeout(1.0):  # 1 second timeout
+                        if not rule._compiled_command.search(str(command)):
+                            continue
+                if rule._compiled_args and stringified:
+                    with re.Timeout(1.0):  # 1 second timeout
+                        if not rule._compiled_args.search(stringified):
+                            continue
+            except re.TimeoutError:
+                # ReDoS attempt detected - skip this rule and log warning
+                logger.warning(
+                    f"ReDoS timeout: pattern took too long for tool={tool_name}"
+                )
                 continue
             return rule
 
