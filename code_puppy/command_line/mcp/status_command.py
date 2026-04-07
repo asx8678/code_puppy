@@ -101,9 +101,10 @@ class StatusCommand(MCPCommandBase):
 
             # State and status
             state = status.get("state", "unknown")
+            # Use generator expression instead of list comprehension for memory efficiency
             state_display = format_state_indicator(
                 ServerState(state)
-                if state in [s.value for s in ServerState]
+                if any(state == s.value for s in ServerState)
                 else ServerState.STOPPED
             )
             status_lines.append(f"[bold]State:[/bold] {state_display}")

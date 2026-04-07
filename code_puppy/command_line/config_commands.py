@@ -690,7 +690,8 @@ def _show_color_options(color_type: str):
         # Display in columns for better readability
         for i in range(0, len(colors), 4):
             row = colors[i : i + 4]
-            row_text = "  ".join([f"[{color}]■[/{color}] {color}" for color, _ in row])
+            # Use generator expression instead of list comprehension for memory efficiency
+            row_text = "  ".join(f"[{color}]■[/{color}] {color}" for color, _ in row)
             emit_info(Text.from_markup(f"  {row_text}"))
 
     emit_info("\nUsage: /diff {color_type} <color_name>")

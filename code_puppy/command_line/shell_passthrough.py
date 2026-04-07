@@ -33,7 +33,8 @@ DANGEROUS_PATTERNS = [
     r">\s*/etc/",
     r"curl.*\|.*sh",
 ]
-_COMPILED_DANGEROUS = [re.compile(p, re.IGNORECASE) for p in DANGEROUS_PATTERNS]
+# Using tuple instead of list for memory efficiency and immutability
+_COMPILED_DANGEROUS = tuple(re.compile(p, re.IGNORECASE) for p in DANGEROUS_PATTERNS)
 MAX_COMMAND_LENGTH = 8192
 
 def _validate_passthrough_command(command: str) -> tuple[bool, str]:
