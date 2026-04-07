@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from .request_cache import RequestCacheMixin
+
 if TYPE_CHECKING:
     import requests
 from code_puppy.config import get_http2
@@ -151,7 +153,7 @@ def _notify_success(model_name: str) -> None:
         pass
 
 
-class RetryingAsyncClient(httpx.AsyncClient):
+class RetryingAsyncClient(RequestCacheMixin, httpx.AsyncClient):
     """AsyncClient with built-in rate limit handling (429) and retries.
 
     This replaces the Tenacity transport with a more direct subclass implementation,
@@ -173,6 +175,8 @@ class RetryingAsyncClient(httpx.AsyncClient):
         self.model_name = model_name.lower() if model_name else ""
         # Cerebras sends crazy aggressive Retry-After headers (60s), ignore them
         self._ignore_retry_headers = "cerebras" in self.model_name
+        # Initialize request cache for optimization
+        self._init_request_cache(max_size=64, ttl_seconds=300)
 
     async def send(self, request: httpx.Request, **kwargs: Any) -> httpx.Response:
         """Send request with automatic retries for rate limits and server errors."""
