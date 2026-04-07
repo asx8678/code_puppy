@@ -375,7 +375,7 @@ except ImportError:
 |----------|-------|-------|
 | HIGH | 0 | - |
 | MEDIUM | 10 | config.py (orphaned docstring), adaptive_rate_limiter.py (locking docs, float compare, integer truncation), callbacks.py (async/sync mixing, TaskGroup comments, context cleanup), interactive_loop.py (exception masking, imports) |
-| LOW | 18 | config.py (globals, cache, lru_cache, comments), model_factory.py (imports, error handling, nesting, type annotations, beta header, DRY), adaptive_rate_limiter.py (back-compat), callbacks.py (type safety, docstrings), interactive_loop.py (getattr, imports), cross-cutting (type syntax, loggers, docstrings) |
+| LOW | 17 | config.py (globals, cache, lru_cache, comments), model_factory.py (imports, error handling, nesting, type annotations, beta header, DRY), adaptive_rate_limiter.py (back-compat), callbacks.py (type safety, docstrings), interactive_loop.py (getattr, imports), cross-cutting (type syntax, loggers, docstrings) |
 
 ## Recommendations
 
