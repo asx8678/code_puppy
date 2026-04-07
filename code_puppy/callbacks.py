@@ -107,6 +107,8 @@ def register_callback(phase: PhaseType, func: CallbackFunc) -> None:
         return
 
     _callbacks[phase].append(func)
+    # Mark this phase as having had a listener (for _backlog early-exit optimization)
+    _backlog.mark_phase_as_having_listener(phase)
     logger.debug(f"Registered async callback {func.__name__} for phase '{phase}'")
 
 
@@ -166,12 +168,19 @@ def _ensure_plugins_loaded_for_phase(phase: PhaseType) -> None:
 
 
 def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> list[Any]:
+    # Cheap early-exit: check count before doing any work
+    if not count_callbacks(phase):
+        # Only buffer if this phase could potentially have listeners later
+        # (i.e., a plugin that registers callbacks for this phase might load)
+        _backlog.buffer_event(phase, args, kwargs)
+        return []
+
     # Ensure lazy-loaded plugins for this phase are loaded first
     _ensure_plugins_loaded_for_phase(phase)
 
+    # Re-check after plugin loading (they may have registered callbacks)
     callbacks = get_callbacks(phase)
     if not callbacks:
-        logger.debug(f"No callbacks registered for phase '{phase}'")
         _backlog.buffer_event(phase, args, kwargs)
         return []
 
@@ -206,13 +215,19 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> list[Any]:
 
 
 async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> list[Any]:
+    # Cheap early-exit: check count before doing any work (including plugin loading)
+    if not count_callbacks(phase):
+        # Only buffer if this phase could potentially have listeners later
+        _backlog.buffer_event(phase, args, kwargs)
+        return []
+
     # Ensure lazy-loaded plugins for this phase are loaded first
     _ensure_plugins_loaded_for_phase(phase)
 
+    # Re-check after plugin loading (they may have registered callbacks)
     callbacks = get_callbacks(phase)
 
     if not callbacks:
-        logger.debug(f"No callbacks registered for phase '{phase}'")
         _backlog.buffer_event(phase, args, kwargs)
         return []
 

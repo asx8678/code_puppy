@@ -59,6 +59,7 @@ from rich.text import Text
 from code_puppy.agents.agent_prompt_mixin import AgentPromptMixin
 from code_puppy.agents.event_stream_handler import event_stream_handler
 from code_puppy.callbacks import (
+    count_callbacks,
     get_callbacks,
     on_agent_exception,
     on_agent_run_end,
@@ -1970,7 +1971,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         _message_history = self.get_message_history()
 
         # Hook: on_message_history_processor_start - dump the message history before processing
-        if get_callbacks("message_history_processor_start"):
+        # Use count_callbacks() for cheap check before expensive list copying
+        if count_callbacks("message_history_processor_start"):
             on_message_history_processor_start(
                 agent_name=self.name,
                 session_id=getattr(self, "session_id", None),
@@ -2039,7 +2041,8 @@ class BaseAgent(ABC, AgentPromptMixin):
             self.set_message_history(final_history)
 
         # Hook: on_message_history_processor_end - dump the message history after processing
-        if get_callbacks("message_history_processor_end"):
+        # Use count_callbacks() for cheap check before expensive list copying
+        if count_callbacks("message_history_processor_end"):
             messages_filtered = len(messages) - messages_added + filtered_count
             on_message_history_processor_end(
                 agent_name=self.name,

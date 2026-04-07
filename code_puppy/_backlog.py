@@ -15,22 +15,60 @@ _MAX_BACKLOG_PER_PHASE = 100
 # phase -> deque of (args_tuple, kwargs_dict) that were fired with no listeners
 _backlog: dict[str, deque[tuple[tuple, dict]]] = {}
 
+# Track phases that have ever had a listener registered (for early-exit optimization)
+# This is populated by callbacks.py when callbacks are registered
+_had_listener: set[str] = set()
 
-def buffer_event(phase: str, args: tuple, kwargs: dict) -> None:
-    """Buffer an event that had no listeners when fired."""
+# Phases that commonly have late-registered listeners during plugin bootstrap.
+# Always buffer these even if no listener exists yet - a plugin might load later.
+# This is required for the backlog replay pattern to work during startup.
+_ALWAYS_BUFFER_PHASES: frozenset[str] = frozenset({
+    "startup",
+    "shutdown",
+    "invoke_agent",
+    "agent_run_start",
+    "agent_run_end",
+    "agent_exception",
+    "custom_command",
+    "custom_command_help",
+    "stream_event",
+    "message_history_processor_start",
+    "message_history_processor_end",
+})
+
+
+def buffer_event(phase: str, args: tuple, kwargs: dict) -> bool:
+    """Buffer an event that had no listeners when fired.
+    
+    Returns True if event was buffered, False if skipped to save memory.
+    """
+    # Early exit optimization: if no listener was ever registered for this phase,
+    # AND it's not a commonly-used bootstrap phase, don't waste memory buffering
+    # events that will likely never be consumed.
+    if phase not in _had_listener and phase not in _ALWAYS_BUFFER_PHASES:
+        return False
+    
     buf = _backlog.get(phase)
     if buf is None:
         buf = deque(maxlen=_MAX_BACKLOG_PER_PHASE)
         _backlog[phase] = buf
     buf.append((args, kwargs))
+    return True
+
+
+def mark_phase_as_having_listener(phase: str) -> None:
+    """Mark a phase as having had a listener registered.
+    
+    Called by callbacks.py when a callback is registered.
+    """
+    _had_listener.add(phase)
 
 
 def drain_backlog(phase: str) -> list[tuple[tuple, dict]]:
     """Pop and return all buffered events for *phase*."""
-    buf = _backlog.get(phase)
+    buf = _backlog.pop(phase, None)
     if not buf:
         return []
-    del _backlog[phase]
     return list(buf)
 
 
