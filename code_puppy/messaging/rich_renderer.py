@@ -8,6 +8,8 @@ only structured data with no formatting hints.
 """
 
 import os
+import re
+from functools import lru_cache
 from typing import Protocol, runtime_checkable
 
 from rich.console import Console
@@ -171,6 +173,13 @@ _FILE_ICONS: dict[str, str] = {
     ".so": "⚡",
     ".dylib": "⚡",
 }
+
+
+@lru_cache(maxsize=128)
+def _get_file_icon_cached(file_path: str) -> str:
+    """Get an emoji icon for a file based on its extension (cached)."""
+    ext = os.path.splitext(file_path)[1].lower()
+    return _FILE_ICONS.get(ext, "📄")
 
 
 # =============================================================================
@@ -611,8 +620,6 @@ class RichConsoleRenderer:
         # Skip for sub-agents unless verbose mode
         if self._should_suppress_subagent_output():
             return
-
-        import re
 
         # Header
         banner = self._format_banner("grep", "GREP")
@@ -1087,8 +1094,7 @@ class RichConsoleRenderer:
 
     def _get_file_icon(self, file_path: str) -> str:
         """Get an emoji icon for a file based on its extension."""
-        ext = os.path.splitext(file_path)[1].lower()
-        return _FILE_ICONS.get(ext, "📄")
+        return _get_file_icon_cached(file_path)
 
     # =========================================================================
     # Skills
