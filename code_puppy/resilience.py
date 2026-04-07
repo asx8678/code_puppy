@@ -8,13 +8,15 @@ the agent pack system and general tool execution.
 from __future__ import annotations
 
 import asyncio
-import inspect
 import functools
+import inspect
 import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Callable, Generic, ParamSpec, TypeVar
+
+from code_puppy.async_utils import run_async_sync
 
 logger = logging.getLogger(__name__)
 
@@ -226,33 +228,17 @@ def with_retry_sync(
 ) -> T:
     """Synchronous version of with_retry.
     
+    This is a thin wrapper around the async with_retry function that
+    runs it using a dedicated background thread's event loop.
+
     Args:
         func: Synchronous function to execute
         config: Retry configuration
-        
+
     Returns:
         Result from successful execution
     """
-    cfg = config or RetryConfig()
-    last_error: Exception | None = None
-    
-    for attempt in range(cfg.max_attempts):
-        try:
-            return func()
-        except cfg.retryable_exceptions as e:
-            last_error = e
-            if attempt < cfg.max_attempts - 1:
-                delay = min(
-                    cfg.base_delay * (cfg.exponential_base ** attempt),
-                    cfg.max_delay,
-                )
-                if cfg.on_retry:
-                    cfg.on_retry(attempt + 1, e, delay)
-                logger.warning(f"Retry {attempt + 1}/{cfg.max_attempts} after error: {e}")
-                time.sleep(delay)
-    
-    assert last_error is not None
-    raise last_error
+    return run_async_sync(with_retry(func, config))
 
 
 async def with_fallback(
