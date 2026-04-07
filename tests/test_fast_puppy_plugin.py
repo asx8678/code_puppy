@@ -196,7 +196,7 @@ class TestOnStartup:
     @patch("code_puppy._core_bridge.RUST_AVAILABLE", False)
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
     @patch("code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference", return_value=False)
-    def test_skips_auto_build_when_disabled(
+    def test_always_auto_builds_even_when_disabled(
         self,
         mock_pref: MagicMock,
         mock_emit: MagicMock,
@@ -204,9 +204,9 @@ class TestOnStartup:
         mock_set_rust: MagicMock,
         mock_auto_build: MagicMock,
     ) -> None:
-        """When persisted preference is False, _try_auto_build should NOT be called."""
+        """When persisted preference is False, _try_auto_build should STILL be called."""
         _on_startup()
-        mock_auto_build.assert_not_called()
+        mock_auto_build.assert_called_once()
 
     @patch("code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build")
     @patch("code_puppy._core_bridge.set_rust_enabled")
@@ -214,14 +214,39 @@ class TestOnStartup:
     @patch("code_puppy._core_bridge.RUST_AVAILABLE", True)
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
     @patch("code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference", return_value=True)
-    def test_applies_persisted_preference(
+    @patch("code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference")
+    def test_on_startup_force_enables_rust(
         self,
+        mock_write_pref: MagicMock,
         mock_pref: MagicMock,
         mock_emit: MagicMock,
         mock_is_enabled: MagicMock,
         mock_set_rust: MagicMock,
         mock_auto_build: MagicMock,
     ) -> None:
-        """When preference is True, set_rust_enabled(True) is called."""
+        """On startup, set_rust_enabled(True) is called and persisted."""
         _on_startup()
         mock_set_rust.assert_called_once_with(True)
+        mock_write_pref.assert_called_once_with(True)
+
+    @patch("code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build")
+    @patch("code_puppy._core_bridge.set_rust_enabled")
+    @patch("code_puppy._core_bridge.is_rust_enabled", return_value=True)
+    @patch("code_puppy._core_bridge.RUST_AVAILABLE", True)
+    @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
+    @patch("code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference", return_value=False)
+    @patch("code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference")
+    def test_force_enables_rust_even_when_persisted_disabled(
+        self,
+        mock_write_pref: MagicMock,
+        mock_pref: MagicMock,
+        mock_emit: MagicMock,
+        mock_is_enabled: MagicMock,
+        mock_set_rust: MagicMock,
+        mock_auto_build: MagicMock,
+    ) -> None:
+        """set_rust_enabled(True) is called even when _read_persisted_preference() returns False."""
+        _on_startup()
+        # Even when persisted preference is False, we force enable
+        mock_set_rust.assert_called_once_with(True)
+        mock_write_pref.assert_called_once_with(True)

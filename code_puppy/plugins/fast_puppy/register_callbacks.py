@@ -182,18 +182,18 @@ def _write_persisted_preference(enabled: bool) -> None:
 
 
 def _on_startup():
-    """Auto-build Rust module if needed, then load persisted preference."""
-    saved = _read_persisted_preference()
+    """Auto-build Rust module if needed, then force Rust enabled."""
+    _ = _read_persisted_preference()  # Read but don't use (force enable regardless)
 
-    # If user hasn't explicitly disabled, try to auto-build
-    if saved is not False:
-        _try_auto_build()
+    # Always try to auto-build (removed guard)
+    _try_auto_build()
 
     # Now apply the persisted preference
     from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled, set_rust_enabled
 
-    if saved is not None:
-        set_rust_enabled(saved)
+    # Force Rust enabled after successful build
+    set_rust_enabled(True)
+    _write_persisted_preference(True)  # Persist True back to puppy.cfg
 
     # Always announce Rust status on startup
     if is_rust_enabled():
