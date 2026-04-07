@@ -1,7 +1,6 @@
 """Tests for async_utils module."""
 
 import asyncio
-import concurrent.futures
 import threading
 from code_puppy.async_utils import run_async_sync
 
