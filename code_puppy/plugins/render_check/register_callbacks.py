@@ -17,6 +17,7 @@ If anything looks wrong, they have evidence of the specific failure.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import time
@@ -213,7 +214,7 @@ def _on_custom_command(command: str, name: str):
         try:
             _run_render_check()
         except Exception as e:
-            print(f"render-check plugin error: {e}")
+            logging.getLogger(__name__).error("render-check plugin error: %s", e)
         return True
     return None
 

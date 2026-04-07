@@ -12,6 +12,7 @@ at render time. Persists only for the current session.
 
 from __future__ import annotations
 
+import logging
 import os
 
 from code_puppy.callbacks import register_callback
@@ -128,7 +129,7 @@ def _on_custom_command(command: str, name: str):
             arg = parts[1].strip()
             _apply_theme(console, arg)
     except Exception as e:
-        print(f"theme plugin error: {e}")
+        logging.getLogger(__name__).error("theme plugin error: %s", e)
     return True
 
 
