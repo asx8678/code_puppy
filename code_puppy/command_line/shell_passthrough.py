@@ -42,8 +42,8 @@ DANGEROUS_PATTERNS = [
     r"wget\s+[^|]*\|\s*(ba)?sh",
     r"curl\s+[^|]*\|\s*bash\s+-[ci]",
     # Eval-based arbitrary execution
-    r"\beval\s+['\"$`]",
-    r"\beval\s*\(",
+    r"\beval(?![\w])\s*['\"$`]",
+    r"\beval(?![\w])\s*\(",
     # Backtick command substitution: `rm -rf /`
     r'`[^`]+`',
     # $(...) command substitution: $(rm -rf /)
