@@ -44,9 +44,10 @@ All CRITICAL and HIGH findings across all audit phases are well-documented with:
 | Finding | File:Line | Ambiguous? | Notes |
 |---------|-----------|------------|-------|
 | Thread Starvation in run_async_sync | `async_utils.py:21-39` | **NO** | Code pattern clearly shown with race condition explanation. Unbounded thread creation mechanism documented. |
-| Non-Thread-Safe Lazy Initialization | `concurrency_limits.py:54-56, 68-70, 80-82` | **NO** | Specific semaphore initialization functions identified. Race condition windows clearly described. |
 | Async/Thread Safety Mismatch | `round_robin_model.py:105-135` | **NO** | Threading.Lock held across potential async boundaries. Lock scope issues clearly documented. |
 | Inconsistent Lock Scope for Index Updates | `round_robin_model.py:101-131` | **NO** | Two separate lock acquisitions with race window between them. Specific race scenario described. |
+
+**Note:** The `concurrency_limits.py: Non-Thread-Safe Lazy Initialization` finding (lines 54-56, 68-70, 80-82) is rated **SEV-MEDIUM** per the source report, not HIGH. It is tracked here for completeness.
 
 ### Testing Gap Analysis (Phase 3.2)
 
@@ -128,7 +129,7 @@ While no deeper dive is needed, findings could be prioritized by:
 
 2. **Short-term (Security + Stability):**
    - JWT Input Validation (SEV-HIGH)
-   - Concurrency race conditions (SEV-HIGH x4)
+   - Concurrency race conditions (SEV-HIGH x3, SEV-MEDIUM x1)
    - Plugin security tests (testing gap → prevents regressions)
 
 3. **Medium-term (Testing Infrastructure):**
@@ -154,6 +155,8 @@ The audit reports provide sufficient detail for developers to proceed directly w
 
 ## Cross-Reference Matrix
 
+**Total: 11 CRITICAL/HIGH findings (plus 1 MEDIUM tracked for completeness)**
+
 | Finding | Phase | Severity | Status |
 |---------|-------|----------|--------|
 | Arbitrary Code Execution via User Plugins | 2.1 Security | CRITICAL | Well-documented |
@@ -161,7 +164,7 @@ The audit reports provide sufficient detail for developers to proceed directly w
 | Path Traversal in Plugin Loading | 2.1 Security | HIGH | Well-documented |
 | Missing Input Validation on JWT Claims | 2.1 Security | HIGH | Well-documented |
 | Thread Starvation in run_async_sync | 3.1 Bugs/Perf | HIGH | Well-documented |
-| Non-Thread-Safe Lazy Initialization | 3.1 Bugs/Perf | HIGH | Well-documented |
+| Non-Thread-Safe Lazy Initialization | 3.1 Bugs/Perf | MEDIUM | Well-documented |
 | Async/Thread Safety Mismatch | 3.1 Bugs/Perf | HIGH | Well-documented |
 | Inconsistent Lock Scope | 3.1 Bugs/Perf | HIGH | Well-documented |
 | API Module (0% coverage) | 3.2 Testing | HIGH | Well-documented |
