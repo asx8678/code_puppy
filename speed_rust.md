@@ -4,6 +4,21 @@
 
 This document instructs an AI agent to create a Rust extension module (`_code_puppy_core`) that replaces the CPU-bound hot paths in Code Puppy's message processing pipeline. The goal is a 10-30x speedup on the per-turn message processing that runs every LLM interaction.
 
+## Workspace Structure (April 2025)
+
+The repository uses a Cargo workspace with pyo3 managed at the workspace level:
+
+```toml
+[workspace]
+members = ["code_puppy_core", "turbo_ops", "turbo_parse"]
+resolver = "2"
+
+[workspace.dependencies]
+pyo3 = { version = "0.28", features = ["extension-module", "serde"] }
+```
+
+All workspace crates inherit pyo3 via `pyo3 = { workspace = true }` for consistent versioning.
+
 ---
 
 ## Context: What Code Puppy Is
