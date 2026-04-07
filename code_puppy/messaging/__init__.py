@@ -83,7 +83,8 @@ from .message_queue import (
     emit_warning,
     get_buffered_startup_messages,
     get_global_queue,
-    provide_prompt_response)
+    provide_prompt_response,
+    wait_for_messages_rendered)
 
 # Message types and enums
 from .messages import (  # Enums, Base, Text, File ops, Diff, Shell, Agent, etc.
@@ -169,6 +170,7 @@ __all__ = [
     "emit_prompt",
     "provide_prompt_response",
     "get_buffered_startup_messages",
+    "wait_for_messages_rendered",
     # Legacy renderers
     "InteractiveRenderer",
     "SynchronousInteractiveRenderer",
