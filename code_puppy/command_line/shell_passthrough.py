@@ -16,6 +16,7 @@ Examples:
 """
 
 import os
+import re
 import subprocess
 import sys
 import time
@@ -24,6 +25,26 @@ from rich.console import Console
 from rich.markup import escape as escape_rich_markup
 
 from code_puppy.config import get_banner_color
+
+# SECURITY FIX fv7t: Add validation to shell passthrough
+DANGEROUS_PATTERNS = [
+    r"rm\s+-rf\s+/",
+    r"rm\s+-rf\s+~",
+    r">\s*/etc/",
+    r"curl.*\|.*sh",
+]
+_COMPILED_DANGEROUS = [re.compile(p, re.IGNORECASE) for p in DANGEROUS_PATTERNS]
+MAX_COMMAND_LENGTH = 8192
+
+def _validate_passthrough_command(command: str) -> tuple[bool, str]:
+    if not command or not command.strip():
+        return False, "Empty command"
+    if len(command) > MAX_COMMAND_LENGTH:
+        return False, f"Command too long"
+    for pattern in _COMPILED_DANGEROUS:
+        if pattern.search(command):
+            return False, f"Dangerous pattern detected"
+    return True, ""
 
 # The prefix character that triggers shell pass-through
 SHELL_PASSTHROUGH_PREFIX = "!"
@@ -114,9 +135,16 @@ def execute_shell_passthrough(task: str) -> None:
     # Banner + command on one line, context hint below
     banner = _format_banner()
     console.print(f"\n{banner} [dim]$ {safe_command}[/dim]")
-    console.print("[dim]↳ Direct shell · Bypassing AI agent and tool safety checks[/dim]")
+    console.print("[dim]↳ Direct shell · Minimal safety checks applied[/dim]")
 
     start_time = time.monotonic()
+
+    # SECURITY FIX fv7t: Validate before execution
+    is_safe, rejection_reason = _validate_passthrough_command(command)
+    if not is_safe:
+        console.print(f"[bold red]🛡️ Command blocked:[/bold red] {rejection_reason}")
+        console.print("[dim]Use agent tools or /yolo mode for this operation.[/dim]")
+        return
 
     try:
         result = subprocess.run(

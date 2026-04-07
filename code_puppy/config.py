@@ -410,6 +410,10 @@ def get_config_keys():
     default_keys.append("resume_message_count")
     # Add fast puppy (Rust acceleration) control key
     default_keys.append("enable_fast_puppy")
+    
+    # SECURITY FIX c9z0: User plugin security settings
+    default_keys.append("enable_user_plugins")
+    default_keys.append("allowed_user_plugins")
 
     config = _get_config()
     keys = set(config[DEFAULT_SECTION].keys()) if DEFAULT_SECTION in config else set()

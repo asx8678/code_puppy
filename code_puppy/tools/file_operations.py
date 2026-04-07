@@ -460,7 +460,15 @@ async def _read_file(
     file_path: str,
     start_line: int | None = None,
     num_lines: int | None = None) -> ReadFileOutput:
-    """Read file with concurrency limiting."""
+    """Read file with concurrency limiting and security validation.
+    
+    SECURITY FIX peis/wslg: Added path validation before file access.
+    """
+    # Validate path before accessing
+    is_valid, error_msg = validate_file_path(file_path, "read")
+    if not is_valid:
+        return ReadFileOutput(content=None, num_tokens=0, error=f"Security: {error_msg}")
+    
     async with FileOpsLimiter():
         # Run blocking I/O in thread pool
         content, num_tokens, error = await asyncio.to_thread(
@@ -473,7 +481,15 @@ def _read_file_sync(
     file_path: str,
     start_line: int | None = None,
     num_lines: int | None = None) -> tuple[str | None, int, str | None]:
-    """Synchronous file reading - runs in thread pool."""
+    """Synchronous file reading - runs in thread pool.
+    
+    SECURITY FIX peis/wslg: Normalizes and validates path.
+    """
+    # SECURITY: Validate and normalize path
+    is_valid, error_msg = validate_file_path(file_path, "read")
+    if not is_valid:
+        return None, 0, f"Security: {error_msg}"
+    
     file_path = os.path.abspath(os.path.expanduser(file_path))
 
     if not os.path.exists(file_path):

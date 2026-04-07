@@ -46,9 +46,42 @@ def _create_loader_builtin(plugin_name: str, module_name: str) -> Callable:
 
 
 def _create_loader_user(plugin_name: str, callbacks_file: Path) -> Callable:
-    """Create a lazy loader function for a user plugin."""
+    """Create a lazy loader function for a user plugin.
+    
+    SECURITY FIX c9z0: User plugins execute with full privileges via exec_module().
+    Added warnings and allowlist requirement for user plugin security.
+    """
     def _load():
         try:
+            # SECURITY FIX c9z0: Check if user plugins are enabled
+            from code_puppy.config import get_value
+            user_plugins_enabled = get_value("enable_user_plugins")
+            if user_plugins_enabled is None:
+                # Default to disabled - require explicit opt-in
+                logger.warning(
+                    f"SECURITY: User plugin '{plugin_name}' not loaded. "
+                    f"User plugins are disabled by default. Set enable_user_plugins=true "
+                    f"in config to enable (executes untrusted code with full privileges)."
+                )
+                return None
+            
+            # Check allowlist if configured
+            allowed_plugins = get_value("allowed_user_plugins")
+            if allowed_plugins:
+                allowed = [p.strip() for p in allowed_plugins.split(",")]
+                if plugin_name not in allowed:
+                    logger.warning(
+                        f"SECURITY: User plugin '{plugin_name}' not in allowlist. "
+                        f"Add to allowed_user_plugins config to enable."
+                    )
+                    return None
+            
+            # Log security warning when loading
+            logger.warning(
+                f"SECURITY: Loading user plugin '{plugin_name}' from {callbacks_file}. "
+                f"This plugin will execute with full system privileges!"
+            )
+            
             module_name = f"{plugin_name}.register_callbacks"
             spec = importlib.util.spec_from_file_location(module_name, callbacks_file)
             if spec is None or spec.loader is None:
@@ -57,6 +90,8 @@ def _create_loader_user(plugin_name: str, callbacks_file: Path) -> Callable:
 
             module = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = module
+            # SECURITY: exec_module() executes arbitrary Python code
+            # This is the attack surface for RCE via malicious plugins
             spec.loader.exec_module(module)
             return module
         except ImportError as e:

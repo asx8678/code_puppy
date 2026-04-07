@@ -20,29 +20,24 @@ from code_puppy.plugins.shell_safety.command_cache import (
 )
 from code_puppy.tools.command_runner import ShellSafetyAssessment
 
-# OAuth model prefixes - these models have their own safety mechanisms
-OAUTH_MODEL_PREFIXES = (
-    "claude-code-",  # Anthropic OAuth
-    "chatgpt-",  # OpenAI OAuth
-    "gemini-oauth",  # Google OAuth
-)
-
+# SECURITY FIX: OAuth bypass removed (issues ydcv, d1li, e6c5)
+# Previously OAuth models bypassed shell safety checks based on name prefixes,
+# which was vulnerable to prefix spoofing (e.g., "claude-code-malicious").
+# Defense in depth: All models now go through the same safety pipeline.
 
 def is_oauth_model(model_name: str | None) -> bool:
-    """Check if the model is an OAuth model that should skip safety checks.
-
-    OAuth models have their own built-in safety mechanisms, so we skip
-    the shell safety callback to avoid redundant checks and potential bugs.
-
+    """DEPRECATED: OAuth bypass removed for security.
+    
+    Previously checked if model was an OAuth model to skip safety checks.
+    Now returns False always - all models must go through safety pipeline.
+    
     Args:
-        model_name: The name of the current model
+        model_name: Ignored - kept for API compatibility
 
     Returns:
-        True if the model is an OAuth model, False otherwise
+        False always - OAuth bypass removed for security
     """
-    if not model_name:
-        return False
-    return model_name.startswith(OAUTH_MODEL_PREFIXES)
+    return False
 
 
 # Risk level hierarchy for numeric comparison
