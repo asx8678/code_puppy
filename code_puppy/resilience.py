@@ -38,14 +38,20 @@ class RetryConfig:
         base_delay: Initial delay between retries in seconds (default: 1.0)
         max_delay: Maximum delay between retries in seconds (default: 60.0)
         exponential_base: Base for exponential backoff (default: 2.0)
-        retryable_exceptions: Tuple of exception types to retry (default: (Exception,))
+        retryable_exceptions: Tuple of exception types to retry
+            (default: (ConnectionError, TimeoutError, OSError, ValueError))
         on_retry: Optional callback called on each retry with (attempt, error, delay)
     """
     max_attempts: int = 3
     base_delay: float = 1.0
     max_delay: float = 60.0
     exponential_base: float = 2.0
-    retryable_exceptions: tuple[type[Exception], ...] = (Exception,)
+    retryable_exceptions: tuple[type[Exception], ...] = (
+        ConnectionError,  # Network issues
+        TimeoutError,     # Timeouts
+        OSError,          # File/network OS errors
+        ValueError,       # Parse errors
+    )
     on_retry: Callable[[int, Exception, float], None] | None = None
 
 
@@ -282,7 +288,12 @@ def retry(
     base_delay: float = 1.0,
     max_delay: float = 60.0,
     exponential_base: float = 2.0,
-    retryable_exceptions: tuple[type[Exception], ...] = (Exception,),
+    retryable_exceptions: tuple[type[Exception], ...] = (
+        ConnectionError,  # Network issues
+        TimeoutError,     # Timeouts
+        OSError,          # File/network OS errors
+        ValueError,       # Parse errors
+    ),
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Decorator to add retry logic to a function.
     
