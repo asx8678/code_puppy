@@ -10,6 +10,7 @@ from typing import Any
 
 from code_puppy import config
 from code_puppy.callbacks import register_callback
+from code_puppy.dbos_utils import reinitialize_dbos
 from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
 
 # ---------------------------------------------------------------------------
@@ -247,7 +248,12 @@ def _clean_db(dry_run: bool) -> tuple[int, int]:
     total_files, total_bytes = _clean_targets(targets, dry_run)
 
     if not dry_run and total_files > 0:
-        emit_warning("  ⚠️  Please restart Code Puppy for DBOS to reinitialize.")
+        if reinitialize_dbos():
+            emit_info("  🔄 DBOS reinitialized successfully")
+        else:
+            emit_warning(
+                "  ⚠️  Could not reinitialize DBOS automatically - you may need to restart"
+            )
 
     return total_files, total_bytes
 
@@ -275,7 +281,7 @@ def _show_help() -> None:
         "  /clean cache             Clean browser profiles, workflows, skills cache"
     )
     emit_info(
-        "  /clean db                Clean DBOS state database (⚠️ requires restart)"
+        "  /clean db                Clean DBOS state database (auto-reinitializes)"
     )
     emit_info("")
     emit_info("Options:")
@@ -289,7 +295,9 @@ def _show_help() -> None:
     emit_info("")
     emit_info("⚠️  Config files (puppy.cfg, mcp_servers.json, models, OAuth tokens)")
     emit_info("   are never touched.")
-    emit_info("💡 /clean all excludes db — use /clean db explicitly (needs restart).")
+    emit_info(
+        "💡 /clean all excludes db — use /clean db explicitly (auto-reinitializes)."
+    )
 
 
 def _show_status() -> None:
