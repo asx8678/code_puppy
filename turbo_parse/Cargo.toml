@@ -6,16 +6,30 @@ authors = ["Code Puppy Team"]
 description = "High-performance parsing with tree-sitter and PyO3 bindings"
 license = "MIT"
 
+[features]
+default = ["python"]
+python = ["dep:pyo3"]
+
 [lib]
 name = "turbo_parse"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [[example]]
 name = "spike"
 path = "examples/spike.rs"
 
+# Benchmarks
+[[bench]]
+name = "parse_bench"
+harness = false
+required-features = []
+
+# Don't enable python feature for benchmarks
+[profile.bench]
+inherits = "release"
+
 [dependencies]
-pyo3 = { workspace = true }
+pyo3 = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tree-sitter = "0.24"
@@ -34,3 +48,4 @@ streaming-iterator = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
