@@ -530,7 +530,6 @@ fn build_query(language: &Language, query_str: &str) -> Result<Query, String> {
     Query::new(language, query_str).map_err(|e| format!("Query error: {:?}", e))
 }
 
-/// Execute the query and extract symbols.
 
 
 /// Find parent for a method.
