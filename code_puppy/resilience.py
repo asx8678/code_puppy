@@ -368,9 +368,7 @@ def get_or_create_circuit_breaker(
     Returns:
         CircuitBreaker instance
     """
-    if name not in _circuit_breakers:
-        _circuit_breakers[name] = CircuitBreaker(name, config)
-    return _circuit_breakers[name]
+    return _circuit_breakers.setdefault(name, CircuitBreaker(name, config))
 
 
 def get_circuit_breaker_status() -> dict[str, dict[str, Any]]:
