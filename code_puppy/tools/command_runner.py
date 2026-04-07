@@ -44,6 +44,7 @@ from code_puppy.messaging import (  # Structured messaging types
     get_message_bus)
 from code_puppy.tools.common import generate_group_id, get_user_approval_async
 from code_puppy.tools.subagent_context import is_subagent
+from code_puppy.concurrency_limits import ToolCallsLimiter
 
 # Maximum line length for shell command output to prevent massive token usage
 # This helps avoid exceeding model context limits when commands produce very long lines
@@ -1193,91 +1194,93 @@ async def run_shell_command(
     # Handle background execution - runs command detached and returns immediately
     # This happens BEFORE user confirmation since we don't wait for the command
     if background:
-        # Create temp log file for output
-        log_file = tempfile.NamedTemporaryFile(
-            mode="w",
-            prefix="shell_bg_",
-            suffix=".log",
-            delete=False,  # Keep file so agent can read it later
-        )
-        log_file_path = log_file.name
+        # Respect centralized concurrency controls for background process spawning
+        async with ToolCallsLimiter():
+            # Create temp log file for output
+            log_file = tempfile.NamedTemporaryFile(
+                mode="w",
+                prefix="shell_bg_",
+                suffix=".log",
+                delete=False,  # Keep file so agent can read it later
+            )
+            log_file_path = log_file.name
 
-        try:
-            # SECURITY: Validate command before execution (defense-in-depth)
-            validate_shell_command(command)
+            try:
+                # SECURITY: Validate command before execution (defense-in-depth)
+                validate_shell_command(command)
 
-            # Platform-specific process detachment
-            if sys.platform.startswith("win"):
-                creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
-                process = subprocess.Popen(
-                    command,
-                    shell=True,  # noqa: S602 — validated above, required for pipes/redirects
-                    stdout=log_file,
-                    stderr=subprocess.STDOUT,
-                    stdin=subprocess.DEVNULL,
-                    cwd=cwd,
-                    creationflags=creationflags)
-            else:
-                process = subprocess.Popen(
-                    command,
-                    shell=True,  # noqa: S602 — validated above, required for pipes/redirects
-                    stdout=log_file,
-                    stderr=subprocess.STDOUT,
-                    stdin=subprocess.DEVNULL,
-                    cwd=cwd,
-                    start_new_session=True,  # Fully detach on POSIX
+                # Platform-specific process detachment
+                if sys.platform.startswith("win"):
+                    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+                    process = subprocess.Popen(
+                        command,
+                        shell=True,  # noqa: S602 — validated above, required for pipes/redirects
+                        stdout=log_file,
+                        stderr=subprocess.STDOUT,
+                        stdin=subprocess.DEVNULL,
+                        cwd=cwd,
+                        creationflags=creationflags)
+                else:
+                    process = subprocess.Popen(
+                        command,
+                        shell=True,  # noqa: S602 — validated above, required for pipes/redirects
+                        stdout=log_file,
+                        stderr=subprocess.STDOUT,
+                        stdin=subprocess.DEVNULL,
+                        cwd=cwd,
+                        start_new_session=True,  # Fully detach on POSIX
+                    )
+
+                log_file.close()  # Close our handle, process keeps writing
+
+                # Emit UI messages so user sees what happened
+                bus = get_message_bus()
+                bus.emit(
+                    ShellStartMessage(
+                        command=command,
+                        cwd=cwd,
+                        timeout=0,  # No timeout for background processes
+                        background=True)
                 )
 
-            log_file.close()  # Close our handle, process keeps writing
+                # Emit info about background execution
+                emit_info(
+                    f"🚀 Background process started (PID: {process.pid}) - no timeout, runs until complete"
+                )
+                emit_info(f"📄 Output logging to: {log_file.name}")
 
-            # Emit UI messages so user sees what happened
-            bus = get_message_bus()
-            bus.emit(
-                ShellStartMessage(
+                # Return immediately - don't wait, don't block
+                return ShellCommandOutput(
+                    success=True,
                     command=command,
-                    cwd=cwd,
-                    timeout=0,  # No timeout for background processes
+                    stdout=None,
+                    stderr=None,
+                    exit_code=None,
+                    execution_time=0.0,
+                    background=True,
+                    log_file=log_file.name,
+                    pid=process.pid)
+            except Exception as e:
+                try:
+                    log_file.close()
+                except Exception:
+                    pass
+                # Clean up the temp file on error since no process will write to it
+                try:
+                    os.unlink(log_file_path)
+                except OSError:
+                    pass
+                # Emit error message so user sees what happened
+                emit_error(f"❌ Failed to start background process: {e}")
+                return ShellCommandOutput(
+                    success=False,
+                    command=command,
+                    error=f"Failed to start background process: {e}",
+                    stdout=None,
+                    stderr=None,
+                    exit_code=None,
+                    execution_time=None,
                     background=True)
-            )
-
-            # Emit info about background execution
-            emit_info(
-                f"🚀 Background process started (PID: {process.pid}) - no timeout, runs until complete"
-            )
-            emit_info(f"📄 Output logging to: {log_file.name}")
-
-            # Return immediately - don't wait, don't block
-            return ShellCommandOutput(
-                success=True,
-                command=command,
-                stdout=None,
-                stderr=None,
-                exit_code=None,
-                execution_time=0.0,
-                background=True,
-                log_file=log_file.name,
-                pid=process.pid)
-        except Exception as e:
-            try:
-                log_file.close()
-            except Exception:
-                pass
-            # Clean up the temp file on error since no process will write to it
-            try:
-                os.unlink(log_file_path)
-            except OSError:
-                pass
-            # Emit error message so user sees what happened
-            emit_error(f"❌ Failed to start background process: {e}")
-            return ShellCommandOutput(
-                success=False,
-                command=command,
-                error=f"Failed to start background process: {e}",
-                stdout=None,
-                stderr=None,
-                exit_code=None,
-                execution_time=None,
-                background=True)
 
     # Rest of the existing function continues...
     if not command or not command.strip():
@@ -1402,7 +1405,9 @@ async def _execute_shell_command(
     # This is reference-counted: listener starts on first command, stops on last
     _acquire_keyboard_context()
     try:
-        return await _run_command_inner(command, cwd, timeout, group_id, silent=silent)
+        # Respect centralized concurrency controls for tool calls
+        async with ToolCallsLimiter():
+            return await _run_command_inner(command, cwd, timeout, group_id, silent=silent)
     finally:
         _release_keyboard_context()
         resume_all_spinners()
