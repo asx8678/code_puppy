@@ -389,6 +389,11 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
                 except Exception:
                     pass
             live_contexts.clear()
+        # Force cursor visibility restoration (in case Live's cleanup was interrupted)
+        try:
+            console.show_cursor(True)
+        except Exception:
+            pass
 
     # Spinner is resumed in PartEndEvent when appropriate (based on next_part_kind)
     # Drain any remaining buffered stream events before handler exits

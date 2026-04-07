@@ -102,7 +102,19 @@ class AppRunner:
             get_message_bus,
         )
 
-        display_console = Console()
+        # Rich Console configuration — defend against silent downgrade to plain text.
+        # Respect CODE_PUPPY_NO_COLOR (off) and CODE_PUPPY_FORCE_COLOR (on) escape hatches.
+        _no_color = os.environ.get("CODE_PUPPY_NO_COLOR", "0") == "1"
+        _force_color = os.environ.get("CODE_PUPPY_FORCE_COLOR", "0") == "1"
+        _is_tty = sys.stdout.isatty()
+
+        display_console = Console(
+            force_terminal=_force_color or _is_tty,
+            color_system=None if _no_color else "auto",
+            no_color=_no_color,
+            legacy_windows=False,
+            soft_wrap=False,
+        )
 
         # Legacy renderer for backward compatibility (emits via get_global_queue)
         message_queue = get_global_queue()
