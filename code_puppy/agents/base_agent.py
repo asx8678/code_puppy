@@ -212,6 +212,36 @@ class BaseAgent(ABC, AgentPromptMixin):
         """Backward-compatible setter delegating to _state.tool_ids_cache."""
         self._state.tool_ids_cache = value
 
+    @property
+    def _mcp_tool_definitions_cache(self) -> list[dict[str, Any]]:
+        """Backward-compatible property delegating to _state.mcp_tool_definitions_cache."""
+        return self._state.mcp_tool_definitions_cache
+
+    @_mcp_tool_definitions_cache.setter
+    def _mcp_tool_definitions_cache(self, value: list[dict[str, Any]]) -> None:
+        """Backward-compatible setter delegating to _state.mcp_tool_definitions_cache."""
+        self._state.mcp_tool_definitions_cache = value
+
+    @property
+    def _mcp_servers(self) -> list[Any]:
+        """Backward-compatible property delegating to _state.mcp_servers."""
+        return self._state.mcp_servers
+
+    @_mcp_servers.setter
+    def _mcp_servers(self, value: list[Any]) -> None:
+        """Backward-compatible setter delegating to _state.mcp_servers."""
+        self._state.mcp_servers = value
+
+    @property
+    def _code_generation_agent(self) -> Any:
+        """Backward-compatible property delegating to _state.code_generation_agent."""
+        return self._state.code_generation_agent
+
+    @_code_generation_agent.setter
+    def _code_generation_agent(self, value: Any) -> None:
+        """Backward-compatible setter delegating to _state.code_generation_agent."""
+        self._state.code_generation_agent = value
+
 
     @property
     @abstractmethod
