@@ -192,6 +192,48 @@ SESSION_ID_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 SESSION_ID_MAX_LENGTH = 128
 
 
+def _sanitize_session_id(raw: str) -> str:
+    """Coerce an arbitrary string into a valid kebab-case session_id.
+
+    - Lowercases the string
+    - Replaces any character not in [a-z0-9-] with '-'
+    - Collapses runs of '-' into a single '-'
+    - Strips leading/trailing '-'
+    - Truncates to SESSION_ID_MAX_LENGTH
+    - Falls back to 'session' if the result would be empty
+
+    This is the defensive counterpart to _validate_session_id: callers at
+    public boundaries (like invoke_agent) should sanitize untrusted input
+    before passing it to internal helpers that still validate strictly.
+
+    Examples:
+        >>> _sanitize_session_id("code_puppy-rjl1.14-worktree")
+        'code-puppy-rjl1-14-worktree'
+        >>> _sanitize_session_id("MySession")
+        'mysession'
+        >>> _sanitize_session_id("!!!")
+        'session'
+    """
+    if not isinstance(raw, str):
+        raw = str(raw)
+    # Lowercase
+    s = raw.lower()
+    # Replace any char not in [a-z0-9-] with '-'
+    s = re.sub(r"[^a-z0-9-]+", "-", s)
+    # Collapse runs of '-'
+    s = re.sub(r"-+", "-", s)
+    # Strip leading/trailing '-'
+    s = s.strip("-")
+    # Truncate
+    if len(s) > SESSION_ID_MAX_LENGTH:
+        s = s[:SESSION_ID_MAX_LENGTH].rstrip("-")
+    # Empty fallback — safe because invoke_agent appends a hash suffix
+    # for new sessions, so collisions on the "session" default are avoided.
+    if not s:
+        s = "session"
+    return s
+
+
 def _validate_session_id(session_id: str) -> None:
     """Validate that a session ID follows kebab-case naming conventions.
 
@@ -437,17 +479,20 @@ def register_invoke_agent(agent):
         """
         from code_puppy.agents.agent_manager import load_agent
 
-        # Validate user-provided session_id if given
+        # Defensive sanitization: user/LLM-provided session IDs may contain
+        # underscores, dots, or other characters that the strict validator
+        # rejects. Coerce to valid kebab-case and log a warning so we can
+        # track callers that need to be educated.
         if session_id is not None:
-            try:
-                _validate_session_id(session_id)
-            except ValueError as e:
-                # Return error immediately if session_id is invalid
-                group_id = generate_group_id("invoke_agent", agent_name)
-                emit_error(str(e), message_group=group_id)
-                return AgentInvokeOutput(
-                    response=None, agent_name=agent_name, error=str(e)
+            sanitized_session_id = _sanitize_session_id(session_id)
+            if sanitized_session_id != session_id:
+                logging.getLogger(__name__).warning(
+                    "invoke_agent: session_id %r was not valid kebab-case; "
+                    "sanitized to %r. Update the caller to pass clean IDs.",
+                    session_id,
+                    sanitized_session_id,
                 )
+                session_id = sanitized_session_id
 
         # Generate a group ID for this tool execution
         group_id = generate_group_id("invoke_agent", agent_name)

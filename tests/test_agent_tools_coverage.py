@@ -420,19 +420,24 @@ class TestRegisterInvokeAgentExecution:
         return registered_func
 
     @pytest.mark.asyncio
-    async def test_invoke_agent_invalid_session_id_returns_error(self):
-        """Test that invalid session_id returns error immediately."""
+    async def test_invoke_agent_invalid_session_id_gets_sanitized(self):
+        """Test that invalid session_id is sanitized and warned, not rejected."""
         invoke_agent = self._get_registered_invoke_agent()
         mock_context = MagicMock()
 
         with (
-            patch("code_puppy.tools.agent_tools.emit_error") as mock_emit_error,
+            patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
+            patch("code_puppy.tools.agent_tools._load_session_history", return_value=[]),
             patch(
                 "code_puppy.tools.agent_tools.generate_group_id",
                 return_value="test-group",
             ),
         ):
-            # Call with invalid session_id (uppercase not allowed)
+            mock_logger = MagicMock()
+            mock_getlogger.return_value = mock_logger
+
+            # Call with invalid session_id (uppercase and underscore not allowed in strict mode)
+            # But should be sanitized and continue, not error
             result = await invoke_agent(
                 mock_context,
                 agent_name="test-agent",
@@ -440,12 +445,14 @@ class TestRegisterInvokeAgentExecution:
                 session_id="Invalid_Session",
             )
 
-            # Should return error output
-            assert isinstance(result, AgentInvokeOutput)
-            assert result.response is None
-            assert result.error is not None
-            assert "must be kebab-case" in result.error
-            assert mock_emit_error.called
+            # Should NOT return error - sanitization should happen
+            assert result.error is None or "must be kebab-case" not in (result.error or "")
+
+            # Warning should be logged about sanitization
+            mock_logger.warning.assert_called_once()
+            warning_call = mock_logger.warning.call_args
+            assert "session_id" in str(warning_call)
+            assert "sanitized" in str(warning_call)
 
     @pytest.mark.asyncio
     async def test_invoke_agent_model_not_found_error(self):
@@ -599,7 +606,7 @@ class TestDBOSWorkflowCounter:
 
 
 class TestSessionIdValidationInInvokeAgent:
-    """Test session ID validation edge cases in invoke_agent."""
+    """Test session ID sanitization in invoke_agent (defensive, not strict)."""
 
     def _get_registered_invoke_agent(self):
         """Helper to capture the registered invoke_agent function."""
@@ -616,18 +623,22 @@ class TestSessionIdValidationInInvokeAgent:
         return registered_func
 
     @pytest.mark.asyncio
-    async def test_invalid_session_with_spaces(self):
-        """Test that session IDs with spaces are rejected."""
+    async def test_invalid_session_with_spaces_gets_sanitized(self):
+        """Test that session IDs with spaces are sanitized to hyphens."""
         invoke_agent = self._get_registered_invoke_agent()
         mock_context = MagicMock()
 
         with (
-            patch("code_puppy.tools.agent_tools.emit_error"),
+            patch("code_puppy.tools.agent_tools._load_session_history", return_value=[]),
+            patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(
                 "code_puppy.tools.agent_tools.generate_group_id",
                 return_value="test-group",
             ),
         ):
+            mock_logger = MagicMock()
+            mock_getlogger.return_value = mock_logger
+
             result = await invoke_agent(
                 mock_context,
                 agent_name="test-agent",
@@ -635,22 +646,28 @@ class TestSessionIdValidationInInvokeAgent:
                 session_id="my session",
             )
 
-            assert result.error is not None
-            assert "must be kebab-case" in result.error
+            # Should NOT error - should be sanitized to "my-session"
+            assert result.error is None or "must be kebab-case" not in (result.error or "")
+            # Warning should be logged about sanitization
+            mock_logger.warning.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_invalid_session_with_special_chars(self):
-        """Test that session IDs with special chars are rejected."""
+    async def test_invalid_session_with_special_chars_gets_sanitized(self):
+        """Test that session IDs with special chars are sanitized."""
         invoke_agent = self._get_registered_invoke_agent()
         mock_context = MagicMock()
 
         with (
-            patch("code_puppy.tools.agent_tools.emit_error"),
+            patch("code_puppy.tools.agent_tools._load_session_history", return_value=[]),
+            patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(
                 "code_puppy.tools.agent_tools.generate_group_id",
                 return_value="test-group",
             ),
         ):
+            mock_logger = MagicMock()
+            mock_getlogger.return_value = mock_logger
+
             result = await invoke_agent(
                 mock_context,
                 agent_name="test-agent",
@@ -658,22 +675,28 @@ class TestSessionIdValidationInInvokeAgent:
                 session_id="session@123",
             )
 
-            assert result.error is not None
-            assert "must be kebab-case" in result.error
+            # Should NOT error - should be sanitized to "session-123"
+            assert result.error is None or "must be kebab-case" not in (result.error or "")
+            # Warning should be logged about sanitization
+            mock_logger.warning.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_empty_session_id_rejected(self):
-        """Test that empty session IDs are rejected."""
+    async def test_empty_session_id_gets_fallback(self):
+        """Test that empty session IDs get 'session' fallback."""
         invoke_agent = self._get_registered_invoke_agent()
         mock_context = MagicMock()
 
         with (
-            patch("code_puppy.tools.agent_tools.emit_error"),
+            patch("code_puppy.tools.agent_tools._load_session_history", return_value=[]),
+            patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(
                 "code_puppy.tools.agent_tools.generate_group_id",
                 return_value="test-group",
             ),
         ):
+            mock_logger = MagicMock()
+            mock_getlogger.return_value = mock_logger
+
             result = await invoke_agent(
                 mock_context,
                 agent_name="test-agent",
@@ -681,22 +704,28 @@ class TestSessionIdValidationInInvokeAgent:
                 session_id="",
             )
 
-            assert result.error is not None
-            assert "cannot be empty" in result.error
+            # Should NOT error - empty becomes "session" fallback
+            assert result.error is None or "cannot be empty" not in (result.error or "")
+            # Warning should be logged about sanitization
+            mock_logger.warning.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_too_long_session_id_rejected(self):
-        """Test that session IDs over 128 chars are rejected."""
+    async def test_too_long_session_id_gets_truncated(self):
+        """Test that session IDs over 128 chars are truncated."""
         invoke_agent = self._get_registered_invoke_agent()
         mock_context = MagicMock()
 
         with (
-            patch("code_puppy.tools.agent_tools.emit_error"),
+            patch("code_puppy.tools.agent_tools._load_session_history", return_value=[]),
+            patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(
                 "code_puppy.tools.agent_tools.generate_group_id",
                 return_value="test-group",
             ),
         ):
+            mock_logger = MagicMock()
+            mock_getlogger.return_value = mock_logger
+
             long_id = "a" * 129
             result = await invoke_agent(
                 mock_context,
@@ -705,8 +734,10 @@ class TestSessionIdValidationInInvokeAgent:
                 session_id=long_id,
             )
 
-            assert result.error is not None
-            assert "128 characters or less" in result.error
+            # Should NOT error - long gets truncated
+            assert result.error is None or "128 characters" not in (result.error or "")
+            # Warning should be logged about sanitization
+            mock_logger.warning.assert_called_once()
 
 
 class TestListAgentsEmitsBannerAndInfo:

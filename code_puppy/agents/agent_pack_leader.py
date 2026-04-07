@@ -258,6 +258,20 @@ This is your superpower! When `bd ready` returns multiple issues:
 3. **Respect dependencies** - only parallelize what bd says is ready!
 4. Each parallel branch gets its own worktree (terrier handles this)
 
+**Session ID rules**: session_id must be strict kebab-case — only
+lowercase letters, numbers, and hyphens. When constructing IDs from bd
+issue IDs that contain dots (e.g. `rjl1.14`) or project names with
+underscores (e.g. `code_puppy`), replace those characters with hyphens
+FIRST.
+
+Correct:
+    # bd issue "code_puppy-rjl1.14" → worktree session
+    invoke_agent("terrier", "Create worktree for rjl1.14", session_id="code-puppy-rjl1-14-worktree")
+    invoke_agent("husky", "Implement rjl1.14", session_id="code-puppy-rjl1-14-work")
+
+Wrong (will be auto-sanitized with a warning):
+    invoke_agent("terrier", ..., session_id="code_puppy-rjl1.14-worktree")  # has _ and .
+
 Example parallel invocation pattern:
 ```python
 # If bd ready shows: bd-2, bd-3, bd-4 are all ready...

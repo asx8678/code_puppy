@@ -10,8 +10,10 @@ import pytest
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
 from code_puppy.tools.agent_tools import (
+    SESSION_ID_MAX_LENGTH,
     _generate_session_hash_suffix,
     _load_session_history,
+    _sanitize_session_id,
     _save_session_history,
     _validate_session_id,
     register_invoke_agent,
@@ -739,3 +741,65 @@ class TestSessionIntegration:
             with open(txt_file, "r") as f:
                 metadata = json.load(f)
             assert metadata["message_count"] == 0
+
+
+class TestSanitizeSessionId:
+    """Tests for _sanitize_session_id()."""
+
+    def test_the_exact_failing_input_from_production(self):
+        assert _sanitize_session_id("code_puppy-rjl1.14-worktree") == "code-puppy-rjl1-14-worktree"
+
+    def test_second_failing_input_from_production(self):
+        assert _sanitize_session_id("code_puppy-rjl1.5-worktree") == "code-puppy-rjl1-5-worktree"
+
+    def test_uppercase_lowered(self):
+        assert _sanitize_session_id("MySession") == "mysession"
+
+    def test_whitespace_replaced(self):
+        assert _sanitize_session_id("my session") == "my-session"
+
+    def test_collapses_repeated_hyphens(self):
+        assert _sanitize_session_id("foo--bar") == "foo-bar"
+
+    def test_strips_leading_trailing_hyphens(self):
+        assert _sanitize_session_id("---foo---") == "foo"
+
+    def test_empty_fallback(self):
+        assert _sanitize_session_id("!!!") == "session"
+
+    def test_truncation(self):
+        result = _sanitize_session_id("a" * 200)
+        assert len(result) <= SESSION_ID_MAX_LENGTH
+
+    def test_idempotent_on_clean_input(self):
+        assert _sanitize_session_id("my-session-1") == "my-session-1"
+
+    def test_sanitized_output_passes_strict_validator(self):
+        # All sanitized outputs should pass strict validation
+        for raw in [
+            "code_puppy-rjl1.14-worktree",
+            "MySession",
+            "my session",
+            "foo--bar",
+            "---foo---",
+            "!!!",
+            "a" * 200,
+        ]:
+            sanitized = _sanitize_session_id(raw)
+            _validate_session_id(sanitized)  # should not raise
+
+
+class TestValidateSessionIdStillStrict:
+    """Regression: internal validator must still reject bad input to catch bugs."""
+
+    def test_underscore_still_rejected(self):
+        with pytest.raises(ValueError):
+            _validate_session_id("bad_id")
+
+    def test_dot_still_rejected(self):
+        with pytest.raises(ValueError):
+            _validate_session_id("bad.id")
+
+    def test_uppercase_still_rejected(self):
+        with pytest.raises(ValueError):
+            _validate_session_id("BadId")
