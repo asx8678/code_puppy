@@ -35,6 +35,28 @@ pre-commit:
           ruff check --fix {staged_files}
         fi
       stage_fixed: true
+    # Optional Rust formatting (requires rustfmt)
+    rustfmt:
+      glob: "*.rs"
+      run: |
+        if command -v cargo >/dev/null 2>&1 && cargo fmt --version >/dev/null 2>&1; then
+          echo "Running rustfmt on staged Rust files...";
+          cargo fmt -- {staged_files}
+        else
+          echo "rustfmt not found; skipping Rust formatting. Install with: rustup component add rustfmt";
+        fi
+      stage_fixed: true
+    # Optional Rust clippy (requires clippy)
+    clippy:
+      glob: "*.rs"
+      run: |
+        if command -v cargo >/dev/null 2>&1 && cargo clippy --version >/dev/null 2>&1; then
+          echo "Running clippy on turbo_parse crate...";
+          cargo clippy -p turbo_parse -- -D warnings || echo "Clippy found issues (non-blocking)";
+        else
+          echo "clippy not found; skipping. Install with: rustup component add clippy";
+        fi
+      fail_text: "Clippy found warnings (not blocking commit)"
 
 
 # pre-push hook removed - tests run in CI only
