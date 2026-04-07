@@ -10,10 +10,12 @@
 
 **File:** `code_puppy/async_utils.py:21-39`
 
-**Issue:** The `run_async_sync` function creates a dedicated event loop in a background thread but blocks on `future.result()` synchronously. While this prevents blocking the calling thread's event loop, it creates a thread-per-call pattern that can lead to:
+**Issue:** The `run_async_sync` function creates a dedicated event loop in a background thread but blocks on `future.result()` synchronously. While this prevents blocking the calling thread's event loop, it creates a thread-per-calling-thread pattern that can lead to:
 1. Thread starvation under high load (unbounded thread creation)
 2. Dangling event loops that never get cleaned up (threads are daemon=True but loops stay open)
 3. Race condition where `_loop_local.loop` is closed between check and use
+
+**Note:** `threading.local()` is keyed per **thread**, not per module - this creates 1 thread per calling thread that invokes run_async_sync (not per module).
 
 **Code:**
 ```python
@@ -33,7 +35,7 @@ def run_async_sync(coro) -> Any:
 
 ---
 
-## [SEV-HIGH] concurrency_limits.py: Non-Thread-Safe Lazy Initialization
+## [SEV-MEDIUM] concurrency_limits.py: Non-Thread-Safe Lazy Initialization
 
 **File:** `code_puppy/concurrency_limits.py:54-56, 68-70, 80-82`
 
@@ -48,7 +50,7 @@ def _get_file_ops_semaphore() -> asyncio.Semaphore:
     return _file_ops_semaphore
 ```
 
-**Impact:** Under high concurrency, multiple semaphores can be created, breaking the concurrency limit guarantee and potentially causing resource exhaustion.
+**Impact:** Under high concurrency, multiple semaphores can be created. Two semaphore instances created means threads use different limiter objects - no concurrency limit enforced for one thread. Practical impact limited since asyncio.Semaphore is typically created from event loop thread.
 
 **Fix:**
 - Use `asyncio.Lock()` for async-safe initialization
@@ -86,15 +88,15 @@ def _get_next_model(self) -> Model:
 
 ## [SEV-HIGH] round_robin_model.py: Inconsistent Lock Scope for Index Updates
 
-**File:** `code_puppy/round_robin_model.py:121-135`
+**File:** `code_puppy/round_robin_model.py:101-131`
 
 **Issue:** The `_current_index` and `_request_count` are updated in a separate `with self._lock` block from where `ordered_names` is computed. This creates a race window where:
 
-1. Thread A computes `ordered_names` starting at index 0
-2. Thread B advances `_current_index` to 1
-3. Thread A uses `ordered_names` but updates index based on stale `skip_count`
+1. Thread A holds lock, reads `_current_index`, builds `ordered_names`, releases lock
+2. Thread B acquires lock, modifies `_current_index`, releases lock  
+3. Thread A acquires lock again, updates `_current_index` based on stale state
 
-This could lead to double-selecting the same model or skipping models entirely.
+Lock is released after reading `ordered_names` and before updating `_current_index`, allowing another thread to modify state between these operations.
 
 **Fix:**
 - Use a single lock acquisition for the entire method
@@ -102,30 +104,30 @@ This could lead to double-selecting the same model or skipping models entirely.
 
 ---
 
-## [SEV-MEDIUM] resilience.py: Circuit Breaker Race on State Transitions
+## [SEV-MEDIUM] resilience.py: Circuit Breaker State Transition Accounting
 
 **File:** `code_puppy/resilience.py:101-115`
 
-**Issue:** The CircuitBreaker captures state under lock but releases it before the actual function execution:
+**Issue:** The CircuitBreaker captures `was_half_open` state under lock but uses it in `_on_success()` and `_on_failure()` which re-acquire the lock. While the boolean capture pattern is correct, the state transitions happen in separate lock acquisitions which could theoretically lead to out-of-order updates under extreme contention.
 
+**Note:** The `_on_success()` method correctly re-acquires `self._lock` before reading `was_half_open`. The pattern of capturing state under lock and using it in subsequent locked operations is a correct concurrency idiom.
+
+**Code:**
 ```python
 async with self._lock:
-    if self.state == CircuitState.OPEN:
-        # ... check timeout
+    # ... check state
     was_half_open = self.state == CircuitState.HALF_OPEN  # Captured under lock
 
 try:
     result = func()  # Executed OUTSIDE lock
     if inspect.isawaitable(result):
         result = await result
-    await self._on_success(was_half_open)  # State may have changed!
+    await self._on_success(was_half_open)  # Re-acquires lock internally
 ```
 
-Between capturing `was_half_open` and calling `_on_success()`, another concurrent call could change the circuit state, causing incorrect success/failure accounting.
-
 **Fix:**
-- Re-check state inside `_on_success()` and `_on_failure()` under lock
-- Or pass the actual state transition logic, not just the boolean flag
+- Consider consolidating into single lock region if strict ordering is required
+- Current pattern is generally acceptable for circuit breaker semantics
 
 ---
 
@@ -207,21 +209,21 @@ async def _get_client(self) -> httpx.AsyncClient:
 
 ---
 
-## [SEV-MEDIUM] gemini_model.py: UUID Generation for Tool Calls Not Crypto-Secure
+## [INFO] gemini_model.py: UUID Generation for Tool Calls
 
 **File:** `code_puppy/gemini_model.py:43-45`
 
-**Issue:** Tool call IDs are generated using `uuid.uuid4()` which is random but not guaranteed unique across time/restarts. For critical path tracking, consider using a counter+entropy approach or ensuring uniqueness at the protocol level.
+**Note:** Tool call IDs are generated using `uuid.uuid4()` which is the correct choice for this use case. UUID4 provides 122 bits of randomness suitable for non-security-critical correlation IDs.
 
-**Fix:**
-- Document that IDs are for correlation only, not security
-- Consider using `uuid.uuid1()` with node ID for better uniqueness guarantees
+**Not Recommended:** `uuid.uuid1()` leaks MAC address and is predictable - it is NOT appropriate for this use case.
+
+**Current implementation is correct - no change needed.**
 
 ---
 
-## [SEV-MEDIUM] tui/app.py: CancelledError Handling Loses Stack Trace
+## [SEV-MEDIUM] tui/app.py: CancelledError Handling Loses Cancellation Source
 
-**File:** `code_puppy/tui/app.py:338-341`
+**File:** `code_puppy/tui/app.py:612-613`
 
 **Issue:** The `_handle_agent_prompt` catches `asyncio.CancelledError` but doesn't preserve or log the cancellation context:
 
@@ -230,14 +232,14 @@ try:
     result, agent_task = await run_prompt_with_attachments(...)
     ...
 except asyncio.CancelledError:
-    chat.write("[yellow]Task cancelled.[/yellow]")
-    return  # Silent swallow - where did cancellation come from?
+    chat.write("[yellow]Task cancelled by user.[/yellow]")
+    # Cancellation source is not logged, making debugging difficult when task cancellation is unexpected.
 ```
 
-This makes debugging cancellation sources impossible.
+Note: `CancelledError` does not have a useful stack trace, but logging the cancellation context is still valuable for debugging unexpected cancellations.
 
 **Fix:**
-- Log cancellation with stack trace for debugging
+- Log cancellation with context for debugging
 - Re-raise `CancelledError` after handling UI update unless truly consumed
 
 ---
@@ -343,11 +345,11 @@ This creates a potential for deadlock if a thread holds `_sync_lock` and tries t
 
 ## Performance Issues
 
-### [PERF-HIGH] async_utils.py: run_async_sync Creates Thread Per Module
+### [PERF-HIGH] async_utils.py: run_async_sync Creates Thread Per Calling Thread
 
 **File:** `code_puppy/async_utils.py:27`
 
-**Issue:** Each Python module that calls `run_async_sync` gets its own thread and event loop via thread-local storage. This doesn't scale - with 100+ modules you could have 100+ threads.
+**Issue:** Each calling thread that invokes `run_async_sync` gets its own thread and event loop via thread-local storage. This doesn't scale - with many calling threads you could have unbounded thread creation.
 
 **Fix:**
 - Use a shared thread pool (e.g., `concurrent.futures.ThreadPoolExecutor(max_workers=4)`)
@@ -424,9 +426,9 @@ This is O(n) and becomes expensive as cache grows.
 
 | Severity | Count | Categories |
 |----------|-------|------------|
-| SEV-HIGH | 4 | Race conditions, thread safety |
+| SEV-HIGH | 3 | Race conditions, thread safety |
 | SEV-MEDIUM | 8 | Resource leaks, state consistency |
-| SEV-LOW | 5 | TOCTOU, logging, design |
+| SEV-LOW | 4 | TOCTOU, logging, design |
 | PERF-HIGH | 1 | Thread pool exhaustion |
 | PERF-MEDIUM | 2 | Cache efficiency, blocking |
 | PERF-LOW | 1 | Repeated computation |
