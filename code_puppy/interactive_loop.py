@@ -490,6 +490,8 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 from code_puppy.messaging import wait_for_messages_rendered
                 await wait_for_messages_rendered(timeout=0.5)
 
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 from code_puppy.messaging.queue_console import get_queue_console
 
