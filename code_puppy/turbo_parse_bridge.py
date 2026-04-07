@@ -18,6 +18,10 @@ try:
         extract_symbols,
         extract_symbols_from_file,
         extract_syntax_diagnostics,
+        get_folds,
+        get_folds_from_file,
+        get_highlights,
+        get_highlights_from_file,
     )
 
     TURBO_PARSE_AVAILABLE = True
@@ -64,7 +68,7 @@ except ImportError:
 
     def parse_source(source: str, language: str) -> dict[str, Any]:
         """Fallback for parse_source when Rust module is unavailable.
-        
+
         Returns an error dict indicating the Rust module is not available.
         """
         return {
@@ -72,15 +76,17 @@ except ImportError:
             "tree": None,
             "parse_time_ms": 0.0,
             "success": False,
-            "errors": [{
-                "message": "turbo_parse module not available - parsing disabled",
-                "severity": "error",
-            }],
+            "errors": [
+                {
+                    "message": "turbo_parse module not available - parsing disabled",
+                    "severity": "error",
+                }
+            ],
         }
 
     def parse_file(path: str, language: str | None = None) -> dict[str, Any]:
         """Fallback for parse_file when Rust module is unavailable.
-        
+
         Returns an error dict indicating the Rust module is not available.
         """
         return {
@@ -88,15 +94,17 @@ except ImportError:
             "tree": None,
             "parse_time_ms": 0.0,
             "success": False,
-            "errors": [{
-                "message": "turbo_parse module not available - parsing disabled",
-                "severity": "error",
-            }],
+            "errors": [
+                {
+                    "message": "turbo_parse module not available - parsing disabled",
+                    "severity": "error",
+                }
+            ],
         }
 
     def extract_syntax_diagnostics(source: str, language: str) -> dict[str, Any]:  # noqa: ARG001
         """Fallback for extract_syntax_diagnostics when Rust module is unavailable.
-        
+
         Returns an error dict indicating the Rust module is not available.
         """
         return {
@@ -108,7 +116,14 @@ except ImportError:
 
     def parse_files_batch(paths, max_workers=None, timeout_ms=None):
         return {
-            "results": [{"file_path": p, "success": False, "errors": [{"message": "turbo_parse not available"}]} for p in paths],
+            "results": [
+                {
+                    "file_path": p,
+                    "success": False,
+                    "errors": [{"message": "turbo_parse not available"}],
+                }
+                for p in paths
+            ],
             "total_time_ms": 0.0,
             "files_processed": len(paths),
             "success_count": 0,
@@ -117,10 +132,52 @@ except ImportError:
         }
 
     def extract_symbols(source, language):
-        return {"success": False, "symbols": [], "error": "turbo_parse not available", "extraction_time_ms": 0.0}
+        return {
+            "success": False,
+            "symbols": [],
+            "error": "turbo_parse not available",
+            "extraction_time_ms": 0.0,
+        }
 
     def extract_symbols_from_file(path, language=None):
-        return {"success": False, "symbols": [], "error": "turbo_parse not available", "extraction_time_ms": 0.0}
+        return {
+            "success": False,
+            "symbols": [],
+            "error": "turbo_parse not available",
+            "extraction_time_ms": 0.0,
+        }
+
+    def get_folds(source, language):
+        return {
+            "success": False,
+            "folds": [],
+            "error": "turbo_parse not available",
+            "extraction_time_ms": 0.0,
+        }
+
+    def get_folds_from_file(path, language=None):
+        return {
+            "success": False,
+            "folds": [],
+            "error": "turbo_parse not available",
+            "extraction_time_ms": 0.0,
+        }
+
+    def get_highlights(source, language):
+        return {
+            "success": False,
+            "captures": [],
+            "error": "turbo_parse not available",
+            "extraction_time_ms": 0.0,
+        }
+
+    def get_highlights_from_file(path, language=None):
+        return {
+            "success": False,
+            "captures": [],
+            "error": "turbo_parse not available",
+            "extraction_time_ms": 0.0,
+        }
 
 
 # --- Turbo Parse toggle -----------------------------------------------------
@@ -161,6 +218,10 @@ __all__ = [
     "extract_symbols",
     "extract_symbols_from_file",
     "extract_syntax_diagnostics",
+    "get_folds",
+    "get_folds_from_file",
+    "get_highlights",
+    "get_highlights_from_file",
     "is_turbo_parse_enabled",
     "set_turbo_parse_enabled",
     "get_turbo_parse_status",

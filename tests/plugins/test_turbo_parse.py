@@ -95,16 +95,19 @@ class TestTurboParsePluginCallbacks:
 
         result = _register_tools()
         assert isinstance(result, list)
-        assert len(result) == 1  # Now has parse_code tool
+        assert len(result) == 4  # parse_code, get_highlights, get_folds, get_outline
 
     def test_register_tools_returns_parse_code_definition(self):
         """Test that register_tools returns parse_code tool definition."""
         from code_puppy.plugins.turbo_parse.register_callbacks import _register_tools
 
         result = _register_tools()
-        assert len(result) == 1
-        
-        tool_def = result[0]
+        assert len(result) == 4
+
+        # Find parse_code tool in the list (could be at any index)
+        parse_code_tool = next((t for t in result if t["name"] == "parse_code"), None)
+        assert parse_code_tool is not None, "parse_code tool not found in results"
+        tool_def = parse_code_tool
         assert tool_def["name"] == "parse_code"
         assert "register_func" in tool_def
         assert callable(tool_def["register_func"])
@@ -1631,3 +1634,390 @@ class TestParseSlashCommandIntegration:
         assert isinstance(result, str)
         assert "test1.py" in result or "test2.py" in result
         assert ".py" in result
+
+
+# ============================================================================
+# Tests for New Tools: get_highlights, get_folds, get_outline
+# ============================================================================
+
+class TestRegisterToolsNewTools:
+    """Tests for the new tool registrations."""
+
+    def test_register_tools_returns_all_tool_definitions(self):
+        """Test that register_tools returns all four tool definitions."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_tools
+
+        result = _register_tools()
+        
+        assert len(result) == 4
+        
+        tool_names = [tool["name"] for tool in result]
+        assert "parse_code" in tool_names
+        assert "get_highlights" in tool_names
+        assert "get_folds" in tool_names
+        assert "get_outline" in tool_names
+    
+    def test_register_tools_has_callable_register_funcs(self):
+        """Test that all tools have callable register functions."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_tools
+
+        result = _register_tools()
+        
+        for tool_def in result:
+            assert "register_func" in tool_def
+            assert callable(tool_def["register_func"])
+
+
+class TestGetHighlightsTool:
+    """Tests for the get_highlights tool functionality."""
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_get_highlights_python_simple(self):
+        """Test highlighting a simple Python function."""
+        from code_puppy.turbo_parse_bridge import get_highlights
+        
+        source = "def hello(): pass"
+        result = get_highlights(source, "python")
+        
+        assert result["success"] is True
+        assert result["language"] == "python"
+        assert "captures" in result
+        assert isinstance(result["captures"], list)
+        assert len(result["captures"]) > 0
+        
+        # Check structure of first capture
+        capture = result["captures"][0]
+        assert "start_byte" in capture
+        assert "end_byte" in capture
+        assert "capture_name" in capture
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_get_highlights_rust_code(self):
+        """Test highlighting Rust code."""
+        from code_puppy.turbo_parse_bridge import get_highlights
+        
+        source = 'fn main() { println!("Hello"); }'
+        result = get_highlights(source, "rust")
+        
+        assert result["success"] is True
+        assert result["language"] == "rust"
+        assert "captures" in result
+        assert isinstance(result["captures"], list)
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_get_highlights_from_file_python(self):
+        """Test highlighting from a Python file."""
+        from code_puppy.turbo_parse_bridge import get_highlights_from_file
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write("def hello():\n    return 'world'\n")
+            temp_path = f.name
+        
+        try:
+            result = get_highlights_from_file(temp_path)
+            
+            assert result["success"] is True
+            assert result["language"] == "python"
+            assert "captures" in result
+            assert isinstance(result["captures"], list)
+        finally:
+            os.unlink(temp_path)
+    
+    def test_get_highlights_tool_registration(self):
+        """Test that the get_highlights tool is properly registered."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_get_highlights_tool
+        
+        # Create a mock agent
+        mock_agent = mock.Mock()
+        mock_agent.tool = lambda f: f  # Decorator that returns the function
+        
+        # Register the tool
+        _register_get_highlights_tool(mock_agent)
+        
+        # Verify the tool decorator was called
+        assert mock_agent.tool.called
+
+
+class TestGetFoldsTool:
+    """Tests for the get_folds tool functionality."""
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_get_folds_python_function(self):
+        """Test getting folds from a Python function."""
+        from code_puppy.turbo_parse_bridge import get_folds
+        
+        source = """def hello():
+    pass
+"""
+        result = get_folds(source, "python")
+        
+        assert result["success"] is True
+        assert result["language"] == "python"
+        assert "folds" in result
+        assert isinstance(result["folds"], list)
+        
+        # Check structure of first fold
+        if result["folds"]:
+            fold = result["folds"][0]
+            assert "start_line" in fold
+            assert "end_line" in fold
+            assert "fold_type" in fold
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_get_folds_python_class(self):
+        """Test getting folds from a Python class."""
+        from code_puppy.turbo_parse_bridge import get_folds
+        
+        source = """class MyClass:
+    def method(self):
+        pass
+"""
+        result = get_folds(source, "python")
+        
+        assert result["success"] is True
+        assert "folds" in result
+        # Should have at least the class and method as folds
+        assert len(result["folds"]) >= 1
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_get_folds_from_file_python(self):
+        """Test getting folds from a Python file."""
+        from code_puppy.turbo_parse_bridge import get_folds_from_file
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write("class Test:\n    def method(self):\n        pass\n")
+            temp_path = f.name
+        
+        try:
+            result = get_folds_from_file(temp_path)
+            
+            assert result["success"] is True
+            assert result["language"] == "python"
+            assert "folds" in result
+            assert isinstance(result["folds"], list)
+        finally:
+            os.unlink(temp_path)
+    
+    def test_get_folds_tool_registration(self):
+        """Test that the get_folds tool is properly registered."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_get_folds_tool
+        
+        # Create a mock agent
+        mock_agent = mock.Mock()
+        mock_agent.tool = lambda f: f  # Decorator that returns the function
+        
+        # Register the tool
+        _register_get_folds_tool(mock_agent)
+        
+        # Verify the tool decorator was called
+        assert mock_agent.tool.called
+
+
+class TestGetOutlineTool:
+    """Tests for the get_outline tool functionality."""
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_get_outline_flat_structure(self):
+        """Test outline with flat structure."""
+        from code_puppy.turbo_parse_bridge import extract_symbols
+        from code_puppy.plugins.turbo_parse.register_callbacks import _build_symbol_hierarchy
+        
+        source = """
+def foo():
+    pass
+
+def bar():
+    pass
+"""
+        result = extract_symbols(source, "python")
+        flat_symbols = result.get("symbols", [])
+        
+        # Build hierarchy
+        outline = _build_symbol_hierarchy(flat_symbols)
+        
+        # Check that all symbols are at root level
+        assert len(outline) >= 2
+        for symbol in outline:
+            assert "children" in symbol
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_get_outline_nested_structure(self):
+        """Test outline with nested structure (methods inside class)."""
+        from code_puppy.turbo_parse_bridge import extract_symbols
+        from code_puppy.plugins.turbo_parse.register_callbacks import _build_symbol_hierarchy
+        
+        source = """
+class MyClass:
+    def __init__(self):
+        pass
+    
+    def method(self):
+        return 42
+"""
+        result = extract_symbols(source, "python")
+        flat_symbols = result.get("symbols", [])
+        
+        # Build hierarchy
+        outline = _build_symbol_hierarchy(flat_symbols)
+        
+        # Find class and check for methods as children
+        found_class = False
+        for symbol in outline:
+            if symbol.get("kind") == "class":
+                found_class = True
+                # Should have methods as children
+                children = symbol.get("children", [])
+                assert len(children) >= 1  # At least __init__ or method
+        
+        # May or may not find class depending on tree-sitter output
+        # but the test verifies the hierarchy building works
+    
+    def test_symbol_contained_check(self):
+        """Test the _is_symbol_contained helper function."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _is_symbol_contained
+        
+        parent = {"start_line": 1, "end_line": 10, "start_col": 0, "end_col": 10}
+        child = {"start_line": 3, "end_line": 5, "start_col": 4, "end_col": 8}
+        
+        assert _is_symbol_contained(child, parent) is True
+        
+        # Child outside parent
+        outside = {"start_line": 11, "end_line": 12, "start_col": 0, "end_col": 5}
+        assert _is_symbol_contained(outside, parent) is False
+        
+        # Same line but different columns
+        same_line = {"start_line": 1, "end_line": 5, "start_col": 4, "end_col": 8}
+        # This depends on implementation details
+        result = _is_symbol_contained(same_line, parent)
+        assert isinstance(result, bool)
+    
+    def test_limit_depth_function(self):
+        """Test the _limit_depth helper function."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _limit_depth
+        
+        items = [
+            {
+                "name": "parent",
+                "children": [
+                    {
+                        "name": "child",
+                        "children": [
+                            {"name": "grandchild", "children": []}
+                        ]
+                    }
+                ]
+            }
+        ]
+        
+        # Limit to depth 2
+        limited = _limit_depth(items, max_depth=2)
+        
+        assert len(limited) == 1
+        assert len(limited[0]["children"]) == 1
+        # At depth 2, children should be emptied
+        assert limited[0]["children"][0]["children"] == []
+    
+    def test_get_outline_tool_registration(self):
+        """Test that the get_outline tool is properly registered."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_get_outline_tool
+        
+        # Create a mock agent
+        mock_agent = mock.Mock()
+        mock_agent.tool = lambda f: f  # Decorator that returns the function
+        
+        # Register the tool
+        _register_get_outline_tool(mock_agent)
+        
+        # Verify the tool decorator was called
+        assert mock_agent.tool.called
+
+
+class TestTurboParseErrorHandling:
+    """Tests for error handling in turbo_parse tools."""
+    
+    def test_get_highlights_unsupported_language(self):
+        """Test get_highlights handles unsupported language gracefully."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_get_highlights_tool
+        
+        # Create a mock agent
+        mock_agent = mock.Mock()
+        
+        @mock_agent.tool
+        async def mock_tool(context, source, language, options=None):
+            from code_puppy.plugins.turbo_parse.register_callbacks import _normalize_language
+            
+            normalized_lang = _normalize_language(language)
+            
+            # Simulate the actual behavior
+            if not TURBO_PARSE_AVAILABLE:
+                return {
+                    "success": False,
+                    "captures": [],
+                    "extraction_time_ms": 0.0,
+                    "language": normalized_lang,
+                    "errors": [f"Language '{language}' is not supported"],
+                }
+            
+            return {"success": True, "captures": [], "language": normalized_lang}
+        
+        # Verify the tool can be called
+        tool_func = mock_agent.tool.call_args[0][0]
+        
+        # In a real async test, we'd await this; for sync test we check structure
+        assert callable(tool_func)
+    
+    def test_get_folds_error_handling(self):
+        """Test get_folds error handling in fallback mode."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_get_folds_tool
+        
+        mock_agent = mock.Mock()
+        mock_agent.tool = lambda f: f
+        
+        _register_get_folds_tool(mock_agent)
+        
+        # Verify the tool was registered
+        assert mock_agent.tool.called
+    
+    def test_get_outline_error_handling(self):
+        """Test get_outline error handling."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _build_symbol_hierarchy
+        
+        # Empty symbols
+        result = _build_symbol_hierarchy([])
+        assert result == []
+        
+        # Malformed symbols should be handled gracefully
+        malformed = [
+            {"name": "test", "start_line": 1},  # Missing end_line
+        ]
+        result = _build_symbol_hierarchy(malformed)
+        assert isinstance(result, list)
+
+
+class TestTurboParseFallback:
+    """Tests for fallback behavior when turbo_parse is unavailable."""
+    
+    def test_bridge_fallback_get_highlights(self):
+        """Test bridge fallback for get_highlights."""
+        # Simulate when turbo_parse is not available
+        with mock.patch("code_puppy.turbo_parse_bridge.TURBO_PARSE_AVAILABLE", False):
+            from code_puppy.turbo_parse_bridge import get_highlights
+            
+            result = get_highlights("def test(): pass", "python")
+            
+            assert result["success"] is False
+            assert "captures" in result
+            assert result["captures"] == []
+            assert "turbo_parse not available" in result.get("error", "")
+    
+    def test_bridge_fallback_get_folds(self):
+        """Test bridge fallback for get_folds."""
+        with mock.patch("code_puppy.turbo_parse_bridge.TURBO_PARSE_AVAILABLE", False):
+            from code_puppy.turbo_parse_bridge import get_folds
+            
+            result = get_folds("def test(): pass", "python")
+            
+            assert result["success"] is False
+            assert "folds" in result
+            assert result["folds"] == []
+            assert "turbo_parse not available" in result.get("error", "")

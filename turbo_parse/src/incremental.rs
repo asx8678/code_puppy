@@ -131,15 +131,6 @@ mod python_impl {
             self == other
         }
     }
-
-    #[pymethods]
-    impl SerializedTree {
-        #[new]
-        #[pyo3(signature = (language, source, had_errors = false))]
-        fn py_new(language: String, source: String, had_errors: bool) -> Self {
-            Self::new(language, source, had_errors)
-        }
-    }
 }
 
 /// Serialized tree data used to reconstruct a Tree for incremental parsing.

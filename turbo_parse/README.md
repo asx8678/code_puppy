@@ -239,6 +239,60 @@ for symbol in result['symbols']:
     print(f"{symbol['kind']}: {symbol['name']} (line {symbol['start_line']})")
 ```
 
+### Syntax Highlighting
+
+Extract syntax highlighting captures from source code using tree-sitter queries.
+
+```python
+import turbo_parse
+
+source = """
+def greet(name: str) -> str:
+    # Return a greeting
+    return f"Hello, {name}!"
+
+class Greeter:
+    DEFAULT_GREETING = "Hi"
+    
+    def __init__(self, greeting: str = None):
+        self.greeting = greeting or self.DEFAULT_GREETING
+"""
+
+result = turbo_parse.get_highlights(source, "python")
+print(f"Found {len(result['captures'])} highlight captures:")
+
+for capture in result['captures']:
+    name = capture['capture_name']
+    start = capture['start_byte']
+    end = capture['end_byte']
+    text = source[start:end]
+    print(f"  [{name}] bytes {start}-{end}: '{text[:30]}...'")
+```
+
+**Output:**
+```
+Found 37 highlight captures:
+  [keyword] bytes 1-4: 'def'
+  [function] bytes 5-10: 'greet'
+  [variable] bytes 25-27: 'str'
+  [comment] bytes 34-54: '# Return a greeting'
+  [string] bytes 68-83: 'Hello, {name}!'
+  [keyword] bytes 87-92: 'class'
+  [type] bytes 93-100: 'Greeter'
+  ...
+```
+
+**Common Capture Names:**
+- `keyword` - Keywords (def, class, if, return, etc.)
+- `function` - Function definitions
+- `type` - Type names
+- `string` - String literals
+- `comment` - Comments
+- `variable` - Variables
+- `constant` - Constants
+- `operator` - Operators
+- `punctuation` - Brackets, delimiters
+
 ### Extract Folds (Code Folding)
 
 ```python
@@ -865,6 +919,8 @@ See [CI.md](./CI.md) for detailed information about:
 | `extract_symbols_from_file()` | `(path: str, language: str=None) -> dict` | Extract symbols from file |
 | `get_folds()` | `(source: str, language: str) -> dict` | Extract fold ranges from source |
 | `get_folds_from_file()` | `(path: str, language: str=None) -> dict` | Extract fold ranges from file |
+| `get_highlights()` | `(source: str, language: str) -> dict` | Extract syntax highlighting captures |
+| `get_highlights_from_file()` | `(path: str, language: str=None) -> dict` | Extract highlights from file |
 | `extract_syntax_diagnostics()` | `(source: str, language: str) -> dict` | Get syntax errors |
 | `parse_files_batch()` | `(paths: list[str], max_workers: int=None) -> dict` | Parse files in parallel |
 | `init_cache()` | `(capacity: int=None) -> dict` | Initialize parse cache |

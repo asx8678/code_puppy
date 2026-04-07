@@ -5,6 +5,7 @@ mod batch;
 mod cache;
 mod diagnostics;
 mod folds;
+mod highlights;
 mod incremental;
 mod parser;
 mod registry;
@@ -16,6 +17,7 @@ use batch::{parse_files_batch as _parse_files_batch, BatchParseOptions, BatchPar
 use cache::{ParseCache, CacheKey, CacheValue, compute_content_hash, DEFAULT_CACHE_CAPACITY};
 use diagnostics::{extract_diagnostics, SyntaxDiagnostics};
 use folds::{get_folds as _get_folds, get_folds_from_file as _get_folds_from_file, FoldResult};
+use highlights::{get_highlights as _get_highlights, get_highlights_from_file as _get_highlights_from_file, HighlightResult};
 use incremental::{parse_with_edits, InputEdit};
 use parser::{parse_file as _parse_file, parse_source as _parse_source, ParseResult};
 use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError};
@@ -677,6 +679,79 @@ fn get_folds_from_file<'py>(py: Python<'py>, path: &str, language: Option<&str>)
     })?)
 }
 
+/// Extract syntax highlights from source code.
+///
+/// # Arguments
+/// * `source` - The source code to analyze
+/// * `language` - The language identifier (e.g., "python", "rust", "javascript")
+///
+/// # Returns
+/// Dict with:
+///   - language: String - the detected/specified language
+///   - captures: List[Dict] - list of highlight captures with start_byte, end_byte, capture_name
+///   - extraction_time_ms: f64 - time taken to extract
+///   - success: bool - whether extraction succeeded
+///   - errors: List[str] - any extraction errors
+///
+/// Each capture contains:
+///   - start_byte: int - starting byte position (0-indexed)
+///   - end_byte: int - ending byte position (0-indexed, exclusive)
+///   - capture_name: str - capture name following Helix conventions (e.g., "keyword", "string")
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+/// source = "def hello(): pass"
+/// result = turbo_parse.get_highlights(source, "python")
+/// for cap in result["captures"]:
+///     print(f"{cap['capture_name']}: bytes {cap['start_byte']}-{cap['end_byte']}")
+/// ```
+#[pyfunction]
+#[pyo3(signature = (source, language))]
+fn get_highlights<'py>(py: Python<'py>, source: &str, language: &str) -> PyResult<Bound<'py, PyAny>> {
+    // Release GIL during CPU-intensive highlight extraction
+    let result: HighlightResult = py.detach(|| {
+        _get_highlights(source, language)
+    });
+
+    convert_json_to_py(py, &serde_json::to_value(&result).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e))
+    })?)
+}
+
+/// Extract syntax highlights from a file.
+///
+/// # Arguments
+/// * `path` - Path to the file
+/// * `language` - Optional language override (detected from extension if not provided)
+///
+/// # Returns
+/// Dict with:
+///   - language: String - the detected/specified language
+///   - captures: List[Dict] - list of highlight captures
+///   - extraction_time_ms: f64 - time taken to extract
+///   - success: bool - whether extraction succeeded
+///   - errors: List[str] - any extraction errors
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+/// result = turbo_parse.get_highlights_from_file("test.py")
+/// print(f"Found {len(result['captures'])} highlight captures")
+/// ```
+#[pyfunction]
+#[pyo3(signature = (path, language = None))]
+fn get_highlights_from_file<'py>(py: Python<'py>, path: &str, language: Option<&str>) -> PyResult<Bound<'py, PyAny>> {
+    // Release GIL during file I/O and CPU-intensive highlight extraction
+    let result: HighlightResult = py.detach(|| {
+        _get_highlights_from_file(path, language)
+    });
+
+    convert_json_to_py(py, &serde_json::to_value(&result).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e))
+    })?)
+}
+
 /// The turbo_parse Python module.
 #[pymodule]
 fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -708,6 +783,9 @@ fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Fold extraction functions
     m.add_function(wrap_pyfunction!(get_folds, m)?)?;
     m.add_function(wrap_pyfunction!(get_folds_from_file, m)?)?;
+    // Highlight extraction functions
+    m.add_function(wrap_pyfunction!(get_highlights, m)?)?;
+    m.add_function(wrap_pyfunction!(get_highlights_from_file, m)?)?;
     // Add pyclass types
     m.add_class::<InputEdit>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
