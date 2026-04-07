@@ -7,13 +7,17 @@
 
 ## Executive Summary
 
-The code_puppy project has an **extensive** test suite with ~963 test functions across 467+ test files. However, significant gaps exist in:
-1. **Core module coverage** - 43+ files have 0% coverage
-2. **Brittle test patterns** - Heavy reliance on mocking (9,314+ patch calls) with timing-dependent tests
-3. **Security-sensitive paths** - Limited malicious input/attack testing for plugin loader and shell execution
-4. **Integration coverage** - Key user flows (MCP handshake, agent run) have thin E2E coverage
+The code_puppy project has an **extensive** test suite with **10,396 test functions** across **434 test files** (467 Python files in tests/ directory including 434 test_*.py files). However, significant gaps exist in:
 
-**Coverage Gate:** The 65% `fail_under` threshold in pyproject.toml may mask risks - zero-coverage files are excluded from coverage.json or are not being exercised by the current test run configuration.
+**⚠️ Data Staleness Warning:** The `coverage.json` data is from **2026-02-20** (47+ days old), which affects the validity of 0% coverage claims - some modules may have been tested since then.
+
+1. **Overall measured coverage: 33.1%** (gate is set to 65% - may mask risks)
+2. **Core module coverage** - 43+ files have 0% coverage
+3. **Brittle test patterns** - Heavy reliance on mocking (9,314+ patch calls) with timing-dependent tests
+4. **Security-sensitive paths** - Limited malicious input/attack testing for plugin loader and shell execution
+5. **Integration coverage** - Key user flows (MCP handshake, agent run) have thin E2E coverage
+
+**Coverage Gate Note:** The 65% `fail_under` threshold in pyproject.toml may mask risks - zero-coverage files are excluded from coverage.json or are not being exercised by the current test run configuration.
 
 ---
 
@@ -161,7 +165,7 @@ The code_puppy project has an **extensive** test suite with ~963 test functions 
 
 **Evidence:**
 - `grep -r "patch(" tests/ | wc -l` = 9,314
-- `grep -r "MagicMock" tests/ | wc -l` = 3,577
+- `grep -r "MagicMock" tests/ | wc -l` = 3,476
 - Tests for session storage, TUI, and plugins have heavy mocking of internal state
 
 **Example from test_plugins_init_coverage.py:**
@@ -342,7 +346,7 @@ time.sleep(10)  # Reduced timeout for LLM response
 **Issue:**
 - coverage.json shows 0% for many modules that have test files
 - Either tests not being run, or coverage not being recorded
-- Last timestamp: 2026-02-20 (may be stale)
+- Data is from 2026-02-20 (47+ days old) - consider regenerating for current analysis
 
 **Recommendation:**
 1. Regenerate coverage with fresh test run
@@ -374,15 +378,16 @@ time.sleep(10)  # Reduced timeout for LLM response
 
 | Metric | Value | Assessment |
 |--------|-------|------------|
-| Test Functions | ~963 | Good volume |
-| Test Files | 467+ | High fragmentation |
+| Test Functions | 10,396 | Good volume |
+| Test Files | 434 test_*.py (467 total .py in tests/) | High fragmentation |
+| Overall Coverage | 33.1% (gate: 65%) | Below gate |
 | patch() Calls | 9,314 | Excessive mocking |
-| MagicMock References | 3,577 | Heavy reliance on mocks |
+| MagicMock References | 3,476 | Heavy reliance on mocks |
 | sleep Calls | 426+ | Timing-dependent |
 | Zero Coverage Files | 43+ ( stmt > 10) | Major gaps |
 | Files <50% Coverage | 40 | Needs attention |
 | Integration Test Files | 12 | Too few for app size |
-| Coverage Gate | 65% | May mask risks |
+| Coverage Data Date | 2026-02-20 (47+ days old) | Stale data |
 
 ---
 
