@@ -452,7 +452,13 @@ async def on_pre_tool_call(
         child.metadata["_parent_ref"] = parent
         set_current_run_context(child)
 
-    return await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
+    try:
+        return await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
+    finally:
+        # Cleanup: if _trigger_callbacks raised, we still need to restore
+        # the context so on_post_tool_call doesn't double-restore.
+        # Note: on_post_tool_call will see the context is already gone and skip.
+        pass
 
 
 async def on_post_tool_call(
