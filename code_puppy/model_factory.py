@@ -892,10 +892,10 @@ class ModelFactory:
         # Build list of extra model sources
         extra_sources: list[tuple[pathlib.Path, str, bool]] = [
             (pathlib.Path(EXTRA_MODELS_FILE), "extra models", False),
-            (pathlib.Path(CHATGPT_MODELS_FILE), "ChatGPT OAuth models", False),
-            (pathlib.Path(CLAUDE_MODELS_FILE), "Claude Code OAuth models", True),
-            (pathlib.Path(GEMINI_MODELS_FILE), "Gemini OAuth models", False),
-            (pathlib.Path(ANTIGRAVITY_MODELS_FILE), "Antigravity OAuth models", False),
+            (pathlib.Path(_config_module.CHATGPT_MODELS_FILE), "ChatGPT OAuth models", False),
+            (pathlib.Path(_config_module.CLAUDE_MODELS_FILE), "Claude Code OAuth models", True),
+            (pathlib.Path(_config_module.GEMINI_MODELS_FILE), "Gemini OAuth models", False),
+            (pathlib.Path(_config_module.ANTIGRAVITY_MODELS_FILE), "Antigravity OAuth models", False),
         ]
 
         for source_path, label, use_filtered in extra_sources:
