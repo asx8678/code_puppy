@@ -92,6 +92,7 @@ impl LanguageRegistry {
 
         // Handle aliases
         let key = match normalized.as_str() {
+            "py" => "python",
             "js" => "javascript",
             "ts" => "typescript",
             "ex" => "elixir",
@@ -110,7 +111,9 @@ impl LanguageRegistry {
 
     /// Get a list of all supported language names.
     pub fn supported_languages(&self) -> Vec<String> {
-        self.languages.keys().cloned().collect()
+        let mut langs: Vec<String> = self.languages.keys().cloned().collect();
+        langs.sort();
+        langs
     }
 }
 
@@ -162,47 +165,56 @@ mod tests {
     fn test_get_python() {
         let registry = LanguageRegistry::new().unwrap();
         let lang = registry.get("python").unwrap();
-        assert_eq!(lang.version(), tree_sitter_python::LANGUAGE.version());
+        let python_lang = Language::from(tree_sitter_python::LANGUAGE);
+        assert_eq!(lang.version(), python_lang.version());
     }
 
     #[test]
     fn test_get_rust() {
         let registry = LanguageRegistry::new().unwrap();
         let lang = registry.get("rust").unwrap();
-        assert_eq!(lang.version(), tree_sitter_rust::LANGUAGE.version());
+        let rust_lang = Language::from(tree_sitter_rust::LANGUAGE);
+        assert_eq!(lang.version(), rust_lang.version());
     }
 
     #[test]
     fn test_get_javascript() {
         let registry = LanguageRegistry::new().unwrap();
         let lang = registry.get("javascript").unwrap();
-        assert_eq!(lang.version(), tree_sitter_javascript::LANGUAGE.version());
+        let js_lang = Language::from(tree_sitter_javascript::LANGUAGE);
+        assert_eq!(lang.version(), js_lang.version());
     }
 
     #[test]
     fn test_get_typescript() {
         let registry = LanguageRegistry::new().unwrap();
         let lang = registry.get("typescript").unwrap();
-        assert!(lang.version().len() > 0);
+        assert!(lang.version() > 0);
     }
 
     #[test]
     fn test_get_tsx() {
         let registry = LanguageRegistry::new().unwrap();
         let lang = registry.get("tsx").unwrap();
-        assert!(lang.version().len() > 0);
+        assert!(lang.version() > 0);
     }
 
     #[test]
     fn test_get_elixir() {
         let registry = LanguageRegistry::new().unwrap();
         let lang = registry.get("elixir").unwrap();
-        assert_eq!(lang.version(), tree_sitter_elixir::LANGUAGE.version());
+        let ex_lang = Language::from(tree_sitter_elixir::LANGUAGE);
+        assert_eq!(lang.version(), ex_lang.version());
     }
 
     #[test]
     fn test_language_aliases() {
         let registry = LanguageRegistry::new().unwrap();
+
+        // PY alias
+        let py = registry.get("py").unwrap();
+        let python = registry.get("python").unwrap();
+        assert_eq!(py.version(), python.version());
 
         // JS alias
         let js = registry.get("js").unwrap();
@@ -273,7 +285,7 @@ mod tests {
     #[test]
     fn test_get_language_convenience() {
         let lang = get_language("python").unwrap();
-        assert!(lang.version().len() > 0);
+        assert!(lang.version() > 0);
 
         let result = get_language("unknown");
         assert!(result.is_err());

@@ -2,7 +2,16 @@ use pyo3::prelude::*;
 
 mod registry;
 
-use registry::{get_language as _get_language, list_supported_languages, RegistryError};
+use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError};
+
+/// Check if a language is supported.
+///
+/// Returns true if the language is supported, false otherwise.
+#[pyfunction]
+#[pyo3(signature = (name))]
+fn is_language_supported(_py: Python<'_>, name: &str) -> bool {
+    _is_language_supported(name)
+}
 
 /// Get a tree-sitter Language by name.
 ///
@@ -91,6 +100,7 @@ fn convert_json_to_py<'py>(py: Python<'py>, value: &serde_json::Value) -> PyResu
 #[pymodule]
 fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(health_check, m)?)?;
+    m.add_function(wrap_pyfunction!(is_language_supported, m)?)?;
     m.add_function(wrap_pyfunction!(get_language, m)?)?;
     m.add_function(wrap_pyfunction!(supported_languages, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
