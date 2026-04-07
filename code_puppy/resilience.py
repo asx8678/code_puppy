@@ -113,6 +113,7 @@ class CircuitBreaker:
             CircuitOpenError: If circuit is open
             Exception: Any exception from the function
         """
+        # State snapshot captured under single lock acquisition
         async with self._lock:
             if self.state == CircuitState.OPEN:
                 if time.time() - self.last_failure_time >= self.config.recovery_timeout:
@@ -126,21 +127,25 @@ class CircuitBreaker:
                 if self.half_open_calls >= self.config.half_open_max_calls:
                     raise CircuitOpenError(f"Circuit {self.name} half-open limit reached")
                 self.half_open_calls += 1
+            
+            # Capture state for post-execution updates (still under lock)
+            was_half_open = self.state == CircuitState.HALF_OPEN
+            failure_threshold = self.config.failure_threshold
         
         try:
             result = func()
             if inspect.isawaitable(result):
                 result = await result
-            await self._on_success()
+            await self._on_success(was_half_open)
             return result
         except Exception as e:
-            await self._on_failure()
+            await self._on_failure(was_half_open, failure_threshold)
             raise
     
-    async def _on_success(self) -> None:
+    async def _on_success(self, was_half_open: bool) -> None:
         """Record successful call."""
         async with self._lock:
-            if self.state == CircuitState.HALF_OPEN:
+            if was_half_open:
                 self.successes += 1
                 if self.successes >= self.config.success_threshold:
                     logger.info(f"Circuit {self.name} closing (recovered)")
@@ -148,16 +153,16 @@ class CircuitBreaker:
             else:
                 self.failures = max(0, self.failures - 1)
     
-    async def _on_failure(self) -> None:
+    async def _on_failure(self, was_half_open: bool, failure_threshold: int) -> None:
         """Record failed call."""
         async with self._lock:
             self.failures += 1
             self.last_failure_time = time.time()
             
-            if self.state == CircuitState.HALF_OPEN:
+            if was_half_open:
                 logger.warning(f"Circuit {self.name} opening (failure in half-open)")
                 self.state = CircuitState.OPEN
-            elif self.failures >= self.config.failure_threshold:
+            elif self.failures >= failure_threshold:
                 logger.warning(f"Circuit {self.name} opening ({self.failures} failures)")
                 self.state = CircuitState.OPEN
     

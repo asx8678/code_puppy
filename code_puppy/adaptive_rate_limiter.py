@@ -235,17 +235,16 @@ async def _recovery_loop() -> None:
         while True:
             await asyncio.sleep(_state.cfg_cooldown_seconds)
             lock = _ensure_lock()
+            
+            # Snapshot state under lock, then process outside the lock
+            recovery_items = []
+            cleanup_needed = False
+            
             async with lock:
                 # Periodically clean up stale model states
                 if len(_state.model_states) > 100:
-                    removed = _cleanup_old_states(max_age_seconds=3600)
-                    if removed:
-                        logger.info(
-                            "adaptive_rate_limiter: pruned %d stale state(s), "
-                            "%d remaining",
-                            removed,
-                            len(_state.model_states),
-                        )
+                    cleanup_needed = True
+                
                 now = time.monotonic()
                 for model_name, st in _state.model_states.items():
                     if st.last_429_time is None:
@@ -253,6 +252,7 @@ async def _recovery_loop() -> None:
                     elapsed = now - st.last_429_time
                     if elapsed < _state.cfg_cooldown_seconds:
                         continue  # still in cooldown
+                    
                     old_limit = st.current_limit
                     increment = max(1.0, st.current_limit * _state.cfg_recovery_rate)
                     new_limit = min(
@@ -261,18 +261,35 @@ async def _recovery_loop() -> None:
                     )
                     if abs(new_limit - old_limit) < 0.01:
                         continue  # already at max
-                    st.current_limit = new_limit
-                    # Wake any waiters that may now be unblocked
-                    async with st.condition:
-                        st.condition.notify_all()
+                    
+                    # Capture recovery item to process outside the lock
+                    recovery_items.append((model_name, st, old_limit, new_limit, elapsed))
+            
+            # Perform cleanup outside the lock if needed
+            if cleanup_needed:
+                removed = _cleanup_old_states(max_age_seconds=3600)
+                if removed:
                     logger.info(
-                        "adaptive_rate_limiter: %r limit recovered %.1f → %.0f "
-                        "(after %.0fs cooldown)",
-                        model_name,
-                        old_limit,
-                        new_limit,
-                        elapsed,
+                        "adaptive_rate_limiter: pruned %d stale state(s), "
+                        "%d remaining",
+                        removed,
+                        len(_state.model_states),
                     )
+            
+            # Process recovery mutations outside the lock
+            for model_name, st, old_limit, new_limit, elapsed in recovery_items:
+                st.current_limit = new_limit
+                # Wake any waiters that may now be unblocked
+                async with st.condition:
+                    st.condition.notify_all()
+                logger.info(
+                    "adaptive_rate_limiter: %r limit recovered %.1f → %.0f "
+                    "(after %.0fs cooldown)",
+                    model_name,
+                    old_limit,
+                    new_limit,
+                    elapsed,
+                )
     except asyncio.CancelledError:
         logger.info("adaptive_rate_limiter: recovery loop cancelled")
     except Exception:
