@@ -80,6 +80,11 @@ class MessageQueue:
         self._prompt_events = {}  # threading.Event per prompt_id
         self._prompt_id_counter = 0  # Counter for unique prompt IDs
 
+        # Condition variable for signaling when queue is empty (all messages rendered)
+        # This eliminates the need for polling with asyncio.sleep(0.1)
+        self._queue_condition = threading.Condition()
+        self._pending_count = 0  # Track messages in flight
+
     def start(self):
         """Start the queue processing."""
         if self._running:
@@ -121,12 +126,18 @@ class MessageQueue:
             return
 
         try:
-            self._queue.put_nowait(message)
+            with self._queue_condition:
+                self._pending_count += 1
+                self._queue.put_nowait(message)
         except queue.Full:
             # Drop oldest message to make room
             try:
-                self._queue.get_nowait()
-                self._queue.put_nowait(message)
+                with self._queue_condition:
+                    dropped = self._queue.get_nowait()
+                    if dropped is not None:
+                        self._pending_count -= 1
+                    self._queue.put_nowait(message)
+                    self._pending_count += 1
             except queue.Empty:
                 pass
 
@@ -174,6 +185,13 @@ class MessageQueue:
                     except Exception as e:
                         logger.debug("Listener error in message queue: %s", e)
 
+                # Signal that we've processed a message - decrement pending and notify
+                with self._queue_condition:
+                    self._pending_count -= 1
+                    if self._pending_count <= 0:
+                        self._pending_count = 0
+                        self._queue_condition.notify_all()
+
             except queue.Empty:
                 continue
 
@@ -198,6 +216,30 @@ class MessageQueue:
     def mark_renderer_inactive(self):
         """Mark that no renderer is currently active."""
         self._has_active_renderer = False
+
+    def wait_for_empty(self, timeout: float | None = None) -> bool:
+        """Wait for all pending messages to be processed.
+
+        Uses a condition variable to efficiently wait until the queue is empty
+        and all messages have been rendered. This is event-driven (no polling),
+        unlike the previous asyncio.sleep(0.1) approach.
+
+        Args:
+            timeout: Maximum time to wait in seconds. If None, wait indefinitely.
+                    Note: A small timeout (e.g., 0.5s) is recommended to prevent
+                    indefinite blocking if message processing is stuck.
+
+        Returns:
+            True if queue became empty, False if timeout occurred.
+        """
+        with self._queue_condition:
+            # Check if queue is already empty
+            if self._pending_count <= 0 and self._queue.empty():
+                return True
+
+            # Wait for condition to be signaled (queue becomes empty)
+            signaled = self._queue_condition.wait(timeout=timeout)
+            return signaled
 
     def create_prompt_request(self, prompt_text: str) -> str:
         """Create a human input request and return its unique ID."""
@@ -358,3 +400,28 @@ def provide_prompt_response(prompt_id: str, response: str):
     """Provide a response to a human input request."""
     queue = get_global_queue()
     queue.provide_prompt_response(prompt_id, response)
+
+
+async def wait_for_messages_rendered(timeout: float = 0.5) -> bool:
+    """Async-friendly wrapper to wait for all messages to be rendered.
+
+    This function uses the condition variable in MessageQueue to efficiently
+    wait until all pending messages have been processed, instead of polling
+    with asyncio.sleep().
+
+    The condition variable is signaled by the message processing thread when
+    the queue becomes empty (all messages have been delivered to renderers).
+
+    Args:
+        timeout: Maximum time to wait in seconds. Default 0.5s to prevent
+                indefinite blocking. Increase if rendering complex output.
+
+    Returns:
+        True if all messages were rendered, False if timeout occurred.
+    """
+    queue = get_global_queue()
+    # Use asyncio.to_thread to call the sync wait_for_empty method
+    # This allows the sync condition variable wait to run in a thread pool
+    # without blocking the event loop
+    import asyncio
+    return await asyncio.to_thread(queue.wait_for_empty, timeout)

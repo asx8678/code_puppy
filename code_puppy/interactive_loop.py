@@ -483,9 +483,12 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 if hasattr(display_console.file, "flush"):
                     display_console.file.flush()
 
-                await asyncio.sleep(
-                    0.1
-                )  # Brief pause to ensure all messages are rendered
+                # Wait for all messages to be rendered using condition variable
+                # instead of polling with asyncio.sleep(0.1). The condition is
+                # signaled when the message queue becomes empty (all messages
+                # processed by renderers). Event-driven with 0.5s timeout safety.
+                from code_puppy.messaging import wait_for_messages_rendered
+                await wait_for_messages_rendered(timeout=0.5)
 
             except Exception as e:
                 from code_puppy.messaging.queue_console import get_queue_console
@@ -562,7 +565,10 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                     # Flush console
                     if hasattr(display_console.file, "flush"):
                         display_console.file.flush()
-                    await asyncio.sleep(0.1)
+
+                    # Wait for messages to render using condition variable
+                    # instead of polling with asyncio.sleep(0.1)
+                    await wait_for_messages_rendered(timeout=0.5)
 
                     # Auto-save
                     auto_save_session_if_enabled()
