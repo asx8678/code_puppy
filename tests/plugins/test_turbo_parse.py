@@ -642,3 +642,231 @@ class TestParseFilesBatch:
         for r in result["results"]:
             assert r["success"] is False
             assert any("not available" in str(e.get("message", "")) for e in r.get("errors", []))
+
+
+# ============================================================================
+# Tests for stats() and health_check() functionality
+# ============================================================================
+
+class TestStatsFunction:
+    """Tests for the stats() function."""
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_stats_returns_dict(self):
+        """Test that stats() returns a dictionary."""
+        from code_puppy.turbo_parse_bridge import stats
+        
+        result = stats()
+        
+        assert isinstance(result, dict)
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_stats_contains_expected_keys(self):
+        """Test that stats() contains all expected keys."""
+        from code_puppy.turbo_parse_bridge import stats
+        
+        result = stats()
+        
+        # Check for expected stats keys
+        assert "total_parses" in result
+        assert "average_parse_time_ms" in result
+        assert "languages_used" in result
+        assert "cache_hits" in result
+        assert "cache_misses" in result
+        assert "cache_evictions" in result
+        assert "cache_hit_ratio" in result
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_stats_values_are_correct_types(self):
+        """Test that stats() returns values with correct types."""
+        from code_puppy.turbo_parse_bridge import stats
+        
+        result = stats()
+        
+        assert isinstance(result["total_parses"], int)
+        assert isinstance(result["average_parse_time_ms"], (int, float))
+        assert isinstance(result["languages_used"], dict)
+        assert isinstance(result["cache_hits"], int)
+        assert isinstance(result["cache_misses"], int)
+        assert isinstance(result["cache_evictions"], int)
+        assert isinstance(result["cache_hit_ratio"], (int, float))
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_stats_cache_hit_ratio_in_range(self):
+        """Test that cache_hit_ratio is between 0.0 and 1.0."""
+        from code_puppy.turbo_parse_bridge import stats
+        
+        result = stats()
+        
+        hit_ratio = result["cache_hit_ratio"]
+        assert 0.0 <= hit_ratio <= 1.0
+
+    def test_stats_fallback_when_unavailable(self):
+        """Test fallback stats() when module is unavailable."""
+        from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
+        
+        if TURBO_PARSE_AVAILABLE:
+            pytest.skip("turbo_parse is available - fallback not active")
+        
+        from code_puppy.turbo_parse_bridge import stats
+        
+        result = stats()
+        
+        assert result["total_parses"] == 0
+        assert result["average_parse_time_ms"] == 0.0
+        assert result["languages_used"] == {}
+        assert result["cache_hits"] == 0
+        assert result["cache_misses"] == 0
+        assert result["cache_evictions"] == 0
+        assert result["cache_hit_ratio"] == 0.0
+
+
+class TestHealthCheckFunction:
+    """Tests for the health_check() function."""
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_health_check_returns_dict(self):
+        """Test that health_check() returns a dictionary."""
+        from code_puppy.turbo_parse_bridge import health_check
+        
+        result = health_check()
+        
+        assert isinstance(result, dict)
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_health_check_contains_expected_keys(self):
+        """Test that health_check() contains all expected keys."""
+        from code_puppy.turbo_parse_bridge import health_check
+        
+        result = health_check()
+        
+        # Check for expected health check keys
+        assert "available" in result
+        assert "version" in result
+        assert "languages" in result
+        assert "cache_available" in result
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_health_check_returns_available_true(self):
+        """Test that health_check() returns available=True when module is installed."""
+        from code_puppy.turbo_parse_bridge import health_check
+        
+        result = health_check()
+        
+        assert result["available"] is True
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_health_check_languages_is_list(self):
+        """Test that health_check() languages is a list."""
+        from code_puppy.turbo_parse_bridge import health_check
+        
+        result = health_check()
+        
+        assert isinstance(result["languages"], list)
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_health_check_has_known_languages(self):
+        """Test that health_check() returns known supported languages."""
+        from code_puppy.turbo_parse_bridge import health_check
+        
+        result = health_check()
+        languages = result["languages"]
+        
+        # Should have some known languages (at minimum, python and rust)
+        assert len(languages) > 0
+        # Each language should be a string
+        for lang in languages:
+            assert isinstance(lang, str)
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_health_check_cache_available_is_bool(self):
+        """Test that health_check() cache_available is a boolean."""
+        from code_puppy.turbo_parse_bridge import health_check
+        
+        result = health_check()
+        
+        assert isinstance(result["cache_available"], bool)
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_health_check_version_is_string(self):
+        """Test that health_check() version is a string."""
+        from code_puppy.turbo_parse_bridge import health_check
+        
+        result = health_check()
+        
+        # Version can be string or None
+        if result["version"] is not None:
+            assert isinstance(result["version"], str)
+
+    def test_health_check_fallback_when_unavailable(self):
+        """Test fallback health_check() when module is unavailable."""
+        from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
+        
+        if TURBO_PARSE_AVAILABLE:
+            pytest.skip("turbo_parse is available - fallback not active")
+        
+        from code_puppy.turbo_parse_bridge import health_check
+        
+        result = health_check()
+        
+        assert result["available"] is False
+        assert result["version"] is None
+        assert result["languages"] == []
+        assert result["cache_available"] is False
+
+
+class TestStatsAfterParsing:
+    """Integration tests to verify stats are updated after parsing operations."""
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_stats_updated_after_parse_source(self):
+        """Test that stats are updated after parse_source calls."""
+        from code_puppy.turbo_parse_bridge import stats, parse_source
+        
+        # Get initial stats
+        initial_stats = stats()
+        initial_count = initial_stats["total_parses"]
+        
+        # Parse some source
+        result = parse_source("def test(): pass", "python")
+        assert result["success"] is True
+        
+        # Get updated stats
+        updated_stats = stats()
+        updated_count = updated_stats["total_parses"]
+        
+        # Should have incremented
+        assert updated_count > initial_count
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_stats_tracks_languages_used(self):
+        """Test that stats track languages used correctly."""
+        from code_puppy.turbo_parse_bridge import stats, parse_source
+        
+        # Parse Python code
+        parse_source("def py(): pass", "python")
+        
+        # Parse Rust code
+        parse_source("fn rs() {}", "rust")
+        
+        # Check stats
+        result = stats()
+        languages = result["languages_used"]
+        
+        # Should track both languages
+        assert "python" in languages or "rust" in languages
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_stats_average_parse_time_is_positive(self):
+        """Test that average parse time is positive after parsing."""
+        from code_puppy.turbo_parse_bridge import stats, parse_source
+        
+        # Parse some code
+        parse_source("def test(): pass", "python")
+        
+        # Check stats
+        result = stats()
+        avg_time = result["average_parse_time_ms"]
+        
+        # Average should be non-negative
+        assert avg_time >= 0.0

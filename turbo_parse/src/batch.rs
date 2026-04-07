@@ -9,6 +9,9 @@ use rayon::prelude::*;
 
 use crate::parser::{parse_file, ParseResult};
 
+#[cfg(test)]
+use crate::diagnostics::SyntaxDiagnostics;
+
 /// Options for batch parsing operations.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct BatchParseOptions {
@@ -218,6 +221,7 @@ mod tests {
                 parse_time_ms: 1.0,
                 success: true,
                 errors: vec![],
+                diagnostics: SyntaxDiagnostics::new(),
             },
             ParseResult {
                 language: "python".to_string(),
@@ -225,6 +229,7 @@ mod tests {
                 parse_time_ms: 0.5,
                 success: false,
                 errors: vec![crate::parser::ParseError::with_message("test error")],
+                diagnostics: SyntaxDiagnostics::new(),
             },
         ];
 

@@ -47,18 +47,14 @@ impl Metrics {
     /// * `language` - The language that was parsed
     /// * `parse_time_ms` - Time taken for the parse operation
     pub fn record_parse(&self, language: &str, parse_time_ms: f64) {
-        // Update global counters
-        {
-            let mut total = self.total_parses.write();
-            *total += 1;
-        }
-        {
-            let mut total_time = self.total_parse_time_ms.write();
-            *total_time += parse_time_ms;
-        }
-
-        // Update per-language stats
+        // Hold a single write lock across all updates for thread safety
+        let mut total = self.total_parses.write();
+        let mut total_time = self.total_parse_time_ms.write();
         let mut langs = self.languages.write();
+
+        *total += 1;
+        *total_time += parse_time_ms;
+
         let lang_stats = langs.entry(language.to_string()).or_default();
         lang_stats.parse_count += 1;
         lang_stats.total_parse_time_ms += parse_time_ms;
@@ -163,37 +159,15 @@ pub fn get_full_stats() -> serde_json::Value {
     })
 }
 
-/// Internal cache stats structure
-#[derive(Debug, Clone, Copy, Default)]
-pub struct CacheStatsInternal {
-    pub hits: u64,
-    pub misses: u64,
-    pub evictions: u64,
-}
-
-impl CacheStatsInternal {
-    pub fn hit_ratio(&self) -> f64 {
-        let total = self.hits + self.misses;
-        if total == 0 {
-            0.0
-        } else {
-            self.hits as f64 / total as f64
-        }
-    }
-}
+use crate::cache::CacheStats;
 
 /// Get cache stats from the global cache
-fn get_cache_stats() -> CacheStatsInternal {
+fn get_cache_stats() -> CacheStats {
     // Return default (0 values) if cache not initialized
     if let Some(cache) = crate::GLOBAL_CACHE.get() {
-        let stats = cache.stats();
-        CacheStatsInternal {
-            hits: stats.hits,
-            misses: stats.misses,
-            evictions: stats.evictions,
-        }
+        cache.stats()
     } else {
-        CacheStatsInternal::default()
+        CacheStats::default()
     }
 }
 
@@ -282,14 +256,16 @@ mod tests {
 
     #[test]
     fn test_cache_stats_hit_ratio() {
-        let stats = CacheStatsInternal {
+        let stats = CacheStats {
             hits: 75,
             misses: 25,
             evictions: 0,
+            size: 0,
+            capacity: 256,
         };
         assert_eq!(stats.hit_ratio(), 0.75);
         
-        let empty_stats = CacheStatsInternal::default();
+        let empty_stats = CacheStats::default();
         assert_eq!(empty_stats.hit_ratio(), 0.0);
     }
 }
