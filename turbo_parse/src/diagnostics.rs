@@ -319,8 +319,22 @@ mod tests {
         let lang = get_rust_language();
         let diagnostics = extract_diagnostics(source, &lang);
         
-        // Should detect the incomplete let statement
-        assert!(!diagnostics.is_empty() || true); // May or may not find errors depending on tree-sitter recovery
+        // Should either have diagnostics OR tree-sitter may recover gracefully
+        // The key is that parsing doesn't panic and we get a result
+        let has_errors = !diagnostics.is_empty();
+        let root_has_error = {
+            let mut parser = tree_sitter::Parser::new();
+            parser.set_language(&lang).unwrap();
+            parser.parse(source, None)
+                .map(|t| t.root_node().has_error())
+                .unwrap_or(false)
+        };
+        
+        // Either we found errors, or tree flagged errors, or both
+        assert!(
+            has_errors || root_has_error || diagnostics.error_count() > 0,
+            "Expected either diagnostics or tree-sitter to flag errors for broken Rust code"
+        );
     }
 
     #[test]
@@ -341,8 +355,20 @@ mod tests {
         let lang = get_javascript_language();
         let diagnostics = extract_diagnostics(source, &lang);
         
-        // Should detect the error
-        assert!(!diagnostics.is_empty() || true);
+        // Check if tree-sitter detected an error in the tree
+        let root_has_error = {
+            let mut parser = tree_sitter::Parser::new();
+            parser.set_language(&lang).unwrap();
+            parser.parse(source, None)
+                .map(|t| t.root_node().has_error())
+                .unwrap_or(false)
+        };
+        
+        // Either we have diagnostics OR the tree flagged an error (tree-sitter recovery may vary)
+        assert!(
+            !diagnostics.is_empty() || root_has_error || diagnostics.error_count() > 0,
+            "Expected either diagnostics extracted OR tree-sitter to flag errors for broken JS code"
+        );
     }
 
     #[test]

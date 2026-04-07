@@ -492,3 +492,117 @@ class TestBridgeFallback:
         assert result["success"] is False
         assert result["tree"] is None
         assert any("not available" in str(e.get("message", "")) for e in result.get("errors", []))
+
+
+# ============================================================================
+# Tests for extract_syntax_diagnostics functionality
+# ============================================================================
+
+class TestExtractSyntaxDiagnostics:
+    """Tests for extract_syntax_diagnostics basic functionality."""
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_valid_code_returns_empty_diagnostics(self):
+        """Test that valid Python code returns empty diagnostics."""
+        from code_puppy.turbo_parse_bridge import extract_syntax_diagnostics
+        
+        source = "def hello():\n    pass\n"
+        result = extract_syntax_diagnostics(source, "python")
+        
+        assert "diagnostics" in result
+        assert "error_count" in result
+        assert "warning_count" in result
+        assert result["diagnostics"] == []
+        assert result["error_count"] == 0
+        assert result["warning_count"] == 0
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_broken_syntax_returns_diagnostics_with_position(self):
+        """Test that broken syntax returns diagnostics with position info."""
+        from code_puppy.turbo_parse_bridge import extract_syntax_diagnostics
+        
+        source = "def hello(\n    pass\n"  # Missing closing paren
+        result = extract_syntax_diagnostics(source, "python")
+        
+        assert "diagnostics" in result
+        assert result["error_count"] > 0
+        assert len(result["diagnostics"]) > 0
+        
+        # Check diagnostic has position information
+        diag = result["diagnostics"][0]
+        assert "message" in diag
+        assert "severity" in diag
+        assert "line" in diag
+        assert "column" in diag
+        assert "offset" in diag
+        assert "length" in diag
+        assert "node_kind" in diag
+        
+        # Verify position info is populated
+        assert diag["line"] > 0  # 1-indexed line number
+        assert diag["severity"] == "error"
+        assert diag["node_kind"] in ["ERROR", "MISSING"]
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_multiple_syntax_errors(self):
+        """Test that multiple syntax errors are all reported."""
+        from code_puppy.turbo_parse_bridge import extract_syntax_diagnostics
+        
+        # Multiple issues: unclosed paren, incomplete statement
+        source = "def a(\n    pass 1\ndef b(\n    pass 2\n"
+        result = extract_syntax_diagnostics(source, "python")
+        
+        # Should find at least one error (tree-sitter may consolidate)
+        assert result["error_count"] >= 1
+        assert len(result["diagnostics"]) >= 1
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_unsupported_language_error_handling(self):
+        """Test that unsupported language returns appropriate error."""
+        from code_puppy.turbo_parse_bridge import extract_syntax_diagnostics
+        
+        result = extract_syntax_diagnostics("some code", "unsupported_language_xyz")
+        
+        # Should indicate language is not supported
+        assert "error" in result
+        assert "unsupported" in result["error"].lower() or "Unsupported" in result["error"]
+        # Error counts should be zero since no parsing occurred
+        assert result.get("error_count", 0) == 0
+        assert result.get("warning_count", 0) == 0
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_supported_languages_work(self):
+        """Test that supported languages work correctly."""
+        from code_puppy.turbo_parse_bridge import extract_syntax_diagnostics
+        
+        # Test Python
+        py_result = extract_syntax_diagnostics("def foo(): pass", "python")
+        assert "diagnostics" in py_result
+        
+        # Test Rust
+        rust_result = extract_syntax_diagnostics("fn main() {}", "rust")
+        assert "diagnostics" in rust_result
+        
+        # Test JavaScript
+        js_result = extract_syntax_diagnostics("function foo() {}", "javascript")
+        assert "diagnostics" in js_result
+
+
+class TestExtractSyntaxDiagnosticsFallback:
+    """Tests for fallback behavior when turbo_parse is not available."""
+    
+    def test_fallback_extract_syntax_diagnostics_stub(self):
+        """Test fallback extract_syntax_diagnostics stub returns error when module unavailable."""
+        from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
+        
+        # Only test if module is not available, otherwise skip
+        if TURBO_PARSE_AVAILABLE:
+            pytest.skip("turbo_parse is available - fallback not active")
+        
+        from code_puppy.turbo_parse_bridge import extract_syntax_diagnostics
+        result = extract_syntax_diagnostics("def test(): pass", "python")
+        
+        assert "diagnostics" in result
+        assert result["diagnostics"] == []
+        assert "error" in result
+        assert "not available" in result["error"].lower()

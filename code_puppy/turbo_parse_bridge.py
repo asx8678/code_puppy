@@ -13,6 +13,7 @@ try:
         supported_languages,
         parse_file,
         parse_source,
+        extract_syntax_diagnostics,
     )
 
     TURBO_PARSE_AVAILABLE = True
@@ -72,6 +73,18 @@ except ImportError:
             }],
         }
 
+    def extract_syntax_diagnostics(source: str, language: str) -> dict[str, Any]:  # noqa: ARG001
+        """Fallback for extract_syntax_diagnostics when Rust module is unavailable.
+        
+        Returns an error dict indicating the Rust module is not available.
+        """
+        return {
+            "diagnostics": [],
+            "error_count": 0,
+            "warning_count": 0,
+            "error": "turbo_parse module not available - syntax diagnostics disabled",
+        }
+
 
 # --- Turbo Parse toggle -----------------------------------------------------
 # When True (default), Rust acceleration is used at runtime if the module
@@ -106,6 +119,7 @@ __all__ = [
     "supported_languages",
     "parse_file",
     "parse_source",
+    "extract_syntax_diagnostics",
     "is_turbo_parse_enabled",
     "set_turbo_parse_enabled",
     "get_turbo_parse_status",
