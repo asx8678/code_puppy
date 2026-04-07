@@ -8,6 +8,7 @@ mod parser;
 mod registry;
 mod stats;
 mod symbols;
+pub mod queries;
 
 use batch::{parse_files_batch as _parse_files_batch, BatchParseOptions, BatchParseResult};
 use cache::{ParseCache, CacheKey, CacheValue, compute_content_hash, DEFAULT_CACHE_CAPACITY};
