@@ -81,9 +81,9 @@ The code_puppy codebase demonstrates good architectural patterns with plugin ext
 3. Check for symlinks and reject or follow them carefully
 
 ### HIGH-3: Missing Input Validation on JWT Claims
-**File:** `code_puppy/claude_cache_client.py:115-143`  
+**File:** `code_puppy/claude_cache_client.py:41-66`  
 **Category:** Security - Input Validation  
-**Description:** When decoding JWT for age calculation, the code extracts `iat` and `exp` claims without validating: (1) `exp` could be in the past but still used, (2) `iat` could be in the future (clock skew), (3) no validation that values are numeric before arithmetic.
+**Description:** _get_jwt_iat() (lines 41-66) decodes JWT for age calculation, extracting `iat` and `exp` claims without validating: (1) `exp` could be in the past but still used, (2) `iat` could be in the future (clock skew), (3) no validation that values are numeric before arithmetic.
 
 **Fix:** Add validation that `iat` and `exp` are positive numbers within reasonable bounds before calculations.
 
@@ -167,7 +167,7 @@ The code_puppy codebase demonstrates good architectural patterns with plugin ext
 | MED-2 | `plugins/claude_code_oauth/utils.py:86-88, 359-365`, `config.py:47-49` | Token Storage | OAuth tokens stored in plain JSON with only filesystem-level protection (0o600). Not encrypted at rest. | Use OS keyring for cross-platform encrypted storage |
 | MED-3 | `session_storage.py:143-156` | TOCTOU Race | HMAC key file creation has TOCTOU race: existence check, then permission setting after write. | Use `os.open()` with `O_CREAT \| O_EXCL` and `os.fchmod()` on fd |
 | MED-4 | `session_storage.py:135-175` | Key Management | HMAC key is per-install, not per-session. All historical sessions use same key; if compromised, all integrity is void. | Use per-session keys derived from master, or document security model |
-| MED-5 | `adaptive_rate_limiter.py:648-683` | TOCTOU Race | Circuit breaker state checked under lock but waited outside lock—state could change between check and wait. | Ensure state checks and condition waits happen atomically under same lock |
+| ~~MED-5~~ | ~~adaptive_rate_limiter.py:648-683~~ | ~~TOCTOU Race~~ | ALREADY FIXED - uses async with state.condition: for atomic wait. | No action needed |
 | MED-6 | `session_storage.py:143-156` | Cleanup | HMAC key file persists after uninstall; no secure deletion mechanism. | Provide secure uninstall command that overwrites and deletes key file |
 
 ### Code Quality (MEDIUM)
@@ -230,7 +230,7 @@ Too many LOW findings to list fully (21 total). Key items called out:
 
 ### Notable LOW Findings
 
-- **LOW-1:** `plugins/claude_code_oauth/config.py:13`, `plugins/chatgpt_oauth/config.py:15` - Hardcoded OAuth client IDs should be configurable
+- **LOW-1:** `plugins/claude_code_oauth/config.py:16`, `plugins/chatgpt_oauth/config.py:15` - Hardcoded OAuth client IDs should be configurable
 - **LOW-2:** `claude_cache_client.py:259-264` - Token refresh logs at INFO level; debug logging could include token data in exceptions
 - **LOW-3:** `claude_cache_client.py:101-143` - Manual JWT decoding bypasses built-in security checks
 - **LOW-4:** `command_line/clipboard.py:98-115` - Clipboard operations use subprocess with user-controlled content
@@ -318,12 +318,12 @@ Too many LOW findings to list fully (21 total). Key items called out:
 | Arbitrary Code Execution via User Plugins | CRITICAL | `plugins/__init__.py:52-104` | SECURITY-CRITICAL-1 |
 | Shell Command Injection | HIGH | `command_runner.py:227-230` | SECURITY-HIGH-1, BUGS-HIGH |
 | Path Traversal in Plugin Loading | HIGH | `plugins/__init__.py:88-99` | SECURITY-HIGH-2 |
-| Missing JWT Claim Validation | HIGH | `claude_cache_client.py:115-143` | SECURITY-HIGH-3 |
+| Missing JWT Claim Validation | HIGH | `claude_cache_client.py:41-66` | SECURITY-HIGH-3 |
 | JWT Parsing Without Verification | MEDIUM | `claude_cache_client.py:47-75` | SECURITY-MED-1 |
 | Token Storage Without Encryption | MEDIUM | OAuth utils | SECURITY-MED-2 |
 | HMAC Key File Race Condition | MEDIUM | `session_storage.py:143-156` | SECURITY-MED-3 |
 | Per-Install HMAC Key | MEDIUM | `session_storage.py:135-175` | SECURITY-MED-4 |
-| Rate Limiter TOCTOU | MEDIUM | `adaptive_rate_limiter.py:648-683` | SECURITY-MED-5 |
+| ~~Rate Limiter TOCTOU~~ | MEDIUM | ~~adaptive_rate_limiter.py:648-683~~ | ALREADY FIXED |
 | No HMAC Key Cleanup on Uninstall | MEDIUM | `session_storage.py:143-156` | SECURITY-MED-6 |
 
 ### Concurrency (10 findings: 4 HIGH, 6 MEDIUM)
@@ -417,7 +417,7 @@ The PYTHON_REVIEW.md found no security or concurrency issues in the reviewed fil
 **Security**
 20. [ ] **MED-2:** Implement token encryption using OS keyring
 21. [ ] **MED-3:** Fix HMAC key file TOCTOU with atomic operations
-22. [ ] **MED-5:** Fix rate limiter TOCTOU with atomic state checks
+22. [x] ~~MED-5: Fix rate limiter TOCTOU with atomic state checks~~ - Already fixed (condition lock in place)
 23. [ ] **MED-26:** Change `.env` loading to `override=False`
 
 **Dependencies/Config**
