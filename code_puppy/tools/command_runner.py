@@ -286,8 +286,8 @@ _CONFIRMATION_LOCK = threading.Lock()
 _RUNNING_PROCESSES: set[subprocess.Popen] = set()
 _RUNNING_PROCESSES_LOCK = threading.Lock()
 # Bounded set of PIDs killed by user — prevents unbounded growth on long sessions.
-# Uses a list as backing store, capped at 1024 entries (evict oldest on overflow).
-_USER_KILLED_PROCESSES: set[int] = set()
+# Uses dict as ordered set (insertion-ordered in Python 3.7+), capped at 1024 entries (evict oldest on overflow).
+_USER_KILLED_PROCESSES: dict[int, None] = {}
 _USER_KILLED_PROCESSES_MAX = 1024
 
 # Global state for shell command keyboard handling
@@ -431,10 +431,10 @@ def kill_all_running_shell_processes() -> int:
                 count += 1
                 # Evict oldest PIDs if at capacity to prevent unbounded growth
                 if len(_USER_KILLED_PROCESSES) >= _USER_KILLED_PROCESSES_MAX:
-                    # Discard an arbitrary element (set has no ordering, but that's fine
-                    # — stale PIDs from much earlier are unlikely to collide)
-                    _USER_KILLED_PROCESSES.pop()
-                _USER_KILLED_PROCESSES.add(p.pid)
+                    # Remove oldest entry (first key in insertion-ordered dict)
+                    oldest_pid = next(iter(_USER_KILLED_PROCESSES))
+                    del _USER_KILLED_PROCESSES[oldest_pid]
+                _USER_KILLED_PROCESSES[p.pid] = None  # Use dict as ordered set
         finally:
             _unregister_process(p)
     return count

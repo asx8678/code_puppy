@@ -163,13 +163,13 @@ class TestSignalHandling:
 
         # Add a PID to the set (simulating a killed process)
         test_pid = 5555
-        _USER_KILLED_PROCESSES.add(test_pid)
+        _USER_KILLED_PROCESSES[test_pid] = None  # dict as ordered set
 
         # Verify it's in the set
         assert test_pid in _USER_KILLED_PROCESSES
 
         # Clear and verify removal
-        _USER_KILLED_PROCESSES.remove(test_pid)
+        del _USER_KILLED_PROCESSES[test_pid]
         assert test_pid not in _USER_KILLED_PROCESSES
 
 
@@ -434,7 +434,7 @@ class TestErrorHandling:
         # The module tracks interrupted processes by PID
         test_pid = 9876
         _USER_KILLED_PROCESSES.clear()
-        _USER_KILLED_PROCESSES.add(test_pid)
+        _USER_KILLED_PROCESSES[test_pid] = None  # dict as ordered set
 
         assert test_pid in _USER_KILLED_PROCESSES
 
