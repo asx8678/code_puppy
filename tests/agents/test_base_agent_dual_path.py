@@ -85,7 +85,7 @@ class TestFilterHugeMessagesDualPath:
     """Exercise both Rust and Python paths in filter_huge_messages."""
 
     @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
-    @patch("code_puppy.agents.base_agent.prune_and_filter")
+    @patch("code_puppy._core_bridge.prune_and_filter")
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
     def test_rust_path_returns_subset(
         self,
@@ -104,7 +104,7 @@ class TestFilterHugeMessagesDualPath:
 
     @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
     @patch(
-        "code_puppy.agents.base_agent.prune_and_filter",
+        "code_puppy._core_bridge.prune_and_filter",
         side_effect=RuntimeError("boom"),
     )
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
@@ -148,7 +148,7 @@ class TestFilterHugeMessagesDualPath:
 
 class TestPruneInterruptedToolCallsDualPath:
     @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
-    @patch("code_puppy.agents.base_agent.prune_and_filter")
+    @patch("code_puppy._core_bridge.prune_and_filter")
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
     def test_rust_path_returns_subset(self, mock_serialize, mock_prune):
         mock_serialize.return_value = [{"fake": True}]
@@ -162,11 +162,11 @@ class TestPruneInterruptedToolCallsDualPath:
 
     @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
     @patch(
-        "code_puppy.agents.base_agent.prune_and_filter", side_effect=OSError("segfault")
+        "code_puppy._core_bridge.prune_and_filter",
+        side_effect=Exception("boom"),
     )
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
     def test_rust_exception_falls_back_to_python(self, mock_serialize, mock_prune):
-        mock_serialize.return_value = [{"fake": True}]
         agent = CodePuppyAgent()
         msgs = _make_messages(2, with_tools=True)
         result = agent.prune_interrupted_tool_calls(msgs)
@@ -233,7 +233,7 @@ class TestMessageHistoryProcessorDualPath:
         return agent
 
     @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
-    @patch("code_puppy.agents.base_agent.process_messages_batch")
+    @patch("code_puppy._core_bridge.process_messages_batch")
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
     def test_rust_path_computes_tokens(self, mock_serialize, mock_batch, agent):
         mock_serialize.return_value = [{"fake": True}]
@@ -248,7 +248,7 @@ class TestMessageHistoryProcessorDualPath:
 
     @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
     @patch(
-        "code_puppy.agents.base_agent.process_messages_batch",
+        "code_puppy._core_bridge.process_messages_batch",
         side_effect=RuntimeError("panic"),
     )
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
@@ -270,7 +270,8 @@ class TestMessageHistoryProcessorDualPath:
         assert isinstance(result, list)
 
     @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
-    @patch("code_puppy.agents.base_agent.process_messages_batch")
+    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
+    @patch("code_puppy._core_bridge.process_messages_batch")
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
     @patch("code_puppy.agents.base_agent.get_compaction_threshold", return_value=0.0)
     @patch(

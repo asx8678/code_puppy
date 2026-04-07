@@ -29,10 +29,10 @@ from pydantic_ai import (
     UsageLimitExceeded,
     UsageLimits)
 from pydantic_ai.durable_exec.dbos import DBOSAgent
-
 # Rust acceleration bridge (optional - falls back to Python)
+from code_puppy import _core_bridge
 from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
-
+from code_puppy._core_bridge import serialize_messages_for_rust
 
 if RUST_AVAILABLE:
     from code_puppy._core_bridge import (
@@ -40,7 +40,7 @@ if RUST_AVAILABLE:
         prune_and_filter,
         split_for_summarization as rust_split_for_summarization,
         truncation_indices as rust_truncation_indices,
-        serialize_messages_for_rust)
+    )
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -653,11 +653,24 @@ class BaseAgent(ABC, AgentPromptMixin):
         has_content_delta = getattr(part, "content_delta", None) is not None
         return bool(has_content or has_content_delta)
 
-    def filter_huge_messages(self, messages: list[ModelMessage]) -> list[ModelMessage]:
+    def filter_huge_messages(
+        self,
+        messages: list[ModelMessage],
+        serialized_messages: list[dict] | None = None,
+    ) -> list[ModelMessage]:
+        """Filter out messages that exceed the token threshold.
+
+        Args:
+            messages: List of messages to filter
+            serialized_messages: Pre-serialized messages for Rust (if available)
+
+        Returns:
+            Filtered list of messages
+        """
         if _rust_enabled():
             try:
-                serialized = serialize_messages_for_rust(messages)
-                result = prune_and_filter(serialized, 50000)
+                serialized = serialized_messages or serialize_messages_for_rust(messages)
+                result = _core_bridge.prune_and_filter(serialized, 50000)
                 return [messages[i] for i in result.surviving_indices]
             except Exception as exc:
                 logger.debug(
@@ -726,9 +739,15 @@ class BaseAgent(ABC, AgentPromptMixin):
 
     def split_messages_for_protected_summarization(
         self,
-        messages: list[ModelMessage]) -> tuple[list[ModelMessage], list[ModelMessage]]:
+        messages: list[ModelMessage],
+        serialized_messages: list[dict] | None = None,
+    ) -> tuple[list[ModelMessage], list[ModelMessage]]:
         """
         Split messages into two groups: messages to summarize and protected recent messages.
+
+        Args:
+            messages: Full message list to split
+            serialized_messages: Pre-serialized messages for Rust (if available)
 
         Returns:
             Tuple of (messages_to_summarize, protected_messages)
@@ -753,9 +772,9 @@ class BaseAgent(ABC, AgentPromptMixin):
         # --- Rust fast path ------------------------------------------------
         if _rust_enabled():
             try:
-                # Serialize messages and get per-message token counts
-                serialized = serialize_messages_for_rust(messages)
-                result = process_messages_batch(serialized, [], [], "")
+                # Use pre-serialized messages if available
+                serialized = serialized_messages or serialize_messages_for_rust(messages)
+                result = _core_bridge.process_messages_batch(serialized, [], [], "")
                 per_message_tokens = result.per_message_tokens
 
                 # Build tool_call_ids_per_message: list of [(id, kind), ...] per message
@@ -771,7 +790,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                     tool_call_ids_per_message.append(ids_for_msg)
 
                 # Call Rust split_for_summarization
-                split_result = rust_split_for_summarization(
+                split_result = _core_bridge.rust_split_for_summarization(
                     per_message_tokens,
                     tool_call_ids_per_message,
                     protected_tokens_limit)
@@ -1012,7 +1031,10 @@ class BaseAgent(ABC, AgentPromptMixin):
         return target_idx
 
     def summarize_messages(
-        self, messages: list[ModelMessage], with_protection: bool = True
+        self,
+        messages: list[ModelMessage],
+        with_protection: bool = True,
+        serialized_messages: list[dict] | None = None,
     ) -> tuple[list[ModelMessage], list[ModelMessage]]:
         """Summarize messages while protecting recent messages up to PROTECTED_TOKENS.
 
@@ -1020,6 +1042,11 @@ class BaseAgent(ABC, AgentPromptMixin):
         the summarizer's context window, the batch is recursively split in
         half, each half summarized independently, and the results combined.
         This guarantees convergence for arbitrarily large histories.
+
+        Args:
+            messages: Messages to summarize
+            with_protection: Whether to protect recent messages
+            serialized_messages: Pre-serialized messages for Rust (if available)
 
         Returns:
             Tuple of (compacted_messages, summarized_source_messages)
@@ -1031,7 +1058,9 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         if with_protection:
             messages_to_summarize, protected_messages = (
-                self.split_messages_for_protected_summarization(messages)
+                self.split_messages_for_protected_summarization(
+                    messages, serialized_messages=serialized_messages
+                )
             )
         else:
             messages_to_summarize = messages[1:] if messages else []
@@ -1224,7 +1253,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         return len(tool_call_ids - tool_return_ids)
 
     def prune_interrupted_tool_calls(
-        self, messages: list[ModelMessage]
+        self, messages: list[ModelMessage], serialized_messages: list[dict] | None = None
     ) -> list[ModelMessage]:
         """
         Remove any messages that participate in mismatched tool call sequences.
@@ -1232,6 +1261,13 @@ class BaseAgent(ABC, AgentPromptMixin):
         A mismatched tool call id is one that appears in a ToolCall (model/tool request)
         without a corresponding tool return, or vice versa. We preserve original order
         and only drop messages that contain parts referencing mismatched tool_call_ids.
+
+        Args:
+            messages: List of messages to prune
+            serialized_messages: Pre-serialized messages for Rust (if available)
+
+        Returns:
+            Pruned list of messages with mismatched tool calls removed
         """
         if not messages:
             return messages
@@ -1240,8 +1276,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         # in a single pass, plus filters empty thinking parts and trailing responses
         if _rust_enabled():
             try:
-                serialized = serialize_messages_for_rust(messages)
-                result = prune_and_filter(serialized, 999_999_999)
+                serialized = serialized_messages or serialize_messages_for_rust(messages)
+                result = _core_bridge.prune_and_filter(serialized, 999_999_999)
                 return [messages[i] for i in result.surviving_indices]
             except Exception as exc:
                 logger.debug(
@@ -1276,10 +1312,13 @@ class BaseAgent(ABC, AgentPromptMixin):
         # First, prune any interrupted/mismatched tool-call conversations
         model_max = self.get_model_context_length()
 
+        # Serialize once and reuse for all Rust operations within this pipeline
+        _serialized_messages_for_rust: list[dict] | None = None
+
         # Use Rust batch processing when available (single pass for tokens + hashes)
         if _rust_enabled():
             try:
-                serialized = serialize_messages_for_rust(messages)
+                _serialized_messages_for_rust = serialize_messages_for_rust(messages)
                 # Extract actual tool definitions for accurate context overhead
                 # Use cached tool_defs (only computed once per agent lifecycle)
                 if self._cached_tool_defs is None:
@@ -1310,8 +1349,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                         else ""
                     )
                 system_prompt = self._cached_system_prompt
-                batch_result = process_messages_batch(
-                    serialized, tool_defs, mcp_defs, system_prompt
+                batch_result = _core_bridge.process_messages_batch(
+                    _serialized_messages_for_rust, tool_defs, mcp_defs, system_prompt
                 )
                 message_tokens = batch_result.total_message_tokens
                 context_overhead = batch_result.context_overhead_tokens
@@ -1362,7 +1401,10 @@ class BaseAgent(ABC, AgentPromptMixin):
             if compaction_strategy == "truncation":
                 # Use truncation instead of summarization
                 protected_tokens = get_protected_token_count()
-                filtered_messages = self.filter_huge_messages(messages)
+                # Pass pre-serialized messages to avoid re-serialization
+                filtered_messages = self.filter_huge_messages(
+                    messages, serialized_messages=_serialized_messages_for_rust
+                )
                 # Pass cached per_message_tokens when available from Rust batch processing
                 cached_tokens = getattr(self, "_rust_per_message_tokens", None)
                 result_messages = self.truncation(
@@ -1380,8 +1422,14 @@ class BaseAgent(ABC, AgentPromptMixin):
                 ]
             else:
                 # Default to summarization (safe to proceed - no pending tool calls)
+                # Pass pre-serialized messages to avoid re-serialization
+                filtered_messages = self.filter_huge_messages(
+                    messages, serialized_messages=_serialized_messages_for_rust
+                )
+                # Also pass serialized messages to summarize_messages for split_messages_for_protected_summarization
                 result_messages, summarized_messages = self.summarize_messages(
-                    self.filter_huge_messages(messages)
+                    filtered_messages,
+                    serialized_messages=_serialized_messages_for_rust,
                 )
 
             final_token_count = sum(
@@ -1403,7 +1451,9 @@ class BaseAgent(ABC, AgentPromptMixin):
         self,
         messages: list[ModelMessage],
         protected_tokens: int,
-        per_message_tokens: list[int | None] = None) -> list[ModelMessage]:
+        per_message_tokens: list[int | None] = None,
+        serialized_messages: list[dict] | None = None,
+    ) -> list[ModelMessage]:
         """
         Truncate message history to manage token usage.
 
@@ -1418,6 +1468,8 @@ class BaseAgent(ABC, AgentPromptMixin):
             per_message_tokens: Optional pre-computed per-message token counts.
                 When provided (e.g., from message_history_processor), avoids
                 re-serializing and re-computing token counts.
+            serialized_messages: Optional pre-serialized messages for Rust.
+                When provided and per_message_tokens is not available, avoids re-serializing.
 
         Returns:
             Truncated list of messages
@@ -1432,13 +1484,13 @@ class BaseAgent(ABC, AgentPromptMixin):
                     tokens = per_message_tokens
                 else:
                     # Compute from scratch when not provided
-                    serialized = serialize_messages_for_rust(messages)
-                    batch = process_messages_batch(serialized, [], [], "")
+                    serialized = serialized_messages or serialize_messages_for_rust(messages)
+                    batch = _core_bridge.process_messages_batch(serialized, [], [], "")
                     tokens = batch.per_message_tokens
                 second_has_thinking = len(messages) > 1 and any(
                     isinstance(p, ThinkingPart) for p in messages[1].parts
                 )
-                kept = rust_truncation_indices(
+                kept = _core_bridge.rust_truncation_indices(
                     tokens, protected_tokens, second_has_thinking
                 )
                 result = [messages[i] for i in kept]
