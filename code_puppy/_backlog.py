@@ -27,8 +27,11 @@ def buffer_event(phase: str, args: tuple, kwargs: dict) -> None:
 
 def drain_backlog(phase: str) -> list[tuple[tuple, dict]]:
     """Pop and return all buffered events for *phase*."""
-    buf = _backlog.pop(phase, None)
-    return list(buf) if buf else []
+    buf = _backlog.get(phase)
+    if not buf:
+        return []
+    del _backlog[phase]
+    return list(buf)
 
 
 def drain_all() -> dict[str, list[tuple[tuple, dict]]]:

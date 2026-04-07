@@ -58,6 +58,7 @@ from rich.text import Text
 from code_puppy.agents.agent_prompt_mixin import AgentPromptMixin
 from code_puppy.agents.event_stream_handler import event_stream_handler
 from code_puppy.callbacks import (
+    get_callbacks,
     on_agent_exception,
     on_agent_run_end,
     on_agent_run_start,
@@ -1840,11 +1841,12 @@ class BaseAgent(ABC, AgentPromptMixin):
         _message_history = self.get_message_history()
 
         # Hook: on_message_history_processor_start - dump the message history before processing
-        on_message_history_processor_start(
-            agent_name=self.name,
-            session_id=getattr(self, "session_id", None),
-            message_history=list(_message_history),  # Copy to avoid mutation issues
-            incoming_messages=list(messages))
+        if get_callbacks("message_history_processor_start"):
+            on_message_history_processor_start(
+                agent_name=self.name,
+                session_id=getattr(self, "session_id", None),
+                message_history=list(_message_history),  # Copy to avoid mutation issues
+                incoming_messages=list(messages))
         # Use Python hashing for dedup in the accumulator.
         # We must stay in the same hash domain as compacted_message_hashes
         # (which are accumulated over turns using Python hash()). Rust
@@ -1908,13 +1910,14 @@ class BaseAgent(ABC, AgentPromptMixin):
             self.set_message_history(final_history)
 
         # Hook: on_message_history_processor_end - dump the message history after processing
-        messages_filtered = len(messages) - messages_added + filtered_count
-        on_message_history_processor_end(
-            agent_name=self.name,
-            session_id=getattr(self, "session_id", None),
-            message_history=list(final_history),  # Copy to avoid mutation issues
-            messages_added=messages_added,
-            messages_filtered=messages_filtered)
+        if get_callbacks("message_history_processor_end"):
+            messages_filtered = len(messages) - messages_added + filtered_count
+            on_message_history_processor_end(
+                agent_name=self.name,
+                session_id=getattr(self, "session_id", None),
+                message_history=list(final_history),  # Copy to avoid mutation issues
+                messages_added=messages_added,
+                messages_filtered=messages_filtered)
 
         return final_history
 
