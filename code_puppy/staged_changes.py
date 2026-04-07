@@ -21,6 +21,7 @@ import tempfile
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
@@ -99,7 +100,7 @@ class StagedChangesSandbox:
     
     def __init__(self):
         self._lock = threading.Lock()
-        self._changes: list[StagedChange] = []
+        self._changes: OrderedDict[str, StagedChange] = OrderedDict()
         self._enabled: bool = False
         self._session_id: str = self._generate_session_id()
         self._ensure_stage_dir()
@@ -143,7 +144,7 @@ class StagedChangesSandbox:
             description=description or f"Create {os.path.basename(file_path)}",
         )
         with self._lock:
-            self._changes.append(change)
+            self._changes[change.change_id] = change
         logger.debug(f"Staged create: {file_path}")
         return change
     
@@ -158,7 +159,7 @@ class StagedChangesSandbox:
             description=description or f"Replace in {os.path.basename(file_path)}",
         )
         with self._lock:
-            self._changes.append(change)
+            self._changes[change.change_id] = change
         logger.debug(f"Staged replace: {file_path}")
         return change
     
@@ -172,7 +173,7 @@ class StagedChangesSandbox:
             description=description or f"Delete from {os.path.basename(file_path)}",
         )
         with self._lock:
-            self._changes.append(change)
+            self._changes[change.change_id] = change
         logger.debug(f"Staged delete snippet: {file_path}")
         return change
     
@@ -184,14 +185,14 @@ class StagedChangesSandbox:
         """Get all pending staged changes."""
         with self._lock:
             if include_applied:
-                return list(self._changes)
-            return [c for c in self._changes if not c.applied and not c.rejected]
+                return list(self._changes.values())
+            return [c for c in self._changes.values() if not c.applied and not c.rejected]
     
     def get_changes_for_file(self, file_path: str) -> list[StagedChange]:
         """Get all staged changes for a specific file."""
         abs_path = os.path.abspath(file_path)
         with self._lock:
-            return [c for c in self._changes if c.file_path == abs_path and not c.applied and not c.rejected]
+            return [c for c in self._changes.values() if c.file_path == abs_path and not c.applied and not c.rejected]
     
     def clear(self) -> None:
         """Clear all staged changes."""
@@ -203,11 +204,10 @@ class StagedChangesSandbox:
     def remove_change(self, change_id: str) -> bool:
         """Remove a specific change by ID."""
         with self._lock:
-            for i, change in enumerate(self._changes):
-                if change.change_id == change_id:
-                    self._changes.pop(i)
-                    logger.debug(f"Removed change {change_id}")
-                    return True
+            if change_id in self._changes:
+                del self._changes[change_id]
+                logger.debug(f"Removed change {change_id}")
+                return True
         return False
     
     def count(self) -> int:
@@ -339,7 +339,7 @@ class StagedChangesSandbox:
             data = {
                 "session_id": self._session_id,
                 "enabled": self._enabled,
-                "changes": [c.to_dict() for c in self._changes],
+                "changes": [c.to_dict() for c in self._changes.values()],
                 "saved_at": time.time(),
             }
         
@@ -364,7 +364,8 @@ class StagedChangesSandbox:
             with self._lock:
                 self._session_id = data.get("session_id", load_id)
                 self._enabled = data.get("enabled", False)
-                self._changes = [StagedChange.from_dict(c) for c in data.get("changes", [])]
+                loaded_changes = [StagedChange.from_dict(c) for c in data.get("changes", [])]
+                self._changes = OrderedDict((c.change_id, c) for c in loaded_changes)
             
             logger.info(f"Loaded {len(self._changes)} staged changes from {load_path}")
             return True
