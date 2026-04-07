@@ -23,28 +23,54 @@ from code_puppy.tools.subagent_context import is_subagent
 
 logger = logging.getLogger(__name__)
 
+# Module-level buffer for batching stream events
+_pending_stream_events: list = []
+_STREAM_FLUSH_INTERVAL = 50
+
 
 def _fire_stream_event(event_type: str, event_data: Any) -> None:
-    """Fire a stream event callback asynchronously (non-blocking).
+    """Fire a stream event callback asynchronously (non-blocking) with batching.
+
+    Events are batched to reduce task creation overhead. The batch is flushed
+    when 'part_end' event is received or when batch size reaches the threshold.
 
     Args:
         event_type: Type of the event (e.g., 'part_start', 'part_delta', 'part_end')
         event_data: Data associated with the event
     """
+    global _pending_stream_events
+
     try:
         from code_puppy import callbacks
         from code_puppy.messaging import get_session_context
 
         agent_session_id = get_session_context()
+        _pending_stream_events.append((event_type, event_data, agent_session_id))
 
-        # Use create_task to fire callback without blocking
-        asyncio.create_task(
-            callbacks.on_stream_event(event_type, event_data, agent_session_id)
-        )
+        # Flush on part_end or when batch threshold reached
+        if event_type == "part_end" or len(_pending_stream_events) >= _STREAM_FLUSH_INTERVAL:
+            batch = _pending_stream_events.copy()
+            _pending_stream_events.clear()
+            asyncio.create_task(_flush_stream_events(batch))
     except ImportError:
         logger.debug("callbacks or messaging module not available for stream event")
     except Exception as e:
         logger.debug(f"Error firing stream event callback: {e}")
+
+
+async def _flush_stream_events(batch: list) -> None:
+    """Flush a batch of stream events to the callbacks.
+
+    Args:
+        batch: List of (event_type, event_data, session_id) tuples to process.
+    """
+    from code_puppy import callbacks
+
+    for event_type, event_data, session_id in batch:
+        try:
+            await callbacks.on_stream_event(event_type, event_data, session_id)
+        except Exception as e:
+            logger.debug(f"Error flushing stream event: {e}")
 
 
 # Module-level console for streaming output
