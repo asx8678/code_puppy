@@ -134,7 +134,7 @@ class TestAutoSaveSessionFunctionality:
         mock_get_auto_save.assert_called_once()
 
     @patch("code_puppy.messaging.emit_info")
-    @patch("code_puppy.config.save_session")
+    @patch("code_puppy.config.save_session_async")
     @patch("code_puppy.config.get_current_autosave_session_name")
     @patch("code_puppy.config.datetime.datetime")
     @patch("code_puppy.config.get_auto_save_session")
@@ -145,7 +145,7 @@ class TestAutoSaveSessionFunctionality:
         mock_get_auto_save,
         mock_datetime,
         mock_get_session_name,
-        mock_save_session,
+        mock_save_session_async,
         mock_emit_info,
         mock_cleanup,
         mock_config_paths,
@@ -164,25 +164,15 @@ class TestAutoSaveSessionFunctionality:
         fake_now.isoformat.return_value = "2024-01-01T01:01:01"
         mock_datetime.now.return_value = fake_now
 
-        metadata = SessionMetadata(
-            session_name="auto_session_20240101_010101",
-            timestamp="2024-01-01T01:01:01",
-            message_count=len(history),
-            total_tokens=6,
-            pickle_path=Path(mock_config_paths.autosave_dir)
-            / "auto_session_20240101_010101.pkl",
-            metadata_path=Path(mock_config_paths.autosave_dir)
-            / "auto_session_20240101_010101_meta.json",
-        )
-        mock_save_session.return_value = metadata
-
         result = cp_config.auto_save_session_if_enabled()
 
         assert result is True
-        mock_save_session.assert_called_once()
-        kwargs = mock_save_session.call_args.kwargs
+        mock_save_session_async.assert_called_once()
+        kwargs = mock_save_session_async.call_args.kwargs
         assert kwargs["base_dir"] == Path(mock_config_paths.autosave_dir)
         assert kwargs["session_name"] == "auto_session_20240101_010101"
+        assert kwargs["auto_saved"] is True
+        assert kwargs["history"] == history
         mock_cleanup.assert_called_once()
         mock_emit_info.assert_called_once()
 

@@ -909,15 +909,16 @@ class TestAutosaveSession:
         mock_agent.get_message_history.return_value = [
             {"role": "user", "content": "hi"}
         ]
-        mock_metadata = MagicMock()
-        mock_metadata.message_count = 1
-        mock_metadata.total_tokens = 100
+        mock_agent.estimate_tokens_for_message.return_value = 100
         with patch(
             "code_puppy.agents.agent_manager.get_current_agent", return_value=mock_agent
         ):
-            with patch("code_puppy.config.save_session", return_value=mock_metadata):
-                with patch("code_puppy.messaging.emit_info"):
-                    assert cp_config.auto_save_session_if_enabled() is True
+            with patch("code_puppy.config.save_session_async") as mock_save_async:
+                with patch("code_puppy.messaging.emit_info") as mock_emit_info:
+                    result = cp_config.auto_save_session_if_enabled()
+                    assert result is True
+                    mock_save_async.assert_called_once()
+                    mock_emit_info.assert_called_once()
 
     def test_finalize_autosave_session(self):
         with patch.object(cp_config, "auto_save_session_if_enabled"):

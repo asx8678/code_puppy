@@ -6,7 +6,7 @@ import pathlib
 import time
 from functools import lru_cache
 
-from code_puppy.session_storage import save_session
+from code_puppy.session_storage import save_session, save_session_async
 
 
 # --- Config caching (eliminates repeated disk reads) ---
@@ -1622,7 +1622,11 @@ def set_current_autosave_from_session_name(session_name: str) -> str:
 
 
 def auto_save_session_if_enabled() -> bool:
-    """Automatically save the current session if auto_save_session is enabled."""
+    """Automatically save the current session if auto_save_session is enabled.
+
+    This function is non-blocking - the actual save operation happens in a
+    background thread to avoid blocking the main execution flow during file I/O.
+    """
     if not get_auto_save_session():
         return False
 
@@ -1641,17 +1645,23 @@ def auto_save_session_if_enabled() -> bool:
         session_name = get_current_autosave_session_name()
         autosave_dir = pathlib.Path(AUTOSAVE_DIR)
 
-        metadata = save_session(
+        # Submit to background thread - non-blocking
+        save_session_async(
             history=history,
             session_name=session_name,
             base_dir=autosave_dir,
             timestamp=now.isoformat(),
             token_estimator=current_agent.estimate_tokens_for_message,
             auto_saved=True,
-            compacted_hashes=list(current_agent.get_compacted_message_hashes()))
+            compacted_hashes=list(current_agent.get_compacted_message_hashes())
+        )
 
+        # Estimate tokens for the info message (quick operation)
+        total_tokens = sum(
+            current_agent.estimate_tokens_for_message(msg) for msg in history
+        )
         emit_info(
-            f"🐾 Auto-saved session: {metadata.message_count} messages ({metadata.total_tokens} tokens)"
+            f"🐾 Auto-saved session: {len(history)} messages ({total_tokens} tokens)"
         )
 
         return True

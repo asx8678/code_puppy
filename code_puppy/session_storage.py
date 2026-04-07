@@ -11,6 +11,7 @@ import hmac
 import json
 import os
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 # SECURITY FIX #zvx9: Pickle has been completely removed to prevent RCE attacks.
 # Session files now use only secure msgpack serialization with HMAC integrity.
@@ -21,6 +22,46 @@ from pathlib import Path
 from typing import Any, Callable
 
 import msgpack
+
+# ----- ThreadPoolExecutor for async autosave -----
+# Single-threaded executor for background session saves to avoid blocking the main thread
+_autosave_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="autosave")
+
+
+def save_session_async(
+    *,
+    history: SessionHistory,
+    session_name: str,
+    base_dir: Path,
+    timestamp: str,
+    token_estimator: TokenEstimator,
+    auto_saved: bool = False,
+    compacted_hashes: list | None = None,
+    precomputed_total: int | None = None,
+) -> None:
+    """Non-blocking version of save_session that submits to thread pool.
+
+    This function immediately returns and performs the actual save operation
+    in a background thread, preventing file I/O from blocking the main thread.
+    Errors are logged but not raised to avoid disrupting the main flow.
+    """
+    def _do_save():
+        try:
+            save_session(
+                history=history,
+                session_name=session_name,
+                base_dir=base_dir,
+                timestamp=timestamp,
+                token_estimator=token_estimator,
+                auto_saved=auto_saved,
+                compacted_hashes=compacted_hashes,
+                precomputed_total=precomputed_total,
+            )
+        except Exception as exc:
+            logger.warning("Async session save failed: %s", exc)
+
+    _autosave_executor.submit(_do_save)
+
 
 # ----- msgpack helpers -----
 

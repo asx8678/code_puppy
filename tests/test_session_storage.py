@@ -17,6 +17,7 @@ from code_puppy.session_storage import (
     load_session,
     load_session_with_hashes,
     save_session,
+    save_session_async,
 )
 
 
@@ -331,3 +332,80 @@ def test_load_session_legacy_pickle_list_format(tmp_path: Path):
         loaded = load_session("plain_list_session", tmp_path)
 
     assert loaded == history
+
+
+# ---------------------------------------------------------------------------
+# Async save tests
+# ---------------------------------------------------------------------------
+
+
+def test_save_session_async_submits_to_background_thread(
+    tmp_path: Path, history: List[str], token_estimator
+):
+    """Verify that save_session_async submits to thread pool without blocking."""
+    import threading
+    import time
+
+    # Use the real implementation - just verify non-blocking behavior
+    main_thread = threading.current_thread().name
+
+    # Call async version - should return immediately (well before any I/O completes)
+    start_time = time.time()
+    save_session_async(
+        history=history,
+        session_name="async_session",
+        base_dir=tmp_path,
+        timestamp="2024-01-01T00:00:00",
+        token_estimator=token_estimator,
+    )
+    elapsed = time.time() - start_time
+
+    # Should return immediately (not wait for actual file I/O)
+    assert elapsed < 0.1, f"save_session_async blocked for {elapsed}s, expected non-blocking"
+
+    # Wait for background thread to complete (with timeout)
+    max_wait = 2.0
+    poll_interval = 0.01
+    waited = 0.0
+    session_file = tmp_path / "async_session.pkl"
+
+    while waited < max_wait:
+        if session_file.exists():
+            break
+        time.sleep(poll_interval)
+        waited += poll_interval
+
+    # Verify the session was eventually saved
+    assert session_file.exists(), f"Session file not created after {max_wait}s"
+
+    # Verify the data is correct
+    loaded = load_session("async_session", tmp_path)
+    assert loaded == history
+
+
+def test_save_session_async_handles_errors_gracefully(
+    tmp_path: Path, history: List[str], token_estimator
+):
+    """Verify that save_session_async logs errors but doesn't raise to caller."""
+    import code_puppy.session_storage as session_module
+
+    original_save = session_module.save_session
+
+    def failing_save(*args, **kwargs):
+        raise IOError("Simulated I/O error")
+
+    session_module.save_session = failing_save
+
+    try:
+        # Should not raise - just log and return
+        save_session_async(
+            history=history,
+            session_name="failing_session",
+            base_dir=tmp_path,
+            timestamp="2024-01-01T00:00:00",
+            token_estimator=token_estimator,
+        )
+        # If we get here, the function didn't raise in the main thread
+        # (errors are logged in background thread)
+    finally:
+        session_module.save_session = original_save
