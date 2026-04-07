@@ -2017,17 +2017,21 @@ class BaseAgent(ABC, AgentPromptMixin):
                     filtered_count += 1
                     continue
             # For multi-part messages, strip empty ThinkingParts but keep the message
-            elif any(isinstance(p, ThinkingPart) and not p.content for p in msg.parts):
-                msg = dataclasses.replace(
-                    msg,
-                    parts=[
-                        p
-                        for p in msg.parts
-                        if not (isinstance(p, ThinkingPart) and not p.content)
-                    ])
-                if not msg.parts:
-                    filtered_count += 1
-                    continue
+            else:
+                # Single-pass filter: build filtered list and track if any changes in one walk
+                new_parts = []
+                found_empty_thinking = False
+                for p in msg.parts:
+                    if isinstance(p, ThinkingPart) and not p.content:
+                        found_empty_thinking = True
+                    else:
+                        new_parts.append(p)
+                
+                if found_empty_thinking:
+                    if not new_parts:
+                        filtered_count += 1
+                        continue
+                    msg = dataclasses.replace(msg, parts=new_parts)
             result_messages_filtered_empty_thinking.append(msg)
         self.set_message_history(result_messages_filtered_empty_thinking)
 
