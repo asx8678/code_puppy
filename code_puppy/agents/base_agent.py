@@ -132,6 +132,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         "pydantic_agent",
         "_mcp_servers",
         "_rust_per_message_tokens",
+        "_resolved_model_components_cache",
     )
 
     def __init__(self):
@@ -164,6 +165,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         self._cached_context_overhead: int | None = None
         # Per-instance cache for get_model_name() to avoid repeated config lookups
         self._model_name_cache: str | None = None
+        # Cache for resolved model components in _create_agent_with_output_type
+        self._resolved_model_components_cache: dict[str, Any] | None = None
 
 
 
@@ -1176,12 +1179,18 @@ class BaseAgent(ABC, AgentPromptMixin):
     ) -> tuple[set[str], set[str]]:
         """Collect tool_call_ids and tool_return_ids with per-list caching.
 
-        Caches result keyed by (id(messages), len(messages)) so repeated
+        Caches result keyed by content-based hash of messages so repeated
         calls within a single message_history_processor invocation reuse
-        the previous scan.  The cache is invalidated automatically when
-        a different list or length is seen.
+        the previous scan. The cache is invalidated automatically when
+        a different list or content is seen.
         """
-        cache_key = (id(messages), len(messages))
+        # Compute content-based cache key using message hashes
+        import hashlib
+        hasher = hashlib.sha256()
+        hasher.update(str(len(messages)).encode())
+        for msg in messages:
+            hasher.update(self.hash_message(msg).encode())
+        cache_key = hasher.hexdigest()[:32]  # 128 bits is sufficient
         if self._tool_ids_cache is not None and self._tool_ids_cache[0] == cache_key:
             return self._tool_ids_cache[1]
         result = self._collect_tool_call_ids_uncached(messages)
@@ -1776,6 +1785,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         self._puppy_rules = None
         # Invalidate context overhead cache since tools/prompt may change
         self._cached_context_overhead = None
+        # Invalidate resolved model components cache since model/tools may change
+        self._resolved_model_components_cache = None
 
         # Build agent with freshly-loaded MCP servers so we can inspect its
         # registered tool names for conflict filtering.
@@ -1885,18 +1896,36 @@ class BaseAgent(ABC, AgentPromptMixin):
         Uses cached MCP servers (``self._mcp_servers``) so the set of tools
         is consistent with the currently loaded code-generation agent.
 
+        Resolved model components are cached per output_type to avoid
+        re-resolution on repeated calls.
+
         Args:
             output_type: The Pydantic model or type for structured output.
 
         Returns:
             A configured PydanticAgent (or DBOSAgent wrapper) with the custom output_type.
         """
-        # Reuse cached MCP servers from the last reload.
-        mcp_servers = getattr(self, "_mcp_servers", []) or []
-        p_agent, resolved_model_name, _, _model, _instructions, _model_settings = self._build_agent(
-            output_type=output_type,
-            mcp_servers=mcp_servers,
-        )
+        # Initialize cache dict if needed
+        if self._resolved_model_components_cache is None:
+            self._resolved_model_components_cache = {}
+
+        # Check cache for resolved components keyed by output_type
+        cache_key = output_type if isinstance(output_type, type) else str(output_type)
+        if cache_key in self._resolved_model_components_cache:
+            cached = self._resolved_model_components_cache[cache_key]
+            p_agent = cached["p_agent"]
+        else:
+            # Reuse cached MCP servers from the last reload.
+            mcp_servers = getattr(self, "_mcp_servers", []) or []
+            p_agent, resolved_model_name, _, _model, _instructions, _model_settings = self._build_agent(
+                output_type=output_type,
+                mcp_servers=mcp_servers,
+            )
+            # Cache the resolved components
+            self._resolved_model_components_cache[cache_key] = {
+                "p_agent": p_agent,
+                "resolved_model_name": resolved_model_name,
+            }
 
         global _reload_count
         _reload_count += 1
