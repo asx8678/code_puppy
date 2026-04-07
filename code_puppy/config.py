@@ -425,14 +425,13 @@ def set_config_value(key: str, value: str):
     """
     Sets a config value in the persistent config file.
     """
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
+    config = _get_config()  # Use cached version
     if DEFAULT_SECTION not in config:
         config[DEFAULT_SECTION] = {}
     config[DEFAULT_SECTION][key] = value
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         config.write(f)
-    _invalidate_config()
+    _invalidate_config()  # Invalidate cache after write
 
 
 # Alias for API compatibility
@@ -443,13 +442,12 @@ def set_value(key: str, value: str) -> None:
 
 def reset_value(key: str) -> None:
     """Remove a key from the config file, resetting it to default."""
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
+    config = _get_config()  # Use cached version
     if DEFAULT_SECTION in config and key in config[DEFAULT_SECTION]:
         del config[DEFAULT_SECTION][key]
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             config.write(f)
-    _invalidate_config()
+    _invalidate_config()  # Invalidate cache after write
 
 
 # --- MODEL STICKY EXTENSION STARTS HERE ---
