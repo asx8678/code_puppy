@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import os
+import secrets
 import tempfile
 import threading
 import time
@@ -176,8 +177,8 @@ class StagedChangesSandbox:
         return change
     
     def _generate_change_id(self) -> str:
-        """Generate unique change ID."""
-        return hashlib.sha256(f"{time.time()}{len(self._changes)}".encode()).hexdigest()[:12]
+        """Generate unique change ID using cryptographically secure random."""
+        return secrets.token_hex(16)  # 32 hex chars, thread-safe and collision-resistant
     
     def get_staged_changes(self, include_applied: bool = False) -> list[StagedChange]:
         """Get all pending staged changes."""
