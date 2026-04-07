@@ -12,6 +12,16 @@ This repo uses Lefthook to run fast, low-drama git hooks.
 - pre-push
   - pytest (via `uv run` if available, fallback to `pytest`)
 
+## Regression Gate
+
+For comprehensive pre-push validation, use the [Regression Gate](./testing.md#regression-gate) which compares test results against a baseline:
+
+```bash
+python scripts/regression_gate.py
+```
+
+See [testing.md](./testing.md) for full details.
+
 ## Smart fallbacks
 
 - If `isort` isn’t available, we fall back to Ruff’s import sorter: `ruff check --select I --fix`.
