@@ -29,7 +29,7 @@ Extract syntax highlighting captures from source code.
 - `language` (string, required): Programming language identifier
 - `options` (dict, optional): Additional options (reserved for future use)
 
-**Returns:** Dict with captures (list of {start_byte, end_byte, capture_name}), 
+**Returns:** Dict with captures (list of {start_byte, end_byte, capture_name}),
 extraction_time_ms, success, language, errors
 
 ### get_folds
@@ -105,15 +105,16 @@ logger = logging.getLogger(__name__)
 
 def _on_startup():
     """Initialize the turbo_parse plugin on startup.
-    
+
     Attempts to import the turbo_parse Rust module and logs availability status.
     Gracefully falls back to pure Python if the Rust module is not available.
     """
     if is_turbo_parse_available():
         try:
             import turbo_parse
+
             version = getattr(turbo_parse, "__version__", "unknown")
-            
+
             # Try to call health_check if available
             try:
                 health = turbo_parse.health_check()
@@ -141,10 +142,10 @@ def _on_startup():
 
 def _normalize_language(language: str) -> str:
     """Normalize language identifier to canonical form.
-    
+
     Args:
         language: Raw language identifier
-        
+
     Returns:
         Normalized language name
     """
@@ -164,7 +165,7 @@ def _normalize_language(language: str) -> str:
 
 def _register_parse_code_tool(agent):
     """Register the parse_code tool with an agent.
-    
+
     Tool JSON Schema:
     {
         "name": "parse_code",
@@ -203,7 +204,7 @@ def _register_parse_code_tool(agent):
         }
     }
     """
-    
+
     @agent.tool
     async def parse_code(
         context: RunContext,
@@ -212,15 +213,15 @@ def _register_parse_code_tool(agent):
         options: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """Parse source code and extract AST, symbols, and diagnostics.
-        
+
         Use this tool when you need to:
         - Parse code to understand its structure
         - Extract function/class definitions and their locations
         - Identify syntax errors or warnings
         - Get an AST representation for analysis
-        
+
         Supported languages: python, rust, javascript, typescript, tsx, elixir
-        
+
         Args:
             source: The source code string to parse
             language: Programming language identifier (e.g., "python", "rust", "js")
@@ -228,7 +229,7 @@ def _register_parse_code_tool(agent):
                 - extract_symbols: bool - Extract symbol outline (default: False)
                 - extract_diagnostics: bool - Extract syntax diagnostics (default: False)
                 - include_tree: bool - Include full AST tree (default: True)
-                
+
         Returns:
             Dict with:
             - success: bool - Whether parsing succeeded
@@ -243,10 +244,10 @@ def _register_parse_code_tool(agent):
         extract_symbols = options.get("extract_symbols", False)
         extract_diagnostics = options.get("extract_diagnostics", False)
         include_tree = options.get("include_tree", True)
-        
+
         start_time = time.time()
         normalized_lang = _normalize_language(language)
-        
+
         # Check if language is supported
         if TURBO_PARSE_AVAILABLE and not is_language_supported(normalized_lang):
             return {
@@ -256,27 +257,31 @@ def _register_parse_code_tool(agent):
                 "diagnostics": [],
                 "parse_time_ms": (time.time() - start_time) * 1000,
                 "language": normalized_lang,
-                "errors": [{
-                    "message": f"Language '{language}' is not supported",
-                    "severity": "error",
-                }],
+                "errors": [
+                    {
+                        "message": f"Language '{language}' is not supported",
+                        "severity": "error",
+                    }
+                ],
             }
-        
+
         try:
             # Parse the source code
             parse_result = _parse_source(source, normalized_lang)
-            
+
             # Build the response
             result = {
                 "success": parse_result.get("success", False),
                 "tree": parse_result.get("tree") if include_tree else None,
                 "symbols": [],
                 "diagnostics": [],
-                "parse_time_ms": parse_result.get("parse_time_ms", (time.time() - start_time) * 1000),
+                "parse_time_ms": parse_result.get(
+                    "parse_time_ms", (time.time() - start_time) * 1000
+                ),
                 "language": parse_result.get("language", normalized_lang),
                 "errors": parse_result.get("errors", []),
             }
-            
+
             # Extract symbols if requested
             if extract_symbols and TURBO_PARSE_AVAILABLE:
                 try:
@@ -285,7 +290,7 @@ def _register_parse_code_tool(agent):
                 except Exception as e:
                     logger.warning(f"Symbol extraction failed: {e}")
                     result["symbols"] = []
-            
+
             # Extract diagnostics if requested
             if extract_diagnostics and TURBO_PARSE_AVAILABLE:
                 try:
@@ -294,9 +299,9 @@ def _register_parse_code_tool(agent):
                 except Exception as e:
                     logger.warning(f"Diagnostic extraction failed: {e}")
                     result["diagnostics"] = []
-            
+
             return result
-            
+
         except Exception as e:
             logger.exception("Parse code tool failed")
             return {
@@ -306,19 +311,21 @@ def _register_parse_code_tool(agent):
                 "diagnostics": [],
                 "parse_time_ms": (time.time() - start_time) * 1000,
                 "language": normalized_lang,
-                "errors": [{
-                    "message": f"Parsing failed: {str(e)}",
-                    "severity": "error",
-                }],
+                "errors": [
+                    {
+                        "message": f"Parsing failed: {str(e)}",
+                        "severity": "error",
+                    }
+                ],
             }
 
 
 def _register_get_highlights_tool(agent):
     """Register the get_highlights tool with an agent.
-    
+
     Tool returns syntax highlighting captures with byte positions.
     """
-    
+
     @agent.tool
     async def get_highlights(
         context: RunContext,
@@ -327,19 +334,19 @@ def _register_get_highlights_tool(agent):
         options: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """Extract syntax highlighting captures from source code.
-        
+
         Use this tool when you need to:
         - Identify syntax tokens for highlighting
         - Get byte positions of keywords, strings, comments, etc.
         - Analyze code structure for visual formatting
-        
+
         Supported languages: python, rust, javascript, typescript, tsx, elixir
-        
+
         Args:
             source: The source code string to analyze
             language: Programming language identifier (e.g., "python", "rust", "js")
             options: Optional dict (reserved for future use)
-                
+
         Returns:
             Dict with:
             - success: bool - Whether extraction succeeded
@@ -350,7 +357,7 @@ def _register_get_highlights_tool(agent):
         """
         start_time = time.time()
         normalized_lang = _normalize_language(language)
-        
+
         if TURBO_PARSE_AVAILABLE and not is_language_supported(normalized_lang):
             return {
                 "success": False,
@@ -359,13 +366,15 @@ def _register_get_highlights_tool(agent):
                 "language": normalized_lang,
                 "errors": [f"Language '{language}' is not supported"],
             }
-        
+
         try:
             result = _get_highlights(source, normalized_lang)
             return {
                 "success": result.get("success", False),
                 "captures": result.get("captures", []),
-                "extraction_time_ms": result.get("extraction_time_ms", (time.time() - start_time) * 1000),
+                "extraction_time_ms": result.get(
+                    "extraction_time_ms", (time.time() - start_time) * 1000
+                ),
                 "language": result.get("language", normalized_lang),
                 "errors": result.get("errors", []),
             }
@@ -382,10 +391,10 @@ def _register_get_highlights_tool(agent):
 
 def _register_get_folds_tool(agent):
     """Register the get_folds tool with an agent.
-    
+
     Tool returns code fold ranges with line positions.
     """
-    
+
     @agent.tool
     async def get_folds(
         context: RunContext,
@@ -394,19 +403,19 @@ def _register_get_folds_tool(agent):
         options: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """Extract code fold ranges from source code.
-        
+
         Use this tool when you need to:
         - Find foldable regions (functions, classes, conditionals)
         - Get line ranges for code folding
         - Understand code structure for collapsing/expanding
-        
+
         Supported languages: python, rust, javascript, typescript, tsx, elixir
-        
+
         Args:
             source: The source code string to analyze
             language: Programming language identifier (e.g., "python", "rust", "js")
             options: Optional dict (reserved for future use)
-                
+
         Returns:
             Dict with:
             - success: bool - Whether extraction succeeded
@@ -417,7 +426,7 @@ def _register_get_folds_tool(agent):
         """
         start_time = time.time()
         normalized_lang = _normalize_language(language)
-        
+
         if TURBO_PARSE_AVAILABLE and not is_language_supported(normalized_lang):
             return {
                 "success": False,
@@ -426,13 +435,15 @@ def _register_get_folds_tool(agent):
                 "language": normalized_lang,
                 "errors": [f"Language '{language}' is not supported"],
             }
-        
+
         try:
             result = _get_folds(source, normalized_lang)
             return {
                 "success": result.get("success", False),
                 "folds": result.get("folds", []),
-                "extraction_time_ms": result.get("extraction_time_ms", (time.time() - start_time) * 1000),
+                "extraction_time_ms": result.get(
+                    "extraction_time_ms", (time.time() - start_time) * 1000
+                ),
                 "language": result.get("language", normalized_lang),
                 "errors": result.get("errors", []),
             }
@@ -449,37 +460,40 @@ def _register_get_folds_tool(agent):
 
 def _build_symbol_hierarchy(symbols: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Build parent-child hierarchy from flat symbol list.
-    
+
     Uses byte position ranges to determine nesting.
-    
+
     Args:
         symbols: Flat list of symbols from extract_symbols
-        
+
     Returns:
         Hierarchical list with 'children' field for nested symbols
     """
     if not symbols:
         return []
-    
+
     # Sort by start position, then by length (longer/outer first)
     sorted_symbols = sorted(
         symbols,
-        key=lambda s: (s.get("start_line", 0), s.get("start_col", 0), 
-                      -(s.get("end_line", 0) - s.get("start_line", 0)))
+        key=lambda s: (
+            s.get("start_line", 0),
+            s.get("start_col", 0),
+            -(s.get("end_line", 0) - s.get("start_line", 0)),
+        ),
     )
-    
+
     # Build hierarchy
     root_items = []
     stack = []
-    
+
     for symbol in sorted_symbols:
         symbol_with_children = {**symbol, "children": []}
-        
+
         # Find parent by checking containment
         while stack:
             parent = stack[-1]
             # Check if this symbol is contained within the parent
-            if (_is_symbol_contained(symbol, parent)):
+            if _is_symbol_contained(symbol, parent):
                 parent["children"].append(symbol_with_children)
                 break
             else:
@@ -487,20 +501,20 @@ def _build_symbol_hierarchy(symbols: List[Dict[str, Any]]) -> List[Dict[str, Any
         else:
             # No parent found, add to root
             root_items.append(symbol_with_children)
-        
+
         # Push this symbol to stack
         stack.append(symbol_with_children)
-    
+
     return root_items
 
 
 def _is_symbol_contained(child: Dict[str, Any], parent: Dict[str, Any]) -> bool:
     """Check if child symbol is contained within parent symbol.
-    
+
     Args:
         child: Child symbol dict
         parent: Parent symbol dict
-        
+
     Returns:
         True if child is contained in parent
     """
@@ -509,24 +523,24 @@ def _is_symbol_contained(child: Dict[str, Any], parent: Dict[str, Any]) -> bool:
     child_end = child.get("end_line", 0)
     parent_start = parent.get("start_line", 0)
     parent_end = parent.get("end_line", 0)
-    
+
     # Strict containment: child starts after parent starts and ends before parent ends
     if child_start > parent_start and child_end <= parent_end:
         return True
-    
+
     # Same start but child ends before parent (e.g., method in class starting at same line)
     if child_start == parent_start and child_end < parent_end:
         return True
-    
+
     return False
 
 
 def _register_get_outline_tool(agent):
     """Register the get_outline tool with an agent.
-    
+
     Tool returns hierarchical symbol outline with parent-child relationships.
     """
-    
+
     @agent.tool
     async def get_outline(
         context: RunContext,
@@ -535,20 +549,20 @@ def _register_get_outline_tool(agent):
         options: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """Extract hierarchical symbol outline from source code.
-        
+
         Use this tool when you need to:
         - Get structured outline of code (functions, classes, methods)
         - Understand parent-child relationships in code
         - Navigate code structure hierarchically
-        
+
         Supported languages: python, rust, javascript, typescript, tsx, elixir
-        
+
         Args:
             source: The source code string to analyze
             language: Programming language identifier (e.g., "python", "rust", "js")
             options: Optional dict with:
                 - max_depth: int - Maximum depth for nested symbols (default: unlimited)
-                
+
         Returns:
             Dict with:
             - success: bool - Whether extraction succeeded
@@ -559,10 +573,10 @@ def _register_get_outline_tool(agent):
         """
         options = options or {}
         max_depth = options.get("max_depth", None)
-        
+
         start_time = time.time()
         normalized_lang = _normalize_language(language)
-        
+
         if TURBO_PARSE_AVAILABLE and not is_language_supported(normalized_lang):
             return {
                 "success": False,
@@ -571,23 +585,25 @@ def _register_get_outline_tool(agent):
                 "language": normalized_lang,
                 "errors": [f"Language '{language}' is not supported"],
             }
-        
+
         try:
             # Get flat symbols first
             symbols_result = _extract_symbols(source, normalized_lang)
             flat_symbols = symbols_result.get("symbols", [])
-            
+
             # Build hierarchy
             outline = _build_symbol_hierarchy(flat_symbols)
-            
+
             # Apply max_depth if specified
             if max_depth is not None:
                 outline = _limit_depth(outline, max_depth)
-            
+
             return {
                 "success": True,
                 "outline": outline,
-                "extraction_time_ms": symbols_result.get("extraction_time_ms", (time.time() - start_time) * 1000),
+                "extraction_time_ms": symbols_result.get(
+                    "extraction_time_ms", (time.time() - start_time) * 1000
+                ),
                 "language": symbols_result.get("language", normalized_lang),
                 "errors": symbols_result.get("errors", []),
             }
@@ -602,14 +618,16 @@ def _register_get_outline_tool(agent):
             }
 
 
-def _limit_depth(items: List[Dict[str, Any]], max_depth: int, current_depth: int = 1) -> List[Dict[str, Any]]:
+def _limit_depth(
+    items: List[Dict[str, Any]], max_depth: int, current_depth: int = 1
+) -> List[Dict[str, Any]]:
     """Limit the depth of hierarchical items.
-    
+
     Args:
         items: List of hierarchical items with 'children' field
         max_depth: Maximum depth to include
         current_depth: Current depth level
-        
+
     Returns:
         List with children limited to max_depth
     """
@@ -618,21 +636,23 @@ def _limit_depth(items: List[Dict[str, Any]], max_depth: int, current_depth: int
         for item in items:
             item["children"] = []
         return items
-    
+
     # Recursively limit children
     for item in items:
         if item.get("children"):
-            item["children"] = _limit_depth(item["children"], max_depth, current_depth + 1)
-    
+            item["children"] = _limit_depth(
+                item["children"], max_depth, current_depth + 1
+            )
+
     return items
 
 
 def _register_tools() -> List[Dict[str, Any]]:
     """Register turbo_parse tools.
-    
+
     Returns a list of tool definitions for the register_tools callback.
     Registers the parse_code, get_highlights, get_folds, and get_outline tools.
-    
+
     Returns:
         List of tool definitions with name and register_func.
     """
@@ -660,9 +680,10 @@ def _register_tools() -> List[Dict[str, Any]]:
 # /parse Slash Command Implementation
 # ============================================================================
 
+
 def _parse_help() -> List[tuple[str, str]]:
     """Return help entries for the /parse command.
-    
+
     Returns:
         List of (command, description) tuples for the /help menu.
     """
@@ -676,10 +697,10 @@ def _parse_help() -> List[tuple[str, str]]:
 
 def _get_language_from_extension(file_path: str) -> Optional[str]:
     """Infer language from file extension.
-    
+
     Args:
         file_path: Path to the file
-        
+
     Returns:
         Language identifier or None if unknown
     """
@@ -700,21 +721,23 @@ def _get_language_from_extension(file_path: str) -> Optional[str]:
 
 def _format_status_output() -> str:
     """Format the status output for the /parse status command.
-    
+
     Returns:
         Formatted status string
     """
     lines = ["🔍 Turbo Parse Status", "=" * 40]
-    
+
     # Health check
     try:
         health = health_check()
         lines.append(f"Available: {'✅ Yes' if health.get('available') else '❌ No'}")
         lines.append(f"Version: {health.get('version', 'N/A')}")
-        lines.append(f"Cache Available: {'✅ Yes' if health.get('cache_available') else '❌ No'}")
-        
+        lines.append(
+            f"Cache Available: {'✅ Yes' if health.get('cache_available') else '❌ No'}"
+        )
+
         # Supported languages
-        langs = health.get('languages', [])
+        langs = health.get("languages", [])
         if langs:
             lines.append(f"\nSupported Languages ({len(langs)}):")
             for lang in langs:
@@ -723,30 +746,32 @@ def _format_status_output() -> str:
             lines.append("\nSupported Languages: None (module unavailable)")
     except Exception as e:
         lines.append(f"Health Check Error: {e}")
-    
+
     # Stats
     try:
         stats_data = stats()
         lines.append("\n📊 Statistics:")
         lines.append(f"  Total Parses: {stats_data.get('total_parses', 0)}")
-        lines.append(f"  Avg Parse Time: {stats_data.get('average_parse_time_ms', 0.0):.2f}ms")
+        lines.append(
+            f"  Avg Parse Time: {stats_data.get('average_parse_time_ms', 0.0):.2f}ms"
+        )
         lines.append(f"  Cache Hits: {stats_data.get('cache_hits', 0)}")
         lines.append(f"  Cache Misses: {stats_data.get('cache_misses', 0)}")
-        hit_ratio = stats_data.get('cache_hit_ratio', 0.0)
+        hit_ratio = stats_data.get("cache_hit_ratio", 0.0)
         lines.append(f"  Cache Hit Ratio: {hit_ratio:.1%}")
     except Exception as e:
         lines.append(f"\nStats Error: {e}")
-    
+
     return "\n".join(lines)
 
 
 def _format_parse_result(result: dict, file_path: str) -> str:
     """Format a single parse result for display.
-    
+
     Args:
         result: Parse result dictionary
         file_path: Path to the file that was parsed
-        
+
     Returns:
         Formatted result string
     """
@@ -754,99 +779,115 @@ def _format_parse_result(result: dict, file_path: str) -> str:
     language = result.get("language", "unknown")
     parse_time = result.get("parse_time_ms", 0.0)
     errors = result.get("errors", [])
-    
+
     status = "✅" if success else "❌"
     lines = [f"{status} {file_path} ({language}) - {parse_time:.2f}ms"]
-    
+
     if errors:
         for err in errors:
             lines.append(f"  ⚠️  {err.get('message', str(err))}")
-    
+
     # Show symbol count if available
     symbols = result.get("symbols", [])
     if symbols:
         lines.append(f"  📋 {len(symbols)} symbols extracted")
-    
+
     return "\n".join(lines)
 
 
 def _handle_parse_path(path_str: str) -> str:
     """Handle the /parse parse_path <path> subcommand.
-    
+
     Args:
         path_str: Path to the file or directory to parse
-        
+
     Returns:
         Formatted output string
     """
     path = Path(path_str).expanduser().resolve()
-    
+
     if not path.exists():
         return f"❌ Path not found: {path_str}"
-    
+
     if path.is_file():
         # Single file
         language = _get_language_from_extension(str(path))
         if language and not is_language_supported(language):
             language = None  # Let parser auto-detect or use unknown
-        
+
         try:
             result = _parse_file(str(path), language)
             return _format_parse_result(result, str(path))
         except Exception as e:
             return f"❌ Error parsing {path}: {e}"
-    
+
     elif path.is_dir():
         # Directory - find supported files
-        supported_exts = {".py", ".rs", ".js", ".jsx", ".ts", ".tsx", ".ex", ".exs", ".heex"}
+        supported_exts = {
+            ".py",
+            ".rs",
+            ".js",
+            ".jsx",
+            ".ts",
+            ".tsx",
+            ".ex",
+            ".exs",
+            ".heex",
+        }
         files_to_parse = []
-        
+
         for ext in supported_exts:
             files_to_parse.extend(path.rglob(f"*{ext}"))
-        
+
         # Limit to avoid overwhelming output
         max_files = 20
         files_to_parse = files_to_parse[:max_files]
         total_found = len(list(path.rglob("*")))
-        
+
         if not files_to_parse:
             return f"📁 No supported files found in {path}\nSupported: .py, .rs, .js, .jsx, .ts, .tsx, .ex, .exs, .heex"
-        
-        lines = [f"📁 Parsing directory: {path}", f"Found {len(files_to_parse)} files (showing first {max_files}):", ""]
-        
+
+        lines = [
+            f"📁 Parsing directory: {path}",
+            f"Found {len(files_to_parse)} files (showing first {max_files}):",
+            "",
+        ]
+
         # Parse files using batch
         try:
             file_paths = [str(f) for f in files_to_parse]
             batch_result = _parse_files_batch(file_paths)
-            
+
             results = batch_result.get("results", [])
             success_count = batch_result.get("success_count", 0)
             error_count = batch_result.get("error_count", 0)
             total_time = batch_result.get("total_time_ms", 0.0)
-            
+
             for result in results:
                 file_path = result.get("file_path", "unknown")
                 lines.append(_format_parse_result(result, file_path))
-            
+
             lines.append("")
             lines.append(f"✅ {success_count} succeeded, ❌ {error_count} failed")
             lines.append(f"⏱️  Total time: {total_time:.2f}ms")
-            
+
             if total_found > max_files:
-                lines.append(f"\n... and {total_found - max_files} more files not shown")
-        
+                lines.append(
+                    f"\n... and {total_found - max_files} more files not shown"
+                )
+
         except Exception as e:
             return f"❌ Error parsing directory: {e}"
-        
+
         return "\n".join(lines)
-    
+
     else:
         return f"❌ Invalid path: {path_str}"
 
 
 def _handle_parse_help() -> str:
     """Handle the /parse help subcommand.
-    
+
     Returns:
         Formatted help string
     """
@@ -863,7 +904,7 @@ def _handle_parse_help() -> str:
         "",
         "Supported Languages:",
     ]
-    
+
     try:
         langs_info = supported_languages()
         langs = langs_info.get("languages", [])
@@ -874,25 +915,27 @@ def _handle_parse_help() -> str:
             lines.append("  (None - turbo_parse module not available)")
     except Exception:
         lines.append("  (Error fetching supported languages)")
-    
-    lines.extend([
-        "",
-        "Examples:",
-        "  /parse status",
-        "  /parse parse_path ./src/main.py",
-        "  /parse parse_path ./lib",
-    ])
-    
+
+    lines.extend(
+        [
+            "",
+            "Examples:",
+            "  /parse status",
+            "  /parse parse_path ./src/main.py",
+            "  /parse parse_path ./lib",
+        ]
+    )
+
     return "\n".join(lines)
 
 
 def _handle_parse_command(command: str, name: str) -> Optional[bool | str]:
     """Handle the /parse custom slash command.
-    
+
     Args:
         command: The full command string (e.g., "/parse status")
         name: The primary command name (e.g., "parse")
-        
+
     Returns:
         - True if handled (no further processing needed)
         - str to display to the user
@@ -900,39 +943,39 @@ def _handle_parse_command(command: str, name: str) -> Optional[bool | str]:
     """
     if name != "parse":
         return None
-    
+
     # Parse subcommand
     parts = command.split(maxsplit=2)
     subcommand = parts[1] if len(parts) > 1 else None
-    
+
     if subcommand is None:
         # No subcommand - show brief help
         emit_info(_handle_parse_help())
         return True
-    
+
     subcommand = subcommand.lower()
-    
+
     if subcommand == "status":
         output = _format_status_output()
         emit_info(output)
         return True
-    
+
     elif subcommand == "parse_path":
         if len(parts) < 3:
             emit_error("Usage: /parse parse_path <path>")
             emit_info("Example: /parse parse_path ./src/main.py")
             return True
-        
+
         path = parts[2].strip()
         output = _handle_parse_path(path)
         emit_info(output)
         return True
-    
+
     elif subcommand == "help":
         output = _handle_parse_help()
         emit_info(output)
         return True
-    
+
     else:
         emit_error(f"Unknown subcommand: {subcommand}")
         emit_info("Run '/parse help' for available subcommands")

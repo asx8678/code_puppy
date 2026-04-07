@@ -95,16 +95,19 @@ class TestTurboParsePluginCallbacks:
 
         result = _register_tools()
         assert isinstance(result, list)
-        assert len(result) == 1  # Now has parse_code tool
+        assert len(result) == 4  # parse_code, get_highlights, get_folds, get_outline
 
     def test_register_tools_returns_parse_code_definition(self):
         """Test that register_tools returns parse_code tool definition."""
         from code_puppy.plugins.turbo_parse.register_callbacks import _register_tools
 
         result = _register_tools()
-        assert len(result) == 1
-        
-        tool_def = result[0]
+        assert len(result) == 4
+
+        # Find parse_code tool in the list (could be at any index)
+        parse_code_tool = next((t for t in result if t["name"] == "parse_code"), None)
+        assert parse_code_tool is not None, "parse_code tool not found in results"
+        tool_def = parse_code_tool
         assert tool_def["name"] == "parse_code"
         assert "register_func" in tool_def
         assert callable(tool_def["register_func"])
