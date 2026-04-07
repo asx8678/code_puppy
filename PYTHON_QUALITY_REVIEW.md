@@ -59,20 +59,6 @@ if _config_cache is None or _cached_mtime != _config_mtime:
 
 ---
 
-### [SEV-LOW] Exception Handling in Config Fallback
-**File:** code_puppy/config.py:348, 371, 475, 502, 543, 565, 614  
-**Issue:** Multiple places use bare `except Exception:` which is modern Python best practice - it catches application errors while allowing `KeyboardInterrupt`, `SystemExit`, and `GeneratorExit` (which inherit from `BaseException`, not `Exception`) to propagate correctly.
-
-```python
-except Exception:
-    # Fallback to default context length if anything goes wrong
-    return 128000
-```
-
-**Fix:** No change needed. This is correct modern Python practice. The `except Exception:` pattern intentionally does NOT catch `KeyboardInterrupt`, `SystemExit`, or `GeneratorExit` since those inherit from `BaseException`.
-
----
-
 ### [SEV-LOW] Mutable Default Argument Risk in `_get_supported_settings_cache`
 **File:** code_puppy/config.py:221  
 **Issue:** The lru_cache-wrapped function captures model_name but the returned frozenset may contain mutable objects (though frozenset is immutable, the issue is more about closure state). This is a minor concern given the caching pattern.
@@ -338,7 +324,7 @@ if hasattr(display_console.file, "flush"):  # What if .file is None?
 ---
 
 ### [SEV-LOW] Potentially Unbound Variable in Import Fallback
-**File:** code_puppy/interactive_loop.py:96-102, 144-148  
+**File:** code_puppy/interactive_loop.py:141-147  
 **Issue:** The `try/except ImportError` block for prompt_toolkit sets variables to None on failure, but the code later assumes these might be functions. The None check is performed but repeated throughout.
 
 ```python
@@ -388,8 +374,8 @@ except ImportError:
 | Severity | Count | Files |
 |----------|-------|-------|
 | HIGH | 0 | - |
-| MEDIUM | 9 | config.py (orphaned docstring), model_factory.py (DRY, async/sync), adaptive_rate_limiter.py (locking docs, float compare, integer truncation), callbacks.py (async/sync mixing, TaskGroup comments, context cleanup), interactive_loop.py (exception masking, imports) |
-| LOW | 15 | config.py (globals, cache, lru_cache, comments, exception handling), model_factory.py (imports, error handling, nesting, type annotations, beta header), adaptive_rate_limiter.py (back-compat), callbacks.py (type safety, docstrings), interactive_loop.py (getattr, imports), cross-cutting (type syntax, loggers, docstrings) |
+| MEDIUM | 10 | config.py (orphaned docstring), adaptive_rate_limiter.py (locking docs, float compare, integer truncation), callbacks.py (async/sync mixing, TaskGroup comments, context cleanup), interactive_loop.py (exception masking, imports) |
+| LOW | 18 | config.py (globals, cache, lru_cache, comments), model_factory.py (imports, error handling, nesting, type annotations, beta header, DRY), adaptive_rate_limiter.py (back-compat), callbacks.py (type safety, docstrings), interactive_loop.py (getattr, imports), cross-cutting (type syntax, loggers, docstrings) |
 
 ## Recommendations
 
