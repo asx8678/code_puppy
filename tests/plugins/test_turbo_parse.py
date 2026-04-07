@@ -9,6 +9,7 @@ import os
 import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -642,3 +643,313 @@ class TestParseFilesBatch:
         for r in result["results"]:
             assert r["success"] is False
             assert any("not available" in str(e.get("message", "")) for e in r.get("errors", []))
+
+
+# ============================================================================
+# Tests for Elixir language support
+# ============================================================================
+
+class TestParseSourceElixir:
+    """Tests for Elixir language parsing."""
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_source_elixir_module(self):
+        """Test parsing a simple Elixir module."""
+        from code_puppy.turbo_parse_bridge import parse_source
+        
+        source = """
+defmodule Hello do
+  def world do
+    :hello
+  end
+end
+"""
+        result = parse_source(source, "elixir")
+        
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert "tree" in result
+        assert "parse_time_ms" in result
+        assert isinstance(result["parse_time_ms"], (int, float))
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_source_elixir_with_functions(self):
+        """Test parsing Elixir with multiple functions."""
+        from code_puppy.turbo_parse_bridge import parse_source
+        
+        source = """
+defmodule Math do
+  def add(a, b), do: a + b
+  def subtract(a, b), do: a - b
+  
+  def factorial(0), do: 1
+  def factorial(n), do: n * factorial(n - 1)
+end
+"""
+        result = parse_source(source, "elixir")
+        
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_source_elixir_alias(self):
+        """Test that elixir language alias 'ex' works."""
+        from code_puppy.turbo_parse_bridge import parse_source
+        
+        source = "defmodule Test do end"
+        result = parse_source(source, "ex")
+        
+        # Should normalize to 'elixir'
+        assert result["language"] == "elixir"
+
+
+class TestParseElixirFixtures:
+    """Tests parsing Elixir fixture files."""
+
+    FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "elixir"
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_simple_module_ex(self):
+        """Test parsing simple_module.ex fixture."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        fixture_path = self.FIXTURES_DIR / "simple_module.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+        
+        result = parse_file(str(fixture_path))
+        
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+        assert "parse_time_ms" in result
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_complex_module_ex(self):
+        """Test parsing complex_module.ex with nested modules and guards."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        fixture_path = self.FIXTURES_DIR / "complex_module.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+        
+        result = parse_file(str(fixture_path))
+        
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_with_imports_ex(self):
+        """Test parsing with_imports.ex with import/use/require/alias."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        fixture_path = self.FIXTURES_DIR / "with_imports.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+        
+        result = parse_file(str(fixture_path))
+        
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_with_macros_ex(self):
+        """Test parsing with_macros.ex with macro definitions."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        fixture_path = self.FIXTURES_DIR / "with_macros.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+        
+        result = parse_file(str(fixture_path))
+        
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_phoenix_controller_ex(self):
+        """Test parsing phoenix_controller.ex Phoenix controller."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        fixture_path = self.FIXTURES_DIR / "phoenix_controller.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+        
+        result = parse_file(str(fixture_path))
+        
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_ecto_schema_ex(self):
+        """Test parsing ecto_schema.ex with schema definitions."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        fixture_path = self.FIXTURES_DIR / "ecto_schema.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+        
+        result = parse_file(str(fixture_path))
+        
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+
+
+class TestElixirKnownGaps:
+    """Tests for known Elixir parsing gaps.
+    
+    These tests document features that may not be fully supported
+    by the tree-sitter-elixir grammar. They use xfail to mark
+    expected failures, allowing the test suite to pass while
+    documenting known limitations.
+    """
+
+    FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "elixir"
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    @pytest.mark.xfail(reason="HEEx templates are not standard Elixir syntax")
+    def test_heex_template_parsing(self):
+        """HEEx templates may not parse correctly."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        fixture_path = self.FIXTURES_DIR / "heex_template.heex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+        
+        result = parse_file(str(fixture_path))
+        
+        # Document the behavior - may succeed or fail
+        # The important thing is we track what happens
+        assert "tree" in result or "errors" in result
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_sigils_parsing_with_some_success(self):
+        """Test that sigils parse at all - some may work, others may not."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        fixture_path = self.FIXTURES_DIR / "with_sigils.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+        
+        result = parse_file(str(fixture_path))
+        
+        # Basic sigils (~s, ~w, ~r) should parse
+        # Complex sigils may have issues but file should still parse
+        assert result["language"] == "elixir"
+        assert "tree" in result
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_string_interpolation_parsing(self):
+        """Test string interpolation parsing - basic cases should work."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        fixture_path = self.FIXTURES_DIR / "string_interpolation.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+        
+        result = parse_file(str(fixture_path))
+        
+        # Basic interpolation should work
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_binary_pattern_matching_parsing(self):
+        """Test binary pattern matching - may have gaps for complex cases."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        fixture_path = self.FIXTURES_DIR / "binary_pattern_matching.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+        
+        result = parse_file(str(fixture_path))
+        
+        # File should at least parse to elixir
+        assert result["language"] == "elixir"
+        # Tree may have errors for complex binary patterns
+        assert "tree" in result
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_protocols_parsing(self):
+        """Test protocol definitions parsing."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        fixture_path = self.FIXTURES_DIR / "protocols.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+        
+        result = parse_file(str(fixture_path))
+        
+        # Protocols should parse
+        assert result["language"] == "elixir"
+        assert "tree" in result
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_elixir_batch_parsing(self):
+        """Test batch parsing of multiple Elixir files."""
+        from code_puppy.turbo_parse_bridge import parse_files_batch
+        
+        fixture_files = [
+            self.FIXTURES_DIR / "simple_module.ex",
+            self.FIXTURES_DIR / "complex_module.ex",
+            self.FIXTURES_DIR / "with_imports.ex",
+        ]
+        
+        # Only include files that exist
+        existing_files = [str(f) for f in fixture_files if f.exists()]
+        if len(existing_files) < 2:
+            pytest.skip("Not enough fixture files available")
+        
+        result = parse_files_batch(existing_files)
+        
+        assert result["files_processed"] == len(existing_files)
+        assert result["error_count"] == 0
+        assert result["all_succeeded"] is True
+        
+        # All should be elixir
+        for r in result["results"]:
+            assert r["language"] == "elixir"
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_is_language_supported_elixir(self):
+        """Test that elixir is reported as supported."""
+        from code_puppy.turbo_parse_bridge import is_language_supported, supported_languages
+        
+        assert is_language_supported("elixir") is True
+        assert is_language_supported("ex") is True  # alias
+        
+        languages = supported_languages()
+        assert "elixir" in languages.get("languages", [])
+
+
+class TestElixirLanguageDetection:
+    """Tests for Elixir file extension detection."""
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_ex_extension_detection(self, tmp_path):
+        """Test that .ex extension is detected as elixir."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        test_file = tmp_path / "test.ex"
+        test_file.write_text("defmodule Test do end")
+        
+        result = parse_file(str(test_file))
+        
+        assert result["language"] == "elixir"
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_exs_extension_detection(self, tmp_path):
+        """Test that .exs extension is detected as elixir."""
+        from code_puppy.turbo_parse_bridge import parse_file
+        
+        test_file = tmp_path / "test.exs"
+        test_file.write_text("defmodule Test do end")
+        
+        result = parse_file(str(test_file))
+        
+        assert result["language"] == "elixir"
