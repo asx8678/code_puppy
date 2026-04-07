@@ -4,11 +4,19 @@
 **Audit Date:** 2026-04-07  
 **Audited Files:**
 - `pyproject.toml`
-- `uv.lock`
+- `uv.lock` (reviewed, clean)
 - `.env.example`
 - `lefthook.yml`
 - `Cargo.toml` (workspace and crate manifests)
 - `coverage.json`
+
+## Summary
+| Severity | Count |
+|----------|-------|
+| MEDIUM   | 4     |
+| LOW      | 9     |
+| INFO     | 3     |
+| **Total**| **16**|
 
 ---
 
@@ -52,15 +60,14 @@
 
 ---
 
-## [SEV-LOW] .env.example Missing Security Warnings
+## [SEV-LOW] .env.example Missing git-commit Warning
 **File:** .env.example:1
-**Issue:** The .env.example file lacks prominent warnings about:
+**Issue:** The .env.example file has a comment noting `.env` takes priority over `~/.code_puppy/puppy.cfg`, but lacks prominent warnings about:
 1. Risks of committing .env files to git
-2. The override=True behavior (documented in config.py but not visible to users)
-3. Where .env files should/shouldn't be placed
+2. Where .env files should/shouldn't be placed
 **Fix:** 
 1. Add header comment: "⚠️ SECURITY: Never commit this file with real keys to git"
-2. Add note about override behavior
+2. Add note about override behavior (already partially documented)
 3. Reference SECURITY.md for key management best practices
 
 ---
@@ -76,7 +83,7 @@
 ---
 
 ## [SEV-LOW] pydantic-ai-slim Pinned to Exact Version
-**File:** pyproject.toml:27
+**File:** pyproject.toml:15
 **Issue:** `pydantic-ai-slim[openai,anthropic,mcp]==1.60.0` is pinned exactly. This is a core framework dependency with security implications (handles API calls, authentication, etc.).
 **Fix:** 
 1. Document policy for reviewing and updating pinned core dependencies
@@ -87,29 +94,26 @@
 
 ## [SEV-LOW] coverage.json Committed to Repository
 **File:** coverage.json (1.6MB in repo root)
-**Issue:** The coverage.json file (1.6MB) is committed to the repository. This is generated data that:
-1. Causes repository bloat
-2. Can leak information about code structure through coverage gaps
-3. May become stale relative to actual code
+**Issue:** The coverage.json file (1.6MB) is committed to the repository. `.gitignore` only contains `.coverage`; `coverage.json` is missing from `.gitignore` and should be added. This generated data causes repository bloat, can leak information about code structure through coverage gaps, and may become stale relative to actual code.
 **Fix:** 
-1. Add to `.gitignore`
+1. Add `coverage.json` to `.gitignore`
 2. Remove from repository with `git rm --cached`
 3. Generate fresh in CI if needed for reporting
 
 ---
 
-## [SEV-LOW] Rust Crate Dependencies Not Pinned in Cargo.lock
-**File:** turbo_parse/Cargo.toml:38-46
-**Issue:** Dependencies like `tree-sitter = "0.24"`, `lru = "0.12"`, `rayon = "1.10"` use loose version constraints. Without a committed Cargo.lock, builds may pull different versions over time, potentially including breaking changes or vulnerable crates.
+## [SEV-LOW] Rust Crate Dependencies Not Pinned in Cargo.lock at Crate Level
+**File:** turbo_parse/Cargo.toml:36-47
+**Issue:** Dependencies like `tree-sitter = "0.24"`, `lru = "0.12"`, `rayon = "1.10"` use loose version constraints. `Cargo.lock` exists at the workspace root (appropriate for a workspace), but without strict constraints in the crate manifest, builds may pull different versions over time, potentially including breaking changes or vulnerable crates.
 **Fix:** 
-1. Commit `Cargo.lock` for binary/library projects (Rust best practice)
-2. Or use stricter constraints like `= "0.24.0"` for security-critical crates
-3. Document the policy for updating Rust dependencies
+1. Use stricter constraints like `= "0.24.0"` for security-critical crates, OR
+2. Document the policy for updating Rust dependencies and verify workspace-level Cargo.lock is sufficient
+3. Ensure CI uses `--locked` flag for cargo builds
 
 ---
 
 ## [SEV-LOW] libloading Feature Flag in turbo_parse
-**File:** turbo_parse/Cargo.toml:46
+**File:** turbo_parse/Cargo.toml:50
 **Issue:** The `libloading` crate (optional, for dynamic-grammars feature) enables loading shared libraries at runtime. While currently optional, if enabled it could be a security vector for loading untrusted code.
 **Fix:** 
 1. Document security implications of the dynamic-grammars feature
@@ -181,8 +185,8 @@
 ### Medium Priority
 - [ ] Document dependency update policy for pinned packages
 - [ ] Remove coverage.json from repository
-- [ ] Commit Cargo.lock for reproducible Rust builds
 - [ ] Add environment variable validation at startup
+- [ ] Verify workspace-level Cargo.lock is sufficient for reproducible builds
 
 ### Low Priority
 - [ ] Audit tree-sitter and pyo3 dependencies for known CVEs
