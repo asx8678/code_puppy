@@ -1,6 +1,7 @@
 """Event stream handler for processing streaming events from agent runs."""
 
 import asyncio
+import importlib.util
 import logging
 from collections.abc import AsyncIterable
 from typing import Any
@@ -24,7 +25,7 @@ from code_puppy.tools.subagent_context import is_subagent
 logger = logging.getLogger(__name__)
 
 # Module-level buffer for batching stream events
-_pending_stream_events: list = []
+_pending_stream_events: list[tuple[str, Any, Any]] = []
 _STREAM_FLUSH_INTERVAL = 50
 
 
@@ -41,7 +42,9 @@ def _fire_stream_event(event_type: str, event_data: Any) -> None:
     global _pending_stream_events
 
     try:
-        from code_puppy import callbacks
+        # Check if callbacks module is available without importing
+        if importlib.util.find_spec("code_puppy.callbacks") is None:
+            raise ImportError("callbacks module not available")
         from code_puppy.messaging import get_session_context
 
         agent_session_id = get_session_context()
@@ -71,6 +74,19 @@ async def _flush_stream_events(batch: list) -> None:
             await callbacks.on_stream_event(event_type, event_data, session_id)
         except Exception as e:
             logger.debug(f"Error flushing stream event: {e}")
+
+
+async def _drain_pending_stream_events() -> None:
+    """Drain any pending stream events before handler exits.
+
+    Ensures that any batched events are delivered before the handler completes.
+    """
+    global _pending_stream_events
+
+    if _pending_stream_events:
+        batch = _pending_stream_events.copy()
+        _pending_stream_events.clear()
+        await _flush_stream_events(batch)
 
 
 # Module-level console for streaming output
@@ -364,3 +380,5 @@ async def event_stream_handler(
                     resume_all_spinners()
 
     # Spinner is resumed in PartEndEvent when appropriate (based on next_part_kind)
+    # Drain any remaining buffered stream events before handler exits
+    await _drain_pending_stream_events()
