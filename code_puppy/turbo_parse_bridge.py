@@ -88,25 +88,9 @@ except ImportError:
             "error": "turbo_parse module not available - syntax diagnostics disabled",
         }
 
-    def parse_files_batch(paths: list[str], **kwargs: Any) -> dict[str, Any]:  # noqa: ARG001
-        """Fallback for parse_files_batch when Rust module is unavailable.
-
-        Returns an error result for all files indicating the Rust module is not available.
-        """
-        results = []
-        for _path in paths:
-            results.append({
-                "language": "unknown",
-                "tree": None,
-                "parse_time_ms": 0.0,
-                "success": False,
-                "errors": [{
-                    "message": "turbo_parse module not available - parsing disabled",
-                    "severity": "error",
-                }],
-            })
+    def parse_files_batch(paths, max_workers=None, timeout_ms=None):
         return {
-            "results": results,
+            "results": [{"file_path": p, "success": False, "errors": [{"message": "turbo_parse not available"}]} for p in paths],
             "total_time_ms": 0.0,
             "files_processed": len(paths),
             "success_count": 0,
@@ -114,31 +98,11 @@ except ImportError:
             "all_succeeded": len(paths) == 0,
         }
 
-    def extract_symbols(source: str, language: str) -> dict[str, Any]:  # noqa: ARG001
-        """Fallback for extract_symbols when Rust module is unavailable.
+    def extract_symbols(source, language):
+        return {"success": False, "symbols": [], "error": "turbo_parse not available", "extraction_time_ms": 0.0}
 
-        Returns empty symbols with error indicating the Rust module is not available.
-        """
-        return {
-            "language": language,
-            "symbols": [],
-            "extraction_time_ms": 0.0,
-            "success": False,
-            "errors": ["turbo_parse module not available - symbol extraction disabled"],
-        }
-
-    def extract_symbols_from_file(path: str, language: str | None = None) -> dict[str, Any]:  # noqa: ARG001
-        """Fallback for extract_symbols_from_file when Rust module is unavailable.
-
-        Returns empty symbols with error indicating the Rust module is not available.
-        """
-        return {
-            "language": language or "unknown",
-            "symbols": [],
-            "extraction_time_ms": 0.0,
-            "success": False,
-            "errors": ["turbo_parse module not available - symbol extraction disabled"],
-        }
+    def extract_symbols_from_file(path, language=None):
+        return {"success": False, "symbols": [], "error": "turbo_parse not available", "extraction_time_ms": 0.0}
 
 
 # --- Turbo Parse toggle -----------------------------------------------------
