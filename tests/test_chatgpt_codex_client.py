@@ -519,9 +519,16 @@ class TestSendMethod:
     @pytest.mark.asyncio
     async def test_post_request_injects_fields(self):
         """Test that POST requests have fields injected."""
+
+        async def mock_aiter_lines():
+            return
+            yield  # Make it an async generator
+
         success_response = Mock(spec=httpx.Response)
         success_response.status_code = 200
         success_response.headers = {"content-type": "application/json"}
+        success_response.aiter_lines = mock_aiter_lines
+        success_response.aclose = AsyncMock()
 
         with patch.object(
             httpx.AsyncClient,
@@ -697,7 +704,7 @@ class TestSendMethod:
 
     @pytest.mark.asyncio
     async def test_stream_conversion_failure_logs_warning(self):
-        """Test that stream conversion failure logs warning and returns original."""
+        """Test that stream conversion failure logs warning and closes response."""
 
         # Create a streaming response that fails during conversion
         async def failing_aiter_lines():
@@ -708,6 +715,7 @@ class TestSendMethod:
         stream_response.status_code = 200
         stream_response.headers = {}
         stream_response.aiter_lines = failing_aiter_lines
+        stream_response.aclose = AsyncMock()
 
         with patch.object(
             httpx.AsyncClient,
@@ -723,9 +731,10 @@ class TestSendMethod:
                 content=json.dumps({"model": "gpt-4", "stream": False}).encode(),
             )
 
-            # Should return original response on conversion failure
-            result = await client.send(request)
-            assert result is stream_response
+            # Should raise exception and close the response on conversion failure
+            with pytest.raises(Exception, match="Stream read error"):
+                await client.send(request)
+            stream_response.aclose.assert_awaited_once()
 
 
 class TestCreateCodexAsyncClient:

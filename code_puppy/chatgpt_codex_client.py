@@ -94,6 +94,8 @@ class ChatGPTCodexAsyncClient(httpx.AsyncClient):
                 response = await self._convert_stream_to_response(response)
             except Exception as e:
                 logger.warning(f"Failed to convert stream response: {e}")
+                await response.aclose()
+                raise
 
         return response
 
@@ -312,6 +314,9 @@ class ChatGPTCodexAsyncClient(httpx.AsyncClient):
         # Create a new response with the complete body
         body_bytes = json.dumps(response_body).encode("utf-8")
         logger.debug(f"Reconstructed response body: {len(body_bytes)} bytes")
+
+        # Close the original response before returning the new one
+        await response.aclose()
 
         new_response = httpx.Response(
             status_code=response.status_code,
