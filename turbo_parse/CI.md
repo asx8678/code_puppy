@@ -4,14 +4,14 @@ This document describes the Continuous Integration (CI) setup for `turbo_parse`,
 
 ## Overview
 
-The CI pipeline for `turbo_parse` ensures that the Rust crate builds and tests successfully across multiple platforms, and that Python wheels are built correctly for distribution.
+The CI pipeline for `turbo_parse` ensures that the Rust crate builds and tests successfully across multiple platforms, that Python wheels are built correctly for distribution, and that performance regressions are detected before they reach `main`.
 
 ## CI Workflow
 
 The CI is defined in `.github/workflows/turbo_parse.yml` and runs on:
 - Every push to `main` that touches `turbo_parse/`, `Cargo.toml`, `Cargo.lock`, or the workflow itself
 - Every pull request to `main` that touches the same paths
-- Manual trigger via `workflow_dispatch`
+- Manual trigger via `workflow_dispatch` with optional `update_baseline` parameter
 
 ### Jobs
 
@@ -22,7 +22,7 @@ Tests the Rust crate across all supported platforms.
 |----------|--------|
 | `ubuntu-latest` | ✓ Formatting, clippy, unit tests |
 | `macos-latest` | ✓ Formatting, clippy, unit tests |
-| `windows-latest` | ✓ Formatning, clippy, unit tests |
+| `windows-latest` | ✓ Formatting, clippy, unit tests |
 
 **Steps:**
 1. Checkout code
@@ -67,8 +67,137 @@ Builds portable Linux wheels using the manylinux standard.
 
 Uses `PyO3/maturin-action@v1` for cross-platform manylinux builds.
 
-#### 5. `check`
+#### 5. `benchmark`
+**Performance regression detection job.**
+
+Runs on:
+- Pull requests to `main`
+- Pushes to `main`
+- Manual workflow dispatch (for baseline updates)
+
+**Key Features:**
+- Runs `cargo bench` to collect performance metrics
+- Compares against stored baseline in `turbo_parse/benches/baseline.json`
+- Fails CI if any benchmark exceeds **15% regression threshold**
+- Outputs GitHub Actions annotations for regressions
+- Uploads benchmark results as artifacts
+
+**Workflow Triggers:**
+- **PR to main**: Runs benchmark check and compares against baseline
+- **Push to main**: Runs benchmark check (as post-merge verification)
+- **Manual with `update_baseline=true`**: Updates the baseline with current results
+
+**Thresholds:**
+| Metric | Value |
+|--------|-------|
+| Regression threshold | 15% |
+| Target: 1k LOC (cold parse) | < 5ms |
+| Target: 10k LOC (cold parse) | < 30ms |
+| Target: 100k LOC (cold parse) | < 250ms |
+
+**Steps:**
+1. Checkout code
+2. Install Rust toolchain
+3. Verify baseline file exists
+4. Run benchmarks with regression check:
+   ```
+   python benches/check_regression.py --ci --threshold 15.0
+   ```
+5. Upload results as artifact (success or failure)
+
+#### 6. `check`
 Summary job that waits for all other jobs and marks the CI as successful or failed.
+
+## Benchmark CI Workflow
+
+### What Happens on PR
+
+When a pull request is opened against `main`:
+
+1. The `benchmark` job runs automatically
+2. Benchmarks execute and are compared against the baseline
+3. If performance degrades >15%, the check fails with:
+   - GitHub Actions error annotations in the PR
+   - Log output with regression details
+   - Blocked merge until resolved
+
+### What Happens on Regression Failure
+
+If the benchmark check fails:
+
+```
+❌ Benchmark regression check failed
+   If this is a legitimate performance improvement, run the workflow with 'update_baseline' checked
+```
+
+**Next steps:**
+1. **Accidental regression?** Fix the performance issue in your code
+2. **Legitimate improvement?** Update the baseline (see below)
+
+### Updating the Baseline
+
+The baseline stores expected performance metrics. Update it after intentional performance improvements.
+
+**Via GitHub Actions (Recommended):**
+
+1. Go to **Actions → turbo_parse CI** in your repository
+2. Click **"Run workflow"** dropdown
+3. Select your branch with performance improvements
+4. Check **"Update benchmark baseline"** checkbox
+5. Click **"Run workflow"**
+6. Commit the updated `baseline.json` file in the PR
+
+**Via Local Command (Manual):**
+
+```bash
+cd turbo_parse
+python benches/check_regression.py --save-baseline
+```
+
+This overwrites `baseline.json` with current results. Commit the updated file.
+
+### Running Benchmarks Locally
+
+```bash
+cd turbo_parse
+
+# Run benchmarks and check for regression (same as CI)
+python benches/check_regression.py --ci --threshold 15.0
+
+# Save current results as new baseline
+python benches/check_regression.py --save-baseline
+
+# Save results to separate file for comparison
+python benches/check_regression.py --output my_results.json
+
+# Test with stricter threshold (e.g., 10%)
+python benches/check_regression.py --threshold 10.0
+```
+
+### Baseline File Format
+
+The baseline is stored in `turbo_parse/benches/baseline.json`:
+
+```json
+{
+  "_metadata": {
+    "description": "Turbo Parse Performance Baseline",
+    "created": "2025-01-07",
+    "platform": "Apple M1 MacBook Pro",
+    "notes": "Target goals for cold parse - measured without cache"
+  },
+  "benchmarks": [
+    {
+      "name": "python_parse/1k_loc/cold_parse",
+      "duration_ns": 5000000,
+      "target_ms": 5,
+      "note": "Target: 1k Python LOC under 5ms"
+    }
+  ]
+}
+```
+
+**Note:** The baseline stores **target goals** in nanoseconds for cold parse scenarios. CI compares actual benchmark results against these targets.
 
 ## Running CI Locally
 

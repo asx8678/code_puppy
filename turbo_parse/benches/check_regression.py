@@ -7,6 +7,7 @@ performance has regressed beyond the threshold (default: 15%).
 
 Usage:
     python check_regression.py [--baseline PATH] [--threshold PERCENT] [--output PATH]
+    python check_regression.py --ci [--baseline PATH] [--threshold PERCENT]
 
 Returns:
     Exit code 0 if no regression detected
@@ -16,6 +17,7 @@ Returns:
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -40,9 +42,15 @@ def load_baseline(path: Path) -> dict[str, dict[str, Any]]:
     with open(path) as f:
         data = json.load(f)
     
+    # Support both formats: with "benchmarks" key and flat format
+    if "benchmarks" in data:
+        entries = data["benchmarks"]
+    else:
+        entries = data
+    
     # Normalize to a simple dict format
     results = {}
-    for entry in data:
+    for entry in entries:
         name = entry.get("name", entry.get("id", "unknown"))
         results[name] = {
             "duration_ns": entry.get("duration_ns", entry.get("mean", 0)),
@@ -157,18 +165,70 @@ def check_regression(
     }
 
 
-def print_report(comparison: dict[str, Any], threshold: float) -> None:
-    """Print a formatted comparison report."""
+def print_report(comparison: dict[str, Any], threshold: float, ci_mode: bool = False) -> None:
+    """Print a formatted comparison report.
+    
+    In CI mode, outputs GitHub Actions annotations for regressions.
+    """
+    regressions = comparison.get("regressions", [])
+    improvements = comparison.get("improvements", [])
+    unchanged = comparison.get("unchanged", [])
+    missing = comparison.get("missing", [])
+    
+    if ci_mode:
+        # CI-friendly output with GitHub Actions annotations
+        print("\n" + "=" * 80)
+        print("BENCHMARK REGRESSION REPORT (CI Mode)")
+        print("=" * 80)
+        print(f"Threshold: {threshold:.1f}%")
+        print()
+        
+        if regressions:
+            print(f"::error title=Performance Regressions Detected::{len(regressions)} benchmark(s) exceeded {threshold:.1f}% regression threshold")
+            for r in regressions:
+                # GitHub Actions error annotation
+                print(f"::error title={r['name']} regression::{r['name']}: +{r['change_percent']:.1f}% ({r['baseline_ms']:.3f}ms -> {r['current_ms']:.3f}ms)")
+        
+        if improvements:
+            print(f"::notice title=Performance Improvements::{len(improvements)} benchmark(s) showed significant improvement")
+            for i in improvements:
+                print(f"::notice title={i['name']} improvement::{i['name']}: {i['change_percent']:.1f}% ({i['baseline_ms']:.3f}ms -> {i['current_ms']:.3f}ms)")
+        
+        if missing:
+            print(f"::warning title=Missing Benchmarks::{len(missing)} benchmark(s) missing or new")
+            for m in missing:
+                if "note" in m:
+                    print(f"::warning::{m['name']}: {m['note']}")
+                else:
+                    print(f"::notice::{m['name']}: New benchmark (no baseline)")
+        
+        # Summary table for CI logs
+        print("\n" + "-" * 80)
+        print("SUMMARY TABLE")
+        print("-" * 80)
+        print(f"{'Benchmark':<40} {'Baseline':>12} {'Current':>12} {'Change':>10}")
+        print("-" * 80)
+        
+        all_tests = (regressions + improvements + unchanged)
+        for test in all_tests:
+            symbol = "🔴" if test in regressions else "🟢" if test in improvements else "✓"
+            print(f"{symbol} {test['name']:<38} {test['baseline_ms']:>10.3f}ms {test['current_ms']:>10.3f}ms {test['change_percent']:>+8.1f}%")
+        
+        for m in missing:
+            if "note" in m:
+                print(f"⚠️  {m['name']:<38} {'MISSING':>12} {'N/A':>12} {'N/A':>10}")
+            else:
+                print(f"✨ {m['name']:<38} {'NEW':>12} {'N/A':>12} {'N/A':>10}")
+        
+        print("-" * 80)
+        return
+    
+    # Interactive mode (original output)
     print("\n" + "=" * 80)
     print("BENCHMARK REGRESSION REPORT")
     print("=" * 80)
     print(f"Threshold: {threshold:.1f}%")
     print()
-    
-    regressions = comparison.get("regressions", [])
-    improvements = comparison.get("improvements", [])
-    unchanged = comparison.get("unchanged", [])
-    missing = comparison.get("missing", [])
     
     if regressions:
         print(f"🔴 REGRESSIONS DETECTED ({len(regressions)} tests):")
@@ -271,8 +331,16 @@ def main() -> int:
         action="store_true",
         help="Save current results as new baseline",
     )
+    parser.add_argument(
+        "--ci",
+        action="store_true",
+        help="CI mode: non-interactive with GitHub Actions annotations",
+    )
     
     args = parser.parse_args()
+    
+    # Auto-detect CI mode from environment
+    ci_mode = args.ci or os.environ.get("CI", "").lower() in ("true", "1", "yes")
     
     if args.create_baseline:
         create_baseline_template(args.baseline)
@@ -305,18 +373,28 @@ def main() -> int:
     )
     
     # Print report
-    print_report(comparison, args.threshold)
+    print_report(comparison, args.threshold, ci_mode=ci_mode)
     
     # Summary
-    print("=" * 80)
+    if ci_mode:
+        print("=" * 80)
+    else:
+        print("=" * 80)
+    
     if has_regression:
-        print("❌ REGRESSION DETECTED: Performance has degraded beyond threshold")
-        print("   Run with --save-baseline to update baseline if this is expected")
+        if ci_mode:
+            print("::error title=Benchmark Regression::❌ REGRESSION DETECTED: Performance has degraded beyond threshold")
+            print("   Run with --save-baseline to update baseline if this is expected")
+        else:
+            print("❌ REGRESSION DETECTED: Performance has degraded beyond threshold")
+            print("   Run with --save-baseline to update baseline if this is expected")
         return 1
     else:
-        print("✓ NO REGRESSION: Performance is within acceptable range")
+        if ci_mode:
+            print("::notice title=Benchmark Check Passed::✅ NO REGRESSION: Performance is within acceptable range")
+        else:
+            print("✓ NO REGRESSION: Performance is within acceptable range")
         return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())
