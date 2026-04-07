@@ -144,7 +144,7 @@ class ContextCompactorMixin:
         try:
             model_name = self.get_model_name()
             if model_name:
-                return get_model_context_length()
+                return get_model_context_length(model_name)
         except Exception:
             pass
         return 128000  # Default
