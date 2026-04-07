@@ -61,26 +61,7 @@ def _read_config() -> ConcurrencyConfig:
         return ConcurrencyConfig()
     
     try:
-        try:
-            import tomllib  # Python 3.11+
-        except ImportError:
-            try:
-                import tomli as tomllib  # type: ignore[no-redef]
-            except ImportError:
-                # Manual parse fallback
-                text = _CONFIG_PATH.read_text()
-                _cached_config = {}
-                for raw in text.splitlines():
-                    line = raw.strip()
-                    if "=" in line and not line.startswith("#"):
-                        key, _, value = line.partition("=")
-                        key = key.strip()
-                        value = value.strip().strip('"').strip("'")
-                        try:
-                            _cached_config[key] = int(value)
-                        except ValueError:
-                            pass
-                return ConcurrencyConfig.from_dict(_cached_config)
+        import tomllib  # Python 3.11+
         
         with open(_CONFIG_PATH, "rb") as fh:
             data = tomllib.load(fh)
@@ -162,49 +143,44 @@ def release_tool_call_slot() -> None:
 
 # Context managers for cleaner usage
 
-class FileOpsLimiter:
+class Limiter:
+    """Generic context manager for concurrency limiting.
+    
+    Usage:
+        async with Limiter(_get_file_ops_semaphore):
+            # do file operation
+            pass
+    """
+    
+    def __init__(self, semaphore_getter):
+        self._get_sem = semaphore_getter
+        self._sem = None
+    
+    async def __aenter__(self):
+        self._sem = self._get_sem()
+        await self._sem.acquire()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._sem:
+            self._sem.release()
+        return False
+
+
+# Convenience factory functions for specific limiter types
+def FileOpsLimiter():
     """Context manager for file operations concurrency limiting."""
-    
-    def __init__(self):
-        self._sem = _get_file_ops_semaphore()
-    
-    async def __aenter__(self):
-        await self._sem.acquire()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        self._sem.release()
-        return False
+    return Limiter(_get_file_ops_semaphore)
 
 
-class ApiCallsLimiter:
+def ApiCallsLimiter():
     """Context manager for API calls concurrency limiting."""
-    
-    def __init__(self):
-        self._sem = _get_api_calls_semaphore()
-    
-    async def __aenter__(self):
-        await self._sem.acquire()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        self._sem.release()
-        return False
+    return Limiter(_get_api_calls_semaphore)
 
 
-class ToolCallsLimiter:
+def ToolCallsLimiter():
     """Context manager for tool calls concurrency limiting."""
-    
-    def __init__(self):
-        self._sem = _get_tool_calls_semaphore()
-    
-    async def __aenter__(self):
-        await self._sem.acquire()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        self._sem.release()
-        return False
+    return Limiter(_get_tool_calls_semaphore)
 
 
 def get_concurrency_status() -> dict[str, int]:
