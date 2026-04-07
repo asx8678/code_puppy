@@ -11,6 +11,8 @@ try:
         get_language,
         is_language_supported,
         supported_languages,
+        parse_file,
+        parse_source,
     )
 
     TURBO_PARSE_AVAILABLE = True
@@ -38,6 +40,38 @@ except ImportError:
         """Return empty list when Rust module is unavailable."""
         return {"languages": [], "count": 0}
 
+    def parse_source(source: str, language: str) -> dict[str, Any]:
+        """Fallback for parse_source when Rust module is unavailable.
+        
+        Returns an error dict indicating the Rust module is not available.
+        """
+        return {
+            "language": language,
+            "tree": None,
+            "parse_time_ms": 0.0,
+            "success": False,
+            "errors": [{
+                "message": "turbo_parse module not available - parsing disabled",
+                "severity": "error",
+            }],
+        }
+
+    def parse_file(path: str, language: str | None = None) -> dict[str, Any]:
+        """Fallback for parse_file when Rust module is unavailable.
+        
+        Returns an error dict indicating the Rust module is not available.
+        """
+        return {
+            "language": language or "unknown",
+            "tree": None,
+            "parse_time_ms": 0.0,
+            "success": False,
+            "errors": [{
+                "message": "turbo_parse module not available - parsing disabled",
+                "severity": "error",
+            }],
+        }
+
 
 # --- Turbo Parse toggle -----------------------------------------------------
 # When True (default), Rust acceleration is used at runtime if the module
@@ -63,3 +97,17 @@ def get_turbo_parse_status() -> dict:
         "enabled": _turbo_parse_user_enabled,
         "active": is_turbo_parse_enabled(),
     }
+
+
+__all__ = [
+    "health_check",
+    "get_language",
+    "is_language_supported",
+    "supported_languages",
+    "parse_file",
+    "parse_source",
+    "is_turbo_parse_enabled",
+    "set_turbo_parse_enabled",
+    "get_turbo_parse_status",
+    "TURBO_PARSE_AVAILABLE",
+]

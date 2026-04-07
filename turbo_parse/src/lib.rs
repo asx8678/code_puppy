@@ -2,11 +2,90 @@ use pyo3::prelude::*;
 use std::sync::OnceLock;
 
 mod cache;
+mod parser;
+mod registry;
 
 use cache::{ParseCache, CacheKey, CacheValue, compute_content_hash, DEFAULT_CACHE_CAPACITY};
+use parser::{parse_file as _parse_file, parse_source as _parse_source, ParseResult};
+use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError};
 
 /// Global singleton cache instance
 static GLOBAL_CACHE: OnceLock<ParseCache> = OnceLock::new();
+
+/// Parse source code directly with GIL release during parsing.
+///
+/// # Arguments
+/// * `source` - The source code to parse
+/// * `language` - The language identifier (e.g., "python", "rust", "javascript")
+///
+/// # Returns
+/// Dict with:
+///   - language: String - the detected/specified language
+///   - tree: Dict or None - serialized tree representation
+///   - parse_time_ms: f64 - time taken to parse
+///   - success: bool - whether parsing succeeded
+///   - errors: List[Dict] - any parse errors
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+/// result = turbo_parse.parse_source("def hello(): pass", "python")
+/// print(result["success"])  # True
+/// print(result["tree"])  # Serialized AST
+/// ```
+#[pyfunction]
+#[pyo3(signature = (source, language))]
+fn parse_source<'py>(py: Python<'py>, source: &str, language: &str) -> PyResult<Bound<'py, PyAny>> {
+    // Release GIL during CPU-intensive parsing
+    let result: ParseResult = py.detach(|| {
+        _parse_source(source, language)
+    });
+
+    convert_parse_result_to_py(py, &result)
+}
+
+/// Parse a file from disk with GIL release during parsing.
+///
+/// # Arguments
+/// * `path` - Path to the file
+/// * `language` - Optional language override (detected from extension if not provided)
+///   Supported extensions: .py, .rs, .js, .jsx, .ts, .tsx, .ex, .exs
+///
+/// # Returns
+/// Dict with:
+///   - language: String - the detected/specified language
+///   - tree: Dict or None - serialized tree representation
+///   - parse_time_ms: f64 - time taken to parse
+///   - success: bool - whether parsing succeeded
+///   - errors: List[Dict] - any parse errors
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+/// result = turbo_parse.parse_file("test.py")
+/// print(result["success"])  # True
+/// print(result["language"])  # "python"
+/// ```
+#[pyfunction]
+#[pyo3(signature = (path, language = None))]
+fn parse_file<'py>(py: Python<'py>, path: &str, language: Option<&str>) -> PyResult<Bound<'py, PyAny>> {
+    // Release GIL during file I/O and CPU-intensive parsing
+    let result: ParseResult = py.detach(|| {
+        _parse_file(path, language)
+    });
+
+    convert_parse_result_to_py(py, &result)
+}
+
+/// Helper to convert ParseResult to Python dict.
+fn convert_parse_result_to_py<'py>(py: Python<'py>, result: &ParseResult) -> PyResult<Bound<'py, PyAny>> {
+    let json_str = serde_json::to_string(result)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e)))?;
+
+    let json_module = py.import("json")?;
+    let py_dict = json_module.call_method1("loads", (json_str,))?;
+    Ok(py_dict)
+}
 
 /// Initialize the global parse cache
 #[pyfunction]
@@ -177,10 +256,6 @@ fn get_cache_info<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     Ok(py_dict)
 }
 
-mod registry;
-
-use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError};
-
 /// Check if a language is supported.
 ///
 /// Returns true if the language is supported, false otherwise.
@@ -281,6 +356,8 @@ fn convert_json_to_py<'py>(py: Python<'py>, value: &serde_json::Value) -> PyResu
 #[pymodule]
 fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(health_check, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_file, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_source, m)?)?;
     // Cache functions from main
     m.add_function(wrap_pyfunction!(init_cache, m)?)?;
     m.add_function(wrap_pyfunction!(cache_get, m)?)?;
