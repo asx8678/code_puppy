@@ -151,6 +151,66 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Mutable runtime state container - separates state from immutable config
         self._state = AgentRuntimeState()
 
+    # Backward-compatible properties that delegate to _state for migration support
+    @property
+    def _puppy_rules(self) -> str | None:
+        """Backward-compatible property delegating to _state.puppy_rules."""
+        return self._state.puppy_rules
+
+    @_puppy_rules.setter
+    def _puppy_rules(self, value: str | None) -> None:
+        """Backward-compatible setter delegating to _state.puppy_rules."""
+        self._state.puppy_rules = value
+
+    @property
+    def _message_history(self) -> list[Any]:
+        """Backward-compatible property delegating to _state.message_history."""
+        return self._state.message_history
+
+    @_message_history.setter
+    def _message_history(self, value: list[Any]) -> None:
+        """Backward-compatible setter delegating to _state.message_history."""
+        self._state.message_history = value
+
+    @property
+    def _model_name_cache(self) -> str | None:
+        """Backward-compatible property delegating to _state.model_name_cache."""
+        return self._state.model_name_cache
+
+    @_model_name_cache.setter
+    def _model_name_cache(self, value: str | None) -> None:
+        """Backward-compatible setter delegating to _state.model_name_cache."""
+        self._state.model_name_cache = value
+
+    @property
+    def _cached_context_overhead(self) -> int | None:
+        """Backward-compatible property delegating to _state.cached_context_overhead."""
+        return self._state.cached_context_overhead
+
+    @_cached_context_overhead.setter
+    def _cached_context_overhead(self, value: int | None) -> None:
+        """Backward-compatible setter delegating to _state.cached_context_overhead."""
+        self._state.cached_context_overhead = value
+
+    @property
+    def _delayed_compaction_requested(self) -> bool:
+        """Backward-compatible property delegating to _state.delayed_compaction_requested."""
+        return self._state.delayed_compaction_requested
+
+    @_delayed_compaction_requested.setter
+    def _delayed_compaction_requested(self, value: bool) -> None:
+        """Backward-compatible setter delegating to _state.delayed_compaction_requested."""
+        self._state.delayed_compaction_requested = value
+
+    @property
+    def _tool_ids_cache(self) -> Any:
+        """Backward-compatible property delegating to _state.tool_ids_cache."""
+        return self._state.tool_ids_cache
+
+    @_tool_ids_cache.setter
+    def _tool_ids_cache(self, value: Any) -> None:
+        """Backward-compatible setter delegating to _state.tool_ids_cache."""
+        self._state.tool_ids_cache = value
 
 
     @property

@@ -22,7 +22,7 @@ class TestBaseAgentConfiguration:
         rules_file.write_text("Test rules")
 
         # Clear any cached rules
-        agent._puppy_rules = None
+        agent._state.puppy_rules = None
 
         # Change to temp directory so Path("AGENTS.md") finds our file
         monkeypatch.chdir(tmp_path)
@@ -34,7 +34,7 @@ class TestBaseAgentConfiguration:
 
     def test_load_puppy_rules_caching(self, agent):
         # Test caching functionality
-        agent._puppy_rules = "Cached rules"
+        agent._state.puppy_rules = "Cached rules"
         result = agent.load_puppy_rules()
         assert result == "Cached rules"
 

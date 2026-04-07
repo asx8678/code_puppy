@@ -223,8 +223,8 @@ class TestMCPToolCache:
 
     def test_mcp_tool_cache_initialized_empty(self, agent):
         """Test that MCP tool cache is initialized as empty list."""
-        assert hasattr(agent, "_mcp_tool_definitions_cache")
-        assert agent._mcp_tool_definitions_cache == []
+        assert hasattr(agent._state, "mcp_tool_definitions_cache")
+        assert agent._state.mcp_tool_definitions_cache == []
 
     def test_estimate_context_overhead_with_empty_mcp_cache(self, agent):
         """Test that estimate_context_overhead_tokens works with empty MCP cache."""
@@ -238,7 +238,7 @@ class TestMCPToolCache:
         # Populate the cache with mock MCP tool definitions
         # Use large tool definitions to ensure the token count difference
         # is detectable with the ~4 chars/token estimation heuristic.
-        agent._mcp_tool_definitions_cache = [
+        agent._state.mcp_tool_definitions_cache = [
             {
                 "name": f"tool_{i}",
                 "description": f"A test tool number {i} with a sufficiently long description "
@@ -258,7 +258,7 @@ class TestMCPToolCache:
         overhead_with_tools = agent.estimate_context_overhead_tokens()
 
         # Clear both the tool cache and the overhead cache, then measure again
-        agent._mcp_tool_definitions_cache = []
+        agent._state.mcp_tool_definitions_cache = []
         agent._cached_context_overhead = None
         overhead_without_tools = agent.estimate_context_overhead_tokens()
 
@@ -279,7 +279,7 @@ class TestMCPToolCache:
             pass  # May fail if no MCP servers are configured, that's OK
 
         # Cache should be cleared
-        assert agent._mcp_tool_definitions_cache == []
+        assert agent._state.mcp_tool_definitions_cache == []
 
     def test_mcp_cache_token_estimation_accuracy(self, agent):
         """Test that MCP tool cache token estimation is reasonably accurate."""
@@ -323,7 +323,7 @@ class TestMCPToolCache:
 
         # Cache should be cleared (or remain as is if async update scheduled)
         # The key thing is it shouldn't raise an error
-        assert hasattr(agent, "_mcp_tool_definitions_cache")
+        assert hasattr(agent._state, "mcp_tool_definitions_cache")
 
 
 class TestTokenEstimationIntegration:
