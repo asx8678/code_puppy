@@ -1,9 +1,51 @@
+//! Turbo Parse — High-performance parsing with tree-sitter and PyO3 bindings.
+//!
+//! This crate provides fast parsing, symbol extraction, and syntax highlighting
+//! for multiple programming languages using tree-sitter grammars.
+//!
+//! # Features
+//!
+//! - `python` (default): Enable Python bindings via PyO3
+//! - `dynamic-grammars`: Enable runtime loading of grammar libraries
+//!
+//! # Security Note: Dynamic Grammars
+//!
+//! When the `dynamic-grammars` feature is enabled, this crate can load
+//! external shared libraries (.so/.dylib/.dll files). This carries security
+//! implications:
+//!
+//! 1. **Only load libraries from trusted sources** — Dynamic libraries
+//!    execute native code with the same privileges as the application.
+//!
+//! 2. **Path validation** — The crate includes path traversal protection,
+//!    but you should still validate paths before calling `register_grammar()`.
+//!
+//! 3. **Allowed directories** — For production use, configure allowed
+//!    directories to restrict where grammars can be loaded from.
+//!
+//! 4. **Library integrity** — Consider verifying checksums of grammar
+//!    libraries before loading them.
+//!
+//! Example secure usage:
+//! ```python
+//! import turbo_parse
+//!
+//! # Only allow loading from specific directory
+//! # (configure via DynamicGrammarLoader)
+//!
+//! # Register a grammar
+//! result = turbo_parse.register_grammar("go", "/path/to/tree-sitter-go.so")
+//! if result["success"]:
+//!     print(f"Grammar loaded: version {result['version']}")
+//! ```
+
 use pyo3::prelude::*;
 use std::sync::OnceLock;
 
 mod batch;
 mod cache;
 mod diagnostics;
+mod dynamic;
 mod folds;
 mod highlights;
 mod incremental;
@@ -20,7 +62,7 @@ use folds::{get_folds as _get_folds, get_folds_from_file as _get_folds_from_file
 use highlights::{get_highlights as _get_highlights, get_highlights_from_file as _get_highlights_from_file, HighlightResult};
 use incremental::{parse_with_edits, InputEdit};
 use parser::{parse_file as _parse_file, parse_source as _parse_source, ParseResult};
-use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError};
+use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError, register_dynamic_grammar, is_dynamic_grammar_registered, unregister_dynamic_grammar};
 use stats::{record_parse_operation, get_full_stats};
 use symbols::{extract_symbols as _extract_symbols, SymbolOutline, extract_symbols_from_file as _extract_symbols_from_file};
 
@@ -752,6 +794,200 @@ fn get_highlights_from_file<'py>(py: Python<'py>, path: &str, language: Option<&
     })?)
 }
 
+/// Register a dynamic grammar library at runtime.
+///
+/// This function loads a tree-sitter grammar from a shared library
+/// (.so/.dylib/.dll file) and makes it available for parsing.
+///
+/// # Security Warning
+/// Only load libraries from trusted sources. Dynamic libraries execute
+/// native code with the same privileges as the application.
+///
+/// # Arguments
+/// * `name` - The grammar name (e.g., "go", "ruby", "c")
+/// * `library_path` - Path to the compiled grammar library
+///
+/// # Returns
+/// Dict with:
+///   - success: bool - whether registration succeeded
+///   - name: str - the grammar name
+///   - version: int - tree-sitter language version (if successful)
+///   - error: str or None - error message if failed
+///
+/// # Example
+/// ```python
+/// import turbo_parse
+///
+/// result = turbo_parse.register_grammar("go", "/usr/local/lib/tree-sitter-go.so")
+/// if result["success"]:
+///     print(f"Loaded grammar version {result['version']}")
+/// else:
+///     print(f"Error: {result['error']}")
+/// ```
+#[pyfunction]
+#[pyo3(signature = (name, library_path))]
+fn register_grammar<'py>(py: Python<'py>, name: &str, library_path: &str) -> PyResult<Bound<'py, PyAny>> {
+    use crate::registry::register_dynamic_grammar;
+    
+    // Release GIL during library loading
+    let result = py.detach(|| {
+        register_dynamic_grammar(name, library_path)
+    });
+    
+    match result {
+        Ok(()) => {
+            // Try to get version info
+            let version = _get_language(name)
+                .map(|lang| lang.version())
+                .unwrap_or(0);
+            
+            let info = serde_json::json!({
+                "success": true,
+                "name": name,
+                "version": version,
+                "error": serde_json::Value::Null,
+            });
+            convert_json_to_py(py, &info)
+        }
+        Err(e) => {
+            let info = serde_json::json!({
+                "success": false,
+                "name": name,
+                "version": serde_json::Value::Null,
+                "error": e.to_string(),
+            });
+            convert_json_to_py(py, &info)
+        }
+    }
+}
+
+/// Unregister a dynamic grammar.
+///
+/// Removes a previously registered grammar from the registry.
+///
+/// # Arguments
+/// * `name` - The grammar name to unregister
+///
+/// # Returns
+/// True if the grammar was removed, False if it wasn't registered
+#[pyfunction]
+#[pyo3(signature = (name))]
+fn unregister_grammar(_py: Python<'_>, name: &str) -> bool {
+    unregister_dynamic_grammar(name)
+}
+
+/// Check if a grammar is registered (including dynamic grammars).
+///
+/// # Arguments
+/// * `name` - The grammar name to check
+///
+/// # Returns
+/// True if the grammar is registered (built-in or dynamic), False otherwise
+#[pyfunction]
+#[pyo3(signature = (name))]
+fn is_grammar_registered(_py: Python<'_>, name: &str) -> bool {
+    // Check built-in
+    if _is_language_supported(name) {
+        return true;
+    }
+    // Check dynamic
+    is_dynamic_grammar_registered(name)
+}
+
+/// List all registered grammars with their types.
+///
+/// Returns a list of dictionaries with grammar information:
+///   - name: str - the grammar name
+///   - type: str - "built-in" or "dynamic"
+///   - version: int - language version
+#[pyfunction]
+fn list_registered_grammars<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    use crate::dynamic::list_dynamic_grammars;
+    
+    let mut grammars = Vec::new();
+    
+    // Add built-in grammars
+    for name in list_supported_languages() {
+        if let Ok(lang) = _get_language(&name) {
+            grammars.push(serde_json::json!({
+                "name": name,
+                "type": "built-in",
+                "version": lang.version(),
+            }));
+        }
+    }
+    
+    // Add dynamic grammars
+    let dynamic = list_dynamic_grammars();
+    for info in dynamic {
+        grammars.push(serde_json::json!({
+            "name": info.name,
+            "type": "dynamic",
+            "version": info.version,
+        }));
+    }
+    
+    let result = serde_json::json!({
+        "grammars": grammars,
+        "total_count": grammars.len(),
+        "built_in_count": grammars.iter().filter(|g| g["type"] == "built-in").count(),
+        "dynamic_count": grammars.iter().filter(|g| g["type"] == "dynamic").count(),
+    });
+    
+    convert_json_to_py(py, &result)
+}
+
+/// Check if dynamic grammar loading is enabled.
+///
+/// Returns True if the `dynamic-grammars` feature was compiled in,
+/// False otherwise.
+#[pyfunction]
+fn dynamic_grammars_enabled() -> bool {
+    cfg!(feature = "dynamic-grammars")
+}
+
+/// Get information about dynamic grammar loading status.
+///
+/// Returns a dict with:
+///   - enabled: bool - whether the feature is enabled
+///   - platform: str - the current platform (linux, macos, windows)
+///   - library_extension: str - the expected file extension (.so, .dylib, .dll)
+///   - loaded_count: int - number of dynamic grammars currently loaded
+#[pyfunction]
+fn dynamic_grammar_info<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    use crate::dynamic::{global_loader, DYLIB_EXTENSION};
+    
+    let loader = global_loader();
+    let loaded = loader.list_loaded();
+    
+    let platform = if cfg!(target_os = "linux") {
+        "linux"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "unknown"
+    };
+    
+    let result = serde_json::json!({
+        "enabled": cfg!(feature = "dynamic-grammars"),
+        "platform": platform,
+        "library_extension": DYLIB_EXTENSION,
+        "loaded_count": loaded.len(),
+        "loaded_grammars": loaded.iter().map(|g| {
+            serde_json::json!({
+                "name": g.name,
+                "path": g.library_path.to_string_lossy().to_string(),
+                "version": g.version,
+                "has_external_scanner": g.has_external_scanner,
+            })
+        }).collect::<Vec<_>>(),
+    });
+    
+    convert_json_to_py(py, &result)
+}
+
 /// The turbo_parse Python module.
 #[pymodule]
 fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -786,6 +1022,13 @@ fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Highlight extraction functions
     m.add_function(wrap_pyfunction!(get_highlights, m)?)?;
     m.add_function(wrap_pyfunction!(get_highlights_from_file, m)?)?;
+    // Dynamic grammar functions
+    m.add_function(wrap_pyfunction!(register_grammar, m)?)?;
+    m.add_function(wrap_pyfunction!(unregister_grammar, m)?)?;
+    m.add_function(wrap_pyfunction!(is_grammar_registered, m)?)?;
+    m.add_function(wrap_pyfunction!(list_registered_grammars, m)?)?;
+    m.add_function(wrap_pyfunction!(dynamic_grammars_enabled, m)?)?;
+    m.add_function(wrap_pyfunction!(dynamic_grammar_info, m)?)?;
     // Add pyclass types
     m.add_class::<InputEdit>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
