@@ -24,6 +24,7 @@ from code_puppy.http_utils import find_available_port
 from code_puppy.keymap import KeymapError, validate_cancel_agent_key
 from code_puppy.terminal_utils import reset_windows_terminal_full
 from code_puppy.version_checker import default_version_mismatch_behavior
+from code_puppy.dbos_utils import is_dbos_initialized
 
 # Import these so main() can call them by name — tests patch at this module level
 from code_puppy.interactive_loop import interactive_mode  # noqa: F401
@@ -366,6 +367,10 @@ class AppRunner:
 
                 log_error(e, context="DBOS initialization error")
                 sys.exit(1)
+
+            # Verify DBOS actually initialized despite no exception
+            if not is_dbos_initialized():
+                emit_error("DBOS initialization verification failed. Workflow durability may be unavailable.")
 
         shutdown_flag = False
         try:
