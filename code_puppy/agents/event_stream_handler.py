@@ -13,7 +13,8 @@ from pydantic_ai.messages import (
     ThinkingPart,
     ThinkingPartDelta,
     ToolCallPart,
-    ToolCallPartDelta)
+    ToolCallPartDelta,
+)
 from rich.console import Console
 from rich.markup import escape
 from rich.text import Text
@@ -51,7 +52,10 @@ def _fire_stream_event(event_type: str, event_data: Any) -> None:
         _pending_stream_events.append((event_type, event_data, agent_session_id))
 
         # Flush on part_end or when batch threshold reached
-        if event_type == "part_end" or len(_pending_stream_events) >= _STREAM_FLUSH_INTERVAL:
+        if (
+            event_type == "part_end"
+            or len(_pending_stream_events) >= _STREAM_FLUSH_INTERVAL
+        ):
             batch = _pending_stream_events.copy()
             _pending_stream_events.clear()
             asyncio.create_task(_flush_stream_events(batch))
@@ -126,9 +130,7 @@ def _should_suppress_output() -> bool:
     return is_subagent() and not get_subagent_verbose()
 
 
-async def event_stream_handler(
-    ctx: RunContext,
-    events: AsyncIterable[Any]) -> None:
+async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> None:
     """Handle streaming events from the agent run.
 
     This function processes streaming events and emits TextPart, ThinkingPart,
@@ -180,7 +182,8 @@ async def event_stream_handler(
             Text.from_markup(
                 f"[bold white on {thinking_color}] THINKING [/bold white on {thinking_color}] [dim]\u26a1 "
             ),
-            end="")
+            end="",
+        )
         did_stream_anything = True
 
     async def _print_response_banner() -> None:
@@ -210,7 +213,8 @@ async def event_stream_handler(
                     "index": event.index,
                     "part_type": type(event.part).__name__,
                     "part": event.part,
-                })
+                },
+            )
 
             part = event.part
             if isinstance(part, ThinkingPart):
@@ -256,7 +260,8 @@ async def event_stream_handler(
                     "index": event.index,
                     "delta_type": type(event.delta).__name__,
                     "delta": event.delta,
-                })
+                },
+            )
 
             if event.index in streaming_parts:
                 delta = event.delta
@@ -316,11 +321,13 @@ async def event_stream_handler(
                     if tool_name:
                         console.print(
                             f"  \U0001f527 Calling {tool_name}... {count} token(s)   ",
-                            end="\r")
+                            end="\r",
+                        )
                     else:
                         console.print(
                             f"  \U0001f527 Calling tool... {count} token(s)   ",
-                            end="\r")
+                            end="\r",
+                        )
 
         # PartEndEvent - finish the streaming with a newline
         elif isinstance(event, PartEndEvent):
@@ -330,7 +337,8 @@ async def event_stream_handler(
                 {
                     "index": event.index,
                     "next_part_kind": getattr(event, "next_part_kind", None),
-                })
+                },
+            )
 
             if event.index in streaming_parts:
                 # For text parts, finalize termflow rendering

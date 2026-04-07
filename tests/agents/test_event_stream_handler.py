@@ -10,8 +10,6 @@ Covers:
 - Stream event batching behavior
 """
 
-import asyncio
-import importlib
 from io import StringIO
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -942,7 +940,9 @@ class TestStreamEventBatching:
                     mock_flush.assert_not_called()
 
                     # Add one more event to reach threshold
-                    _fire_stream_event("part_start", {"index": _STREAM_FLUSH_INTERVAL - 1})
+                    _fire_stream_event(
+                        "part_start", {"index": _STREAM_FLUSH_INTERVAL - 1}
+                    )
 
                     # Flush should be triggered via create_task
                     mock_flush.assert_called_once()
@@ -987,13 +987,17 @@ class TestStreamEventBatching:
             ("part_end", {"index": 0}, "session-1"),
         ]
 
-        with patch("code_puppy.callbacks.on_stream_event", new_callable=AsyncMock) as mock_on_stream:
+        with patch(
+            "code_puppy.callbacks.on_stream_event", new_callable=AsyncMock
+        ) as mock_on_stream:
             await _flush_stream_events(batch)
 
             # on_stream_event should be called for each event in batch
             assert mock_on_stream.call_count == 3
             mock_on_stream.assert_any_call("part_start", {"index": 0}, "session-1")
-            mock_on_stream.assert_any_call("part_delta", {"content": "hello"}, "session-1")
+            mock_on_stream.assert_any_call(
+                "part_delta", {"content": "hello"}, "session-1"
+            )
             mock_on_stream.assert_any_call("part_end", {"index": 0}, "session-1")
 
     @pytest.mark.asyncio
