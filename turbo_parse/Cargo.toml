@@ -2,6 +2,9 @@
 name = "turbo_parse"
 version = "0.1.0"
 edition = "2021"
+authors = ["Code Puppy Team"]
+description = "High-performance parsing with tree-sitter and PyO3 bindings"
+license = "MIT"
 
 [lib]
 name = "turbo_parse"
@@ -13,5 +16,16 @@ path = "examples/spike.rs"
 
 [dependencies]
 pyo3 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 tree-sitter = "0.24"
 tree-sitter-python = "0.23"
+tree-sitter-rust = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-elixir = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
