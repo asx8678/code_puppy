@@ -12,7 +12,6 @@ High-performance parsing with tree-sitter and PyO3 bindings for Code Puppy.
 - **Blazing Fast**: Rust-powered parsing with tree-sitter, GIL release during CPU-intensive operations
 - **Multi-Language**: Support for Python, Rust, JavaScript, TypeScript, TSX, and Elixir
 - **Symbol Extraction**: Extract functions, classes, methods, imports with precise location info
-- **Syntax Highlighting**: Extract highlight regions with byte positions using Helix Editor queries
 - **Diagnostics**: Syntax error detection with detailed position information
 - **Caching**: LRU cache for parsed trees to avoid re-parsing unchanged files
 - **Incremental Parsing**: Fast re-parsing with tree reuse for editor-like use cases
@@ -240,62 +239,63 @@ for symbol in result['symbols']:
     print(f"{symbol['kind']}: {symbol['name']} (line {symbol['start_line']})")
 ```
 
-### Syntax Highlighting
-
-Extract syntax highlighting regions from source code using tree-sitter queries from the Helix Editor project.
+### Extract Folds (Code Folding)
 
 ```python
 import turbo_parse
 
 source = """
-def greet(name: str) -> str:
-    # Return a greeting message
+def hello(name: str) -> str:
     return f"Hello, {name}!"
+
+class DataProcessor:
+    def __init__(self):
+        self.cache = {}
+    
+    def process(self, data: List[str]) -> dict:
+        return process_data(data)
+        
+    if True:
+        print("conditional block")
 """
 
-result = turbo_parse.get_highlights(source, "python")
-print(f"Found {len(result['captures'])} highlight regions")
-print(f"Time: {result['extraction_time_ms']:.2f}ms")
+result = turbo_parse.get_folds(source, "python")
+print(f"Found {len(result['folds'])} foldable regions:")
 
-# Each capture has:
-#   - start_byte: int - start byte position (0-indexed, inclusive)
-#   - end_byte: int - end byte position (0-indexed, exclusive)
-#   - capture_name: str - the highlight type (e.g., "keyword", "string", "comment")
-for cap in result['captures'][:5]:  # Show first 5
-    text = source[cap['start_byte']:cap['end_byte']]
-    print(f"  {cap['capture_name']:20} | {text!r}")
+for fold in result['folds']:
+    fold_type = fold['fold_type']
+    start = fold['start_line']
+    end = fold['end_line']
+    print(f"  [{fold_type}] lines {start}-{end}")
 ```
 
-**Example output:**
+**Output:**
 ```
-Found 12 highlight regions
-Time: 0.45ms
-  keyword.function     | 'def'
-  function             | 'greet'
-  variable.parameter   | 'name'
-  punctuation          | ':'
-  type                 | 'str'
+Found 4 foldable regions:
+  [function] lines 2-3
+  [class] lines 5-12
+  [function] lines 7-8
+  [function] lines 10-11
+  [conditional] lines 13-14
 ```
 
-**Capture names** follow Helix Editor conventions:
-- `keyword` / `keyword.function` / `keyword.control` - Language keywords
-- `string` / `string.template` - String literals
-- `comment` / `comment.line` / `comment.block` - Comments
-- `function` / `function.method` / `function.builtin` - Functions
-- `type` / `type.builtin` - Type names
-- `variable` / `variable.parameter` / `variable.builtin` - Variables
-- `constant` / `constant.builtin` / `constant.numeric` - Constants
-- `operator` / `punctuation` - Operators and punctuation
+**Fold Types:**
+- `function` - Function definitions
+- `class` - Class/struct definitions
+- `conditional` - If statements, match expressions, switch statements
+- `loop` - For, while, loop constructs
+- `block` - Try blocks, with statements, impl blocks
+- `import` - Import/export statements
+- `generic` - Generic blocks (objects, arrays, JSX elements)
 
-**Highlight from file:**
+### Extract Folds from File
+
 ```python
 import turbo_parse
 
-# Auto-detect language from extension
-result = turbo_parse.get_highlights_from_file("src/main.py")
-
-# Or specify language explicitly
-result = turbo_parse.get_highlights_from_file("some_file.txt", language="python")
+result = turbo_parse.get_folds_from_file("src/main.py")
+for fold in result['folds']:
+    print(f"{fold['fold_type']}: lines {fold['start_line']}-{fold['end_line']}")
 ```
 
 ### Syntax Diagnostics
@@ -583,6 +583,10 @@ turbo_parse is organized into several modules that work together:
 │  │parse_source │  │  parse_file │  │   extract_symbols   │  │
 │  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘   │
 │         └─────────────────┴────────────────────┘              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
+│  │  get_folds  │  │ get_folds_  │  │ extract_symbols_    │   │
+│  │             │  │ from_file   │  │ from_file           │   │
+│  └─────────────┴──┴─────────────┴──┴─────────────────────┘   │
 └─────────────────────────┬───────────────────────────────────┘
                           │
 ┌─────────────────────────▼───────────────────────────────────┐
@@ -602,6 +606,14 @@ turbo_parse is organized into several modules that work together:
 │  │  • InputEdit struct — edit descriptors               │   │
 │  │  • parse_with_edits — incremental re-parsing         │   │
 │  │  • Tree::edit() + Parser::parse_with() integration    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │                    folds.rs                          │   │
+│  │  • FoldRange struct — foldable regions               │   │
+│  │  • FoldType enum — function, class, block, etc.       │   │
+│  │  • FoldContext — reusable query state               │   │
+│  │  • @fold capture queries from Helix Editor          │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────┬───────────────────────────────────┘
                           │
@@ -645,15 +657,6 @@ turbo_parse is organized into several modules that work together:
   - Parent-child relationships (methods → classes)
   - Symbol kind classification (function, class, method, import, etc.)
   - Position tracking (line, column, byte offsets)
-
-#### `highlights` — Syntax Highlighting
-- **Purpose**: Extract syntax highlighting regions using tree-sitter queries
-- **Key Functions**: `get_highlights()`, `get_highlights_from_file()`
-- **Features**:
-  - Helix Editor query compatibility
-  - Byte-accurate position tracking
-  - Ordered capture output
-  - Query caching via `HighlightContext` for performance
 
 #### `diagnostics` — Syntax Error Detection
 - **Purpose**: Extract ERROR and MISSING nodes from tree-sitter trees
@@ -860,8 +863,8 @@ See [CI.md](./CI.md) for detailed information about:
 | `parse_file()` | `(path: str, language: str=None) -> dict` | Parse file from disk |
 | `extract_symbols()` | `(source: str, language: str) -> dict` | Extract symbols from source |
 | `extract_symbols_from_file()` | `(path: str, language: str=None) -> dict` | Extract symbols from file |
-| `get_highlights()` | `(source: str, language: str) -> dict` | Get syntax highlights from source |
-| `get_highlights_from_file()` | `(path: str, language: str=None) -> dict` | Get syntax highlights from file |
+| `get_folds()` | `(source: str, language: str) -> dict` | Extract fold ranges from source |
+| `get_folds_from_file()` | `(path: str, language: str=None) -> dict` | Extract fold ranges from file |
 | `extract_syntax_diagnostics()` | `(source: str, language: str) -> dict` | Get syntax errors |
 | `parse_files_batch()` | `(paths: list[str], max_workers: int=None) -> dict` | Parse files in parallel |
 | `init_cache()` | `(capacity: int=None) -> dict` | Initialize parse cache |
