@@ -13,11 +13,11 @@
 ## config.py Findings
 
 ### [SEV-MEDIUM] Duplicate Docstring Location
-**File:** code_puppy/config.py:1007-1014  
+**File:** code_puppy/config.py:1002-1014  
 **Issue:** A function docstring for `normalize_command_history()` is orphaned at the end of another function, appearing between unrelated code. This is likely a copy-paste error where a docstring was accidentally placed after the closing brace of a function.
 
 ```python
-# Lines ~1007-1014
+# Lines ~1002-1014
 
 # Legacy functions for backward compatibility
     """
@@ -29,7 +29,7 @@
 ---
 
 ### [SEV-LOW] Module-Level Mutable Globals Without Clear Thread Safety
-**File:** code_puppy/config.py:27-34  
+**File:** code_puppy/config.py:13-18  
 **Issue:** Multiple mutable global caches (`_config_cache`, `_model_validation_cache`, `_default_model_cache`, etc.) are accessed and modified across the module without explicit synchronization mechanisms. While Python's GIL provides some safety, concurrent access during cache invalidation and reads could lead to race conditions.
 
 ```python
@@ -45,7 +45,7 @@ _model_validation_cache = {}
 ---
 
 ### [SEV-LOW] Cache Invalidation Timing Issue
-**File:** code_puppy/config.py:36-56  
+**File:** code_puppy/config.py:39-43  
 **Issue:** The `_get_config()` function has a race condition window: between checking `_cached_mtime != _config_mtime` and updating `_config_mtime`, another thread could trigger invalidation. This is a TOCTOU (Time-of-Check-Time-of-Use) issue.
 
 ```python
@@ -60,7 +60,7 @@ if _config_cache is None or _cached_mtime != _config_mtime:
 ---
 
 ### [SEV-LOW] Exception Handling in Config Fallback
-**File:** code_puppy/config.py:540-542, 607-611  
+**File:** code_puppy/config.py:348, 371, 475, 502, 543, 565, 614  
 **Issue:** Multiple places use bare `except Exception:` which is modern Python best practice - it catches application errors while allowing `KeyboardInterrupt`, `SystemExit`, and `GeneratorExit` (which inherit from `BaseException`, not `Exception`) to propagate correctly.
 
 ```python
@@ -74,7 +74,7 @@ except Exception:
 ---
 
 ### [SEV-LOW] Mutable Default Argument Risk in `_get_supported_settings_cache`
-**File:** code_puppy/config.py:109-129  
+**File:** code_puppy/config.py:221  
 **Issue:** The lru_cache-wrapped function captures model_name but the returned frozenset may contain mutable objects (though frozenset is immutable, the issue is more about closure state). This is a minor concern given the caching pattern.
 
 **Fix:** Review that all cached return values are truly immutable or document the caching behavior clearly.
@@ -82,7 +82,7 @@ except Exception:
 ---
 
 ### [SEV-LOW] Legacy Comment Block
-**File:** code_puppy/config.py:461-464  
+**File:** code_puppy/config.py:314-317  
 **Issue:** Legacy comment block about message history limit is technically not commented code, but the phrase "Legacy function removed" is misleading documentation that should be cleaned up.
 
 ```python
@@ -96,31 +96,17 @@ except Exception:
 
 ## model_factory.py Findings
 
-### [SEV-MEDIUM] Resource Leak in `make_model_settings` - Verify Consistency
-**File:** code_puppy/model_factory.py  
-**Issue:** Review all file operations for consistent use of context managers (`with` statement).
 
-```python
-# ModelFactory.load_config uses proper with statements:
-bundled_models = pathlib.Path(__file__).parent / "models.json"
-with open(bundled_models, "r") as f:
-    config = json.load(f)
-```
-
-**Fix:** All file operations in model_factory.py correctly use `with` statements. No changes needed, but verify this pattern is maintained in future modifications.
-
----
-
-### [SEV-MEDIUM] Mutable Default in `_build_anthropic_beta_header` Pattern
-**File:** code_puppy/model_factory.py:108-123  
+### [SEV-LOW] Mutable Default in `_build_anthropic_beta_header` Pattern
+**File:** code_puppy/model_factory.py:85-100  
 **Issue:** Lists are created fresh each call which is safe, but the pattern `parts: list[str] = []` could be confused with `parts = []` at module level.
 
 **Fix:** This is actually correct (new list each call), but consider adding a comment to clarify intent.
 
 ---
 
-### [SEV-MEDIUM] Type Annotation Inaccuracy
-**File:** code_puppy/model_factory.py:70-123  
+### [SEV-LOW] Type Annotation Inaccuracy
+**File:** code_puppy/model_factory.py:70-130  
 **Issue:** `make_model_settings` returns `ModelSettings` but creates different subclass instances conditionally (`OpenAIResponsesModelSettings`, `AnthropicModelSettings`, `OpenAIChatModelSettings`). The return type annotation doesn't reflect this union.
 
 ```python
@@ -140,7 +126,7 @@ def make_model_settings(...) -> ModelSettings:  # Should be Union[...] or base c
 ---
 
 ### [SEV-LOW] Inconsistent Error Handling in Custom Config Resolution
-**File:** code_puppy/model_factory.py:226-290  
+**File:** code_puppy/model_factory.py:274-295  
 **Issue:** `get_custom_config()` handles missing API keys by logging warnings and continuing with empty strings, which may cause downstream failures with cryptic error messages. Silent degradation pattern.
 
 ```python
@@ -162,7 +148,7 @@ if api_key is None:
 ---
 
 ### [SEV-LOW] Similar Code Blocks in `_build_zai_coding` and `_build_zai_api`
-**File:** code_puppy/model_factory.py:534-571  
+**File:** code_puppy/model_factory.py:551-581  
 **Issue:** The two Zai builders have nearly identical code (95% similar), differing only in the base_url. This violates DRY principle.
 
 ```python
@@ -177,8 +163,8 @@ if api_key is None:
 ## adaptive_rate_limiter.py Findings
 
 ### [SEV-MEDIUM] Potential Deadlock in `acquire_model_slot`
-**File:** code_puppy/adaptive_rate_limiter.py:408-466  
-**Issue:** The function acquires `lock` then releases it, later acquiring `state.condition`. However, there are paths where `state.condition` is awaited while holding async context that could lead to complex interleaving issues. The TOCTOU fix (lines 429-444) uses nested lock acquisition patterns that need careful review.
+**File:** code_puppy/adaptive_rate_limiter.py:613-720  
+**Issue:** The function acquires `lock` then releases it, later acquiring `state.condition`. However, there are paths where `state.condition` is awaited while holding async context that could lead to complex interleaving issues. The TOCTOU fix uses nested lock acquisition patterns that need careful review.
 
 ```python
 async with lock:
@@ -192,12 +178,12 @@ if need_wait_open:
             await asyncio.wait_for(state.condition.wait(), timeout=timeout)
 ```
 
-**Fix:** The current implementation is correct after the TOCTOU fix. Add extensive comments explaining the locking strategy. The condition lock is intentionally different from the global lock.
+**Fix:** Add extensive comments explaining the locking strategy. The condition lock is intentionally different from the global lock.
 
 ---
 
 ### [SEV-MEDIUM] Integer Division Inconsistency
-**File:** code_puppy/adaptive_rate_limiter.py:362  
+**File:** code_puppy/adaptive_rate_limiter.py:702  
 **Issue:** `int(state.current_limit)` truncates rather than rounds. For limits like 2.9, this effectively gives quota for 2 concurrent requests, possibly causing under-utilization.
 
 ```python
@@ -206,13 +192,6 @@ while state.active_count >= int(state.current_limit):  # Truncation vs rounding
 
 **Fix:** Consider `math.ceil()` for more permissive behavior or document the truncation behavior explicitly.
 
-
-**File:** code_puppy/adaptive_rate_limiter.py:269-275  
-**Issue:** The code stores `asyncio.TaskGroup` in `_state.circuit_tasks` as a set, but `TaskGroup` is a context manager that shouldn't be stored long-term. Wait, reading more carefully - `circuit_tasks` stores `Task` objects not `TaskGroup`. This is correct.
-
-**Fix:** No issue found.
-
----
 
 ### [SEV-MEDIUM] Float Comparison with `abs() < 0.01`
 **File:** code_puppy/adaptive_rate_limiter.py:262  
@@ -228,7 +207,7 @@ if abs(new_limit - old_limit) < 0.01:
 ---
 
 ### [SEV-LOW] Global State in `_BackCompatModule`
-**File:** code_puppy/adaptive_rate_limiter.py:535-615  
+**File:** code_puppy/adaptive_rate_limiter.py:868-911  
 **Issue:** The back-compat module replacement pattern modifies `sys.modules` at import time, which can interfere with import machinery and cause issues with reloads, mock patching, or alternative import systems.
 
 ```python
@@ -245,7 +224,7 @@ _sys.modules[__name__] = _new
 ## callbacks.py Findings
 
 ### [SEV-MEDIUM] Async vs Sync Callback Mixing Can Cause Loop Confusion
-**File:** code_puppy/callbacks.py:145-163, 190-196  
+**File:** code_puppy/callbacks.py:170-198, 240-260  
 **Issue:** `_trigger_callbacks_sync()` attempts to handle async callbacks by calling `asyncio.get_running_loop()` and using `asyncio.ensure_future()` or `asyncio.run()`. However, calling `asyncio.run()` from within an already running loop raises `RuntimeError`. The code catches this, but the fallback to `asyncio.run()` can cause issues in thread pool contexts.
 
 ```python
@@ -265,7 +244,7 @@ if asyncio.iscoroutine(result):
 ---
 
 ### [SEV-MEDIUM] `asyncio.TaskGroup` Cancellation Behavior
-**File:** code_puppy/callbacks.py:189-215  
+**File:** code_puppy/callbacks.py:255-270  
 **Issue:** The comment says "auto-cancels remaining tasks on first unhandled failure" but `_run_one` catches all exceptions and returns None. So the cancellation feature isn't actually utilized. This is fine but the comment is misleading.
 
 ```python
@@ -280,7 +259,7 @@ if asyncio.iscoroutine(result):
 ---
 
 ### [SEV-LOW] `*args, **kwargs` Pattern Loses Type Safety
-**File:** code_puppy/callbacks.py:216-224 (and all `on_*` functions)  
+**File:** code_puppy/callbacks.py:288-400 (and all `on_*` functions)  
 **Issue:** All the `on_*` functions use `*args, **kwargs` which provides no type checking at call sites. Errors in argument count or type are runtime errors rather than caught by mypy.
 
 **Fix:** Consider using `ParamSpec` for preserving callback signatures, though this adds complexity.
@@ -288,7 +267,7 @@ if asyncio.iscoroutine(result):
 ---
 
 ### [SEV-LOW] `drain_backlog` Always Returns `list[Any]` Even When Buffer Empty
-**File:** code_puppy/callbacks.py:217-226  
+**File:** code_puppy/callbacks.py:262-270  
 **Issue:** The return type is `list[Any]` but the function documentation doesn't clarify what the return values represent (results from replayed callbacks? something else?).
 
 **Fix:** Improve docstring to explain return semantics.
@@ -296,7 +275,7 @@ if asyncio.iscoroutine(result):
 ---
 
 ### [SEV-MEDIUM] Missing Context Cleanup on Exception in `on_pre_tool_call`
-**File:** code_puppy/callbacks.py:445-487  
+**File:** code_puppy/callbacks.py:422-462  
 **Issue:** If an exception occurs during callback triggering, the child RunContext is created but may not be properly cleaned up if `_trigger_callbacks` itself raises.
 
 ```python
@@ -315,7 +294,7 @@ Actually: `set_current_run_context` sets a context var, and `on_post_tool_call` 
 ## interactive_loop.py Findings
 
 ### [SEV-MEDIUM] Exception Masking with Overly Broad `except Exception`
-**File:** code_puppy/interactive_loop.py:130-157  
+**File:** code_puppy/interactive_loop.py:576-586  
 **Issue:** The Wiggum loop catches `Exception` broadly and stops the loop, but also catches `asyncio.CancelledError` (subclass of Exception in Python 3.8-3.10, though not in 3.11+). This could suppress legitimate cancellation signals.
 
 ```python
@@ -346,7 +325,7 @@ async def interactive_mode(...):
 ---
 
 ### [SEV-LOW] `getattr` Check Without Attribute Existence Verification
-**File:** code_puppy/interactive_loop.py:258-262  
+**File:** code_puppy/interactive_loop.py:483, 566  
 **Issue:** Checking `if hasattr(display_console.file, "flush"):` then calling `display_console.file.flush()` assumes `file` exists. But checking for `flush` attribute doesn't guarantee `file` attribute exists.
 
 ```python
@@ -359,7 +338,7 @@ if hasattr(display_console.file, "flush"):  # What if .file is None?
 ---
 
 ### [SEV-LOW] Potentially Unbound Variable in Import Fallback
-**File:** code_puppy/interactive_loop.py:85-93  
+**File:** code_puppy/interactive_loop.py:96-102, 144-148  
 **Issue:** The `try/except ImportError` block for prompt_toolkit sets variables to None on failure, but the code later assumes these might be functions. The None check is performed but repeated throughout.
 
 ```python
@@ -409,8 +388,8 @@ except ImportError:
 | Severity | Count | Files |
 |----------|-------|-------|
 | HIGH | 0 | - |
-| MEDIUM | 12 | config.py (orphaned docstring), model_factory.py (resource consistency, DRY, types), adaptive_rate_limiter.py (locking docs, float compare, integer truncation), callbacks.py (async/sync mixing, TaskGroup comments, context cleanup), interactive_loop.py (exception masking, imports) |
-| LOW | 12 | config.py (globals, cache, lru_cache, comments), model_factory.py (imports, error handling, nesting), adaptive_rate_limiter.py (back-compat), callbacks.py (type safety, docstrings), interactive_loop.py (getattr, imports), cross-cutting (type syntax, loggers, docstrings) |
+| MEDIUM | 9 | config.py (orphaned docstring), model_factory.py (DRY, async/sync), adaptive_rate_limiter.py (locking docs, float compare, integer truncation), callbacks.py (async/sync mixing, TaskGroup comments, context cleanup), interactive_loop.py (exception masking, imports) |
+| LOW | 15 | config.py (globals, cache, lru_cache, comments, exception handling), model_factory.py (imports, error handling, nesting, type annotations, beta header), adaptive_rate_limiter.py (back-compat), callbacks.py (type safety, docstrings), interactive_loop.py (getattr, imports), cross-cutting (type syntax, loggers, docstrings) |
 
 ## Recommendations
 
@@ -418,4 +397,4 @@ except ImportError:
 2. **Priority 2 (MEDIUM):** Add locking strategy documentation in `adaptive_rate_limiter.py`
 3. **Priority 3 (MEDIUM):** Fix orphaned docstring in `config.py` and DRY up Zai builders in `model_factory.py`
 4. **Priority 4 (MEDIUM):** Fix exception masking in `interactive_loop.py` to not catch `asyncio.CancelledError`
-5. **Priority 5 (LOW):** Standardize type syntax, add missing docstrings
+5. **Priority 5 (LOW):** Standardize type syntax, add missing docstrings, review integer truncation behavior
