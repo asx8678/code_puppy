@@ -239,6 +239,65 @@ for symbol in result['symbols']:
     print(f"{symbol['kind']}: {symbol['name']} (line {symbol['start_line']})")
 ```
 
+### Extract Folds (Code Folding)
+
+```python
+import turbo_parse
+
+source = """
+def hello(name: str) -> str:
+    return f"Hello, {name}!"
+
+class DataProcessor:
+    def __init__(self):
+        self.cache = {}
+    
+    def process(self, data: List[str]) -> dict:
+        return process_data(data)
+        
+    if True:
+        print("conditional block")
+"""
+
+result = turbo_parse.get_folds(source, "python")
+print(f"Found {len(result['folds'])} foldable regions:")
+
+for fold in result['folds']:
+    fold_type = fold['fold_type']
+    start = fold['start_line']
+    end = fold['end_line']
+    print(f"  [{fold_type}] lines {start}-{end}")
+```
+
+**Output:**
+```
+Found 4 foldable regions:
+  [function] lines 2-3
+  [class] lines 5-12
+  [function] lines 7-8
+  [function] lines 10-11
+  [conditional] lines 13-14
+```
+
+**Fold Types:**
+- `function` - Function definitions
+- `class` - Class/struct definitions
+- `conditional` - If statements, match expressions, switch statements
+- `loop` - For, while, loop constructs
+- `block` - Try blocks, with statements, impl blocks
+- `import` - Import/export statements
+- `generic` - Generic blocks (objects, arrays, JSX elements)
+
+### Extract Folds from File
+
+```python
+import turbo_parse
+
+result = turbo_parse.get_folds_from_file("src/main.py")
+for fold in result['folds']:
+    print(f"{fold['fold_type']}: lines {fold['start_line']}-{fold['end_line']}")
+```
+
 ### Syntax Diagnostics
 
 ```python
@@ -524,6 +583,10 @@ turbo_parse is organized into several modules that work together:
 │  │parse_source │  │  parse_file │  │   extract_symbols   │  │
 │  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘   │
 │         └─────────────────┴────────────────────┘              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
+│  │  get_folds  │  │ get_folds_  │  │ extract_symbols_    │   │
+│  │             │  │ from_file   │  │ from_file           │   │
+│  └─────────────┴──┴─────────────┴──┴─────────────────────┘   │
 └─────────────────────────┬───────────────────────────────────┘
                           │
 ┌─────────────────────────▼───────────────────────────────────┐
@@ -543,6 +606,14 @@ turbo_parse is organized into several modules that work together:
 │  │  • InputEdit struct — edit descriptors               │   │
 │  │  • parse_with_edits — incremental re-parsing         │   │
 │  │  • Tree::edit() + Parser::parse_with() integration    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │                    folds.rs                          │   │
+│  │  • FoldRange struct — foldable regions               │   │
+│  │  • FoldType enum — function, class, block, etc.       │   │
+│  │  • FoldContext — reusable query state               │   │
+│  │  • @fold capture queries from Helix Editor          │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────┬───────────────────────────────────┘
                           │
@@ -792,6 +863,8 @@ See [CI.md](./CI.md) for detailed information about:
 | `parse_file()` | `(path: str, language: str=None) -> dict` | Parse file from disk |
 | `extract_symbols()` | `(source: str, language: str) -> dict` | Extract symbols from source |
 | `extract_symbols_from_file()` | `(path: str, language: str=None) -> dict` | Extract symbols from file |
+| `get_folds()` | `(source: str, language: str) -> dict` | Extract fold ranges from source |
+| `get_folds_from_file()` | `(path: str, language: str=None) -> dict` | Extract fold ranges from file |
 | `extract_syntax_diagnostics()` | `(source: str, language: str) -> dict` | Get syntax errors |
 | `parse_files_batch()` | `(paths: list[str], max_workers: int=None) -> dict` | Parse files in parallel |
 | `init_cache()` | `(capacity: int=None) -> dict` | Initialize parse cache |
