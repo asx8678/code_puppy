@@ -95,7 +95,19 @@ class TestTurboParsePluginCallbacks:
 
         result = _register_tools()
         assert isinstance(result, list)
-        assert len(result) == 0  # Currently a placeholder
+        assert len(result) == 1  # Now has parse_code tool
+
+    def test_register_tools_returns_parse_code_definition(self):
+        """Test that register_tools returns parse_code tool definition."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_tools
+
+        result = _register_tools()
+        assert len(result) == 1
+        
+        tool_def = result[0]
+        assert tool_def["name"] == "parse_code"
+        assert "register_func" in tool_def
+        assert callable(tool_def["register_func"])
 
 
 class TestTurboParseStartup:
@@ -870,3 +882,385 @@ class TestStatsAfterParsing:
         
         # Average should be non-negative
         assert avg_time >= 0.0
+
+
+# ============================================================================
+# Tests for parse_code tool registration and functionality
+# ============================================================================
+
+class TestParseCodeToolRegistration:
+    """Tests for the parse_code tool registration via register_tools hook."""
+
+    def test_parse_code_tool_register_func_exists(self):
+        """Test that _register_parse_code_tool function exists."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_parse_code_tool
+        
+        assert callable(_register_parse_code_tool)
+
+    def test_parse_code_tool_normalizes_language_aliases(self):
+        """Test that language aliases are normalized correctly."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _normalize_language
+        
+        assert _normalize_language("py") == "python"
+        assert _normalize_language("js") == "javascript"
+        assert _normalize_language("ts") == "typescript"
+        assert _normalize_language("rs") == "rust"
+        assert _normalize_language("PYTHON") == "python"  # Case insensitive
+        assert _normalize_language("rust") == "rust"  # Already normalized
+        assert _normalize_language("  python  ") == "python"  # Whitespace stripped
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_code_tool_integration(self):
+        """Integration test for parse_code tool with mocked agent."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_parse_code_tool
+        
+        # Create a mock agent
+        mock_agent = mock.Mock()
+        tools = {}
+        
+        def mock_tool_decorator(func):
+            tools[func.__name__] = func
+            return func
+        
+        mock_agent.tool = mock_tool_decorator
+        
+        # Register the tool
+        _register_parse_code_tool(mock_agent)
+        
+        # Verify tool was registered
+        assert "parse_code" in tools
+        
+        # Get the registered tool function
+        parse_code = tools["parse_code"]
+        
+        # Verify the function has correct docstring and signature info
+        assert "Parse source code" in parse_code.__doc__
+        assert "AST" in parse_code.__doc__
+
+    def test_parse_code_tool_returns_correct_structure(self):
+        """Test that parse_code tool returns correct response structure."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_parse_code_tool
+        from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
+        
+        # Create a mock agent and context
+        mock_agent = mock.Mock()
+        tools = {}
+        
+        def mock_tool_decorator(func):
+            tools[func.__name__] = func
+            return func
+        
+        mock_agent.tool = mock_tool_decorator
+        
+        # Register the tool
+        _register_parse_code_tool(mock_agent)
+        parse_code = tools["parse_code"]
+        
+        # Test with simple Python code
+        mock_context = mock.Mock()
+        
+        # We need to run the async function
+        import asyncio
+        
+        result = asyncio.run(parse_code(
+            context=mock_context,
+            source="def hello(): pass",
+            language="python",
+            options=None,
+        ))
+        
+        # Verify response structure
+        assert "success" in result
+        assert "tree" in result
+        assert "symbols" in result
+        assert "diagnostics" in result
+        assert "parse_time_ms" in result
+        assert "language" in result
+        assert "errors" in result
+        
+        # Verify types
+        assert isinstance(result["success"], bool)
+        assert isinstance(result["parse_time_ms"], (int, float))
+        assert isinstance(result["symbols"], list)
+        assert isinstance(result["diagnostics"], list)
+        assert isinstance(result["errors"], list)
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_code_tool_with_symbols_extraction(self):
+        """Test parse_code tool with symbol extraction enabled."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_parse_code_tool
+        
+        mock_agent = mock.Mock()
+        tools = {}
+        
+        def mock_tool_decorator(func):
+            tools[func.__name__] = func
+            return func
+        
+        mock_agent.tool = mock_tool_decorator
+        _register_parse_code_tool(mock_agent)
+        parse_code = tools["parse_code"]
+        
+        import asyncio
+        
+        result = asyncio.run(parse_code(
+            context=mock.Mock(),
+            source="""
+def outer_func():
+    pass
+
+class MyClass:
+    def method(self):
+        pass
+""",
+            language="python",
+            options={"extract_symbols": True},
+        ))
+        
+        # Should have extracted symbols
+        assert len(result["symbols"]) > 0
+        # Verify symbol structure
+        for symbol in result["symbols"]:
+            assert "name" in symbol
+            assert "kind" in symbol
+            assert "start_line" in symbol
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_code_tool_with_diagnostics_extraction(self):
+        """Test parse_code tool with diagnostics extraction enabled."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_parse_code_tool
+        
+        mock_agent = mock.Mock()
+        tools = {}
+        
+        def mock_tool_decorator(func):
+            tools[func.__name__] = func
+            return func
+        
+        mock_agent.tool = mock_tool_decorator
+        _register_parse_code_tool(mock_agent)
+        parse_code = tools["parse_code"]
+        
+        import asyncio
+        
+        # Test with code that has syntax issues
+        result = asyncio.run(parse_code(
+            context=mock.Mock(),
+            source="def broken(  # incomplete",
+            language="python",
+            options={"extract_diagnostics": True},
+        ))
+        
+        # Should have extracted diagnostics
+        # Note: may or may not have diagnostics depending on parse success
+        assert isinstance(result["diagnostics"], list)
+        # Each diagnostic should have required fields if present
+        for diag in result["diagnostics"]:
+            assert "message" in diag
+            assert "severity" in diag
+
+    def test_parse_code_tool_handles_unsupported_language(self):
+        """Test parse_code tool handles unsupported language gracefully."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_parse_code_tool
+        
+        mock_agent = mock.Mock()
+        tools = {}
+        
+        def mock_tool_decorator(func):
+            tools[func.__name__] = func
+            return func
+        
+        mock_agent.tool = mock_tool_decorator
+        _register_parse_code_tool(mock_agent)
+        parse_code = tools["parse_code"]
+        
+        import asyncio
+        
+        result = asyncio.run(parse_code(
+            context=mock.Mock(),
+            source="some code",
+            language="unsupported_xyz_language",
+            options=None,
+        ))
+        
+        # Should return error for unsupported language when module available
+        assert result["success"] is False
+        assert len(result["errors"]) > 0
+        assert "unsupported" in result["errors"][0]["message"].lower() or "not available" in result["errors"][0]["message"].lower()
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_code_tool_with_include_tree_false(self):
+        """Test parse_code tool with include_tree=False option."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_parse_code_tool
+        
+        mock_agent = mock.Mock()
+        tools = {}
+        
+        def mock_tool_decorator(func):
+            tools[func.__name__] = func
+            return func
+        
+        mock_agent.tool = mock_tool_decorator
+        _register_parse_code_tool(mock_agent)
+        parse_code = tools["parse_code"]
+        
+        import asyncio
+        
+        result = asyncio.run(parse_code(
+            context=mock.Mock(),
+            source="def hello(): pass",
+            language="python",
+            options={"include_tree": False},
+        ))
+        
+        # Tree should be None when include_tree=False
+        assert result["tree"] is None
+        assert result["success"] is True
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_code_tool_parses_rust_code(self):
+        """Test parse_code tool can parse Rust code."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_parse_code_tool
+        
+        mock_agent = mock.Mock()
+        tools = {}
+        
+        def mock_tool_decorator(func):
+            tools[func.__name__] = func
+            return func
+        
+        mock_agent.tool = mock_tool_decorator
+        _register_parse_code_tool(mock_agent)
+        parse_code = tools["parse_code"]
+        
+        import asyncio
+        
+        result = asyncio.run(parse_code(
+            context=mock.Mock(),
+            source="fn main() { println!(\"Hello\"); }",
+            language="rust",
+            options={"extract_symbols": True},
+        ))
+        
+        assert result["success"] is True
+        assert result["language"] == "rust"
+        assert result["tree"] is not None
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_code_tool_parses_javascript_code(self):
+        """Test parse_code tool can parse JavaScript code."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_parse_code_tool
+        
+        mock_agent = mock.Mock()
+        tools = {}
+        
+        def mock_tool_decorator(func):
+            tools[func.__name__] = func
+            return func
+        
+        mock_agent.tool = mock_tool_decorator
+        _register_parse_code_tool(mock_agent)
+        parse_code = tools["parse_code"]
+        
+        import asyncio
+        
+        result = asyncio.run(parse_code(
+            context=mock.Mock(),
+            source="function greet() { return 'hello'; }",
+            language="javascript",
+            options={"extract_symbols": True},
+        ))
+        
+        assert result["success"] is True
+        # Language might be normalized to js or javascript
+        assert result["language"] in ["javascript", "js"]
+
+    def test_parse_code_tool_handles_empty_source(self):
+        """Test parse_code tool handles empty source gracefully."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_parse_code_tool
+        
+        mock_agent = mock.Mock()
+        tools = {}
+        
+        def mock_tool_decorator(func):
+            tools[func.__name__] = func
+            return func
+        
+        mock_agent.tool = mock_tool_decorator
+        _register_parse_code_tool(mock_agent)
+        parse_code = tools["parse_code"]
+        
+        import asyncio
+        
+        result = asyncio.run(parse_code(
+            context=mock.Mock(),
+            source="",
+            language="python",
+            options=None,
+        ))
+        
+        # Should handle empty source gracefully
+        assert "success" in result
+        assert "errors" in result
+        assert isinstance(result["parse_time_ms"], (int, float))
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_code_tool_error_handling(self):
+        """Test parse_code tool error handling for invalid inputs."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_parse_code_tool
+        
+        mock_agent = mock.Mock()
+        tools = {}
+        
+        def mock_tool_decorator(func):
+            tools[func.__name__] = func
+            return func
+        
+        mock_agent.tool = mock_tool_decorator
+        _register_parse_code_tool(mock_agent)
+        parse_code = tools["parse_code"]
+        
+        import asyncio
+        
+        # Test with very long source that might cause issues
+        result = asyncio.run(parse_code(
+            context=mock.Mock(),
+            source="x" * 100000,  # Very long source
+            language="python",
+            options=None,
+        ))
+        
+        # Should complete without crashing
+        assert "success" in result
+        assert "parse_time_ms" in result
+
+
+class TestParseCodeToolDocumentation:
+    """Tests verifying parse_code tool documentation."""
+
+    def test_module_docstring_includes_tool_documentation(self):
+        """Test that module docstring documents the parse_code tool."""
+        from code_puppy.plugins.turbo_parse import register_callbacks
+        
+        docstring = register_callbacks.__doc__
+        assert docstring is not None
+        assert "parse_code" in docstring
+        assert "Tool" in docstring or "tool" in docstring
+
+    def test_parse_code_tool_function_has_docstring(self):
+        """Test that parse_code tool function has proper docstring."""
+        from code_puppy.plugins.turbo_parse.register_callbacks import _register_parse_code_tool
+        
+        mock_agent = mock.Mock()
+        tools = {}
+        
+        def mock_tool_decorator(func):
+            tools[func.__name__] = func
+            return func
+        
+        mock_agent.tool = mock_tool_decorator
+        _register_parse_code_tool(mock_agent)
+        parse_code = tools["parse_code"]
+        
+        assert parse_code.__doc__ is not None
+        assert len(parse_code.__doc__) > 50  # Has substantial documentation
