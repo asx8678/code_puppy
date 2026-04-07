@@ -88,6 +88,22 @@ except ImportError:
             "error": "turbo_parse module not available - syntax diagnostics disabled",
         }
 
+    def parse_files_batch(paths, max_workers=None, timeout_ms=None):
+        return {
+            "results": [{"file_path": p, "success": False, "errors": [{"message": "turbo_parse not available"}]} for p in paths],
+            "total_time_ms": 0.0,
+            "files_processed": len(paths),
+            "success_count": 0,
+            "error_count": len(paths),
+            "all_succeeded": len(paths) == 0,
+        }
+
+    def extract_symbols(source, language):
+        return {"success": False, "symbols": [], "error": "turbo_parse not available", "extraction_time_ms": 0.0}
+
+    def extract_symbols_from_file(path, language=None):
+        return {"success": False, "symbols": [], "error": "turbo_parse not available", "extraction_time_ms": 0.0}
+
 
 # --- Turbo Parse toggle -----------------------------------------------------
 # When True (default), Rust acceleration is used at runtime if the module
@@ -122,6 +138,9 @@ __all__ = [
     "supported_languages",
     "parse_file",
     "parse_source",
+    "parse_files_batch",
+    "extract_symbols",
+    "extract_symbols_from_file",
     "extract_syntax_diagnostics",
     "is_turbo_parse_enabled",
     "set_turbo_parse_enabled",

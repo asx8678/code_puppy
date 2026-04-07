@@ -9,6 +9,7 @@ import os
 import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -121,7 +122,8 @@ class TestTurboParseStartup:
                 _on_startup()
 
         assert any(
-            "not available" in record.message.lower() or "fallback" in record.message.lower()
+            "not available" in record.message.lower()
+            or "fallback" in record.message.lower()
             for record in caplog.records
         )
 
@@ -142,10 +144,7 @@ class TestTurboParseStartup:
                     _on_startup()
 
         # Should have an INFO or DEBUG log about the module being available
-        assert any(
-            "available" in record.message.lower()
-            for record in caplog.records
-        )
+        assert any("available" in record.message.lower() for record in caplog.records)
 
 
 class TestTurboParseExports:
@@ -183,28 +182,33 @@ class TestTurboParseExports:
 # Tests for parse_source and parse_file functionality
 # ============================================================================
 
+
 class TestParseSource:
     """Tests for parse_source basic functionality."""
 
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_source_python_function(self):
         """Test parsing a simple Python function."""
         from code_puppy.turbo_parse_bridge import parse_source
-        
+
         source = "def hello(): pass"
         result = parse_source(source, "python")
-        
+
         assert result["success"] is True
         assert result["language"] == "python"
         assert "tree" in result
         assert "parse_time_ms" in result
         assert isinstance(result["parse_time_ms"], (int, float))
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_source_class_definition(self):
         """Test parsing a Python class definition."""
         from code_puppy.turbo_parse_bridge import parse_source
-        
+
         source = """
 class MyClass:
     def __init__(self):
@@ -214,31 +218,35 @@ class MyClass:
         return self.value
 """
         result = parse_source(source, "python")
-        
+
         assert result["success"] is True
         assert result["language"] == "python"
         assert result["tree"] is not None
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_source_invalid_syntax(self):
         """Test parsing source with invalid syntax."""
         from code_puppy.turbo_parse_bridge import parse_source
-        
+
         source = "def broken(  # incomplete"
         result = parse_source(source, "python")
-        
+
         # Should return result with success flag and error info
         assert "success" in result
         assert "errors" in result
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_source_rust_code(self):
         """Test parsing Rust source code."""
         from code_puppy.turbo_parse_bridge import parse_source
-        
-        source = "fn main() { println!(\"Hello\"); }"
+
+        source = 'fn main() { println!("Hello"); }'
         result = parse_source(source, "rust")
-        
+
         assert result["success"] is True
         assert result["language"] == "rust"
 
@@ -246,69 +254,77 @@ class MyClass:
 class TestParseFile:
     """Tests for parse_file with temp file."""
 
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_file_python(self):
         """Test parsing a Python file from disk."""
         from code_puppy.turbo_parse_bridge import parse_file
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write("def hello():\n    return 'world'\n")
             temp_path = f.name
-        
+
         try:
             result = parse_file(temp_path)
-            
+
             assert result["success"] is True
             assert result["language"] == "python"
             assert "tree" in result
             assert "parse_time_ms" in result
         finally:
             os.unlink(temp_path)
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_file_with_language_override(self):
         """Test parsing with explicit language override."""
         from code_puppy.turbo_parse_bridge import parse_file
-        
+
         # Create a file with no extension
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
             f.write("fn main() {}")
             temp_path = f.name
-        
+
         try:
             # Override language to rust
             result = parse_file(temp_path, language="rust")
-            
+
             assert result["success"] is True
             assert result["language"] == "rust"
         finally:
             os.unlink(temp_path)
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_file_empty(self):
         """Test parsing an empty file."""
         from code_puppy.turbo_parse_bridge import parse_file
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write("")
             temp_path = f.name
-        
+
         try:
             result = parse_file(temp_path)
-            
+
             # Should handle empty files gracefully
             assert "success" in result
             assert "language" in result
         finally:
             os.unlink(temp_path)
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_file_nonexistent(self):
         """Test parsing a non-existent file."""
         from code_puppy.turbo_parse_bridge import parse_file
-        
+
         result = parse_file("/nonexistent/path/file.py")
-        
+
         # Should return error for non-existent file
         assert result["success"] is False
         assert "errors" in result
@@ -317,35 +333,41 @@ class TestParseFile:
 class TestUnsupportedLanguage:
     """Tests for unsupported language error handling."""
 
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_unsupported_language_error(self):
         """Test that unsupported language returns appropriate error."""
         from code_puppy.turbo_parse_bridge import parse_source
-        
+
         result = parse_source("some code", "unsupported_language_xyz")
-        
+
         # Should fail gracefully with error info
         assert result["success"] is False
         assert "errors" in result
         assert len(result["errors"]) > 0
-        
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_unsupported_language_via_is_language_supported(self):
         """Test is_language_supported for unsupported languages."""
         from code_puppy.turbo_parse_bridge import is_language_supported
-        
+
         assert is_language_supported("unsupported_xyz") is False
         assert is_language_supported("python") is True
 
 
 class TestConcurrentGILRelease:
     """Test that GIL is released during parsing by calling from multiple threads."""
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_concurrent_parse_source(self):
         """Test concurrent parse_source calls from multiple threads."""
         from code_puppy.turbo_parse_bridge import parse_source
-        
+
         sources = [
             ("def f1(): pass", "python"),
             ("def f2(): return 42", "python"),
@@ -353,10 +375,10 @@ class TestConcurrentGILRelease:
             ("fn main() {}", "rust"),
             ("fn foo() -> i32 { 42 }", "rust"),
         ]
-        
+
         results = []
         errors = []
-        
+
         def parse_worker(source_lang):
             source, lang = source_lang
             try:
@@ -366,32 +388,34 @@ class TestConcurrentGILRelease:
             except Exception as e:
                 errors.append(e)
                 return False
-        
+
         # Run parsing concurrently from multiple threads
         with ThreadPoolExecutor(max_workers=5) as executor:
             futures = [executor.submit(parse_worker, s) for s in sources]
             outcomes = [f.result() for f in as_completed(futures)]
-        
+
         # All should complete without crashing
         assert len(results) + len(errors) == len(sources)
         # Most should succeed (at least the valid ones)
         assert sum(outcomes) >= 3, f"Expected at least 3 successes, got {sum(outcomes)}"
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_concurrent_parse_file(self):
         """Test concurrent parse_file calls from multiple threads."""
         from code_puppy.turbo_parse_bridge import parse_file
-        
+
         # Create multiple temp files
         temp_files = []
         for i in range(4):
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
                 f.write(f"def func_{i}(): return {i}\n")
                 temp_files.append(f.name)
-        
+
         results = []
         errors = []
-        
+
         def parse_worker(path):
             try:
                 result = parse_file(path)
@@ -400,33 +424,37 @@ class TestConcurrentGILRelease:
             except Exception as e:
                 errors.append(e)
                 return False
-        
+
         try:
             # Run parsing concurrently
             with ThreadPoolExecutor(max_workers=4) as executor:
                 futures = [executor.submit(parse_worker, path) for path in temp_files]
                 outcomes = [f.result() for f in as_completed(futures)]
-            
+
             # All should complete without crashing
             assert len(results) + len(errors) == len(temp_files)
             # Most should succeed
-            assert sum(outcomes) >= 3, f"Expected at least 3 successes, got {sum(outcomes)}"
+            assert sum(outcomes) >= 3, (
+                f"Expected at least 3 successes, got {sum(outcomes)}"
+            )
         finally:
             for path in temp_files:
                 try:
                     os.unlink(path)
                 except OSError:
                     pass
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_thread_safety_stress(self):
         """Stress test with many concurrent threads."""
         from code_puppy.turbo_parse_bridge import parse_source
-        
+
         num_threads = 10
         results = []
         lock = threading.Lock()
-        
+
         def stress_worker(thread_id):
             source = f"def thread_func_{thread_id}(): return {thread_id}"
             try:
@@ -438,95 +466,112 @@ class TestConcurrentGILRelease:
                 with lock:
                     results.append((thread_id, False, str(e)))
                 return False
-        
+
         # Launch many threads concurrently
         threads = []
         for i in range(num_threads):
             t = threading.Thread(target=stress_worker, args=(i,))
             threads.append(t)
-        
+
         for t in threads:
             t.start()
-        
+
         for t in threads:
             t.join()
-        
+
         # All threads should complete
-        assert len(results) == num_threads, f"Expected {num_threads} results, got {len(results)}"
+        assert len(results) == num_threads, (
+            f"Expected {num_threads} results, got {len(results)}"
+        )
         # Most should succeed (the GIL release allows true parallelism)
         successes = sum(1 for r in results if len(r) > 1 and r[1] is True)
-        assert successes >= num_threads * 0.8, f"Expected ~{num_threads} successes, got {successes}"
+        assert successes >= num_threads * 0.8, (
+            f"Expected ~{num_threads} successes, got {successes}"
+        )
 
 
 class TestBridgeFallback:
     """Tests for fallback behavior when turbo_parse is not available."""
-    
+
     def test_fallback_parse_source_stub(self):
         """Test fallback parse_source stub returns error when module unavailable."""
         # Directly test the fallback stub function (simulate ImportError block)
         from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
-        
+
         # Only test if module is not available, otherwise skip
         if TURBO_PARSE_AVAILABLE:
             pytest.skip("turbo_parse is available - fallback not active")
-        
+
         # If we reach here, we're using the fallback stubs
         from code_puppy.turbo_parse_bridge import parse_source
+
         result = parse_source("def test(): pass", "python")
-        
+
         assert result["success"] is False
         assert result["tree"] is None
-        assert any("not available" in str(e.get("message", "")) for e in result.get("errors", []))
-    
+        assert any(
+            "not available" in str(e.get("message", ""))
+            for e in result.get("errors", [])
+        )
+
     def test_fallback_parse_file_stub(self):
         """Test fallback parse_file stub returns error when module unavailable."""
         from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
-        
+
         # Only test if module is not available, otherwise skip
         if TURBO_PARSE_AVAILABLE:
             pytest.skip("turbo_parse is available - fallback not active")
-        
+
         from code_puppy.turbo_parse_bridge import parse_file
+
         result = parse_file("test.py")
-        
+
         assert result["success"] is False
         assert result["tree"] is None
-        assert any("not available" in str(e.get("message", "")) for e in result.get("errors", []))
+        assert any(
+            "not available" in str(e.get("message", ""))
+            for e in result.get("errors", [])
+        )
 
 
 # ============================================================================
 # Tests for parse_files_batch functionality
 # ============================================================================
 
+
 class TestParseFilesBatch:
     """Tests for parse_files_batch batch parsing functionality."""
 
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_files_batch_empty(self):
         """Test batch parsing with empty file list."""
         from code_puppy.turbo_parse_bridge import parse_files_batch
-        
+
         result = parse_files_batch([])
-        
+
         assert result["files_processed"] == 0
         assert result["success_count"] == 0
         assert result["error_count"] == 0
         assert result["all_succeeded"] is True
         assert result["results"] == []
         assert result["total_time_ms"] >= 0.0
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_files_batch_single_file(self):
         """Test batch parsing with a single file."""
         from code_puppy.turbo_parse_bridge import parse_files_batch
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write("def hello():\n    return 'world'\n")
             temp_path = f.name
-        
+
         try:
             result = parse_files_batch([temp_path])
-            
+
             assert result["files_processed"] == 1
             assert result["success_count"] == 1
             assert result["error_count"] == 0
@@ -537,30 +582,32 @@ class TestParseFilesBatch:
             assert result["total_time_ms"] >= 0.0
         finally:
             os.unlink(temp_path)
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_files_batch_multiple_files(self):
         """Test batch parsing with multiple files of different languages."""
         from code_puppy.turbo_parse_bridge import parse_files_batch
-        
+
         # Create Python and Rust files
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f1:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f1:
             f1.write("def func1(): pass\n")
             py_path = f1.name
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.rs', delete=False) as f2:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".rs", delete=False) as f2:
             f2.write("fn main() {}\n")
             rs_path = f2.name
-        
+
         try:
             result = parse_files_batch([py_path, rs_path])
-            
+
             assert result["files_processed"] == 2
             assert result["success_count"] == 2
             assert result["error_count"] == 0
             assert result["all_succeeded"] is True
             assert len(result["results"]) == 2
-            
+
             # Check individual results
             assert result["results"][0]["language"] == "python"
             assert result["results"][0]["success"] is True
@@ -569,22 +616,24 @@ class TestParseFilesBatch:
         finally:
             os.unlink(py_path)
             os.unlink(rs_path)
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_files_batch_max_workers(self):
         """Test batch parsing with max_workers parameter."""
         from code_puppy.turbo_parse_bridge import parse_files_batch
-        
+
         # Create multiple temp files
         temp_files = []
         for i in range(3):
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
                 f.write(f"def func_{i}(): return {i}\n")
                 temp_files.append(f.name)
-        
+
         try:
             result = parse_files_batch(temp_files, max_workers=2)
-            
+
             assert result["files_processed"] == 3
             assert result["success_count"] == 3
             assert result["error_count"] == 0
@@ -593,27 +642,29 @@ class TestParseFilesBatch:
         finally:
             for path in temp_files:
                 os.unlink(path)
-    
-    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
     def test_parse_files_batch_mixed_success_failure(self):
         """Test batch parsing with mix of successful and failed files."""
         from code_puppy.turbo_parse_bridge import parse_files_batch
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write("def valid(): pass\n")
             valid_path = f.name
-        
+
         invalid_path = "/nonexistent/path/file.py"
-        
+
         try:
             result = parse_files_batch([valid_path, invalid_path])
-            
+
             assert result["files_processed"] == 2
             assert result["success_count"] == 1
             assert result["error_count"] == 1
             assert result["all_succeeded"] is False
             assert len(result["results"]) == 2
-            
+
             # First file should succeed
             assert result["results"][0]["success"] is True
             # Second file should fail
@@ -621,24 +672,456 @@ class TestParseFilesBatch:
             assert len(result["results"][1]["errors"]) > 0
         finally:
             os.unlink(valid_path)
-    
+
     def test_fallback_parse_files_batch_stub(self):
         """Test fallback parse_files_batch stub when module unavailable."""
         from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
-        
+
         if TURBO_PARSE_AVAILABLE:
             pytest.skip("turbo_parse is available - fallback not active")
-        
+
         from code_puppy.turbo_parse_bridge import parse_files_batch
-        
+
         result = parse_files_batch(["file1.py", "file2.py"])
-        
+
         assert result["files_processed"] == 2
         assert result["success_count"] == 0
         assert result["error_count"] == 2
         assert result["all_succeeded"] is False
         assert len(result["results"]) == 2
-        
+
         for r in result["results"]:
             assert r["success"] is False
-            assert any("not available" in str(e.get("message", "")) for e in r.get("errors", []))
+            assert any(
+                "not available" in str(e.get("message", ""))
+                for e in r.get("errors", [])
+            )
+
+
+# ============================================================================
+# Tests for Elixir language support
+# ============================================================================
+
+
+class TestParseSourceElixir:
+    """Tests for Elixir language parsing."""
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_parse_source_elixir_module(self):
+        """Test parsing a simple Elixir module."""
+        from code_puppy.turbo_parse_bridge import parse_source
+
+        source = """
+defmodule Hello do
+  def world do
+    :hello
+  end
+end
+"""
+        result = parse_source(source, "elixir")
+
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert "tree" in result
+        assert "parse_time_ms" in result
+        assert isinstance(result["parse_time_ms"], (int, float))
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_parse_source_elixir_with_functions(self):
+        """Test parsing Elixir with multiple functions."""
+        from code_puppy.turbo_parse_bridge import parse_source
+
+        source = """
+defmodule Math do
+  def add(a, b), do: a + b
+  def subtract(a, b), do: a - b
+  
+  def factorial(0), do: 1
+  def factorial(n), do: n * factorial(n - 1)
+end
+"""
+        result = parse_source(source, "elixir")
+
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_parse_source_elixir_alias(self):
+        """Test that elixir language alias 'ex' works."""
+        from code_puppy.turbo_parse_bridge import parse_source
+
+        source = "defmodule Test do end"
+        result = parse_source(source, "ex")
+
+        # Should normalize to 'elixir'
+        assert result["language"] == "elixir"
+
+
+class TestParseElixirFixtures:
+    """Tests parsing Elixir fixture files."""
+
+    FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "elixir"
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_parse_simple_module_ex(self):
+        """Test parsing simple_module.ex fixture."""
+        from code_puppy.turbo_parse_bridge import parse_file, extract_symbols_from_file
+
+        fixture_path = self.FIXTURES_DIR / "simple_module.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+
+        result = parse_file(str(fixture_path))
+
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+        assert "parse_time_ms" in result
+
+        # Verify symbol counts: 1 module, 2 public functions
+        symbols = extract_symbols_from_file(str(fixture_path))
+        assert symbols["success"] is True
+        assert len(symbols["symbols"]) >= 3  # 1 module + 2 functions + possibly more
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_parse_complex_module_ex(self):
+        """Test parsing complex_module.ex with nested modules and guards."""
+        from code_puppy.turbo_parse_bridge import parse_file, extract_symbols_from_file
+
+        fixture_path = self.FIXTURES_DIR / "complex_module.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+
+        result = parse_file(str(fixture_path))
+
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+
+        # Verify symbol counts: 3 modules, 4+ functions
+        symbols = extract_symbols_from_file(str(fixture_path))
+        assert symbols["success"] is True
+        assert len(symbols["symbols"]) >= 7  # 3 modules + 4+ functions
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_parse_with_imports_ex(self):
+        """Test parsing with_imports.ex with import/use/require/alias."""
+        from code_puppy.turbo_parse_bridge import parse_file, extract_symbols_from_file
+
+        fixture_path = self.FIXTURES_DIR / "with_imports.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+
+        result = parse_file(str(fixture_path))
+
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+
+        # Verify symbol counts: 1 module + import/use/require/alias statements
+        symbols = extract_symbols_from_file(str(fixture_path))
+        assert symbols["success"] is True
+        assert len(symbols["symbols"]) >= 1  # At least 1 module
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_parse_with_macros_ex(self):
+        """Test parsing with_macros.ex with macro definitions."""
+        from code_puppy.turbo_parse_bridge import parse_file, extract_symbols_from_file
+
+        fixture_path = self.FIXTURES_DIR / "with_macros.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+
+        result = parse_file(str(fixture_path))
+
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+
+        # Verify symbol counts: 1 module, 2 macros, 1 function
+        symbols = extract_symbols_from_file(str(fixture_path))
+        assert symbols["success"] is True
+        assert len(symbols["symbols"]) >= 4  # 1 module + 2 macros + 1 function
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_parse_phoenix_controller_ex(self):
+        """Test parsing phoenix_controller.ex Phoenix controller."""
+        from code_puppy.turbo_parse_bridge import parse_file, extract_symbols_from_file
+
+        fixture_path = self.FIXTURES_DIR / "phoenix_controller.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+
+        result = parse_file(str(fixture_path))
+
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+
+        # Verify symbol counts: 1 module, 5+ action functions
+        symbols = extract_symbols_from_file(str(fixture_path))
+        assert symbols["success"] is True
+        assert len(symbols["symbols"]) >= 6  # 1 module + 5+ functions
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_parse_ecto_schema_ex(self):
+        """Test parsing ecto_schema.ex with schema definitions."""
+        from code_puppy.turbo_parse_bridge import parse_file, extract_symbols_from_file
+
+        fixture_path = self.FIXTURES_DIR / "ecto_schema.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+
+        result = parse_file(str(fixture_path))
+
+        assert result["success"] is True
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+
+        # Verify symbol counts: 1 module, 1 schema, 3 functions
+        symbols = extract_symbols_from_file(str(fixture_path))
+        assert symbols["success"] is True
+        assert len(symbols["symbols"]) >= 4  # 1 module + 3+ functions
+
+
+class TestElixirKnownGaps:
+    """Tests for known Elixir parsing gaps.
+
+    These tests document features that may not be fully supported
+    by the tree-sitter-elixir grammar. They use xfail to mark
+    expected failures, allowing the test suite to pass while
+    documenting known limitations.
+    """
+
+    FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "elixir"
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    @pytest.mark.xfail(reason="HEEx templates are not standard Elixir syntax")
+    def test_heex_template_parsing(self):
+        """HEEx templates may not parse correctly."""
+        from code_puppy.turbo_parse_bridge import parse_file, extract_symbols_from_file
+
+        fixture_path = self.FIXTURES_DIR / "heex_template.heex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+
+        result = parse_file(str(fixture_path))
+
+        # Document the behavior - may succeed or fail
+        # The important thing is we track what happens
+        assert "tree" in result or "errors" in result
+
+        # Try to extract symbols if parsing succeeded
+        if result["success"]:
+            symbols = extract_symbols_from_file(str(fixture_path))
+            assert "symbols" in symbols
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_sigils_parsing_with_some_success(self):
+        """Test that sigils parse at all - some may work, others may not."""
+        from code_puppy.turbo_parse_bridge import parse_file, extract_symbols_from_file
+
+        fixture_path = self.FIXTURES_DIR / "with_sigils.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+
+        result = parse_file(str(fixture_path))
+
+        # Basic sigils (~s, ~w, ~r) should parse
+        # Complex sigils may have issues but file should still parse
+        assert result["language"] == "elixir"
+        assert "tree" in result
+
+        # Verify symbols: 1 module + multiple functions for each sigil type
+        symbols = extract_symbols_from_file(str(fixture_path))
+        assert symbols["success"] is True
+        assert len(symbols["symbols"]) >= 10  # 1 module + many sigil test functions
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_string_interpolation_parsing(self):
+        """Test string interpolation parsing - basic cases should work."""
+        from code_puppy.turbo_parse_bridge import parse_file, extract_symbols_from_file
+
+        fixture_path = self.FIXTURES_DIR / "string_interpolation.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+
+        result = parse_file(str(fixture_path))
+
+        # Basic interpolation should work
+        assert result["language"] == "elixir"
+        assert result["tree"] is not None
+
+        # Verify symbols: 1 module + test functions
+        symbols = extract_symbols_from_file(str(fixture_path))
+        assert symbols["success"] is True
+        assert len(symbols["symbols"]) >= 5  # 1 module + multiple functions
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_binary_pattern_matching_parsing(self):
+        """Test binary pattern matching - may have gaps for complex cases."""
+        from code_puppy.turbo_parse_bridge import parse_file, extract_symbols_from_file
+
+        fixture_path = self.FIXTURES_DIR / "binary_pattern_matching.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+
+        result = parse_file(str(fixture_path))
+
+        # File should at least parse to elixir
+        assert result["language"] == "elixir"
+        # Tree may have errors for complex binary patterns
+        assert "tree" in result
+
+        # Verify symbols extracted
+        symbols = extract_symbols_from_file(str(fixture_path))
+        assert symbols["success"] is True
+        assert (
+            len(symbols["symbols"]) >= 5
+        )  # 1 module + multiple binary matching functions
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_protocols_parsing(self):
+        """Test protocol definitions parsing."""
+        from code_puppy.turbo_parse_bridge import parse_file, extract_symbols_from_file
+
+        fixture_path = self.FIXTURES_DIR / "protocols.ex"
+        if not fixture_path.exists():
+            pytest.skip(f"Fixture not found: {fixture_path}")
+
+        result = parse_file(str(fixture_path))
+
+        # Protocols should parse
+        assert result["language"] == "elixir"
+        assert "tree" in result
+
+        # Verify symbols: 2 protocols + multiple implementations + 1 User module
+        symbols = extract_symbols_from_file(str(fixture_path))
+        assert symbols["success"] is True
+        assert len(symbols["symbols"]) >= 8  # Multiple protocols and implementations
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_elixir_batch_parsing(self):
+        """Test batch parsing of multiple Elixir files."""
+        from code_puppy.turbo_parse_bridge import (
+            parse_files_batch,
+            extract_symbols_from_file,
+        )
+
+        fixture_files = [
+            self.FIXTURES_DIR / "simple_module.ex",
+            self.FIXTURES_DIR / "complex_module.ex",
+            self.FIXTURES_DIR / "with_imports.ex",
+        ]
+
+        # Only include files that exist
+        existing_files = [str(f) for f in fixture_files if f.exists()]
+        if len(existing_files) < 2:
+            pytest.skip("Not enough fixture files available")
+
+        result = parse_files_batch(existing_files)
+
+        assert result["files_processed"] == len(existing_files)
+        assert result["error_count"] == 0
+        assert result["all_succeeded"] is True
+
+        # All should be elixir
+        for r in result["results"]:
+            assert r["language"] == "elixir"
+
+        # Verify symbols for first file
+        symbols = extract_symbols_from_file(existing_files[0])
+        assert symbols["success"] is True
+        assert len(symbols["symbols"]) >= 1
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_is_language_supported_elixir(self):
+        """Test that elixir is reported as supported."""
+        from code_puppy.turbo_parse_bridge import (
+            is_language_supported,
+            supported_languages,
+        )
+
+        assert is_language_supported("elixir") is True
+        assert is_language_supported("ex") is True  # alias
+
+        languages = supported_languages()
+        assert "elixir" in languages.get("languages", [])
+
+
+class TestElixirLanguageDetection:
+    """Tests for Elixir file extension detection."""
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_ex_extension_detection(self, tmp_path):
+        """Test that .ex extension is detected as elixir."""
+        from code_puppy.turbo_parse_bridge import parse_file
+
+        test_file = tmp_path / "test.ex"
+        test_file.write_text("defmodule Test do end")
+
+        result = parse_file(str(test_file))
+
+        assert result["language"] == "elixir"
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_exs_extension_detection(self, tmp_path):
+        """Test that .exs extension is detected as elixir."""
+        from code_puppy.turbo_parse_bridge import parse_file
+
+        test_file = tmp_path / "test.exs"
+        test_file.write_text("defmodule Test do end")
+
+        result = parse_file(str(test_file))
+
+        assert result["language"] == "elixir"
+
+    @pytest.mark.skipif(
+        not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed"
+    )
+    def test_heex_extension_detection(self, tmp_path):
+        """Test that .heex extension is detected as elixir."""
+        from code_puppy.turbo_parse_bridge import parse_file
+
+        test_file = tmp_path / "test.heex"
+        test_file.write_text("<div>Hello <%= @name %></div>")
+
+        result = parse_file(str(test_file))
+
+        assert result["language"] == "elixir"
