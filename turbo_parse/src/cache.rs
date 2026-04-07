@@ -78,7 +78,8 @@ impl ParseCache {
 
     /// Create a new ParseCache with specified capacity
     pub fn with_capacity(capacity: usize) -> Self {
-        let cap = NonZeroUsize::new(capacity).unwrap_or_else(|| NonZeroUsize::new(1).unwrap());
+        let cap = NonZeroUsize::new(capacity)
+            .unwrap_or_else(|| NonZeroUsize::new(1).expect("1 is guaranteed to be non-zero"));
         Self {
             inner: RwLock::new(LruCache::new(cap)),
             stats: RwLock::new(CacheStats::default()),
