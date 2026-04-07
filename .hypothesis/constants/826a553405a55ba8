@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/repl_session.py
+# hypothesis_version: 6.151.11
+
+[100, ' | ', 'ReplSession', 'Reset REPL session', 'a', 'autosave_session_id', 'basic', 'command', 'command_count', 'created_at', 'current_agent', 'current_mode', 'current_model', 'current_pack', 'current_session.json', 'default', 'full', 'last_command', 'loaded_files', 'message_count', 'pack', 'project_root', 'r', 'repl_history.jsonl', 'repl_state', 'semi', 'session_id', 'single', 'timestamp', 'updated_at', 'w', 'working_directory']

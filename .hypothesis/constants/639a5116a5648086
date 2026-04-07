@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/messaging/renderers.py
+# hypothesis_version: 6.151.11
+
+[0.01, 0.1, 1.0, '>>> ', 'Current version:', 'Latest version:', 'blue', 'bold red', 'dim', 'flush', 'green', 'prompt_id', 'yellow']

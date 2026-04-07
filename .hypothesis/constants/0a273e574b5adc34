@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/shell_safety/register_callbacks.py
+# hypothesis_version: 6.151.11
+
+['blocked', 'critical', 'denied_by_policy', 'error_message', 'high', 'is_fallback', 'low', 'medium', 'none', 'reasoning', 'risk', 'run_shell_command', 'unknown']

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/command_line/mcp/status_command.py
+# hypothesis_version: 6.151.11
+
+['\n📋 Recent Events:', '%H:%M:%S', 'cyan', 'enabled', 'error_message', 'exists', 'quarantined', 'recent_events', 'recent_events_count', 'state', 'timestamp', 'total_seconds', 'tracker_metadata', 'tracker_uptime', 'unknown']

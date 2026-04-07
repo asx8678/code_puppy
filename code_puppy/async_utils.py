@@ -8,18 +8,60 @@ async code from synchronous contexts.
 from __future__ import annotations
 
 import asyncio
+import atexit
+import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-# Thread-local storage for dedicated event loops (used by run_async_sync)
-_loop_local = threading.local()
+# Bounded thread pool for running async code - prevents thread explosion under load.
+# max_workers matches Python's ThreadPoolExecutor default: min(32, cpu_count + 4)
+_executor: ThreadPoolExecutor | None = None
+_executor_lock = threading.Lock()
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    """Get or create the module-level ThreadPoolExecutor."""
+    global _executor
+    if _executor is None:
+        with _executor_lock:
+            if _executor is None:
+                max_workers = min(32, (os.cpu_count() or 1) + 4)
+                _executor = ThreadPoolExecutor(
+                    max_workers=max_workers,
+                    thread_name_prefix="async_utils_pool",
+                )
+    return _executor
+
+
+def _shutdown_executor() -> None:
+    """Gracefully shutdown the thread pool executor."""
+    global _executor
+    if _executor is not None:
+        _executor.shutdown(wait=True)
+        _executor = None
+
+
+# Register cleanup at exit to ensure proper executor shutdown
+atexit.register(_shutdown_executor)
+
+
+def _run_coro_in_thread(coro) -> Any:
+    """Run a coroutine in a new event loop within the current thread."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
 
 
 def run_async_sync(coro) -> Any:
-    """Run a coroutine in a dedicated background thread's event loop.
+    """Run a coroutine in a background thread pool's event loop.
 
-    This is more reliable than asyncio.run() for nested calls and cases
-    where an event loop may already exist in the current thread.
+    Uses a bounded ThreadPoolExecutor to prevent thread explosion under load.
+    Each worker thread creates, uses, and closes its own dedicated event loop.
 
     Args:
         coro: The coroutine to run
@@ -27,18 +69,6 @@ def run_async_sync(coro) -> Any:
     Returns:
         The result of the coroutine
     """
-    # Check if we have a dedicated loop in this thread
-    if (
-        not hasattr(_loop_local, "loop")
-        or _loop_local.loop is None
-        or _loop_local.loop.is_closed()
-    ):
-        _loop_local.loop = asyncio.new_event_loop()
-        _loop_local.thread = threading.Thread(
-            target=_loop_local.loop.run_forever, daemon=True
-        )
-        _loop_local.thread.start()
-
-    # Submit the coroutine to the dedicated loop
-    future = asyncio.run_coroutine_threadsafe(coro, _loop_local.loop)
+    executor = _get_executor()
+    future = executor.submit(_run_coro_in_thread, coro)
     return future.result()

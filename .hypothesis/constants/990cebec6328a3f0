@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/tools/browser/chromium_terminal_manager.py
+# hypothesis_version: 6.151.11
+
+['CHROMIUM_HEADLESS', 'Page closed', 'default', 'false', 'true']

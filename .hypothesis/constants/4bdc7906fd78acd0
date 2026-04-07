@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/mcp_/retry_manager.py
+# hypothesis_version: 6.151.11
+
+[-0.25, 0.0, 0.1, 0.25, 1.0, 2.0, 408, 429, 500, 600, 'authentication', 'exponential', 'exponential_jitter', 'fixed', 'forbidden', 'json', 'linear', 'permission', 'response', 'schema', 'unauthorized', 'unknown', 'validation']

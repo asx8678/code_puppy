@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/command_line/core_commands.py
+# hypothesis_version: 6.151.11
+
+[300, '--', '--show', '-m', '/add_model', '/cd <dir>', '/exit, /quit', '/help, /h', '/m', '/mcp', '/model', '/model, /m <model>', '/motd', '/tools', '/tutorial', '/wiggum <prompt>', '/wiggum_stop', '@', 'Goodbye!', 'No description', 'Set active model', 'a', 'add_model', 'agent', 'api', 'api_server.pid', 'cb', 'cd', 'chatgpt', 'chatgpt-gpt-5.4', 'claude', 'clipboard', 'code_puppy.api.main', 'completed', 'config', 'core', 'exit', 'h', 'help', 'm', 'mcp', 'model', 'model_settings', 'motd', 'ms', 'paste', 'quit', 'skipped', 'start', 'status', 'stop', 'stopwiggum', 'tools', 'tutorial', 'wiggum', 'wiggum_stop', 'ws']

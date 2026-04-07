@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/api/pty_manager.py
+# hypothesis_version: 6.151.11
+
+[0.01, 4096, '-i', '/bin/bash', 'COMSPEC', 'HHHH', 'SHELL', 'cmd.exe', 'win32']

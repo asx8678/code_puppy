@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/code_explorer/register_callbacks.py
+# hypothesis_version: 6.151.11
+
+['   Outline:', '*', '/', 'class', 'content', 'contexts', 'custom_command', 'custom_command_help', 'dir', 'directory', 'error', 'errors', 'explore', 'explore dir <path>', 'explore file <path>', 'explore help', 'explore_directory', 'file', 'file_path', 'formatted', 'function', 'get_code_context', 'get_file_outline', 'help', 'import', 'kind', 'language', 'language_counts', 'method', 'name', 'num_lines', 'num_tokens', 'outline', 'read_file', 'register_func', 'register_tools', 'startup', 'struct', 'success', 'summary', 'symbol_count', 'symbols', 'symbols_available', 'total_files', 'total_symbols', 'unknown', 'with_symbols', '•', '⚡', '🏛️', '📦', '🔹']

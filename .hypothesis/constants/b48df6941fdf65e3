@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/claude_cache_client.py
+# hypothesis_version: 6.151.11
+
+[b'"_cache_control_sdk_injected"', 0.0, 0.5, 1.0, 5.0, 60.0, 256, 300, 400, 401, 403, 429, 500, 502, 503, 504, 1000, 3600, ',', '.', '/v1/messages', '400 bad request', '=', 'Authorization', 'Content-Length', 'Retry-After', 'X-API-Key', 'X-Api-Key', '_content', 'anthropic-beta', 'authorization', 'bearer ', 'beta', 'cache', 'cache_control', 'claude-code-20250219', 'cloudflare', 'content', 'content-type', 'cp_', 'ephemeral', 'exp', 'extensions', 'iat', 'ignore', 'messages', 'name', 'oauth-2025-04-20', 'requests_optimized', 'stream', 'text/html', 'tools', 'true', 'type', 'user-agent', 'utf-8', 'x-api-key']

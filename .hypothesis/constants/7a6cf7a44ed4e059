@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/agents/__init__.py
+# hypothesis_version: 6.151.11
+
+['clone_agent', 'delete_clone_agent', 'get_available_agents', 'get_current_agent', 'is_clone_agent_name', 'load_agent', 'refresh_agents', 'set_current_agent']
