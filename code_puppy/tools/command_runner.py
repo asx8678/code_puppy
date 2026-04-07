@@ -215,11 +215,14 @@ def safe_execute_subprocess(
     # Validate command before execution (defense-in-depth)
     validate_shell_command(command)
 
-    # Use shlex.quote on the entire command as an additional safety measure
-    # This ensures proper escaping if the command is passed to a shell
-    # Note: We still need shell=True for pipes/redirects, but we validate
-    # the command thoroughly before it reaches this point.
-
+    # SECURITY: shell=True is REQUIRED here—commands arrive as complete strings
+    # from the LLM (e.g., "cd /foo && make test" or "cat file | grep pattern")
+    # and REQUIRE shell interpretation for pipes, redirects, chains, and variable
+    # expansion. The command has been validated by validate_shell_command() above
+    # which checks length limits, forbidden characters, and dangerous patterns.
+    # Additional upstream validation happens in the shell_safety plugin and the
+    # PolicyEngine. Removing shell=True would break all non-trivial commands.
+    # noqa: S602 — shell=True justified: upstream validation + user confirmation
     return subprocess.Popen(
         command,
         shell=True,  # noqa: S602 — validated above, required for pipes/redirects

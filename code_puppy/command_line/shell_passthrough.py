@@ -27,17 +27,45 @@ from rich.markup import escape as escape_rich_markup
 from code_puppy.config import get_banner_color
 
 # SECURITY FIX fv7t: Add validation to shell passthrough
+# These patterns detect dangerous shell constructs that could lead to
+# arbitrary code execution. This is defense-in-depth for user-initiated
+# direct shell commands (bypassing the agent/tool pipeline).
+# NOTE: `shell=True` is required for pipes/redirects/chains. Upstream
+# validation assumes the user typed this directly (like a terminal).
 DANGEROUS_PATTERNS = [
+    # Destructive filesystem operations
     r"rm\s+-rf\s+/",
     r"rm\s+-rf\s+~",
     r">\s*/etc/",
-    r"curl.*\|.*sh",
+    # Remote code execution via curl/wget piped to shell
+    r"curl\s+[^|]*\|\s*(ba)?sh",
+    r"wget\s+[^|]*\|\s*(ba)?sh",
+    r"curl\s+[^|]*\|\s*bash\s+-[ci]",
+    # Eval-based arbitrary execution
+    r"\beval(?![\w])\s*['\"$`]",
+    r"\beval(?![\w])\s*\(",
+    # Backtick command substitution: `rm -rf /`
+    r'`[^`]+`',
+    # $(...) command substitution: $(rm -rf /)
+    r'\$\s*\([^)]+\)',
+    # ${...} variable expansion that executes
+    r'\$\{[^}]*\bexpr\b',
 ]
 # Using tuple instead of list for memory efficiency and immutability
 _COMPILED_DANGEROUS = tuple(re.compile(p, re.IGNORECASE) for p in DANGEROUS_PATTERNS)
 MAX_COMMAND_LENGTH = 8192
 
 def _validate_passthrough_command(command: str) -> tuple[bool, str]:
+    """Validate command for dangerous patterns.
+
+    Defense-in-depth: User-initiated passthrough commands bypass the
+    agent/tool security pipeline. We perform basic sanity checks here.
+
+    Returns:
+        Tuple of (is_safe, rejection_reason). is_safe=True means the
+        command passed all checks (not that it's "safe", just that
+        no obvious dangerous patterns were detected).
+    """
     if not command or not command.strip():
         return False, "Empty command"
     if len(command) > MAX_COMMAND_LENGTH:
@@ -147,6 +175,12 @@ def execute_shell_passthrough(task: str) -> None:
         console.print("[dim]Use agent tools or /yolo mode for this operation.[/dim]")
         return
 
+    # SECURITY: shell=True is required here for pipes/redirects/command chains
+    # (e.g., "!cat file | grep pattern"). This is user-initiated direct shell
+    # execution—treat it like the user typed it in their terminal. The command
+    # has passed _validate_passthrough_command() which blocks obvious injection
+    # patterns. User confirms intent by prefixing with "!". For stricter
+    # control, users should invoke tools via the agent instead.
     try:
         result = subprocess.run(
             command,
