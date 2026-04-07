@@ -1446,7 +1446,7 @@ def _run_command_sync(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=cwd,
-        bufsize=1,  # Line buffered for reduced system calls
+        bufsize=-1,  # Use default buffering (bufsize=1 invalid for binary mode in Py3.14)
         preexec_fn=preexec_fn,
         creationflags=creationflags)
 
