@@ -22,25 +22,15 @@ import sys
 import time
 
 from code_puppy.callbacks import register_callback
+from code_puppy.console import build_console
 
 COMMAND_NAME = "render-check"
 COMMAND_ALIASES = ("rendercheck", "check-render")
 
 
-def _build_console():
-    """Build a Console honoring CODE_PUPPY_NO_COLOR and CODE_PUPPY_FORCE_COLOR."""
-    from rich.console import Console
-
-    no_color = os.environ.get("CODE_PUPPY_NO_COLOR", "0") == "1"
-    force_color = os.environ.get("CODE_PUPPY_FORCE_COLOR", "0") == "1"
-    is_tty = sys.stdout.isatty()
-
-    return Console(
-        force_terminal=force_color or is_tty,
-        color_system=None if no_color else "auto",
-        no_color=no_color,
-        legacy_windows=False,
-    )
+def _get_console():
+    """Get a Console honoring CODE_PUPPY_NO_COLOR and CODE_PUPPY_FORCE_COLOR."""
+    return build_console()
 
 
 def _print_header(console, title: str) -> None:
@@ -192,7 +182,7 @@ def _test_environment(console) -> None:
 
 
 def _run_render_check() -> None:
-    console = _build_console()
+    console = _get_console()
     console.print()
     console.print("[bold cyan]🐕 Code Puppy — Render Check[/bold cyan]")
     console.print(

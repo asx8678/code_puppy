@@ -52,16 +52,10 @@ try:
         emit_warning,
         get_queue_console,
     )
+    from code_puppy.console import build_console
 
     # Use queue console by default, but allow fallback
-    NO_COLOR = os.environ.get("CODE_PUPPY_NO_COLOR", "0") == "1"
-    _force_color = os.environ.get("CODE_PUPPY_FORCE_COLOR", "0") == "1"
-    _rich_console = Console(
-        force_terminal=_force_color or sys.stdout.isatty(),
-        color_system=None if NO_COLOR else "auto",
-        no_color=NO_COLOR,
-        legacy_windows=False,
-    )
+    _rich_console = build_console()
     console = get_queue_console()
     # Set the fallback console for compatibility
     console.fallback_console = _rich_console

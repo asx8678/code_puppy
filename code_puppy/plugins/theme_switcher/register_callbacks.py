@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 
 from code_puppy.callbacks import register_callback
+from code_puppy.console import build_console
 
 COMMAND_NAME = "theme"
 DEFAULT_THEME = "monokai"
@@ -45,18 +46,9 @@ def _set_theme(name: str) -> None:
     os.environ[ENV_VAR] = name
 
 
-def _build_console():
-    from rich.console import Console
-    import sys
-
-    force_color = os.environ.get("CODE_PUPPY_FORCE_COLOR", "0") == "1"
-    no_color = os.environ.get("CODE_PUPPY_NO_COLOR", "0") == "1"
-    return Console(
-        force_terminal=force_color or sys.stdout.isatty(),
-        color_system=None if no_color else "auto",
-        no_color=no_color,
-        legacy_windows=False,
-    )
+def _get_console():
+    """Get a Console honoring CODE_PUPPY_NO_COLOR and CODE_PUPPY_FORCE_COLOR."""
+    return build_console()
 
 
 def _show_current_and_list(console) -> None:
@@ -127,7 +119,7 @@ def _on_custom_command(command: str, name: str):
         return None
 
     try:
-        console = _build_console()
+        console = _get_console()
         # Parse args from the full command string (strip leading /theme)
         parts = command.strip().split(None, 1)
         if len(parts) < 2:
