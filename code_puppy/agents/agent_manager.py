@@ -17,7 +17,7 @@ from pydantic_ai.messages import ModelMessage
 from code_puppy.agents.base_agent import BaseAgent
 from code_puppy.agents.json_agent import JSONAgent, discover_json_agents
 from code_puppy.callbacks import on_agent_reload, on_register_agents
-from code_puppy.messaging import emit_success, emit_warning
+from code_puppy.messaging import emit_error, emit_success, emit_warning
 
 
 @dataclass(frozen=True)
@@ -274,10 +274,19 @@ def _discover_agents(message_group_id: str | None = None):
                             description=agent_instance.description,
                             factory=attr)
 
-            except Exception as e:
-                # Skip problematic modules
+            except (ImportError, ModuleNotFoundError) as e:
                 emit_warning(
-                    f"Warning: Could not load agent module {modname}: {e}",
+                    f"Could not import agent module {modname}: {e}",
+                    message_group=message_group_id)
+                continue
+            except (AttributeError, SyntaxError, TypeError) as e:
+                emit_warning(
+                    f"Agent module {modname} has errors: {e}",
+                    message_group=message_group_id)
+                continue
+            except Exception as e:
+                emit_error(
+                    f"Unexpected error loading agent module {modname}: {e}",
                     message_group=message_group_id)
                 continue
 
@@ -320,15 +329,35 @@ def _discover_agents(message_group_id: str | None = None):
                                     description=agent_instance.description,
                                     factory=attr)
 
-                    except Exception as e:
+                    except (ImportError, ModuleNotFoundError) as e:
                         emit_warning(
-                            f"Warning: Could not load agent {subpkg_name}.{modname}: {e}",
+                            f"Could not import agent {subpkg_name}.{modname}: {e}",
+                            message_group=message_group_id)
+                        continue
+                    except (AttributeError, SyntaxError, TypeError) as e:
+                        emit_warning(
+                            f"Agent {subpkg_name}.{modname} has errors: {e}",
+                            message_group=message_group_id)
+                        continue
+                    except Exception as e:
+                        emit_error(
+                            f"Unexpected error loading agent {subpkg_name}.{modname}: {e}",
                             message_group=message_group_id)
                         continue
 
-            except Exception as e:
+            except (ImportError, ModuleNotFoundError) as e:
                 emit_warning(
-                    f"Warning: Could not load agent sub-package {subpkg_name}: {e}",
+                    f"Could not import agent sub-package {subpkg_name}: {e}",
+                    message_group=message_group_id)
+                continue
+            except (AttributeError, SyntaxError, TypeError) as e:
+                emit_warning(
+                    f"Agent sub-package {subpkg_name} has errors: {e}",
+                    message_group=message_group_id)
+                continue
+            except Exception as e:
+                emit_error(
+                    f"Unexpected error loading agent sub-package {subpkg_name}: {e}",
                     message_group=message_group_id)
                 continue
 
@@ -348,9 +377,24 @@ def _discover_agents(message_group_id: str | None = None):
                     _json_tmp = JSONAgent(json_path)
                     _json_display = _json_tmp.display_name
                     _json_desc = _json_tmp.description
-                except Exception:
+                except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
                     _json_display = agent_name.replace("-", " ").title() + " 🤖"
                     _json_desc = "No description available"
+                    emit_warning(
+                        f"JSON agent '{agent_name}' config error: {e}",
+                        message_group=message_group_id)
+                except (AttributeError, TypeError) as e:
+                    _json_display = agent_name.replace("-", " ").title() + " 🤖"
+                    _json_desc = "No description available"
+                    emit_warning(
+                        f"JSON agent '{agent_name}' has errors: {e}",
+                        message_group=message_group_id)
+                except Exception as e:
+                    _json_display = agent_name.replace("-", " ").title() + " 🤖"
+                    _json_desc = "No description available"
+                    emit_error(
+                        f"Unexpected error loading JSON agent '{agent_name}': {e}",
+                        message_group=message_group_id)
                 _state.agent_registry[agent_name] = AgentInfo(
                     name=agent_name,
                     display_name=_json_display,
@@ -390,8 +434,14 @@ def _discover_agents(message_group_id: str | None = None):
                                     display_name=_plugin_inst.display_name,
                                     description=_plugin_inst.description,
                                     factory=agent_class)
-                            except Exception:
-                                pass  # skip problematic plugin agent
+                            except (ImportError, ModuleNotFoundError, AttributeError, TypeError) as e:
+                                emit_warning(
+                                    f"Could not load plugin agent '{agent_name}': {e}",
+                                    message_group=message_group_id)
+                            except Exception as e:
+                                emit_error(
+                                    f"Unexpected error loading plugin agent '{agent_name}': {e}",
+                                    message_group=message_group_id)
                     elif "json_path" in agent_def:
                         json_path = agent_def["json_path"]
                         if isinstance(json_path, str):
@@ -399,9 +449,24 @@ def _discover_agents(message_group_id: str | None = None):
                                 _pj_tmp = JSONAgent(json_path)
                                 _pj_display = _pj_tmp.display_name
                                 _pj_desc = _pj_tmp.description
-                            except Exception:
+                            except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
                                 _pj_display = agent_name.replace("-", " ").title() + " 🤖"
                                 _pj_desc = "No description available"
+                                emit_warning(
+                                    f"Plugin JSON agent '{agent_name}' config error: {e}",
+                                    message_group=message_group_id)
+                            except (AttributeError, TypeError) as e:
+                                _pj_display = agent_name.replace("-", " ").title() + " 🤖"
+                                _pj_desc = "No description available"
+                                emit_warning(
+                                    f"Plugin JSON agent '{agent_name}' has errors: {e}",
+                                    message_group=message_group_id)
+                            except Exception as e:
+                                _pj_display = agent_name.replace("-", " ").title() + " 🤖"
+                                _pj_desc = "No description available"
+                                emit_error(
+                                    f"Unexpected error loading plugin JSON agent '{agent_name}': {e}",
+                                    message_group=message_group_id)
                             _state.agent_registry[agent_name] = AgentInfo(
                                 name=agent_name,
                                 display_name=_pj_display,
