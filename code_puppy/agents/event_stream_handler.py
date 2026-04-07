@@ -1,6 +1,7 @@
 """Event stream handler for processing streaming events from agent runs."""
 
 import asyncio
+import importlib.util
 import logging
 from collections.abc import AsyncIterable
 from typing import Any
@@ -12,7 +13,8 @@ from pydantic_ai.messages import (
     ThinkingPart,
     ThinkingPartDelta,
     ToolCallPart,
-    ToolCallPartDelta)
+    ToolCallPartDelta,
+)
 from rich.console import Console
 from rich.markup import escape
 from rich.text import Text
@@ -23,28 +25,72 @@ from code_puppy.tools.subagent_context import is_subagent
 
 logger = logging.getLogger(__name__)
 
+# Module-level buffer for batching stream events
+_pending_stream_events: list[tuple[str, Any, Any]] = []
+_STREAM_FLUSH_INTERVAL = 50
+
 
 def _fire_stream_event(event_type: str, event_data: Any) -> None:
-    """Fire a stream event callback asynchronously (non-blocking).
+    """Fire a stream event callback asynchronously (non-blocking) with batching.
+
+    Events are batched to reduce task creation overhead. The batch is flushed
+    when 'part_end' event is received or when batch size reaches the threshold.
 
     Args:
         event_type: Type of the event (e.g., 'part_start', 'part_delta', 'part_end')
         event_data: Data associated with the event
     """
+    global _pending_stream_events
+
     try:
-        from code_puppy import callbacks
+        # Check if callbacks module is available without importing
+        if importlib.util.find_spec("code_puppy.callbacks") is None:
+            raise ImportError("callbacks module not available")
         from code_puppy.messaging import get_session_context
 
         agent_session_id = get_session_context()
+        _pending_stream_events.append((event_type, event_data, agent_session_id))
 
-        # Use create_task to fire callback without blocking
-        asyncio.create_task(
-            callbacks.on_stream_event(event_type, event_data, agent_session_id)
-        )
+        # Flush on part_end or when batch threshold reached
+        if (
+            event_type == "part_end"
+            or len(_pending_stream_events) >= _STREAM_FLUSH_INTERVAL
+        ):
+            batch = _pending_stream_events.copy()
+            _pending_stream_events.clear()
+            asyncio.create_task(_flush_stream_events(batch))
     except ImportError:
         logger.debug("callbacks or messaging module not available for stream event")
     except Exception as e:
         logger.debug(f"Error firing stream event callback: {e}")
+
+
+async def _flush_stream_events(batch: list) -> None:
+    """Flush a batch of stream events to the callbacks.
+
+    Args:
+        batch: List of (event_type, event_data, session_id) tuples to process.
+    """
+    from code_puppy import callbacks
+
+    for event_type, event_data, session_id in batch:
+        try:
+            await callbacks.on_stream_event(event_type, event_data, session_id)
+        except Exception as e:
+            logger.debug(f"Error flushing stream event: {e}")
+
+
+async def _drain_pending_stream_events() -> None:
+    """Drain any pending stream events before handler exits.
+
+    Ensures that any batched events are delivered before the handler completes.
+    """
+    global _pending_stream_events
+
+    if _pending_stream_events:
+        batch = _pending_stream_events.copy()
+        _pending_stream_events.clear()
+        await _flush_stream_events(batch)
 
 
 # Module-level console for streaming output
@@ -84,9 +130,7 @@ def _should_suppress_output() -> bool:
     return is_subagent() and not get_subagent_verbose()
 
 
-async def event_stream_handler(
-    ctx: RunContext,
-    events: AsyncIterable[Any]) -> None:
+async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> None:
     """Handle streaming events from the agent run.
 
     This function processes streaming events and emits TextPart, ThinkingPart,
@@ -138,7 +182,8 @@ async def event_stream_handler(
             Text.from_markup(
                 f"[bold white on {thinking_color}] THINKING [/bold white on {thinking_color}] [dim]\u26a1 "
             ),
-            end="")
+            end="",
+        )
         did_stream_anything = True
 
     async def _print_response_banner() -> None:
@@ -168,7 +213,8 @@ async def event_stream_handler(
                     "index": event.index,
                     "part_type": type(event.part).__name__,
                     "part": event.part,
-                })
+                },
+            )
 
             part = event.part
             if isinstance(part, ThinkingPart):
@@ -214,7 +260,8 @@ async def event_stream_handler(
                     "index": event.index,
                     "delta_type": type(event.delta).__name__,
                     "delta": event.delta,
-                })
+                },
+            )
 
             if event.index in streaming_parts:
                 delta = event.delta
@@ -274,11 +321,13 @@ async def event_stream_handler(
                     if tool_name:
                         console.print(
                             f"  \U0001f527 Calling {tool_name}... {count} token(s)   ",
-                            end="\r")
+                            end="\r",
+                        )
                     else:
                         console.print(
                             f"  \U0001f527 Calling tool... {count} token(s)   ",
-                            end="\r")
+                            end="\r",
+                        )
 
         # PartEndEvent - finish the streaming with a newline
         elif isinstance(event, PartEndEvent):
@@ -288,7 +337,8 @@ async def event_stream_handler(
                 {
                     "index": event.index,
                     "next_part_kind": getattr(event, "next_part_kind", None),
-                })
+                },
+            )
 
             if event.index in streaming_parts:
                 # For text parts, finalize termflow rendering
@@ -338,3 +388,5 @@ async def event_stream_handler(
                     resume_all_spinners()
 
     # Spinner is resumed in PartEndEvent when appropriate (based on next_part_kind)
+    # Drain any remaining buffered stream events before handler exits
+    await _drain_pending_stream_events()

@@ -7,10 +7,11 @@ Covers:
 - Content streaming and buffering
 - Banner printing
 - Cleanup and state management
+- Stream event batching behavior
 """
 
 from io import StringIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic_ai import PartDeltaEvent, PartEndEvent, PartStartEvent, RunContext
@@ -25,6 +26,11 @@ from pydantic_ai.messages import (
 from rich.console import Console
 
 from code_puppy.agents.event_stream_handler import (
+    _drain_pending_stream_events,
+    _fire_stream_event,
+    _flush_stream_events,
+    _pending_stream_events,
+    _STREAM_FLUSH_INTERVAL,
     event_stream_handler,
     get_streaming_console,
     set_streaming_console,
@@ -837,3 +843,223 @@ class TestSubAgentSuppression:
         assert events_consumed == 10
         # But nothing was printed
         console.print.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handler_drains_pending_events_on_completion(self, mock_ctx):
+        """Test that handler drains remaining stream events before exiting."""
+        text_part = TextPart(content="test")
+        start_event = PartStartEvent(index=0, part=text_part)
+        end_event = PartEndEvent(index=0, part=text_part, next_part_kind=None)
+
+        async def event_stream():
+            yield start_event
+            yield end_event
+
+        console = MagicMock(spec=Console, width=80)
+        console.file = StringIO()
+        set_streaming_console(console)
+
+        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
+            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+                with patch(
+                    "code_puppy.agents.event_stream_handler.get_banner_color",
+                    return_value="blue",
+                ):
+                    with patch("termflow.Parser") as mock_parser_cls:
+                        mock_parser = MagicMock()
+                        mock_parser.finalize.return_value = []
+                        mock_parser_cls.return_value = mock_parser
+
+                        with patch("termflow.Renderer"):
+                            with patch(
+                                "code_puppy.agents.event_stream_handler._drain_pending_stream_events"
+                            ) as mock_drain:
+                                await event_stream_handler(mock_ctx, event_stream())
+
+                                # Should drain pending events at end of handler
+                                mock_drain.assert_called_once()
+
+
+class TestStreamEventBatching:
+    """Test stream event batching behavior."""
+
+    @pytest.fixture(autouse=True)
+    def reset_pending_events(self):
+        """Reset the pending events buffer before each test."""
+        global _pending_stream_events
+        _pending_stream_events.clear()
+        yield
+        _pending_stream_events.clear()
+
+    @pytest.mark.asyncio
+    async def test_events_accumulate_in_pending_buffer(self):
+        """Test that events accumulate in _pending_stream_events."""
+        # Mock get_session_context to return a test value
+        with patch(
+            "code_puppy.messaging.get_session_context",
+            return_value="test-session",
+        ):
+            with patch(
+                "importlib.util.find_spec",
+                return_value=True,
+            ):
+                # Fire multiple part_start events (not part_end, so no flush)
+                for i in range(5):
+                    _fire_stream_event("part_start", {"index": i})
+
+                # Events should be accumulated
+                assert len(_pending_stream_events) == 5
+                for i, (event_type, data, session_id) in enumerate(
+                    _pending_stream_events
+                ):
+                    assert event_type == "part_start"
+                    assert data["index"] == i
+                    assert session_id == "test-session"
+
+    @pytest.mark.asyncio
+    async def test_flush_triggered_at_interval_threshold(self):
+        """Test flush is triggered when batch reaches _STREAM_FLUSH_INTERVAL."""
+        # Mock get_session_context and callbacks
+        with patch(
+            "code_puppy.messaging.get_session_context",
+            return_value="test-session",
+        ):
+            with patch(
+                "importlib.util.find_spec",
+                return_value=True,
+            ):
+                with patch(
+                    "code_puppy.agents.event_stream_handler._flush_stream_events"
+                ) as mock_flush:
+                    # Add events up to the threshold - 1 (shouldn't trigger flush)
+                    for i in range(_STREAM_FLUSH_INTERVAL - 1):
+                        _fire_stream_event("part_start", {"index": i})
+
+                    # Buffer should be at threshold - 1, no flush yet
+                    assert len(_pending_stream_events) == _STREAM_FLUSH_INTERVAL - 1
+                    mock_flush.assert_not_called()
+
+                    # Add one more event to reach threshold
+                    _fire_stream_event(
+                        "part_start", {"index": _STREAM_FLUSH_INTERVAL - 1}
+                    )
+
+                    # Flush should be triggered via create_task
+                    mock_flush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_flush_triggered_by_part_end(self):
+        """Test flush is triggered by part_end event."""
+        # Mock get_session_context and find_spec
+        with patch(
+            "code_puppy.messaging.get_session_context",
+            return_value="test-session",
+        ):
+            with patch(
+                "importlib.util.find_spec",
+                return_value=True,
+            ):
+                with patch(
+                    "code_puppy.agents.event_stream_handler._flush_stream_events"
+                ) as mock_flush:
+                    # Add a few events (not enough to trigger threshold)
+                    for i in range(5):
+                        _fire_stream_event("part_start", {"index": i})
+
+                    assert len(_pending_stream_events) == 5
+                    mock_flush.assert_not_called()
+
+                    # Fire part_end - should trigger immediate flush
+                    _fire_stream_event("part_end", {"index": 4})
+
+                    # Flush should be triggered
+                    mock_flush.assert_called_once()
+                    # Buffer should be cleared
+                    assert len(_pending_stream_events) == 0
+
+    @pytest.mark.asyncio
+    async def test_flush_stream_events_calls_callbacks(self):
+        """Test _flush_stream_events properly calls callbacks.on_stream_event."""
+        # Create a batch of events
+        batch = [
+            ("part_start", {"index": 0}, "session-1"),
+            ("part_delta", {"content": "hello"}, "session-1"),
+            ("part_end", {"index": 0}, "session-1"),
+        ]
+
+        with patch(
+            "code_puppy.callbacks.on_stream_event", new_callable=AsyncMock
+        ) as mock_on_stream:
+            await _flush_stream_events(batch)
+
+            # on_stream_event should be called for each event in batch
+            assert mock_on_stream.call_count == 3
+            mock_on_stream.assert_any_call("part_start", {"index": 0}, "session-1")
+            mock_on_stream.assert_any_call(
+                "part_delta", {"content": "hello"}, "session-1"
+            )
+            mock_on_stream.assert_any_call("part_end", {"index": 0}, "session-1")
+
+    @pytest.mark.asyncio
+    async def test_flush_stream_events_handles_errors_gracefully(self):
+        """Test _flush_stream_events handles callback errors gracefully."""
+        batch = [
+            ("part_start", {"index": 0}, "session-1"),
+            ("part_start", {"index": 1}, "session-1"),  # Second should still run
+        ]
+
+        with patch(
+            "code_puppy.callbacks.on_stream_event",
+            new_callable=AsyncMock,
+            side_effect=[Exception("boom"), None],
+        ) as mock_on_stream:
+            # Should not raise despite first call failing
+            await _flush_stream_events(batch)
+
+            # Both calls should be attempted
+            assert mock_on_stream.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_drain_pending_stream_events_flushes_remaining(self):
+        """Test _drain_pending_stream_events flushes remaining events."""
+        # Add some events to the buffer
+        _pending_stream_events.append(("part_start", {"index": 0}, "session-1"))
+        _pending_stream_events.append(("part_delta", {"content": "hi"}, "session-1"))
+
+        with patch(
+            "code_puppy.agents.event_stream_handler._flush_stream_events"
+        ) as mock_flush:
+            await _drain_pending_stream_events()
+
+            # Should flush the batch
+            mock_flush.assert_called_once()
+            # Buffer should be cleared
+            assert len(_pending_stream_events) == 0
+            # Verify correct batch was passed
+            call_args = mock_flush.call_args[0][0]
+            assert len(call_args) == 2
+
+    @pytest.mark.asyncio
+    async def test_drain_pending_stream_events_noop_when_empty(self):
+        """Test _drain_pending_stream_events does nothing when buffer is empty."""
+        _pending_stream_events.clear()
+
+        with patch(
+            "code_puppy.agents.event_stream_handler._flush_stream_events"
+        ) as mock_flush:
+            await _drain_pending_stream_events()
+
+            mock_flush.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_fire_stream_event_import_error(self):
+        """Test _fire_stream_event handles ImportError gracefully."""
+        # Mock find_spec to return None (module not found)
+        with patch(
+            "importlib.util.find_spec",
+            return_value=None,
+        ):
+            # Should not raise even though callbacks module is "missing"
+            _fire_stream_event("part_start", {"index": 0})
+            # Buffer should remain empty since callbacks not available
+            assert len(_pending_stream_events) == 0
