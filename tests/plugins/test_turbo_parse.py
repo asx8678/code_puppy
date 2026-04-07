@@ -8,13 +8,13 @@ import importlib.util
 import os
 import tempfile
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from unittest import mock
 
 import pytest
 
 from code_puppy.callbacks import clear_callbacks, get_callbacks, register_callback
+from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
 
 
 def is_turbo_parse_available() -> bool:
@@ -186,6 +186,7 @@ class TestTurboParseExports:
 class TestParseSource:
     """Tests for parse_source basic functionality."""
 
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_parse_source_python_function(self):
         """Test parsing a simple Python function."""
         from code_puppy.turbo_parse_bridge import parse_source
@@ -198,7 +199,8 @@ class TestParseSource:
         assert "tree" in result
         assert "parse_time_ms" in result
         assert isinstance(result["parse_time_ms"], (int, float))
-        
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_parse_source_class_definition(self):
         """Test parsing a Python class definition."""
         from code_puppy.turbo_parse_bridge import parse_source
@@ -216,7 +218,8 @@ class MyClass:
         assert result["success"] is True
         assert result["language"] == "python"
         assert result["tree"] is not None
-        
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_parse_source_invalid_syntax(self):
         """Test parsing source with invalid syntax."""
         from code_puppy.turbo_parse_bridge import parse_source
@@ -227,7 +230,8 @@ class MyClass:
         # Should return result with success flag and error info
         assert "success" in result
         assert "errors" in result
-        
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_parse_source_rust_code(self):
         """Test parsing Rust source code."""
         from code_puppy.turbo_parse_bridge import parse_source
@@ -242,6 +246,7 @@ class MyClass:
 class TestParseFile:
     """Tests for parse_file with temp file."""
 
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_parse_file_python(self):
         """Test parsing a Python file from disk."""
         from code_puppy.turbo_parse_bridge import parse_file
@@ -260,6 +265,7 @@ class TestParseFile:
         finally:
             os.unlink(temp_path)
     
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_parse_file_with_language_override(self):
         """Test parsing with explicit language override."""
         from code_puppy.turbo_parse_bridge import parse_file
@@ -278,6 +284,7 @@ class TestParseFile:
         finally:
             os.unlink(temp_path)
     
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_parse_file_empty(self):
         """Test parsing an empty file."""
         from code_puppy.turbo_parse_bridge import parse_file
@@ -295,6 +302,7 @@ class TestParseFile:
         finally:
             os.unlink(temp_path)
     
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_parse_file_nonexistent(self):
         """Test parsing a non-existent file."""
         from code_puppy.turbo_parse_bridge import parse_file
@@ -309,6 +317,7 @@ class TestParseFile:
 class TestUnsupportedLanguage:
     """Tests for unsupported language error handling."""
 
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_unsupported_language_error(self):
         """Test that unsupported language returns appropriate error."""
         from code_puppy.turbo_parse_bridge import parse_source
@@ -320,6 +329,7 @@ class TestUnsupportedLanguage:
         assert "errors" in result
         assert len(result["errors"]) > 0
         
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_unsupported_language_via_is_language_supported(self):
         """Test is_language_supported for unsupported languages."""
         from code_puppy.turbo_parse_bridge import is_language_supported
@@ -331,6 +341,7 @@ class TestUnsupportedLanguage:
 class TestConcurrentGILRelease:
     """Test that GIL is released during parsing by calling from multiple threads."""
     
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_concurrent_parse_source(self):
         """Test concurrent parse_source calls from multiple threads."""
         from code_puppy.turbo_parse_bridge import parse_source
@@ -366,6 +377,7 @@ class TestConcurrentGILRelease:
         # Most should succeed (at least the valid ones)
         assert sum(outcomes) >= 3, f"Expected at least 3 successes, got {sum(outcomes)}"
     
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_concurrent_parse_file(self):
         """Test concurrent parse_file calls from multiple threads."""
         from code_puppy.turbo_parse_bridge import parse_file
@@ -406,6 +418,7 @@ class TestConcurrentGILRelease:
                 except OSError:
                     pass
     
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
     def test_thread_safety_stress(self):
         """Stress test with many concurrent threads."""
         from code_puppy.turbo_parse_bridge import parse_source
@@ -432,14 +445,11 @@ class TestConcurrentGILRelease:
             t = threading.Thread(target=stress_worker, args=(i,))
             threads.append(t)
         
-        start_time = time.time()
         for t in threads:
             t.start()
         
         for t in threads:
             t.join()
-        
-        elapsed = time.time() - start_time
         
         # All threads should complete
         assert len(results) == num_threads, f"Expected {num_threads} results, got {len(results)}"
