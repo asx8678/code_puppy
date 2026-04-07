@@ -140,11 +140,6 @@ impl SyntaxDiagnostics {
         self.diagnostics.is_empty()
     }
 
-    /// Get the total number of diagnostics.
-    pub fn len(&self) -> usize {
-        self.diagnostics.len()
-    }
-
     /// Get the number of errors.
     pub fn error_count(&self) -> usize {
         self.errors().len()
