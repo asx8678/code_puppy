@@ -138,9 +138,6 @@ class ModelsDevRegistry:
         self.json_path = Path(json_path) if json_path else None
         self.providers: dict[str, ProviderInfo] = {}
         self.models: dict[str, ModelInfo] = {}
-        self.provider_models: dict[
-            str, list[str]
-        ] = {}  # Maps provider_id to list of model IDs
         self.data_source: str = "unknown"  # Track where data came from
 
         # Sync init only loads from file (bundled or explicit path)
@@ -172,7 +169,6 @@ class ModelsDevRegistry:
         instance.json_path = Path(json_path) if json_path else None
         instance.providers = {}
         instance.models = {}
-        instance.provider_models = {}
         instance.data_source = "unknown"
 
         await instance._load_data_async()
@@ -301,7 +297,6 @@ class ModelsDevRegistry:
             try:
                 provider = self._parse_provider(provider_id, provider_data)
                 self.providers[provider_id] = provider
-                self.provider_models[provider_id] = []
 
                 # Parse models nested under the provider
                 models_data = provider_data.get("models", {})
@@ -311,7 +306,6 @@ class ModelsDevRegistry:
                             model = self._parse_model(provider_id, model_id, model_data)
                             model_key = model.full_id
                             self.models[model_key] = model
-                            self.provider_models[provider_id].append(model_id)
                         except Exception as e:
                             emit_warning(
                                 f"Skipping malformed model {provider_id}::{model_id}: {e}"
@@ -420,11 +414,9 @@ class ModelsDevRegistry:
             List of ModelInfo objects sorted by name
         """
         if provider_id:
-            model_ids = self.provider_models.get(provider_id, [])
+            prefix = f"{provider_id}::"
             models = [
-                self.models[f"{provider_id}::{model_id}"]
-                for model_id in model_ids
-                if f"{provider_id}::{model_id}" in self.models
+                model for key, model in self.models.items() if key.startswith(prefix)
             ]
         else:
             models = list(self.models.values())
