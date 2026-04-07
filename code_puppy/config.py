@@ -353,13 +353,20 @@ def _get_model_context_length(model_name: str) -> int:
     return result
 
 
-def get_model_context_length() -> int:
+def get_model_context_length(model_name: str | None = None) -> int:
     """
     Get the context length for the currently configured model from models.json.
     Results are cached per-model to avoid repeated config lookups.
+
+    Args:
+        model_name: Optional model name to look up. If not provided, uses global model.
+
+    Returns:
+        Model context length in tokens.
     """
     try:
-        model_name = get_global_model_name()
+        if model_name is None:
+            model_name = get_global_model_name()
         return _get_model_context_length(model_name)
     except Exception:
         # Fallback to default context length if anything goes wrong
