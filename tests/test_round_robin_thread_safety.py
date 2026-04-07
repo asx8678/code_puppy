@@ -1,8 +1,10 @@
-"""Tests for thread-safety of RoundRobinModel._get_next_model."""
+"""Tests for async concurrency safety of RoundRobinModel._get_next_model."""
 
-import threading
+import asyncio
 from collections import Counter
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from code_puppy.round_robin_model import RoundRobinModel
 
@@ -38,34 +40,32 @@ class MockModel:
         return model_settings, model_request_parameters
 
 
-def test_get_next_model_thread_safety():
+@pytest.mark.asyncio
+async def test_get_next_model_concurrent_access():
     """Verify _get_next_model distributes evenly under concurrent access."""
     models = [MockModel(f"model{i}") for i in range(3)]
     rrm = RoundRobinModel(*models)
 
-    results: list[str] = []
-    lock = threading.Lock()
-    num_threads = 10
-    calls_per_thread = 300
+    num_concurrent = 10
+    calls_per_task = 300
 
-    def worker():
+    async def worker():
         local = []
-        for _ in range(calls_per_thread):
-            model = rrm._get_next_model()
+        for _ in range(calls_per_task):
+            model = await rrm._get_next_model()
             local.append(model.model_name)
-        with lock:
-            results.extend(local)
+        return local
 
-    threads = [threading.Thread(target=worker) for _ in range(num_threads)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    # Run all workers concurrently
+    results = await asyncio.gather(*[worker() for _ in range(num_concurrent)])
 
-    total = num_threads * calls_per_thread  # 3000
-    assert len(results) == total
+    # Flatten results
+    all_results = [name for worker_results in results for name in worker_results]
 
-    counts = Counter(results)
+    total = num_concurrent * calls_per_task  # 3000
+    assert len(all_results) == total
+
+    counts = Counter(all_results)
     expected = total // len(models)  # 1000 each
     # Each model should get exactly 1/3 of requests
     for name, count in counts.items():
@@ -75,34 +75,32 @@ def test_get_next_model_thread_safety():
         )
 
 
-def test_get_next_model_thread_safety_with_rotate_every():
-    """Thread-safety with rotate_every > 1."""
+@pytest.mark.asyncio
+async def test_get_next_model_concurrent_with_rotate_every():
+    """Async concurrency safety with rotate_every > 1."""
     models = [MockModel(f"model{i}") for i in range(2)]
     rrm = RoundRobinModel(*models, rotate_every=3)
 
-    results: list[str] = []
-    lock = threading.Lock()
-    num_threads = 6
-    calls_per_thread = 300  # 1800 total, divisible by 6 (rotate_every*num_models)
+    num_concurrent = 6
+    calls_per_task = 300  # 1800 total, divisible by 6 (rotate_every*num_models)
 
-    def worker():
+    async def worker():
         local = []
-        for _ in range(calls_per_thread):
-            model = rrm._get_next_model()
+        for _ in range(calls_per_task):
+            model = await rrm._get_next_model()
             local.append(model.model_name)
-        with lock:
-            results.extend(local)
+        return local
 
-    threads = [threading.Thread(target=worker) for _ in range(num_threads)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    # Run all workers concurrently
+    results = await asyncio.gather(*[worker() for _ in range(num_concurrent)])
 
-    total = num_threads * calls_per_thread
-    assert len(results) == total
+    # Flatten results
+    all_results = [name for worker_results in results for name in worker_results]
 
-    counts = Counter(results)
+    total = num_concurrent * calls_per_task
+    assert len(all_results) == total
+
+    counts = Counter(all_results)
     # Each model should get exactly half
     expected = total // len(models)
     for name, count in counts.items():
