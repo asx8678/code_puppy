@@ -174,17 +174,24 @@ class RoundRobinModel(Model):
         model_request_parameters: ModelRequestParameters,
         run_context: RunContext[Any] | None = None) -> AsyncIterator[StreamedResponse]:
         """Make a streaming request using the next model in the round-robin sequence."""
+        from code_puppy.model_availability import availability_service
+
         current_model = self._get_next_model()
         # Use prepare_request to merge settings and customize parameters
         merged_settings, prepared_params = current_model.prepare_request(
             model_settings, model_request_parameters
         )
 
-        async with current_model.request_stream(
-            messages, merged_settings, prepared_params, run_context
-        ) as response:
-            self._set_span_attributes(current_model)
-            yield response
+        try:
+            async with current_model.request_stream(
+                messages, merged_settings, prepared_params, run_context
+            ) as response:
+                self._set_span_attributes(current_model)
+                yield response
+            availability_service.mark_healthy(current_model.model_name)
+        except Exception as e:
+            self._track_failure(current_model.model_name, e)
+            raise
 
     @staticmethod
     def _track_failure(model_name: str, error: Exception) -> None:
