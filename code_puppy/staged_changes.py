@@ -17,10 +17,10 @@ import hashlib
 import json
 import logging
 import os
-import secrets
 import tempfile
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
@@ -177,8 +177,8 @@ class StagedChangesSandbox:
         return change
     
     def _generate_change_id(self) -> str:
-        """Generate unique change ID using cryptographically secure random."""
-        return secrets.token_hex(16)  # 32 hex chars, thread-safe and collision-resistant
+        """Generate unique change ID using UUID4."""
+        return uuid.uuid4().hex  # 32 hex chars, guaranteed unique
     
     def get_staged_changes(self, include_applied: bool = False) -> list[StagedChange]:
         """Get all pending staged changes."""
