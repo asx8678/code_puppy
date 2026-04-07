@@ -18,6 +18,10 @@ try:
         extract_symbols,
         extract_symbols_from_file,
         extract_syntax_diagnostics,
+        get_folds,
+        get_folds_from_file,
+        get_highlights,
+        get_highlights_from_file,
     )
 
     TURBO_PARSE_AVAILABLE = True
@@ -122,6 +126,18 @@ except ImportError:
     def extract_symbols_from_file(path, language=None):
         return {"success": False, "symbols": [], "error": "turbo_parse not available", "extraction_time_ms": 0.0}
 
+    def get_folds(source, language):
+        return {"success": False, "folds": [], "error": "turbo_parse not available", "extraction_time_ms": 0.0}
+
+    def get_folds_from_file(path, language=None):
+        return {"success": False, "folds": [], "error": "turbo_parse not available", "extraction_time_ms": 0.0}
+
+    def get_highlights(source, language):
+        return {"success": False, "captures": [], "error": "turbo_parse not available", "extraction_time_ms": 0.0}
+
+    def get_highlights_from_file(path, language=None):
+        return {"success": False, "captures": [], "error": "turbo_parse not available", "extraction_time_ms": 0.0}
+
 
 # --- Turbo Parse toggle -----------------------------------------------------
 # When True (default), Rust acceleration is used at runtime if the module
@@ -161,6 +177,10 @@ __all__ = [
     "extract_symbols",
     "extract_symbols_from_file",
     "extract_syntax_diagnostics",
+    "get_folds",
+    "get_folds_from_file",
+    "get_highlights",
+    "get_highlights_from_file",
     "is_turbo_parse_enabled",
     "set_turbo_parse_enabled",
     "get_turbo_parse_status",

@@ -2,52 +2,58 @@
 
 Registers the turbo_parse parsing system with code_puppy's callback hooks:
 - startup: Check turbo_parse Rust module availability and log status
-- register_tools: Register the parse_code tool for code parsing operations
+- register_tools: Register parsing tools for code analysis operations
 - custom_command: Register the /parse slash command with subcommands
 - custom_command_help: Register help text for the /parse command
 
-## parse_code Tool
+## Available Tools
 
-The parse_code tool provides high-performance code parsing using the turbo_parse
-Rust module with graceful fallback to stub implementations when unavailable.
-
-### Tool Signature
-
-**Name:** `parse_code`
+### parse_code
+Parse source code and extract AST, symbols, and diagnostics.
 
 **Parameters:**
 - `source` (string, required): Source code to parse
 - `language` (string, required): Programming language identifier
-  (e.g., "python", "rust", "javascript", "typescript")
 - `options` (dict, optional): Additional parsing options
   - `extract_symbols` (bool): Whether to extract symbol outline
   - `extract_diagnostics` (bool): Whether to extract syntax diagnostics
   - `include_tree` (bool): Whether to include full AST tree (default: True)
 
-**Returns:**
-```python
-{
-    "success": bool,              # Whether parsing succeeded
-    "tree": dict | None,          # Serialized AST tree
-    "symbols": list,            # List of extracted symbols
-    "diagnostics": list,        # Syntax error/warning diagnostics
-    "parse_time_ms": float,     # Time taken to parse in milliseconds
-    "language": str,            # Normalized language identifier
-    "errors": list,             # Error messages if any
-}
-```
+**Returns:** Dict with success, tree, symbols, diagnostics, parse_time_ms, language, errors
 
-### Usage Example
+### get_highlights
+Extract syntax highlighting captures from source code.
 
-```python
-result = await parse_code(
-    source="def hello(): pass",
-    language="python",
-    options={"extract_symbols": True}
-)
-# result["success"] -> True
-# result["symbols"] -> [{"name": "hello", "kind": "function", ...}]
-```
+**Parameters:**
+- `source` (string, required): Source code to analyze
+- `language` (string, required): Programming language identifier
+- `options` (dict, optional): Additional options (reserved for future use)
+
+**Returns:** Dict with captures (list of {start_byte, end_byte, capture_name}), 
+extraction_time_ms, success, language, errors
+
+### get_folds
+Extract code fold ranges from source code.
+
+**Parameters:**
+- `source` (string, required): Source code to analyze
+- `language` (string, required): Programming language identifier
+- `options` (dict, optional): Additional options (reserved for future use)
+
+**Returns:** Dict with folds (list of {start_line, end_line, fold_type}),
+extraction_time_ms, success, language, errors
+
+### get_outline
+Extract hierarchical symbol outline from source code.
+
+**Parameters:**
+- `source` (string, required): Source code to analyze
+- `language` (string, required): Programming language identifier
+- `options` (dict, optional): Additional options
+  - `max_depth` (int): Maximum depth for nested symbols (default: unlimited)
+
+**Returns:** Dict with outline (hierarchical structure of symbols with children),
+extraction_time_ms, success, language, errors
 
 ## /parse Slash Command
 
@@ -85,6 +91,8 @@ from code_puppy.turbo_parse_bridge import (
     parse_files_batch as _parse_files_batch,
     extract_symbols as _extract_symbols,
     extract_syntax_diagnostics as _extract_diagnostics,
+    get_folds as _get_folds,
+    get_highlights as _get_highlights,
     is_language_supported,
     supported_languages,
     health_check,
@@ -305,11 +313,325 @@ def _register_parse_code_tool(agent):
             }
 
 
+def _register_get_highlights_tool(agent):
+    """Register the get_highlights tool with an agent.
+    
+    Tool returns syntax highlighting captures with byte positions.
+    """
+    
+    @agent.tool
+    async def get_highlights(
+        context: RunContext,
+        source: str,
+        language: str,
+        options: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        """Extract syntax highlighting captures from source code.
+        
+        Use this tool when you need to:
+        - Identify syntax tokens for highlighting
+        - Get byte positions of keywords, strings, comments, etc.
+        - Analyze code structure for visual formatting
+        
+        Supported languages: python, rust, javascript, typescript, tsx, elixir
+        
+        Args:
+            source: The source code string to analyze
+            language: Programming language identifier (e.g., "python", "rust", "js")
+            options: Optional dict (reserved for future use)
+                
+        Returns:
+            Dict with:
+            - success: bool - Whether extraction succeeded
+            - captures: list - Highlight captures with {start_byte, end_byte, capture_name}
+            - extraction_time_ms: float - Time taken to extract
+            - language: str - Normalized language identifier
+            - errors: list - Error messages if extraction failed
+        """
+        start_time = time.time()
+        normalized_lang = _normalize_language(language)
+        
+        if TURBO_PARSE_AVAILABLE and not is_language_supported(normalized_lang):
+            return {
+                "success": False,
+                "captures": [],
+                "extraction_time_ms": (time.time() - start_time) * 1000,
+                "language": normalized_lang,
+                "errors": [f"Language '{language}' is not supported"],
+            }
+        
+        try:
+            result = _get_highlights(source, normalized_lang)
+            return {
+                "success": result.get("success", False),
+                "captures": result.get("captures", []),
+                "extraction_time_ms": result.get("extraction_time_ms", (time.time() - start_time) * 1000),
+                "language": result.get("language", normalized_lang),
+                "errors": result.get("errors", []),
+            }
+        except Exception as e:
+            logger.exception("Get highlights tool failed")
+            return {
+                "success": False,
+                "captures": [],
+                "extraction_time_ms": (time.time() - start_time) * 1000,
+                "language": normalized_lang,
+                "errors": [f"Extraction failed: {str(e)}"],
+            }
+
+
+def _register_get_folds_tool(agent):
+    """Register the get_folds tool with an agent.
+    
+    Tool returns code fold ranges with line positions.
+    """
+    
+    @agent.tool
+    async def get_folds(
+        context: RunContext,
+        source: str,
+        language: str,
+        options: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        """Extract code fold ranges from source code.
+        
+        Use this tool when you need to:
+        - Find foldable regions (functions, classes, conditionals)
+        - Get line ranges for code folding
+        - Understand code structure for collapsing/expanding
+        
+        Supported languages: python, rust, javascript, typescript, tsx, elixir
+        
+        Args:
+            source: The source code string to analyze
+            language: Programming language identifier (e.g., "python", "rust", "js")
+            options: Optional dict (reserved for future use)
+                
+        Returns:
+            Dict with:
+            - success: bool - Whether extraction succeeded
+            - folds: list - Fold ranges with {start_line, end_line, fold_type}
+            - extraction_time_ms: float - Time taken to extract
+            - language: str - Normalized language identifier
+            - errors: list - Error messages if extraction failed
+        """
+        start_time = time.time()
+        normalized_lang = _normalize_language(language)
+        
+        if TURBO_PARSE_AVAILABLE and not is_language_supported(normalized_lang):
+            return {
+                "success": False,
+                "folds": [],
+                "extraction_time_ms": (time.time() - start_time) * 1000,
+                "language": normalized_lang,
+                "errors": [f"Language '{language}' is not supported"],
+            }
+        
+        try:
+            result = _get_folds(source, normalized_lang)
+            return {
+                "success": result.get("success", False),
+                "folds": result.get("folds", []),
+                "extraction_time_ms": result.get("extraction_time_ms", (time.time() - start_time) * 1000),
+                "language": result.get("language", normalized_lang),
+                "errors": result.get("errors", []),
+            }
+        except Exception as e:
+            logger.exception("Get folds tool failed")
+            return {
+                "success": False,
+                "folds": [],
+                "extraction_time_ms": (time.time() - start_time) * 1000,
+                "language": normalized_lang,
+                "errors": [f"Extraction failed: {str(e)}"],
+            }
+
+
+def _build_symbol_hierarchy(symbols: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Build parent-child hierarchy from flat symbol list.
+    
+    Uses byte position ranges to determine nesting.
+    
+    Args:
+        symbols: Flat list of symbols from extract_symbols
+        
+    Returns:
+        Hierarchical list with 'children' field for nested symbols
+    """
+    if not symbols:
+        return []
+    
+    # Sort by start position, then by length (longer/outer first)
+    sorted_symbols = sorted(
+        symbols,
+        key=lambda s: (s.get("start_line", 0), s.get("start_col", 0), 
+                      -(s.get("end_line", 0) - s.get("start_line", 0)))
+    )
+    
+    # Build hierarchy
+    root_items = []
+    stack = []
+    
+    for symbol in sorted_symbols:
+        symbol_with_children = {**symbol, "children": []}
+        
+        # Find parent by checking containment
+        while stack:
+            parent = stack[-1]
+            # Check if this symbol is contained within the parent
+            if (_is_symbol_contained(symbol, parent)):
+                parent["children"].append(symbol_with_children)
+                break
+            else:
+                stack.pop()
+        else:
+            # No parent found, add to root
+            root_items.append(symbol_with_children)
+        
+        # Push this symbol to stack
+        stack.append(symbol_with_children)
+    
+    return root_items
+
+
+def _is_symbol_contained(child: Dict[str, Any], parent: Dict[str, Any]) -> bool:
+    """Check if child symbol is contained within parent symbol.
+    
+    Args:
+        child: Child symbol dict
+        parent: Parent symbol dict
+        
+    Returns:
+        True if child is contained in parent
+    """
+    # Check line containment
+    child_start = child.get("start_line", 0)
+    child_end = child.get("end_line", 0)
+    parent_start = parent.get("start_line", 0)
+    parent_end = parent.get("end_line", 0)
+    
+    # Strict containment: child starts after parent starts and ends before parent ends
+    if child_start > parent_start and child_end <= parent_end:
+        return True
+    
+    # Same start but child ends before parent (e.g., method in class starting at same line)
+    if child_start == parent_start and child_end < parent_end:
+        return True
+    
+    return False
+
+
+def _register_get_outline_tool(agent):
+    """Register the get_outline tool with an agent.
+    
+    Tool returns hierarchical symbol outline with parent-child relationships.
+    """
+    
+    @agent.tool
+    async def get_outline(
+        context: RunContext,
+        source: str,
+        language: str,
+        options: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        """Extract hierarchical symbol outline from source code.
+        
+        Use this tool when you need to:
+        - Get structured outline of code (functions, classes, methods)
+        - Understand parent-child relationships in code
+        - Navigate code structure hierarchically
+        
+        Supported languages: python, rust, javascript, typescript, tsx, elixir
+        
+        Args:
+            source: The source code string to analyze
+            language: Programming language identifier (e.g., "python", "rust", "js")
+            options: Optional dict with:
+                - max_depth: int - Maximum depth for nested symbols (default: unlimited)
+                
+        Returns:
+            Dict with:
+            - success: bool - Whether extraction succeeded
+            - outline: list - Hierarchical structure with {name, kind, position, children}
+            - extraction_time_ms: float - Time taken to extract
+            - language: str - Normalized language identifier
+            - errors: list - Error messages if extraction failed
+        """
+        options = options or {}
+        max_depth = options.get("max_depth", None)
+        
+        start_time = time.time()
+        normalized_lang = _normalize_language(language)
+        
+        if TURBO_PARSE_AVAILABLE and not is_language_supported(normalized_lang):
+            return {
+                "success": False,
+                "outline": [],
+                "extraction_time_ms": (time.time() - start_time) * 1000,
+                "language": normalized_lang,
+                "errors": [f"Language '{language}' is not supported"],
+            }
+        
+        try:
+            # Get flat symbols first
+            symbols_result = _extract_symbols(source, normalized_lang)
+            flat_symbols = symbols_result.get("symbols", [])
+            
+            # Build hierarchy
+            outline = _build_symbol_hierarchy(flat_symbols)
+            
+            # Apply max_depth if specified
+            if max_depth is not None:
+                outline = _limit_depth(outline, max_depth)
+            
+            return {
+                "success": True,
+                "outline": outline,
+                "extraction_time_ms": symbols_result.get("extraction_time_ms", (time.time() - start_time) * 1000),
+                "language": symbols_result.get("language", normalized_lang),
+                "errors": symbols_result.get("errors", []),
+            }
+        except Exception as e:
+            logger.exception("Get outline tool failed")
+            return {
+                "success": False,
+                "outline": [],
+                "extraction_time_ms": (time.time() - start_time) * 1000,
+                "language": normalized_lang,
+                "errors": [f"Extraction failed: {str(e)}"],
+            }
+
+
+def _limit_depth(items: List[Dict[str, Any]], max_depth: int, current_depth: int = 1) -> List[Dict[str, Any]]:
+    """Limit the depth of hierarchical items.
+    
+    Args:
+        items: List of hierarchical items with 'children' field
+        max_depth: Maximum depth to include
+        current_depth: Current depth level
+        
+    Returns:
+        List with children limited to max_depth
+    """
+    if current_depth >= max_depth:
+        # Remove all children at this depth
+        for item in items:
+            item["children"] = []
+        return items
+    
+    # Recursively limit children
+    for item in items:
+        if item.get("children"):
+            item["children"] = _limit_depth(item["children"], max_depth, current_depth + 1)
+    
+    return items
+
+
 def _register_tools() -> List[Dict[str, Any]]:
     """Register turbo_parse tools.
     
     Returns a list of tool definitions for the register_tools callback.
-    Currently registers the parse_code tool for high-performance code parsing.
+    Registers the parse_code, get_highlights, get_folds, and get_outline tools.
     
     Returns:
         List of tool definitions with name and register_func.
@@ -318,7 +640,19 @@ def _register_tools() -> List[Dict[str, Any]]:
         {
             "name": "parse_code",
             "register_func": _register_parse_code_tool,
-        }
+        },
+        {
+            "name": "get_highlights",
+            "register_func": _register_get_highlights_tool,
+        },
+        {
+            "name": "get_folds",
+            "register_func": _register_get_folds_tool,
+        },
+        {
+            "name": "get_outline",
+            "register_func": _register_get_outline_tool,
+        },
     ]
 
 
