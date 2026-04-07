@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Regex for stripping ANSI escape codes produced by termflow / other renderers
+# Regex for stripping ANSI escape codes produced by Rich / other renderers
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[mGKHF]")
 
 
@@ -226,14 +226,13 @@ class TUIConsole:
     Passed to ``set_streaming_console()`` so that ``event_stream_handler``
     writes streaming tokens / banners to the TUI chat log instead of stdout.
 
-    We also set ``self.file = self`` so that ``termflow``'s
-    ``TermflowRenderer(output=console.file, ...)`` writes here via
-    ``TUIConsole.write()``.
+    We also set ``self.file = self`` so that any code using
+    ``console.file.write()`` writes here via ``TUIConsole.write()``.
     """
 
     def __init__(self, app: "CodePuppyApp") -> None:
         self.app = app
-        # ``termflow`` uses ``console.file`` for low-level writes
+        # Rich and other tools may use ``console.file`` for low-level writes
         self.file = self
         self._width: int = 120
 
@@ -279,11 +278,11 @@ class TUIConsole:
             pass
 
     # ------------------------------------------------------------------
-    # File-like API (used by termflow's TermflowRenderer via console.file)
+    # File-like API (used by renderers that need console.file)
     # ------------------------------------------------------------------
 
     def write(self, text: str) -> None:
-        """Accept raw writes (e.g. from termflow) and forward to the chat log.
+        """Accept raw writes and forward to the chat log.
 
         ANSI escape codes are decoded via ``rich.ansi.AnsiDecoder`` so that
         the styled output appears correctly in the RichLog widget.

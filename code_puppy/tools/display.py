@@ -1,7 +1,7 @@
 """Common display utilities for rendering agent outputs.
 
 This module provides non-streaming display functions for rendering
-agent results and other structured content using termflow for markdown.
+agent results and other structured content using rich.markdown for markdown.
 """
 
 
@@ -16,9 +16,9 @@ def display_non_streamed_result(
     console: Console | None = None,
     banner_text: str = "AGENT RESPONSE",
     banner_name: str = "agent_response") -> None:
-    """Display a non-streamed result with markdown rendering via termflow.
+    """Display a non-streamed result with markdown rendering via rich.markdown.
 
-    This function renders markdown content using termflow for beautiful
+    This function renders markdown content using rich.markdown.Markdown for beautiful
     terminal output. Use this instead of streaming for sub-agent responses
     or any other content that arrives all at once.
 
@@ -38,9 +38,8 @@ def display_non_streamed_result(
 
     import time
 
+    from rich.markdown import Markdown
     from rich.text import Text
-    from termflow import Parser as TermflowParser
-    from termflow import Renderer as TermflowRenderer
 
     from code_puppy.messaging.spinner import pause_all_spinners, resume_all_spinners
 
@@ -62,18 +61,8 @@ def display_non_streamed_result(
         )
     )
 
-    # Use termflow for markdown rendering
-    parser = TermflowParser()
-    renderer = TermflowRenderer(output=console.file, width=console.width)
-
-    # Process content line by line
-    for line in content.split("\n"):
-        events = parser.parse_line(line)
-        renderer.render_all(events)
-
-    # Finalize to close any open markdown blocks
-    final_events = parser.finalize()
-    renderer.render_all(final_events)
+    # Render markdown using Rich
+    console.print(Markdown(content))
 
     # Resume spinners
     resume_all_spinners()

@@ -149,8 +149,14 @@ class TestEventStreamHandler:
 
         with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
             with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
-                await event_stream_handler(mock_ctx, event_stream())
+                with patch("rich.live.Live") as mock_live_cls:
+                    mock_live = MagicMock()
+                    mock_live.__exit__ = MagicMock(return_value=False)
+                    mock_live.update = MagicMock()
+                    mock_live_cls.return_value = mock_live
+                    await event_stream_handler(mock_ctx, event_stream())
 
+        # Banner printed via console.print, Live update for content
         assert console.print.called
 
     @pytest.mark.asyncio
@@ -194,7 +200,7 @@ class TestEventStreamHandler:
 
     @pytest.mark.asyncio
     async def test_handles_text_part_with_initial_content(self, mock_ctx):
-        """Test TextPart with initial content sets up termflow."""
+        """Test TextPart with initial content sets up streaming."""
         text_part = TextPart(content="Initial text content")
         event = PartStartEvent(index=0, part=text_part)
 
@@ -210,8 +216,8 @@ class TestEventStreamHandler:
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
                 ):
-                    with patch("termflow.Parser"):
-                        with patch("termflow.Renderer"):
+                    with patch("rich.live.Live"):
+                        with patch("rich.markdown.Markdown"):
                             await event_stream_handler(mock_ctx, event_stream())
 
         assert console.print.called
@@ -264,13 +270,13 @@ class TestEventStreamHandler:
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
                 ):
-                    with patch("termflow.Parser") as mock_parser_cls:
-                        mock_parser = MagicMock()
-                        mock_parser.parse_line.return_value = []
-                        mock_parser.finalize.return_value = []
-                        mock_parser_cls.return_value = mock_parser
+                    with patch("rich.live.Live") as mock_live_cls:
+                        mock_live = MagicMock()
+                        mock_live.__exit__ = MagicMock(return_value=False)
+                        mock_live.update = MagicMock()
+                        mock_live_cls.return_value = mock_live
 
-                        with patch("termflow.Renderer"):
+                        with patch("rich.markdown.Markdown"):
                             await event_stream_handler(mock_ctx, event_stream())
 
         # Handler should process without error
@@ -303,10 +309,13 @@ class TestEventStreamHandler:
         """Test handling PartEndEvent for text parts."""
         text_part = TextPart(content="")
         start_event = PartStartEvent(index=0, part=text_part)
+        delta = TextPartDelta(content_delta="some content")
+        delta_event = PartDeltaEvent(index=0, delta=delta)
         end_event = PartEndEvent(index=0, part=text_part, next_part_kind=None)
 
         async def event_stream():
             yield start_event
+            yield delta_event
             yield end_event
 
         console = MagicMock(spec=Console, width=80)
@@ -315,17 +324,17 @@ class TestEventStreamHandler:
 
         with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
             with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
-                with patch("termflow.Parser") as mock_parser_cls:
-                    mock_parser = MagicMock()
-                    mock_parser.finalize.return_value = []
-                    mock_parser_cls.return_value = mock_parser
+                with patch("rich.live.Live") as mock_live_cls:
+                    mock_live = MagicMock()
+                    mock_live.__exit__ = MagicMock(return_value=False)
+                    mock_live_cls.return_value = mock_live
 
-                    with patch("termflow.Renderer"):
+                    with patch("rich.markdown.Markdown"):
                         await event_stream_handler(mock_ctx, event_stream())
 
         # Spinner should be resumed when next part is not text/thinking/tool
-        # finalize should be called to cleanup
-        assert mock_parser.finalize.called
+        # __exit__ should be called to cleanup Live context
+        assert mock_live.__exit__.called
 
     @pytest.mark.asyncio
     async def test_handles_part_end_event_for_tool(self, mock_ctx):
@@ -381,10 +390,13 @@ class TestEventStreamHandler:
         """Test that spinner is not resumed if next part is text."""
         text_part = TextPart(content="")
         start_event = PartStartEvent(index=0, part=text_part)
+        delta = TextPartDelta(content_delta="some content")
+        delta_event = PartDeltaEvent(index=0, delta=delta)
         end_event = PartEndEvent(index=0, part=text_part, next_part_kind="text")
 
         async def event_stream():
             yield start_event
+            yield delta_event
             yield end_event
 
         console = MagicMock(spec=Console, width=80)
@@ -393,18 +405,18 @@ class TestEventStreamHandler:
 
         with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
             with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
-                with patch("termflow.Parser") as mock_parser_cls:
-                    mock_parser = MagicMock()
-                    mock_parser.finalize.return_value = []
-                    mock_parser_cls.return_value = mock_parser
+                with patch("rich.live.Live") as mock_live_cls:
+                    mock_live = MagicMock()
+                    mock_live.__exit__ = MagicMock(return_value=False)
+                    mock_live_cls.return_value = mock_live
 
-                    with patch("termflow.Renderer"):
+                    with patch("rich.markdown.Markdown"):
                         await event_stream_handler(mock_ctx, event_stream())
 
         # The function checks: if next_kind not in ("text", "thinking", "tool-call")
         # So if next is "text", it should NOT call resume
-        # finalize should have been called for cleanup
-        assert mock_parser.finalize.called
+        # __exit__ should have been called for cleanup
+        assert mock_live.__exit__.called
 
     @pytest.mark.asyncio
     async def test_streaming_with_multiple_text_deltas(self, mock_ctx):
@@ -431,13 +443,13 @@ class TestEventStreamHandler:
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
                 ):
-                    with patch("termflow.Parser") as mock_parser_cls:
-                        mock_parser = MagicMock()
-                        mock_parser.parse_line.return_value = []
-                        mock_parser.finalize.return_value = []
-                        mock_parser_cls.return_value = mock_parser
+                    with patch("rich.live.Live") as mock_live_cls:
+                        mock_live = MagicMock()
+                        mock_live.__exit__ = MagicMock(return_value=False)
+                        mock_live.update = MagicMock()
+                        mock_live_cls.return_value = mock_live
 
-                        with patch("termflow.Renderer"):
+                        with patch("rich.markdown.Markdown"):
                             await event_stream_handler(mock_ctx, event_stream())
 
         # Handler should process multiple deltas without error
@@ -465,13 +477,13 @@ class TestEventStreamHandler:
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
                 ):
-                    with patch("termflow.Parser") as mock_parser_cls:
-                        mock_parser = MagicMock()
-                        mock_parser.parse_line.return_value = []
-                        mock_parser.finalize.return_value = []
-                        mock_parser_cls.return_value = mock_parser
+                    with patch("rich.live.Live") as mock_live_cls:
+                        mock_live = MagicMock()
+                        mock_live.__exit__ = MagicMock(return_value=False)
+                        mock_live.update = MagicMock()
+                        mock_live_cls.return_value = mock_live
 
-                        with patch("termflow.Renderer"):
+                        with patch("rich.markdown.Markdown"):
                             await event_stream_handler(mock_ctx, event_stream())
 
         # Handler should process newlines in text without error
@@ -570,12 +582,12 @@ class TestEventStreamHandler:
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
                 ):
-                    with patch("termflow.Parser") as mock_parser_cls:
-                        mock_parser = MagicMock()
-                        mock_parser.finalize.return_value = []
-                        mock_parser_cls.return_value = mock_parser
+                    with patch("rich.live.Live") as mock_live_cls:
+                        mock_live = MagicMock()
+                        mock_live.__exit__ = MagicMock(return_value=False)
+                        mock_live_cls.return_value = mock_live
 
-                        with patch("termflow.Renderer"):
+                        with patch("rich.markdown.Markdown"):
                             await event_stream_handler(mock_ctx, event_stream())
 
         # Banner should not be printed immediately (deferred)
@@ -601,17 +613,17 @@ class TestEventStreamHandler:
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
                 ):
-                    with patch("termflow.Parser") as mock_parser_cls:
-                        mock_parser = MagicMock()
-                        mock_parser.finalize.return_value = []
-                        mock_parser_cls.return_value = mock_parser
+                    with patch("rich.live.Live") as mock_live_cls:
+                        mock_live = MagicMock()
+                        mock_live.__exit__ = MagicMock(return_value=False)
+                        mock_live_cls.return_value = mock_live
 
-                        with patch("termflow.Renderer"):
+                        with patch("rich.markdown.Markdown"):
                             await event_stream_handler(mock_ctx, event_stream())
 
         # Verify cleanup was called
         # finalize should be called for text parts
-        assert mock_parser.finalize.called
+        assert mock_live.__exit__.called
 
     @pytest.mark.asyncio
     async def test_multiple_parts_in_sequence(self, mock_ctx):
@@ -640,13 +652,13 @@ class TestEventStreamHandler:
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
                 ):
-                    with patch("termflow.Parser") as mock_parser_cls:
-                        mock_parser = MagicMock()
-                        mock_parser.parse_line.return_value = []
-                        mock_parser.finalize.return_value = []
-                        mock_parser_cls.return_value = mock_parser
+                    with patch("rich.live.Live") as mock_live_cls:
+                        mock_live = MagicMock()
+                        mock_live.__exit__ = MagicMock(return_value=False)
+                        mock_live.update = MagicMock()
+                        mock_live_cls.return_value = mock_live
 
-                        with patch("termflow.Renderer"):
+                        with patch("rich.markdown.Markdown"):
                             await event_stream_handler(mock_ctx, event_stream())
 
         # Both parts should be processed without error
@@ -732,12 +744,12 @@ class TestSubAgentSuppression:
                         "code_puppy.agents.event_stream_handler.get_banner_color",
                         return_value="blue",
                     ):
-                        with patch("termflow.Parser") as mock_parser_cls:
-                            mock_parser = MagicMock()
-                            mock_parser.finalize.return_value = []
-                            mock_parser_cls.return_value = mock_parser
+                        with patch("rich.live.Live") as mock_live_cls:
+                            mock_live = MagicMock()
+                            mock_live.__exit__ = MagicMock(return_value=False)
+                            mock_live_cls.return_value = mock_live
 
-                            with patch("termflow.Renderer"):
+                            with patch("rich.markdown.Markdown"):
                                 await event_stream_handler(mock_ctx, mock_events())
 
         # Verify output WAS printed (verbose=True overrides suppression)
@@ -770,12 +782,12 @@ class TestSubAgentSuppression:
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
                 ):
-                    with patch("termflow.Parser") as mock_parser_cls:
-                        mock_parser = MagicMock()
-                        mock_parser.finalize.return_value = []
-                        mock_parser_cls.return_value = mock_parser
+                    with patch("rich.live.Live") as mock_live_cls:
+                        mock_live = MagicMock()
+                        mock_live.__exit__ = MagicMock(return_value=False)
+                        mock_live_cls.return_value = mock_live
 
-                        with patch("termflow.Renderer"):
+                        with patch("rich.markdown.Markdown"):
                             await event_stream_handler(mock_ctx, mock_events())
 
         # Verify output WAS printed (main agent never suppresses)
@@ -865,12 +877,12 @@ class TestSubAgentSuppression:
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
                 ):
-                    with patch("termflow.Parser") as mock_parser_cls:
-                        mock_parser = MagicMock()
-                        mock_parser.finalize.return_value = []
-                        mock_parser_cls.return_value = mock_parser
+                    with patch("rich.live.Live") as mock_live_cls:
+                        mock_live = MagicMock()
+                        mock_live.__exit__ = MagicMock(return_value=False)
+                        mock_live_cls.return_value = mock_live
 
-                        with patch("termflow.Renderer"):
+                        with patch("rich.markdown.Markdown"):
                             with patch(
                                 "code_puppy.agents.event_stream_handler._drain_pending_stream_events"
                             ) as mock_drain:

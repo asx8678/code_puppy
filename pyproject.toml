@@ -33,7 +33,6 @@ dependencies = [
     "fastapi>=0.135.2",
     "uvicorn[standard]>=0.42.0",
     "websockets>=16.0",
-    "termflow-md>=0.1.9",
     "Pillow>=12.1.1",
     "anthropic==0.79.0",
     "msgpack>=1.0.0",

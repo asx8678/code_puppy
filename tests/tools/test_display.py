@@ -16,14 +16,12 @@ class TestDisplayNonStreamedResult:
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_basic_display_with_provided_console(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
@@ -33,12 +31,8 @@ class TestDisplayNonStreamedResult:
 
         # Setup mocks
         mock_get_banner_color.return_value = "blue"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         # Create a mock console
         mock_console = Mock(spec=Console)
@@ -67,27 +61,20 @@ class TestDisplayNonStreamedResult:
         # Verify console methods were called
         assert mock_console.print.called
 
-        # Verify parser was instantiated
-        mock_parser_class.assert_called_once()
-
-        # Verify renderer was instantiated
-        mock_renderer_class.assert_called_once_with(
-            output=mock_console.file, width=mock_console.width
-        )
+        # Verify Markdown was instantiated with the content
+        mock_markdown_class.assert_called_once_with(content)
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     @patch("code_puppy.tools.display.Console")
     def test_creates_console_when_none_provided(
         self,
         mock_console_class,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
@@ -102,12 +89,8 @@ class TestDisplayNonStreamedResult:
         mock_console_class.return_value = mock_console
 
         mock_get_banner_color.return_value = "green"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         # Call the function without providing a console
         content = "Test content"
@@ -116,17 +99,18 @@ class TestDisplayNonStreamedResult:
         # Verify Console was created
         mock_console_class.assert_called_once()
 
+        # Verify Markdown was instantiated with the content
+        mock_markdown_class.assert_called_once_with(content)
+
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_multiline_content_parsing(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
@@ -136,12 +120,8 @@ class TestDisplayNonStreamedResult:
 
         # Setup mocks
         mock_get_banner_color.return_value = "red"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
@@ -151,26 +131,18 @@ class TestDisplayNonStreamedResult:
         content = "Line 1\nLine 2\nLine 3"
         display_non_streamed_result(content=content, console=mock_console)
 
-        # Verify parse_line was called for each line
-        assert mock_parser.parse_line.call_count == 3
-        mock_parser.parse_line.assert_any_call("Line 1")
-        mock_parser.parse_line.assert_any_call("Line 2")
-        mock_parser.parse_line.assert_any_call("Line 3")
-
-        # Verify finalize was called
-        mock_parser.finalize.assert_called_once()
+        # Verify Markdown was instantiated once with the full content
+        mock_markdown_class.assert_called_once_with(content)
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_empty_content(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
@@ -180,12 +152,8 @@ class TestDisplayNonStreamedResult:
 
         # Setup mocks
         mock_get_banner_color.return_value = "yellow"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
@@ -194,23 +162,18 @@ class TestDisplayNonStreamedResult:
         # Call with empty content
         display_non_streamed_result(content="", console=mock_console)
 
-        # Verify parse_line was called once with empty string
-        mock_parser.parse_line.assert_called_once_with("")
-
-        # Verify finalize was called
-        mock_parser.finalize.assert_called_once()
+        # Verify Markdown was instantiated with empty string
+        mock_markdown_class.assert_called_once_with("")
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_content_with_markdown_syntax(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
@@ -220,12 +183,8 @@ class TestDisplayNonStreamedResult:
 
         # Setup mocks
         mock_get_banner_color.return_value = "magenta"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = [Mock()]
-        mock_parser.finalize.return_value = [Mock()]
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
@@ -235,20 +194,18 @@ class TestDisplayNonStreamedResult:
         content = "# Heading\n\n**bold** and *italic*\n\n- list item"
         display_non_streamed_result(content=content, console=mock_console)
 
-        # Verify the content was split and parsed
-        assert mock_parser.parse_line.call_count == 5  # 5 lines when split by \n
+        # Verify Markdown was instantiated once with the full content
+        mock_markdown_class.assert_called_once_with(content)
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_default_banner_text_and_name(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
@@ -258,12 +215,8 @@ class TestDisplayNonStreamedResult:
 
         # Setup mocks
         mock_get_banner_color.return_value = "cyan"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
@@ -278,73 +231,57 @@ class TestDisplayNonStreamedResult:
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_renderer_render_all_called(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
     ):
-        """Test that renderer.render_all is called for parsed events."""
+        """Test that console.print is called with the Markdown instance."""
         from code_puppy.tools.display import display_non_streamed_result
 
         # Setup mocks
         mock_get_banner_color.return_value = "white"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-
-        mock_event_1 = Mock()
-        mock_event_2 = Mock()
-        mock_event_3 = Mock()
-        mock_parser.parse_line.side_effect = [[mock_event_1], [mock_event_2]]
-        mock_parser.finalize.return_value = [mock_event_3]
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
         mock_console.width = 80
 
         # Call with multiline content
-        display_non_streamed_result(content="Line 1\nLine 2", console=mock_console)
+        content = "Line 1\nLine 2"
+        display_non_streamed_result(content=content, console=mock_console)
 
-        # Verify render_all was called for each parsed event set
-        assert mock_renderer.render_all.call_count == 3
-        mock_renderer.render_all.assert_any_call([mock_event_1])
-        mock_renderer.render_all.assert_any_call([mock_event_2])
-        mock_renderer.render_all.assert_any_call([mock_event_3])
+        # Verify console.print was called with the Markdown instance
+        mock_markdown_class.assert_called_once_with(content)
+        # Verify console.print was called - check one of the calls is for Markdown
+        mock_console.print.assert_any_call(mock_markdown)
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_console_print_called_for_banner(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
     ):
-        """Test that console.print is called to render the banner."""
+        """Test that console.print is called to render the banner and content."""
         from code_puppy.tools.display import display_non_streamed_result
 
         # Setup mocks
         mock_get_banner_color.return_value = "blue"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
@@ -356,20 +293,22 @@ class TestDisplayNonStreamedResult:
         )
 
         # Verify console.print was called multiple times
-        # First call clears the line, second is newline, third is the banner
-        assert mock_console.print.call_count >= 3
+        # Includes clearing line, newline, banner, and Markdown content
+        assert mock_console.print.call_count >= 2
+        # Verify Markdown was instantiated
+        mock_markdown_class.assert_called_once_with("test")
+        # Verify Markdown was passed to console.print
+        mock_console.print.assert_any_call(mock_markdown)
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_special_characters_in_content(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
@@ -379,12 +318,8 @@ class TestDisplayNonStreamedResult:
 
         # Setup mocks
         mock_get_banner_color.return_value = "green"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
@@ -394,20 +329,18 @@ class TestDisplayNonStreamedResult:
         content = "Special: !@#$%^&*()_+-=[]{}|;:',.<>?/"
         display_non_streamed_result(content=content, console=mock_console)
 
-        # Verify parse_line was called with the special characters
-        mock_parser.parse_line.assert_called_once_with(content)
+        # Verify Markdown was instantiated with the special characters
+        mock_markdown_class.assert_called_once_with(content)
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_long_content_multiple_lines(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
@@ -417,12 +350,8 @@ class TestDisplayNonStreamedResult:
 
         # Setup mocks
         mock_get_banner_color.return_value = "red"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
@@ -434,20 +363,18 @@ class TestDisplayNonStreamedResult:
 
         display_non_streamed_result(content=content, console=mock_console)
 
-        # Verify parse_line was called for each line
-        assert mock_parser.parse_line.call_count == 100
+        # Verify Markdown was instantiated once with the full content
+        mock_markdown_class.assert_called_once_with(content)
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_unicode_content(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
@@ -457,12 +384,8 @@ class TestDisplayNonStreamedResult:
 
         # Setup mocks
         mock_get_banner_color.return_value = "yellow"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
@@ -472,35 +395,29 @@ class TestDisplayNonStreamedResult:
         content = "Hello 世界 🐶 Привет عالم"
         display_non_streamed_result(content=content, console=mock_console)
 
-        # Verify parse_line was called with unicode content
-        mock_parser.parse_line.assert_called_once_with(content)
+        # Verify Markdown was instantiated with unicode content
+        mock_markdown_class.assert_called_once_with(content)
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_console_file_attribute_used(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
     ):
-        """Test that console.file attribute is passed to renderer."""
+        """Test that console is used for printing markdown content."""
         from code_puppy.tools.display import display_non_streamed_result
 
         # Setup mocks
         mock_get_banner_color.return_value = "blue"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         # Create a real StringIO to be used as console.file
         test_file = StringIO()
@@ -511,20 +428,19 @@ class TestDisplayNonStreamedResult:
         # Call the function
         display_non_streamed_result(content="test", console=mock_console)
 
-        # Verify renderer was created with the correct console.file
-        mock_renderer_class.assert_called_once_with(output=test_file, width=100)
+        # Verify Markdown was created with the content and console.print was called
+        mock_markdown_class.assert_called_once_with("test")
+        mock_console.print.assert_any_call(mock_markdown)
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_custom_banner_text_displayed(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
@@ -534,12 +450,8 @@ class TestDisplayNonStreamedResult:
 
         # Setup mocks
         mock_get_banner_color.return_value = "magenta"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
@@ -554,36 +466,28 @@ class TestDisplayNonStreamedResult:
         # Verify console.print was called and check that banner text is used
         # We can't easily check the Text content due to markup, but we verify print was called
         assert mock_console.print.called
+        mock_markdown_class.assert_called_once_with("test")
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_parse_line_events_rendered(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
     ):
-        """Test that events from parse_line are rendered."""
+        """Test that Markdown is created and passed to console.print."""
         from code_puppy.tools.display import display_non_streamed_result
 
         # Setup mocks
         mock_get_banner_color.return_value = "cyan"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-
-        # Create mock events
-        events = [Mock(), Mock()]
-        mock_parser.parse_line.return_value = events
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
@@ -592,38 +496,31 @@ class TestDisplayNonStreamedResult:
         # Call the function
         display_non_streamed_result(content="test", console=mock_console)
 
-        # Verify renderer.render_all was called with the events
-        mock_renderer.render_all.assert_any_call(events)
+        # Verify Markdown was instantiated with content
+        mock_markdown_class.assert_called_once_with("test")
+        # Verify console.print was called with the Markdown instance
+        mock_console.print.assert_any_call(mock_markdown)
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_finalize_events_rendered(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
     ):
-        """Test that events from finalize are rendered."""
+        """Test that Markdown is rendered correctly (no finalize needed with Rich)."""
         from code_puppy.tools.display import display_non_streamed_result
 
         # Setup mocks
         mock_get_banner_color.return_value = "green"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-
-        # Create mock events
-        finalize_events = [Mock(), Mock()]
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = finalize_events
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
@@ -632,20 +529,19 @@ class TestDisplayNonStreamedResult:
         # Call the function
         display_non_streamed_result(content="test", console=mock_console)
 
-        # Verify renderer.render_all was called with the finalize events
-        mock_renderer.render_all.assert_any_call(finalize_events)
+        # Verify Markdown was instantiated and passed to console.print
+        mock_markdown_class.assert_called_once_with("test")
+        mock_console.print.assert_any_call(mock_markdown)
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_banner_color_applied_correctly(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
@@ -656,12 +552,8 @@ class TestDisplayNonStreamedResult:
         # Setup mocks
         expected_color = "purple"
         mock_get_banner_color.return_value = expected_color
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
@@ -681,33 +573,27 @@ class TestDisplayNonStreamedResult:
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_console_width_passed_to_renderer(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
     ):
-        """Test that console width is passed to the renderer."""
+        """Test that console width is used (Rich handles width internally)."""
         from code_puppy.tools.display import display_non_streamed_result
 
         # Setup mocks
         mock_get_banner_color.return_value = "blue"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.return_value = []
-        mock_parser.finalize.return_value = []
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
 
         # Test with different widths
         for test_width in [80, 120, 160]:
-            mock_renderer_class.reset_mock()
+            mock_markdown_class.reset_mock()
             mock_console = Mock(spec=Console)
             mock_console.file = StringIO()
             mock_console.width = test_width
@@ -715,22 +601,19 @@ class TestDisplayNonStreamedResult:
             # Call the function
             display_non_streamed_result(content="test", console=mock_console)
 
-            # Verify renderer was created with the correct width
-            mock_renderer_class.assert_called_once()
-            call_kwargs = mock_renderer_class.call_args[1]
-            assert call_kwargs["width"] == test_width
+            # Verify Markdown was instantiated and console.print was called
+            mock_markdown_class.assert_called_once_with("test")
+            mock_console.print.assert_any_call(mock_markdown)
 
     @patch("code_puppy.messaging.spinner.pause_all_spinners")
     @patch("code_puppy.messaging.spinner.resume_all_spinners")
     @patch("time.sleep")
-    @patch("termflow.Renderer")
-    @patch("termflow.Parser")
+    @patch("rich.markdown.Markdown")
     @patch("code_puppy.tools.display.get_banner_color")
     def test_spinners_resumed_even_on_exception(
         self,
         mock_get_banner_color,
-        mock_parser_class,
-        mock_renderer_class,
+        mock_markdown_class,
         mock_sleep,
         mock_resume,
         mock_pause,
@@ -740,15 +623,13 @@ class TestDisplayNonStreamedResult:
 
         # Setup mocks with exception
         mock_get_banner_color.return_value = "red"
-        mock_parser = Mock()
-        mock_renderer = Mock()
-        mock_parser_class.return_value = mock_parser
-        mock_renderer_class.return_value = mock_renderer
-        mock_parser.parse_line.side_effect = Exception("Test exception")
-
+        mock_markdown = Mock()
+        mock_markdown_class.return_value = mock_markdown
+        # Make console.print raise an exception when called with Markdown
         mock_console = Mock(spec=Console)
         mock_console.file = StringIO()
         mock_console.width = 80
+        mock_console.print.side_effect = [None, None, Exception("Test exception")]
 
         # Call the function and expect an exception
         with pytest.raises(Exception):
