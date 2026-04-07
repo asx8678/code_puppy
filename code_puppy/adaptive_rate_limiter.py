@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -617,6 +618,19 @@ async def acquire_model_slot(
 ) -> None:
     """Acquire an adaptive concurrency slot for *model_name*.
 
+    Lock Usage (Sequential, Not Nested):
+
+    This function uses two locks acquired in sequence, never simultaneously:
+
+    1. _state.lock — acquired first to safely look up/create the per-model
+       state entry in the global _state.model_states dict, then released.
+    2. state.condition — acquired second to wait for and claim a concurrency
+       slot for this specific model.
+
+    Because the locks are never held simultaneously, deadlock from lock
+    ordering is not possible. condition.wait() releases only the condition's
+    internal lock (the only lock held at that point).
+
     Blocks until a slot is available.  The first call for any model
     auto-starts the background recovery task.
 
@@ -700,7 +714,7 @@ async def acquire_model_slot(
             state = _ensure_state(key)
 
     async with state.condition:
-        while state.active_count >= int(state.current_limit):
+        while state.active_count >= math.ceil(state.current_limit):
             await asyncio.wait_for(
                 state.condition.wait(), timeout=timeout,
             )
