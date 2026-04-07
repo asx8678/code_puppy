@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import tempfile
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -96,6 +97,7 @@ class StagedChangesSandbox:
     """Sandbox for accumulating and managing staged file changes."""
     
     def __init__(self):
+        self._lock = threading.Lock()
         self._changes: list[StagedChange] = []
         self._enabled: bool = False
         self._session_id: str = self._generate_session_id()
@@ -139,7 +141,8 @@ class StagedChangesSandbox:
             content=content,
             description=description or f"Create {os.path.basename(file_path)}",
         )
-        self._changes.append(change)
+        with self._lock:
+            self._changes.append(change)
         logger.debug(f"Staged create: {file_path}")
         return change
     
@@ -153,7 +156,8 @@ class StagedChangesSandbox:
             new_str=new_str,
             description=description or f"Replace in {os.path.basename(file_path)}",
         )
-        self._changes.append(change)
+        with self._lock:
+            self._changes.append(change)
         logger.debug(f"Staged replace: {file_path}")
         return change
     
@@ -166,7 +170,8 @@ class StagedChangesSandbox:
             snippet=snippet,
             description=description or f"Delete from {os.path.basename(file_path)}",
         )
-        self._changes.append(change)
+        with self._lock:
+            self._changes.append(change)
         logger.debug(f"Staged delete snippet: {file_path}")
         return change
     
@@ -176,28 +181,32 @@ class StagedChangesSandbox:
     
     def get_staged_changes(self, include_applied: bool = False) -> list[StagedChange]:
         """Get all pending staged changes."""
-        if include_applied:
-            return list(self._changes)
-        return [c for c in self._changes if not c.applied and not c.rejected]
+        with self._lock:
+            if include_applied:
+                return list(self._changes)
+            return [c for c in self._changes if not c.applied and not c.rejected]
     
     def get_changes_for_file(self, file_path: str) -> list[StagedChange]:
         """Get all staged changes for a specific file."""
         abs_path = os.path.abspath(file_path)
-        return [c for c in self._changes if c.file_path == abs_path and not c.applied and not c.rejected]
+        with self._lock:
+            return [c for c in self._changes if c.file_path == abs_path and not c.applied and not c.rejected]
     
     def clear(self) -> None:
         """Clear all staged changes."""
-        count = len(self._changes)
-        self._changes.clear()
+        with self._lock:
+            count = len(self._changes)
+            self._changes.clear()
         logger.info(f"Cleared {count} staged changes")
     
     def remove_change(self, change_id: str) -> bool:
         """Remove a specific change by ID."""
-        for i, change in enumerate(self._changes):
-            if change.change_id == change_id:
-                self._changes.pop(i)
-                logger.debug(f"Removed change {change_id}")
-                return True
+        with self._lock:
+            for i, change in enumerate(self._changes):
+                if change.change_id == change_id:
+                    self._changes.pop(i)
+                    logger.debug(f"Removed change {change_id}")
+                    return True
         return False
     
     def count(self) -> int:
@@ -325,12 +334,13 @@ class StagedChangesSandbox:
         self._ensure_stage_dir()
         save_path = STAGE_DIR / f"{self._session_id}.json"
         
-        data = {
-            "session_id": self._session_id,
-            "enabled": self._enabled,
-            "changes": [c.to_dict() for c in self._changes],
-            "saved_at": time.time(),
-        }
+        with self._lock:
+            data = {
+                "session_id": self._session_id,
+                "enabled": self._enabled,
+                "changes": [c.to_dict() for c in self._changes],
+                "saved_at": time.time(),
+            }
         
         with open(save_path, "w") as f:
             json.dump(data, f, indent=2)
@@ -350,9 +360,10 @@ class StagedChangesSandbox:
             with open(load_path, "r") as f:
                 data = json.load(f)
             
-            self._session_id = data.get("session_id", load_id)
-            self._enabled = data.get("enabled", False)
-            self._changes = [StagedChange.from_dict(c) for c in data.get("changes", [])]
+            with self._lock:
+                self._session_id = data.get("session_id", load_id)
+                self._enabled = data.get("enabled", False)
+                self._changes = [StagedChange.from_dict(c) for c in data.get("changes", [])]
             
             logger.info(f"Loaded {len(self._changes)} staged changes from {load_path}")
             return True
