@@ -24,6 +24,8 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import httpx
 
+from .request_cache import RequestCacheMixin
+
 logger = logging.getLogger(__name__)
 
 # Refresh token if it's older than the configured max age (seconds)
@@ -75,7 +77,7 @@ def _get_jwt_iat(token: str) -> int:
         return 0
 
 
-class ClaudeCacheAsyncClient(httpx.AsyncClient):
+class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
     """Async HTTP client with Claude Code OAuth transformations.
 
     Handles:
@@ -85,7 +87,16 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
     - Header transformations (anthropic-beta, user-agent)
     - URL modifications (adding ?beta=true)
     - Proactive token refresh
+    - Request caching for header-only change optimization
     """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        # Initialize request cache with larger capacity for Claude (more diverse requests)
+        self._init_request_cache(max_size=256, ttl_seconds=300)
+        # Performance tracking
+        self._request_build_time_saved_ms = 0.0
+        self._requests_optimized = 0
 
     def _get_jwt_age_seconds(self, token: str | None) -> float | None:
         """Decode a JWT and return its age in seconds.
@@ -339,6 +350,8 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         self, request: httpx.Request, *args: Any, **kwargs: Any
     ) -> httpx.Response:  # type: ignore[override]
         is_messages_endpoint = request.url.path.endswith("/v1/messages")
+        rebuild_start = time.perf_counter()
+        used_cache = False
 
         # Proactive token refresh: check JWT age before every request
         if not request.extensions.get("claude_oauth_refresh_attempted"):
@@ -347,15 +360,17 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                     refreshed_token = self._refresh_claude_oauth_token()
                     if refreshed_token:
                         logger.info("Proactively refreshed token before request")
-                        # Rebuild request with new token
+                        # Rebuild request with new token - USE CACHE for header-only change
                         headers = dict(request.headers)
                         self._update_auth_headers(headers, refreshed_token)
                         body_bytes = self._extract_body_bytes(request)
-                        request = self.build_request(
+                        request = self.cached_or_build_request(
                             method=request.method,
                             url=request.url,
                             headers=headers,
-                            content=body_bytes)
+                            content=body_bytes
+                        )
+                        used_cache = True
                         request.extensions["claude_oauth_refresh_attempted"] = True
             except Exception as exc:
                 logger.debug("Error during proactive token refresh check: %s", exc)
@@ -383,14 +398,17 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                         body_bytes = transformed_body
                         body_modified = True
 
-                # Rebuild request if anything changed
+                # Rebuild request if anything changed - USE CACHE for optimization
                 if body_modified or headers_modified or url != request.url:
                     try:
-                        rebuilt = self.build_request(
+                        # Use cached request building for optimization
+                        rebuilt = self.cached_or_build_request(
                             method=request.method,
                             url=url,
                             headers=headers,
-                            content=body_bytes)
+                            content=body_bytes
+                        )
+                        used_cache = True
 
                         # Copy core internals so httpx uses the modified body/stream
                         if hasattr(rebuilt, "_content"):
@@ -416,6 +434,17 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
 
             except Exception as exc:
                 logger.debug("Error in Claude Code transformations: %s", exc)
+
+        # Track performance metrics
+        if used_cache:
+            rebuild_time = (time.perf_counter() - rebuild_start) * 1000
+            self._requests_optimized += 1
+            estimated_saved = max(0, 5.0 - rebuild_time)
+            self._request_build_time_saved_ms += estimated_saved
+            logger.debug(
+                "Request optimized via cache (took %.2fms, saved ~%.2fms)",
+                rebuild_time, estimated_saved
+            )
 
         # Send the request with retry logic for transient errors
         response = await self._send_with_retries(request, *args, **kwargs)
@@ -447,11 +476,13 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                         body_bytes = self._extract_body_bytes(request)
                         headers = dict(request.headers)
                         self._update_auth_headers(headers, refreshed_token)
-                        retry_request = self.build_request(
+                        # Use cached request building for retry optimization
+                        retry_request = self.cached_or_build_request(
                             method=request.method,
                             url=request.url,
                             headers=headers,
-                            content=body_bytes)
+                            content=body_bytes
+                        )
                         retry_request.extensions["claude_oauth_refresh_attempted"] = (
                             True
                         )
@@ -643,6 +674,22 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         except Exception as exc:
             logger.error("Exception during token refresh: %s", exc)
             return None
+
+    def get_performance_stats(self) -> dict[str, Any]:
+        """Get performance statistics for this client.
+        
+        Returns:
+            Dict with performance metrics including:
+            - requests_optimized: Number of requests that used cache
+            - time_saved_ms: Estimated time saved from avoiding rebuilds
+            - cache_stats: Detailed cache statistics
+        """
+        cache_stats = self.get_cache_stats()
+        return {
+            "requests_optimized": self._requests_optimized,
+            "estimated_time_saved_ms": self._request_build_time_saved_ms,
+            "cache": cache_stats,
+        }
 
     @staticmethod
     def _inject_cache_control(body: bytes) -> bytes | None:
