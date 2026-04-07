@@ -6,6 +6,7 @@ mod cache;
 mod diagnostics;
 mod parser;
 mod registry;
+mod stats;
 mod symbols;
 
 use batch::{parse_files_batch as _parse_files_batch, BatchParseOptions, BatchParseResult};
@@ -13,10 +14,11 @@ use cache::{ParseCache, CacheKey, CacheValue, compute_content_hash, DEFAULT_CACH
 use diagnostics::{extract_diagnostics, SyntaxDiagnostics};
 use parser::{parse_file as _parse_file, parse_source as _parse_source, ParseResult};
 use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError};
+use stats::{record_parse_operation, get_full_stats};
 use symbols::{extract_symbols as _extract_symbols, SymbolOutline, extract_symbols_from_file as _extract_symbols_from_file};
 
 /// Global singleton cache instance
-static GLOBAL_CACHE: OnceLock<ParseCache> = OnceLock::new();
+pub static GLOBAL_CACHE: OnceLock<ParseCache> = OnceLock::new();
 
 /// Parse source code directly with GIL release during parsing.
 ///
@@ -46,6 +48,9 @@ fn parse_source<'py>(py: Python<'py>, source: &str, language: &str) -> PyResult<
     let result: ParseResult = py.detach(|| {
         _parse_source(source, language)
     });
+
+    // Record metrics
+    record_parse_operation(&result.language, result.parse_time_ms);
 
     convert_parse_result_to_py(py, &result)
 }
@@ -79,6 +84,9 @@ fn parse_file<'py>(py: Python<'py>, path: &str, language: Option<&str>) -> PyRes
     let result: ParseResult = py.detach(|| {
         _parse_file(path, language)
     });
+
+    // Record metrics
+    record_parse_operation(&result.language, result.parse_time_ms);
 
     convert_parse_result_to_py(py, &result)
 }
@@ -397,18 +405,43 @@ fn supported_languages<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
 /// Returns a dict with module info including:
 ///   available: always true (if this function is callable)
 ///   version: crate version
+///   languages: list of supported language names
 ///   cache_available: whether the cache is initialized
 #[pyfunction]
 fn health_check<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     let cache_initialized = GLOBAL_CACHE.get().is_some();
+    let langs = list_supported_languages();
     
     let info = serde_json::json!({
         "available": true,
         "version": env!("CARGO_PKG_VERSION"),
+        "languages": langs,
         "cache_available": cache_initialized,
     });
 
     let json_str = serde_json::to_string(&info)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e)))?;
+
+    let json_module = py.import("json")?;
+    let py_dict = json_module.call_method1("loads", (json_str,))?;
+    Ok(py_dict)
+}
+
+/// Get statistics about turbo_parse operations.
+///
+/// Returns a dict with:
+///   total_parses: u64 - count of parse operations
+///   cache_hits: u64 - number of cache hits
+///   cache_misses: u64 - number of cache misses
+///   cache_evictions: u64 - number of cache evictions
+///   cache_hit_ratio: f64 - cache hit ratio (0.0 to 1.0)
+///   average_parse_time_ms: f64 - average parse time in milliseconds
+///   languages_used: dict - per-language usage histogram
+#[pyfunction(name = "stats")]
+fn get_stats_py<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let stats = get_full_stats();
+    
+    let json_str = serde_json::to_string(&stats)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Serialization error: {}", e)))?;
 
     let json_module = py.import("json")?;
@@ -463,6 +496,11 @@ fn parse_files_batch<'py>(
     let result: BatchParseResult = py.detach(|| {
         _parse_files_batch(paths, options)
     });
+
+    // Record metrics for each individual result
+    for parse_result in &result.results {
+        record_parse_operation(&parse_result.language, parse_result.parse_time_ms);
+    }
 
     convert_batch_result_to_py(py, &result)
 }
@@ -558,6 +596,7 @@ fn extract_symbols_from_file<'py>(py: Python<'py>, path: &str, language: Option<
 #[pymodule]
 fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(health_check, m)?)?;
+    m.add_function(wrap_pyfunction!(get_stats_py, m)?)?;
     m.add_function(wrap_pyfunction!(parse_file, m)?)?;
     m.add_function(wrap_pyfunction!(parse_source, m)?)?;
     m.add_function(wrap_pyfunction!(parse_files_batch, m)?)?;

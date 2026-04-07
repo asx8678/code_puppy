@@ -8,6 +8,7 @@ from typing import Any
 try:
     from turbo_parse import (
         health_check,
+        stats,
         get_language,
         is_language_supported,
         supported_languages,
@@ -26,7 +27,24 @@ except ImportError:
     # Provide stub functions that return fallback values
     def health_check() -> dict[str, Any]:
         """Return health status when Rust module is unavailable."""
-        return {"available": False, "version": None}
+        return {
+            "available": False,
+            "version": None,
+            "languages": [],
+            "cache_available": False,
+        }
+
+    def stats() -> dict[str, Any]:
+        """Return empty stats when Rust module is unavailable."""
+        return {
+            "total_parses": 0,
+            "average_parse_time_ms": 0.0,
+            "languages_used": {},
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "cache_evictions": 0,
+            "cache_hit_ratio": 0.0,
+        }
 
     def get_language(name: str) -> dict[str, Any]:
         """Return unsupported status when Rust module is unavailable."""
@@ -117,11 +135,15 @@ def get_turbo_parse_status() -> dict:
 
 __all__ = [
     "health_check",
+    "stats",
     "get_language",
     "is_language_supported",
     "supported_languages",
     "parse_file",
     "parse_source",
+    "parse_files_batch",
+    "extract_symbols",
+    "extract_symbols_from_file",
     "extract_syntax_diagnostics",
     "is_turbo_parse_enabled",
     "set_turbo_parse_enabled",
