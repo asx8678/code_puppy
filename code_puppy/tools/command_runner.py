@@ -49,6 +49,9 @@ from code_puppy.tools.subagent_context import is_subagent
 # This helps avoid exceeding model context limits when commands produce very long lines
 MAX_LINE_LENGTH = 256
 
+# Batch size for shell output emissions to reduce bus overhead
+# Collects multiple lines and emits them together rather than one at a time
+SHELL_BATCH_SIZE = 10
 
 def _truncate_line(line: str) -> str:
     """Truncate a line to MAX_LINE_LENGTH if it exceeds the limit."""
@@ -821,8 +824,31 @@ def run_shell_command_streaming(
     stdout_lines = deque(maxlen=256)
     stderr_lines = deque(maxlen=256)
 
+    # Buffers for batched shell line emissions
+    stdout_batch = []
+    stderr_batch = []
+
     stdout_thread = None
     stderr_thread = None
+
+    def _emit_stdout_batch():
+        """Emit accumulated stdout lines as a batch."""
+        if not silent and stdout_batch:
+            for line in stdout_batch:
+                emit_shell_line(line, stream="stdout")
+            stdout_batch.clear()
+
+    def _emit_stderr_batch():
+        """Emit accumulated stderr lines as a batch."""
+        if not silent and stderr_batch:
+            for line in stderr_batch:
+                emit_shell_line(line, stream="stderr")
+            stderr_batch.clear()
+
+    def _flush_all_batches():
+        """Flush any remaining batched lines."""
+        _emit_stdout_batch()
+        _emit_stderr_batch()
 
     def read_stdout():
         try:
@@ -850,7 +876,9 @@ def run_shell_command_streaming(
                             line = _truncate_line(line)
                             stdout_lines.append(line)
                             if not silent:
-                                emit_shell_line(line, stream="stdout")
+                                stdout_batch.append(line)
+                                if len(stdout_batch) >= SHELL_BATCH_SIZE:
+                                    _emit_stdout_batch()
                             last_output_time[0] = time.time()
                         else:
                             # No data available, check if process has exited
@@ -863,7 +891,9 @@ def run_shell_command_streaming(
                                             line = _truncate_line(line)
                                             stdout_lines.append(line)
                                             if not silent:
-                                                emit_shell_line(line, stream="stdout")
+                                                stdout_batch.append(line)
+                                    if not silent and stdout_batch:
+                                        _emit_stdout_batch()
                                 except (ValueError, OSError):
                                     pass
                                 break
@@ -886,13 +916,17 @@ def run_shell_command_streaming(
                         line = _truncate_line(line)
                         stdout_lines.append(line)
                         if not silent:
-                            emit_shell_line(line, stream="stdout")
+                            stdout_batch.append(line)
+                            if len(stdout_batch) >= SHELL_BATCH_SIZE:
+                                _emit_stdout_batch()
                         last_output_time[0] = time.time()
                     # If not ready, loop continues and checks stop event again
         except (ValueError, OSError):
             pass
         except Exception:
             pass
+        finally:
+            _emit_stdout_batch()
 
     def read_stderr():
         try:
@@ -919,7 +953,9 @@ def run_shell_command_streaming(
                             line = _truncate_line(line)
                             stderr_lines.append(line)
                             if not silent:
-                                emit_shell_line(line, stream="stderr")
+                                stderr_batch.append(line)
+                                if len(stderr_batch) >= SHELL_BATCH_SIZE:
+                                    _emit_stderr_batch()
                             last_output_time[0] = time.time()
                         else:
                             # No data available, check if process has exited
@@ -932,7 +968,9 @@ def run_shell_command_streaming(
                                             line = _truncate_line(line)
                                             stderr_lines.append(line)
                                             if not silent:
-                                                emit_shell_line(line, stream="stderr")
+                                                stderr_batch.append(line)
+                                    if not silent and stderr_batch:
+                                        _emit_stderr_batch()
                                 except (ValueError, OSError):
                                     pass
                                 break
@@ -954,12 +992,16 @@ def run_shell_command_streaming(
                         line = _truncate_line(line)
                         stderr_lines.append(line)
                         if not silent:
-                            emit_shell_line(line, stream="stderr")
+                            stderr_batch.append(line)
+                            if len(stderr_batch) >= SHELL_BATCH_SIZE:
+                                _emit_stderr_batch()
                         last_output_time[0] = time.time()
         except (ValueError, OSError):
             pass
         except Exception:
             pass
+        finally:
+            _emit_stderr_batch()
 
     def cleanup_process_and_threads(timeout_type: str = "unknown"):
         nonlocal stdout_thread, stderr_thread
@@ -1404,7 +1446,7 @@ def _run_command_sync(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=cwd,
-        bufsize=0,  # Unbuffered for real-time output
+        bufsize=1,  # Line buffered for reduced system calls
         preexec_fn=preexec_fn,
         creationflags=creationflags)
 
