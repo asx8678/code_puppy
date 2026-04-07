@@ -17,6 +17,7 @@ try:
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.layout import Layout, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     Application = None  # type: ignore
@@ -49,7 +50,8 @@ try:
         emit_info,
         emit_success,
         emit_warning,
-        get_queue_console)
+        get_queue_console,
+    )
 
     # Use queue console by default, but allow fallback
     NO_COLOR = bool(int(os.environ.get("CODE_PUPPY_NO_COLOR", "0")))
@@ -59,6 +61,7 @@ try:
     console.fallback_console = _rich_console
 except ImportError as _messaging_import_err:
     import logging as _logging
+
     _logging.getLogger(__name__).warning(
         "Messaging system import failed, falling back to direct Console: %s",
         _messaging_import_err,
@@ -134,30 +137,30 @@ DIR_IGNORE_PATTERNS = [
     "**/.hg/**",
     "**/.bzr/**",
     # Cross-language common patterns (shared across multiple ecosystems)
-    "**/target/**",      # Java, Rust, Scala, Clojure
+    "**/target/**",  # Java, Rust, Scala, Clojure
     "**/target",
-    "**/build/**",       # Node.js, Java, Dart/Flutter, Kotlin
+    "**/build/**",  # Node.js, Java, Dart/Flutter, Kotlin
     "**/build",
-    "**/dist/**",        # Node.js, Python, Haskell
+    "**/dist/**",  # Node.js, Python, Haskell
     "**/dist",
-    "**/bin/**",         # .NET/C#, Java
-    "**/vendor/**",      # Go, Ruby, PHP
-    "**/deps/**",        # Elixir, Erlang
-    "**/coverage/**",    # Node.js, Ruby
-    "**/doc/**",         # Ruby, Elixir
-    "**/_build/**",      # Perl, Elixir
-    "**/.gradle/**",     # Java, Kotlin
-    "**/project/target/**",   # Java, Scala
+    "**/bin/**",  # .NET/C#, Java
+    "**/vendor/**",  # Go, Ruby, PHP
+    "**/deps/**",  # Elixir, Erlang
+    "**/coverage/**",  # Node.js, Ruby
+    "**/doc/**",  # Ruby, Elixir
+    "**/_build/**",  # Perl, Elixir
+    "**/.gradle/**",  # Java, Kotlin
+    "**/project/target/**",  # Java, Scala
     "**/project/project/**",  # Java, Scala
-    "**/*.class",        # Java, Scala, Kotlin, Clojure
-    "**/*.jar",          # Java, Scala, Kotlin, Clojure
-    "**/*.dll",          # Go, .NET/C#, C/C++
-    "**/*.exe",          # Go, .NET/C#, C/C++
-    "**/*.so",           # Go, C/C++
-    "**/*.dylib",        # Go, C/C++
-    "**/*.pdb",          # Rust, .NET/C#
-    "**/*.o",            # C/C++, Haskell
-    "**/*.beam",         # Elixir, Erlang
+    "**/*.class",  # Java, Scala, Kotlin, Clojure
+    "**/*.jar",  # Java, Scala, Kotlin, Clojure
+    "**/*.dll",  # Go, .NET/C#, C/C++
+    "**/*.exe",  # Go, .NET/C#, C/C++
+    "**/*.so",  # Go, C/C++
+    "**/*.dylib",  # Go, C/C++
+    "**/*.pdb",  # Rust, .NET/C#
+    "**/*.o",  # C/C++, Haskell
+    "**/*.beam",  # Elixir, Erlang
     # Node.js / JavaScript / TypeScript
     "**/node_modules/**",
     "**/node_modules/**/*.js",
@@ -678,9 +681,8 @@ def brighten_hex(hex_color: str, factor: float) -> str:
 
 
 def _format_diff_with_syntax_highlighting(
-    diff_text: str,
-    addition_color: str | None = None,
-    deletion_color: str | None = None) -> Text:
+    diff_text: str, addition_color: str | None = None, deletion_color: str | None = None
+) -> Text:
     """Format diff with full syntax highlighting using Pygments.
 
     This renders diffs with:
@@ -784,9 +786,7 @@ def format_diff_with_colors(diff_text: str) -> Text:
     Returns:
         Rich Text object with syntax highlighting
     """
-    from code_puppy.config import (
-        get_diff_addition_color,
-        get_diff_deletion_color)
+    from code_puppy.config import get_diff_addition_color, get_diff_deletion_color
 
     if not diff_text or not diff_text.strip():
         return Text("-- no diff available --", style="dim")
@@ -804,13 +804,15 @@ def format_diff_with_colors(diff_text: str) -> Text:
     return _format_diff_with_syntax_highlighting(
         diff_text,
         addition_color=addition_base_color,
-        deletion_color=deletion_base_color)
+        deletion_color=deletion_base_color,
+    )
 
 
 async def arrow_select_async(
     message: str,
     choices: list[str],
-    preview_callback: Callable[[int | None, str]] = None) -> str:
+    preview_callback: Callable[[int | None, str]] = None,
+) -> str:
     """Async version: Show an arrow-key navigable selector with optional preview.
 
     Args:
@@ -911,10 +913,7 @@ async def arrow_select_async(
     layout = Layout(Window(content=control))
 
     # Application
-    app = Application(
-        layout=layout,
-        key_bindings=kb,
-        full_screen=False)
+    app = Application(layout=layout, key_bindings=kb, full_screen=False)
 
     # Flush output before prompt_toolkit takes control
     sys.stdout.flush()
@@ -952,7 +951,8 @@ def get_user_approval(
     content: Text | str,
     preview: str | None = None,
     border_style: str = "dim white",
-    puppy_name: str | None = None) -> tuple[bool, str | None]:
+    puppy_name: str | None = None,
+) -> tuple[bool, str | None]:
     """Show a beautiful approval panel with arrow-key selector.
 
     This is a thin wrapper around get_user_approval_async to avoid code duplication.
@@ -969,7 +969,9 @@ def get_user_approval(
         - confirmed: True if approved, False if rejected
         - user_feedback: Optional feedback text if user provided it
     """
-    return run_async_sync(get_user_approval_async(title, content, preview, border_style, puppy_name))
+    return run_async_sync(
+        get_user_approval_async(title, content, preview, border_style, puppy_name)
+    )
 
 
 async def get_user_approval_async(
@@ -977,7 +979,8 @@ async def get_user_approval_async(
     content: Text | str,
     preview: str | None = None,
     border_style: str = "dim white",
-    puppy_name: str | None = None) -> tuple[bool, str | None]:
+    puppy_name: str | None = None,
+) -> tuple[bool, str | None]:
     """Async version of get_user_approval - show a beautiful approval panel with arrow-key selector.
 
     Args:
@@ -1024,7 +1027,8 @@ async def get_user_approval_async(
         # Mark that we showed a diff preview
         try:
             from code_puppy.plugins.file_permission_handler.register_callbacks import (
-                set_diff_already_shown)
+                set_diff_already_shown,
+            )
 
             set_diff_already_shown(True)
         except ImportError:
@@ -1035,7 +1039,8 @@ async def get_user_approval_async(
         panel_content,
         title=f"[bold white]{title}[/bold white]",
         border_style=border_style,
-        padding=(1, 2))
+        padding=(1, 2),
+    )
 
     # Pause spinners BEFORE showing panel
     set_awaiting_user_input(True)
@@ -1074,7 +1079,8 @@ async def get_user_approval_async(
                 "✓ Approve",
                 "✗ Reject",
                 f"💬 Reject with feedback (tell {puppy_name} what to change)",
-            ])
+            ],
+        )
 
         if choice == "✓ Approve":
             confirmed = True
@@ -1085,9 +1091,7 @@ async def get_user_approval_async(
             confirmed = False
             emit_info("")
             emit_info(f"Tell {puppy_name} what to change:")
-            user_feedback = Prompt.ask(
-                "[bold green]➤[/bold green]",
-                default="").strip()
+            user_feedback = Prompt.ask("[bold green]➤[/bold green]", default="").strip()
 
             if not user_feedback:
                 user_feedback = None
@@ -1154,7 +1158,11 @@ def _find_best_window(
     # Use cached needle lines if provided, otherwise compute once
     if _needle_lines_cache is not None:
         needle_lines = _needle_lines_cache
-        needle_len = _needle_len_cache if _needle_len_cache is not None else len(needle.rstrip("\n"))
+        needle_len = (
+            _needle_len_cache
+            if _needle_len_cache is not None
+            else len(needle.rstrip("\n"))
+        )
     else:
         needle_stripped = needle.rstrip("\n")
         needle_lines = needle_stripped.splitlines()
@@ -1187,7 +1195,10 @@ def _find_best_window(
         window_first_line = haystack_lines[i]
         window_first_len = len(window_first_line)
         # Skip if first line length differs by more than 50%
-        if needle_first_len > 0 and abs(window_first_len - needle_first_len) > needle_first_len * 0.5:
+        if (
+            needle_first_len > 0
+            and abs(window_first_len - needle_first_len) > needle_first_len * 0.5
+        ):
             continue
 
         # Pre-filter 2: If lengths are close, check first char similarity
@@ -1235,7 +1246,9 @@ def generate_group_id(tool_name: str, extra_context: str = "") -> str:
     """
     # Create a unique identifier using timestamp, context, and a random component
     timestamp = str(int(time.time() * 1000000))  # microseconds for more uniqueness
-    random_component = secrets.token_hex(8)  # 16 hex chars of cryptographically strong randomness
+    random_component = secrets.token_hex(
+        8
+    )  # 16 hex chars of cryptographically strong randomness
     context_string = f"{tool_name}_{timestamp}_{random_component}_{extra_context}"
 
     # Generate a short hash
