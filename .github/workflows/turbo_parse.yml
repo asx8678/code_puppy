@@ -16,10 +16,20 @@ on:
       - 'Cargo.lock'
       - '.github/workflows/turbo_parse.yml'
   workflow_dispatch:
+    inputs:
+      update_baseline:
+        description: 'Update benchmark baseline (after performance improvements)'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  BASELINE_PATH: turbo_parse/benches/baseline.json
+  REGRESSION_THRESHOLD: 15.0
 
 jobs:
   cargo-test:
@@ -172,9 +182,91 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Benchmark job: runs on PRs to check for performance regressions
+  benchmark:
+    name: Benchmark Regression Check
+    runs-on: ubuntu-latest
+    # Run on PRs, manual trigger with update_baseline=true, or always on main
+    if: >
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.update_baseline) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: turbo_parse -> target
+          shared-key: turbo-parse-benchmark
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify baseline exists
+        run: |
+          if [ ! -f "${BASELINE_PATH}" ]; then
+            echo "::error::Baseline file not found: ${BASELINE_PATH}"
+            echo "Create baseline.json following the format in turbo_parse/benches/BENCHMARKS.md"
+            exit 2
+          fi
+          echo "Baseline file found: ${BASELINE_PATH}"
+          cat "${BASELINE_PATH}" | jq '.._metadata'
+
+      # Manual baseline update mode
+      - name: Run benchmarks and update baseline
+        if: github.event_name == 'workflow_dispatch' && inputs.update_baseline
+        working-directory: ${{ github.workspace }}/turbo_parse
+        run: |
+          echo "::notice::Updating benchmark baseline..."
+          # Run benchmarks and save new baseline
+          python benches/check_regression.py --save-baseline --ci
+          echo "::notice::Baseline updated. Review and commit the changes."
+
+      # Regular benchmark regression check mode
+      - name: Run benchmarks and check for regression
+        if: >
+          (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        working-directory: ${{ github.workspace }}/turbo_parse
+        run: |
+          echo "::group::Running benchmark regression check"
+          python benches/check_regression.py --ci --threshold ${{ env.REGRESSION_THRESHOLD }}
+          EXIT_CODE=$?
+          echo "::endgroup::"
+          
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "::notice title=Benchmark Check Passed::✅ No performance regression detected"
+          elif [ $EXIT_CODE -eq 1 ]; then
+            echo "::error title=Performance Regression::❌ Performance regression detected (> ${{ env.REGRESSION_THRESHOLD }}% threshold)"
+            echo ""
+            echo "To update baseline after legitimate performance improvements:"
+            echo "1. Go to Actions → turbo_parse CI"
+            echo "2. Run workflow with 'update_baseline' checked"
+            exit 1
+          else
+            echo "::error::Benchmark check failed with error (exit code: $EXIT_CODE)"
+            exit $EXIT_CODE
+          fi
+
+      - name: Upload benchmark results
+        if: failure() || success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            turbo_parse/benches/*.json
+          retention-days: 30
+
   check:
     name: CI Summary
-    needs: [cargo-test, maturin-build, test-wheel-install, maturin-build-manylinux]
+    needs: [cargo-test, maturin-build, test-wheel-install, maturin-build-manylinux, benchmark]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -194,6 +286,11 @@ jobs:
           fi
           if [ "${{ needs.maturin-build-manylinux.result }}" != "success" ]; then
             echo "❌ manylinux wheel builds failed"
+            exit 1
+          fi
+          if [ "${{ needs.benchmark.result }}" != "success" ]; then
+            echo "❌ Benchmark regression check failed"
+            echo "   If this is a legitimate performance improvement, run the workflow with 'update_baseline' checked"
             exit 1
           fi
           echo "✅ All CI checks passed!"
