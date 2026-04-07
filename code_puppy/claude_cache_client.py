@@ -40,19 +40,6 @@ TOOL_PREFIX = "cp_"
 # User-Agent to send with Claude Code OAuth requests
 CLAUDE_CLI_USER_AGENT = "claude-cli/2.1.2 (external, cli)"
 
-# Required betas for Claude Code OAuth (allocated once at import)
-_REQUIRED_BETAS: frozenset[str] = frozenset([
-    "oauth-2025-04-20",
-    "interleaved-thinking-2025-05-14",
-])
-
-# X-API-Key header variants to remove (case-insensitive lookup)
-_X_API_KEY_VARIANTS: frozenset[str] = frozenset([
-    "x-api-key",
-    "x-apikey",
-    "x-api_key",
-])
-
 try:
     from anthropic import AsyncAnthropic
 except ImportError:  # pragma: no cover - optional dep
@@ -307,23 +294,27 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         incoming_beta = headers.get("anthropic-beta", "")
         incoming_betas = [b.strip() for b in incoming_beta.split(",") if b.strip()]
 
-        # Start with required betas from module-level constant
-        merged = list(_REQUIRED_BETAS)
+        # Always-required betas for Claude Code OAuth
+        required_betas = [
+            "oauth-2025-04-20",
+            "interleaved-thinking-2025-05-14",
+        ]
         if "claude-code-20250219" in incoming_betas:
-            merged.append("claude-code-20250219")
+            required_betas.append("claude-code-20250219")
 
-        # Merge: append any extras from the incoming headers that
-        # aren't already in the required set.
+        # Merge: start with required, then append any extras from the
+        # incoming headers that aren't already in the required set.
+        merged = list(required_betas)
+        required_set = set(required_betas)
         for beta in incoming_betas:
-            if beta not in _REQUIRED_BETAS:
+            if beta not in required_set:
                 merged.append(beta)
 
         headers["anthropic-beta"] = ",".join(merged)
 
-        # Remove x-api-key headers if present (we use Bearer auth)
-        # Use case-insensitive lookup for header name matching
-        for key in list(headers.keys()):
-            if key.lower() in _X_API_KEY_VARIANTS:
+        # Remove x-api-key if present (we use Bearer auth)
+        for key in ["x-api-key", "X-API-Key", "X-Api-Key"]:
+            if key in headers:
                 del headers[key]
 
     @staticmethod
