@@ -84,7 +84,9 @@ defmodule Protocols do
   end
 
   # Struct definition for protocol demo
-  defstruct User, [:name, :age, :email]
+  defmodule User do
+    defstruct [:name, :age, :email]
+  end
 
   # Using a protocol (BASIC)
   def demo_protocols do
