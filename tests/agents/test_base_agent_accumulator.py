@@ -144,7 +144,7 @@ class TestBaseAgentAccumulator:
         msg1_hash = agent.hash_message(msg1)
 
         # Add the hash to compacted hashes set
-        agent._compacted_message_hashes.add(msg1_hash)
+        agent.add_compacted_message_hash(msg1_hash)
 
         # Try to add both messages via accumulator
         result = agent.message_history_accumulator(mock_run_context, [msg1, msg2])
@@ -160,7 +160,7 @@ class TestBaseAgentAccumulator:
         matches a compacted message — prevents dropping the user's prompt."""
         msg = ModelRequest(parts=[TextPart(content="yes")])
         msg_hash = agent.hash_message(msg)
-        agent._compacted_message_hashes.add(msg_hash)
+        agent.add_compacted_message_hash(msg_hash)
 
         result = agent.message_history_accumulator(mock_run_context, [msg])
 

@@ -57,6 +57,7 @@ from pydantic_ai.messages import (
 from rich.text import Text
 
 from code_puppy.agents.agent_prompt_mixin import AgentPromptMixin
+from code_puppy.agents.agent_state import AgentRuntimeState
 from code_puppy.agents.event_stream_handler import event_stream_handler
 from code_puppy.callbacks import (
     count_callbacks,
@@ -130,63 +131,116 @@ def _serialize_schema_to_json(schema_tuple: tuple[tuple[str, Any], ...]) -> str:
 
 
 class BaseAgent(ABC, AgentPromptMixin):
-    """Base class for all agent configurations."""
+    """Base class for all agent configurations.
+    
+    This class separates immutable configuration (name, description, system_prompt)
+    from mutable runtime state (message history, caches, etc.) using the
+    AgentRuntimeState container.
+    
+    The mutable state is stored in `_state` attribute, while config is provided
+    through abstract properties that subclasses must implement.
+    """
 
     __slots__ = (
         "id",
-        "_message_history",
-        "_compacted_message_hashes",
-        "_message_history_hashes",
-        "_code_generation_agent",
-        "_last_model_name",
-        "_puppy_rules",
-        "cur_model",
-        "_mcp_tool_definitions_cache",
-        "_cached_system_prompt",
-        "_cached_tool_defs",
-        "_delayed_compaction_requested",
-        "_tool_ids_cache",
-        "_cached_context_overhead",
-        "_model_name_cache",
-        "pydantic_agent",
-        "_mcp_servers",
-        "_rust_per_message_tokens",
-        "_resolved_model_components_cache",
+        "_state",
     )
 
     def __init__(self):
         self.id = str(uuid.uuid7())  # time-sortable for chronological ordering
-        self._message_history: list[Any] = []
-        self._compacted_message_hashes: set[str] = set()  # SHA-256 hex digests
-        # Incremental hash set maintained alongside _message_history to avoid
-        # O(n*p) rehashing in message_history_accumulator on every agent turn.
-        self._message_history_hashes: set[int] = set()
-        # Agent construction cache
-        self._code_generation_agent = None
-        self._last_model_name: str | None = None
-        # Puppy rules loaded lazily
-        self._puppy_rules: str | None = None
-        self.cur_model: pydantic_ai.models.Model
-        # Cache for MCP tool definitions (for token estimation)
-        # This is populated after the first successful run when MCP tools are retrieved
-        self._mcp_tool_definitions_cache: list[dict[str, Any]] = []
-        # Cache for system prompt and tool defs used in message_history_processor.
-        # These are intentionally session-scoped: populated once per run_with_mcp
-        # entry and never invalidated, because the model and tool set are stable
-        # within a single agent session.
-        self._cached_system_prompt: str | None = None
-        self._cached_tool_defs: list[dict[str, Any | None]] = None
-        # Per-instance flag for delayed compaction (not a module global — safe with parallel agents)
-        self._delayed_compaction_requested: bool = False
-        # Per-invocation cache for _collect_tool_call_ids (see method)
-        self._tool_ids_cache = None
-        # Cached context overhead tokens (invalidated by reload_code_generation_agent)
-        self._cached_context_overhead: int | None = None
-        # Per-instance cache for get_model_name() to avoid repeated config lookups
-        self._model_name_cache: str | None = None
-        # Cache for resolved model components in _create_agent_with_output_type
-        self._resolved_model_components_cache: dict[str, Any] | None = None
+        # Mutable runtime state container - separates state from immutable config
+        self._state = AgentRuntimeState()
 
+    # Backward-compatible properties that delegate to _state for migration support
+    @property
+    def _puppy_rules(self) -> str | None:
+        """Backward-compatible property delegating to _state.puppy_rules."""
+        return self._state.puppy_rules
+
+    @_puppy_rules.setter
+    def _puppy_rules(self, value: str | None) -> None:
+        """Backward-compatible setter delegating to _state.puppy_rules."""
+        self._state.puppy_rules = value
+
+    @property
+    def _message_history(self) -> list[Any]:
+        """Backward-compatible property delegating to _state.message_history."""
+        return self._state.message_history
+
+    @_message_history.setter
+    def _message_history(self, value: list[Any]) -> None:
+        """Backward-compatible setter delegating to _state.message_history."""
+        self._state.message_history = value
+
+    @property
+    def _model_name_cache(self) -> str | None:
+        """Backward-compatible property delegating to _state.model_name_cache."""
+        return self._state.model_name_cache
+
+    @_model_name_cache.setter
+    def _model_name_cache(self, value: str | None) -> None:
+        """Backward-compatible setter delegating to _state.model_name_cache."""
+        self._state.model_name_cache = value
+
+    @property
+    def _cached_context_overhead(self) -> int | None:
+        """Backward-compatible property delegating to _state.cached_context_overhead."""
+        return self._state.cached_context_overhead
+
+    @_cached_context_overhead.setter
+    def _cached_context_overhead(self, value: int | None) -> None:
+        """Backward-compatible setter delegating to _state.cached_context_overhead."""
+        self._state.cached_context_overhead = value
+
+    @property
+    def _delayed_compaction_requested(self) -> bool:
+        """Backward-compatible property delegating to _state.delayed_compaction_requested."""
+        return self._state.delayed_compaction_requested
+
+    @_delayed_compaction_requested.setter
+    def _delayed_compaction_requested(self, value: bool) -> None:
+        """Backward-compatible setter delegating to _state.delayed_compaction_requested."""
+        self._state.delayed_compaction_requested = value
+
+    @property
+    def _tool_ids_cache(self) -> Any:
+        """Backward-compatible property delegating to _state.tool_ids_cache."""
+        return self._state.tool_ids_cache
+
+    @_tool_ids_cache.setter
+    def _tool_ids_cache(self, value: Any) -> None:
+        """Backward-compatible setter delegating to _state.tool_ids_cache."""
+        self._state.tool_ids_cache = value
+
+    @property
+    def _mcp_tool_definitions_cache(self) -> list[dict[str, Any]]:
+        """Backward-compatible property delegating to _state.mcp_tool_definitions_cache."""
+        return self._state.mcp_tool_definitions_cache
+
+    @_mcp_tool_definitions_cache.setter
+    def _mcp_tool_definitions_cache(self, value: list[dict[str, Any]]) -> None:
+        """Backward-compatible setter delegating to _state.mcp_tool_definitions_cache."""
+        self._state.mcp_tool_definitions_cache = value
+
+    @property
+    def _mcp_servers(self) -> list[Any]:
+        """Backward-compatible property delegating to _state.mcp_servers."""
+        return self._state.mcp_servers
+
+    @_mcp_servers.setter
+    def _mcp_servers(self, value: list[Any]) -> None:
+        """Backward-compatible setter delegating to _state.mcp_servers."""
+        self._state.mcp_servers = value
+
+    @property
+    def _code_generation_agent(self) -> Any:
+        """Backward-compatible property delegating to _state.code_generation_agent."""
+        return self._state.code_generation_agent
+
+    @_code_generation_agent.setter
+    def _code_generation_agent(self, value: Any) -> None:
+        """Backward-compatible setter delegating to _state.code_generation_agent."""
+        self._state.code_generation_agent = value
 
 
     @property
@@ -244,7 +298,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         Returns:
             List of messages in this agent's conversation history.
         """
-        return self._message_history
+        return self._state.message_history
 
     def set_message_history(self, history: list[Any]) -> None:
         """Set the message history for this agent.
@@ -252,15 +306,13 @@ class BaseAgent(ABC, AgentPromptMixin):
         Args:
             history: List of messages to set as the conversation history.
         """
-        self._message_history = history
+        self._state.message_history = history
         # Rebuild hash set when history is replaced wholesale
-        self._message_history_hashes = set(self.hash_message(m) for m in history)
+        self._state.message_history_hashes = set(self.hash_message(m) for m in history)
 
     def clear_message_history(self) -> None:
         """Clear the message history for this agent."""
-        self._message_history = []
-        self._compacted_message_hashes.clear()
-        self._message_history_hashes.clear()
+        self._state.clear_history()
 
     def append_to_message_history(self, message: Any) -> None:
         """Append a message to this agent's history.
@@ -268,8 +320,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         Args:
             message: Message to append to the conversation history.
         """
-        self._message_history.append(message)
-        self._message_history_hashes.add(self.hash_message(message))
+        self._state.append_message(message, self.hash_message(message))
 
     def extend_message_history(self, history: list[Any]) -> None:
         """Extend this agent's message history with multiple messages.
@@ -277,8 +328,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         Args:
             history: List of messages to append to the conversation history.
         """
-        self._message_history.extend(history)
-        self._message_history_hashes.update(self.hash_message(m) for m in history)
+        hashes = [self.hash_message(m) for m in history]
+        self._state.extend_history(history, hashes)
 
     def get_compacted_message_hashes(self) -> set[str]:
         """Get the set of compacted message hashes for this agent.
@@ -286,7 +337,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         Returns:
             Set of hashes for messages that have been compacted/summarized.
         """
-        return self._compacted_message_hashes
+        return self._state.compacted_message_hashes
 
     def add_compacted_message_hash(self, message_hash: str) -> None:
         """Add a message hash to the set of compacted message hashes.
@@ -294,7 +345,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         Args:
             message_hash: Hash of a message that has been compacted/summarized.
         """
-        self._compacted_message_hashes.add(message_hash)
+        self._state.compacted_message_hashes.add(message_hash)
 
     def restore_compacted_hashes(self, hashes: list) -> None:
         """Restore compacted message hashes from a persisted session.
@@ -303,7 +354,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             hashes: List of message hashes (int or str) to restore into the
                     internal compacted-hashes set.
         """
-        self._compacted_message_hashes = set(hashes)
+        self._state.compacted_message_hashes = set(hashes)
 
     def get_model_name(self) -> str | None:
         """Get pinned model name for this agent, if specified.
@@ -316,16 +367,16 @@ class BaseAgent(ABC, AgentPromptMixin):
             Model name to use for this agent, or global default if none pinned.
         """
         # Only use cache if we have a pinned model (stable)
-        if self._model_name_cache is not None:
-            return self._model_name_cache
+        if self._state.model_name_cache is not None:
+            return self._state.model_name_cache
 
         pinned = get_agent_pinned_model(self.name)
         if pinned == "" or pinned is None:
             return get_global_model_name()
 
         # Cache the pinned model and return it
-        self._model_name_cache = pinned
-        return self._model_name_cache
+        self._state.model_name_cache = pinned
+        return self._state.model_name_cache
 
     def _clean_binaries(self, messages: list[ModelMessage]) -> list[ModelMessage]:
         """Remove BinaryContent items from message parts.
@@ -525,8 +576,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         Results are cached per-instance and invalidated when the agent is reloaded
         (tool set and prompt change only on reload).
         """
-        if self._cached_context_overhead is not None:
-            return self._cached_context_overhead
+        if self._state.cached_context_overhead is not None:
+            return self._state.cached_context_overhead
 
         total_tokens = 0
 
@@ -596,7 +647,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # 3. Estimate tokens for MCP tool definitions from cache
         # MCP tools are fetched asynchronously, so we use a cache that's populated
         # after the first successful run. See _update_mcp_tool_cache() method.
-        mcp_tool_cache = getattr(self, "_mcp_tool_definitions_cache", [])
+        mcp_tool_cache = getattr(self, "_state", None) and self._state.mcp_tool_definitions_cache
         if mcp_tool_cache:
             for tool_def in mcp_tool_cache:
                 try:
@@ -624,7 +675,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                     logger.debug("Failed to process tool for token counting", exc_info=True)
                     continue
 
-        self._cached_context_overhead = total_tokens
+        self._state.cached_context_overhead = total_tokens
         return total_tokens
 
     async def _update_mcp_tool_cache(self) -> None:
@@ -634,7 +685,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         This should be called after a successful run to populate the cache for
         accurate token estimation in subsequent runs.
         """
-        mcp_servers = getattr(self, "_mcp_servers", None)
+        mcp_servers = self._state.mcp_servers if self._state.mcp_servers else None
         if not mcp_servers:
             return
 
@@ -656,7 +707,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                 logger.debug("MCP server not accessible, skipping", exc_info=True)
                 continue
 
-        self._mcp_tool_definitions_cache = tool_definitions
+        self._state.mcp_tool_definitions_cache = tool_definitions
 
     def update_mcp_tool_cache_sync(self) -> None:
         """
@@ -671,7 +722,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         # Simply clear the cache - it will be repopulated on the next agent run
         # This is safer than trying to call async methods from sync context
-        self._mcp_tool_definitions_cache = []
+        self._state.mcp_tool_definitions_cache = []
 
     def _is_tool_call_part(self, part: Any) -> bool:
         if isinstance(part, (ToolCallPart, ToolCallPartDelta)):
@@ -1216,10 +1267,10 @@ class BaseAgent(ABC, AgentPromptMixin):
         for msg in messages:
             hasher.update(self.hash_message(msg).encode())
         cache_key = hasher.hexdigest()[:32]  # 128 bits is sufficient
-        if self._tool_ids_cache is not None and self._tool_ids_cache[0] == cache_key:
-            return self._tool_ids_cache[1]
+        if self._state.tool_ids_cache is not None and self._state.tool_ids_cache[0] == cache_key:
+            return self._state.tool_ids_cache[1]
         result = self._collect_tool_call_ids_uncached(messages)
-        self._tool_ids_cache = (cache_key, result)
+        self._state.tool_ids_cache = (cache_key, result)
         return result
 
     def has_pending_tool_calls(self, messages: list[ModelMessage]) -> bool:
@@ -1244,7 +1295,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         This sets a per-instance flag that will be checked during the next message
         processing cycle to trigger compaction when it's safe to do so.
         """
-        self._delayed_compaction_requested = True
+        self._state.delayed_compaction_requested = True
         emit_info(
             "🔄 Delayed compaction requested - will attempt after tool calls complete",
             message_group="token_context_status")
@@ -1256,13 +1307,13 @@ class BaseAgent(ABC, AgentPromptMixin):
         Returns:
             True if delayed compaction was requested and no tool calls are pending
         """
-        if not self._delayed_compaction_requested:
+        if not self._state.delayed_compaction_requested:
             return False
 
         # Check if it's now safe to compact
         messages = self.get_message_history()
         if not self.has_pending_tool_calls(messages):
-            self._delayed_compaction_requested = False  # Reset the flag
+            self._state.delayed_compaction_requested = False  # Reset the flag
             return True
 
         return False
@@ -1379,7 +1430,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                 _serialized_messages_for_rust = serialize_messages_for_rust(messages)
                 # Extract actual tool definitions for accurate context overhead
                 # Use cached tool_defs (only computed once per agent lifecycle)
-                if self._cached_tool_defs is None:
+                if self._state.cached_tool_defs is None:
                     _build_tool_defs = []
                     pydantic_agent = getattr(self, "pydantic_agent", None)
                     if pydantic_agent:
@@ -1396,23 +1447,23 @@ class BaseAgent(ABC, AgentPromptMixin):
                                 if schema and isinstance(schema, dict):
                                     td["inputSchema"] = _json.dumps(schema)
                                 _build_tool_defs.append(td)
-                    self._cached_tool_defs = _build_tool_defs
-                tool_defs = self._cached_tool_defs
-                mcp_defs = getattr(self, "_mcp_tool_definitions_cache", []) or []
+                    self._state.cached_tool_defs = _build_tool_defs
+                tool_defs = self._state.cached_tool_defs
+                mcp_defs = self._state.mcp_tool_definitions_cache or []
                 # Use cached system prompt (only computed once per agent lifecycle)
-                if self._cached_system_prompt is None:
-                    self._cached_system_prompt = (
+                if self._state.cached_system_prompt is None:
+                    self._state.cached_system_prompt = (
                         self.get_full_system_prompt()
                         if hasattr(self, "get_full_system_prompt")
                         else ""
                     )
-                system_prompt = self._cached_system_prompt
+                system_prompt = self._state.cached_system_prompt
                 batch_result = _core_bridge.process_messages_batch(
                     _serialized_messages_for_rust, tool_defs, mcp_defs, system_prompt
                 )
                 message_tokens = batch_result.total_message_tokens
                 context_overhead = batch_result.context_overhead_tokens
-                self._rust_per_message_tokens = batch_result.per_message_tokens
+                self._state.rust_per_message_tokens = batch_result.per_message_tokens
             except Exception as exc:
                 logger.debug(
                     "Rust fallback in message_history_processor: %s", exc, exc_info=True
@@ -1613,8 +1664,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         If both exist, they are combined with global rules first, then project rules.
         This allows project-specific rules to override or extend global rules.
         """
-        if self._puppy_rules is not None:
-            return self._puppy_rules
+        if self._state.puppy_rules is not None:
+            return self._state.puppy_rules
         from pathlib import Path
 
         possible_paths = ["AGENTS.md", "AGENT.md", "agents.md", "agent.md"]
@@ -1640,8 +1691,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Combine global and project rules
         # Global rules come first, project rules second (allowing project to override)
         rules = [r for r in [global_rules, project_rules] if r]
-        self._puppy_rules = "\n\n".join(rules) if rules else None
-        return self._puppy_rules
+        self._state.puppy_rules = "\n\n".join(rules) if rules else None
+        return self._state.puppy_rules
 
     def load_mcp_servers(self, extra_headers: dict[str, str | None] = None):
         """Load MCP servers through the manager and return pydantic-ai compatible servers.
@@ -1663,7 +1714,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         Forces a re-sync from mcp_servers.json to pick up any configuration changes.
         """
         # Clear the MCP tool cache when servers are reloaded
-        self._mcp_tool_definitions_cache = []
+        self._state.mcp_tool_definitions_cache = []
 
         # Force re-sync from mcp_servers.json
         manager = get_mcp_manager()
@@ -1798,7 +1849,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         agent_tools = self.get_available_tools()
         register_tools_for_agent(p_agent, agent_tools, model_name=resolved_model_name)
 
-        self.cur_model = model
+        self._state.cur_model = model
         return p_agent, resolved_model_name, mcp_servers, model, instructions, model_settings
 
     def reload_code_generation_agent(self, message_group: str | None = None):
@@ -1807,11 +1858,11 @@ class BaseAgent(ABC, AgentPromptMixin):
         # current working directory is performed on the next load_puppy_rules()
         # call.  This is critical for /cd: the user may have switched to a
         # different project that has its own AGENT.md (or none at all).
-        self._puppy_rules = None
+        self._state.puppy_rules = None
         # Invalidate context overhead cache since tools/prompt may change
-        self._cached_context_overhead = None
+        self._state.cached_context_overhead = None
         # Invalidate resolved model components cache since model/tools may change
-        self._resolved_model_components_cache = None
+        self._state.resolved_model_components_cache = None
 
         # Build agent with freshly-loaded MCP servers so we can inspect its
         # registered tool names for conflict filtering.
@@ -1873,7 +1924,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                 )
             )
 
-        self._last_model_name = resolved_model_name
+        self._state.last_model_name = resolved_model_name
         # Wrap with DBOS, but handle MCP servers separately to avoid
         # serialization issues ("cannot pickle async_generator object").
         global _reload_count
@@ -1885,9 +1936,9 @@ class BaseAgent(ABC, AgentPromptMixin):
                 p_agent,
                 name=f"{self.name}-{_reload_count}",
                 event_stream_handler=event_stream_handler)
-            self.pydantic_agent = dbos_agent
-            self._code_generation_agent = dbos_agent
-            self._mcp_servers = filtered_mcp_servers
+            self._state.cur_model = dbos_agent
+            self._state.code_generation_agent = dbos_agent
+            self._state.mcp_servers = filtered_mcp_servers
         else:
             # Non-DBOS path: recreate agent with filtered MCP servers.
             # Reuse model/instructions/model_settings from the first _build_agent
@@ -1906,10 +1957,10 @@ class BaseAgent(ABC, AgentPromptMixin):
             register_tools_for_agent(
                 final_agent, agent_tools, model_name=resolved_model_name
             )
-            self.pydantic_agent = final_agent
-            self._code_generation_agent = final_agent
-            self._mcp_servers = filtered_mcp_servers
-        return self._code_generation_agent
+            self._state.cur_model = final_agent
+            self._state.code_generation_agent = final_agent
+            self._state.mcp_servers = filtered_mcp_servers
+        return self._state.code_generation_agent
 
     def _create_agent_with_output_type(self, output_type: type[Any]) -> PydanticAgent:
         """Create a temporary agent configured with a custom output_type.
@@ -1931,23 +1982,23 @@ class BaseAgent(ABC, AgentPromptMixin):
             A configured PydanticAgent (or DBOSAgent wrapper) with the custom output_type.
         """
         # Initialize cache dict if needed
-        if self._resolved_model_components_cache is None:
-            self._resolved_model_components_cache = {}
+        if self._state.resolved_model_components_cache is None:
+            self._state.resolved_model_components_cache = {}
 
         # Check cache for resolved components keyed by output_type
         cache_key = output_type if isinstance(output_type, type) else str(output_type)
-        if cache_key in self._resolved_model_components_cache:
-            cached = self._resolved_model_components_cache[cache_key]
+        if cache_key in self._state.resolved_model_components_cache:
+            cached = self._state.resolved_model_components_cache[cache_key]
             p_agent = cached["p_agent"]
         else:
             # Reuse cached MCP servers from the last reload.
-            mcp_servers = getattr(self, "_mcp_servers", []) or []
+            mcp_servers = self._state.mcp_servers or []
             p_agent, resolved_model_name, _, _model, _instructions, _model_settings = self._build_agent(
                 output_type=output_type,
                 mcp_servers=mcp_servers,
             )
             # Cache the resolved components
-            self._resolved_model_components_cache[cache_key] = {
+            self._state.resolved_model_components_cache[cache_key] = {
                 "p_agent": p_agent,
                 "resolved_model_name": resolved_model_name,
             }
@@ -1985,7 +2036,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # estimation — that's where the big speedup lives.
         # Use the incrementally-maintained hash set instead of rebuilding
         # from scratch each turn (was O(n*p), now O(1)).
-        message_history_hashes = self._message_history_hashes
+        message_history_hashes = self._state.message_history_hashes
         messages_added = 0
         last_msg_index = len(messages) - 1
         for i, msg in enumerate(messages):
@@ -2248,14 +2299,14 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         group_id = str(uuid.uuid4())
         # Avoid double-loading: reuse existing agent if already built
-        pydantic_agent = (
-            self._code_generation_agent or self.reload_code_generation_agent()
+        pydantic_agent_instance = (
+            self._state.code_generation_agent or self.reload_code_generation_agent()
         )
 
         # Warm MCP tool cache before first run so turn-1 context overhead is accurate.
         # _update_mcp_tool_cache is a no-op when cache is already populated or no
         # MCP servers are registered, so it is safe to call on every entry.
-        if not self._mcp_tool_definitions_cache and getattr(self, "_mcp_servers", None):
+        if not self._state.mcp_tool_definitions_cache and self._state.mcp_servers:
             try:
                 await self._update_mcp_tool_cache()
             except Exception:
@@ -2263,7 +2314,7 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         # If a custom output_type is specified, create a temporary agent with that type
         if output_type is not None:
-            pydantic_agent = self._create_agent_with_output_type(output_type)
+            pydantic_agent_instance = self._create_agent_with_output_type(output_type)
 
         # Handle model-specific prompt transformations via prepare_prompt_for_model()
         # This uses the get_model_system_prompt hook, so plugins can register their own handlers
@@ -2326,15 +2377,14 @@ class BaseAgent(ABC, AgentPromptMixin):
                     """Temporarily inject MCP servers into DBOS agent toolsets."""
                     if (
                         get_use_dbos()
-                        and hasattr(self, "_mcp_servers")
-                        and self._mcp_servers
+                        and self._state.mcp_servers
                     ):
-                        original = pydantic_agent._toolsets
-                        pydantic_agent._toolsets = original + self._mcp_servers
+                        original = pydantic_agent_instance._toolsets
+                        pydantic_agent_instance._toolsets = original + self._state.mcp_servers
                         try:
                             yield
                         finally:
-                            pydantic_agent._toolsets = original
+                            pydantic_agent_instance._toolsets = original
                     else:
                         yield
 
@@ -2346,7 +2396,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                 )
 
                 with _mcp_injection(), workflow_ctx:
-                    result_ = await pydantic_agent.run(
+                    result_ = await pydantic_agent_instance.run(
                         prompt_payload,
                         message_history=self.get_message_history(),
                         usage_limits=usage_limits,
@@ -2509,7 +2559,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             result = await agent_task
 
             # Update MCP tool cache after successful run for accurate token estimation
-            if hasattr(self, "_mcp_servers") and self._mcp_servers:
+            if self._state.mcp_servers:
                 try:
                     await self._update_mcp_tool_cache()
                 except Exception:

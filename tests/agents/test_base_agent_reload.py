@@ -42,7 +42,8 @@ class TestBaseAgentReload:
             # Basic assertions
             assert result is not None
             assert mock_register.called
-            assert agent.cur_model == mock_model
+            # cur_model is set to the PydanticAgent/DBOSAgent wrapper instance, not the model
+            assert agent._state.cur_model == mock_agent_instance
             assert agent._code_generation_agent == mock_agent_instance
 
             # Verify the Agent class was called with proper parameters

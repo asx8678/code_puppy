@@ -295,7 +295,7 @@ class TestEstimateContextOverhead:
             agent.estimate_context_overhead_tokens()
 
     def test_with_mcp_tool_cache(self, agent):
-        agent._mcp_tool_definitions_cache = [
+        agent._state.mcp_tool_definitions_cache = [
             {
                 "name": "mcp_tool",
                 "description": "An MCP tool",
@@ -357,7 +357,7 @@ class TestUpdateMcpToolCache:
     async def test_no_mcp_servers(self, agent):
         agent._mcp_servers = None
         await agent._update_mcp_tool_cache()
-        assert agent._mcp_tool_definitions_cache == []
+        assert agent._state.mcp_tool_definitions_cache == []
 
     @pytest.mark.asyncio
     async def test_with_mcp_servers(self, agent):
@@ -371,15 +371,15 @@ class TestUpdateMcpToolCache:
         agent._mcp_servers = [mock_server]
 
         await agent._update_mcp_tool_cache()
-        assert len(agent._mcp_tool_definitions_cache) == 1
-        assert agent._mcp_tool_definitions_cache[0]["name"] == "test_tool"
+        assert len(agent._state.mcp_tool_definitions_cache) == 1
+        assert agent._state.mcp_tool_definitions_cache[0]["name"] == "test_tool"
 
     @pytest.mark.asyncio
     async def test_server_without_list_tools(self, agent):
         mock_server = MagicMock(spec=[])
         agent._mcp_servers = [mock_server]
         await agent._update_mcp_tool_cache()
-        assert agent._mcp_tool_definitions_cache == []
+        assert agent._state.mcp_tool_definitions_cache == []
 
     @pytest.mark.asyncio
     async def test_server_raises_exception(self, agent):
@@ -394,7 +394,7 @@ class TestUpdateMcpToolCacheSync:
     """Test for update_mcp_tool_cache_sync (line 740)."""
 
     def test_clears_cache(self, agent):
-        agent._mcp_tool_definitions_cache = [{"name": "old"}]
+        agent._state.mcp_tool_definitions_cache = [{"name": "old"}]
         agent.update_mcp_tool_cache_sync()
         assert agent._mcp_tool_definitions_cache == []
 
@@ -913,7 +913,7 @@ class TestReloadCodeGenerationAgent:
 
         def spy_load():
             # _puppy_rules should already be None when we arrive here
-            value_at_load_time.append(agent._puppy_rules)
+            value_at_load_time.append(agent._state.puppy_rules)
             return original_load()
 
         with (
@@ -955,7 +955,7 @@ class TestReloadCodeGenerationAgent:
         # Crucially, _puppy_rules must have been None at entry to load_puppy_rules,
         # proving the cache was cleared before the fresh disk read.
         assert value_at_load_time[0] is None, (
-            f"_puppy_rules was not cleared before re-loading rules; "
+            f"_state.puppy_rules was not cleared before re-loading rules; "
             f"got: {value_at_load_time[0]!r}"
         )
 
@@ -1095,8 +1095,8 @@ class TestMessageHistoryAccumulator:
         ctx = MagicMock()
         msg = ModelRequest(parts=[TextPart(content="duplicate")])
         msg_hash = agent.hash_message(msg)
-        agent._compacted_message_hashes.add(msg_hash)
-        agent._message_history = []
+        agent.add_compacted_message_hash(msg_hash)
+        agent.clear_message_history()
         # Same hash in compacted set - should still add last message
         result = agent.message_history_accumulator(ctx, [msg])
         assert len(result) >= 1
@@ -2158,7 +2158,7 @@ class TestLoadMcpServers:
 
     @patch("code_puppy.agents.base_agent.get_mcp_manager")
     def test_reload(self, mock_mgr, agent):
-        agent._mcp_tool_definitions_cache = [{"old": True}]
+        agent._state.mcp_tool_definitions_cache = [{"old": True}]
         mock_mgr.return_value.get_servers_for_agent.return_value = []
         agent.reload_mcp_servers()
         assert agent._mcp_tool_definitions_cache == []
