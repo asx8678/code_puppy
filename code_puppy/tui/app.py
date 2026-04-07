@@ -7,6 +7,7 @@ an input line at the bottom, and a status bar showing token rate.
 
 import asyncio
 from collections import deque
+import logging
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -16,6 +17,8 @@ from textual.widgets import Header, Input, RichLog
 from code_puppy.tui.theme import APP_CSS, CODE_PUPPY_THEME
 from code_puppy.tui.widgets.completion_overlay import CompletionOverlay
 from code_puppy.tui.widgets.info_bar import InfoBar
+
+logger = logging.getLogger(__name__)
 
 # Maximum number of history entries to keep
 MAX_HISTORY = 500
@@ -610,6 +613,7 @@ class CodePuppyApp(App):
             auto_save_session_if_enabled()
 
         except asyncio.CancelledError:
+            logger.debug("Task cancelled by user in TUI agent response")
             chat.write("[yellow]Task cancelled by user.[/yellow]")
         except Exception as e:
             chat.write(f"[red]Error: {e}[/red]")
