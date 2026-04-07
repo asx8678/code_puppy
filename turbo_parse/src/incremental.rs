@@ -96,7 +96,8 @@ impl InputEdit {
 #[cfg(feature = "python")]
 mod python_impl {
     use super::*;
-    use pyo3::prelude::*;
+    use pyo3::prelude::{PyResult, Python, Bound, PyAny};
+    use pyo3::pymethods;
 
     #[pymethods]
     impl InputEdit {

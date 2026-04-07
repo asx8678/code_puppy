@@ -10,8 +10,6 @@ use std::path::Path;
 use std::sync::OnceLock;
 use tree_sitter::Language;
 
-use crate::dynamic::DynamicLoadError;
-
 #[cfg(feature = "dynamic-grammars")]
 use crate::dynamic::{global_loader, load_dynamic_grammar};
 

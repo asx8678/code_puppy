@@ -23,7 +23,7 @@ use highlights::{get_highlights as _get_highlights, get_highlights_from_file as 
 use incremental::{parse_with_edits, InputEdit};
 use injection::{get_injections as _get_injections, get_injections_from_file as _get_injections_from_file, parse_injections, InjectionRange, InjectionResult, ParsedInjectionResult};
 use parser::{parse_file as _parse_file, parse_source as _parse_source, ParseResult};
-use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError, register_dynamic_grammar, is_dynamic_grammar_registered, unregister_dynamic_grammar};
+use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError, is_dynamic_grammar_registered, unregister_dynamic_grammar};
 use stats::{record_parse_operation, get_full_stats};
 use symbols::{extract_symbols as _extract_symbols, SymbolOutline, extract_symbols_from_file as _extract_symbols_from_file};
 
@@ -915,6 +915,33 @@ fn dynamic_grammars_enabled() -> bool {
 ///   - library_extension: str - the expected file extension (.so, .dylib, .dll)
 ///   - loaded_count: int - number of dynamic grammars currently loaded
 #[pyfunction]
+fn dynamic_grammar_info<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    use crate::dynamic::{global_loader, DYLIB_EXTENSION};
+    
+    let loader = global_loader();
+    let loaded = loader.list_loaded();
+    
+    let platform = if cfg!(target_os = "linux") {
+        "linux"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "unknown"
+    };
+    
+    let info = serde_json::json!({
+        "enabled": cfg!(feature = "dynamic-grammars"),
+        "platform": platform,
+        "library_extension": DYLIB_EXTENSION,
+        "loaded_count": loaded.len(),
+        "loaded_grammars": loaded.iter().map(|g| &g.name).collect::<Vec<_>>(),
+    });
+    
+    convert_json_to_py(py, &info)
+}
+
 /// Detect language injections in source code.
 ///
 /// Identifies regions of embedded languages within the source code,
