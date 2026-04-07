@@ -2,6 +2,7 @@ import asyncio
 import fnmatch
 import hashlib
 import os
+import re as _re
 import secrets
 import sys
 import time
@@ -435,7 +436,6 @@ IGNORE_PATTERNS = list(dict.fromkeys(DIR_IGNORE_PATTERNS + FILE_IGNORE_PATTERNS)
 # ---------------------------------------------------------------------------
 # Pre-compiled pattern matching (compiled once at import time)
 # ---------------------------------------------------------------------------
-import re as _re
 
 
 def _compile_patterns(patterns: list[str]) -> _re.Pattern:
