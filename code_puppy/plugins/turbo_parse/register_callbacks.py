@@ -99,6 +99,7 @@ from code_puppy.turbo_parse_bridge import (
     stats,
     TURBO_PARSE_AVAILABLE,
 )
+from code_puppy.utils.symbol_hierarchy import build_symbol_hierarchy
 
 logger = logging.getLogger(__name__)
 
@@ -458,83 +459,6 @@ def _register_get_folds_tool(agent):
             }
 
 
-def _build_symbol_hierarchy(symbols: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Build parent-child hierarchy from flat symbol list.
-
-    Uses byte position ranges to determine nesting.
-
-    Args:
-        symbols: Flat list of symbols from extract_symbols
-
-    Returns:
-        Hierarchical list with 'children' field for nested symbols
-    """
-    if not symbols:
-        return []
-
-    # Sort by start position, then by length (longer/outer first)
-    sorted_symbols = sorted(
-        symbols,
-        key=lambda s: (
-            s.get("start_line", 0),
-            s.get("start_col", 0),
-            -(s.get("end_line", 0) - s.get("start_line", 0)),
-        ),
-    )
-
-    # Build hierarchy
-    root_items = []
-    stack = []
-
-    for symbol in sorted_symbols:
-        symbol_with_children = {**symbol, "children": []}
-
-        # Find parent by checking containment
-        while stack:
-            parent = stack[-1]
-            # Check if this symbol is contained within the parent
-            if _is_symbol_contained(symbol, parent):
-                parent["children"].append(symbol_with_children)
-                break
-            else:
-                stack.pop()
-        else:
-            # No parent found, add to root
-            root_items.append(symbol_with_children)
-
-        # Push this symbol to stack
-        stack.append(symbol_with_children)
-
-    return root_items
-
-
-def _is_symbol_contained(child: Dict[str, Any], parent: Dict[str, Any]) -> bool:
-    """Check if child symbol is contained within parent symbol.
-
-    Args:
-        child: Child symbol dict
-        parent: Parent symbol dict
-
-    Returns:
-        True if child is contained in parent
-    """
-    # Check line containment
-    child_start = child.get("start_line", 0)
-    child_end = child.get("end_line", 0)
-    parent_start = parent.get("start_line", 0)
-    parent_end = parent.get("end_line", 0)
-
-    # Strict containment: child starts after parent starts and ends before parent ends
-    if child_start > parent_start and child_end <= parent_end:
-        return True
-
-    # Same start but child ends before parent (e.g., method in class starting at same line)
-    if child_start == parent_start and child_end < parent_end:
-        return True
-
-    return False
-
-
 def _register_get_outline_tool(agent):
     """Register the get_outline tool with an agent.
 
@@ -591,8 +515,8 @@ def _register_get_outline_tool(agent):
             symbols_result = _extract_symbols(source, normalized_lang)
             flat_symbols = symbols_result.get("symbols", [])
 
-            # Build hierarchy
-            outline = _build_symbol_hierarchy(flat_symbols)
+            # Build hierarchy using shared utility
+            outline = build_symbol_hierarchy(flat_symbols)
 
             # Apply max_depth if specified
             if max_depth is not None:
