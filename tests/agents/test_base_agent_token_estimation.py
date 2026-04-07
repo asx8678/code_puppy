@@ -136,8 +136,8 @@ class TestTokenEstimation:
     def test_filter_huge_messages_removes_oversized(self, agent):
         """Test that filter_huge_messages removes messages exceeding 50000 tokens."""
         # Create a message that's definitely over 50000 tokens
-        # 50000 tokens * 3 = 150000 characters minimum
-        huge_text = "x" * 150001  # This should be ~50000+ tokens
+        # 50000 tokens * 4 = 200000 characters minimum
+        huge_text = "x" * 200001  # This should be ~50000+ tokens
         huge_message = ModelRequest(parts=[TextPart(content=huge_text)])
 
         # Create a small message that should be kept
