@@ -64,6 +64,10 @@ _state = AgentManagerState()
 # never be replaced or serialised).
 _SESSION_LOCK = threading.Lock()
 
+# Thread lock for agent registry mutations (prevents race conditions during
+# concurrent agent discovery operations).
+_REGISTRY_LOCK = threading.Lock()
+
 
 # Session persistence file path
 def _get_session_file_path() -> Path:
@@ -226,189 +230,197 @@ def _ensure_session_cache_loaded() -> None:
 
 def _discover_agents(message_group_id: str | None = None):
     """Dynamically discover all agent classes and JSON agents."""
+    # Double-checked locking pattern for thread-safe early return
     if _state.registry_populated:
         return  # Already discovered, use cached registry
-    # Always clear the registry to force refresh
-    _state.agent_registry.clear()
 
-    # 1. Discover Python agent classes in the agents package
-    import code_puppy.agents as agents_package
+    with _REGISTRY_LOCK:
+        # Check again inside lock (another thread may have populated while waiting)
+        if _state.registry_populated:
+            return
 
-    # Iterate through all modules in the agents package
-    for _, modname, _ in pkgutil.iter_modules(agents_package.__path__):
-        if modname.startswith("_") or modname in [
-            "base_agent",
-            "json_agent",
-            "agent_manager",
-        ]:
-            continue
+        # Always clear the registry to force refresh
+        _state.agent_registry.clear()
 
-        try:
-            # Import the module
-            module = importlib.import_module(f"code_puppy.agents.{modname}")
+        # 1. Discover Python agent classes in the agents package
+        import code_puppy.agents as agents_package
 
-            # Look for BaseAgent subclasses
-            for attr_name in dir(module):
-                attr = getattr(module, attr_name)
-                if (
-                    isinstance(attr, type)
-                    and issubclass(attr, BaseAgent)
-                    and attr not in [BaseAgent, JSONAgent]
-                ):
-                    # Instantiate once to capture metadata into AgentInfo
-                    agent_instance = attr()
-                    _state.agent_registry[agent_instance.name] = AgentInfo(
-                        name=agent_instance.name,
-                        display_name=agent_instance.display_name,
-                        description=agent_instance.description,
-                        factory=attr)
-
-        except Exception as e:
-            # Skip problematic modules
-            emit_warning(
-                f"Warning: Could not load agent module {modname}: {e}",
-                message_group=message_group_id)
-            continue
-
-    # 1b. Discover agents in sub-packages (like 'pack')
-    for _, subpkg_name, ispkg in pkgutil.iter_modules(agents_package.__path__):
-        if not ispkg or subpkg_name.startswith("_"):
-            continue
-
-        try:
-            # Import the sub-package
-            subpkg = importlib.import_module(f"code_puppy.agents.{subpkg_name}")
-
-            # Iterate through modules in the sub-package
-            if not hasattr(subpkg, "__path__"):
+        # Iterate through all modules in the agents package
+        for _, modname, _ in pkgutil.iter_modules(agents_package.__path__):
+            if modname.startswith("_") or modname in [
+                "base_agent",
+                "json_agent",
+                "agent_manager",
+            ]:
                 continue
 
-            for _, modname, _ in pkgutil.iter_modules(subpkg.__path__):
-                if modname.startswith("_"):
-                    continue
+            try:
+                # Import the module
+                module = importlib.import_module(f"code_puppy.agents.{modname}")
 
-                try:
-                    # Import the submodule
-                    module = importlib.import_module(
-                        f"code_puppy.agents.{subpkg_name}.{modname}"
-                    )
+                # Look for BaseAgent subclasses
+                for attr_name in dir(module):
+                    attr = getattr(module, attr_name)
+                    if (
+                        isinstance(attr, type)
+                        and issubclass(attr, BaseAgent)
+                        and attr not in [BaseAgent, JSONAgent]
+                    ):
+                        # Instantiate once to capture metadata into AgentInfo
+                        agent_instance = attr()
+                        _state.agent_registry[agent_instance.name] = AgentInfo(
+                            name=agent_instance.name,
+                            display_name=agent_instance.display_name,
+                            description=agent_instance.description,
+                            factory=attr)
 
-                    # Look for BaseAgent subclasses
-                    for attr_name in dir(module):
-                        attr = getattr(module, attr_name)
-                        if (
-                            isinstance(attr, type)
-                            and issubclass(attr, BaseAgent)
-                            and attr not in [BaseAgent, JSONAgent]
-                        ):
-                            # Instantiate once to capture metadata into AgentInfo
-                            agent_instance = attr()
-                            _state.agent_registry[agent_instance.name] = AgentInfo(
-                                name=agent_instance.name,
-                                display_name=agent_instance.display_name,
-                                description=agent_instance.description,
-                                factory=attr)
-
-                except Exception as e:
-                    emit_warning(
-                        f"Warning: Could not load agent {subpkg_name}.{modname}: {e}",
-                        message_group=message_group_id)
-                    continue
-
-        except Exception as e:
-            emit_warning(
-                f"Warning: Could not load agent sub-package {subpkg_name}: {e}",
-                message_group=message_group_id)
-            continue
-
-    # 2. Discover JSON agents in user directory
-    try:
-        json_agents = discover_json_agents()
-
-        # Add JSON agents to registry (store file path instead of class)
-        # Python (builtin) agents take precedence over JSON agents.
-        for agent_name, json_path in json_agents.items():
-            if agent_name in _state.agent_registry:
+            except Exception as e:
+                # Skip problematic modules
                 emit_warning(
-                    f"JSON agent '{agent_name}' skipped: builtin Python agent with the same name takes precedence.",
+                    f"Warning: Could not load agent module {modname}: {e}",
                     message_group=message_group_id)
                 continue
-            try:
-                _json_tmp = JSONAgent(json_path)
-                _json_display = _json_tmp.display_name
-                _json_desc = _json_tmp.description
-            except Exception:
-                _json_display = agent_name.replace("-", " ").title() + " 🤖"
-                _json_desc = "No description available"
-            _state.agent_registry[agent_name] = AgentInfo(
-                name=agent_name,
-                display_name=_json_display,
-                description=_json_desc,
-                factory=lambda _p=json_path: JSONAgent(_p),
-                json_path=json_path)
 
-    except Exception as e:
-        emit_warning(
-            f"Warning: Could not discover JSON agents: {e}",
-            message_group=message_group_id)
-
-    # 3. Discover agents registered by plugins
-    try:
-        results = on_register_agents()
-        for result in results:
-            if result is None:
+        # 1b. Discover agents in sub-packages (like 'pack')
+        for _, subpkg_name, ispkg in pkgutil.iter_modules(agents_package.__path__):
+            if not ispkg or subpkg_name.startswith("_"):
                 continue
-            # Each result should be a list of agent definitions
-            agents_list = result if isinstance(result, list) else [result]
-            for agent_def in agents_list:
-                if not isinstance(agent_def, dict) or "name" not in agent_def:
+
+            try:
+                # Import the sub-package
+                subpkg = importlib.import_module(f"code_puppy.agents.{subpkg_name}")
+
+                # Iterate through modules in the sub-package
+                if not hasattr(subpkg, "__path__"):
                     continue
 
-                agent_name = agent_def["name"]
+                for _, modname, _ in pkgutil.iter_modules(subpkg.__path__):
+                    if modname.startswith("_"):
+                        continue
 
-                # Support both class-based and JSON path-based registration
-                if "class" in agent_def:
-                    agent_class = agent_def["class"]
-                    if isinstance(agent_class, type) and issubclass(
-                        agent_class, BaseAgent
-                    ):
-                        try:
-                            _plugin_inst = agent_class()
+                    try:
+                        # Import the submodule
+                        module = importlib.import_module(
+                            f"code_puppy.agents.{subpkg_name}.{modname}"
+                        )
+
+                        # Look for BaseAgent subclasses
+                        for attr_name in dir(module):
+                            attr = getattr(module, attr_name)
+                            if (
+                                isinstance(attr, type)
+                                and issubclass(attr, BaseAgent)
+                                and attr not in [BaseAgent, JSONAgent]
+                            ):
+                                # Instantiate once to capture metadata into AgentInfo
+                                agent_instance = attr()
+                                _state.agent_registry[agent_instance.name] = AgentInfo(
+                                    name=agent_instance.name,
+                                    display_name=agent_instance.display_name,
+                                    description=agent_instance.description,
+                                    factory=attr)
+
+                    except Exception as e:
+                        emit_warning(
+                            f"Warning: Could not load agent {subpkg_name}.{modname}: {e}",
+                            message_group=message_group_id)
+                        continue
+
+            except Exception as e:
+                emit_warning(
+                    f"Warning: Could not load agent sub-package {subpkg_name}: {e}",
+                    message_group=message_group_id)
+                continue
+
+        # 2. Discover JSON agents in user directory
+        try:
+            json_agents = discover_json_agents()
+
+            # Add JSON agents to registry (store file path instead of class)
+            # Python (builtin) agents take precedence over JSON agents.
+            for agent_name, json_path in json_agents.items():
+                if agent_name in _state.agent_registry:
+                    emit_warning(
+                        f"JSON agent '{agent_name}' skipped: builtin Python agent with the same name takes precedence.",
+                        message_group=message_group_id)
+                    continue
+                try:
+                    _json_tmp = JSONAgent(json_path)
+                    _json_display = _json_tmp.display_name
+                    _json_desc = _json_tmp.description
+                except Exception:
+                    _json_display = agent_name.replace("-", " ").title() + " 🤖"
+                    _json_desc = "No description available"
+                _state.agent_registry[agent_name] = AgentInfo(
+                    name=agent_name,
+                    display_name=_json_display,
+                    description=_json_desc,
+                    factory=lambda _p=json_path: JSONAgent(_p),
+                    json_path=json_path)
+
+        except Exception as e:
+            emit_warning(
+                f"Warning: Could not discover JSON agents: {e}",
+                message_group=message_group_id)
+
+        # 3. Discover agents registered by plugins
+        try:
+            results = on_register_agents()
+            for result in results:
+                if result is None:
+                    continue
+                # Each result should be a list of agent definitions
+                agents_list = result if isinstance(result, list) else [result]
+                for agent_def in agents_list:
+                    if not isinstance(agent_def, dict) or "name" not in agent_def:
+                        continue
+
+                    agent_name = agent_def["name"]
+
+                    # Support both class-based and JSON path-based registration
+                    if "class" in agent_def:
+                        agent_class = agent_def["class"]
+                        if isinstance(agent_class, type) and issubclass(
+                            agent_class, BaseAgent
+                        ):
+                            try:
+                                _plugin_inst = agent_class()
+                                _state.agent_registry[agent_name] = AgentInfo(
+                                    name=_plugin_inst.name,
+                                    display_name=_plugin_inst.display_name,
+                                    description=_plugin_inst.description,
+                                    factory=agent_class)
+                            except Exception:
+                                pass  # skip problematic plugin agent
+                    elif "json_path" in agent_def:
+                        json_path = agent_def["json_path"]
+                        if isinstance(json_path, str):
+                            try:
+                                _pj_tmp = JSONAgent(json_path)
+                                _pj_display = _pj_tmp.display_name
+                                _pj_desc = _pj_tmp.description
+                            except Exception:
+                                _pj_display = agent_name.replace("-", " ").title() + " 🤖"
+                                _pj_desc = "No description available"
                             _state.agent_registry[agent_name] = AgentInfo(
-                                name=_plugin_inst.name,
-                                display_name=_plugin_inst.display_name,
-                                description=_plugin_inst.description,
-                                factory=agent_class)
-                        except Exception:
-                            pass  # skip problematic plugin agent
-                elif "json_path" in agent_def:
-                    json_path = agent_def["json_path"]
-                    if isinstance(json_path, str):
-                        try:
-                            _pj_tmp = JSONAgent(json_path)
-                            _pj_display = _pj_tmp.display_name
-                            _pj_desc = _pj_tmp.description
-                        except Exception:
-                            _pj_display = agent_name.replace("-", " ").title() + " 🤖"
-                            _pj_desc = "No description available"
-                        _state.agent_registry[agent_name] = AgentInfo(
-                            name=agent_name,
-                            display_name=_pj_display,
-                            description=_pj_desc,
-                            factory=lambda _p=json_path: JSONAgent(_p),
-                            json_path=json_path)
+                                name=agent_name,
+                                display_name=_pj_display,
+                                description=_pj_desc,
+                                factory=lambda _p=json_path: JSONAgent(_p),
+                                json_path=json_path)
 
-    except Exception as e:
-        emit_warning(
-            f"Warning: Could not load plugin agents: {e}",
-            message_group=message_group_id)
+        except Exception as e:
+            emit_warning(
+                f"Warning: Could not load plugin agents: {e}",
+                message_group=message_group_id)
 
-    _state.registry_populated = True  # Mark registry as fully populated
+        _state.registry_populated = True  # Mark registry as fully populated
 
 
 def _invalidate_agent_registry() -> None:
     """Invalidate the agent registry cache, forcing re-discovery on next call."""
-    _state.registry_populated = False
+    with _REGISTRY_LOCK:
+        _state.registry_populated = False
 
 
 def get_available_agents() -> dict[str, str]:
