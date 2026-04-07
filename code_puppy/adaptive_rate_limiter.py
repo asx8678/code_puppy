@@ -46,6 +46,7 @@ DEFAULT_MAX_LIMIT: int = 10
 DEFAULT_COOLDOWN_SECONDS: float = 60.0
 DEFAULT_RECOVERY_RATE: float = 0.5  # fraction of current limit to add per tick
 DEFAULT_INITIAL_LIMIT: int = 10  # starting concurrency for any new model
+LIMIT_EPSILON: float = 0.01  # epsilon for float comparison of limits
 
 # Circuit breaker defaults
 DEFAULT_CIRCUIT_BREAKER_ENABLED: bool = False
@@ -259,7 +260,7 @@ async def _recovery_loop() -> None:
                         st.current_limit + increment,
                         float(_state.cfg_max_limit),
                     )
-                    if abs(new_limit - old_limit) < 0.01:
+                    if abs(new_limit - old_limit) < LIMIT_EPSILON:
                         continue  # already at max
                     
                     # Capture recovery item to process outside the lock
