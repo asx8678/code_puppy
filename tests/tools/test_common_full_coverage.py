@@ -637,7 +637,7 @@ class TestArrowSelect:
             new_callable=AsyncMock,
             return_value="a",
         ) as mock_async:
-            with patch("code_puppy.tools.common._run_async_sync") as mock_runner:
+            with patch("code_puppy.async_utils.run_async_sync") as mock_runner:
                 mock_runner.return_value = "a"
                 result = arrow_select("Pick:", ["a", "b"])
                 assert result == "a"
@@ -653,7 +653,7 @@ class TestArrowSelect:
             new_callable=AsyncMock,
             side_effect=KeyboardInterrupt,
         ):
-            with patch("code_puppy.tools.common._run_async_sync") as mock_runner:
+            with patch("code_puppy.async_utils.run_async_sync") as mock_runner:
                 mock_runner.side_effect = KeyboardInterrupt
                 with pytest.raises(KeyboardInterrupt):
                     arrow_select("Pick:", ["a", "b"])
