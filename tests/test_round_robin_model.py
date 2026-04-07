@@ -73,30 +73,32 @@ class TestRoundRobinModel:
         assert rrm._current_index == 0
         assert rrm.model_name == "round_robin:single_model"
 
-    def test_rotation_basic(self):
+    @pytest.mark.asyncio
+    async def test_rotation_basic(self):
         """Test basic rotation between two models."""
         models = [MockModel("model1"), MockModel("model2")]
         rrm = RoundRobinModel(*models, rotate_every=1)
 
         # First call should return model1
-        current_model = rrm._get_next_model()
+        current_model = await rrm._get_next_model()
         assert current_model.model_name == "model1"
         assert rrm._current_index == 1
         assert rrm._request_count == 0
 
         # Second call should return model2
-        current_model = rrm._get_next_model()
+        current_model = await rrm._get_next_model()
         assert current_model.model_name == "model2"
         assert rrm._current_index == 0
         assert rrm._request_count == 0
 
         # Third call should return model1 again (cycle)
-        current_model = rrm._get_next_model()
+        current_model = await rrm._get_next_model()
         assert current_model.model_name == "model1"
         assert rrm._current_index == 1
         assert rrm._request_count == 0
 
-    def test_rotation_three_models(self):
+    @pytest.mark.asyncio
+    async def test_rotation_three_models(self):
         """Test rotation through three models."""
         models = [MockModel("m1"), MockModel("m2"), MockModel("m3")]
         rrm = RoundRobinModel(*models, rotate_every=1)
@@ -105,33 +107,35 @@ class TestRoundRobinModel:
         actual_sequence = []
 
         for _ in range(6):
-            model = rrm._get_next_model()
+            model = await rrm._get_next_model()
             actual_sequence.append(model.model_name)
 
         assert actual_sequence == expected_sequence
 
-    def test_rotation_with_rotate_every_2(self):
+    @pytest.mark.asyncio
+    async def test_rotation_with_rotate_every_2(self):
         """Test rotation with rotate_every=2."""
         models = [MockModel("model1"), MockModel("model2")]
         rrm = RoundRobinModel(*models, rotate_every=2)
 
         # First two calls should return model1
-        assert rrm._get_next_model().model_name == "model1"
-        assert rrm._get_next_model().model_name == "model1"
+        assert (await rrm._get_next_model()).model_name == "model1"
+        assert (await rrm._get_next_model()).model_name == "model1"
         assert rrm._current_index == 1
 
         # Next two calls should return model2
-        assert rrm._get_next_model().model_name == "model2"
-        assert rrm._get_next_model().model_name == "model2"
+        assert (await rrm._get_next_model()).model_name == "model2"
+        assert (await rrm._get_next_model()).model_name == "model2"
         assert rrm._current_index == 0
 
-    def test_single_model_no_rotation(self):
+    @pytest.mark.asyncio
+    async def test_single_model_no_rotation(self):
         """Test that single model always returns same model regardless of rotate_every."""
         model = MockModel("single")
         rrm = RoundRobinModel(model, rotate_every=3)
 
         for _ in range(10):
-            returned_model = rrm._get_next_model()
+            returned_model = await rrm._get_next_model()
             assert returned_model is model
             assert rrm._current_index == 0  # Should never change
 
@@ -147,7 +151,8 @@ class TestRoundRobinModel:
         rrm_custom = RoundRobinModel(*models, rotate_every=5)
         assert rrm_custom.model_name == "round_robin:m1,m2,m3:rotate_every=5"
 
-    def test_properties_delegate_to_current_model(self):
+    @pytest.mark.asyncio
+    async def test_properties_delegate_to_current_model(self):
         """Test that system and base_url properties delegate to current model."""
         models = [MockModel("model1"), MockModel("model2")]
         rrm = RoundRobinModel(*models)
@@ -157,27 +162,28 @@ class TestRoundRobinModel:
         assert rrm.base_url == "https://api.model1.com"
 
         # After rotation should point to model2
-        rrm._get_next_model()  # Rotate to model2
+        await rrm._get_next_model()  # Rotate to model2
         assert rrm.system == "system_model2"
         assert rrm.base_url == "https://api.model2.com"
 
-    def test_request_count_tracking(self):
+    @pytest.mark.asyncio
+    async def test_request_count_tracking(self):
         """Test that request count is tracked correctly."""
         models = [MockModel("model1"), MockModel("model2")]
         rrm = RoundRobinModel(*models, rotate_every=3)
 
         # First call
-        rrm._get_next_model()
+        await rrm._get_next_model()
         assert rrm._request_count == 1
         assert rrm._current_index == 0
 
         # Second call
-        rrm._get_next_model()
+        await rrm._get_next_model()
         assert rrm._request_count == 2
         assert rrm._current_index == 0
 
         # Third call - should trigger rotation
-        rrm._get_next_model()
+        await rrm._get_next_model()
         assert rrm._request_count == 0  # Reset after rotation
         assert rrm._current_index == 1
 
@@ -206,23 +212,24 @@ class TestRoundRobinModel:
         with pytest.raises(ValueError, match="rotate_every must be at least 1"):
             RoundRobinModel(*models, rotate_every=-5)
 
-    def test_large_rotate_every_value(self):
+    @pytest.mark.asyncio
+    async def test_large_rotate_every_value(self):
         """Test behavior with large rotate_every values."""
         models = [MockModel("m1"), MockModel("m2")]
         rrm = RoundRobinModel(*models, rotate_every=100)
 
         # Should stay on first model for 99 calls (count goes 1-99)
         for _ in range(99):
-            assert rrm._get_next_model().model_name == "m1"
+            assert (await rrm._get_next_model()).model_name == "m1"
         assert rrm._request_count == 99
         assert rrm._current_index == 0
 
         # 100th call should trigger rotation (count becomes 100 >= rotate_every)
         assert (
-            rrm._get_next_model().model_name == "m1"
-        )  # Still returns m1, but rotates after
+            await rrm._get_next_model()
+        ).model_name == "m1"  # Still returns m1, but rotates after
         assert rrm._current_index == 1
         assert rrm._request_count == 0  # Reset after rotation
 
         # Next call should return m2
-        assert rrm._get_next_model().model_name == "m2"
+        assert (await rrm._get_next_model()).model_name == "m2"
