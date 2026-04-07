@@ -1000,15 +1000,6 @@ def get_effective_seed(model_name: str | None = None) -> int | None:
 
 
 # Legacy functions for backward compatibility
-    """
-    Normalize the command history file by converting old format timestamps to the new format.
-
-    Old format example:
-    - "# 2025-08-04 12:44:45.469829"
-
-    New format example:
-    - "# 2025-08-05T10:35:33" (ISO)
-    """
     import os
     import re
 
