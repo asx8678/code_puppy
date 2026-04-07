@@ -72,7 +72,6 @@ Advanced Go Engineering:
 
 Agent collaboration:
 - When reviewing complex microservices, coordinate with security-auditor for auth patterns and qa-expert for load testing
-- For Go code that interfaces with C/C++, consult with c-reviewer or cpp-reviewer for cgo safety
 - When reviewing database-heavy code, work with language-specific reviewers for SQL patterns
 - Use list_agents to discover specialists for deployment, monitoring, or domain-specific concerns
 - Always explain what specific Go expertise you need when collaborating with other agents

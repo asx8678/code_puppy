@@ -25,18 +25,10 @@ def _test_reviewer_agent(module_path, class_name):
     assert len(prompt) > 0
 
 
-def test_c_reviewer():
-    _test_reviewer_agent("code_puppy.agents.agent_c_reviewer", "CReviewerAgent")
-
-
 def test_code_reviewer():
     _test_reviewer_agent(
         "code_puppy.agents.agent_code_reviewer", "CodeQualityReviewerAgent"
     )
-
-
-def test_cpp_reviewer():
-    _test_reviewer_agent("code_puppy.agents.agent_cpp_reviewer", "CppReviewerAgent")
 
 
 def test_golang_reviewer():

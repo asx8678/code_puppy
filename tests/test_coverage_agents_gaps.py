@@ -16,9 +16,7 @@ import pytest
 
 
 _REVIEWER_AGENTS = [
-    ("code_puppy.agents.agent_c_reviewer", "CReviewerAgent"),
     ("code_puppy.agents.agent_code_reviewer", "CodeQualityReviewerAgent"),
-    ("code_puppy.agents.agent_cpp_reviewer", "CppReviewerAgent"),
     ("code_puppy.agents.agent_golang_reviewer", "GolangReviewerAgent"),
     ("code_puppy.agents.agent_javascript_reviewer", "JavaScriptReviewerAgent"),
     ("code_puppy.agents.agent_python_reviewer", "PythonReviewerAgent"),

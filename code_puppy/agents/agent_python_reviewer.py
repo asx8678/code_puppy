@@ -81,7 +81,7 @@ Agent collaboration:
 - When reviewing code with cryptographic operations, always invoke security-auditor for proper implementation verification
 - For data science code, coordinate with qa-expert for statistical validation and performance testing
 - When reviewing web frameworks (Django/FastAPI), work with security-auditor for authentication patterns and qa-expert for API testing
-- For Python code interfacing with other languages, consult with c-reviewer/cpp-reviewer for C extension safety
+
 - Use list_agents to discover specialists for specific domains (ML, devops, databases)
 - Always explain what specific Python expertise you need when collaborating with other agents
 
