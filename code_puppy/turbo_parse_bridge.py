@@ -13,6 +13,8 @@ try:
         supported_languages,
         parse_file,
         parse_source,
+        extract_symbols,
+        extract_symbols_from_file,
     )
 
     TURBO_PARSE_AVAILABLE = True
@@ -72,6 +74,32 @@ except ImportError:
             }],
         }
 
+    def extract_symbols(source: str, language: str) -> dict[str, Any]:
+        """Fallback for extract_symbols when Rust module is unavailable.
+        
+        Returns an error dict indicating the Rust module is not available.
+        """
+        return {
+            "language": language,
+            "symbols": [],
+            "extraction_time_ms": 0.0,
+            "success": False,
+            "errors": ["turbo_parse module not available - symbol extraction disabled"],
+        }
+
+    def extract_symbols_from_file(path: str, language: str | None = None) -> dict[str, Any]:
+        """Fallback for extract_symbols_from_file when Rust module is unavailable.
+        
+        Returns an error dict indicating the Rust module is not available.
+        """
+        return {
+            "language": language or "unknown",
+            "symbols": [],
+            "extraction_time_ms": 0.0,
+            "success": False,
+            "errors": ["turbo_parse module not available - symbol extraction disabled"],
+        }
+
 
 # --- Turbo Parse toggle -----------------------------------------------------
 # When True (default), Rust acceleration is used at runtime if the module
@@ -106,6 +134,8 @@ __all__ = [
     "supported_languages",
     "parse_file",
     "parse_source",
+    "extract_symbols",
+    "extract_symbols_from_file",
     "is_turbo_parse_enabled",
     "set_turbo_parse_enabled",
     "get_turbo_parse_status",

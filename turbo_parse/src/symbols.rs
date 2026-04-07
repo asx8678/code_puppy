@@ -290,6 +290,44 @@ mod queries {
         (function_declaration
           name: (identifier) @name) @function
 
+        ; Function expressions in variable declarations
+        (lexical_declaration
+          (variable_declarator
+            name: (identifier) @name
+            value: (function_expression))) @function
+
+        ; Arrow functions in variable declarations
+        (lexical_declaration
+          (variable_declarator
+            name: (identifier) @name
+            value: (arrow_function))) @function
+
+        ; Class declarations (TypeScript uses same grammar as JavaScript)
+        (class_declaration
+          name: (type_identifier) @name) @class
+
+        ; Method definitions
+        (method_definition
+          name: (property_identifier) @name) @method
+
+        ; Import statements
+        (import_statement
+          (import_clause
+            (identifier) @name)) @import
+
+        ; Named imports
+        (import_statement
+          (import_clause
+            (named_imports
+              (import_specifier
+                name: (identifier) @name)))) @import
+
+        ; Variable declarations at module level
+        (program
+          (lexical_declaration
+            (variable_declarator
+              name: (identifier) @name))) @variable
+
         ; TypeScript-specific: Interface declarations
         (interface_declaration
           name: (type_identifier) @name) @interface
@@ -328,7 +366,7 @@ mod queries {
         (call
           target: (identifier) @import_keyword
           (arguments
-            (identifier) @name)
+            (alias) @name)
           (#any-of? @import_keyword "import" "use" "require")) @import
 
         ; Alias statements
@@ -341,7 +379,7 @@ mod queries {
 }
 
 /// Normalize language name and return owned String.
-fn normalize_language(name: &str) -> String {
+pub fn normalize_language(name: &str) -> String {
     match name.to_lowercase().as_str() {
         "py" => "python".to_string(),
         "js" => "javascript".to_string(),
