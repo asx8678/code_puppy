@@ -3,12 +3,14 @@ use std::sync::OnceLock;
 
 mod batch;
 mod cache;
+mod diagnostics;
 mod parser;
 mod registry;
 mod symbols;
 
 use batch::{parse_files_batch as _parse_files_batch, BatchParseOptions, BatchParseResult};
 use cache::{ParseCache, CacheKey, CacheValue, compute_content_hash, DEFAULT_CACHE_CAPACITY};
+use diagnostics::{extract_diagnostics, SyntaxDiagnostics};
 use parser::{parse_file as _parse_file, parse_source as _parse_source, ParseResult};
 use registry::{get_language as _get_language, is_language_supported as _is_language_supported, list_supported_languages, RegistryError};
 use symbols::{extract_symbols as _extract_symbols, SymbolOutline, extract_symbols_from_file as _extract_symbols_from_file};
@@ -79,6 +81,74 @@ fn parse_file<'py>(py: Python<'py>, path: &str, language: Option<&str>) -> PyRes
     });
 
     convert_parse_result_to_py(py, &result)
+}
+
+/// Extract syntax diagnostics from source code.
+///
+/// Walks the tree-sitter tree and finds ERROR and MISSING nodes,
+/// returning detailed diagnostics with position information.
+///
+/// # Arguments
+/// * `source` - The source code to analyze
+/// * `language` - The language identifier (e.g., "python", "rust", "javascript")
+///
+/// # Returns
+/// Dict with:
+///   - diagnostics: List[Dict] - list of diagnostic objects
+///   - error_count: int - number of error-level diagnostics
+///   - warning_count: int - number of warning-level diagnostics
+///
+/// Each diagnostic contains:
+///   - message: str - human-readable error message
+///   - severity: str - "error" or "warning"
+///   - line: int - line number (1-indexed)
+///   - column: int - column number (0-indexed)
+///   - offset: int - byte offset in source
+///   - length: int - length of error region in bytes
+///   - node_kind: str - the kind of node that caused the error
+#[pyfunction]
+#[pyo3(signature = (source, language))]
+fn extract_syntax_diagnostics<'py>(py: Python<'py>, source: &str, language: &str) -> PyResult<Bound<'py, PyAny>> {
+    // Normalize language name
+    let lang_name = language.to_lowercase();
+    let normalized = match lang_name.as_str() {
+        "py" => "python",
+        "js" => "javascript",
+        "ts" => "typescript",
+        "ex" => "elixir",
+        _ => &lang_name,
+    };
+
+    // Get the tree-sitter language
+    let ts_language = match _get_language(normalized) {
+        Ok(lang) => lang,
+        Err(RegistryError::UnsupportedLanguage(_)) => {
+            let error_info = serde_json::json!({
+                "diagnostics": [],
+                "error_count": 0,
+                "warning_count": 0,
+                "error": format!("Unsupported language: '{}'", language),
+            });
+            return convert_json_to_py(py, &error_info);
+        }
+        Err(e) => {
+            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()));
+        }
+    };
+
+    // Run diagnostics extraction with GIL released
+    let diagnostics: SyntaxDiagnostics = py.detach(|| {
+        extract_diagnostics(source, ts_language)
+    });
+
+    let result = serde_json::json!({
+        "diagnostics": diagnostics.diagnostics,
+        "error_count": diagnostics.error_count(),
+        "warning_count": diagnostics.warning_count(),
+        "language": normalized,
+    });
+
+    convert_json_to_py(py, &result)
 }
 
 /// Helper to convert ParseResult to Python dict.
@@ -491,6 +561,7 @@ fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_file, m)?)?;
     m.add_function(wrap_pyfunction!(parse_source, m)?)?;
     m.add_function(wrap_pyfunction!(parse_files_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(extract_syntax_diagnostics, m)?)?;
     // Cache functions from main
     // Symbol extraction functions added
     m.add_function(wrap_pyfunction!(init_cache, m)?)?;

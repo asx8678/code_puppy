@@ -8,6 +8,7 @@ use std::time::Instant;
 use serde::{Deserialize, Serialize};
 use tree_sitter::{Node, Parser, Tree};
 
+use crate::diagnostics::{extract_diagnostics, SyntaxDiagnostics};
 use crate::registry::{get_language, RegistryError};
 use crate::symbols::normalize_language;
 
@@ -59,6 +60,8 @@ pub struct ParseResult {
     pub success: bool,
     /// Any parse errors encountered
     pub errors: Vec<ParseError>,
+    /// Syntax diagnostics from tree analysis
+    pub diagnostics: SyntaxDiagnostics,
 }
 
 impl ParseResult {
@@ -69,6 +72,7 @@ impl ParseResult {
         parse_time_ms: f64,
         success: bool,
         errors: Vec<ParseError>,
+        diagnostics: SyntaxDiagnostics,
     ) -> Self {
         Self {
             language: language.into(),
@@ -76,6 +80,7 @@ impl ParseResult {
             parse_time_ms,
             success,
             errors,
+            diagnostics,
         }
     }
 
@@ -87,6 +92,7 @@ impl ParseResult {
             parse_time_ms: 0.0,
             success: false,
             errors: vec![error],
+            diagnostics: SyntaxDiagnostics::new(),
         }
     }
 }
@@ -154,9 +160,8 @@ fn serialize_tree(tree: &Tree, source: &str) -> serde_json::Value {
     })
 }
 
-/// Extract parse errors from a tree (has_errors check).
-fn extract_errors(tree: &Tree, source: &str) -> Vec<ParseError> {
-    let mut errors = Vec::new();
+/// Extract parse errors from a tree (legacy function - kept for backwards compatibility).
+fn extract_errors_legacy(tree: &Tree, source: &str, errors: &mut Vec<ParseError>) {
     let root = tree.root_node();
     
     fn collect_errors(node: Node, source: &str, errors: &mut Vec<ParseError>) {
@@ -183,8 +188,7 @@ fn extract_errors(tree: &Tree, source: &str) -> Vec<ParseError> {
         }
     }
     
-    collect_errors(root, source, &mut errors);
-    errors
+    collect_errors(root, source, errors);
 }
 
 /// Internal parse implementation that doesn't need Python GIL.
@@ -234,9 +238,15 @@ fn parse_source_internal(source: &str, language: &str) -> ParseResult {
     
     let parse_time_ms = start.elapsed().as_secs_f64() * 1000.0;
     
-    // Extract errors from the tree
-    let errors = extract_errors(&tree, source);
-    let has_errors = !errors.is_empty() || tree.root_node().has_error();
+    // Extract diagnostics from the tree (ERROR and MISSING nodes)
+    let diagnostics = extract_diagnostics(source, &ts_language);
+    
+    // Also extract legacy errors for backwards compatibility
+    let mut legacy_errors = Vec::new();
+    extract_errors_legacy(&tree, source, &mut legacy_errors);
+    
+    // Combine legacy errors with diagnostic-based errors for full coverage
+    let has_errors = !diagnostics.is_empty() || !legacy_errors.is_empty() || tree.root_node().has_error();
     
     // Serialize the tree
     let tree_json = serialize_tree(&tree, source);
@@ -246,7 +256,8 @@ fn parse_source_internal(source: &str, language: &str) -> ParseResult {
         Some(tree_json),
         parse_time_ms,
         !has_errors,
-        errors,
+        legacy_errors,
+        diagnostics,
     )
 }
 
