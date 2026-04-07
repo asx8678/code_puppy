@@ -87,12 +87,14 @@ DANGEROUS_PATTERNS = [
 ]
 
 # Characters that are NEVER allowed in commands (control characters, etc.)
+# Using generator expression for memory efficiency when building the forbidden set
 FORBIDDEN_CHARS = set(
     chr(i) for i in range(32) if i not in (9, 10, 13)  # Allow tab, LF, CR
 ) | {'\x7f'}  # Also forbid DEL character
 
 # Compiled regex patterns for performance
-_COMPILED_DANGEROUS_PATTERNS = [re.compile(p) for p in DANGEROUS_PATTERNS]
+# Using tuple instead of list for memory efficiency and immutability
+_COMPILED_DANGEROUS_PATTERNS = tuple(re.compile(p) for p in DANGEROUS_PATTERNS)
 
 
 class CommandValidationError(Exception):

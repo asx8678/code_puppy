@@ -72,8 +72,8 @@ def _sanitize_header(v: Any) -> str:
 
 def _check_unique(items: list[str], field_name: str) -> None:
     """Raise ValueError if items has duplicates (case-insensitive)."""
-    lowered = [i.lower() for i in items]
-    if len(lowered) != len(set(lowered)):
+    # Use generator expression instead of list comprehension for memory efficiency
+    if len(items) != len(set(i.lower() for i in items)):
         raise ValueError(f"{field_name} must be unique")
 
 

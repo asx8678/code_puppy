@@ -29,12 +29,12 @@ def matches(matcher: str, tool_name: str, tool_args: dict[str, Any]) -> bool:
         return True
 
     if "||" in matcher:
-        parts = [p.strip() for p in matcher.split("||")]
-        return any(matches(part, tool_name, tool_args) for part in parts)
+        # Use generator expression for memory efficiency with large patterns
+        return any(matches(p.strip(), tool_name, tool_args) for p in matcher.split("||"))
 
     if "&&" in matcher:
-        parts = [p.strip() for p in matcher.split("&&")]
-        return all(matches(part, tool_name, tool_args) for part in parts)
+        # Use generator expression for memory efficiency with large patterns
+        return all(matches(p.strip(), tool_name, tool_args) for p in matcher.split("&&"))
 
     return _match_single(matcher.strip(), tool_name, tool_args)
 
@@ -118,7 +118,8 @@ def _looks_like_file_path(value: str) -> bool:
 
 
 def _is_regex_pattern(pattern: str) -> bool:
-    regex_chars = ["^", "$", ".", "+", "?", "[", "]", "(", ")", "{", "}", "|", "\\"]
+    # Use a constant tuple instead of list - immutable and slightly faster membership testing
+    regex_chars = ("^", "$", ".", "+", "?", "[", "]", "(", ")", "{", "}", "|", "\\")
     return any(char in pattern for char in regex_chars)
 
 
@@ -135,7 +136,8 @@ def extract_file_extension(file_path: str) -> str | None:
 
 
 def matches_tool(tool_name: str, *names: str) -> bool:
-    return tool_name.lower() in [name.lower() for name in names]
+    # Use generator expression instead of list comprehension for memory efficiency
+    return any(tool_name.lower() == name.lower() for name in names)
 
 
 def matches_file_extension(tool_args: dict[str, Any], *extensions: str) -> bool:
