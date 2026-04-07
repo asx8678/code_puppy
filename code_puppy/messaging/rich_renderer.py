@@ -26,10 +26,7 @@ from code_puppy.tools.common import format_diff_with_colors
 from code_puppy.tools.subagent_context import is_subagent
 
 from .bus import MessageBus
-from .commands import (
-    ConfirmationResponse,
-    SelectionResponse,
-    UserInputResponse)
+from .commands import ConfirmationResponse, SelectionResponse, UserInputResponse
 from .messages import (
     AgentReasoningMessage,
     AgentResponseMessage,
@@ -54,12 +51,20 @@ from .messages import (
     TextMessage,
     UniversalConstructorMessage,
     UserInputRequest,
-    VersionCheckMessage)
-
-# Default code theme for syntax highlighting across all markdown content
-_CODE_THEME = os.environ.get("CODE_PUPPY_CODE_THEME", "monokai")
+    VersionCheckMessage,
+)
 
 # Note: Text and Tree were removed - no longer used in this implementation
+
+
+def _get_code_theme() -> str:
+    """Read the current code theme from env var at render time.
+
+    Returns the value of CODE_PUPPY_CODE_THEME if set, otherwise 'monokai'.
+    This is a function (not a module-level constant) so the /theme command
+    can switch themes at runtime without requiring a restart.
+    """
+    return os.environ.get("CODE_PUPPY_CODE_THEME", "monokai")
 
 
 # =============================================================================
@@ -201,7 +206,8 @@ class RichConsoleRenderer:
         self,
         bus: MessageBus,
         console: Console | None = None,
-        styles: dict[MessageLevel, str | None] = None) -> None:
+        styles: dict[MessageLevel, str | None] = None,
+    ) -> None:
         """Initialize the renderer.
 
         Args:
@@ -501,7 +507,12 @@ class RichConsoleRenderer:
                 dir_stats[parent]["files"].append(entry)
                 dir_stats[parent]["total_size"] += entry.size
 
-        def render_dir_tree(dir_path: str, depth: int = 0, size_cache: dict[str, int] | None = None, file_count_cache: dict[str, int] | None = None) -> None:
+        def render_dir_tree(
+            dir_path: str,
+            depth: int = 0,
+            size_cache: dict[str, int] | None = None,
+            file_count_cache: dict[str, int] | None = None,
+        ) -> None:
             """Recursively render directory with compact summary."""
             # Initialize caches on first call (root level)
             if size_cache is None:
@@ -669,7 +680,8 @@ class RichConsoleRenderer:
                             f"({re.escape(search_term)})",
                             r"[bold yellow]\1[/bold yellow]",
                             line,
-                            flags=re.IGNORECASE)
+                            flags=re.IGNORECASE,
+                        )
                     else:
                         highlighted_line = line
 
@@ -827,13 +839,13 @@ class RichConsoleRenderer:
         # Current reasoning
         self._console.print("[bold cyan]Current reasoning:[/bold cyan]")
         # Render reasoning as markdown
-        md = Markdown(msg.reasoning, code_theme=_CODE_THEME)
+        md = Markdown(msg.reasoning, code_theme=_get_code_theme())
         self._console.print(md)
 
         # Next steps (if any)
         if msg.next_steps and msg.next_steps.strip():
             self._console.print("\n[bold cyan]Planned next steps:[/bold cyan]")
-            md_steps = Markdown(msg.next_steps, code_theme=_CODE_THEME)
+            md_steps = Markdown(msg.next_steps, code_theme=_get_code_theme())
             self._console.print(md_steps)
 
         # Trailing newline for spinner separation
@@ -847,7 +859,7 @@ class RichConsoleRenderer:
 
         # Content (markdown or plain)
         if msg.is_markdown:
-            md = Markdown(msg.content, code_theme=_CODE_THEME)
+            md = Markdown(msg.content, code_theme=_get_code_theme())
             self._console.print(md)
         else:
             self._console.print(msg.content)
@@ -879,7 +891,7 @@ class RichConsoleRenderer:
             msg.prompt[:200] + "..." if len(msg.prompt) > 200 else msg.prompt
         )
         self._console.print("[dim]Prompt:[/dim]")
-        md_prompt = Markdown(prompt_display, code_theme=_CODE_THEME)
+        md_prompt = Markdown(prompt_display, code_theme=_get_code_theme())
         self._console.print(md_prompt)
 
     def _render_subagent_response(self, msg: SubAgentResponseMessage) -> None:
@@ -889,7 +901,7 @@ class RichConsoleRenderer:
         self._console.print(f"\n{banner} [bold cyan]{msg.agent_name}[/bold cyan]")
 
         # Render response as markdown
-        md = Markdown(msg.response, code_theme=_CODE_THEME)
+        md = Markdown(msg.response, code_theme=_get_code_theme())
         self._console.print(md)
 
         # Footer with session info
@@ -984,9 +996,8 @@ class RichConsoleRenderer:
                         feedback = feedback if feedback else None
 
                     response = ConfirmationResponse(
-                        prompt_id=msg.prompt_id,
-                        confirmed=confirmed,
-                        feedback=feedback)
+                        prompt_id=msg.prompt_id, confirmed=confirmed, feedback=feedback
+                    )
                     self._bus.provide_response(response)
                     return
 
@@ -1012,9 +1023,8 @@ class RichConsoleRenderer:
                 idx = int(choice)
                 if msg.allow_cancel and idx == 0:
                     response = SelectionResponse(
-                        prompt_id=msg.prompt_id,
-                        selected_index=-1,
-                        selected_value="")
+                        prompt_id=msg.prompt_id, selected_index=-1, selected_value=""
+                    )
                     self._bus.provide_response(response)
                     return
 
@@ -1022,7 +1032,8 @@ class RichConsoleRenderer:
                     response = SelectionResponse(
                         prompt_id=msg.prompt_id,
                         selected_index=idx - 1,
-                        selected_value=msg.options[idx - 1])
+                        selected_value=msg.options[idx - 1],
+                    )
                     self._bus.provide_response(response)
                     return
             except ValueError:

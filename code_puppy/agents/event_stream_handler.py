@@ -155,7 +155,9 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
 
         # Track which part indices we're currently streaming (for Text/Thinking/Tool parts)
         streaming_parts: set[int] = set()
-        thinking_parts: set[int] = set()  # Track which parts are thinking (for dim style)
+        thinking_parts: set[int] = (
+            set()
+        )  # Track which parts are thinking (for dim style)
         text_parts: set[int] = set()  # Track which parts are text
         tool_parts: set[int] = set()  # Track which parts are tool calls
         banner_printed: set[int] = set()  # Track if banner was already printed
@@ -177,7 +179,11 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
                 transient=False,  # Keep rendered output after Live exits
                 auto_refresh=True,
             )
-            live.__enter__()
+            try:
+                live.__enter__()
+            except Exception:
+                # Live failed to start - don't store it, finally block will skip
+                return
             live_contexts[index] = live
 
         async def _print_thinking_banner() -> None:
@@ -382,7 +388,7 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
 
     finally:
         # Ensure any dangling Live contexts are exited to restore terminal state
-        if 'live_contexts' in locals():
+        if "live_contexts" in locals():
             for idx, live in list(live_contexts.items()):
                 try:
                     live.__exit__(None, None, None)

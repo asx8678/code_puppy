@@ -54,8 +54,14 @@ try:
     )
 
     # Use queue console by default, but allow fallback
-    NO_COLOR = bool(int(os.environ.get("CODE_PUPPY_NO_COLOR", "0")))
-    _rich_console = Console(no_color=NO_COLOR)
+    NO_COLOR = os.environ.get("CODE_PUPPY_NO_COLOR", "0") == "1"
+    _force_color = os.environ.get("CODE_PUPPY_FORCE_COLOR", "0") == "1"
+    _rich_console = Console(
+        force_terminal=_force_color or sys.stdout.isatty(),
+        color_system=None if NO_COLOR else "auto",
+        no_color=NO_COLOR,
+        legacy_windows=False,
+    )
     console = get_queue_console()
     # Set the fallback console for compatibility
     console.fallback_console = _rich_console
@@ -66,7 +72,7 @@ except ImportError as _messaging_import_err:
         "Messaging system import failed, falling back to direct Console: %s",
         _messaging_import_err,
     )
-    NO_COLOR = bool(int(os.environ.get("CODE_PUPPY_NO_COLOR", "0")))
+    NO_COLOR = os.environ.get("CODE_PUPPY_NO_COLOR", "0") == "1"
     _force_color = os.environ.get("CODE_PUPPY_FORCE_COLOR", "0") == "1"
     console = Console(
         force_terminal=_force_color or sys.stdout.isatty(),
