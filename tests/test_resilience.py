@@ -31,7 +31,7 @@ class TestRetryConfig:
         assert cfg.base_delay == 1.0
         assert cfg.max_delay == 60.0
         assert cfg.exponential_base == 2.0
-        assert cfg.retryable_exceptions == (Exception,)
+        assert cfg.retryable_exceptions == (ConnectionError, TimeoutError, OSError, ValueError)
 
     def test_custom_values(self):
         """Test custom configuration values."""
