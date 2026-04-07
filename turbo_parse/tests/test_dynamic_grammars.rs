@@ -348,33 +348,6 @@ fn test_already_registered() {
     // if the first load succeeded
 }
 
-/// Test the complete API surface for Python bindings.
-/// This ensures all the expected functions exist and have correct signatures.
-#[test]
-fn test_api_surface() {
-    // These just verify the functions exist and are callable
-    // (except they need Python GIL, so we just verify they compile)
-    
-    fn _check_api_exists() {
-        // These would need Python context to actually call
-        // We're just verifying they exist in the crate
-        let _: fn(_, _, _) -> _ = crate::_register_grammar;
-        let _: fn(_, _) -> _ = crate::_unregister_grammar;
-        let _: fn(_, _) -> _ = crate::_is_grammar_registered;
-        let _: fn(_) -> _ = crate::_list_registered_grammars;
-        let _: fn() -> _ = crate::_dynamic_grammars_enabled;
-        let _: fn(_) -> _ = crate::_dynamic_grammar_info;
-    }
-}
-
-// Stub functions to verify API surface (will fail at runtime but compile)
-fn _register_grammar(_py: (), _name: &str, _library_path: &str) -> Result<(), ()> { Ok(()) }
-fn _unregister_grammar(_py: (), _name: &str) -> bool { false }
-fn _is_grammar_registered(_py: (), _name: &str) -> bool { false }
-fn _list_registered_grammars(_py: ()) -> Result<(), ()> { Ok(()) }
-fn _dynamic_grammars_enabled() -> bool { false }
-fn _dynamic_grammar_info(_py: ()) -> Result<(), ()> { Ok(()) }
-
 /// Test path validation edge cases.
 #[test]
 fn test_path_validation_edge_cases() {

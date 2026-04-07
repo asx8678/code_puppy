@@ -340,6 +340,9 @@ impl DynamicGrammarLoader {
         // Call the function to get the language
         let language = unsafe { lang_fn() };
 
+        // Clone language before moving (Language implements Clone)
+        let language_clone = language.clone();
+
         // Create grammar info
         let info = DynamicGrammarInfo {
             name: name.to_string(),
@@ -362,7 +365,7 @@ impl DynamicGrammarLoader {
             grammars.insert(name.to_string(), Arc::new(loaded));
         }
 
-        Ok(language)
+        Ok(language_clone)
     }
 
     /// Load a grammar with external scanner support.
@@ -410,9 +413,9 @@ impl DynamicGrammarLoader {
         };
 
         // Load optional scanner library
-        let scanner_lib = if let Some(scanner) = scanner_path {
-            let scanner_platform = self.to_platform_library_path(scanner);
-            
+        let scanner_platform_path = scanner_path.map(|s| self.to_platform_library_path(s));
+        
+        let scanner_lib = if let Some(ref scanner_platform) = scanner_platform_path {
             if !scanner_platform.exists() {
                 return Err(DynamicLoadError::ScannerLoadError(
                     format!("Scanner not found: {}", scanner_platform.display())
@@ -448,11 +451,14 @@ impl DynamicGrammarLoader {
 
         let language = unsafe { lang_fn() };
 
+        // Clone language before moving (Language implements Clone)
+        let language_clone = language.clone();
+
         // Create grammar info
         let info = DynamicGrammarInfo {
             name: name.to_string(),
             library_path: platform_path.clone(),
-            scanner_path: scanner_lib.as_ref().map(|_| platform_path.clone()),
+            scanner_path: scanner_platform_path.clone(),
             version: language.version(),
             has_external_scanner: scanner_lib.is_some(),
         };
@@ -470,7 +476,7 @@ impl DynamicGrammarLoader {
             grammars.insert(name.to_string(), Arc::new(loaded));
         }
 
-        Ok(language)
+        Ok(language_clone)
     }
 
     /// Stub implementation when feature is not enabled.
