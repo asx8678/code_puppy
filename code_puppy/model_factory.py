@@ -19,6 +19,10 @@ from .config import EXTRA_MODELS_FILE, get_value, get_yolo_mode
 from .http_utils import create_async_client, get_cert_bundle_path, get_http2
 from .provider_identity import make_anthropic_provider, resolve_provider_identity
 
+# Import config module for deferred imports hoist pattern
+# Using alias to maintain monkeypatch compatibility for tests
+from code_puppy import config as _config_module
+
 # Heavy SDK imports are deferred to builder functions to reduce startup time.
 # See _build_anthropic(), _build_openai(), etc.
 
@@ -137,13 +141,6 @@ def make_model_settings(
     Returns:
         Appropriate ModelSettings subclass instance for the model.
     """
-    from code_puppy.config import (
-        get_effective_model_settings,
-        get_openai_reasoning_effort,
-        get_openai_reasoning_summary,
-        get_openai_verbosity,
-        model_supports_setting)
-
     model_settings_dict: dict = {}
 
     # Calculate max_tokens if not explicitly provided
@@ -163,7 +160,7 @@ def make_model_settings(
             min(int(_OUTPUT_TOKEN_RATIO * context_length), _MAX_OUTPUT_TOKENS))
 
     model_settings_dict["max_tokens"] = max_tokens
-    effective_settings = get_effective_model_settings(model_name)
+    effective_settings = _config_module.get_effective_model_settings(model_name)
     model_settings_dict.update(effective_settings)
 
     # Disable parallel tool calls when yolo_mode is off (sequential so user can review each call)
@@ -181,7 +178,7 @@ def make_model_settings(
     model_settings: ModelSettings = ModelSettings(**model_settings_dict)
 
     if "gpt-5" in model_name:
-        model_settings_dict["openai_reasoning_effort"] = get_openai_reasoning_effort()
+        model_settings_dict["openai_reasoning_effort"] = _config_module.get_openai_reasoning_effort()
 
         model_type = model_config.get("type")
         uses_responses_api = (
@@ -192,16 +189,16 @@ def make_model_settings(
 
         if uses_responses_api:
             model_settings_dict["openai_reasoning_summary"] = (
-                get_openai_reasoning_summary()
+                _config_module.get_openai_reasoning_summary()
             )
             if "codex" not in model_name:
-                model_settings_dict["openai_text_verbosity"] = get_openai_verbosity()
+                model_settings_dict["openai_text_verbosity"] = _config_module.get_openai_verbosity()
             model_settings = OpenAIResponsesModelSettings(**model_settings_dict)
         else:
             # Chat Completions models don't support configurable reasoning summaries.
             # Keep the old verbosity injection path for non-Responses GPT-5 models.
             if "codex" not in model_name:
-                verbosity = get_openai_verbosity()
+                verbosity = _config_module.get_openai_verbosity()
                 model_settings_dict["extra_body"] = {"verbosity": verbosity}
             model_settings = OpenAIChatModelSettings(**model_settings_dict)
     elif model_name.startswith("claude-") or model_name.startswith("anthropic-"):
@@ -241,7 +238,7 @@ def make_model_settings(
         # pydantic-ai doesn't have a native field for output_config yet,
         # so we inject it through extra_body which gets merged into the
         # HTTP request body.
-        if model_supports_setting(model_name, "effort"):
+        if _config_module.model_supports_setting(model_name, "effort"):
             effort = effective_settings.get("effort", "high")
             if "anthropic_thinking" in model_settings_dict:
                 extra_body = model_settings_dict.get("extra_body") or {}
@@ -252,7 +249,7 @@ def make_model_settings(
 
     # Handle Gemini thinking models (Gemini-3)
     # Check if model supports thinking settings and apply defaults
-    if model_supports_setting(model_name, "thinking_level"):
+    if _config_module.model_supports_setting(model_name, "thinking_level"):
         # Apply defaults if not explicitly set by user
         # Default: thinking_enabled=True, thinking_level="low"
         if "thinking_enabled" not in model_settings_dict:
@@ -854,21 +851,15 @@ class ModelFactory:
         global _model_config_cache, _model_config_mtimes
 
         # Check if any source file has changed since last cache
-        # Use module-level imports for EXTRA_MODELS_FILE etc. (line 26)
-        # so that monkeypatch in tests can override them
-        from code_puppy.config import (
-            ANTIGRAVITY_MODELS_FILE,
-            CHATGPT_MODELS_FILE,
-            CLAUDE_MODELS_FILE,
-            GEMINI_MODELS_FILE)
+        # Use module-level _config_module imports so that monkeypatch in tests can override them
 
         source_files = [
             pathlib.Path(__file__).parent / "models.json",
             pathlib.Path(EXTRA_MODELS_FILE),
-            pathlib.Path(CHATGPT_MODELS_FILE),
-            pathlib.Path(CLAUDE_MODELS_FILE),
-            pathlib.Path(GEMINI_MODELS_FILE),
-            pathlib.Path(ANTIGRAVITY_MODELS_FILE),
+            pathlib.Path(_config_module.CHATGPT_MODELS_FILE),
+            pathlib.Path(_config_module.CLAUDE_MODELS_FILE),
+            pathlib.Path(_config_module.GEMINI_MODELS_FILE),
+            pathlib.Path(_config_module.ANTIGRAVITY_MODELS_FILE),
         ]
 
         # Build current mtimes for existing files
@@ -901,10 +892,10 @@ class ModelFactory:
         # Build list of extra model sources
         extra_sources: list[tuple[pathlib.Path, str, bool]] = [
             (pathlib.Path(EXTRA_MODELS_FILE), "extra models", False),
-            (pathlib.Path(CHATGPT_MODELS_FILE), "ChatGPT OAuth models", False),
-            (pathlib.Path(CLAUDE_MODELS_FILE), "Claude Code OAuth models", True),
-            (pathlib.Path(GEMINI_MODELS_FILE), "Gemini OAuth models", False),
-            (pathlib.Path(ANTIGRAVITY_MODELS_FILE), "Antigravity OAuth models", False),
+            (pathlib.Path(_config_module.CHATGPT_MODELS_FILE), "ChatGPT OAuth models", False),
+            (pathlib.Path(_config_module.CLAUDE_MODELS_FILE), "Claude Code OAuth models", True),
+            (pathlib.Path(_config_module.GEMINI_MODELS_FILE), "Gemini OAuth models", False),
+            (pathlib.Path(_config_module.ANTIGRAVITY_MODELS_FILE), "Antigravity OAuth models", False),
         ]
 
         for source_path, label, use_filtered in extra_sources:
