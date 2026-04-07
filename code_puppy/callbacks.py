@@ -247,10 +247,10 @@ async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> list[Any]:
             )
             return None
 
-    # Use TaskGroup (Python 3.11+) for better error handling:
-    # auto-cancels remaining tasks on first unhandled failure.
-    # Since _run_one already catches all exceptions and returns None,
-    # TaskGroup won't cancel siblings, but it structures the concurrency better.
+    # Use TaskGroup (Python 3.11+) for structured concurrency.
+    # Note: _run_one catches all exceptions and returns None, so TaskGroup
+    # won't auto-cancel siblings on failure. The TaskGroup still provides
+    # better structured concurrency semantics than manual task management.
     results: list[Any] = []
     async with asyncio.TaskGroup() as tg:
         tasks = [tg.create_task(_run_one(cb)) for cb in callbacks]
