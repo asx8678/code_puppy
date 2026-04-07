@@ -29,12 +29,12 @@ generate_group_id = common_module.generate_group_id
 def mock_time_and_random(monkeypatch):
     """Fixture to make time and random deterministic for testing."""
     # We need to patch at the module level where they're imported
-    import random
+    import secrets
     import time
 
     monkeypatch.setattr(time, "time", lambda: 1234567890.123456)
-    monkeypatch.setattr(random, "randint", lambda a, b: 5555)
-    return 1234567890.123456, 5555
+    monkeypatch.setattr(secrets, "token_hex", lambda n: "a" * (n * 2))
+    return 1234567890.123456, "a" * 16
 
 
 class TestIgnorePatterns:

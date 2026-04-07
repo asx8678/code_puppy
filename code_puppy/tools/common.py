@@ -2,6 +2,7 @@ import asyncio
 import fnmatch
 import hashlib
 import os
+import secrets
 import sys
 import time
 from pathlib import Path
@@ -1432,10 +1433,8 @@ def generate_group_id(tool_name: str, extra_context: str = "") -> str:
         A string in format: tool_name_hash
     """
     # Create a unique identifier using timestamp, context, and a random component
-    import random
-
     timestamp = str(int(time.time() * 1000000))  # microseconds for more uniqueness
-    random_component = random.randint(1000, 9999)  # Add randomness
+    random_component = secrets.token_hex(8)  # 16 hex chars of cryptographically strong randomness
     context_string = f"{tool_name}_{timestamp}_{random_component}_{extra_context}"
 
     # Generate a short hash

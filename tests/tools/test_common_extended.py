@@ -240,17 +240,17 @@ class TestCommonExtended:
         assert file_group.startswith("file_operation_")
         assert shell_group.startswith("shell_command_")
 
-    @patch("random.randint")
+    @patch("secrets.token_hex")
     @patch("time.time")
-    def test_generate_group_id_deterministic(self, mock_time, mock_randint):
+    def test_generate_group_id_deterministic(self, mock_time, mock_token_hex):
         """Test group ID generation with mocked time and random for deterministic testing."""
         mock_time.return_value = 1234567890.123456
-        mock_randint.return_value = 42
+        mock_token_hex.return_value = "aaaaaaaaaaaaaaaa"
 
         group_id = generate_group_id("test_tool", "context")
 
         # Should be deterministic with mocked values
-        expected_hash = "test_tool_1234567890123456_42_context"
+        expected_hash = "test_tool_1234567890123456_aaaaaaaaaaaaaaaa_context"
         import hashlib
 
         expected_short_hash = hashlib.md5(expected_hash.encode()).hexdigest()[:8]
