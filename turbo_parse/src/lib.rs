@@ -915,6 +915,39 @@ fn dynamic_grammars_enabled() -> bool {
 ///   - library_extension: str - the expected file extension (.so, .dylib, .dll)
 ///   - loaded_count: int - number of dynamic grammars currently loaded
 #[pyfunction]
+fn dynamic_grammar_info<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    use crate::dynamic::list_dynamic_grammars;
+    
+    let loaded_count = list_dynamic_grammars().len();
+    
+    #[cfg(target_os = "linux")]
+    let platform = "linux";
+    #[cfg(target_os = "macos")]
+    let platform = "macos";
+    #[cfg(target_os = "windows")]
+    let platform = "windows";
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    let platform = "unknown";
+    
+    #[cfg(target_os = "linux")]
+    let library_extension = ".so";
+    #[cfg(target_os = "macos")]
+    let library_extension = ".dylib";
+    #[cfg(target_os = "windows")]
+    let library_extension = ".dll";
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    let library_extension = "";
+    
+    let result = serde_json::json!({
+        "enabled": cfg!(feature = "dynamic-grammars"),
+        "platform": platform,
+        "library_extension": library_extension,
+        "loaded_count": loaded_count,
+    });
+    
+    convert_json_to_py(py, &result)
+}
+
 /// Detect language injections in source code.
 ///
 /// Identifies regions of embedded languages within the source code,
