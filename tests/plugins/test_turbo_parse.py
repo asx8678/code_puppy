@@ -492,3 +492,153 @@ class TestBridgeFallback:
         assert result["success"] is False
         assert result["tree"] is None
         assert any("not available" in str(e.get("message", "")) for e in result.get("errors", []))
+
+
+# ============================================================================
+# Tests for parse_files_batch functionality
+# ============================================================================
+
+class TestParseFilesBatch:
+    """Tests for parse_files_batch batch parsing functionality."""
+
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_files_batch_empty(self):
+        """Test batch parsing with empty file list."""
+        from code_puppy.turbo_parse_bridge import parse_files_batch
+        
+        result = parse_files_batch([])
+        
+        assert result["files_processed"] == 0
+        assert result["success_count"] == 0
+        assert result["error_count"] == 0
+        assert result["all_succeeded"] is True
+        assert result["results"] == []
+        assert result["total_time_ms"] >= 0.0
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_files_batch_single_file(self):
+        """Test batch parsing with a single file."""
+        from code_puppy.turbo_parse_bridge import parse_files_batch
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write("def hello():\n    return 'world'\n")
+            temp_path = f.name
+        
+        try:
+            result = parse_files_batch([temp_path])
+            
+            assert result["files_processed"] == 1
+            assert result["success_count"] == 1
+            assert result["error_count"] == 0
+            assert result["all_succeeded"] is True
+            assert len(result["results"]) == 1
+            assert result["results"][0]["success"] is True
+            assert result["results"][0]["language"] == "python"
+            assert result["total_time_ms"] >= 0.0
+        finally:
+            os.unlink(temp_path)
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_files_batch_multiple_files(self):
+        """Test batch parsing with multiple files of different languages."""
+        from code_puppy.turbo_parse_bridge import parse_files_batch
+        
+        # Create Python and Rust files
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f1:
+            f1.write("def func1(): pass\n")
+            py_path = f1.name
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.rs', delete=False) as f2:
+            f2.write("fn main() {}\n")
+            rs_path = f2.name
+        
+        try:
+            result = parse_files_batch([py_path, rs_path])
+            
+            assert result["files_processed"] == 2
+            assert result["success_count"] == 2
+            assert result["error_count"] == 0
+            assert result["all_succeeded"] is True
+            assert len(result["results"]) == 2
+            
+            # Check individual results
+            assert result["results"][0]["language"] == "python"
+            assert result["results"][0]["success"] is True
+            assert result["results"][1]["language"] == "rust"
+            assert result["results"][1]["success"] is True
+        finally:
+            os.unlink(py_path)
+            os.unlink(rs_path)
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_files_batch_max_workers(self):
+        """Test batch parsing with max_workers parameter."""
+        from code_puppy.turbo_parse_bridge import parse_files_batch
+        
+        # Create multiple temp files
+        temp_files = []
+        for i in range(3):
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(f"def func_{i}(): return {i}\n")
+                temp_files.append(f.name)
+        
+        try:
+            result = parse_files_batch(temp_files, max_workers=2)
+            
+            assert result["files_processed"] == 3
+            assert result["success_count"] == 3
+            assert result["error_count"] == 0
+            assert result["all_succeeded"] is True
+            assert len(result["results"]) == 3
+        finally:
+            for path in temp_files:
+                os.unlink(path)
+    
+    @pytest.mark.skipif(not TURBO_PARSE_AVAILABLE, reason="turbo_parse Rust module not installed")
+    def test_parse_files_batch_mixed_success_failure(self):
+        """Test batch parsing with mix of successful and failed files."""
+        from code_puppy.turbo_parse_bridge import parse_files_batch
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write("def valid(): pass\n")
+            valid_path = f.name
+        
+        invalid_path = "/nonexistent/path/file.py"
+        
+        try:
+            result = parse_files_batch([valid_path, invalid_path])
+            
+            assert result["files_processed"] == 2
+            assert result["success_count"] == 1
+            assert result["error_count"] == 1
+            assert result["all_succeeded"] is False
+            assert len(result["results"]) == 2
+            
+            # First file should succeed
+            assert result["results"][0]["success"] is True
+            # Second file should fail
+            assert result["results"][1]["success"] is False
+            assert len(result["results"][1]["errors"]) > 0
+        finally:
+            os.unlink(valid_path)
+    
+    def test_fallback_parse_files_batch_stub(self):
+        """Test fallback parse_files_batch stub when module unavailable."""
+        from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
+        
+        if TURBO_PARSE_AVAILABLE:
+            pytest.skip("turbo_parse is available - fallback not active")
+        
+        from code_puppy.turbo_parse_bridge import parse_files_batch
+        
+        result = parse_files_batch(["file1.py", "file2.py"])
+        
+        assert result["files_processed"] == 2
+        assert result["success_count"] == 0
+        assert result["error_count"] == 2
+        assert result["all_succeeded"] is False
+        assert len(result["results"]) == 2
+        
+        for r in result["results"]:
+            assert r["success"] is False
+            assert any("not available" in str(e.get("message", "")) for e in r.get("errors", []))
