@@ -34,6 +34,7 @@ It also handles request/response correlation for user interactions:
 
 import asyncio
 import threading
+from collections import deque
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -99,8 +100,8 @@ class MessageBus:
         # runs, then reused for call_soon_threadsafe cross-thread puts.
         self._event_loop: asyncio.AbstractEventLoop | None = None
 
-        # Startup buffering
-        self._startup_buffer: list[AnyMessage] = []
+        # Startup buffering: deque with maxlen for O(1) append + auto-eviction
+        self._startup_buffer: deque[AnyMessage] = deque(maxlen=self._maxsize)
         self._has_active_renderer = False
 
         # Lock-free fast path: Event is set when renderer is active.
@@ -153,9 +154,7 @@ class MessageBus:
                 if message.session_id is None and self._current_session_id is not None:
                     message.session_id = self._current_session_id
                 self._startup_buffer.append(message)
-                # Prevent unbounded buffer growth in headless mode
-                if len(self._startup_buffer) > self._maxsize:
-                    self._startup_buffer = self._startup_buffer[-self._maxsize :]
+                # deque with maxlen handles eviction automatically (O(1))
             return
 
         # Renderer is active - need to acquire lock for session tagging and delivery
@@ -166,8 +165,7 @@ class MessageBus:
             # Double-check renderer status (could have changed)
             if not self._has_active_renderer:
                 self._startup_buffer.append(message)
-                if len(self._startup_buffer) > self._maxsize:
-                    self._startup_buffer = self._startup_buffer[-self._maxsize :]
+                # deque with maxlen handles eviction automatically (O(1))
                 return
 
             # Thread-safe put: if already on the event loop thread, call

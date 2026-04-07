@@ -7,6 +7,7 @@ queue management, and async/sync operation.
 
 import asyncio
 import threading
+from collections import deque
 from unittest.mock import patch
 
 import pytest
@@ -35,7 +36,8 @@ class TestMessageBusInitialization:
         assert isinstance(bus._incoming, asyncio.Queue)
         assert bus._current_session_id is None
         assert not bus._has_active_renderer
-        assert bus._startup_buffer == []
+        assert isinstance(bus._startup_buffer, deque)
+        assert len(bus._startup_buffer) == 0
 
     def test_initialization_custom_maxsize(self):
         """Test initialization with custom maxsize."""
@@ -56,7 +58,7 @@ class TestMessageBusEmission:
     def test_emit_text_message(self):
         """Test emitting a text message."""
         bus = MessageBus()
-        bus._has_active_renderer = True
+        bus.mark_renderer_active()
         message = TextMessage(level=MessageLevel.INFO, text="Hello")
         bus.emit(message)
         assert not bus._outgoing.empty()
@@ -76,7 +78,7 @@ class TestMessageBusEmission:
     def test_emit_info(self):
         """Test emit_info helper method."""
         bus = MessageBus()
-        bus._has_active_renderer = True
+        bus.mark_renderer_active()
         bus.emit_info("Info message")
         assert not bus._outgoing.empty()
         msg = bus._outgoing.get_nowait()
@@ -86,7 +88,7 @@ class TestMessageBusEmission:
     def test_emit_warning(self):
         """Test emit_warning helper method."""
         bus = MessageBus()
-        bus._has_active_renderer = True
+        bus.mark_renderer_active()
         bus.emit_warning("Warning!")
         msg = bus._outgoing.get_nowait()
         assert msg.level == MessageLevel.WARNING
@@ -94,7 +96,7 @@ class TestMessageBusEmission:
     def test_emit_error(self):
         """Test emit_error helper method."""
         bus = MessageBus()
-        bus._has_active_renderer = True
+        bus.mark_renderer_active()
         bus.emit_error("Error!")
         msg = bus._outgoing.get_nowait()
         assert msg.level == MessageLevel.ERROR
@@ -102,7 +104,7 @@ class TestMessageBusEmission:
     def test_emit_success(self):
         """Test emit_success helper method."""
         bus = MessageBus()
-        bus._has_active_renderer = True
+        bus.mark_renderer_active()
         bus.emit_success("Success!")
         msg = bus._outgoing.get_nowait()
         assert msg.level == MessageLevel.SUCCESS
@@ -110,7 +112,7 @@ class TestMessageBusEmission:
     def test_emit_debug(self):
         """Test emit_debug helper method."""
         bus = MessageBus()
-        bus._has_active_renderer = True
+        bus.mark_renderer_active()
         bus.emit_debug("Debug info")
         msg = bus._outgoing.get_nowait()
         assert msg.level == MessageLevel.DEBUG
@@ -118,7 +120,7 @@ class TestMessageBusEmission:
     def test_emit_text_with_level_and_category(self):
         """Test emit_text with custom level and category."""
         bus = MessageBus()
-        bus._has_active_renderer = True
+        bus.mark_renderer_active()
         bus.emit_text(
             level=MessageLevel.ERROR,
             text="Error occurred",
@@ -131,7 +133,7 @@ class TestMessageBusEmission:
     def test_emit_auto_tags_with_session_id(self):
         """Test that emit auto-tags messages with session_id."""
         bus = MessageBus()
-        bus._has_active_renderer = True
+        bus.mark_renderer_active()
         bus.set_session_context("session-123")
         message = TextMessage(level=MessageLevel.INFO, text="Test")
         bus.emit(message)
@@ -141,7 +143,7 @@ class TestMessageBusEmission:
     def test_emit_respects_existing_session_id(self):
         """Test that emit respects existing session_id."""
         bus = MessageBus()
-        bus._has_active_renderer = True
+        bus.mark_renderer_active()
         bus.set_session_context("session-123")
         message = TextMessage(
             level=MessageLevel.INFO, text="Test", session_id="custom-id"
@@ -153,7 +155,7 @@ class TestMessageBusEmission:
     def test_emit_queue_full_drops_oldest(self):
         """Test that full queue drops oldest message."""
         bus = MessageBus(maxsize=2)
-        bus._has_active_renderer = True
+        bus.mark_renderer_active()
         bus.emit(TextMessage(level=MessageLevel.INFO, text="msg1"))
         bus.emit(TextMessage(level=MessageLevel.INFO, text="msg2"))
         bus.emit(TextMessage(level=MessageLevel.INFO, text="msg3"))
@@ -459,7 +461,7 @@ class TestQueueAccess:
     def test_get_message_nowait(self):
         """Test non-blocking message retrieval."""
         bus = MessageBus()
-        bus._has_active_renderer = True
+        bus.mark_renderer_active()
         msg = TextMessage(level=MessageLevel.INFO, text="test")
         bus.emit(msg)
 
@@ -493,7 +495,7 @@ class TestBufferedMessages:
     def test_get_buffered_messages_empty(self):
         """Test getting buffered messages when none exist."""
         bus = MessageBus()
-        assert bus.get_buffered_messages() == []
+        assert len(bus.get_buffered_messages()) == 0
 
     def test_get_buffered_messages(self):
         """Test getting buffered messages."""
@@ -528,8 +530,9 @@ class TestBufferedMessages:
         assert len(bus._startup_buffer) == 1
         assert bus._outgoing.empty()
 
-        # Activate renderer
-        bus._has_active_renderer = True
+        # Activate renderer - note: previously buffered messages stay in buffer
+        # New messages go to queue
+        bus.mark_renderer_active()
         msg2 = TextMessage(level=MessageLevel.INFO, text="test2")
         bus.emit(msg2)
 
@@ -545,7 +548,7 @@ class TestThreadSafety:
     def test_concurrent_emit(self):
         """Test concurrent message emission."""
         bus = MessageBus()
-        bus._has_active_renderer = True
+        bus.mark_renderer_active()
         results = []
 
         def emit_messages(thread_id):
