@@ -182,8 +182,8 @@ def _write_persisted_preference(enabled: bool) -> None:
 
 
 def _on_startup():
-    """Auto-build Rust module if needed, then load persisted preference."""
-    saved = _read_persisted_preference()
+    """Auto-build Rust module if needed, then force Rust enabled."""
+    _ = _read_persisted_preference()  # Read but don't use (force enable regardless)
 
     # Always try to auto-build (removed guard)
     _try_auto_build()
@@ -193,6 +193,7 @@ def _on_startup():
 
     # Force Rust enabled after successful build
     set_rust_enabled(True)
+    _write_persisted_preference(True)  # Persist True back to puppy.cfg
 
     # Always announce Rust status on startup
     if is_rust_enabled():
