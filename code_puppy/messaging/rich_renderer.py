@@ -7,6 +7,7 @@ The renderer is responsible for ALL presentation decisions - the messages contai
 only structured data with no formatting hints.
 """
 
+import os
 from typing import Protocol, runtime_checkable
 
 from rich.console import Console
@@ -94,6 +95,81 @@ DIFF_STYLES = {
     "add": "green",
     "remove": "red",
     "context": "dim",
+}
+
+# Mapping of message levels to prefix icons
+_LEVEL_PREFIXES: dict[MessageLevel, str] = {
+    MessageLevel.ERROR: "✗ ",
+    MessageLevel.WARNING: "⚠ ",
+    MessageLevel.SUCCESS: "✓ ",
+    MessageLevel.INFO: "ℹ ",
+    MessageLevel.DEBUG: "• ",
+}
+
+# Mapping of file extensions to emoji icons
+_FILE_ICONS: dict[str, str] = {
+    # Python
+    ".py": "🐍",
+    ".pyw": "🐍",
+    # JavaScript/TypeScript
+    ".js": "📜",
+    ".jsx": "📜",
+    ".ts": "📜",
+    ".tsx": "📜",
+    # Web
+    ".html": "🌐",
+    ".htm": "🌐",
+    ".xml": "🌐",
+    ".css": "🎨",
+    ".scss": "🎨",
+    ".sass": "🎨",
+    # Documentation
+    ".md": "📝",
+    ".markdown": "📝",
+    ".rst": "📝",
+    ".txt": "📝",
+    # Config
+    ".json": "⚙️",
+    ".yaml": "⚙️",
+    ".yml": "⚙️",
+    ".toml": "⚙️",
+    ".ini": "⚙️",
+    # Images
+    ".jpg": "🖼️",
+    ".jpeg": "🖼️",
+    ".png": "🖼️",
+    ".gif": "🖼️",
+    ".svg": "🖼️",
+    ".webp": "🖼️",
+    # Audio
+    ".mp3": "🎵",
+    ".wav": "🎵",
+    ".ogg": "🎵",
+    ".flac": "🎵",
+    # Video
+    ".mp4": "🎬",
+    ".avi": "🎬",
+    ".mov": "🎬",
+    ".webm": "🎬",
+    # Documents
+    ".pdf": "📄",
+    ".doc": "📄",
+    ".docx": "📄",
+    ".xls": "📄",
+    ".xlsx": "📄",
+    ".ppt": "📄",
+    ".pptx": "📄",
+    # Archives
+    ".zip": "📦",
+    ".tar": "📦",
+    ".gz": "📦",
+    ".rar": "📦",
+    ".7z": "📦",
+    # Executables
+    ".exe": "⚡",
+    ".dll": "⚡",
+    ".so": "⚡",
+    ".dylib": "⚡",
 }
 
 
@@ -360,14 +436,7 @@ class RichConsoleRenderer:
 
     def _get_level_prefix(self, level: MessageLevel) -> str:
         """Get a prefix icon for the message level."""
-        prefixes = {
-            MessageLevel.ERROR: "✗ ",
-            MessageLevel.WARNING: "⚠ ",
-            MessageLevel.SUCCESS: "✓ ",
-            MessageLevel.INFO: "ℹ ",
-            MessageLevel.DEBUG: "• ",
-        }
-        return prefixes.get(level, "")
+        return _LEVEL_PREFIXES.get(level, "")
 
     # =========================================================================
     # File Operations
@@ -1018,74 +1087,8 @@ class RichConsoleRenderer:
 
     def _get_file_icon(self, file_path: str) -> str:
         """Get an emoji icon for a file based on its extension."""
-        import os
-
         ext = os.path.splitext(file_path)[1].lower()
-        icons = {
-            # Python
-            ".py": "🐍",
-            ".pyw": "🐍",
-            # JavaScript/TypeScript
-            ".js": "📜",
-            ".jsx": "📜",
-            ".ts": "📜",
-            ".tsx": "📜",
-            # Web
-            ".html": "🌐",
-            ".htm": "🌐",
-            ".xml": "🌐",
-            ".css": "🎨",
-            ".scss": "🎨",
-            ".sass": "🎨",
-            # Documentation
-            ".md": "📝",
-            ".markdown": "📝",
-            ".rst": "📝",
-            ".txt": "📝",
-            # Config
-            ".json": "⚙️",
-            ".yaml": "⚙️",
-            ".yml": "⚙️",
-            ".toml": "⚙️",
-            ".ini": "⚙️",
-            # Images
-            ".jpg": "🖼️",
-            ".jpeg": "🖼️",
-            ".png": "🖼️",
-            ".gif": "🖼️",
-            ".svg": "🖼️",
-            ".webp": "🖼️",
-            # Audio
-            ".mp3": "🎵",
-            ".wav": "🎵",
-            ".ogg": "🎵",
-            ".flac": "🎵",
-            # Video
-            ".mp4": "🎬",
-            ".avi": "🎬",
-            ".mov": "🎬",
-            ".webm": "🎬",
-            # Documents
-            ".pdf": "📄",
-            ".doc": "📄",
-            ".docx": "📄",
-            ".xls": "📄",
-            ".xlsx": "📄",
-            ".ppt": "📄",
-            ".pptx": "📄",
-            # Archives
-            ".zip": "📦",
-            ".tar": "📦",
-            ".gz": "📦",
-            ".rar": "📦",
-            ".7z": "📦",
-            # Executables
-            ".exe": "⚡",
-            ".dll": "⚡",
-            ".so": "⚡",
-            ".dylib": "⚡",
-        }
-        return icons.get(ext, "📄")
+        return _FILE_ICONS.get(ext, "📄")
 
     # =========================================================================
     # Skills
