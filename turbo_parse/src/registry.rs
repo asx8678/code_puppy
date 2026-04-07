@@ -95,7 +95,7 @@ impl LanguageRegistry {
             "py" => "python",
             "js" => "javascript",
             "ts" => "typescript",
-            "ex" => "elixir",
+            "ex" | "exs" => "elixir",
             _ => &normalized,
         };
 

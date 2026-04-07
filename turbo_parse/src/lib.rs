@@ -123,7 +123,7 @@ fn extract_syntax_diagnostics<'py>(py: Python<'py>, source: &str, language: &str
         "py" => "python",
         "js" => "javascript",
         "ts" => "typescript",
-        "ex" => "elixir",
+        "ex" | "exs" => "elixir",
         _ => &lang_name,
     };
 
