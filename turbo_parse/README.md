@@ -12,6 +12,7 @@ High-performance parsing with tree-sitter and PyO3 bindings for Code Puppy.
 - **Blazing Fast**: Rust-powered parsing with tree-sitter, GIL release during CPU-intensive operations
 - **Multi-Language**: Support for Python, Rust, JavaScript, TypeScript, TSX, and Elixir
 - **Symbol Extraction**: Extract functions, classes, methods, imports with precise location info
+- **Syntax Highlighting**: Extract highlight regions with byte positions using Helix Editor queries
 - **Diagnostics**: Syntax error detection with detailed position information
 - **Caching**: LRU cache for parsed trees to avoid re-parsing unchanged files
 - **Incremental Parsing**: Fast re-parsing with tree reuse for editor-like use cases
@@ -237,6 +238,64 @@ import turbo_parse
 result = turbo_parse.extract_symbols_from_file("src/main.py")
 for symbol in result['symbols']:
     print(f"{symbol['kind']}: {symbol['name']} (line {symbol['start_line']})")
+```
+
+### Syntax Highlighting
+
+Extract syntax highlighting regions from source code using tree-sitter queries from the Helix Editor project.
+
+```python
+import turbo_parse
+
+source = """
+def greet(name: str) -> str:
+    # Return a greeting message
+    return f"Hello, {name}!"
+"""
+
+result = turbo_parse.get_highlights(source, "python")
+print(f"Found {len(result['captures'])} highlight regions")
+print(f"Time: {result['extraction_time_ms']:.2f}ms")
+
+# Each capture has:
+#   - start_byte: int - start byte position (0-indexed, inclusive)
+#   - end_byte: int - end byte position (0-indexed, exclusive)
+#   - capture_name: str - the highlight type (e.g., "keyword", "string", "comment")
+for cap in result['captures'][:5]:  # Show first 5
+    text = source[cap['start_byte']:cap['end_byte']]
+    print(f"  {cap['capture_name']:20} | {text!r}")
+```
+
+**Example output:**
+```
+Found 12 highlight regions
+Time: 0.45ms
+  keyword.function     | 'def'
+  function             | 'greet'
+  variable.parameter   | 'name'
+  punctuation          | ':'
+  type                 | 'str'
+```
+
+**Capture names** follow Helix Editor conventions:
+- `keyword` / `keyword.function` / `keyword.control` - Language keywords
+- `string` / `string.template` - String literals
+- `comment` / `comment.line` / `comment.block` - Comments
+- `function` / `function.method` / `function.builtin` - Functions
+- `type` / `type.builtin` - Type names
+- `variable` / `variable.parameter` / `variable.builtin` - Variables
+- `constant` / `constant.builtin` / `constant.numeric` - Constants
+- `operator` / `punctuation` - Operators and punctuation
+
+**Highlight from file:**
+```python
+import turbo_parse
+
+# Auto-detect language from extension
+result = turbo_parse.get_highlights_from_file("src/main.py")
+
+# Or specify language explicitly
+result = turbo_parse.get_highlights_from_file("some_file.txt", language="python")
 ```
 
 ### Syntax Diagnostics
@@ -587,6 +646,15 @@ turbo_parse is organized into several modules that work together:
   - Symbol kind classification (function, class, method, import, etc.)
   - Position tracking (line, column, byte offsets)
 
+#### `highlights` — Syntax Highlighting
+- **Purpose**: Extract syntax highlighting regions using tree-sitter queries
+- **Key Functions**: `get_highlights()`, `get_highlights_from_file()`
+- **Features**:
+  - Helix Editor query compatibility
+  - Byte-accurate position tracking
+  - Ordered capture output
+  - Query caching via `HighlightContext` for performance
+
 #### `diagnostics` — Syntax Error Detection
 - **Purpose**: Extract ERROR and MISSING nodes from tree-sitter trees
 - **Key Functions**: `extract_diagnostics()`
@@ -792,6 +860,8 @@ See [CI.md](./CI.md) for detailed information about:
 | `parse_file()` | `(path: str, language: str=None) -> dict` | Parse file from disk |
 | `extract_symbols()` | `(source: str, language: str) -> dict` | Extract symbols from source |
 | `extract_symbols_from_file()` | `(path: str, language: str=None) -> dict` | Extract symbols from file |
+| `get_highlights()` | `(source: str, language: str) -> dict` | Get syntax highlights from source |
+| `get_highlights_from_file()` | `(path: str, language: str=None) -> dict` | Get syntax highlights from file |
 | `extract_syntax_diagnostics()` | `(source: str, language: str) -> dict` | Get syntax errors |
 | `parse_files_batch()` | `(paths: list[str], max_workers: int=None) -> dict` | Parse files in parallel |
 | `init_cache()` | `(capacity: int=None) -> dict` | Initialize parse cache |
