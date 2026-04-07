@@ -1370,12 +1370,30 @@ def _find_best_window(
     # Pre-join the needle once for comparison
     needle_joined = "\n".join(needle_lines)
 
+    # Pre-filter: Get first line of needle for cheap similarity pre-check
+    needle_first_line = needle_lines[0] if needle_lines else ""
+    needle_first_len = len(needle_first_line)
+
     # Calculate cumulative line offsets for O(1) window length estimation
     # This lets us quickly skip windows that are too different in size
     haystack_len = len(haystack_lines)
     max_start = haystack_len - win_size + 1
 
     for i in range(max_start):
+        # Pre-filter 1: Quick first-line length check
+        # If first line lengths differ significantly, skip this window
+        window_first_line = haystack_lines[i]
+        window_first_len = len(window_first_line)
+        # Skip if first line length differs by more than 50%
+        if needle_first_len > 0 and abs(window_first_len - needle_first_len) > needle_first_len * 0.5:
+            continue
+
+        # Pre-filter 2: If lengths are close, check first char similarity
+        # Skip if first characters don't match at all (common case rejection)
+        if needle_first_line and window_first_line:
+            if needle_first_line[0] != window_first_line[0]:
+                continue
+
         # Fast path: estimate window size by line count (already known)
         # Skip windows that are wildly different in character count
         # Only compute full join when length is reasonably close
