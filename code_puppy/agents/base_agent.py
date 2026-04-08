@@ -1292,6 +1292,26 @@ class BaseAgent(ABC, AgentPromptMixin):
         self._state.tool_ids_cache = (cache_key, result)
         return result
 
+    def _check_pending_tool_calls(
+        self, messages: list[ModelMessage]
+    ) -> tuple[bool, int]:
+        """Check for pending tool calls and return both existence flag and count.
+
+        This single-pass method returns both whether there are pending tool calls
+        and how many, avoiding duplicate traversal when both values are needed.
+
+        Args:
+            messages: Message history to check
+
+        Returns:
+            Tuple of (has_pending: bool, pending_count: int)
+        """
+        if not messages:
+            return False, 0
+        tool_call_ids, tool_return_ids = self._collect_tool_call_ids(messages)
+        pending = tool_call_ids - tool_return_ids
+        return bool(pending), len(pending)
+
     def has_pending_tool_calls(self, messages: list[ModelMessage]) -> bool:
         """
         Check if there are any pending tool calls in the message history.
@@ -1302,10 +1322,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         Returns:
             True if there are pending tool calls, False otherwise
         """
-        if not messages:
-            return False
-        tool_call_ids, tool_return_ids = self._collect_tool_call_ids(messages)
-        return bool(tool_call_ids - tool_return_ids)
+        return self._check_pending_tool_calls(messages)[0]
 
     def request_delayed_compaction(self) -> None:
         """
@@ -1376,10 +1393,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         Returns:
             Number of tool calls waiting for execution
         """
-        if not messages:
-            return 0
-        tool_call_ids, tool_return_ids = self._collect_tool_call_ids(messages)
-        return len(tool_call_ids - tool_return_ids)
+        return self._check_pending_tool_calls(messages)[1]
 
     def prune_interrupted_tool_calls(
         self,
@@ -1519,19 +1533,18 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         if proportion_used > compaction_threshold:
             # RACE CONDITION PROTECTION: Check for pending tool calls before summarization
-            if compaction_strategy == "summarization" and self.has_pending_tool_calls(
-                messages
-            ):
-                pending_count = self.get_pending_tool_call_count(messages)
-                emit_warning(
-                    f"⚠️  Summarization deferred: {pending_count} pending tool call(s) detected. "
-                    "Waiting for tool execution to complete before compaction.",
-                    message_group="token_context_status",
-                )
-                # Request delayed compaction for when tool calls complete
-                self.request_delayed_compaction()
-                # Return original messages without compaction
-                return messages, []
+            if compaction_strategy == "summarization":
+                has_pending, pending_count = self._check_pending_tool_calls(messages)
+                if has_pending:
+                    emit_warning(
+                        f"⚠️  Summarization deferred: {pending_count} pending tool call(s) detected. "
+                        "Waiting for tool execution to complete before compaction.",
+                        message_group="token_context_status",
+                    )
+                    # Request delayed compaction for when tool calls complete
+                    self.request_delayed_compaction()
+                    # Return original messages without compaction
+                    return messages, []
 
             if compaction_strategy == "truncation":
                 # Use truncation instead of summarization
