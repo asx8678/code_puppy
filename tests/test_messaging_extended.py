@@ -192,8 +192,7 @@ class TestMessagingExtended:
         assert "Buffered message 1" in contents
         assert "Buffered message 2" in contents
 
-        # Clear buffer and mark renderer active
-        self.queue.clear_startup_buffer()
+        # Buffer was drained by the get_buffered_messages() call above (swap-and-clear)
         self.queue.mark_renderer_active()
 
         # Now messages should go to main queue

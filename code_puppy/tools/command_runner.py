@@ -536,12 +536,12 @@ def set_awaiting_user_input(awaiting=True):
 
 class ShellCommandOutput(BaseModel):
     success: bool
-    command: str | None
+    command: str | None = None
     error: str | None = ""
-    stdout: str | None
-    stderr: str | None
-    exit_code: int | None
-    execution_time: float | None
+    stdout: str | None = None
+    stderr: str | None = None
+    exit_code: int | None = None
+    execution_time: float | None = None
     timeout: bool | None = False
     user_interrupted: bool | None = False
     user_feedback: str | None = None  # User feedback when command is rejected
@@ -1206,6 +1206,7 @@ def run_shell_command_streaming(
             stdout="\n".join(list(stdout_lines)[-256:]),
             stderr="\n".join(list(stderr_lines)[-256:]),
             exit_code=-1,
+            execution_time=time.time() - start_time,
             timeout=False,
         )
 
@@ -1355,7 +1356,13 @@ async def run_shell_command(
     if not command or not command.strip():
         emit_error("Command cannot be empty", message_group=group_id)
         return ShellCommandOutput(
-            **{"success": False, "error": "Command cannot be empty"}
+            success=False,
+            command=command,
+            error="Command cannot be empty",
+            stdout=None,
+            stderr=None,
+            exit_code=None,
+            execution_time=None,
         )
 
     from code_puppy.config import get_yolo_mode
@@ -1376,6 +1383,10 @@ async def run_shell_command(
                 success=False,
                 command=command,
                 error="Another command is currently awaiting confirmation",
+                stdout=None,
+                stderr=None,
+                exit_code=None,
+                execution_time=None,
             )
 
         # Get puppy name for personalized messages
@@ -1521,7 +1532,6 @@ def _run_command_sync(
         text=True,
         encoding="utf-8",
         errors="replace",
-        newline="",
     )
     _register_process(process)
     try:
@@ -1575,6 +1585,7 @@ async def _run_command_inner(
             stdout=truncated_stdout,
             stderr=truncated_stderr,
             exit_code=-1,
+            execution_time=None,
             timeout=False,
         )
 

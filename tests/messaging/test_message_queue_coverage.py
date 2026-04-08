@@ -631,14 +631,17 @@ class TestEmitQueueFullEdgeCase:
 
 
 class TestStartupBuffer:
-    """Tests for startup buffer and clear_startup_buffer."""
+    """Tests for startup buffer (swap-and-clear via get_buffered_messages)."""
 
-    def test_clear_startup_buffer(self):
+    def test_get_buffered_messages_drains_buffer(self):
         mq = MessageQueue()
         msg = UIMessage(type=MessageType.INFO, content="buffered")
         mq.emit(msg)  # No active renderer, goes to buffer
         assert len(mq._startup_buffer) == 1
-        mq.clear_startup_buffer()
+        # Swap-and-clear: draining returns the messages and empties the buffer
+        drained = mq.get_buffered_messages()
+        assert len(drained) == 1
+        assert drained[0].content == "buffered"
         assert len(mq._startup_buffer) == 0
 
     def test_emit_without_active_renderer_buffers(self):

@@ -360,13 +360,14 @@ def test_get_buffered_messages(bus):
     bus.emit(msg)
     buffered = bus.get_buffered_messages()
     assert len(buffered) == 1
-    # Original buffer unchanged
-    assert len(bus._startup_buffer) == 1
+    # Swap-and-clear: buffer is atomically drained on read
+    assert len(bus._startup_buffer) == 0
 
 
-def test_clear_buffer(bus):
+def test_get_buffered_messages_drains_buffer(bus):
     bus.emit(TextMessage(level=MessageLevel.INFO, text="buf"))
-    bus.clear_buffer()
+    # get_buffered_messages() uses swap-and-clear, draining the buffer
+    bus.get_buffered_messages()
     assert len(bus._startup_buffer) == 0
 
 

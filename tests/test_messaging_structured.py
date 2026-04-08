@@ -231,7 +231,7 @@ class TestMixedMessageTypes:
 
         bus = get_message_bus()
         bus.mark_renderer_active()
-        bus.clear_buffer()  # Clear any buffered messages
+        bus.get_buffered_messages()  # Drain any buffered messages (swap-and-clear)
 
         # Use global function
         emit_shell_line("Global shell line", stream="stderr")

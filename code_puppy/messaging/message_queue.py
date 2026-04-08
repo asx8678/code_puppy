@@ -68,6 +68,7 @@ class MessageQueue:
     """Thread-safe message queue for UI messages."""
 
     def __init__(self, maxsize: int = 1000):
+        self._maxsize = maxsize  # Used by get_buffered_messages swap-and-clear
         self._queue = queue.Queue(maxsize=maxsize)
         self._async_queue = None  # Will be created when needed
         self._async_queue_maxsize = maxsize

@@ -311,7 +311,6 @@ class RichConsoleRenderer:
         # First, process any buffered messages
         for msg in self._bus.get_buffered_messages():
             self._render_sync(msg)
-        self._bus.clear_buffer()
 
         # Register wakeup callback so bus can signal us when new messages arrive
         self._bus.register_wakeup_callback(self._wakeup)
@@ -351,7 +350,6 @@ class RichConsoleRenderer:
         # Process any buffered messages first
         for msg in self._bus.get_buffered_messages():
             self._render_sync(msg)
-        self._bus.clear_buffer()
 
     async def stop_async(self) -> None:
         """Stop the renderer asynchronously."""

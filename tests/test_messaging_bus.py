@@ -510,14 +510,15 @@ class TestBufferedMessages:
         assert buffered[0].text == "msg1"
         assert buffered[1].text == "msg2"
 
-    def test_clear_buffer(self):
-        """Test clearing the startup buffer."""
+    def test_get_buffered_messages_swap_and_clear(self):
+        """get_buffered_messages() atomically drains the startup buffer."""
         bus = MessageBus()
         msg = TextMessage(level=MessageLevel.INFO, text="test")
         bus.emit(msg)
 
+        # First call returns the buffered message AND clears the buffer
         assert len(bus.get_buffered_messages()) == 1
-        bus.clear_buffer()
+        # Subsequent call sees an empty buffer
         assert len(bus.get_buffered_messages()) == 0
 
     def test_activate_renderer_flushes_buffer(self):

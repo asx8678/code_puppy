@@ -168,14 +168,16 @@ class TestMessageQueueBuffering:
         retrieved = queue._queue.get_nowait()
         assert retrieved.content == "Second"
 
-    def test_clear_buffer(self):
-        """Test clearing the message buffer."""
+    def test_get_buffered_messages_drains_buffer(self):
+        """get_buffered_messages() uses swap-and-clear to drain the startup buffer."""
         queue = MessageQueue()
         for i in range(3):
             msg = UIMessage(type=MessageType.INFO, content=f"Msg {i}")
             queue.emit(msg)
         assert len(queue._startup_buffer) == 3
-        queue.clear_startup_buffer()
+        # Swap-and-clear: calling get_buffered_messages atomically empties the buffer
+        drained = queue.get_buffered_messages()
+        assert len(drained) == 3
         assert len(queue._startup_buffer) == 0
 
 
@@ -408,15 +410,11 @@ class TestMessageQueueLifecycle:
         # Buffer should still have message
         assert msg1 in queue._startup_buffer
 
-        # Get buffered messages
+        # Get buffered messages (swap-and-clear: returns the messages AND empties buffer)
         buffered = queue.get_buffered_messages()
         assert len(buffered) == 1
 
-        # Buffer still there until cleared
-        assert msg1 in queue._startup_buffer
-
-        # Clear it
-        queue.clear_startup_buffer()
+        # Buffer is drained atomically
         assert len(queue._startup_buffer) == 0
 
     def test_renderer_state_affects_buffering(self):

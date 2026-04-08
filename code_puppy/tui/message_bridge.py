@@ -116,8 +116,8 @@ class TUIMessageBridge:
         queue.mark_renderer_active()
 
         # Flush messages that were buffered before any renderer was active.
+        # get_buffered_messages() uses swap-and-clear, so the buffer is drained atomically.
         buffered = queue.get_buffered_messages()
-        queue.clear_startup_buffer()
         for msg in buffered:
             self._render_queue_message(msg)
 
