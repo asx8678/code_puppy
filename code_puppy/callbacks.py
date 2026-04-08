@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 import traceback
 from typing import Any, Callable, Literal
 
@@ -90,69 +91,84 @@ _callbacks: dict[PhaseType, list[CallbackFunc]] = {
 
 logger = logging.getLogger(__name__)
 
+# Thread-safety lock for _callbacks dict access
+# Using RLock to allow nested locking (safety guard for complex scenarios)
+_callbacks_lock = threading.RLock()
+
 
 def register_callback(phase: PhaseType, func: CallbackFunc) -> None:
-    if phase not in _callbacks:
-        raise ValueError(
-            f"Unsupported phase: {phase}. Supported phases: {list(_callbacks.keys())}"
-        )
+    with _callbacks_lock:
+        if phase not in _callbacks:
+            raise ValueError(
+                f"Unsupported phase: {phase}. Supported phases: {list(_callbacks.keys())}"
+            )
 
-    if not callable(func):
-        raise TypeError(f"Callback must be callable, got {type(func)}")
+        if not callable(func):
+            raise TypeError(f"Callback must be callable, got {type(func)}")
 
-    # Prevent duplicate registration of the same callback function
-    # This can happen if plugins are accidentally loaded multiple times
-    if func in _callbacks[phase]:
-        logger.debug(
-            f"Callback {func.__name__} already registered for phase '{phase}', skipping"
-        )
-        return
+        # Prevent duplicate registration of the same callback function
+        # This can happen if plugins are accidentally loaded multiple times
+        if func in _callbacks[phase]:
+            logger.debug(
+                f"Callback {func.__name__} already registered for phase '{phase}', skipping"
+            )
+            return
 
-    _callbacks[phase].append(func)
+        _callbacks[phase].append(func)
     # Mark this phase as having had a listener (for _backlog early-exit optimization)
+    # Note: this call is outside the lock to prevent lock contention with _backlog
     _backlog.mark_phase_as_having_listener(phase)
     logger.debug(f"Registered async callback {func.__name__} for phase '{phase}'")
 
 
 def unregister_callback(phase: PhaseType, func: CallbackFunc) -> bool:
-    if phase not in _callbacks:
-        return False
+    with _callbacks_lock:
+        if phase not in _callbacks:
+            return False
 
-    try:
-        _callbacks[phase].remove(func)
-        logger.debug(
-            f"Unregistered async callback {func.__name__} from phase '{phase}'"
-        )
-        return True
-    except ValueError:
-        return False
+        try:
+            _callbacks[phase].remove(func)
+            logger.debug(
+                f"Unregistered async callback {func.__name__} from phase '{phase}'"
+            )
+            return True
+        except ValueError:
+            return False
 
 
 def clear_callbacks(phase: PhaseType | None = None) -> None:
+    with _callbacks_lock:
+        if phase is None:
+            for p in _callbacks:
+                _callbacks[p].clear()
+        else:
+            if phase in _callbacks:
+                _callbacks[phase].clear()
+    # _backlog calls outside the lock to prevent lock contention
     if phase is None:
-        for p in _callbacks:
-            _callbacks[p].clear()
         _backlog.clear()
         logger.debug("Cleared all async callbacks")
     else:
-        if phase in _callbacks:
-            _callbacks[phase].clear()
-            _backlog.clear(phase)
-            logger.debug(f"Cleared async callbacks for phase '{phase}'")
+        _backlog.clear(phase)
+        logger.debug(f"Cleared async callbacks for phase '{phase}'")
 
 
 def get_callbacks(phase: PhaseType) -> tuple[CallbackFunc, ...]:
     """Return an immutable snapshot of callbacks for the given phase.
 
     Returns a tuple (cheaper than list.copy()) to prevent accidental mutation.
+    Thread-safe: takes a snapshot while holding the lock to prevent
+    concurrent modification during iteration.
     """
-    return tuple(_callbacks.get(phase, ()))
+    with _callbacks_lock:
+        return tuple(_callbacks.get(phase, ()))
 
 
 def count_callbacks(phase: PhaseType | None = None) -> int:
-    if phase is None:
-        return sum(len(callbacks) for callbacks in _callbacks.values())
-    return len(_callbacks.get(phase, []))
+    with _callbacks_lock:
+        if phase is None:
+            return sum(len(callbacks) for callbacks in _callbacks.values())
+        return len(_callbacks.get(phase, []))
 
 
 def _ensure_plugins_loaded_for_phase(phase: PhaseType) -> None:
