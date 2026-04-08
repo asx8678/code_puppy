@@ -15,7 +15,6 @@ from typing import Any, Callable, Sequence
 
 import mcp
 import pydantic
-import pydantic_ai.models
 from dbos import DBOS, SetWorkflowID
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai import (
@@ -34,12 +33,7 @@ from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
 from code_puppy._core_bridge import serialize_messages_for_rust
 
 if RUST_AVAILABLE:
-    from code_puppy._core_bridge import (
-        process_messages_batch,
-        prune_and_filter,
-        split_for_summarization as rust_split_for_summarization,
-        truncation_indices as rust_truncation_indices,
-    )
+    pass
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -59,7 +53,6 @@ from code_puppy.agents.agent_state import AgentRuntimeState
 from code_puppy.agents.event_stream_handler import event_stream_handler
 from code_puppy.callbacks import (
     count_callbacks,
-    get_callbacks,
     on_agent_exception,
     on_agent_run_end,
     on_agent_run_start,
