@@ -391,10 +391,16 @@ async def _list_files(
         else:
             return "\U0001f4c4"
 
-    # Count items in results
-    dir_count = sum(1 for item in results if item.type == "directory")
-    file_count = sum(1 for item in results if item.type == "file")
-    total_size = sum(item.size for item in results if item.type == "file")
+    # Count items in results - single pass for performance
+    dir_count = 0
+    file_count = 0
+    total_size = 0
+    for item in results:
+        if item.type == "directory":
+            dir_count += 1
+        else:
+            file_count += 1
+            total_size += item.size
 
     # Build structured FileEntry objects for the UI
     file_entries = []
