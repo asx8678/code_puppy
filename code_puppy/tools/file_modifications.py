@@ -213,7 +213,7 @@ def _delete_snippet_from_file(
     snippet: str,
     message_group: str | None = None,
 ) -> dict[str, Any]:
-    file_path = os.path.abspath(file_path)
+    assert os.path.isabs(file_path), f"Expected absolute path, got {file_path!r}"
     diff_text = ""
     try:
         if not os.path.exists(file_path) or not os.path.isfile(file_path):
@@ -268,7 +268,8 @@ def _replace_in_file(
     Optimized to cache splitlines() results and avoid repeated string operations.
     Uses cached line arrays and pre-computed needle lines for fuzzy matching.
     """
-    file_path = os.path.abspath(path)
+    assert os.path.isabs(path), f"Expected absolute path, got {path!r}"
+    file_path = path
     diff_text = ""
     try:
         if not os.path.exists(file_path) or not os.path.isfile(file_path):
@@ -386,7 +387,8 @@ def _write_to_file(
     overwrite: bool = False,
     message_group: str | None = None,
 ) -> dict[str, Any]:
-    file_path = os.path.abspath(path)
+    assert os.path.isabs(path), f"Expected absolute path, got {path!r}"
+    file_path = path
 
     try:
         exists = os.path.exists(file_path)
@@ -631,7 +633,7 @@ async def _edit_file(
 async def _delete_file(
     context: RunContext, file_path: str, message_group: str | None = None
 ) -> dict[str, Any]:
-    file_path = os.path.abspath(file_path)
+    assert os.path.isabs(file_path), f"Expected absolute path, got {file_path!r}"
 
     # Use the plugin system for permission handling with operation data
     from code_puppy.callbacks import on_file_permission
@@ -775,6 +777,7 @@ def register_delete_file(agent):
 
         Shows exactly what content was removed via diff output.
         """
+        file_path = os.path.abspath(file_path)
         # Generate group_id for delete_file tool execution
         group_id = generate_group_id("delete_file", file_path)
         result = await _delete_file(context, file_path, message_group=group_id)
@@ -867,6 +870,7 @@ def register_replace_in_file(agent):
         Each replacement specifies an old_str to find and a new_str to replace it with.
         Replacements are applied sequentially. Prefer this over full file rewrites.
         """
+        file_path = os.path.abspath(file_path)
         group_id = generate_group_id("replace_in_file", file_path)
         # replacements arrive as plain dicts — pass them straight through
         replacements_dict = [
