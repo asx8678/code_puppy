@@ -139,8 +139,10 @@ def _get_or_create_hmac_key() -> bytes:
                 len(key),
             )
             key = os.urandom(32)
-            key_path.write_bytes(key)
-            key_path.chmod(0o600)
+            tmp_path = key_path.with_suffix(".tmp")
+            tmp_path.write_bytes(key)
+            tmp_path.chmod(0o600)
+            tmp_path.replace(key_path)
         return key
 
 
