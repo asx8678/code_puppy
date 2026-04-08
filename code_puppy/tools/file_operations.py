@@ -4,6 +4,7 @@ import atexit
 import functools
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
 
@@ -310,10 +311,10 @@ async def _list_files(
                     continue
 
                 # Derive type from stat mode bits
-                if os.stat.S_ISREG(stat_info.st_mode):
+                if stat.S_ISREG(stat_info.st_mode):
                     entry_type = "file"
                     size = stat_info.st_size
-                elif os.stat.S_ISDIR(stat_info.st_mode):
+                elif stat.S_ISDIR(stat_info.st_mode):
                     entry_type = "directory"
                     size = 0
                 else:

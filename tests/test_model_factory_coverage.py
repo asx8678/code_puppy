@@ -525,23 +525,23 @@ class TestLoadConfigExtended:
 
                     mock_path_class.side_effect = path_side_effect
 
-                    # Make filtered import fail
-                    with patch.dict(
-                        "sys.modules",
-                        {"code_puppy.plugins.claude_code_oauth.utils": None},
-                    ):
+                    # Make filtered import fail by patching the import function
+                    real_import = __builtins__["__import__"]
+
+                    def import_with_error(name, *args, **kwargs):
+                        if "claude_code_oauth.utils" in name:
+                            raise ImportError("Module not found")
+                        return real_import(name, *args, **kwargs)
+
+                    with patch("builtins.__import__", side_effect=import_with_error):
                         with patch(
-                            "code_puppy.plugins.claude_code_oauth.utils.load_claude_models_filtered",
-                            side_effect=ImportError("Module not found"),
+                            "json.load",
+                            side_effect=[base_config, plain_claude_config],
                         ):
-                            with patch(
-                                "json.load",
-                                side_effect=[base_config, plain_claude_config],
-                            ):
-                                with patch("logging.getLogger"):
-                                    # Should fall back to plain JSON loading
-                                    config = ModelFactory.load_config()
-                                    assert isinstance(config, Mapping)
+                            with patch("logging.getLogger"):
+                                # Should fall back to plain JSON loading
+                                config = ModelFactory.load_config()
+                                assert isinstance(config, Mapping)
 
 
 class TestClaudeCodeModel:

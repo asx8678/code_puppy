@@ -965,8 +965,11 @@ def arrow_select(
                 "arrow_select() called from within an active event loop. "
                 "Use arrow_select_async() for async contexts to avoid thread hop overhead."
             )
-    except RuntimeError:
-        raise  # Re-raise the one we just created
+    except RuntimeError as e:
+        # Only re-raise if it's our intentional error about active loop
+        # If it's "no running event loop", let it fall through to sync wrapper
+        if "active event loop" in str(e):
+            raise
     except Exception:
         # No running loop, proceed with sync wrapper
         pass
@@ -1008,8 +1011,11 @@ def get_user_approval(
                 "get_user_approval() called from within an active event loop. "
                 "Use get_user_approval_async() for async contexts to avoid thread hop overhead."
             )
-    except RuntimeError:
-        raise  # Re-raise the one we just created
+    except RuntimeError as e:
+        # Only re-raise if it's our intentional error about active loop
+        # If it's "no running event loop", let it fall through to sync wrapper
+        if "active event loop" in str(e):
+            raise
     except Exception:
         # No running loop, proceed with sync wrapper
         pass

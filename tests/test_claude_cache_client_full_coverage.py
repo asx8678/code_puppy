@@ -677,9 +677,9 @@ class TestCloudflareDetection:
     async def test_no_content_fallback_to_text(self):
         resp = Mock(spec=httpx.Response)
         resp.headers = {"content-type": "text/html"}
-        resp._content = None
-        resp.text = "cloudflare 400 bad request"
-        resp.aread = AsyncMock(return_value=resp.text.encode("utf-8"))
+        # Simulate pre-read content with bytes (production code now uses bytes comparison)
+        resp._content = b"cloudflare 400 bad request"
+        resp.aread = AsyncMock(return_value=b"cloudflare 400 bad request")
         c = ClaudeCacheAsyncClient()
         assert await c._is_cloudflare_html_error(resp) is True
 

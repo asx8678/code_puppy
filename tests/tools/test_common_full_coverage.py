@@ -220,6 +220,9 @@ class TestGetLexerForExtension:
     def test_no_pygments(self):
         import code_puppy.tools.common as mod
 
+        # Clear the cache since we're changing PYGMENTS_AVAILABLE
+        mod._get_lexer_for_extension.cache_clear()
+
         orig = mod.PYGMENTS_AVAILABLE
         try:
             mod.PYGMENTS_AVAILABLE = False
@@ -227,6 +230,8 @@ class TestGetLexerForExtension:
             assert result is None
         finally:
             mod.PYGMENTS_AVAILABLE = orig
+            # Clear cache again to avoid affecting other tests
+            mod._get_lexer_for_extension.cache_clear()
 
     def test_get_lexer_by_name_exception(self):
         """Test fallback to TextLexer when get_lexer_by_name fails."""
@@ -632,31 +637,35 @@ class TestArrowSelect:
         """arrow_select now delegates to arrow_select_async via _run_async_sync."""
         from code_puppy.tools.common import arrow_select
 
-        with patch(
-            "code_puppy.tools.common.arrow_select_async",
-            new_callable=AsyncMock,
-            return_value="a",
-        ) as mock_async:
-            with patch("code_puppy.tools.common.run_async_sync") as mock_runner:
-                mock_runner.return_value = "a"
-                result = arrow_select("Pick:", ["a", "b"])
-                assert result == "a"
-                # Verify _run_async_sync was called with arrow_select_async coro
-                mock_runner.assert_called_once()
+        # Mock asyncio.get_running_loop to simulate "no running loop" condition
+        with patch("asyncio.get_running_loop", side_effect=RuntimeError("no running event loop")):
+            with patch(
+                "code_puppy.tools.common.arrow_select_async",
+                new_callable=AsyncMock,
+                return_value="a",
+            ) as mock_async:
+                with patch("code_puppy.tools.common.run_async_sync") as mock_runner:
+                    mock_runner.return_value = "a"
+                    result = arrow_select("Pick:", ["a", "b"])
+                    assert result == "a"
+                    # Verify _run_async_sync was called with arrow_select_async coro
+                    mock_runner.assert_called_once()
 
     def test_keyboard_interrupt_on_cancel(self):
         """arrow_select propagates KeyboardInterrupt when result is None."""
         from code_puppy.tools.common import arrow_select
 
-        with patch(
-            "code_puppy.tools.common.arrow_select_async",
-            new_callable=AsyncMock,
-            side_effect=KeyboardInterrupt,
-        ):
-            with patch("code_puppy.tools.common.run_async_sync") as mock_runner:
-                mock_runner.side_effect = KeyboardInterrupt
-                with pytest.raises(KeyboardInterrupt):
-                    arrow_select("Pick:", ["a", "b"])
+        # Mock asyncio.get_running_loop to simulate "no running loop" condition
+        with patch("asyncio.get_running_loop", side_effect=RuntimeError("no running event loop")):
+            with patch(
+                "code_puppy.tools.common.arrow_select_async",
+                new_callable=AsyncMock,
+                side_effect=KeyboardInterrupt,
+            ):
+                with patch("code_puppy.tools.common.run_async_sync") as mock_runner:
+                    mock_runner.side_effect = KeyboardInterrupt
+                    with pytest.raises(KeyboardInterrupt):
+                        arrow_select("Pick:", ["a", "b"])
 
 
 # ---------------------------------------------------------------------------
@@ -665,79 +674,41 @@ class TestArrowSelect:
 
 
 class TestGetUserApproval:
+    # Helper to mock asyncio.get_running_loop for sync context
+    @staticmethod
+    def _mock_no_event_loop():
+        return patch("asyncio.get_running_loop", side_effect=RuntimeError("no running event loop"))
+
     def test_approve(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch(
-            "code_puppy.tools.common.arrow_select_async",
-            new_callable=AsyncMock,
-            return_value="✓ Approve",
-        ):
-            with patch("code_puppy.tools.common.Console"):
-                with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
-                    with patch("code_puppy.tools.common.emit_info"):
-                        with patch("code_puppy.tools.common.emit_success"):
-                            confirmed, feedback = get_user_approval(
-                                "Test", "content", puppy_name="Biscuit"
-                            )
+        with self._mock_no_event_loop():
+            with patch(
+                "code_puppy.tools.common.arrow_select_async",
+                new_callable=AsyncMock,
+                return_value="✓ Approve",
+            ):
+                with patch("code_puppy.tools.common.Console"):
+                    with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
+                        with patch("code_puppy.tools.common.emit_info"):
+                            with patch("code_puppy.tools.common.emit_success"):
+                                confirmed, feedback = get_user_approval(
+                                    "Test", "content", puppy_name="Biscuit"
+                                )
         assert confirmed is True
         assert feedback is None
 
     def test_reject(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch(
-            "code_puppy.tools.common.arrow_select_async",
-            new_callable=AsyncMock,
-            return_value="✗ Reject",
-        ):
-            with patch("code_puppy.tools.common.Console"):
-                with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
-                    with patch("code_puppy.tools.common.emit_info"):
-                        with patch("code_puppy.tools.common.emit_error"):
-                            confirmed, feedback = get_user_approval(
-                                "Test", "content", puppy_name="Biscuit"
-                            )
-        assert confirmed is False
-        assert feedback is None
-
-    def test_reject_with_feedback(self):
-        from code_puppy.tools.common import get_user_approval
-
-        with patch(
-            "code_puppy.tools.common.arrow_select_async",
-            new_callable=AsyncMock,
-            return_value="💬 Reject with feedback (tell Biscuit what to change)",
-        ):
-            with patch("code_puppy.tools.common.Prompt") as MockPrompt:
-                MockPrompt.ask.return_value = "fix the thing"
+        with self._mock_no_event_loop():
+            with patch(
+                "code_puppy.tools.common.arrow_select_async",
+                new_callable=AsyncMock,
+                return_value="✗ Reject",
+            ):
                 with patch("code_puppy.tools.common.Console"):
-                    with patch(
-                        "code_puppy.tools.command_runner.set_awaiting_user_input"
-                    ):
-                        with patch("code_puppy.tools.common.emit_info"):
-                            with patch("code_puppy.tools.common.emit_error"):
-                                with patch("code_puppy.tools.common.emit_warning"):
-                                    confirmed, feedback = get_user_approval(
-                                        "Test", "content", puppy_name="Biscuit"
-                                    )
-        assert confirmed is False
-        assert feedback == "fix the thing"
-
-    def test_reject_with_empty_feedback(self):
-        from code_puppy.tools.common import get_user_approval
-
-        with patch(
-            "code_puppy.tools.common.arrow_select_async",
-            new_callable=AsyncMock,
-            return_value="💬 feedback",
-        ):
-            with patch("code_puppy.tools.common.Prompt") as MockPrompt:
-                MockPrompt.ask.return_value = "  "
-                with patch("code_puppy.tools.common.Console"):
-                    with patch(
-                        "code_puppy.tools.command_runner.set_awaiting_user_input"
-                    ):
+                    with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
                         with patch("code_puppy.tools.common.emit_info"):
                             with patch("code_puppy.tools.common.emit_error"):
                                 confirmed, feedback = get_user_approval(
@@ -746,97 +717,149 @@ class TestGetUserApproval:
         assert confirmed is False
         assert feedback is None
 
+    def test_reject_with_feedback(self):
+        from code_puppy.tools.common import get_user_approval
+
+        with self._mock_no_event_loop():
+            with patch(
+                "code_puppy.tools.common.arrow_select_async",
+                new_callable=AsyncMock,
+                return_value="💬 Reject with feedback (tell Biscuit what to change)",
+            ):
+                with patch("code_puppy.tools.common.Prompt") as MockPrompt:
+                    MockPrompt.ask.return_value = "fix the thing"
+                    with patch("code_puppy.tools.common.Console"):
+                        with patch(
+                            "code_puppy.tools.command_runner.set_awaiting_user_input"
+                        ):
+                            with patch("code_puppy.tools.common.emit_info"):
+                                with patch("code_puppy.tools.common.emit_error"):
+                                    with patch("code_puppy.tools.common.emit_warning"):
+                                        confirmed, feedback = get_user_approval(
+                                            "Test", "content", puppy_name="Biscuit"
+                                        )
+        assert confirmed is False
+        assert feedback == "fix the thing"
+
+    def test_reject_with_empty_feedback(self):
+        from code_puppy.tools.common import get_user_approval
+
+        with self._mock_no_event_loop():
+            with patch(
+                "code_puppy.tools.common.arrow_select_async",
+                new_callable=AsyncMock,
+                return_value="💬 feedback",
+            ):
+                with patch("code_puppy.tools.common.Prompt") as MockPrompt:
+                    MockPrompt.ask.return_value = "  "
+                    with patch("code_puppy.tools.common.Console"):
+                        with patch(
+                            "code_puppy.tools.command_runner.set_awaiting_user_input"
+                        ):
+                            with patch("code_puppy.tools.common.emit_info"):
+                                with patch("code_puppy.tools.common.emit_error"):
+                                    confirmed, feedback = get_user_approval(
+                                        "Test", "content", puppy_name="Biscuit"
+                                    )
+        assert confirmed is False
+        assert feedback is None
+
     def test_keyboard_interrupt(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch(
-            "code_puppy.tools.common.arrow_select_async",
-            new_callable=AsyncMock,
-            side_effect=KeyboardInterrupt,
-        ):
-            with patch("code_puppy.tools.common.Console"):
-                with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
-                    with patch("code_puppy.tools.common.emit_info"):
-                        with patch("code_puppy.tools.common.emit_error"):
-                            confirmed, feedback = get_user_approval(
-                                "Test", "content", puppy_name="Biscuit"
-                            )
+        with self._mock_no_event_loop():
+            with patch(
+                "code_puppy.tools.common.arrow_select_async",
+                new_callable=AsyncMock,
+                side_effect=KeyboardInterrupt,
+            ):
+                with patch("code_puppy.tools.common.Console"):
+                    with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
+                        with patch("code_puppy.tools.common.emit_info"):
+                            with patch("code_puppy.tools.common.emit_error"):
+                                confirmed, feedback = get_user_approval(
+                                    "Test", "content", puppy_name="Biscuit"
+                                )
         assert confirmed is False
 
     def test_eof_error(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch(
-            "code_puppy.tools.common.arrow_select_async",
-            new_callable=AsyncMock,
-            side_effect=EOFError,
-        ):
-            with patch("code_puppy.tools.common.Console"):
-                with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
-                    with patch("code_puppy.tools.common.emit_info"):
-                        with patch("code_puppy.tools.common.emit_error"):
-                            confirmed, feedback = get_user_approval(
-                                "Test", "content", puppy_name="Biscuit"
-                            )
+        with self._mock_no_event_loop():
+            with patch(
+                "code_puppy.tools.common.arrow_select_async",
+                new_callable=AsyncMock,
+                side_effect=EOFError,
+            ):
+                with patch("code_puppy.tools.common.Console"):
+                    with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
+                        with patch("code_puppy.tools.common.emit_info"):
+                            with patch("code_puppy.tools.common.emit_error"):
+                                confirmed, feedback = get_user_approval(
+                                    "Test", "content", puppy_name="Biscuit"
+                                )
         assert confirmed is False
 
     def test_with_preview(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch(
-            "code_puppy.tools.common.arrow_select_async",
-            new_callable=AsyncMock,
-            return_value="✓ Approve",
-        ):
-            with patch("code_puppy.tools.common.Console"):
-                with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
-                    with patch("code_puppy.tools.common.emit_info"):
-                        with patch("code_puppy.tools.common.emit_success"):
-                            with patch(
-                                "code_puppy.tools.common.format_diff_with_colors",
-                                return_value=Text("diff"),
-                            ):
-                                confirmed, _ = get_user_approval(
-                                    "Test",
-                                    "content",
-                                    preview="-old\n+new",
-                                    puppy_name="Biscuit",
-                                )
+        with self._mock_no_event_loop():
+            with patch(
+                "code_puppy.tools.common.arrow_select_async",
+                new_callable=AsyncMock,
+                return_value="✓ Approve",
+            ):
+                with patch("code_puppy.tools.common.Console"):
+                    with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
+                        with patch("code_puppy.tools.common.emit_info"):
+                            with patch("code_puppy.tools.common.emit_success"):
+                                with patch(
+                                    "code_puppy.tools.common.format_diff_with_colors",
+                                    return_value=Text("diff"),
+                                ):
+                                    confirmed, _ = get_user_approval(
+                                        "Test",
+                                        "content",
+                                        preview="-old\n+new",
+                                        puppy_name="Biscuit",
+                                    )
         assert confirmed is True
 
     def test_with_text_content(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch(
-            "code_puppy.tools.common.arrow_select_async",
-            new_callable=AsyncMock,
-            return_value="✓ Approve",
-        ):
-            with patch("code_puppy.tools.common.Console"):
-                with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
-                    with patch("code_puppy.tools.common.emit_info"):
-                        with patch("code_puppy.tools.common.emit_success"):
-                            confirmed, _ = get_user_approval(
-                                "Test", Text("rich content"), puppy_name="Biscuit"
-                            )
+        with self._mock_no_event_loop():
+            with patch(
+                "code_puppy.tools.common.arrow_select_async",
+                new_callable=AsyncMock,
+                return_value="✓ Approve",
+            ):
+                with patch("code_puppy.tools.common.Console"):
+                    with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
+                        with patch("code_puppy.tools.common.emit_info"):
+                            with patch("code_puppy.tools.common.emit_success"):
+                                confirmed, _ = get_user_approval(
+                                    "Test", Text("rich content"), puppy_name="Biscuit"
+                                )
         assert confirmed is True
 
     def test_default_puppy_name(self):
         from code_puppy.tools.common import get_user_approval
 
-        with patch(
-            "code_puppy.tools.common.arrow_select_async",
-            new_callable=AsyncMock,
-            return_value="✓ Approve",
-        ):
-            with patch("code_puppy.tools.common.Console"):
-                with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
-                    with patch("code_puppy.tools.common.emit_info"):
-                        with patch("code_puppy.tools.common.emit_success"):
-                            with patch(
-                                "code_puppy.config.get_puppy_name", return_value="buddy"
-                            ):
-                                confirmed, _ = get_user_approval("Test", "content")
+        with self._mock_no_event_loop():
+            with patch(
+                "code_puppy.tools.common.arrow_select_async",
+                new_callable=AsyncMock,
+                return_value="✓ Approve",
+            ):
+                with patch("code_puppy.tools.common.Console"):
+                    with patch("code_puppy.tools.command_runner.set_awaiting_user_input"):
+                        with patch("code_puppy.tools.common.emit_info"):
+                            with patch("code_puppy.tools.common.emit_success"):
+                                with patch(
+                                    "code_puppy.config.get_puppy_name", return_value="buddy"
+                                ):
+                                    confirmed, _ = get_user_approval("Test", "content")
         assert confirmed is True
 
 

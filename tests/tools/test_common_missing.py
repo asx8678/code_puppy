@@ -192,6 +192,11 @@ class TestFormatDiffWithColors:
 
 
 class TestGetUserApproval:
+    # Helper to mock asyncio.get_running_loop for sync context
+    @staticmethod
+    def _mock_no_event_loop():
+        return patch("asyncio.get_running_loop", side_effect=RuntimeError("no running event loop"))
+
     @patch(
         "code_puppy.tools.common.arrow_select_async",
         new_callable=AsyncMock,
@@ -206,7 +211,8 @@ class TestGetUserApproval:
     ):
         from code_puppy.tools.common import get_user_approval
 
-        approved, feedback = get_user_approval("Test", "content", puppy_name="Rex")
+        with self._mock_no_event_loop():
+            approved, feedback = get_user_approval("Test", "content", puppy_name="Rex")
         assert approved is True
         assert feedback is None
 
@@ -224,7 +230,8 @@ class TestGetUserApproval:
     ):
         from code_puppy.tools.common import get_user_approval
 
-        approved, feedback = get_user_approval("Test", "content", puppy_name="Rex")
+        with self._mock_no_event_loop():
+            approved, feedback = get_user_approval("Test", "content", puppy_name="Rex")
         assert approved is False
 
     @patch(
@@ -243,7 +250,8 @@ class TestGetUserApproval:
         from code_puppy.tools.common import get_user_approval
 
         MockPrompt.ask.return_value = "fix it"
-        approved, feedback = get_user_approval("Test", "content", puppy_name="Rex")
+        with self._mock_no_event_loop():
+            approved, feedback = get_user_approval("Test", "content", puppy_name="Rex")
         assert approved is False
         assert feedback == "fix it"
 
@@ -262,7 +270,8 @@ class TestGetUserApproval:
     ):
         from code_puppy.tools.common import get_user_approval
 
-        approved, feedback = get_user_approval("Test", "content", puppy_name="Rex")
+        with self._mock_no_event_loop():
+            approved, feedback = get_user_approval("Test", "content", puppy_name="Rex")
         assert approved is False
 
     @patch(
@@ -279,12 +288,13 @@ class TestGetUserApproval:
     ):
         from code_puppy.tools.common import get_user_approval
 
-        approved, _ = get_user_approval(
-            "Test",
-            "content",
-            preview="--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new",
-            puppy_name="Rex",
-        )
+        with self._mock_no_event_loop():
+            approved, _ = get_user_approval(
+                "Test",
+                "content",
+                preview="--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new",
+                puppy_name="Rex",
+            )
         assert approved is True
 
     @patch(
@@ -301,7 +311,8 @@ class TestGetUserApproval:
     ):
         from code_puppy.tools.common import get_user_approval
 
-        approved, _ = get_user_approval("Test", Text("hello"), puppy_name="Rex")
+        with self._mock_no_event_loop():
+            approved, _ = get_user_approval("Test", Text("hello"), puppy_name="Rex")
         assert approved is True
 
     @patch(
@@ -319,7 +330,8 @@ class TestGetUserApproval:
     ):
         from code_puppy.tools.common import get_user_approval
 
-        approved, _ = get_user_approval("Test", "content")
+        with self._mock_no_event_loop():
+            approved, _ = get_user_approval("Test", "content")
         assert approved is True
 
 
