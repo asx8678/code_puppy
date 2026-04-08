@@ -21,6 +21,7 @@ from rich.rule import Rule
 # Note: Syntax import removed - file content not displayed, only header
 from rich.table import Table
 
+from code_puppy.async_utils import format_size
 from code_puppy.config import get_subagent_verbose
 from code_puppy.tools.common import format_diff_with_colors
 from code_puppy.tools.subagent_context import is_subagent
@@ -562,7 +563,7 @@ class RichConsoleRenderer:
                     icon = self._get_file_icon(f.path)
                     name = os.path.basename(f.path)
                     size_str = (
-                        f" [dim]({self._format_size(f.size)})[/dim]"
+                        f" [dim]({format_size(f.size)})[/dim]"
                         if f.size > 0
                         else ""
                     )
@@ -591,7 +592,7 @@ class RichConsoleRenderer:
                         f"{subdir_count} subdir{'s' if subdir_count != 1 else ''}"
                     )
                 if rec_size > 0:
-                    parts.append(self._format_size(rec_size))
+                    parts.append(format_size(rec_size))
 
                 summary = f" [dim]({', '.join(parts)})[/dim]" if parts else ""
                 self._console.print(
@@ -610,7 +611,7 @@ class RichConsoleRenderer:
         self._console.print(
             f"📁 [blue]{msg.dir_count} directories[/blue], "
             f"📄 [green]{msg.file_count} files[/green] "
-            f"[dim]({self._format_size(msg.total_size)} total)[/dim]"
+            f"[dim]({format_size(msg.total_size)} total)[/dim]"
         )
 
     def _render_file_content(self, msg: FileContentMessage) -> None:
@@ -1099,17 +1100,6 @@ class RichConsoleRenderer:
     # =========================================================================
     # Helpers
     # =========================================================================
-
-    def _format_size(self, size_bytes: int) -> str:
-        """Format byte size to human readable matching old format."""
-        if size_bytes < 1024:
-            return f"{size_bytes} B"
-        elif size_bytes < 1024 * 1024:
-            return f"{size_bytes / 1024:.1f} KB"
-        elif size_bytes < 1024 * 1024 * 1024:
-            return f"{size_bytes / (1024 * 1024):.1f} MB"
-        else:
-            return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
 
     def _get_file_icon(self, file_path: str) -> str:
         """Get an emoji icon for a file based on its extension."""

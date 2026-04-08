@@ -13,6 +13,7 @@ from pydantic_ai import RunContext
 # ---------------------------------------------------------------------------
 import asyncio
 
+from code_puppy.async_utils import format_size
 from code_puppy.concurrency_limits import FileOpsLimiter
 from code_puppy.messaging import (  # New structured messaging types
     FileContentMessage,
@@ -360,16 +361,6 @@ async def _list_files(
         # Clean up the temporary ignore file
         if ignore_file and os.path.exists(ignore_file):
             os.unlink(ignore_file)
-
-    def format_size(size_bytes):
-        if size_bytes < 1024:
-            return f"{size_bytes} B"
-        elif size_bytes < 1024 * 1024:
-            return f"{size_bytes / 1024:.1f} KB"
-        elif size_bytes < 1024 * 1024 * 1024:
-            return f"{size_bytes / (1024 * 1024):.1f} MB"
-        else:
-            return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
 
     def get_file_icon(file_path):
         ext = os.path.splitext(file_path)[1].lower()

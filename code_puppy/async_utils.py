@@ -9,10 +9,24 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import functools
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+
+
+@functools.lru_cache(maxsize=512)
+def format_size(size_bytes: int) -> str:
+    """Format byte size to human readable string (B, KB, MB, GB)."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
 
 # Bounded thread pool for running async code - prevents thread explosion under load.
 # max_workers matches Python's ThreadPoolExecutor default: min(32, cpu_count + 4)
