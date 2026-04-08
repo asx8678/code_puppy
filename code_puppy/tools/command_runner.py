@@ -368,8 +368,10 @@ def _unregister_process(proc: subprocess.Popen) -> None:
 
 def _monitor_background_process(proc: subprocess.Popen) -> None:
     """Wait for background process to finish, then unregister it."""
-    proc.wait()
-    _unregister_process(proc)
+    try:
+        proc.wait()
+    finally:
+        _unregister_process(proc)
 
 
 def _kill_process_group(proc: subprocess.Popen) -> None:
