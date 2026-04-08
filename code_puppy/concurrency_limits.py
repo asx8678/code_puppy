@@ -27,15 +27,57 @@ DEFAULT_TOOL_CALLS_LIMIT = 8  # Max concurrent tool executions
 _CONFIG_PATH = Path.home() / ".code_puppy" / "concurrency.toml"
 
 # Global semaphores (initialized lazily)
-_file_ops_semaphore: asyncio.Semaphore | None = None
-_api_calls_semaphore: asyncio.Semaphore | None = None
-_tool_calls_semaphore: asyncio.Semaphore | None = None
+_file_ops_semaphore: TrackedSemaphore | None = None
+_api_calls_semaphore: TrackedSemaphore | None = None
+_tool_calls_semaphore: TrackedSemaphore | None = None
 
 # Cached config
 _cached_config: ConcurrencyConfig | None = None
 
 # Lock for thread-safe semaphore initialization
 _semaphore_init_lock = threading.Lock()
+
+
+class TrackedSemaphore:
+    """Wrapper around asyncio.Semaphore that tracks value without private attribute access.
+    
+    This class provides a Pythonic way to access the current semaphore value
+    for monitoring purposes, without relying on implementation details.
+    """
+    
+    def __init__(self, value: int):
+        self._semaphore = asyncio.Semaphore(value)
+        self._initial_value = value
+        # Use a lock to ensure thread-safe counter updates
+        self._lock = asyncio.Lock()
+        self._available = value
+    
+    async def acquire(self) -> None:
+        """Acquire a slot from the semaphore."""
+        await self._semaphore.acquire()
+        async with self._lock:
+            self._available -= 1
+    
+    def release(self) -> None:
+        """Release a slot back to the semaphore."""
+        self._semaphore.release()
+        # Use asyncio.run_coroutine_threadsafe or direct update if in async context
+        # For simplicity, we update the counter directly since it's only used for
+        # monitoring and doesn't need to be 100% precise
+        self._available = min(self._available + 1, self._initial_value)
+    
+    @property
+    def value(self) -> int:
+        """Get the current approximate number of available slots.
+        
+        This is an approximation for monitoring purposes. The actual
+        semaphore value is managed internally by asyncio.Semaphore.
+        """
+        return max(0, self._available)
+    
+    def locked(self) -> bool:
+        """Return True if semaphore is locked (no slots available)."""
+        return self._semaphore.locked()
 
 
 @dataclass(frozen=True)
@@ -88,14 +130,14 @@ def _read_config() -> ConcurrencyConfig:
         return _cached_config
 
 
-def _get_file_ops_semaphore() -> asyncio.Semaphore:
+def _get_file_ops_semaphore() -> TrackedSemaphore:
     """Get or create the file operations semaphore."""
     global _file_ops_semaphore
     if _file_ops_semaphore is None:
         with _semaphore_init_lock:
             if _file_ops_semaphore is None:  # Double-checked locking
                 config = _read_config()
-                _file_ops_semaphore = asyncio.Semaphore(config.file_ops_limit)
+                _file_ops_semaphore = TrackedSemaphore(config.file_ops_limit)
                 logger.debug(
                     "File ops semaphore initialized with limit %d",
                     config.file_ops_limit,
@@ -103,14 +145,14 @@ def _get_file_ops_semaphore() -> asyncio.Semaphore:
     return _file_ops_semaphore
 
 
-def _get_api_calls_semaphore() -> asyncio.Semaphore:
+def _get_api_calls_semaphore() -> TrackedSemaphore:
     """Get or create the API calls semaphore."""
     global _api_calls_semaphore
     if _api_calls_semaphore is None:
         with _semaphore_init_lock:
             if _api_calls_semaphore is None:  # Double-checked locking
                 config = _read_config()
-                _api_calls_semaphore = asyncio.Semaphore(config.api_calls_limit)
+                _api_calls_semaphore = TrackedSemaphore(config.api_calls_limit)
                 logger.debug(
                     "API calls semaphore initialized with limit %d",
                     config.api_calls_limit,
@@ -118,14 +160,14 @@ def _get_api_calls_semaphore() -> asyncio.Semaphore:
     return _api_calls_semaphore
 
 
-def _get_tool_calls_semaphore() -> asyncio.Semaphore:
+def _get_tool_calls_semaphore() -> TrackedSemaphore:
     """Get or create the tool calls semaphore."""
     global _tool_calls_semaphore
     if _tool_calls_semaphore is None:
         with _semaphore_init_lock:
             if _tool_calls_semaphore is None:  # Double-checked locking
                 config = _read_config()
-                _tool_calls_semaphore = asyncio.Semaphore(config.tool_calls_limit)
+                _tool_calls_semaphore = TrackedSemaphore(config.tool_calls_limit)
                 logger.debug(
                     "Tool calls semaphore initialized with limit %d",
                     config.tool_calls_limit,
@@ -217,23 +259,23 @@ def get_concurrency_status() -> dict[str, int]:
     config = _read_config()
     return {
         "file_ops_limit": config.file_ops_limit,
-        "file_ops_available": getattr(
-            _file_ops_semaphore, "_value", config.file_ops_limit
-        )
-        if _file_ops_semaphore
-        else config.file_ops_limit,
+        "file_ops_available": (
+            _file_ops_semaphore.value
+            if _file_ops_semaphore
+            else config.file_ops_limit
+        ),
         "api_calls_limit": config.api_calls_limit,
-        "api_calls_available": getattr(
-            _api_calls_semaphore, "_value", config.api_calls_limit
-        )
-        if _api_calls_semaphore
-        else config.api_calls_limit,
+        "api_calls_available": (
+            _api_calls_semaphore.value
+            if _api_calls_semaphore
+            else config.api_calls_limit
+        ),
         "tool_calls_limit": config.tool_calls_limit,
-        "tool_calls_available": getattr(
-            _tool_calls_semaphore, "_value", config.tool_calls_limit
-        )
-        if _tool_calls_semaphore
-        else config.tool_calls_limit,
+        "tool_calls_available": (
+            _tool_calls_semaphore.value
+            if _tool_calls_semaphore
+            else config.tool_calls_limit
+        ),
     }
 
 
