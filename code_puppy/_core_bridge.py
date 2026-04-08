@@ -9,6 +9,11 @@ import json
 from typing import Any
 
 try:
+    from pydantic_ai.messages import ModelRequest
+except ImportError:
+    ModelRequest = None  # type: ignore[misc,assignment]
+
+try:
     from _code_puppy_core import (
         ProcessResult,
         PruneResult,
@@ -97,8 +102,6 @@ def serialize_message_for_rust(message: Any) -> dict:
     OPTIMIZED: Reduced getattr() calls by using direct attribute access
     and local variable caching where type is known.
     """
-    from pydantic_ai.messages import ModelRequest
-
     kind = "request" if isinstance(message, ModelRequest) else "response"
 
     # OPTIMIZATION: Cache message attributes to avoid repeated lookups
@@ -113,22 +116,16 @@ def serialize_message_for_rust(message: Any) -> dict:
     parts_append = parts.append
 
     for part in msg_parts:
-        # OPTIMIZATION: Use hasattr + direct access instead of getattr defaults
-        # This reduces function call overhead for commonly present attributes
-
         # part_kind is usually present, but use getattr with fallback
         part_kind = getattr(part, "part_kind", None)
         if part_kind is None:
             part_kind = type(part).__name__
 
-        # Cache content attribute - using local var avoids repeated lookups
-        # Use hasattr + direct access pattern for better performance than getattr
-        content = part.content if hasattr(part, "content") else None
-
-        # Cache tool attributes using the same pattern
-        tool_call_id = part.tool_call_id if hasattr(part, "tool_call_id") else None
-        tool_name = part.tool_name if hasattr(part, "tool_name") else None
-        args = part.args if hasattr(part, "args") else None
+        # Use getattr with default for safe attribute access
+        content = getattr(part, "content", None)
+        tool_call_id = getattr(part, "tool_call_id", None)
+        tool_name = getattr(part, "tool_name", None)
+        args = getattr(part, "args", None)
 
         # Build part dict with cached values
         part_dict: dict[str, Any] = {
@@ -137,7 +134,7 @@ def serialize_message_for_rust(message: Any) -> dict:
             "content_json": None,
             "tool_call_id": tool_call_id,
             "tool_name": tool_name,
-            "args": str(args) if args is not None else None,
+            "args": json.dumps(args, separators=(',', ':')) if args is not None else None,
         }
 
         # Handle content serialization - using local 'content' avoids re-lookup

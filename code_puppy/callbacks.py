@@ -2,6 +2,7 @@ import asyncio
 import logging
 import threading
 import traceback
+import weakref
 from typing import Any, Callable, Literal
 
 from code_puppy import _backlog
@@ -9,6 +10,7 @@ from code_puppy.run_context import (
     RunContext,
     get_current_run_context,
     set_current_run_context,
+    reset_run_context,
     create_root_run_context,
 )
 
@@ -605,14 +607,17 @@ async def on_pre_tool_call(
             component_name=tool_name,
             metadata={"tool_args_keys": list(tool_args.keys())},
         )
-        # Stash the parent so on_post_tool_call can restore it.
-        child.metadata["_parent_ref"] = parent
-        set_current_run_context(child)
+        # Stash weak reference to parent to avoid memory retention chain.
+        child.metadata["_parent_ref"] = weakref.ref(parent)
+        # Store the token for proper context reset in on_post_tool_call.
+        child.metadata["_context_token"] = set_current_run_context(child)
         try:
             results = await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
         except Exception:
-            # Restore parent context on error to prevent context leaks
-            set_current_run_context(parent)
+            # Restore parent context on error to prevent context leaks.
+            token = child.metadata.pop("_context_token", None)
+            if token is not None:
+                reset_run_context(token)
             raise
     else:
         results = await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
@@ -675,8 +680,15 @@ async def on_post_tool_call(
         ctx.close()
         ctx.metadata["duration_ms"] = duration_ms
         # Restore the parent context that was stashed by on_pre_tool_call.
-        parent = ctx.metadata.pop("_parent_ref", None)
-        set_current_run_context(parent)
+        token = ctx.metadata.pop("_context_token", None)
+        if token is not None:
+            reset_run_context(token)
+        # Resolve weakref to parent if still available.
+        parent_ref = ctx.metadata.pop("_parent_ref", None)
+        if parent_ref is not None:
+            parent = parent_ref() if callable(parent_ref) else parent_ref
+            if parent is not None:
+                set_current_run_context(parent)
 
     return await _trigger_callbacks(
         "post_tool_call", tool_name, tool_args, result, duration_ms, context
