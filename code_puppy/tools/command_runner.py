@@ -1199,8 +1199,24 @@ async def run_shell_command(
     callback_results = await on_run_shell_command(context, command, cwd, timeout)
 
     # Check if any callback blocked the command
-    # Callbacks can return None (allow) or a dict with blocked=True (reject)
+    # Callbacks can return:
+    # - None (allow)
+    # - dict with blocked=True (reject)
+    # - Deny object from permission_decision (reject, from failed callbacks)
     for result in callback_results:
+        # Handle Deny objects from permission_decision (fail-closed semantics)
+        if result is not None and type(result).__name__ == "Deny":
+            return ShellCommandOutput(
+                success=False,
+                command=command,
+                error=getattr(result, "reason", "Command blocked by safety check"),
+                user_feedback=getattr(result, "user_feedback", "") or "",
+                stdout=None,
+                stderr=None,
+                exit_code=None,
+                execution_time=None,
+            )
+        # Handle legacy dict format
         if result and isinstance(result, dict) and result.get("blocked"):
             return ShellCommandOutput(
                 success=False,

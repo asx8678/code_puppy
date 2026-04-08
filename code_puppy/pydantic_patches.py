@@ -289,6 +289,22 @@ def patch_tool_call_callbacks() -> None:
                 )
 
                 for callback_result in callback_results:
+                    # Handle Deny objects from permission_decision (fail-closed semantics)
+                    if callback_result is not None and type(callback_result).__name__ == "Deny":
+                        raw_reason = getattr(callback_result, "reason", "") or ""
+                        user_feedback = getattr(callback_result, "user_feedback", "") or ""
+                        if "[BLOCKED]" in raw_reason:
+                            clean_reason = raw_reason[
+                                raw_reason.index("[BLOCKED]") :
+                            ].strip()
+                        elif user_feedback:
+                            clean_reason = user_feedback
+                        else:
+                            clean_reason = "Tool execution blocked by security check"
+                        block_msg = f"🚫 Hook blocked this tool call: {clean_reason}"
+                        emit_warning(block_msg)
+                        return f"ERROR: {block_msg}\n\nThe hook policy prevented this tool from running. Please inform the user and do not retry this specific command."
+                    # Handle legacy dict format
                     if (
                         callback_result
                         and isinstance(callback_result, dict)
@@ -311,7 +327,12 @@ def patch_tool_call_callbacks() -> None:
                         emit_warning(block_msg)
                         return f"ERROR: {block_msg}\n\nThe hook policy prevented this tool from running. Please inform the user and do not retry this specific command."
             except Exception:
-                pass  # other errors don't block tool execution
+                # SECURITY: Changed from pass to fail-closed behavior
+                # If the callback system itself fails, we should block the tool
+                # to prevent potential security bypass. If the callback fails,
+                # there's likely a serious problem that shouldn't be ignored.
+                emit_warning("🚫 Security callback system error; blocking tool execution")
+                return "ERROR: Security callback system error. Tool execution blocked to maintain safety."
 
             start = time.perf_counter()
             error: Exception | None = None

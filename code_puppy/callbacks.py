@@ -343,7 +343,45 @@ def on_delete_file(*args, **kwargs) -> Any:
 
 
 async def on_run_shell_command(*args, **kwargs) -> Any:
-    return await _trigger_callbacks("run_shell_command", *args, **kwargs)
+    """Trigger callbacks for shell command execution.
+
+    SECURITY-CRITICAL: This function implements FAIL-CLOSED semantics.
+    If a security callback raises an exception, the operation is denied
+    (returns a Deny result) rather than being allowed to proceed.
+
+    Returns:
+        List of callback results. If any callback raises an exception,
+        the result will be a Deny object indicating the operation should be blocked.
+    """
+    # Import here to avoid circular dependency
+    try:
+        from code_puppy.permission_decision import Deny
+    except ImportError:
+        # Fallback if permission_decision is not available
+        Deny = None
+
+    results = await _trigger_callbacks("run_shell_command", *args, **kwargs)
+
+    # Replace None results (from failed callbacks) with Deny for fail-closed behavior
+    # This ensures that if a security plugin crashes, the command is blocked
+    security_results = []
+    for result in results:
+        if result is None and Deny is not None:
+            # Callback failed with exception - deny the operation
+            logger.warning(
+                "Security callback for run_shell_command failed with exception; "
+                "denying operation (fail-closed)"
+            )
+            security_results.append(
+                Deny(
+                    reason="Security check failed",
+                    user_feedback="Command blocked due to security check failure",
+                )
+            )
+        else:
+            security_results.append(result)
+
+    return security_results
 
 
 def on_agent_reload(*args, **kwargs) -> Any:
@@ -392,6 +430,10 @@ def on_file_permission(
 ) -> list[Any]:
     """Trigger file permission callbacks.
 
+    SECURITY-CRITICAL: This function implements FAIL-CLOSED semantics.
+    If a security callback raises an exception, the operation is denied
+    (returns False) rather than being allowed to proceed.
+
     This allows plugins to register handlers for file permission checks
     before file operations are performed.
 
@@ -406,11 +448,13 @@ def on_file_permission(
     Returns:
         List of boolean results from permission handlers.
         Returns True if permission should be granted, False if denied.
+        If a callback raises an exception, returns False to deny the operation.
     """
     # For backward compatibility, if operation_data is provided, prefer it over preview
     if operation_data is not None:
         preview = None
-    return _trigger_callbacks_sync(
+
+    results = _trigger_callbacks_sync(
         "file_permission",
         context,
         file_path,
@@ -420,11 +464,33 @@ def on_file_permission(
         operation_data,
     )
 
+    # Replace None results (from failed callbacks) with False for fail-closed behavior
+    # This ensures that if a security plugin crashes, the file operation is blocked
+    security_results = []
+    for result in results:
+        if result is None:
+            # Callback failed with exception - deny the operation
+            logger.warning(
+                "Security callback for file_permission failed with exception; "
+                "denying %s on %s (fail-closed)",
+                operation,
+                file_path,
+            )
+            security_results.append(False)
+        else:
+            security_results.append(result)
+
+    return security_results
+
 
 async def on_pre_tool_call(
     tool_name: str, tool_args: dict, context: Any = None
 ) -> list[Any]:
     """Trigger callbacks before a tool is called.
+
+    SECURITY-CRITICAL: This function implements FAIL-CLOSED semantics.
+    If a security callback raises an exception, the operation is denied
+    (returns a Deny result) rather than being allowed to proceed.
 
     This allows plugins to inspect, modify, or log tool calls before
     they are executed.
@@ -441,7 +507,14 @@ async def on_pre_tool_call(
 
     Returns:
         List of results from registered callbacks.
+        If any callback raises an exception, returns a Deny object to block the tool.
     """
+    # Import here to avoid circular dependency
+    try:
+        from code_puppy.permission_decision import Deny
+    except ImportError:
+        Deny = None
+
     parent = get_current_run_context()
     if parent is not None:
         child = RunContext.create_child(
@@ -454,13 +527,35 @@ async def on_pre_tool_call(
         child.metadata["_parent_ref"] = parent
         set_current_run_context(child)
         try:
-            return await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
+            results = await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
         except Exception:
             # Restore parent context on error to prevent context leaks
             set_current_run_context(parent)
             raise
+    else:
+        results = await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
 
-    return await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
+    # Replace None results (from failed callbacks) with Deny for fail-closed behavior
+    # This ensures that if a security plugin crashes, the tool is blocked
+    security_results = []
+    for result in results:
+        if result is None and Deny is not None:
+            # Callback failed with exception - deny the operation
+            logger.warning(
+                "Security callback for pre_tool_call failed with exception; "
+                "denying tool %s (fail-closed)",
+                tool_name,
+            )
+            security_results.append(
+                Deny(
+                    reason="Security check failed",
+                    user_feedback=f"Tool {tool_name} blocked due to security check failure",
+                )
+            )
+        else:
+            security_results.append(result)
+
+    return security_results
 
 
 async def on_post_tool_call(
