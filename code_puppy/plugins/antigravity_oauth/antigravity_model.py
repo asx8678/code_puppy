@@ -138,7 +138,7 @@ class AntigravityModel(GeminiModel):
                         system_parts.append({"text": part.content})
                     elif isinstance(part, UserPromptPart):
                         # Use parent's _map_user_prompt
-                        mapped_parts = await self._map_user_prompt(part)
+                        mapped_parts = self._map_user_prompt(part)
                         # Sanitize bytes to base64 for JSON serialization
                         for mp in mapped_parts:
                             if "inline_data" in mp and "data" in mp["inline_data"]:

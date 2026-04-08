@@ -6,6 +6,7 @@ SDK dependency.
 """
 
 import base64
+import copy
 import json
 import logging
 import uuid
@@ -65,8 +66,6 @@ def _flatten_union_to_object_gemini(union_items: list, defs: dict, resolve_fn) -
     For discriminated unions like EditFilePayload, we merge all object types
     into one with all properties (Gemini doesn't support anyOf/oneOf).
     """
-    import copy as copy_module
-
     merged_properties = {}
     has_string_type = False
 
@@ -83,7 +82,7 @@ def _flatten_union_to_object_gemini(union_items: list, defs: dict, resolve_fn) -
             elif ref_path.startswith("#/definitions/"):
                 ref_name = ref_path[14:]
             if ref_name and ref_name in defs:
-                item = copy_module.deepcopy(defs[ref_name])
+                item = copy.deepcopy(defs[ref_name])
             else:
                 continue
 
@@ -99,7 +98,7 @@ def _flatten_union_to_object_gemini(union_items: list, defs: dict, resolve_fn) -
             for prop_name, prop_schema in props.items():
                 if prop_name not in merged_properties:
                     merged_properties[prop_name] = resolve_fn(
-                        copy_module.deepcopy(prop_schema)
+                        copy.deepcopy(prop_schema)
                     )
 
     if not merged_properties:
@@ -331,7 +330,7 @@ class GeminiModel(Model):
             "x-goog-api-key": self.api_key,
         }
 
-    async def _map_user_prompt(self, part: UserPromptPart) -> list[dict[str, Any]]:
+    def _map_user_prompt(self, part: UserPromptPart) -> list[dict[str, Any]]:
         """Map a user prompt part to Gemini format."""
         parts = []
 
@@ -378,7 +377,7 @@ class GeminiModel(Model):
                     if isinstance(part, SystemPromptPart):
                         system_parts.append({"text": part.content})
                     elif isinstance(part, UserPromptPart):
-                        mapped_parts = await self._map_user_prompt(part)
+                        mapped_parts = self._map_user_prompt(part)
                         message_parts.extend(mapped_parts)
                     elif isinstance(part, ToolReturnPart):
                         message_parts.append(
