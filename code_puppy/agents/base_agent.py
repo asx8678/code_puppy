@@ -494,7 +494,9 @@ class BaseAgent(ABC, AgentPromptMixin):
             elif isinstance(content, list):
                 # Use list comprehension for faster string building
                 result_parts = [
-                    item if isinstance(item, str) else f"BinaryContent={hash(item.data)}"
+                    item
+                    if isinstance(item, str)
+                    else f"BinaryContent={hash(item.data)}"
                     for item in content
                     if isinstance(item, str) or isinstance(item, BinaryContent)
                 ]
