@@ -398,9 +398,7 @@ def _build_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
 
     client = ClaudeCacheAsyncClient(verify=verify, timeout=180, http2=http2_enabled)
 
-    from code_puppy.config import get_effective_model_settings
-
-    effective_settings = get_effective_model_settings(model_name)
+    effective_settings = _config_module.get_effective_model_settings(model_name)
     interleaved_thinking = effective_settings.get("interleaved_thinking", False)
 
     beta_header = _build_anthropic_beta_header(
@@ -446,9 +444,7 @@ def _build_custom_anthropic(model_name: str, model_config: dict, config: dict) -
         headers=headers, verify=verify, timeout=180, http2=http2_enabled
     )
 
-    from code_puppy.config import get_effective_model_settings
-
-    effective_settings = get_effective_model_settings(model_name)
+    effective_settings = _config_module.get_effective_model_settings(model_name)
     interleaved_thinking = effective_settings.get("interleaved_thinking", False)
 
     beta_header = _build_anthropic_beta_header(
