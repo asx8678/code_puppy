@@ -288,10 +288,16 @@ class RequestCache:
                     entry.request, headers, client
                 )
                 
-                # Update the cache entry with the new request
-                entry.request = new_request
-                entry.headers_hash = headers_hash
-                entry.created_at = time.time()  # Reset TTL
+                # Create new CachedRequest entry instead of mutating in-place
+                new_entry = CachedRequest(
+                    request=new_request,
+                    content_hash=content_hash,
+                    headers_hash=headers_hash,
+                    created_at=time.time(),  # Reset TTL
+                    access_count=entry.access_count,
+                    last_accessed=entry.last_accessed,
+                )
+                self._cache[content_hash] = new_entry
                 
                 return new_request
         
