@@ -14,6 +14,7 @@ provides additional rule-based command filtering.
 import asyncio
 from collections import deque
 import ctypes
+import io
 import os
 import re
 import select
@@ -1493,8 +1494,6 @@ def _run_command_sync(
             creationflags = 0
     else:
         preexec_fn = os.setsid if hasattr(os, "setsid") else None
-
-    import io
 
     # SECURITY: Validate command before execution (defense-in-depth)
     try:
