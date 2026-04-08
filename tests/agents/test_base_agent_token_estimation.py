@@ -91,9 +91,10 @@ class TestTokenEstimation:
         text_content = "This is a test message"
         message = ModelRequest(parts=[TextPart(content=text_content)])
         token_count = agent.estimate_tokens_for_message(message)
-        # Should call estimate_token_count on the text
-        # New heuristic: ~4 chars/token for prose
-        expected = max(1, int(len(text_content) / 4.0))
+        # stringify_message_part adds "text: " prefix (6 chars) to TextPart content
+        # So we need to account for the prefix in our expected calculation
+        part_str = agent.stringify_message_part(message.parts[0])
+        expected = agent.estimate_token_count(part_str)
         assert token_count == expected
 
     def test_estimate_tokens_for_message_multiple_parts(self, agent):
@@ -109,8 +110,11 @@ class TestTokenEstimation:
         )
         token_count = agent.estimate_tokens_for_message(message)
         # Should sum the tokens from both parts
-        tokens1 = agent.estimate_token_count(text1)
-        tokens2 = agent.estimate_token_count(text2)
+        # stringify_message_part adds "text: " prefix to each part
+        part1_str = agent.stringify_message_part(message.parts[0])
+        part2_str = agent.stringify_message_part(message.parts[1])
+        tokens1 = agent.estimate_token_count(part1_str)
+        tokens2 = agent.estimate_token_count(part2_str)
         expected = max(1, tokens1 + tokens2)
         assert token_count == expected
 
@@ -342,14 +346,15 @@ class TestTokenEstimationIntegration:
         text = "test content with some words"
         single_part_message = ModelRequest(parts=[TextPart(content=text)])
 
-        # Estimate tokens directly
-        direct_tokens = agent.estimate_token_count(text)
+        # Estimate tokens for the stringified part (which includes "text: " prefix)
+        part_str = agent.stringify_message_part(single_part_message.parts[0])
+        part_tokens = agent.estimate_token_count(part_str)
 
         # Estimate tokens for message
         message_tokens = agent.estimate_tokens_for_message(single_part_message)
 
-        # Should be consistent
-        assert direct_tokens == message_tokens
+        # Should be consistent (message_tokens uses stringify_message_part internally)
+        assert part_tokens == message_tokens
 
     def test_filter_preserves_message_order(self, agent):
         """Test that filter_huge_messages preserves message order."""
