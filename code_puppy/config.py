@@ -10,6 +10,10 @@ from code_puppy.session_storage import save_session_async
 from code_puppy import runtime_state
 
 
+# --- Path caching (lazy evaluation at first access) ---
+_path_cache: dict[str, pathlib.Path | str] = {}
+_PATH_LOCK = threading.Lock()
+
 # --- Config caching (eliminates repeated disk reads) ---
 _config_cache: configparser.ConfigParser | None = None
 _config_mtime: float = 0.0
@@ -20,6 +24,36 @@ _cached_mtime = None
 
 # --- Thread-safe lock for config cache access ---
 _CONFIG_LOCK = threading.Lock()
+
+
+@lru_cache(maxsize=4)
+def _get_xdg_dir_cached(env_var: str, fallback: str) -> str:
+    """
+    Get directory for code_puppy files (cached at module level).
+
+    XDG paths are only used when the corresponding environment variable
+    is explicitly set by the user. Otherwise, we use the legacy ~/.code_puppy
+    directory for all file types (config, data, cache, state).
+
+    Args:
+        env_var: XDG environment variable name (e.g., "XDG_CONFIG_HOME")
+        fallback: Fallback path relative to home (e.g., ".config") - unused unless XDG var is set
+
+    Returns:
+        Path to the directory for code_puppy files
+    """
+    # Use XDG directory ONLY if environment variable is explicitly set
+    xdg_base = os.getenv(env_var)
+    if xdg_base:
+        return os.path.join(xdg_base, "code_puppy")
+
+    # Default to legacy ~/.code_puppy for all file types
+    return os.path.join(os.path.expanduser("~"), ".code_puppy")
+
+
+def _get_xdg_dir(env_var: str, fallback: str) -> str:
+    """Get XDG directory (wrapper for backward compatibility)."""
+    return _get_xdg_dir_cached(env_var, fallback)
 
 
 def _get_config() -> configparser.ConfigParser:
@@ -72,62 +106,71 @@ def _is_truthy(val: str | None, default: bool = False) -> bool:
     return str(val).strip().lower() in _TRUTHY_VALUES
 
 
-def _get_xdg_dir(env_var: str, fallback: str) -> str:
-    """
-    Get directory for code_puppy files, defaulting to ~/.code_puppy.
-
-    XDG paths are only used when the corresponding environment variable
-    is explicitly set by the user. Otherwise, we use the legacy ~/.code_puppy
-    directory for all file types (config, data, cache, state).
-
-    Args:
-        env_var: XDG environment variable name (e.g., "XDG_CONFIG_HOME")
-        fallback: Fallback path relative to home (e.g., ".config") - unused unless XDG var is set
-
-    Returns:
-        Path to the directory for code_puppy files
-    """
-    # Use XDG directory ONLY if environment variable is explicitly set
-    xdg_base = os.getenv(env_var)
-    if xdg_base:
-        return os.path.join(xdg_base, "code_puppy")
-
-    # Default to legacy ~/.code_puppy for all file types
-    return os.path.join(os.path.expanduser("~"), ".code_puppy")
+# --- Lazy-evaluated path constants ---
+# Use module-level __getattr__ for true lazy evaluation at first access
 
 
-# XDG Base Directory paths
-CONFIG_DIR = _get_xdg_dir("XDG_CONFIG_HOME", ".config")
-DATA_DIR = _get_xdg_dir("XDG_DATA_HOME", ".local/share")
-CACHE_DIR = _get_xdg_dir("XDG_CACHE_HOME", ".cache")
-STATE_DIR = _get_xdg_dir("XDG_STATE_HOME", ".local/state")
+def __getattr__(name: str) -> pathlib.Path | str:
+    """Lazy evaluator for path constants - computed only on first access."""
+    # XDG Base Directory paths (cached after first access)
+    if name == "CONFIG_DIR":
+        return _get_xdg_dir_cached("XDG_CONFIG_HOME", ".config")
+    if name == "DATA_DIR":
+        return _get_xdg_dir_cached("XDG_DATA_HOME", ".local/share")
+    if name == "CACHE_DIR":
+        return _get_xdg_dir_cached("XDG_CACHE_HOME", ".cache")
+    if name == "STATE_DIR":
+        return _get_xdg_dir_cached("XDG_STATE_HOME", ".local/state")
 
-# Configuration files (XDG_CONFIG_HOME)
-CONFIG_FILE = pathlib.Path(CONFIG_DIR) / "puppy.cfg"
-MCP_SERVERS_FILE = pathlib.Path(CONFIG_DIR) / "mcp_servers.json"
+    # Configuration files (XDG_CONFIG_HOME)
+    if name == "CONFIG_FILE":
+        return pathlib.Path(__getattr__("CONFIG_DIR")) / "puppy.cfg"
+    if name == "MCP_SERVERS_FILE":
+        return pathlib.Path(__getattr__("CONFIG_DIR")) / "mcp_servers.json"
 
-# Data files (XDG_DATA_HOME)
-MODELS_FILE = pathlib.Path(DATA_DIR) / "models.json"
-EXTRA_MODELS_FILE = pathlib.Path(DATA_DIR) / "extra_models.json"
-AGENTS_DIR = pathlib.Path(DATA_DIR) / "agents"
-SKILLS_DIR = pathlib.Path(DATA_DIR) / "skills"
-CONTEXTS_DIR = pathlib.Path(DATA_DIR) / "contexts"
-_DEFAULT_SQLITE_FILE = pathlib.Path(DATA_DIR) / "dbos_store.sqlite"
+    # Data files (XDG_DATA_HOME)
+    if name == "MODELS_FILE":
+        return pathlib.Path(__getattr__("DATA_DIR")) / "models.json"
+    if name == "EXTRA_MODELS_FILE":
+        return pathlib.Path(__getattr__("DATA_DIR")) / "extra_models.json"
+    if name == "AGENTS_DIR":
+        return pathlib.Path(__getattr__("DATA_DIR")) / "agents"
+    if name == "SKILLS_DIR":
+        return pathlib.Path(__getattr__("DATA_DIR")) / "skills"
+    if name == "CONTEXTS_DIR":
+        return pathlib.Path(__getattr__("DATA_DIR")) / "contexts"
+    if name == "_DEFAULT_SQLITE_FILE":
+        return pathlib.Path(__getattr__("DATA_DIR")) / "dbos_store.sqlite"
 
-# OAuth plugin model files (XDG_DATA_HOME)
-GEMINI_MODELS_FILE = pathlib.Path(DATA_DIR) / "gemini_models.json"
-CHATGPT_MODELS_FILE = pathlib.Path(DATA_DIR) / "chatgpt_models.json"
-CLAUDE_MODELS_FILE = pathlib.Path(DATA_DIR) / "claude_models.json"
-ANTIGRAVITY_MODELS_FILE = pathlib.Path(DATA_DIR) / "antigravity_models.json"
+    # OAuth plugin model files (XDG_DATA_HOME)
+    if name == "GEMINI_MODELS_FILE":
+        return pathlib.Path(__getattr__("DATA_DIR")) / "gemini_models.json"
+    if name == "CHATGPT_MODELS_FILE":
+        return pathlib.Path(__getattr__("DATA_DIR")) / "chatgpt_models.json"
+    if name == "CLAUDE_MODELS_FILE":
+        return pathlib.Path(__getattr__("DATA_DIR")) / "claude_models.json"
+    if name == "ANTIGRAVITY_MODELS_FILE":
+        return pathlib.Path(__getattr__("DATA_DIR")) / "antigravity_models.json"
 
-# Cache files (XDG_CACHE_HOME)
-AUTOSAVE_DIR = pathlib.Path(CACHE_DIR) / "autosaves"
+    # Cache files (XDG_CACHE_HOME)
+    if name == "AUTOSAVE_DIR":
+        return pathlib.Path(__getattr__("CACHE_DIR")) / "autosaves"
 
-# State files (XDG_STATE_HOME)
-COMMAND_HISTORY_FILE = pathlib.Path(STATE_DIR) / "command_history.txt"
-DBOS_DATABASE_URL = os.environ.get(
-    "DBOS_SYSTEM_DATABASE_URL", f"sqlite:///{_DEFAULT_SQLITE_FILE}"
-)
+    # State files (XDG_STATE_HOME)
+    if name == "COMMAND_HISTORY_FILE":
+        return pathlib.Path(__getattr__("STATE_DIR")) / "command_history.txt"
+
+    # Database URL (lazy since it depends on _DEFAULT_SQLITE_FILE)
+    if name == "DBOS_DATABASE_URL":
+        return os.environ.get(
+            "DBOS_SYSTEM_DATABASE_URL", f"sqlite:///{__getattr__('_DEFAULT_SQLITE_FILE')}"
+        )
+
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+# Note: All path constants are now lazy-evaluated via __getattr__ above.
+# They are computed only on first access and cached thereafter.
 # DBOS enable switch is controlled solely via puppy.cfg using key 'enable_dbos'.
 # Default: True (DBOS enabled) unless explicitly disabled.
 
