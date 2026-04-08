@@ -14,6 +14,7 @@ provides additional rule-based command filtering.
 import asyncio
 from collections import deque
 import ctypes
+import io
 import os
 import re
 import select
@@ -1232,7 +1233,7 @@ async def run_shell_command(
         context=context,
     )
 
-if not security_decision.allowed:
+    if not security_decision.allowed:
         return ShellCommandOutput(
             success=False,
             command=command,
