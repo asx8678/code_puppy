@@ -1,5 +1,4 @@
 import configparser
-import datetime
 import json
 import os
 import pathlib
@@ -8,6 +7,7 @@ import time
 from functools import lru_cache
 
 from code_puppy.session_storage import save_session, save_session_async
+from code_puppy import runtime_state
 
 
 # --- Config caching (eliminates repeated disk reads) ---
@@ -210,13 +210,11 @@ def get_enable_streaming() -> bool:
 DEFAULT_SECTION = "puppy"
 REQUIRED_KEYS = ["puppy_name", "owner_name"]
 
-# Runtime-only autosave session ID (per-process)
-_CURRENT_AUTOSAVE_ID: str | None = None
+# Note: Runtime-only state variables moved to runtime_state.py:
+# - _CURRENT_AUTOSAVE_ID -> runtime_state._CURRENT_AUTOSAVE_ID
+# - _SESSION_MODEL -> runtime_state._SESSION_MODEL
 
-# Session-local model name (initialized from file on first access, then cached)
-_SESSION_MODEL: str | None = None
-
-# Cache containers for model validation and defaults
+# Cache containers for model validation and defaults (config caching, not runtime state)
 _model_validation_cache = {}
 _default_model_cache = None
 _default_vision_model_cache = None
@@ -600,8 +598,7 @@ def reset_session_model():
     This is primarily for testing purposes. In normal operation, the session
     model is set once at startup and only changes via set_model_name().
     """
-    global _SESSION_MODEL
-    _SESSION_MODEL = None
+    runtime_state.reset_session_model()
 
 
 def model_supports_setting(model_name: str, setting: str) -> bool:
@@ -636,19 +633,18 @@ def get_global_model_name():
     Uses session-local caching so that model changes in other terminals
     don't affect this running instance. The file is only read once at startup.
 
-    1. If _SESSION_MODEL is set, return it (session cache)
+    1. If session model is cached in runtime_state, return it (session cache)
     2. Otherwise, look at ``model`` in *puppy.cfg*
     3. If that value exists **and** is present in *models.json*, use it
     4. Otherwise return the first model listed in *models.json*
     5. As a last resort fall back to ``claude-4-0-sonnet``
 
-    The result is cached in _SESSION_MODEL for subsequent calls.
+    The result is cached in runtime_state for subsequent calls.
     """
-    global _SESSION_MODEL
-
     # Return cached session model if already initialized
-    if _SESSION_MODEL is not None:
-        return _SESSION_MODEL
+    cached_model = runtime_state.get_session_model()
+    if cached_model is not None:
+        return cached_model
 
     # First access - initialize from file
     stored_model = get_value("model")
@@ -656,26 +652,25 @@ def get_global_model_name():
     if stored_model:
         # Use cached validation to avoid hitting ModelFactory every time
         if _validate_model_exists(stored_model):
-            _SESSION_MODEL = stored_model
-            return _SESSION_MODEL
+            runtime_state.set_session_model(stored_model)
+            return stored_model
 
     # Either no stored model or it's not valid – choose default from models.json
-    _SESSION_MODEL = _default_model_from_models_json()
-    return _SESSION_MODEL
+    default_model = _default_model_from_models_json()
+    runtime_state.set_session_model(default_model)
+    return default_model
 
 
 def set_model_name(model: str):
     """Sets the model name in both the session cache and persistent config file.
 
-    Updates _SESSION_MODEL immediately for this process, and writes to the
+    Updates runtime_state immediately for this process, and writes to the
     config file so new terminals will pick up this model as their default.
     """
-    global _SESSION_MODEL
+    # Update session cache immediately (runtime state, not config)
+    runtime_state.set_session_model(model)
 
-    # Update session cache immediately
-    _SESSION_MODEL = model
-
-    # Also persist to file for new terminal sessions
+    # Also persist to file for new terminal sessions (this is config)
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
     if DEFAULT_SECTION not in config:
@@ -1517,24 +1512,28 @@ def reset_all_banner_colors():
 
 
 def get_current_autosave_id() -> str:
-    """Get or create the current autosave session ID for this process."""
-    global _CURRENT_AUTOSAVE_ID
-    if not _CURRENT_AUTOSAVE_ID:
-        # Use a full timestamp so tests and UX can predict the name if needed
-        _CURRENT_AUTOSAVE_ID = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    return _CURRENT_AUTOSAVE_ID
+    """Get or create the current autosave session ID for this process.
+
+    This is a convenience wrapper that delegates to runtime_state.
+    The autosave ID is runtime-only state, not persisted to config.
+    """
+    return runtime_state.get_current_autosave_id()
 
 
 def rotate_autosave_id() -> str:
-    """Force a new autosave session ID and return it."""
-    global _CURRENT_AUTOSAVE_ID
-    _CURRENT_AUTOSAVE_ID = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    return _CURRENT_AUTOSAVE_ID
+    """Force a new autosave session ID and return it.
+
+    This is a convenience wrapper that delegates to runtime_state.
+    """
+    return runtime_state.rotate_autosave_id()
 
 
 def get_current_autosave_session_name() -> str:
-    """Return the full session name used for autosaves (no file extension)."""
-    return f"auto_session_{get_current_autosave_id()}"
+    """Return the full session name used for autosaves (no file extension).
+
+    This is a convenience wrapper that delegates to runtime_state.
+    """
+    return runtime_state.get_current_autosave_session_name()
 
 
 def set_current_autosave_from_session_name(session_name: str) -> str:
@@ -1542,14 +1541,10 @@ def set_current_autosave_from_session_name(session_name: str) -> str:
 
     Accepts names like 'auto_session_YYYYMMDD_HHMMSS' and extracts the ID part.
     Returns the ID that was set.
+
+    This is a convenience wrapper that delegates to runtime_state.
     """
-    global _CURRENT_AUTOSAVE_ID
-    prefix = "auto_session_"
-    if session_name.startswith(prefix):
-        _CURRENT_AUTOSAVE_ID = session_name[len(prefix) :]
-    else:
-        _CURRENT_AUTOSAVE_ID = session_name
-    return _CURRENT_AUTOSAVE_ID
+    return runtime_state.set_current_autosave_from_session_name(session_name)
 
 
 def auto_save_session_if_enabled() -> bool:
@@ -1560,6 +1555,8 @@ def auto_save_session_if_enabled() -> bool:
     Token counting is done once on the main thread and passed to the background
     thread to avoid redundant computation.
     """
+    import datetime  # Local import since this is only used here
+
     if not get_auto_save_session():
         return False
 

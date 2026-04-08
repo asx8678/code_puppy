@@ -506,20 +506,26 @@ class TestModelSupportsSetting:
 # ---------------------------------------------------------------------------
 class TestModelName:
     def test_get_global_model_name_from_session(self):
-        cp_config._SESSION_MODEL = "cached-model"
+        from code_puppy import runtime_state
+
+        runtime_state.set_session_model("cached-model")
         assert cp_config.get_global_model_name() == "cached-model"
-        cp_config._SESSION_MODEL = None
+        runtime_state.reset_session_model()
 
     def test_get_global_model_name_from_config(self):
-        cp_config._SESSION_MODEL = None
+        from code_puppy import runtime_state
+
+        runtime_state.reset_session_model()
         cp_config.set_config_value("model", "my-model")
         with patch.object(cp_config, "_validate_model_exists", return_value=True):
             result = cp_config.get_global_model_name()
             assert result == "my-model"
-        cp_config._SESSION_MODEL = None
+        runtime_state.reset_session_model()
 
     def test_get_global_model_name_invalid_stored(self):
-        cp_config._SESSION_MODEL = None
+        from code_puppy import runtime_state
+
+        runtime_state.reset_session_model()
         cp_config.set_config_value("model", "bad-model")
         with patch.object(cp_config, "_validate_model_exists", return_value=False):
             with patch.object(
@@ -527,15 +533,19 @@ class TestModelName:
             ):
                 result = cp_config.get_global_model_name()
                 assert result == "default-m"
-        cp_config._SESSION_MODEL = None
+        runtime_state.reset_session_model()
 
     def test_set_model_name(self):
+        from code_puppy import runtime_state
+
         cp_config.set_model_name("new-model")
-        assert cp_config._SESSION_MODEL == "new-model"
-        cp_config._SESSION_MODEL = None
+        assert runtime_state.get_session_model() == "new-model"
+        runtime_state.reset_session_model()
 
     def test_reset_session_model(self):
-        cp_config._SESSION_MODEL = "foo"
+        from code_puppy import runtime_state
+
+        runtime_state.set_session_model("foo")
         cp_config.reset_session_model()
         assert cp_config._SESSION_MODEL is None
 
