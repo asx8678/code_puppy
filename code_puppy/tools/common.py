@@ -439,16 +439,12 @@ def _compile_patterns(patterns: list[str]) -> _re.Pattern:
     and ``?``) and the results are OR-joined into one compiled regex.
     Duplicate patterns are removed to keep the regex lean.
     """
-    seen: set[str] = set()
-    regex_parts: list[str] = []
-    for pat in patterns:
-        if pat in seen:
-            continue
-        seen.add(pat)
-        regex_parts.append(fnmatch.translate(pat))
-    if not regex_parts:
+    # Use dict.fromkeys() to deduplicate while preserving order, then
+    # generator expression to translate patterns on-the-fly (no intermediate list)
+    unique_patterns = dict.fromkeys(patterns)
+    if not unique_patterns:
         return _re.compile(r"(?!)")  # matches nothing
-    return _re.compile("|".join(f"(?:{p})" for p in regex_parts))
+    return _re.compile("|".join(f"(?:{fnmatch.translate(p)})" for p in unique_patterns))
 
 
 _DIR_IGNORE_RE: _re.Pattern = _compile_patterns(DIR_IGNORE_PATTERNS)
