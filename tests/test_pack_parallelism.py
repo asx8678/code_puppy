@@ -2,7 +2,7 @@
 
 import builtins
 import importlib
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 def _reload_plugin():
@@ -202,3 +202,177 @@ class TestCommandHelp:
         result = plugin._command_help()
         names = [entry[0] for entry in result]
         assert "pack-parallelism" not in names
+
+
+class TestInvalidateAgentCaches:
+    def test_skips_reload_when_value_unchanged(self):
+        """If previous == new, skip cache invalidation entirely."""
+        plugin = _reload_plugin()
+        with patch("code_puppy.agents.agent_manager.get_current_agent") as mock_get:
+            plugin._invalidate_agent_caches(previous_val=4, new_val=4)
+            mock_get.assert_not_called()
+
+    def test_busts_cached_system_prompt_and_reloads_agent(self):
+        """When value changes, both caches should be invalidated."""
+        plugin = _reload_plugin()
+
+        # Create a mock agent with the expected attributes
+        mock_agent = MagicMock()
+        mock_state = MagicMock()
+        mock_state.cached_system_prompt = "old cached prompt"
+        mock_agent._state = mock_state
+        mock_agent.reload_code_generation_agent = MagicMock()
+
+        with patch(
+            "code_puppy.agents.agent_manager.get_current_agent", return_value=mock_agent
+        ):
+            plugin._invalidate_agent_caches(previous_val=2, new_val=4)
+
+        # Verify cache was busted
+        assert mock_state.cached_system_prompt is None
+        # Verify agent was reloaded
+        mock_agent.reload_code_generation_agent.assert_called_once()
+
+    def test_handles_missing_agent_state_gracefully(self):
+        """Agent without _state attribute should not crash."""
+        plugin = _reload_plugin()
+
+        mock_agent = MagicMock()
+        # No _state attribute
+        del mock_agent._state
+
+        with patch(
+            "code_puppy.agents.agent_manager.get_current_agent", return_value=mock_agent
+        ):
+            # Should not raise
+            plugin._invalidate_agent_caches(previous_val=2, new_val=4)
+
+    def test_handles_missing_reload_method_gracefully(self):
+        """Agent without reload_code_generation_agent should not crash."""
+        plugin = _reload_plugin()
+
+        mock_agent = MagicMock()
+        mock_state = MagicMock()
+        mock_state.cached_system_prompt = "old prompt"
+        mock_agent._state = mock_state
+        # No reload_code_generation_agent method
+        del mock_agent.reload_code_generation_agent
+
+        with patch(
+            "code_puppy.agents.agent_manager.get_current_agent", return_value=mock_agent
+        ):
+            # Should not raise - cache busted but no reload
+            plugin._invalidate_agent_caches(previous_val=2, new_val=4)
+            # Cache should still be busted
+            assert mock_state.cached_system_prompt is None
+
+
+class TestCommandBustsCache:
+    def test_command_busts_cached_system_prompt(self):
+        """Test that slash command triggers cache invalidation."""
+        plugin = _reload_plugin()
+        plugin._session_max = None
+        plugin._cached_config = 2
+
+        # Create a mock agent
+        mock_agent = MagicMock()
+        mock_state = MagicMock()
+        mock_state.cached_system_prompt = "old prompt"
+        mock_agent._state = mock_state
+        mock_agent.reload_code_generation_agent = MagicMock()
+
+        with patch("code_puppy.messaging.emit_info"):
+            with patch(
+                "code_puppy.agents.agent_manager.get_current_agent",
+                return_value=mock_agent,
+            ):
+                plugin._handle_command("/pack-parallel 4", "pack-parallel")
+
+        # Verify both caches were busted
+        assert mock_state.cached_system_prompt is None
+        mock_agent.reload_code_generation_agent.assert_called_once()
+
+    def test_command_skips_reload_on_same_value(self):
+        """Test that setting same value skips reload optimization."""
+        plugin = _reload_plugin()
+        plugin._session_max = 4  # Already 4
+        plugin._cached_config = 2
+
+        mock_agent = MagicMock()
+
+        with patch("code_puppy.messaging.emit_info"):
+            with patch(
+                "code_puppy.agents.agent_manager.get_current_agent",
+                return_value=mock_agent,
+            ) as mock_get:
+                plugin._handle_command("/pack-parallel 4", "pack-parallel")
+
+        # get_current_agent should NOT be called because optimization
+        # skips invalidation when previous_val == new_val
+        mock_get.assert_not_called()
+
+    def test_command_survives_when_no_active_agent(self):
+        """Slash command should succeed even when no agent is active."""
+        plugin = _reload_plugin()
+        plugin._session_max = None
+        plugin._cached_config = 2
+
+        with patch("code_puppy.messaging.emit_info") as mock_info:
+            with patch(
+                "code_puppy.agents.agent_manager.get_current_agent",
+                side_effect=Exception("No agent available"),
+            ):
+                result = plugin._handle_command("/pack-parallel 4", "pack-parallel")
+
+        # Should return True (command handled) despite agent error
+        assert result is True
+        # Success message should still be emitted
+        mock_info.assert_called()
+        # Check that the success message mentions the new value
+        call_texts = [str(c) for c in mock_info.call_args_list]
+        assert any("4" in text for text in call_texts)
+
+    def test_command_survives_when_get_current_agent_returns_none(self):
+        """Slash command should succeed when get_current_agent returns None."""
+        plugin = _reload_plugin()
+        plugin._session_max = None
+        plugin._cached_config = 2
+
+        with patch("code_puppy.messaging.emit_info") as mock_info:
+            with patch(
+                "code_puppy.agents.agent_manager.get_current_agent", return_value=None
+            ):
+                result = plugin._handle_command("/pack-parallel 4", "pack-parallel")
+
+        assert result is True
+        mock_info.assert_called()
+        call_texts = [str(c) for c in mock_info.call_args_list]
+        assert any("4" in text for text in call_texts)
+
+    def test_command_survives_cache_invalidation_exception(self):
+        """Slash command should succeed even if cache invalidation raises."""
+        plugin = _reload_plugin()
+        plugin._session_max = None
+        plugin._cached_config = 2
+
+        mock_agent = MagicMock()
+        # Make cache invalidation raise
+        mock_agent._state.cached_system_prompt = "old"
+        type(mock_agent._state).cached_system_prompt = property(
+            lambda self: "old",
+            lambda self, val: (_ for _ in ()).throw(Exception("Cannot set")),
+        )
+
+        with patch("code_puppy.messaging.emit_info") as mock_info:
+            with patch(
+                "code_puppy.agents.agent_manager.get_current_agent",
+                return_value=mock_agent,
+            ):
+                result = plugin._handle_command("/pack-parallel 4", "pack-parallel")
+
+        # Should return True (command handled) despite cache error
+        assert result is True
+        # Value should still be set
+        assert plugin._session_max == 4
+        # Success message should be emitted
+        mock_info.assert_called()
