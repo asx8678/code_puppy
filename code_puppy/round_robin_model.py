@@ -216,4 +216,4 @@ class RoundRobinModel(Model):
             if span.is_recording():
                 attributes = getattr(span, "attributes", {})
                 if attributes.get("gen_ai.request.model") == self.model_name:
-                    span.set_attributes(model.model_attributes(model))
+                    span.set_attributes({"gen_ai.response.model": model.model_name})

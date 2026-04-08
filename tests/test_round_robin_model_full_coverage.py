@@ -115,7 +115,7 @@ class TestSetSpanAttributes:
         ):
             rrm._set_span_attributes(m1)
 
-        mock_span.set_attributes.assert_called_once_with({"model_name": "model1"})
+        mock_span.set_attributes.assert_called_once_with({"gen_ai.response.model": "model1"})
 
     def test_set_span_attributes_recording_non_matching_model(self):
         from code_puppy.round_robin_model import RoundRobinModel
