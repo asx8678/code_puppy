@@ -507,46 +507,51 @@ class RichConsoleRenderer:
                 dir_stats[parent]["files"].append(entry)
                 dir_stats[parent]["total_size"] += entry.size
 
+        # Bottom-up memoization: compute all directory sizes in a single pass
+        size_cache: dict[str, int] = {}
+        file_count_cache: dict[str, int] = {}
+
+        def compute_recursive_stats(dir_path: str) -> tuple[int, int]:
+            """Compute size and file count for a directory and all subdirectories.
+            
+            Uses post-order traversal (bottom-up) to ensure children are computed
+            before parents. Results are memoized in size_cache and file_count_cache.
+            """
+            if dir_path in size_cache:
+                return size_cache[dir_path], file_count_cache[dir_path]
+
+            stats = dir_stats.get(
+                dir_path, {"files": [], "subdirs": set(), "total_size": 0}
+            )
+            total_size = stats["total_size"]
+            total_files = len(stats["files"])
+
+            # Recursively compute for all subdirectories first (post-order)
+            for sub in stats["subdirs"]:
+                sub_size, sub_files = compute_recursive_stats(sub)
+                total_size += sub_size
+                total_files += sub_files
+
+            size_cache[dir_path] = total_size
+            file_count_cache[dir_path] = total_files
+            return total_size, total_files
+
+        # Pre-compute all directory sizes in a single bottom-up pass
+        all_dirs = list(dir_stats.keys())
+        for d in all_dirs:
+            if d not in size_cache:
+                compute_recursive_stats(d)
+
         def render_dir_tree(
             dir_path: str,
             depth: int = 0,
-            size_cache: dict[str, int] | None = None,
-            file_count_cache: dict[str, int] | None = None,
         ) -> None:
-            """Recursively render directory with compact summary."""
-            # Initialize caches on first call (root level)
-            if size_cache is None:
-                size_cache = {}
-            if file_count_cache is None:
-                file_count_cache = {}
-
+            """Render directory with compact summary using pre-computed stats."""
             stats = dir_stats.get(
                 dir_path, {"files": [], "subdirs": set(), "total_size": 0}
             )
             files = stats["files"]
             subdirs = sorted(stats["subdirs"])
-
-            # Calculate total size including subdirectories (recursive) with memoization
-            def get_recursive_size(d: str) -> int:
-                if d in size_cache:
-                    return size_cache[d]
-                s = dir_stats.get(d, {"files": [], "subdirs": set(), "total_size": 0})
-                size = s["total_size"]
-                for sub in s["subdirs"]:
-                    size += get_recursive_size(sub)
-                size_cache[d] = size
-                return size
-
-            # Calculate total file count including subdirectories (recursive) with memoization
-            def get_recursive_file_count(d: str) -> int:
-                if d in file_count_cache:
-                    return file_count_cache[d]
-                s = dir_stats.get(d, {"files": [], "subdirs": set(), "total_size": 0})
-                count = len(s["files"])
-                for sub in s["subdirs"]:
-                    count += get_recursive_file_count(sub)
-                file_count_cache[d] = count
-                return count
 
             indent = "    " * depth
 
@@ -567,12 +572,12 @@ class RichConsoleRenderer:
 
                 # Show subdirs at root level
                 for subdir in subdirs:
-                    render_dir_tree(subdir, depth, size_cache, file_count_cache)
+                    render_dir_tree(subdir, depth)
             else:
-                # Show directory with summary
+                # Show directory with summary (use pre-computed cache values)
                 dir_name = os.path.basename(dir_path)
-                rec_size = get_recursive_size(dir_path)
-                rec_file_count = get_recursive_file_count(dir_path)
+                rec_size = size_cache.get(dir_path, 0)
+                rec_file_count = file_count_cache.get(dir_path, 0)
                 subdir_count = len(subdirs)
 
                 # Build summary parts
@@ -595,7 +600,7 @@ class RichConsoleRenderer:
 
                 # Recursively show subdirectories
                 for subdir in subdirs:
-                    render_dir_tree(subdir, depth + 1, size_cache, file_count_cache)
+                    render_dir_tree(subdir, depth + 1)
 
         # Render the tree starting from root
         render_dir_tree(root_key, 0)
