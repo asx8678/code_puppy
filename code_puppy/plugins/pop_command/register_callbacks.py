@@ -5,30 +5,7 @@ from __future__ import annotations
 from typing import Any, List, Optional, Tuple
 
 from code_puppy.callbacks import register_callback
-
-
-def emit_error(message: Any) -> None:
-    from code_puppy.messaging import emit_error as _emit_error
-
-    _emit_error(message)
-
-
-def emit_info(message: Any) -> None:
-    from code_puppy.messaging import emit_info as _emit_info
-
-    _emit_info(message)
-
-
-def emit_success(message: Any) -> None:
-    from code_puppy.messaging import emit_success as _emit_success
-
-    _emit_success(message)
-
-
-def emit_warning(message: Any) -> None:
-    from code_puppy.messaging import emit_warning as _emit_warning
-
-    _emit_warning(message)
+from code_puppy.utils import emit_error, emit_info, emit_success, emit_warning
 
 
 def _custom_help() -> List[Tuple[str, str]]:
