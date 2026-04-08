@@ -110,4 +110,5 @@ dev = [
     "pexpect>=4.9.0",
     "maturin>=1.12.6",
     "hypothesis>=6.150.0",
+    "pytest-randomly>=4.0.1",
 ]

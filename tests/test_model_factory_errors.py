@@ -5,11 +5,16 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
-from code_puppy.model_factory import ModelFactory, get_custom_config
+from code_puppy.model_factory import ModelFactory, get_custom_config, invalidate_model_config_cache
 
 
 class TestModelFactoryErrors:
     """Test error handling in ModelFactory - focus on exception paths."""
+
+    @pytest.fixture(autouse=True)
+    def invalidate_cache(self):
+        """Invalidate model config cache before each test to ensure isolation."""
+        invalidate_model_config_cache()
 
     def test_get_model_invalid_name(self):
         """Test get_model() with completely invalid model name."""
@@ -331,9 +336,6 @@ class TestModelFactoryErrors:
 
     def test_config_callback_exception_handling(self):
         """Test load_config() when callbacks raise exceptions."""
-        from code_puppy.model_factory import invalidate_model_config_cache
-
-        invalidate_model_config_cache()
         with patch(
             "code_puppy.model_factory.callbacks.get_callbacks",
             return_value=[lambda: None],
