@@ -383,7 +383,7 @@ class TestGetCustomConfig:
         with patch("code_puppy.model_factory.get_api_key", return_value=None):
             with patch("code_puppy.model_factory.emit_warning") as mock_warn:
                 url, headers, verify, api_key = get_custom_config(config)
-                assert api_key is None
+                assert api_key == ""  # Missing env var returns empty string via regex substitution
                 mock_warn.assert_called()
 
     def test_get_custom_config_raw_api_key(self):
