@@ -53,19 +53,20 @@ class PuppyInput(Input):
         self._history_index = -1
         self._saved_input = ""
 
-    def _get_overlay(self) -> "CompletionOverlay | None":
-        """Get the completion overlay, or None if not available."""
-        try:
-            return self.app.query_one("#completions", CompletionOverlay)
-        except Exception:
-            return None
+    @property
+    def _overlay(self) -> "CompletionOverlay | None":
+        """Get the cached completion overlay from the app (Issue APP-M2)."""
+        app = self.app
+        if hasattr(app, "_completion_overlay"):
+            return app._completion_overlay
+        return None
 
     def _trigger_completions(self) -> None:
         """Show completions for the current input value."""
         from code_puppy.tui.completion import get_completions
 
         completions = get_completions(self.value, self.cursor_position)
-        overlay = self._get_overlay()
+        overlay = self._overlay
         if overlay is None:
             return
         if completions:
@@ -75,7 +76,7 @@ class PuppyInput(Input):
 
     def on_key(self, event) -> None:
         """Handle up/down arrow for history and completion navigation."""
-        overlay = self._get_overlay()
+        overlay = self._overlay
         overlay_visible = overlay is not None and overlay.is_visible
 
         # When overlay is visible, forward navigation keys to it
@@ -419,6 +420,125 @@ class CodePuppyApp(App):
         # Regular text → send to agent
         await self._handle_agent_prompt(text)
 
+    # --- Slash command handlers (Issue APP-M1: dict dispatch) ---
+
+    def _cmd_help(self, command: str, chat) -> None:
+        """Handle /help, /h → render directly in chat."""
+        try:
+            from code_puppy.command_line.command_handler import get_commands_help
+
+            help_text = get_commands_help()
+            chat.write(help_text)
+        except Exception as e:
+            chat.write(f"[red]Error loading help: {e}[/red]")
+
+    def _cmd_model(self, command: str, chat) -> None:
+        """Handle /model, /m (no args) → Textual model picker."""
+        self._show_model_picker_screen()
+
+    def _cmd_agent(self, command: str, chat) -> None:
+        """Handle /agent, /a (no args) → Textual agent picker."""
+        from code_puppy.tui.screens.agent_screen import AgentScreen
+
+        def _on_agent_selected_cmd(_result=None) -> None:
+            try:
+                self._info_bar.update_from_app_state()
+            except AttributeError:
+                try:
+                    self.query_one("#info-bar", InfoBar).update_from_app_state()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        self.push_screen(AgentScreen(), callback=_on_agent_selected_cmd)
+
+    def _cmd_settings(self, command: str, chat) -> None:
+        """Handle /settings, /model_settings → Textual settings screen."""
+        from code_puppy.tui.screens.model_settings_screen import ModelSettingsScreen
+
+        self.push_screen(ModelSettingsScreen(), callback=self._on_screen_dismissed)
+
+    def _cmd_diff(self, command: str, chat) -> None:
+        """Handle /diff → Textual diff screen."""
+        from code_puppy.tui.screens.diff_screen import DiffScreen
+
+        self.push_screen(DiffScreen())
+
+    def _cmd_colors(self, command: str, chat) -> None:
+        """Handle /colors → Textual colors screen."""
+        from code_puppy.tui.screens.colors_screen import ColorsScreen
+
+        self.push_screen(ColorsScreen())
+
+    def _cmd_tutorial(self, command: str, chat) -> None:
+        """Handle /tutorial → Textual onboarding screen."""
+        from code_puppy.tui.screens.onboarding_screen import OnboardingScreen
+
+        self.push_screen(OnboardingScreen())
+
+    def _cmd_autosave_load(self, command: str, chat) -> None:
+        """Handle /autosave_load → Textual autosave screen."""
+        from code_puppy.tui.screens.autosave_screen import AutosaveScreen
+
+        self.push_screen(AutosaveScreen())
+
+    def _cmd_skills(self, command: str, chat) -> None:
+        """Handle /skills, /skill → Textual skills screen."""
+        from code_puppy.tui.screens.skills_screen import SkillsScreen
+
+        self.push_screen(SkillsScreen())
+
+    def _cmd_hooks(self, command: str, chat) -> None:
+        """Handle /hooks, /hook → Textual hooks screen."""
+        from code_puppy.tui.screens.hooks_screen import HooksScreen
+
+        self.push_screen(HooksScreen())
+
+    def _cmd_scheduler(self, command: str, chat) -> None:
+        """Handle /scheduler, /sched, /cron → Textual scheduler screen."""
+        from code_puppy.tui.screens.scheduler_screen import SchedulerScreen
+
+        self.push_screen(SchedulerScreen())
+
+    def _cmd_uc(self, command: str, chat) -> None:
+        """Handle /uc → Textual UC screen."""
+        from code_puppy.tui.screens.uc_screen import UCScreen
+
+        self.push_screen(UCScreen())
+
+    def _cmd_add_model(self, command: str, chat) -> None:
+        """Handle /add_model → Textual add model screen."""
+        from code_puppy.tui.screens.add_model_screen import AddModelScreen
+
+        self.push_screen(AddModelScreen(), callback=self._on_screen_dismissed)
+
+    # Dispatch table for slash commands (Issue APP-M1: dict dispatch)
+    # Maps command names to handler methods
+    _SLASH_COMMANDS: dict[str, str] = {
+        "/help": "_cmd_help",
+        "/h": "_cmd_help",
+        "/model": "_cmd_model",
+        "/m": "_cmd_model",
+        "/agent": "_cmd_agent",
+        "/a": "_cmd_agent",
+        "/settings": "_cmd_settings",
+        "/model_settings": "_cmd_settings",
+        "/diff": "_cmd_diff",
+        "/colors": "_cmd_colors",
+        "/tutorial": "_cmd_tutorial",
+        "/autosave_load": "_cmd_autosave_load",
+        "/skills": "_cmd_skills",
+        "/skill": "_cmd_skills",
+        "/hooks": "_cmd_hooks",
+        "/hook": "_cmd_hooks",
+        "/scheduler": "_cmd_scheduler",
+        "/sched": "_cmd_scheduler",
+        "/cron": "_cmd_scheduler",
+        "/uc": "_cmd_uc",
+        "/add_model": "_cmd_add_model",
+    }
+
     async def _handle_slash_command(self, command: str) -> None:
         """Dispatch a slash command to the command handler.
 
@@ -441,110 +561,12 @@ class CodePuppyApp(App):
         # handle_command — those use stdin pickers which deadlock in TUI).    #
         # ------------------------------------------------------------------ #
 
-        # /help, /h → render directly in chat
-        if cmd_name in ("/help", "/h"):
-            try:
-                from code_puppy.command_line.command_handler import get_commands_help
-
-                help_text = get_commands_help()
-                chat.write(help_text)
-            except Exception as e:
-                chat.write(f"[red]Error loading help: {e}[/red]")
-            return
-
-        # /model, /m (no args) → Textual model picker
-        # /model <name> or /m <name> → safe to pass through (no picker invoked)
-        if cmd_name in ("/model", "/m") and len(cmd_parts) == 1:
-            self._show_model_picker_screen()
-            return
-
-        # /agent, /a (no args) → Textual agent picker
-        # /agent <name> → safe to pass through
-        if cmd_name in ("/agent", "/a") and len(cmd_parts) == 1:
-            from code_puppy.tui.screens.agent_screen import AgentScreen
-
-            def _on_agent_selected_cmd(_result=None) -> None:
-                try:
-                    self._info_bar.update_from_app_state()
-                except AttributeError:
-                    try:
-                        self.query_one("#info-bar", InfoBar).update_from_app_state()
-                    except Exception:
-                        pass
-                except Exception:
-                    pass
-
-            self.push_screen(AgentScreen(), callback=_on_agent_selected_cmd)
-            return
-
-        # /settings, /model_settings → Textual settings screen
-        if cmd_name in ("/settings", "/model_settings"):
-            from code_puppy.tui.screens.model_settings_screen import ModelSettingsScreen
-
-            self.push_screen(ModelSettingsScreen(), callback=self._on_screen_dismissed)
-            return
-
-        # /diff → Textual diff screen
-        if cmd_name == "/diff":
-            from code_puppy.tui.screens.diff_screen import DiffScreen
-
-            self.push_screen(DiffScreen())
-            return
-
-        # /colors → Textual colors screen
-        if cmd_name == "/colors":
-            from code_puppy.tui.screens.colors_screen import ColorsScreen
-
-            self.push_screen(ColorsScreen())
-            return
-
-        # /tutorial → Textual onboarding screen
-        if cmd_name == "/tutorial":
-            from code_puppy.tui.screens.onboarding_screen import OnboardingScreen
-
-            self.push_screen(OnboardingScreen())
-            return
-
-        # /autosave_load → Textual autosave screen
-        if cmd_name == "/autosave_load":
-            from code_puppy.tui.screens.autosave_screen import AutosaveScreen
-
-            self.push_screen(AutosaveScreen())
-            return
-
-        # /skills, /skill → Textual skills screen
-        if cmd_name in ("/skills", "/skill"):
-            from code_puppy.tui.screens.skills_screen import SkillsScreen
-
-            self.push_screen(SkillsScreen())
-            return
-
-        # /hooks, /hook → Textual hooks screen
-        if cmd_name in ("/hooks", "/hook"):
-            from code_puppy.tui.screens.hooks_screen import HooksScreen
-
-            self.push_screen(HooksScreen())
-            return
-
-        # /scheduler, /sched, /cron → Textual scheduler screen
-        if cmd_name in ("/scheduler", "/sched", "/cron"):
-            from code_puppy.tui.screens.scheduler_screen import SchedulerScreen
-
-            self.push_screen(SchedulerScreen())
-            return
-
-        # /uc → Textual UC screen
-        if cmd_name == "/uc":
-            from code_puppy.tui.screens.uc_screen import UCScreen
-
-            self.push_screen(UCScreen())
-            return
-
-        # /add_model → Textual add model screen
-        if cmd_name == "/add_model":
-            from code_puppy.tui.screens.add_model_screen import AddModelScreen
-
-            self.push_screen(AddModelScreen(), callback=self._on_screen_dismissed)
+        # Dict dispatch for simple screen commands (Issue APP-M1)
+        # Only dispatch if no additional args (args require fall-through)
+        handler_name = self._SLASH_COMMANDS.get(cmd_name)
+        if handler_name and len(cmd_parts) == 1:
+            handler = getattr(self, handler_name)
+            handler(command, chat)
             return
 
         # /mcp install → Textual MCP catalog screen
@@ -573,7 +595,6 @@ class CodePuppyApp(App):
 
             def _on_mcp_form_done(server_name: str | None) -> None:
                 if server_name:
-                    # Use cached widget reference (Issue APP-H1)
                     _chat = self._chat_log
                     _chat.write(
                         f"[bold green]✅ Custom MCP server '[cyan]{server_name}[/cyan]' added![/bold green]"
