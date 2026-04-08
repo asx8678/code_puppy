@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any
+import os
 
 from code_puppy import config
 
@@ -10,7 +11,9 @@ CLAUDE_CODE_OAUTH_CONFIG: dict[str, Any] = {
     "token_url": "https://console.anthropic.com/v1/oauth/token",
     "api_base_url": "https://api.anthropic.com",
     # OAuth client configuration observed in Claude Code CLI flow
-    "client_id": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+    "client_id": os.environ.get(
+        "CLAUDE_OAUTH_CLIENT_ID", "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+    ),
     "scope": "org:create_api_key user:profile user:inference",
     # Callback handling (we host a localhost callback to capture the redirect)
     "redirect_host": "http://localhost",

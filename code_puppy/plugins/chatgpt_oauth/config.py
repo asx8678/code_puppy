@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any
+import os
 
 from code_puppy import config
 
@@ -12,7 +13,9 @@ CHATGPT_OAUTH_CONFIG: dict[str, Any] = {
     # API endpoints - Codex uses chatgpt.com backend, not api.openai.com
     "api_base_url": "https://chatgpt.com/backend-api/codex",
     # OAuth client configuration for Code Puppy
-    "client_id": "app_EMoamEEZ73f0CkXaXp7hrann",
+    "client_id": os.environ.get(
+        "CHATGPT_OAUTH_CLIENT_ID", "app_EMoamEEZ73f0CkXaXp7hrann"
+    ),
     "scope": "openid profile email offline_access",
     # Callback handling (we host a localhost callback to capture the redirect)
     "redirect_host": "http://localhost",
