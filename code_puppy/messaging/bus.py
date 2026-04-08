@@ -38,6 +38,8 @@ from collections import deque
 from typing import Any, Callable
 from uuid import uuid4
 
+from code_puppy.config import get_bus_request_timeout_seconds
+
 from .commands import (
     AnyCommand,
     ConfirmationResponse,
@@ -53,11 +55,6 @@ from .messages import (
     TextMessage,
     UserInputRequest,
 )
-
-
-# Default timeout in seconds for user-facing request_* methods.
-# If the UI does not respond within this window the call raises TimeoutError.
-_REQUEST_TIMEOUT_SECONDS: float = 300.0
 
 
 class MessageBus:
@@ -390,7 +387,7 @@ class MessageBus:
         try:
             # Wait for response — timeout prevents permanent hang if UI disconnects
             result = await asyncio.wait_for(
-                asyncio.shield(future), timeout=_REQUEST_TIMEOUT_SECONDS
+                asyncio.shield(future), timeout=get_bus_request_timeout_seconds()
             )
             return result if result else (default or "")
         except asyncio.TimeoutError:
@@ -442,7 +439,7 @@ class MessageBus:
 
         try:
             return await asyncio.wait_for(
-                asyncio.shield(future), timeout=_REQUEST_TIMEOUT_SECONDS
+                asyncio.shield(future), timeout=get_bus_request_timeout_seconds()
             )
         except asyncio.TimeoutError:
             return (False, None)
@@ -487,7 +484,7 @@ class MessageBus:
 
         try:
             return await asyncio.wait_for(
-                asyncio.shield(future), timeout=_REQUEST_TIMEOUT_SECONDS
+                asyncio.shield(future), timeout=get_bus_request_timeout_seconds()
             )
         except asyncio.TimeoutError:
             return (-1, "")

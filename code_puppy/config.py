@@ -150,6 +150,7 @@ def _invalidate_config() -> None:
     get_grep_output_verbose.cache_clear()
     get_resume_message_count.cache_clear()
     get_compaction_threshold.cache_clear()
+    get_bus_request_timeout_seconds.cache_clear()
     get_compaction_strategy.cache_clear()
     get_http2.cache_clear()
     get_message_limit.cache_clear()
@@ -1370,6 +1371,21 @@ get_compaction_threshold = _make_float_getter(
     This is the proportion of model context that triggers compaction.
     Defaults to 0.85 (85%) if unset or misconfigured.
     Configurable by 'compaction_threshold' key.
+    """,
+)
+
+
+get_bus_request_timeout_seconds = _make_float_getter(
+    "bus_request_timeout_seconds",
+    default=300.0,
+    min_val=10.0,
+    max_val=3600.0,
+    doc="""Returns the timeout in seconds for bus request/response operations.
+    This controls how long request_input(), request_confirmation(), and request_selection()
+    will wait for user responses before timing out.
+    Defaults to 300.0 seconds (5 minutes) if unset or misconfigured.
+    Configurable by 'bus_request_timeout_seconds' key.
+    Valid range: 10 to 3600 seconds.
     """,
 )
 
