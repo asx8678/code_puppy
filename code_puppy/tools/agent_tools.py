@@ -48,6 +48,9 @@ logger = logging.getLogger(__name__)
 # itertools.count() is thread-safe for next() calls
 _dbos_workflow_counter = itertools.count()
 
+# Cache for subagent sessions directory to avoid repeated mkdir/stat calls
+_sessions_dir_cache: Path | None = None
+
 
 def _generate_dbos_workflow_id(base_id: str) -> str:
     """Generate a unique DBOS workflow ID by appending an atomic counter.
@@ -236,8 +239,13 @@ def _get_subagent_sessions_dir() -> Path:
     Returns:
         Path to XDG data directory/subagent_sessions/
     """
+    global _sessions_dir_cache
+    if _sessions_dir_cache is not None:
+        return _sessions_dir_cache
+    
     sessions_dir = Path(DATA_DIR) / "subagent_sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _sessions_dir_cache = sessions_dir
     return sessions_dir
 
 

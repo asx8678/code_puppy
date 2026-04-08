@@ -349,13 +349,20 @@ class TUIConsole:
         if not stripped:
             return
 
-        # Attempt to convert ANSI codes to Rich Text for proper display
-        try:
-            rich_text = Text.from_ansi(stripped)
-            chat.write(rich_text)
-        except Exception:
-            # Fall back to plain text with ANSI stripped
-            chat.write(_strip_ansi(stripped))
+        # Optimization: Only use Text.from_ansi if ANSI codes are present
+        # Most writes are plain text, so we avoid the overhead for the common case
+        if '\x1b' in stripped or '\033' in stripped:
+            # Attempt to convert ANSI codes to Rich Text for proper display
+            try:
+                rich_text = Text.from_ansi(stripped)
+                chat.write(rich_text)
+                return
+            except Exception:
+                # Fall back to plain text with ANSI stripped
+                stripped = _strip_ansi(stripped)
+        
+        # Plain text path - no ANSI processing needed
+        chat.write(stripped)
 
     def flush(self) -> None:
         """No-op flush (satisfies file-like interface)."""
