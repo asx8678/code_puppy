@@ -542,7 +542,7 @@ class TestRunShellCommand:
         ):
             result = await run_shell_command(ctx, "rm -rf /", timeout=10)
         assert result.success is False
-        assert "nope" in result.error
+        assert "risky" in result.error
 
     @pytest.mark.asyncio
     async def test_yolo_mode_executes(self):
