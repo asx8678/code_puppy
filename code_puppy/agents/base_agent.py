@@ -1538,7 +1538,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                     messages, serialized_messages=_serialized_messages_for_rust
                 )
                 # Pass cached per_message_tokens when available from Rust batch processing
-                cached_tokens = getattr(self, "_rust_per_message_tokens", None)
+                cached_tokens = self._state.rust_per_message_tokens
                 result_messages = self.truncation(
                     filtered_messages,
                     protected_tokens,
@@ -1553,6 +1553,11 @@ class BaseAgent(ABC, AgentPromptMixin):
                     for m in filtered_messages
                     if self.hash_message(m) not in result_hashes
                 ]
+                # Calculate final token count efficiently using cached per-message tokens
+                # Sum tokens for messages that were kept (result_messages is a subset of filtered_messages)
+                final_token_count = self._calculate_kept_tokens(
+                    filtered_messages, result_messages, cached_tokens
+                )
             else:
                 # Default to summarization (safe to proceed - no pending tool calls)
                 # Pass pre-serialized messages to avoid re-serialization
@@ -1564,10 +1569,11 @@ class BaseAgent(ABC, AgentPromptMixin):
                     filtered_messages,
                     serialized_messages=_serialized_messages_for_rust,
                 )
+                # For summarization, we need to estimate tokens since messages are transformed
+                final_token_count = sum(
+                    self.estimate_tokens_for_message(msg) for msg in result_messages
+                )
 
-            final_token_count = sum(
-                self.estimate_tokens_for_message(msg) for msg in result_messages
-            )
             # Update spinner with final token count
             final_summary = SpinnerBase.format_context_info(
                 final_token_count, model_max, final_token_count / model_max
@@ -1661,6 +1667,43 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         result = self.prune_interrupted_tool_calls(result)
         return result
+
+    def _calculate_kept_tokens(
+        self,
+        original_messages: list[ModelMessage],
+        kept_messages: list[ModelMessage],
+        per_message_tokens: list[int] | None,
+    ) -> int:
+        """Efficiently calculate token count for kept messages using cached tokens.
+
+        Uses the cached per-message token counts to avoid re-computing tokens
+        for messages that survived compaction. Falls back to estimation if
+        cached tokens are not available.
+
+        Args:
+            original_messages: The original list of messages before compaction
+            kept_messages: The messages that were kept after compaction
+            per_message_tokens: Cached token counts for original_messages, or None
+
+        Returns:
+            Total token count for kept_messages
+        """
+        if per_message_tokens is None or len(per_message_tokens) != len(original_messages):
+            # Fallback: compute tokens the slow way if cache is unavailable/mismatched
+            return sum(
+                self.estimate_tokens_for_message(msg) for msg in kept_messages
+            )
+
+        # Build a set of hashes for kept messages for O(1) lookup
+        kept_hashes = {self.hash_message(m) for m in kept_messages}
+
+        # Sum tokens for messages that are in the kept set
+        total = 0
+        for i, msg in enumerate(original_messages):
+            if self.hash_message(msg) in kept_hashes:
+                total += per_message_tokens[i]
+
+        return total
 
     def run_summarization_sync(
         self, instructions: str, message_history: list[ModelMessage]
