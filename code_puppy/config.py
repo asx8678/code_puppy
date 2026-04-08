@@ -214,7 +214,9 @@ def _make_int_getter(
             return default
 
     getter.__name__ = getter_name
-    getter.__doc__ = doc or f"Return the configured value for '{key}' as int (default {default})."
+    getter.__doc__ = (
+        doc or f"Return the configured value for '{key}' as int (default {default})."
+    )
     return cache(getter)
 
 
@@ -256,7 +258,9 @@ def _make_float_getter(
             return default
 
     getter.__name__ = getter_name
-    getter.__doc__ = doc or f"Return the configured value for '{key}' as float (default {default})."
+    getter.__doc__ = (
+        doc or f"Return the configured value for '{key}' as float (default {default})."
+    )
     return cache(getter)
 
 
