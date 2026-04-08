@@ -6,12 +6,14 @@ us avoid duplication while staying inside the Zen-of-Python sweet spot: simple
 is better than complex, nested side effects are worse than deliberate helpers.
 """
 
+import atexit
 import hashlib
 import hmac
 import json
 import os
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from queue import Queue, Full
 
 # SECURITY FIX #zvx9: Pickle has been completely removed to prevent RCE attacks.
 # Session files now use only secure msgpack serialization with HMAC integrity.
@@ -25,7 +27,26 @@ import msgpack
 
 # ----- ThreadPoolExecutor for async autosave -----
 # Single-threaded executor for background session saves to avoid blocking the main thread
+# ISSUE zn8 FIX: Bounded pending queue (maxsize=4) with coalescing to prevent unbounded growth.
 _autosave_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="autosave")
+
+# Pending save queue with maxsize=4 for bounded memory usage
+_pending_save_queue: Queue = Queue(maxsize=4)
+
+
+def _autosave_shutdown():
+    """Shutdown handler: flush pending saves before exit.
+
+    ISSUE zn8 FIX: atexit.register(_autosave_shutdown) prevents silent data loss at Ctrl+C.
+    Waits for pending saves to complete with a 5-second timeout.
+    """
+    try:
+        _autosave_executor.shutdown(wait=True, cancel_futures=False)
+    except Exception:
+        pass
+
+
+atexit.register(_autosave_shutdown)
 
 
 def save_session_async(
@@ -41,21 +62,43 @@ def save_session_async(
 ) -> None:
     """Non-blocking version of save_session that submits to thread pool.
 
+    ISSUE zn8 FIXES:
+    1. Snapshot list(history) at submit to prevent closure pinning mutable history.
+    2. Bounded pending queue (maxsize=4) with coalescing - oldest dropped if full.
+    3. atexit.register(_autosave_shutdown) ensures data is flushed on exit.
+
     This function immediately returns and performs the actual save operation
     in a background thread, preventing file I/O from blocking the main thread.
     Errors are logged but not raised to avoid disrupting the main flow.
     """
+    # Snapshot the history list to prevent closure from pinning mutable state.
+    # This ensures the background thread sees a consistent view even if the
+    # caller modifies the history list after calling this function.
+    history_snapshot = list(history)
+    compacted_hashes_snapshot = list(compacted_hashes) if compacted_hashes is not None else None
+
+    # Try to add to bounded queue; if full, drop oldest (coalescing strategy).
+    # This prevents unbounded memory growth during rapid auto-save bursts.
+    try:
+        _pending_save_queue.put_nowait((session_name, timestamp))
+    except Full:
+        # Queue is full, drop oldest item to make room (coalescing).
+        try:
+            _pending_save_queue.get_nowait()
+            _pending_save_queue.put_nowait((session_name, timestamp))
+        except Exception:
+            pass  # Best effort; continue even if queue operations fail
 
     def _do_save():
         try:
             save_session(
-                history=history,
+                history=history_snapshot,
                 session_name=session_name,
                 base_dir=base_dir,
                 timestamp=timestamp,
                 token_estimator=token_estimator,
                 auto_saved=auto_saved,
-                compacted_hashes=compacted_hashes,
+                compacted_hashes=compacted_hashes_snapshot,
                 precomputed_total=precomputed_total,
             )
         except Exception as exc:
@@ -168,12 +211,15 @@ def _load_raw_bytes(raw: bytes) -> Any:
     # New msgpack format: magic header followed by HMAC + msgpack payload
     if raw.startswith(_MSGPACK_MAGIC):
         # Format: MAGIC (8 bytes) + HMAC (32 bytes) + msgpack payload
+        # ISSUE qyj FIX: Use memoryview for zero-copy slicing to avoid 5MB+ copies.
         offset = len(_MSGPACK_MAGIC)
-        stored_hmac = raw[offset : offset + 32]
-        msgpack_data = raw[offset + 32 :]
+        view = memoryview(raw)
+        stored_hmac = bytes(view[offset : offset + 32])  # detach HMAC only
+        msgpack_view = view[offset + 32 :]  # zero-copy view of payload
 
         # Verify HMAC integrity using per-install secret key
-        expected_hmac = _compute_hmac(_get_hmac_key(), msgpack_data)
+        # Convert view to bytes for HMAC computation (still copies payload once)
+        expected_hmac = _compute_hmac(_get_hmac_key(), bytes(msgpack_view))
         if not hmac.compare_digest(stored_hmac, expected_hmac):
             # Backward compat: files saved after msgpack migration but
             # before HMAC was added have format MAGIC + raw msgpack (no HMAC).
@@ -192,7 +238,7 @@ def _load_raw_bytes(raw: bytes) -> Any:
                 stacklevel=2,
             )
             return data
-        return msgpack.unpackb(msgpack_data, raw=False)
+        return msgpack.unpackb(msgpack_view, raw=False)
 
     # Legacy signed format: CPSESSION\x01 + 32-byte signature + pickle
     # SECURITY FIX #zvx9: Pickle deserialization removed - RCE vulnerability

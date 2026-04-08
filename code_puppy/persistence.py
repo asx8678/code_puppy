@@ -4,6 +4,7 @@ This module provides atomic file write operations to prevent partial/corrupt
 files on crash or interruption. All writes use temp-file + atomic replace.
 """
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -223,3 +224,65 @@ def read_msgpack(path: Path, default: Any = None) -> Any:
     except (msgpack.ExtraData, msgpack.OutOfData, OSError, ValueError) as e:
         logger.warning(f"Failed to read msgpack from {path}: {e}")
         return default
+
+
+# ----- Async wrappers using asyncio.to_thread -----
+
+async def atomic_write_text_async(path: Path, content: str, encoding: str = "utf-8") -> None:
+    """Async wrapper for atomic_write_text using asyncio.to_thread.
+
+    Args:
+        path: Target file path
+        content: Text content to write
+        encoding: Text encoding (default: utf-8)
+    """
+    await asyncio.to_thread(atomic_write_text, path, content, encoding)
+
+
+async def atomic_write_bytes_async(path: Path, data: bytes) -> None:
+    """Async wrapper for atomic_write_bytes using asyncio.to_thread.
+
+    Args:
+        path: Target file path
+        data: Binary data to write
+    """
+    await asyncio.to_thread(atomic_write_bytes, path, data)
+
+
+async def atomic_write_msgpack_async(
+    path: Path, data: Any, default: Callable[[Any], Any] | None = None
+) -> None:
+    """Async wrapper for atomic_write_msgpack using asyncio.to_thread.
+
+    Args:
+        path: Target file path
+        data: msgpack-serializable data
+        default: Optional serializer for custom types
+    """
+    await asyncio.to_thread(atomic_write_msgpack, path, data, default)
+
+
+async def read_json_async(path: Path, default: Any = None) -> Any:
+    """Async wrapper for read_json using asyncio.to_thread.
+
+    Args:
+        path: File path to read
+        default: Value to return if file doesn't exist or is invalid
+
+    Returns:
+        Parsed JSON data or default value
+    """
+    return await asyncio.to_thread(read_json, path, default)
+
+
+async def read_msgpack_async(path: Path, default: Any = None) -> Any:
+    """Async wrapper for read_msgpack using asyncio.to_thread.
+
+    Args:
+        path: File path to read
+        default: Value to return if file doesn't exist or is invalid
+
+    Returns:
+        Parsed msgpack data or default value
+    """
+    return await asyncio.to_thread(read_msgpack, path, default)
