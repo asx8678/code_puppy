@@ -12,8 +12,8 @@ from code_puppy.tools.agent_tools import (
     _generate_dbos_workflow_id,
     _generate_session_hash_suffix,
     _get_subagent_sessions_dir,
-    _load_session_history,
-    _save_session_history,
+    _load_session_history_sync,
+    _save_session_history_sync,
     _validate_session_id,
 )
 
@@ -58,32 +58,40 @@ class TestGenerateSessionHashSuffix:
 
 class TestSessionHistory:
     def test_save_and_load(self, tmp_path):
+        from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,
         ):
-            msgs = ["msg1", "msg2"]
-            _save_session_history("test-session", msgs, "agent1", "initial")
-            loaded = _load_session_history("test-session")
-            assert loaded == msgs
+            msgs = [
+                ModelRequest(parts=[UserPromptPart(content="msg1")]),
+                ModelResponse(parts=[TextPart(content="msg2")]),
+            ]
+            _save_session_history_sync("test-session", msgs, "agent1", "initial")
+            loaded = _load_session_history_sync("test-session")
+            assert len(loaded) == 2
+            assert loaded[0].parts[0].content == "msg1"
+            assert loaded[1].parts[0].content == "msg2"
 
     def test_save_update_metadata(self, tmp_path):
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,
         ):
-            _save_session_history("test-session", ["msg1"], "agent1", "initial")
-            _save_session_history("test-session", ["msg1", "msg2"], "agent1")
-            txt = tmp_path / "test-session.txt"
-            data = json.loads(txt.read_text())
-            assert data["message_count"] == 2
+            _save_session_history_sync("test-session", ["msg1"], "agent1", "initial")
+            _save_session_history_sync("test-session", ["msg1", "msg2"], "agent1")
+            # Metadata is now folded into msgpack
+            from code_puppy.persistence import read_msgpack
+            msgpack_file = tmp_path / "test-session.msgpack"
+            data = read_msgpack(msgpack_file)
+            assert data["metadata"]["message_count"] == 2
 
     def test_load_nonexistent(self, tmp_path):
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,
         ):
-            assert _load_session_history("nope") == []
+            assert _load_session_history_sync("nope") == []
 
     def test_load_corrupted(self, tmp_path):
         pkl = tmp_path / "bad.pkl"
@@ -92,7 +100,7 @@ class TestSessionHistory:
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,
         ):
-            assert _load_session_history("bad") == []
+            assert _load_session_history_sync("bad") == []
 
     def test_save_invalid_session_id(self, tmp_path):
         with patch(
@@ -100,7 +108,7 @@ class TestSessionHistory:
             return_value=tmp_path,
         ):
             with pytest.raises(ValueError):
-                _save_session_history("BAD SESSION", [], "agent")
+                _save_session_history_sync("BAD SESSION", [], "agent")
 
     def test_load_invalid_session_id(self, tmp_path):
         with patch(
@@ -108,20 +116,22 @@ class TestSessionHistory:
             return_value=tmp_path,
         ):
             with pytest.raises(ValueError):
-                _load_session_history("BAD SESSION")
+                _load_session_history_sync("BAD SESSION")
 
     def test_save_metadata_update_error(self, tmp_path):
-        """Metadata update failure is silently handled."""
+        """Metadata update works with folded format."""
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,
         ):
-            _save_session_history("test-session", ["msg1"], "agent1", "initial")
-            # Corrupt the txt file
-            txt = tmp_path / "test-session.txt"
-            txt.write_text("not json")
-            # Should not raise
-            _save_session_history("test-session", ["msg1", "msg2"], "agent1")
+            _save_session_history_sync("test-session", ["msg1"], "agent1", "initial")
+            # Second save preserves initial_prompt from first save
+            _save_session_history_sync("test-session", ["msg1", "msg2"], "agent1")
+            from code_puppy.persistence import read_msgpack
+            msgpack_file = tmp_path / "test-session.msgpack"
+            data = read_msgpack(msgpack_file)
+            # initial_prompt preserved from first save
+            assert data["metadata"]["initial_prompt"] == "initial"
 
 
 class TestGetSubagentSessionsDir:

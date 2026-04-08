@@ -12,9 +12,11 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserProm
 from code_puppy.tools.agent_tools import (
     SESSION_ID_MAX_LENGTH,
     _generate_session_hash_suffix,
-    _load_session_history,
+    _load_session_history_async,
+    _load_session_history_sync,
     _sanitize_session_id,
-    _save_session_history,
+    _save_session_history_async,
+    _save_session_history_sync,
     _validate_session_id,
     register_invoke_agent,
     register_list_agents,
@@ -272,7 +274,7 @@ class TestSessionSaveLoad:
             return_value=temp_session_dir,
         ):
             # Save the session
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=mock_messages,
                 agent_name=agent_name,
@@ -280,7 +282,7 @@ class TestSessionSaveLoad:
             )
 
             # Load it back
-            loaded_messages = _load_session_history(session_id)
+            loaded_messages = _load_session_history_sync(session_id)
 
             # Verify the messages match
             assert len(loaded_messages) == len(mock_messages)
@@ -294,7 +296,7 @@ class TestSessionSaveLoad:
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=temp_session_dir,
         ):
-            loaded_messages = _load_session_history("nonexistent-session")
+            loaded_messages = _load_session_history_sync("nonexistent-session")
             assert loaded_messages == []
 
     def test_save_with_invalid_session_id_raises_error(
@@ -306,7 +308,7 @@ class TestSessionSaveLoad:
             return_value=temp_session_dir,
         ):
             with pytest.raises(ValueError, match="must be kebab-case"):
-                _save_session_history(
+                _save_session_history_sync(
                     session_id="Invalid_Session",
                     message_history=mock_messages,
                     agent_name="test-agent",
@@ -319,7 +321,7 @@ class TestSessionSaveLoad:
             return_value=temp_session_dir,
         ):
             with pytest.raises(ValueError, match="must be kebab-case"):
-                _load_session_history("Invalid_Session")
+                _load_session_history_sync("Invalid_Session")
 
     def test_save_creates_msgpack_and_txt_files(self, temp_session_dir, mock_messages):
         """Test that save creates both .msgpack and .txt files."""
@@ -331,18 +333,16 @@ class TestSessionSaveLoad:
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=temp_session_dir,
         ):
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=mock_messages,
                 agent_name=agent_name,
                 initial_prompt=initial_prompt,
             )
 
-            # Check that both files exist
+            # Check that msgpack file exists (txt file now folded into msgpack payload)
             msgpack_file = temp_session_dir / f"{session_id}.msgpack"
-            txt_file = temp_session_dir / f"{session_id}.txt"
             assert msgpack_file.exists()
-            assert txt_file.exists()
 
     def test_txt_file_contains_readable_metadata(self, temp_session_dir, mock_messages):
         """Test that .txt file contains readable metadata."""
@@ -354,17 +354,18 @@ class TestSessionSaveLoad:
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=temp_session_dir,
         ):
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=mock_messages,
                 agent_name=agent_name,
                 initial_prompt=initial_prompt,
             )
 
-            # Read and verify metadata
-            txt_file = temp_session_dir / f"{session_id}.txt"
-            with open(txt_file, "r") as f:
-                metadata = json.load(f)
+            # Read and verify metadata (now folded into msgpack payload)
+            from code_puppy.persistence import read_msgpack
+            msgpack_file = temp_session_dir / f"{session_id}.msgpack"
+            data = read_msgpack(msgpack_file)
+            metadata = data.get("metadata", {})
 
             assert metadata["session_id"] == session_id
             assert metadata["agent_name"] == agent_name
@@ -385,7 +386,7 @@ class TestSessionSaveLoad:
             return_value=temp_session_dir,
         ):
             # First save
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=mock_messages[:2],
                 agent_name=agent_name,
@@ -393,24 +394,25 @@ class TestSessionSaveLoad:
             )
 
             # Second save with more messages
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=mock_messages,
                 agent_name=agent_name,
                 initial_prompt=None,  # Should not overwrite initial_prompt
             )
 
-            # Read and verify metadata was updated
-            txt_file = temp_session_dir / f"{session_id}.txt"
-            with open(txt_file, "r") as f:
-                metadata = json.load(f)
+            # Read and verify metadata was updated (now folded into msgpack)
+            from code_puppy.persistence import read_msgpack
+            msgpack_file = temp_session_dir / f"{session_id}.msgpack"
+            data = read_msgpack(msgpack_file)
+            metadata = data.get("metadata", {})
 
             # Initial prompt should still be there from first save
             assert metadata["initial_prompt"] == initial_prompt
             # Message count should be updated
             assert metadata["message_count"] == len(mock_messages)
-            # last_updated should exist
-            assert "last_updated" in metadata
+            # updated_at should exist
+            assert "updated_at" in metadata
 
     def test_load_handles_corrupted_pickle(self, temp_session_dir):
         """Test that loading a corrupted pickle file returns empty list."""
@@ -426,7 +428,7 @@ class TestSessionSaveLoad:
                 f.write(b"This is not a valid pickle file!")
 
             # Should return empty list instead of crashing
-            loaded_messages = _load_session_history(session_id)
+            loaded_messages = _load_session_history_sync(session_id)
             assert loaded_messages == []
 
     def test_save_and_load_roundtrip_with_datetime_content(self, temp_session_dir):
@@ -445,14 +447,14 @@ class TestSessionSaveLoad:
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=temp_session_dir,
         ):
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=mock_messages,
                 agent_name=agent_name,
                 initial_prompt="Persist this session",
             )
 
-            loaded_messages = _load_session_history(session_id)
+            loaded_messages = _load_session_history_sync(session_id)
 
         assert len(loaded_messages) == len(mock_messages)
         for loaded, original in zip(loaded_messages, mock_messages):
@@ -469,7 +471,7 @@ class TestSessionSaveLoad:
             return_value=temp_session_dir,
         ):
             # First save WITH initial_prompt
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=mock_messages[:2],
                 agent_name=agent_name,
@@ -477,7 +479,7 @@ class TestSessionSaveLoad:
             )
 
             # Second save WITHOUT initial_prompt
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=mock_messages,
                 agent_name=agent_name,
@@ -485,7 +487,7 @@ class TestSessionSaveLoad:
             )
 
             # Should still be able to load
-            loaded_messages = _load_session_history(session_id)
+            loaded_messages = _load_session_history_sync(session_id)
             assert len(loaded_messages) == len(mock_messages)
 
 
@@ -599,7 +601,7 @@ class TestSessionIntegration:
             return_value=temp_session_dir,
         ):
             # First interaction
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=mock_messages[:1],
                 agent_name=agent_name,
@@ -607,18 +609,18 @@ class TestSessionIntegration:
             )
 
             # Load and verify
-            loaded = _load_session_history(session_id)
+            loaded = _load_session_history_sync(session_id)
             assert len(loaded) == 1
 
             # Second interaction - add more messages
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=mock_messages,
                 agent_name=agent_name,
             )
 
             # Load and verify both messages are there
-            loaded = _load_session_history(session_id)
+            loaded = _load_session_history_sync(session_id)
             assert len(loaded) == 2
 
     def test_multiple_sessions_dont_interfere(self, temp_session_dir, mock_messages):
@@ -633,7 +635,7 @@ class TestSessionIntegration:
         ):
             # Save to session 1
             messages1 = mock_messages[:1]
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session1_id,
                 message_history=messages1,
                 agent_name=agent_name,
@@ -642,7 +644,7 @@ class TestSessionIntegration:
 
             # Save to session 2
             messages2 = mock_messages
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session2_id,
                 message_history=messages2,
                 agent_name=agent_name,
@@ -650,8 +652,8 @@ class TestSessionIntegration:
             )
 
             # Load both and verify they're independent
-            loaded1 = _load_session_history(session1_id)
-            loaded2 = _load_session_history(session2_id)
+            loaded1 = _load_session_history_sync(session1_id)
+            loaded2 = _load_session_history_sync(session2_id)
 
             assert len(loaded1) == 1
             assert len(loaded2) == 2
@@ -669,27 +671,28 @@ class TestSessionIntegration:
             return_value=temp_session_dir,
         ):
             # Save with 1 message
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=mock_messages[:1],
                 agent_name=agent_name,
                 initial_prompt="Test",
             )
 
-            txt_file = temp_session_dir / f"{session_id}.txt"
-            with open(txt_file, "r") as f:
-                metadata = json.load(f)
+            from code_puppy.persistence import read_msgpack
+            msgpack_file = temp_session_dir / f"{session_id}.msgpack"
+            data = read_msgpack(msgpack_file)
+            metadata = data.get("metadata", {})
             assert metadata["message_count"] == 1
 
             # Save with 2 messages
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=mock_messages,
                 agent_name=agent_name,
             )
 
-            with open(txt_file, "r") as f:
-                metadata = json.load(f)
+            data = read_msgpack(msgpack_file)
+            metadata = data.get("metadata", {})
             assert metadata["message_count"] == 2
 
     def test_invalid_session_id_in_integration(self, temp_session_dir):
@@ -708,14 +711,14 @@ class TestSessionIntegration:
             for invalid_id in invalid_ids:
                 # Both save and load should raise ValueError
                 with pytest.raises(ValueError, match="must be kebab-case"):
-                    _save_session_history(
+                    _save_session_history_sync(
                         session_id=invalid_id,
                         message_history=[],
                         agent_name="test-agent",
                     )
 
                 with pytest.raises(ValueError, match="must be kebab-case"):
-                    _load_session_history(invalid_id)
+                    _load_session_history_sync(invalid_id)
 
     def test_empty_session_history_save_and_load(self, temp_session_dir):
         """Test that empty session histories can be saved and loaded."""
@@ -727,7 +730,7 @@ class TestSessionIntegration:
             return_value=temp_session_dir,
         ):
             # Save empty history
-            _save_session_history(
+            _save_session_history_sync(
                 session_id=session_id,
                 message_history=[],
                 agent_name=agent_name,
@@ -735,13 +738,14 @@ class TestSessionIntegration:
             )
 
             # Load it back
-            loaded = _load_session_history(session_id)
+            loaded = _load_session_history_sync(session_id)
             assert loaded == []
 
-            # Verify metadata is still correct
-            txt_file = temp_session_dir / f"{session_id}.txt"
-            with open(txt_file, "r") as f:
-                metadata = json.load(f)
+            # Verify metadata is still correct (now folded into msgpack)
+            from code_puppy.persistence import read_msgpack
+            msgpack_file = temp_session_dir / f"{session_id}.msgpack"
+            data = read_msgpack(msgpack_file)
+            metadata = data.get("metadata", {})
             assert metadata["message_count"] == 0
 
 

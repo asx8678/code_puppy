@@ -144,43 +144,7 @@ def _generate_session_hash_suffix() -> str:
     return uuid.uuid4().hex[:8]
 
 
-def _sanitize_messages_for_dbos(messages: list[ModelMessage]) -> list[ModelMessage]:
-    """Sanitize messages to remove non-serializable objects before DBOS serialization.
 
-    DBOS uses pickle for workflow durability, which cannot serialize coroutines
-    or other async objects that may be captured in message metadata fields.
-    This function uses pydantic-ai's type adapter to serialize and deserialize
-    messages, which strips out non-serializable objects while preserving the
-    message structure.
-
-    Args:
-        messages: List of ModelMessage objects to sanitize.
-
-    Returns:
-        Sanitized list of ModelMessage objects safe for DBOS serialization.
-    """
-    # Skip expensive JSON round-trip when DBOS is not enabled
-    if not get_use_dbos():
-        return messages
-
-    if not messages:
-        return messages
-
-    try:
-        from pydantic_ai.messages import ModelMessagesTypeAdapter
-
-        # Serialize to JSON (this strips non-serializable objects)
-        json_data = ModelMessagesTypeAdapter.dump_json(messages)
-        # Deserialize back to messages (this creates clean message objects)
-        return ModelMessagesTypeAdapter.validate_json(json_data)
-    except Exception as e:
-        # Log the sanitization failure so we can track if this becomes a recurring issue
-        logging.getLogger(__name__).warning(
-            f"Message sanitization failed: {e}. Falling back to original messages."
-        )
-        # If serialization fails, return original messages
-        # The error will be caught later during actual DBOS serialization
-        return messages
 
 
 # Regex pattern for kebab-case session IDs
@@ -277,19 +241,23 @@ def _get_subagent_sessions_dir() -> Path:
     return sessions_dir
 
 
-def _save_session_history(
+# ----- Sync helpers for session save/load -----
+
+def _save_session_history_sync(
     session_id: str,
     message_history: list[ModelMessage],
     agent_name: str,
     initial_prompt: str | None = None,
 ) -> None:
-    """Save session history to filesystem.
+    """Sync helper: Save session history to filesystem with folded metadata.
 
     Args:
         session_id: The session identifier (must be kebab-case)
         message_history: List of messages to save
         agent_name: Name of the agent being invoked
-        initial_prompt: The first prompt that started this session (for .txt metadata)
+        initial_prompt: The first prompt that started this session (for metadata).
+            If None on first save, no initial_prompt is stored.
+            If None on subsequent saves, preserves initial_prompt from previous save.
 
     Raises:
         ValueError: If session_id is not valid kebab-case format
@@ -298,48 +266,40 @@ def _save_session_history(
     _validate_session_id(session_id)
 
     sessions_dir = _get_subagent_sessions_dir()
+    msgpack_path = sessions_dir / f"{session_id}.msgpack"
 
-    # Save msgpack file with JSON-serializable message history.
-    # Use dump_python to get serializable dicts directly (avoids JSON round-trip).
-    # This eliminates triple serialization: dump_python → msgpack instead of
-    # dump_json → msgpack → validate_json.
+    # ISSUE 70e FIX: Fold metadata into the msgpack payload; drop separate .txt file.
+    # This eliminates TOCTOU race and data-corruption risk from read-modify-write.
     from pydantic_ai.messages import ModelMessagesTypeAdapter
 
-    payload = {
-        "format": "pydantic-ai-json",
-        "payload": ModelMessagesTypeAdapter.dump_python(message_history, mode="json"),
-    }
-    msgpack_path = sessions_dir / f"{session_id}.msgpack"
-    atomic_write_msgpack(msgpack_path, payload)
+    # Check if we need to preserve initial_prompt from previous save
+    saved_initial_prompt = initial_prompt
+    if initial_prompt is None and msgpack_path.exists():
+        try:
+            existing_data = msgpack.unpackb(msgpack_path.read_bytes(), raw=False)
+            if isinstance(existing_data, dict):
+                existing_meta = existing_data.get("metadata", {})
+                saved_initial_prompt = existing_meta.get("initial_prompt")
+        except Exception:
+            pass  # If read fails, proceed without preserving
 
-    # Save or update txt file with metadata
-    txt_path = sessions_dir / f"{session_id}.txt"
-    if not txt_path.exists() and initial_prompt:
-        # Only write initial metadata on first save
-        metadata = {
+    payload = {
+        "format": "pydantic-ai-json-v2",
+        "payload": ModelMessagesTypeAdapter.dump_python(message_history, mode="json"),
+        "metadata": {
             "session_id": session_id,
             "agent_name": agent_name,
-            "initial_prompt": initial_prompt,
+            "initial_prompt": saved_initial_prompt,
             "created_at": datetime.now().isoformat(),
             "message_count": len(message_history),
-        }
-        with open(txt_path, "w") as f:
-            json.dump(metadata, f, indent=2)
-    elif txt_path.exists():
-        # Update message count on subsequent saves
-        try:
-            with open(txt_path, "r") as f:
-                metadata = json.load(f)
-            metadata["message_count"] = len(message_history)
-            metadata["last_updated"] = datetime.now().isoformat()
-            with open(txt_path, "w") as f:
-                json.dump(metadata, f, indent=2)
-        except Exception:
-            pass  # If we can't update metadata, no big deal
+            "updated_at": datetime.now().isoformat(),
+        },
+    }
+    atomic_write_msgpack(msgpack_path, payload)
 
 
-def _load_session_history(session_id: str) -> list[ModelMessage]:
-    """Load session history from filesystem.
+def _load_session_history_sync(session_id: str) -> list[ModelMessage]:
+    """Sync helper: Load session history from filesystem.
 
     Args:
         session_id: The session identifier (must be kebab-case)
@@ -355,9 +315,10 @@ def _load_session_history(session_id: str) -> list[ModelMessage]:
 
     sessions_dir = _get_subagent_sessions_dir()
 
-    # Try msgpack first (new format), fall back to legacy pickle
+    # Try msgpack first (new format), fall back to legacy formats
     msgpack_path = sessions_dir / f"{session_id}.msgpack"
     pkl_path = sessions_dir / f"{session_id}.pkl"
+    txt_path = sessions_dir / f"{session_id}.txt"
 
     if msgpack_path.exists():
         try:
@@ -365,13 +326,18 @@ def _load_session_history(session_id: str) -> list[ModelMessage]:
             data = msgpack.unpackb(raw, raw=False)
             from pydantic_ai.messages import ModelMessagesTypeAdapter
 
+            # v2 format with folded metadata
+            if isinstance(data, dict) and data.get("format") == "pydantic-ai-json-v2":
+                payload = data.get("payload", [])
+                return ModelMessagesTypeAdapter.validate_python(payload)
+            # v1 format (legacy, no metadata)
             if isinstance(data, dict) and data.get("format") == "pydantic-ai-json":
                 payload = data.get("payload", [])
-                # payload is already Python dicts from dump_python, validate them
                 return ModelMessagesTypeAdapter.validate_python(payload)
+            # Oldest format: plain list
             return ModelMessagesTypeAdapter.validate_python(data)
         except Exception:
-            pass  # Fall through to pickle or return empty
+            pass  # Fall through to other formats or return empty
 
     # SECURITY FIX j0ha/l1en: Pickle completely removed - RCE vulnerability
     if pkl_path.exists():
@@ -379,7 +345,48 @@ def _load_session_history(session_id: str) -> list[ModelMessage]:
         # Files must be migrated to msgpack format
         return []
 
+    # Legacy .txt files are ignored (metadata now folded into msgpack)
+    # We keep the txt_path reference for cleanup purposes if needed
+    _ = txt_path  # Avoid unused variable warning; file may be cleaned up later
+
     return []
+
+
+# ----- Async wrappers using asyncio.to_thread -----
+
+async def _save_session_history_async(
+    session_id: str,
+    message_history: list[ModelMessage],
+    agent_name: str,
+    initial_prompt: str | None = None,
+) -> None:
+    """Async wrapper: Save session history using asyncio.to_thread.
+
+    Args:
+        session_id: The session identifier (must be kebab-case)
+        message_history: List of messages to save
+        agent_name: Name of the agent being invoked
+        initial_prompt: The first prompt that started this session (for metadata)
+    """
+    await asyncio.to_thread(
+        _save_session_history_sync,
+        session_id,
+        message_history,
+        agent_name,
+        initial_prompt,
+    )
+
+
+async def _load_session_history_async(session_id: str) -> list[ModelMessage]:
+    """Async wrapper: Load session history using asyncio.to_thread.
+
+    Args:
+        session_id: The session identifier (must be kebab-case)
+
+    Returns:
+        List of ModelMessage objects, or empty list if session doesn't exist
+    """
+    return await asyncio.to_thread(_load_session_history_sync, session_id)
 
 
 class AgentInfo(BaseModel):
@@ -502,7 +509,7 @@ def register_invoke_agent(agent):
         # For user-provided session_id, check if it exists
         # For None, we'll generate a new one below
         if session_id is not None:
-            message_history = _load_session_history(session_id)
+            message_history = await _load_session_history_async(session_id)
             is_new_session = len(message_history) == 0
         else:
             message_history = []
@@ -747,12 +754,8 @@ def register_invoke_agent(agent):
             # The result contains all_messages which includes the full conversation
             updated_history = result.all_messages()
 
-            # Sanitize messages to remove non-serializable objects (coroutines, etc.)
-            # This is necessary because DBOS uses pickle for workflow durability
-            updated_history = _sanitize_messages_for_dbos(updated_history)
-
-            # Save to filesystem (include initial prompt only for new sessions)
-            _save_session_history(
+            # Save to filesystem async (include initial prompt only for new sessions)
+            await _save_session_history_async(
                 session_id=session_id,
                 message_history=updated_history,
                 agent_name=agent_name,
