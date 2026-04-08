@@ -39,7 +39,8 @@ class MCPDashboard:
             box=box.ROUNDED,
             show_header=True,
             header_style="bold blue",
-            title_style="bold cyan")
+            title_style="bold cyan",
+        )
 
         # Define columns
         table.add_column("Name", style="white", no_wrap=True, min_width=10)
@@ -73,7 +74,8 @@ class MCPDashboard:
                 "-",
                 "-",
                 "-",
-                f"[red]{str(e)}[/red]")
+                f"[red]{str(e)}[/red]",
+            )
 
         return table
 

@@ -1,6 +1,5 @@
 """Tool registration for ask_user_question."""
 
-
 from typing import TYPE_CHECKING
 
 from pydantic_ai import RunContext

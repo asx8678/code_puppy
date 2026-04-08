@@ -28,7 +28,7 @@ class TestTurboExecutorAgent:
     def test_uses_config_based_model_pinning(self):
         """Test that the agent uses config-based model pinning (not hardcoded)."""
         # Agent should NOT override get_model_name - uses BaseAgent config-based pinning
-        assert not hasattr(TurboExecutorAgent, 'PINNED_MODEL')
+        assert not hasattr(TurboExecutorAgent, "PINNED_MODEL")
 
     def test_available_tools(self):
         """Test that the agent has the expected tools."""

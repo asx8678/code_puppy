@@ -15,7 +15,6 @@ If the remote catalog can't be fetched (and there's no cache), the catalog is
 empty by default (and we log a warning).
 """
 
-
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -161,7 +160,8 @@ class SkillCatalog:
                 has_references=remote_entry.has_references,
                 file_count=remote_entry.file_count,
                 download_url=remote_entry.download_url,
-                zip_size_bytes=remote_entry.zip_size_bytes)
+                zip_size_bytes=remote_entry.zip_size_bytes,
+            )
             entries.append(entry)
 
         self._rebuild_indices(entries)

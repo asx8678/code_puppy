@@ -38,7 +38,8 @@ class StartCommand(MCPCommandBase):
         if not args:
             emit_info(
                 Text.from_markup("[yellow]Usage: /mcp start <server_name>[/yellow]"),
-                message_group=group_id)
+                message_group=group_id,
+            )
             return
 
         server_name = args[0]
@@ -47,9 +48,7 @@ class StartCommand(MCPCommandBase):
             # Find server by name
             server_id = find_server_id_by_name(self.manager, server_name)
             if not server_id:
-                emit_error(
-                    f"Server '{server_name}' not found",
-                    message_group=group_id)
+                emit_error(f"Server '{server_name}' not found", message_group=group_id)
                 suggest_similar_servers(self.manager, server_name, group_id=group_id)
                 return
 
@@ -74,17 +73,19 @@ class StartCommand(MCPCommandBase):
                     # Stdio servers start subprocess asynchronously
                     emit_success(
                         f"🚀 Starting server: {server_name} (subprocess starting in background)",
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
                     emit_info(
                         Text.from_markup(
                             "[dim]Tip: Use /mcp status to check if the server is fully initialized[/dim]"
                         ),
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
                 else:
                     # SSE/HTTP servers connect on first use
                     emit_success(
-                        f"✅ Enabled server: {server_name}",
-                        message_group=group_id)
+                        f"✅ Enabled server: {server_name}", message_group=group_id
+                    )
 
                 # Reload the agent to pick up the newly enabled server
                 # NOTE: We don't block or wait - the server will be ready
@@ -95,14 +96,14 @@ class StartCommand(MCPCommandBase):
                     # Clear MCP tool cache - it will be repopulated on next run
                     agent.update_mcp_tool_cache_sync()
                     emit_info(
-                        "Agent reloaded with updated servers",
-                        message_group=group_id)
+                        "Agent reloaded with updated servers", message_group=group_id
+                    )
                 except Exception as e:
                     logger.warning(f"Could not reload agent: {e}")
             else:
                 emit_error(
-                    f"Failed to start server: {server_name}",
-                    message_group=group_id)
+                    f"Failed to start server: {server_name}", message_group=group_id
+                )
 
         except Exception as e:
             logger.error(f"Error starting server '{server_name}': {e}")

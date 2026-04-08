@@ -45,15 +45,16 @@ DANGEROUS_PATTERNS = [
     r"\beval(?![\w])\s*['\"$`]",
     r"\beval(?![\w])\s*\(",
     # Backtick command substitution: `rm -rf /`
-    r'`[^`]+`',
+    r"`[^`]+`",
     # $(...) command substitution: $(rm -rf /)
-    r'\$\s*\([^)]+\)',
+    r"\$\s*\([^)]+\)",
     # ${...} variable expansion that executes
-    r'\$\{[^}]*\bexpr\b',
+    r"\$\{[^}]*\bexpr\b",
 ]
 # Using tuple instead of list for memory efficiency and immutability
 _COMPILED_DANGEROUS = tuple(re.compile(p, re.IGNORECASE) for p in DANGEROUS_PATTERNS)
 MAX_COMMAND_LENGTH = 8192
+
 
 def _validate_passthrough_command(command: str) -> tuple[bool, str]:
     """Validate command for dangerous patterns.
@@ -74,6 +75,7 @@ def _validate_passthrough_command(command: str) -> tuple[bool, str]:
         if pattern.search(command):
             return False, f"Dangerous pattern detected"
     return True, ""
+
 
 # The prefix character that triggers shell pass-through
 SHELL_PASSTHROUGH_PREFIX = "!"
@@ -189,7 +191,8 @@ def execute_shell_passthrough(task: str) -> None:
             # Inherit stdio — output goes straight to the terminal
             stdin=sys.stdin,
             stdout=sys.stdout,
-            stderr=sys.stderr)
+            stderr=sys.stderr,
+        )
         elapsed = time.monotonic() - start_time
 
         if result.returncode == 0:

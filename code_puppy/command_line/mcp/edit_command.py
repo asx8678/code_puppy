@@ -41,10 +41,11 @@ class EditCommand(MCPCommandBase):
             if not args:
                 emit_info(
                     Text.from_markup("[yellow]Usage: /mcp edit <server_name>[/yellow]"),
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 emit_info(
-                    "Use '/mcp list' to see available servers.",
-                    message_group=group_id)
+                    "Use '/mcp list' to see available servers.", message_group=group_id
+                )
                 return
 
             server_name = args[0]
@@ -62,7 +63,8 @@ class EditCommand(MCPCommandBase):
                 edit_mode=True,
                 existing_name=server_name,
                 existing_type=server_type,
-                existing_config=config_dict)
+                existing_config=config_dict,
+            )
 
             if success:
                 # Reload MCP servers to pick up changes
@@ -90,12 +92,10 @@ class EditCommand(MCPCommandBase):
             Tuple of (server_type, config_dict) or None if not found
         """
         if not os.path.exists(MCP_SERVERS_FILE):
-            emit_error(
-                "No MCP servers configured yet.",
-                message_group=group_id)
+            emit_error("No MCP servers configured yet.", message_group=group_id)
             emit_info(
-                "Use '/mcp install' to add a server first.",
-                message_group=group_id)
+                "Use '/mcp install' to add a server first.", message_group=group_id
+            )
             return None
 
         try:
@@ -105,14 +105,10 @@ class EditCommand(MCPCommandBase):
             servers = data.get("mcp_servers", {})
 
             if server_name not in servers:
-                emit_error(
-                    f"Server '{server_name}' not found.",
-                    message_group=group_id)
+                emit_error(f"Server '{server_name}' not found.", message_group=group_id)
                 # Show available servers
                 if servers:
-                    emit_warning(
-                        "\nAvailable servers:",
-                        message_group=group_id)
+                    emit_warning("\nAvailable servers:", message_group=group_id)
                     for name in sorted(servers.keys()):
                         emit_info(f"  • {name}", message_group=group_id)
                 return None
@@ -127,12 +123,8 @@ class EditCommand(MCPCommandBase):
             return (server_type, config)
 
         except json.JSONDecodeError as e:
-            emit_error(
-                f"Error reading config file: {e}",
-                message_group=group_id)
+            emit_error(f"Error reading config file: {e}", message_group=group_id)
             return None
         except Exception as e:
-            emit_error(
-                f"Error loading server config: {e}",
-                message_group=group_id)
+            emit_error(f"Error loading server config: {e}", message_group=group_id)
             return None

@@ -11,7 +11,6 @@ Schema source:
 https://www.llmspec.dev/skills/skills.json
 """
 
-
 import json
 import logging
 import time
@@ -236,7 +235,8 @@ def _parse_catalog(raw: dict[str, Any]) -> RemoteCatalogData | None:
                         ),
                         has_license=_safe_bool(
                             contents.get("has_license"), default=False
-                        ))
+                        ),
+                    )
                 )
 
         if not version:
@@ -249,7 +249,8 @@ def _parse_catalog(raw: dict[str, Any]) -> RemoteCatalogData | None:
             base_url=base_url,
             total_skills=total_skills,
             groups=groups,
-            entries=entries)
+            entries=entries,
+        )
 
     except Exception as e:
         logger.exception(f"Failed to parse remote catalog JSON: {e}")

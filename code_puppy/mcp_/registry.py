@@ -417,7 +417,8 @@ class ServerRegistry:
                         name=config_data["name"],
                         type=config_data["type"],
                         enabled=config_data.get("enabled", True),
-                        config=config_data["config"])
+                        config=config_data["config"],
+                    )
 
                     # Basic validation
                     validation_errors = self.validate_config(config)

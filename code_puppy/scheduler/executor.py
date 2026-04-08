@@ -9,10 +9,7 @@ import subprocess
 import sys
 from datetime import datetime
 
-from code_puppy.scheduler.config import (
-    SCHEDULER_LOG_DIR,
-    ScheduledTask,
-    update_task)
+from code_puppy.scheduler.config import SCHEDULER_LOG_DIR, ScheduledTask, update_task
 
 
 def get_code_puppy_command() -> str:
@@ -99,7 +96,8 @@ def execute_task(task: ScheduledTask) -> tuple[bool, int, str]:
                 stdout=log_f,
                 stderr=subprocess.STDOUT,
                 shell=False,
-                env=os.environ.copy())
+                env=os.environ.copy(),
+            )
 
             # Wait for completion
             exit_code = process.wait()

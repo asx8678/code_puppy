@@ -6,7 +6,6 @@ installers (e.g. local installers, remote zip downloaders).
 It is intentionally small so other modules can depend on a stable result shape.
 """
 
-
 from dataclasses import dataclass
 from pathlib import Path
 

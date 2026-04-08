@@ -13,7 +13,8 @@ from .agent_manager import (
     is_clone_agent_name,
     load_agent,
     refresh_agents,
-    set_current_agent)
+    set_current_agent,
+)
 from .subagent_stream_handler import subagent_stream_handler
 
 __all__ = [

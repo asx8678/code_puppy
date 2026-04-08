@@ -1,6 +1,5 @@
 """Utility helpers for the Claude Code OAuth plugin."""
 
-
 import base64
 import hashlib
 import json
@@ -17,7 +16,8 @@ import requests
 from .config import (
     CLAUDE_CODE_OAUTH_CONFIG,
     get_claude_models_path,
-    get_token_storage_path)
+    get_token_storage_path,
+)
 
 # Proactive refresh buffer default (seconds). Actual buffer is dynamic
 # based on expires_in to avoid overly aggressive refreshes.
@@ -32,9 +32,11 @@ logger = logging.getLogger(__name__)
 # the raw model name (e.g. ``claude-opus-4-5-20251101``) and the
 # prefixed form (e.g. ``claude-code-claude-opus-4-5-20251101``). Add an
 # entry here to permanently suppress a model in the UI/model picker.
-BLOCKED_CLAUDE_CODE_MODELS = frozenset({
-    "claude-opus-4-5-20251101",
-})
+BLOCKED_CLAUDE_CODE_MODELS = frozenset(
+    {
+        "claude-opus-4-5-20251101",
+    }
+)
 
 
 def _is_blocked_claude_model(model_name: str) -> bool:
@@ -47,13 +49,12 @@ def _is_blocked_claude_model(model_name: str) -> bool:
     name = model_name
     prefix = CLAUDE_CODE_OAUTH_CONFIG.get("prefix", "claude-code-")
     if prefix and name.startswith(prefix):
-        name = name[len(prefix):]
+        name = name[len(prefix) :]
     # Tolerate the ``-long`` variant suffix that the plugin appends.
     if name.endswith("-long"):
         name = name[: -len("-long")]
     return (
-        name in BLOCKED_CLAUDE_CODE_MODELS
-        or model_name in BLOCKED_CLAUDE_CODE_MODELS
+        name in BLOCKED_CLAUDE_CODE_MODELS or model_name in BLOCKED_CLAUDE_CODE_MODELS
     )
 
 
@@ -110,7 +111,8 @@ def prepare_oauth_context() -> OAuthContext:
         state=state,
         code_verifier=code_verifier,
         code_challenge=code_challenge,
-        created_at=time.time())
+        created_at=time.time(),
+    )
     return _oauth_context
 
 
@@ -278,14 +280,16 @@ def refresh_access_token(force: bool = False) -> str | None:
             CLAUDE_CODE_OAUTH_CONFIG["token_url"],
             json=payload,
             headers=headers,
-            timeout=30)
+            timeout=30,
+        )
         if response.status_code == 200:
             content_type = response.headers.get("content-type", "")
             if not content_type.startswith("application/json"):
                 logger.error(
                     "Token refresh returned non-JSON response (Content-Type: %s): %s",
                     content_type,
-                    response.text[:500])
+                    response.text[:500],
+                )
                 return None
             try:
                 new_tokens = response.json()
@@ -413,7 +417,8 @@ def load_claude_models_filtered() -> dict[str, Any]:
         logger.info(
             "Loaded %d models, filtered to %d latest models",
             len(all_models),
-            len(filtered_models))
+            len(filtered_models),
+        )
         return filtered_models
 
     except Exception as exc:  # pragma: no cover - defensive logging
@@ -461,7 +466,8 @@ def exchange_code_for_tokens(
             CLAUDE_CODE_OAUTH_CONFIG["token_url"],
             json=payload,
             headers=headers,
-            timeout=30)
+            timeout=30,
+        )
         logger.info("Token exchange response: %s", response.status_code)
         logger.debug("Response body: %s", response.text)
         if response.status_code == 200:
@@ -470,7 +476,8 @@ def exchange_code_for_tokens(
                 logger.error(
                     "Token exchange returned non-JSON response (Content-Type: %s): %s",
                     content_type,
-                    response.text[:500])
+                    response.text[:500],
+                )
                 return None
             try:
                 token_data = response.json()
@@ -482,9 +489,8 @@ def exchange_code_for_tokens(
             )
             return token_data
         logger.error(
-            "Token exchange failed: %s - %s",
-            response.status_code,
-            response.text)
+            "Token exchange failed: %s - %s", response.status_code, response.text
+        )
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Token exchange error: %s", exc)
     return None
@@ -551,7 +557,8 @@ def filter_latest_claude_models(
         len(models),
         len(filtered),
         max_per_family,
-        filtered)
+        filtered,
+    )
     return filtered
 
 
@@ -573,7 +580,8 @@ def fetch_claude_code_models(access_token: str) -> list[str | None]:
                 logger.error(
                     "Models fetch returned non-JSON response (Content-Type: %s): %s",
                     content_type,
-                    response.text[:500])
+                    response.text[:500],
+                )
                 return None
             try:
                 data = response.json()
@@ -589,9 +597,8 @@ def fetch_claude_code_models(access_token: str) -> list[str | None]:
                 return models
         else:
             logger.error(
-                "Failed to fetch models: %s - %s",
-                response.status_code,
-                response.text)
+                "Failed to fetch models: %s - %s", response.status_code, response.text
+            )
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Error fetching Claude Code models: %s", exc)
     return None

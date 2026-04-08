@@ -148,7 +148,8 @@ class UCRegistry:
             signature=signature_str,
             source_path=str(file_path),
             function_name=func_name,
-            docstring=docstring)
+            docstring=docstring,
+        )
 
     def _load_module(self, file_path: Path) -> ModuleType | None:
         """Load a Python module from a file path.

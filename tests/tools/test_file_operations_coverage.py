@@ -193,10 +193,13 @@ class TestGrepFunction:
     @pytest.mark.asyncio
     async def test_grep_timeout_handling(self, tmp_path):
         """Test grep handles timeout gracefully."""
+
         def mock_run(*args, **kwargs):
             raise subprocess.TimeoutExpired("rg", 30)
 
-        with patch("code_puppy.tools.file_operations.asyncio.to_thread", side_effect=mock_run):
+        with patch(
+            "code_puppy.tools.file_operations.asyncio.to_thread", side_effect=mock_run
+        ):
             result = await _grep(None, "test", str(tmp_path))
 
         assert result.error is not None
@@ -206,10 +209,13 @@ class TestGrepFunction:
     @pytest.mark.asyncio
     async def test_grep_file_not_found_error(self, tmp_path):
         """Test grep handles FileNotFoundError (ripgrep not installed)."""
+
         def mock_run(*args, **kwargs):
             raise FileNotFoundError("rg not found")
 
-        with patch("code_puppy.tools.file_operations.asyncio.to_thread", side_effect=mock_run):
+        with patch(
+            "code_puppy.tools.file_operations.asyncio.to_thread", side_effect=mock_run
+        ):
             result = await _grep(None, "test", str(tmp_path))
 
         assert result.error is not None
@@ -218,10 +224,13 @@ class TestGrepFunction:
     @pytest.mark.asyncio
     async def test_grep_generic_exception(self, tmp_path):
         """Test grep handles generic exceptions."""
+
         def mock_run(*args, **kwargs):
             raise RuntimeError("Unexpected error")
 
-        with patch("code_puppy.tools.file_operations.asyncio.to_thread", side_effect=mock_run):
+        with patch(
+            "code_puppy.tools.file_operations.asyncio.to_thread", side_effect=mock_run
+        ):
             result = await _grep(None, "test", str(tmp_path))
 
         assert result.error is not None
@@ -306,10 +315,13 @@ class TestListFilesRipgrepHandling:
     @pytest.mark.asyncio
     async def test_list_files_general_exception(self, tmp_path):
         """Test list_files handles general exceptions."""
+
         def mock_run(*args, **kwargs):
             raise RuntimeError("Unexpected error occurred")
 
-        with patch("code_puppy.tools.file_operations.asyncio.to_thread", side_effect=mock_run):
+        with patch(
+            "code_puppy.tools.file_operations.asyncio.to_thread", side_effect=mock_run
+        ):
             result = await _list_files(None, str(tmp_path), recursive=True)
 
         assert result.error is not None

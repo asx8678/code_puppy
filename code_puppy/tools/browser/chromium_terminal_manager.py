@@ -88,7 +88,8 @@ class ChromiumTerminalManager:
 
             # Launch browser (not persistent - allows multiple instances)
             self._browser = await self._playwright.chromium.launch(
-                headless=self.headless)
+                headless=self.headless
+            )
 
             # Create ephemeral context
             self._context = await self._browser.new_context()
@@ -230,7 +231,8 @@ class ChromiumTerminalManager:
 
 
 def get_chromium_terminal_manager(
-    session_id: str | None = None) -> ChromiumTerminalManager:
+    session_id: str | None = None,
+) -> ChromiumTerminalManager:
     """Get or create a ChromiumTerminalManager instance.
 
     Args:

@@ -20,7 +20,8 @@ from code_puppy.messaging import (  # New structured messaging types
     FileListingMessage,
     GrepMatch,
     GrepResultMessage,
-    get_message_bus)
+    get_message_bus,
+)
 
 
 # Pydantic models for tool return types
@@ -205,8 +206,7 @@ async def _list_files(
             cmd = [rg_path, "--files"]
 
             # Add ignore patterns to the command via a temporary file
-            from code_puppy.tools.common import (
-                DIR_IGNORE_PATTERNS)
+            from code_puppy.tools.common import DIR_IGNORE_PATTERNS
 
             f = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".ignore")
             ignore_file = f.name
@@ -290,7 +290,8 @@ async def _list_files(
                                             full_path=os.path.join(
                                                 directory, partial_path
                                             ),
-                                            depth=partial_path.count(os.sep))
+                                            depth=partial_path.count(os.sep),
+                                        )
                                     )
 
                     # Add the entry (file or directory)
@@ -300,7 +301,8 @@ async def _list_files(
                             type=entry_type,
                             size=size,
                             full_path=full_path,
-                            depth=depth)
+                            depth=depth,
+                        )
                     )
                 except (FileNotFoundError, PermissionError, OSError):
                     # Skip files we can't access
@@ -327,7 +329,8 @@ async def _list_files(
                                 type="directory",
                                 size=0,
                                 full_path=full_entry_path,
-                                depth=0)
+                                depth=0,
+                            )
                         )
                     elif os.path.isfile(full_entry_path):
                         # Include top-level files (including binaries)
@@ -341,7 +344,8 @@ async def _list_files(
                                 type="file",
                                 size=size,
                                 full_path=full_entry_path,
-                                depth=0)
+                                depth=0,
+                            )
                         )
             except (FileNotFoundError, PermissionError, OSError):
                 # Skip entries we can't access
@@ -422,7 +426,8 @@ async def _list_files(
                 path=item.path,
                 type="dir" if item.type == "directory" else "file",
                 size=item.size,
-                depth=item.depth or 0)
+                depth=item.depth or 0,
+            )
         )
 
     # Emit structured message for the UI
@@ -432,7 +437,8 @@ async def _list_files(
         recursive=recursive,
         total_size=total_size,
         dir_count=dir_count,
-        file_count=file_count)
+        file_count=file_count,
+    )
     get_message_bus().emit(file_listing_msg)
 
     # Build plain text output for LLM consumption
@@ -459,6 +465,7 @@ async def _list_files(
 # Security helpers
 # SECURITY FIX peis/wslg/p8wo/8y6x: path validation & sensitive-path blocking
 # ---------------------------------------------------------------------------
+
 
 def _is_sensitive_path(file_path: str) -> bool:
     """Check if a path points to a sensitive file/directory.
@@ -531,7 +538,9 @@ def _is_sensitive_path(file_path: str) -> bool:
         # Only block .pem/.key if they live in a directory that sounds
         # credential-ish — otherwise legitimate project files would be blocked.
         parent_lower = os.path.dirname(resolved).lower()
-        if any(tok in parent_lower for tok in ("secret", "cred", "key", "cert", "private")):
+        if any(
+            tok in parent_lower for tok in ("secret", "cred", "key", "cert", "private")
+        ):
             return True
 
     return False
@@ -582,16 +591,19 @@ async def _read_file(
     context: RunContext,
     file_path: str,
     start_line: int | None = None,
-    num_lines: int | None = None) -> ReadFileOutput:
+    num_lines: int | None = None,
+) -> ReadFileOutput:
     """Read file with concurrency limiting and security validation.
-    
+
     SECURITY FIX peis/wslg: Added path validation before file access.
     """
     # Validate path before accessing
     is_valid, error_msg = validate_file_path(file_path, "read")
     if not is_valid:
-        return ReadFileOutput(content=None, num_tokens=0, error=f"Security: {error_msg}")
-    
+        return ReadFileOutput(
+            content=None, num_tokens=0, error=f"Security: {error_msg}"
+        )
+
     async with FileOpsLimiter():
         # Run blocking I/O in thread pool
         content, num_tokens, error = await asyncio.to_thread(
@@ -601,18 +613,17 @@ async def _read_file(
 
 
 def _read_file_sync(
-    file_path: str,
-    start_line: int | None = None,
-    num_lines: int | None = None) -> tuple[str | None, int, str | None]:
+    file_path: str, start_line: int | None = None, num_lines: int | None = None
+) -> tuple[str | None, int, str | None]:
     """Synchronous file reading - runs in thread pool.
-    
+
     SECURITY FIX peis/wslg: Normalizes and validates path.
     """
     # SECURITY: Validate and normalize path
     is_valid, error_msg = validate_file_path(file_path, "read")
     if not is_valid:
         return None, 0, f"Security: {error_msg}"
-    
+
     file_path = os.path.abspath(os.path.expanduser(file_path))
 
     if not os.path.exists(file_path):
@@ -663,9 +674,14 @@ def _read_file_sync(
 
             # Use shared token estimation (content-aware, sampling for large texts)
             from code_puppy.token_utils import estimate_token_count as _etc
+
             num_tokens = _etc(content)
             if num_tokens > 10000:
-                return None, 0, "The file is massive, greater than 10,000 tokens which is dangerous to read entirely. Please read this file in chunks."
+                return (
+                    None,
+                    0,
+                    "The file is massive, greater than 10,000 tokens which is dangerous to read entirely. Please read this file in chunks.",
+                )
 
             # Count total lines for the message
             total_lines = content.count("\n") + (
@@ -686,7 +702,8 @@ def _read_file_sync(
                 start_line=emit_start_line,
                 num_lines=emit_num_lines,
                 total_lines=total_lines,
-                num_tokens=num_tokens)
+                num_tokens=num_tokens,
+            )
             get_message_bus().emit(file_content_msg)
 
         return content, num_tokens, None
@@ -728,7 +745,9 @@ def _sanitize_string(text: str) -> str:
         )
 
 
-async def _grep(context: RunContext, search_string: str, directory: str = ".") -> GrepOutput:
+async def _grep(
+    context: RunContext, search_string: str, directory: str = "."
+) -> GrepOutput:
     import json
     import os
     import shlex
@@ -843,7 +862,8 @@ async def _grep(context: RunContext, search_string: str, directory: str = ".") -
                         match_info = MatchInfo(
                             file_path=_sanitize_string(file_path),
                             line_number=line_number,
-                            line_content=_sanitize_string(line_content.strip()))
+                            line_content=_sanitize_string(line_content.strip()),
+                        )
                         matches.append(match_info)
                         # Limit to 50 matches total, same as original implementation
                         if len(matches) >= 50:
@@ -870,7 +890,8 @@ async def _grep(context: RunContext, search_string: str, directory: str = ".") -
         GrepMatch(
             file_path=m.file_path or "",
             line_number=m.line_number or 1,
-            line_content=m.line_content or "")
+            line_content=m.line_content or "",
+        )
         for m in matches
     ]
 
@@ -883,7 +904,8 @@ async def _grep(context: RunContext, search_string: str, directory: str = ".") -
         directory=directory,
         matches=grep_matches,
         total_matches=len(matches),
-        files_searched=unique_files)
+        files_searched=unique_files,
+    )
     get_message_bus().emit(grep_result_msg)
 
     return GrepOutput(matches=matches, error=error_message)
@@ -925,7 +947,8 @@ def register_read_file(agent):
         context: RunContext,
         file_path: str = "",
         start_line: int | None = None,
-        num_lines: int | None = None) -> ReadFileOutput:
+        num_lines: int | None = None,
+    ) -> ReadFileOutput:
         """Read file contents with optional line-range selection and token safety.
 
         Use start_line/num_lines for large files to avoid overwhelming context.

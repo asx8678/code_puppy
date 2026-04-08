@@ -9,7 +9,9 @@ def _detect_project_name(root: Path) -> str:
     return root.name or "project"
 
 
-def format_structure_map(root: Path, summaries: list[FileSummary], max_chars: int = 2400) -> str | None:
+def format_structure_map(
+    root: Path, summaries: list[FileSummary], max_chars: int = 2400
+) -> str | None:
     if not summaries:
         return None
 

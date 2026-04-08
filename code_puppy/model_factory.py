@@ -9,7 +9,10 @@ import httpx
 
 # Light pydantic-ai imports needed at module scope for make_model_settings()
 from pydantic_ai.models.anthropic import AnthropicModelSettings
-from pydantic_ai.models.openai import OpenAIChatModelSettings, OpenAIResponsesModelSettings
+from pydantic_ai.models.openai import (
+    OpenAIChatModelSettings,
+    OpenAIResponsesModelSettings,
+)
 from pydantic_ai.settings import ModelSettings
 
 from code_puppy.messaging import emit_warning
@@ -83,9 +86,8 @@ CONTEXT_1M_BETA = "context-1m-2025-08-07"
 
 
 def _build_anthropic_beta_header(
-    model_config: dict,
-    *,
-    interleaved_thinking: bool = False) -> str | None:
+    model_config: dict, *, interleaved_thinking: bool = False
+) -> str | None:
     """Build the anthropic-beta header value for an Anthropic model.
 
     Combines beta flags based on model capabilities:
@@ -157,7 +159,8 @@ def make_model_settings(
         # min _MIN_OUTPUT_TOKENS, _OUTPUT_TOKEN_RATIO of context, max _MAX_OUTPUT_TOKENS
         max_tokens = max(
             _MIN_OUTPUT_TOKENS,
-            min(int(_OUTPUT_TOKEN_RATIO * context_length), _MAX_OUTPUT_TOKENS))
+            min(int(_OUTPUT_TOKEN_RATIO * context_length), _MAX_OUTPUT_TOKENS),
+        )
 
     model_settings_dict["max_tokens"] = max_tokens
     effective_settings = _config_module.get_effective_model_settings(model_name)
@@ -178,7 +181,9 @@ def make_model_settings(
     model_settings: ModelSettings = ModelSettings(**model_settings_dict)
 
     if "gpt-5" in model_name:
-        model_settings_dict["openai_reasoning_effort"] = _config_module.get_openai_reasoning_effort()
+        model_settings_dict["openai_reasoning_effort"] = (
+            _config_module.get_openai_reasoning_effort()
+        )
 
         model_type = model_config.get("type")
         uses_responses_api = (
@@ -192,7 +197,9 @@ def make_model_settings(
                 _config_module.get_openai_reasoning_summary()
             )
             if "codex" not in model_name:
-                model_settings_dict["openai_text_verbosity"] = _config_module.get_openai_verbosity()
+                model_settings_dict["openai_text_verbosity"] = (
+                    _config_module.get_openai_verbosity()
+                )
             model_settings = OpenAIResponsesModelSettings(**model_settings_dict)
         else:
             # Chat Completions models don't support configurable reasoning summaries.
@@ -377,7 +384,10 @@ def _build_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
     from anthropic import AsyncAnthropic
     from pydantic_ai.models.anthropic import AnthropicModel
     from pydantic_ai.providers.anthropic import AnthropicProvider
-    from code_puppy.claude_cache_client import ClaudeCacheAsyncClient, patch_anthropic_client_messages
+    from code_puppy.claude_cache_client import (
+        ClaudeCacheAsyncClient,
+        patch_anthropic_client_messages,
+    )
 
     api_key = _require_api_key("ANTHROPIC_API_KEY", model_config)
     if not api_key:
@@ -386,10 +396,7 @@ def _build_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
     verify = get_cert_bundle_path()
     http2_enabled = get_http2()
 
-    client = ClaudeCacheAsyncClient(
-        verify=verify,
-        timeout=180,
-        http2=http2_enabled)
+    client = ClaudeCacheAsyncClient(verify=verify, timeout=180, http2=http2_enabled)
 
     from code_puppy.config import get_effective_model_settings
 
@@ -406,7 +413,8 @@ def _build_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
     anthropic_client = AsyncAnthropic(
         api_key=api_key,
         http_client=client,
-        default_headers=default_headers if default_headers else None)
+        default_headers=default_headers if default_headers else None,
+    )
 
     patch_anthropic_client_messages(anthropic_client)
 
@@ -417,7 +425,10 @@ def _build_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
 def _build_custom_anthropic(model_name: str, model_config: dict, config: dict) -> Any:
     from anthropic import AsyncAnthropic
     from pydantic_ai.models.anthropic import AnthropicModel
-    from code_puppy.claude_cache_client import ClaudeCacheAsyncClient, patch_anthropic_client_messages
+    from code_puppy.claude_cache_client import (
+        ClaudeCacheAsyncClient,
+        patch_anthropic_client_messages,
+    )
 
     url, headers, verify, api_key = get_custom_config(model_config)
     if not api_key:
@@ -432,10 +443,8 @@ def _build_custom_anthropic(model_name: str, model_config: dict, config: dict) -
     http2_enabled = get_http2()
 
     client = ClaudeCacheAsyncClient(
-        headers=headers,
-        verify=verify,
-        timeout=180,
-        http2=http2_enabled)
+        headers=headers, verify=verify, timeout=180, http2=http2_enabled
+    )
 
     from code_puppy.config import get_effective_model_settings
 
@@ -453,14 +462,13 @@ def _build_custom_anthropic(model_name: str, model_config: dict, config: dict) -
         base_url=url,
         http_client=client,
         api_key=api_key,
-        default_headers=default_headers if default_headers else None)
+        default_headers=default_headers if default_headers else None,
+    )
 
     patch_anthropic_client_messages(anthropic_client)
 
     provider_name = resolve_provider_identity(model_name, model_config)
-    provider = make_anthropic_provider(
-        provider_name, anthropic_client=anthropic_client
-    )
+    provider = make_anthropic_provider(provider_name, anthropic_client=anthropic_client)
     return AnthropicModel(model_name=model_config["name"], provider=provider)
 
 
@@ -521,7 +529,8 @@ def _build_azure_openai(model_name: str, model_config: dict, config: dict) -> An
         azure_endpoint=azure_endpoint,
         api_version=api_version,
         api_key=api_key,
-        max_retries=azure_max_retries)
+        max_retries=azure_max_retries,
+    )
     provider = OpenAIProvider(openai_client=azure_client)
     model = OpenAIChatModel(model_name=model_config["name"], provider=provider)
     model.provider = provider
@@ -555,11 +564,9 @@ def _build_zai_coding(model_name: str, model_config: dict, config: dict) -> Any:
     if not api_key:
         return None
     provider = OpenAIProvider(
-        api_key=api_key,
-        base_url="https://api.z.ai/api/coding/paas/v4")
-    zai_model = ZaiChatModel(
-        model_name=model_config["name"],
-        provider=provider)
+        api_key=api_key, base_url="https://api.z.ai/api/coding/paas/v4"
+    )
+    zai_model = ZaiChatModel(model_name=model_config["name"], provider=provider)
     zai_model.provider = provider
     return zai_model
 
@@ -570,12 +577,8 @@ def _build_zai_api(model_name: str, model_config: dict, config: dict) -> Any:
     api_key = _require_api_key("ZAI_API_KEY", model_config)
     if not api_key:
         return None
-    provider = OpenAIProvider(
-        api_key=api_key,
-        base_url="https://api.z.ai/api/paas/v4/")
-    zai_model = ZaiChatModel(
-        model_name=model_config["name"],
-        provider=provider)
+    provider = OpenAIProvider(api_key=api_key, base_url="https://api.z.ai/api/paas/v4/")
+    zai_model = ZaiChatModel(model_name=model_config["name"], provider=provider)
     zai_model.provider = provider
     return zai_model
 
@@ -630,7 +633,8 @@ def _build_custom_gemini(model_name: str, model_config: dict, config: dict) -> A
         model_name=model_config["name"],
         api_key=api_key,
         base_url=url,
-        http_client=client)
+        http_client=client,
+    )
 
 
 def _build_cerebras(model_name: str, model_config: dict, config: dict) -> Any:
@@ -661,9 +665,7 @@ def _build_cerebras(model_name: str, model_config: dict, config: dict) -> Any:
     # Pass "cerebras" so RetryingAsyncClient knows to ignore Cerebras's
     # absurdly aggressive Retry-After headers (they send 60s!)
     client = create_async_client(headers=headers, verify=verify, model_name="cerebras")
-    provider = ZaiCerebrasProvider(
-        api_key=api_key,
-        http_client=client)
+    provider = ZaiCerebrasProvider(api_key=api_key, http_client=client)
     model = OpenAIChatModel(model_name=model_config["name"], provider=provider)
     model.provider = provider
     return model
@@ -706,15 +708,13 @@ def _build_gemini_oauth(model_name: str, model_config: dict, config: dict) -> An
     try:
         try:
             from gemini_oauth.config import GEMINI_OAUTH_CONFIG
-            from gemini_oauth.utils import (
-                get_project_id,
-                get_valid_access_token)
+            from gemini_oauth.utils import get_project_id, get_valid_access_token
         except ImportError:
-            from code_puppy.plugins.gemini_oauth.config import (
-                GEMINI_OAUTH_CONFIG)
+            from code_puppy.plugins.gemini_oauth.config import GEMINI_OAUTH_CONFIG
             from code_puppy.plugins.gemini_oauth.utils import (
                 get_project_id,
-                get_valid_access_token)
+                get_valid_access_token,
+            )
     except ImportError as exc:
         emit_warning(
             f"Gemini OAuth plugin not available; skipping model '{model_config.get('name')}'. "
@@ -745,7 +745,8 @@ def _build_gemini_oauth(model_name: str, model_config: dict, config: dict) -> An
         access_token=access_token,
         project_id=project_id,
         api_base_url=GEMINI_OAUTH_CONFIG["api_base_url"],
-        api_version=GEMINI_OAUTH_CONFIG["api_version"])
+        api_version=GEMINI_OAUTH_CONFIG["api_version"],
+    )
 
 
 # NOTE: 'chatgpt_oauth' model type is now handled by the chatgpt_oauth plugin
@@ -892,10 +893,26 @@ class ModelFactory:
         # Build list of extra model sources
         extra_sources: list[tuple[pathlib.Path, str, bool]] = [
             (pathlib.Path(EXTRA_MODELS_FILE), "extra models", False),
-            (pathlib.Path(_config_module.CHATGPT_MODELS_FILE), "ChatGPT OAuth models", False),
-            (pathlib.Path(_config_module.CLAUDE_MODELS_FILE), "Claude Code OAuth models", True),
-            (pathlib.Path(_config_module.GEMINI_MODELS_FILE), "Gemini OAuth models", False),
-            (pathlib.Path(_config_module.ANTIGRAVITY_MODELS_FILE), "Antigravity OAuth models", False),
+            (
+                pathlib.Path(_config_module.CHATGPT_MODELS_FILE),
+                "ChatGPT OAuth models",
+                False,
+            ),
+            (
+                pathlib.Path(_config_module.CLAUDE_MODELS_FILE),
+                "Claude Code OAuth models",
+                True,
+            ),
+            (
+                pathlib.Path(_config_module.GEMINI_MODELS_FILE),
+                "Gemini OAuth models",
+                False,
+            ),
+            (
+                pathlib.Path(_config_module.ANTIGRAVITY_MODELS_FILE),
+                "Antigravity OAuth models",
+                False,
+            ),
         ]
 
         for source_path, label, use_filtered in extra_sources:
@@ -906,7 +923,8 @@ class ModelFactory:
                 if use_filtered:
                     try:
                         from code_puppy.plugins.claude_code_oauth.utils import (
-                            load_claude_models_filtered)
+                            load_claude_models_filtered,
+                        )
 
                         extra_config = load_claude_models_filtered()
                     except ImportError:
@@ -990,8 +1008,7 @@ class ModelFactory:
                 raise  # Re-raise ValueError from _check_result
             except Exception as e:
                 raise ValueError(
-                    f"Model '{model_name}': custom provider '{model_type}' "
-                    f"failed: {e}"
+                    f"Model '{model_name}': custom provider '{model_type}' failed: {e}"
                 ) from e
 
         # Look up the builder in the registry

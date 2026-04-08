@@ -50,10 +50,15 @@ def _iter_candidate_files(root: Path) -> list[Path]:
         if _is_hidden(rel):
             continue
         candidates.append(path)
-    return sorted(candidates, key=lambda p: (len(p.relative_to(root).parts), str(p.relative_to(root))))
+    return sorted(
+        candidates,
+        key=lambda p: (len(p.relative_to(root).parts), str(p.relative_to(root))),
+    )
 
 
-def _summarize_python_file(path: Path, root: Path, max_symbols: int) -> FileSummary | None:
+def _summarize_python_file(
+    path: Path, root: Path, max_symbols: int
+) -> FileSummary | None:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (SyntaxError, UnicodeDecodeError, OSError):
@@ -66,13 +71,19 @@ def _summarize_python_file(path: Path, root: Path, max_symbols: int) -> FileSumm
             signature = f"def {node.name}({', '.join(args)})"
             symbols.append(signature)
         elif isinstance(node, ast.ClassDef):
-            methods = [n.name for n in node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+            methods = [
+                n.name
+                for n in node.body
+                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            ]
             suffix = f" methods={','.join(methods[:3])}" if methods else ""
             symbols.append(f"class {node.name}{suffix}")
         if len(symbols) >= max_symbols:
             break
 
-    return FileSummary(path=str(path.relative_to(root)), kind="python", symbols=tuple(symbols))
+    return FileSummary(
+        path=str(path.relative_to(root)), kind="python", symbols=tuple(symbols)
+    )
 
 
 def _summarize_non_python_file(path: Path, root: Path) -> FileSummary | None:
@@ -87,7 +98,9 @@ def _summarize_non_python_file(path: Path, root: Path) -> FileSummary | None:
     return None
 
 
-def build_structure_map(root: Path, max_files: int = 40, max_symbols_per_file: int = 8) -> list[FileSummary]:
+def build_structure_map(
+    root: Path, max_files: int = 40, max_symbols_per_file: int = 8
+) -> list[FileSummary]:
     summaries: list[FileSummary] = []
     for path in _iter_candidate_files(root):
         summary: FileSummary | None

@@ -45,6 +45,7 @@ def save_session_async(
     in a background thread, preventing file I/O from blocking the main thread.
     Errors are logged but not raised to avoid disrupting the main flow.
     """
+
     def _do_save():
         try:
             save_session(

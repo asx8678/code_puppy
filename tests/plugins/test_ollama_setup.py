@@ -271,6 +271,6 @@ class TestAuthFailNoAutoLogin:
         #    (plugin should never auto-run login on auth failure)
         for call in mock_subprocess_run.call_args_list:
             args = call[0][0] if call[0] else []
-            assert (
-                "login" not in args
-            ), f"subprocess.run must not be called with 'ollama login'; got {args}"
+            assert "login" not in args, (
+                f"subprocess.run must not be called with 'ollama login'; got {args}"
+            )

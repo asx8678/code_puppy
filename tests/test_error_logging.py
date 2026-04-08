@@ -138,7 +138,9 @@ class TestErrorLogging:
 
         original_log_file = error_logging.ERROR_LOG_FILE
         # Point to an invalid path that can't be written
-        error_logging.ERROR_LOG_FILE = Path("/nonexistent/path/that/cant/exist/errors.log")
+        error_logging.ERROR_LOG_FILE = Path(
+            "/nonexistent/path/that/cant/exist/errors.log"
+        )
 
         try:
             # This should not raise an exception
@@ -154,7 +156,9 @@ class TestErrorLogging:
         from code_puppy import error_logging
 
         original_log_file = error_logging.ERROR_LOG_FILE
-        error_logging.ERROR_LOG_FILE = Path("/nonexistent/path/that/cant/exist/errors.log")
+        error_logging.ERROR_LOG_FILE = Path(
+            "/nonexistent/path/that/cant/exist/errors.log"
+        )
 
         try:
             # This should not raise an exception

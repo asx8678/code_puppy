@@ -54,51 +54,61 @@ class TestConfigure:
     def test_configure_min_limit(self):
         configure(min_limit=2)
         from code_puppy import adaptive_rate_limiter as arl
+
         assert arl._cfg_min_limit == 2
 
     def test_configure_max_limit(self):
         configure(max_limit=20)
         from code_puppy import adaptive_rate_limiter as arl
+
         assert arl._cfg_max_limit == 20
 
     def test_configure_cooldown(self):
         configure(cooldown_seconds=30.0)
         from code_puppy import adaptive_rate_limiter as arl
+
         assert arl._cfg_cooldown_seconds == 30.0
 
     def test_configure_recovery_rate(self):
         configure(recovery_rate=0.3)
         from code_puppy import adaptive_rate_limiter as arl
+
         assert arl._cfg_recovery_rate == 0.3
 
     def test_configure_initial_limit(self):
         configure(initial_limit=5)
         from code_puppy import adaptive_rate_limiter as arl
+
         assert arl._cfg_initial_limit == 5
 
     def test_configure_clamps_min_limit(self):
         configure(min_limit=0)
         from code_puppy import adaptive_rate_limiter as arl
+
         assert arl._cfg_min_limit == 1
 
     def test_configure_clamps_max_above_min(self):
         configure(min_limit=5, max_limit=3)
         from code_puppy import adaptive_rate_limiter as arl
+
         assert arl._cfg_max_limit == 5  # clamped to min
 
     def test_configure_clamps_cooldown(self):
         configure(cooldown_seconds=0.0)
         from code_puppy import adaptive_rate_limiter as arl
+
         assert arl._cfg_cooldown_seconds == 1.0
 
     def test_configure_clamps_recovery_rate(self):
         configure(recovery_rate=2.0)
         from code_puppy import adaptive_rate_limiter as arl
+
         assert arl._cfg_recovery_rate == 1.0
 
     def test_configure_clamps_initial_limit(self):
         configure(min_limit=3, initial_limit=1)
         from code_puppy import adaptive_rate_limiter as arl
+
         assert arl._cfg_initial_limit == 3  # clamped to min
 
 
@@ -435,14 +445,17 @@ class TestHttpUtilsIntegration:
     def test_import_http_utils(self):
         """http_utils should import without errors."""
         from code_puppy.http_utils import RetryingAsyncClient
+
         assert RetryingAsyncClient is not None
 
     def test_notify_helper_exists(self):
         from code_puppy.http_utils import _notify_adaptive_rate_limiter
+
         assert callable(_notify_adaptive_rate_limiter)
 
     def test_notify_on_non_429_is_noop(self):
         from code_puppy.http_utils import _notify_adaptive_rate_limiter
+
         # Should not raise and should not create state
         _notify_adaptive_rate_limiter("gpt-4", 200)
         _notify_adaptive_rate_limiter("gpt-4", 500)
@@ -465,6 +478,7 @@ class TestHttpUtilsIntegration:
 
     def test_notify_empty_model_is_noop(self):
         from code_puppy.http_utils import _notify_adaptive_rate_limiter
+
         _notify_adaptive_rate_limiter("", 429)
         _notify_adaptive_rate_limiter("   ", 429)
         time.sleep(0.05)

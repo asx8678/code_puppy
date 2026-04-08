@@ -4,7 +4,6 @@ MCP Command Utilities - Shared helper functions for MCP command handlers.
 Provides common utility functions used across multiple MCP command modules.
 """
 
-
 from rich.text import Text
 
 from code_puppy.mcp_.managed_server import ServerState

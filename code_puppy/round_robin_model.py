@@ -11,7 +11,8 @@ from pydantic_ai.models import (
     ModelRequestParameters,
     ModelResponse,
     ModelSettings,
-    StreamedResponse)
+    StreamedResponse,
+)
 
 from code_puppy.model_availability import model_availability_service
 
@@ -51,7 +52,8 @@ class RoundRobinModel(Model):
         self,
         *models: Model,
         rotate_every: int = 1,
-        settings: ModelSettings | None = None):
+        settings: ModelSettings | None = None,
+    ):
         """Initialize a round-robin model instance.
 
         Args:
@@ -100,8 +102,7 @@ class RoundRobinModel(Model):
             n = len(self.models)
             # Build a candidate list: starting at _current_index, wrap around.
             ordered_names = [
-                self.models[(self._current_index + i) % n].model_name
-                for i in range(n)
+                self.models[(self._current_index + i) % n].model_name for i in range(n)
             ]
 
             result = model_availability_service.select_first_available(ordered_names)
@@ -144,7 +145,8 @@ class RoundRobinModel(Model):
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters) -> ModelResponse:
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
         """Make a request using the next available model in the round-robin sequence."""
         from code_puppy.model_availability import availability_service
 
@@ -170,7 +172,8 @@ class RoundRobinModel(Model):
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
-        run_context: RunContext[Any] | None = None) -> AsyncIterator[StreamedResponse]:
+        run_context: RunContext[Any] | None = None,
+    ) -> AsyncIterator[StreamedResponse]:
         """Make a streaming request using the next model in the round-robin sequence."""
         from code_puppy.model_availability import availability_service
 

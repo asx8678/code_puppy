@@ -348,7 +348,9 @@ class TestProviderFiltering:
         cap_id = _cap_id("include")
         define_capability(cap_id, "Cap", "desc")
         register_provider(cap_id, _SimpleProvider("p1", [{"name": "from_p1"}]))
-        register_provider(cap_id, _SimpleProvider("p2", [{"name": "from_p2"}], priority=10))
+        register_provider(
+            cap_id, _SimpleProvider("p2", [{"name": "from_p2"}], priority=10)
+        )
         result = await load_capability(cap_id, ctx=_make_ctx(), providers=["p1"])
         names = {i["name"] for i in result.items}
         assert "from_p1" in names
@@ -359,8 +361,12 @@ class TestProviderFiltering:
         cap_id = _cap_id("exclude")
         define_capability(cap_id, "Cap", "desc")
         register_provider(cap_id, _SimpleProvider("p1", [{"name": "from_p1"}]))
-        register_provider(cap_id, _SimpleProvider("p2", [{"name": "from_p2"}], priority=10))
-        result = await load_capability(cap_id, ctx=_make_ctx(), exclude_providers=["p2"])
+        register_provider(
+            cap_id, _SimpleProvider("p2", [{"name": "from_p2"}], priority=10)
+        )
+        result = await load_capability(
+            cap_id, ctx=_make_ctx(), exclude_providers=["p2"]
+        )
         names = {i["name"] for i in result.items}
         assert "from_p1" in names
         assert "from_p2" not in names

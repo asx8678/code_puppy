@@ -14,6 +14,7 @@ try:
     from prompt_toolkit.layout import Dimension, Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -29,11 +30,13 @@ from code_puppy.scheduler.config import (
     add_task,
     delete_task,
     load_tasks,
-    toggle_task)
+    toggle_task,
+)
 from code_puppy.scheduler.daemon import (
     get_daemon_pid,
     start_daemon_background,
-    stop_daemon)
+    stop_daemon,
+)
 from code_puppy.scheduler.executor import run_task_by_id
 from code_puppy.tools.command_runner import set_awaiting_user_input
 
@@ -362,7 +365,8 @@ def _create_new_task() -> ScheduledTask | None:
         model=result["model"],
         schedule_type=result["schedule_type"],
         schedule_value=result["schedule_value"],
-        working_directory=result["working_directory"])
+        working_directory=result["working_directory"],
+    )
 
 
 def _tail_log_file(log_file: str) -> None:

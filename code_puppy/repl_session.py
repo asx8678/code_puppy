@@ -31,33 +31,34 @@ REPL_HISTORY_FILE = REPL_STATE_DIR / "repl_history.jsonl"
 @dataclass
 class ReplSession:
     """Persistent REPL session state.
-    
+
     Tracks conversation history, project context, and configuration
     that persists across REPL restarts.
     """
+
     session_id: str
     created_at: float = field(default_factory=lambda: time.time())
     updated_at: float = field(default_factory=lambda: time.time())
-    
+
     # Project context
     working_directory: str = field(default_factory=lambda: str(Path.cwd()))
     loaded_files: list[str] = field(default_factory=list)
     project_root: str | None = None
-    
+
     # Session configuration
     current_agent: str = "default"
     current_model: str | None = None
     current_mode: str = "semi"  # basic, semi, full, pack
     current_pack: str = "single"  # model pack
-    
+
     # Session metadata
     message_count: int = 0
     command_count: int = 0
     last_command: str | None = None
-    
+
     # Conversation snapshot (reference to autosave)
     autosave_session_id: str | None = None
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize session to dictionary."""
         return {
@@ -76,7 +77,7 @@ class ReplSession:
             "last_command": self.last_command,
             "autosave_session_id": self.autosave_session_id,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ReplSession":
         """Create session from dictionary."""
@@ -96,7 +97,7 @@ class ReplSession:
             last_command=data.get("last_command"),
             autosave_session_id=data.get("autosave_session_id"),
         )
-    
+
     def touch(self) -> None:
         """Update the last modified timestamp."""
         self.updated_at = time.time()
@@ -115,10 +116,10 @@ def get_repl_state_dir() -> Path:
 def get_current_session() -> ReplSession:
     """Get the current REPL session, loading from disk if needed."""
     global _current_session
-    
+
     if _current_session is None:
         _current_session = load_session()
-    
+
     return _current_session
 
 
@@ -133,7 +134,7 @@ def load_session() -> ReplSession:
             return session
         except Exception as e:
             logger.warning(f"Failed to load REPL session: {e}")
-    
+
     # Create new session
     session = ReplSession(session_id=get_current_autosave_id())
     logger.debug(f"Created new REPL session: {session.session_id}")
@@ -144,10 +145,10 @@ def save_session(session: ReplSession | None = None) -> None:
     """Save REPL session to disk."""
     if session is None:
         session = get_current_session()
-    
+
     session.touch()
     get_repl_state_dir()
-    
+
     try:
         with open(REPL_STATE_FILE, "w") as f:
             json.dump(session.to_dict(), f, indent=2)
@@ -159,17 +160,18 @@ def save_session(session: ReplSession | None = None) -> None:
 def reset_session() -> ReplSession:
     """Reset the REPL session to a fresh state."""
     global _current_session
-    
+
     _current_session = ReplSession(session_id=get_current_autosave_id())
     save_session(_current_session)
-    
+
     # Also reset workflow state
     try:
         from code_puppy.workflow_state import reset_workflow_state
+
         reset_workflow_state()
     except Exception:
         pass
-    
+
     logger.debug("Reset REPL session")
     return _current_session
 
@@ -177,13 +179,13 @@ def reset_session() -> ReplSession:
 def update_session(**kwargs) -> None:
     """Update current session with new values and save."""
     session = get_current_session()
-    
+
     for key, value in kwargs.items():
         if hasattr(session, key):
             setattr(session, key, value)
         else:
             logger.warning(f"Unknown session attribute: {key}")
-    
+
     save_session(session)
 
 
@@ -193,7 +195,7 @@ def record_command(command: str) -> None:
     session.command_count += 1
     session.last_command = command
     session.touch()
-    
+
     # Append to history file
     try:
         with open(REPL_HISTORY_FILE, "a") as f:
@@ -205,7 +207,7 @@ def record_command(command: str) -> None:
             f.write(json.dumps(entry) + "\n")
     except Exception as e:
         logger.debug(f"Failed to write command history: {e}")
-    
+
     save_session(session)
 
 
@@ -213,11 +215,11 @@ def get_command_history(limit: int = 100) -> list[dict[str, Any]]:
     """Get recent command history."""
     if not REPL_HISTORY_FILE.exists():
         return []
-    
+
     try:
         with open(REPL_HISTORY_FILE, "r") as f:
             lines = f.readlines()
-        
+
         # Parse last N entries
         entries = []
         for line in lines[-limit:]:
@@ -226,7 +228,7 @@ def get_command_history(limit: int = 100) -> list[dict[str, Any]]:
                 entries.append(entry)
             except json.JSONDecodeError:
                 continue
-        
+
         return entries
     except Exception as e:
         logger.warning(f"Failed to read command history: {e}")
@@ -236,14 +238,14 @@ def get_command_history(limit: int = 100) -> list[dict[str, Any]]:
 def add_loaded_file(file_path: str) -> None:
     """Track a file as being loaded into context."""
     session = get_current_session()
-    
+
     # Normalize path
     try:
         path = Path(file_path).resolve()
         str_path = str(path)
     except Exception:
         str_path = file_path
-    
+
     # Add if not already present
     if str_path not in session.loaded_files:
         session.loaded_files.append(str_path)
@@ -253,13 +255,13 @@ def add_loaded_file(file_path: str) -> None:
 def remove_loaded_file(file_path: str) -> None:
     """Remove a file from the loaded context."""
     session = get_current_session()
-    
+
     try:
         path = Path(file_path).resolve()
         str_path = str(path)
     except Exception:
         str_path = file_path
-    
+
     if str_path in session.loaded_files:
         session.loaded_files.remove(str_path)
         save_session(session)
@@ -275,38 +277,38 @@ def clear_loaded_files() -> None:
 def get_session_summary() -> str:
     """Get a human-readable summary of current session."""
     session = get_current_session()
-    
+
     lines = [
         f"Session: {session.session_id[:8]}...",
         f"Commands: {session.command_count}",
         f"Loaded files: {len(session.loaded_files)}",
         f"Agent: {session.current_agent}",
     ]
-    
+
     if session.current_model:
         lines.append(f"Model: {session.current_model}")
-    
+
     lines.append(f"Mode: {session.current_mode}")
     lines.append(f"Pack: {session.current_pack}")
-    
+
     return " | ".join(lines)
 
 
 def switch_mode(mode: str) -> bool:
     """Switch the REPL mode (basic/semi/full/pack)."""
     from code_puppy.config_presets import apply_preset
-    
+
     valid_modes = ["basic", "semi", "full", "pack"]
     if mode not in valid_modes:
         emit_error(f"Invalid mode: {mode}. Valid modes: {', '.join(valid_modes)}")
         return False
-    
+
     # Apply the preset
     if apply_preset(mode, emit=True):
         update_session(current_mode=mode)
         emit_success(f"Switched to {mode} mode")
         return True
-    
+
     return False
 
 
@@ -314,7 +316,7 @@ def switch_agent(agent_name: str) -> bool:
     """Switch the current agent."""
     try:
         from code_puppy.agents import set_agent_by_name
-        
+
         if set_agent_by_name(agent_name):
             update_session(current_agent=agent_name)
             emit_success(f"Switched to {agent_name} agent")
@@ -331,7 +333,7 @@ def switch_model(model_name: str) -> bool:
     """Switch the current model."""
     try:
         from code_puppy.config import set_model_name
-        
+
         set_model_name(model_name)
         update_session(current_model=model_name)
         emit_success(f"Switched to {model_name} model")
@@ -344,7 +346,7 @@ def switch_model(model_name: str) -> bool:
 def switch_pack(pack_name: str) -> bool:
     """Switch the model pack."""
     from code_puppy.model_packs import set_current_pack
-    
+
     if set_current_pack(pack_name):
         update_session(current_pack=pack_name)
         return True
@@ -361,24 +363,26 @@ def import_session_from_autosave(autosave_id: str) -> bool:
     try:
         from code_puppy.config import AUTOSAVE_DIR
         from code_puppy.session_storage import load_session as load_autosave
-        
+
         autosave_path = Path(AUTOSAVE_DIR) / f"{autosave_id}.msgpack"
         if not autosave_path.exists():
             emit_error(f"Autosave session not found: {autosave_id}")
             return False
-        
+
         # Load the autosave to get message count
         messages = load_autosave(autosave_id, base_dir=Path(AUTOSAVE_DIR))
-        
+
         # Update session
         update_session(
             autosave_session_id=autosave_id,
-            message_count=len(messages) if messages else 0
+            message_count=len(messages) if messages else 0,
         )
-        
-        emit_success(f"Imported session with {len(messages) if messages else 0} messages")
+
+        emit_success(
+            f"Imported session with {len(messages) if messages else 0} messages"
+        )
         return True
-        
+
     except Exception as e:
         emit_error(f"Failed to import session: {e}")
         return False

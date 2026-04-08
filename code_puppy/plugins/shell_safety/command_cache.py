@@ -42,9 +42,7 @@ class CommandSafetyCache:
         # Normalize command (strip whitespace)
         return (command.strip(), cwd)
 
-    def get(
-        self, command: str, cwd: str | None = None
-    ) -> CachedAssessment | None:
+    def get(self, command: str, cwd: str | None = None) -> CachedAssessment | None:
         """Get a cached assessment if it exists.
 
         Args:
@@ -63,9 +61,7 @@ class CommandSafetyCache:
         self._misses += 1
         return None
 
-    def put(
-        self, command: str, cwd: str | None, assessment: CachedAssessment
-    ) -> None:
+    def put(self, command: str, cwd: str | None, assessment: CachedAssessment) -> None:
         """Store an assessment in the cache.
 
         Args:
@@ -134,9 +130,7 @@ def get_cached_assessment(
     return _cache.get(command, cwd)
 
 
-def cache_assessment(
-    command: str, cwd: str | None, risk: str, reasoning: str
-) -> None:
+def cache_assessment(command: str, cwd: str | None, risk: str, reasoning: str) -> None:
     """Cache an LLM assessment result.
 
     Cache all LLM assessments since the same command should get
@@ -148,7 +142,5 @@ def cache_assessment(
         risk: The assessed risk level
         reasoning: The assessment reasoning
     """
-    assessment = CachedAssessment(
-        risk=risk,
-        reasoning=reasoning)
+    assessment = CachedAssessment(risk=risk, reasoning=reasoning)
     _cache.put(command, cwd, assessment)

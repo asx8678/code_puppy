@@ -15,6 +15,7 @@ try:
     from prompt_toolkit.layout import Dimension, HSplit, Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -192,10 +193,7 @@ def _load_source_code(tool: UCToolInfo) -> tuple[list[str], str | None]:
         return [], f"Could not read source: {e}"
 
 
-def _render_menu_panel(
-    tools: list[UCToolInfo],
-    page: int,
-    selected_idx: int) -> List:
+def _render_menu_panel(tools: list[UCToolInfo], page: int, selected_idx: int) -> List:
     """Render the left menu panel with pagination.
 
     Args:
@@ -362,7 +360,8 @@ def _render_source_panel(
     tool: UCToolInfo,
     source_lines: list[str],
     scroll_offset: int,
-    error: str | None = None) -> List:
+    error: str | None = None,
+) -> List:
     """Render source code panel with syntax highlighting.
 
     Args:
@@ -423,7 +422,8 @@ def _render_source_panel(
     lines.append(
         (
             "fg:ansibrightblack",
-            f" Lines {scroll_offset + 1}-{end_offset} of {total_lines}")
+            f" Lines {scroll_offset + 1}-{end_offset} of {total_lines}",
+        )
     )
     lines.append(("fg:ansibrightblack", f" (Page {current_page}/{total_pages})"))
     lines.append(("", "\n\n"))
@@ -565,16 +565,14 @@ def _show_source_code(tool: UCToolInfo) -> None:
     try:
         source_code = Path(tool.source_path).read_text()
         syntax = Syntax(
-            source_code,
-            "python",
-            theme="monokai",
-            line_numbers=True,
-            word_wrap=True)
+            source_code, "python", theme="monokai", line_numbers=True, word_wrap=True
+        )
         panel = Panel(
             syntax,
             title=f"[bold cyan]{tool.full_name}[/bold cyan]",
             border_style="cyan",
-            padding=(0, 1))
+            padding=(0, 1),
+        )
         emit_info(panel)
     except Exception as e:
         emit_error(f"Could not read source: {e}")
@@ -812,7 +810,8 @@ async def interactive_uc_picker() -> str | None:
                     layout=layout,
                     key_bindings=list_kb,
                     full_screen=False,
-                    mouse_support=False)
+                    mouse_support=False,
+                )
             else:
                 # Source view
                 update_source_display()
@@ -821,7 +820,8 @@ async def interactive_uc_picker() -> str | None:
                     layout=layout,
                     key_bindings=source_kb,
                     full_screen=False,
-                    mouse_support=False)
+                    mouse_support=False,
+                )
 
             await app.run_async()
 
@@ -871,7 +871,8 @@ async def interactive_uc_picker() -> str | None:
     name="uc",
     description="Universal Constructor - browse and manage custom tools",
     usage="/uc",
-    category="tools")
+    category="tools",
+)
 def handle_uc_command(command: str) -> bool:
     """Handle the /uc command - opens the interactive TUI.
 

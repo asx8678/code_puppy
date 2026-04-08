@@ -17,6 +17,7 @@ try:
     from prompt_toolkit.layout import Dimension, Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -165,7 +166,8 @@ def _render_menu_panel(
     entries: list[tuple[str, dict]],
     page: int,
     selected_idx: int,
-    browse_mode: bool = False) -> List:
+    browse_mode: bool = False,
+) -> List:
     """Render the left menu panel with pagination."""
     lines = []
     total_pages = get_total_pages(len(entries), PAGE_SIZE)
@@ -236,9 +238,8 @@ def _render_menu_panel(
 
 
 def _render_message_browser_panel(
-    history: list,
-    message_idx: int,
-    session_name: str) -> List:
+    history: list, message_idx: int, session_name: str
+) -> List:
     """Render the message browser panel showing a single message.
 
     Args:
@@ -304,7 +305,8 @@ def _render_message_browser_panel(
                 legacy_windows=False,
                 no_color=False,
                 force_terminal=False,
-                width=72)
+                width=72,
+            )
             md = Markdown(content)
             console.print(md)
             rendered = console.file.getvalue()
@@ -380,7 +382,8 @@ def _render_preview_panel(base_dir: Path, entry: tuple[str, dict | None]) -> Lis
             legacy_windows=False,
             no_color=False,
             force_terminal=False,
-            width=76)
+            width=76,
+        )
         md = Markdown(last_message)
         console.print(md)
         rendered = console.file.getvalue()
@@ -405,9 +408,7 @@ def _render_preview_panel(base_dir: Path, entry: tuple[str, dict | None]) -> Lis
 DEFAULT_RESUME_DISPLAY_COUNT = 50
 
 
-def display_resumed_history(
-    history: list,
-    num_messages: int | None = None) -> None:
+def display_resumed_history(history: list, num_messages: int | None = None) -> None:
     """Display recent message history after resuming a session.
 
     Shows the last N messages from the conversation so users have context
@@ -457,11 +458,7 @@ def display_resumed_history(
     # Print header with hidden count if applicable
     console.print()
     if hidden_count > 0:
-        console.print(
-            Rule(
-                f"{hidden_count} earlier messages",
-                style="dim")
-        )
+        console.print(Rule(f"{hidden_count} earlier messages", style="dim"))
         console.print()
 
     # Get banner color for agent responses
@@ -673,10 +670,8 @@ async def interactive_autosave_picker() -> str | None:
 
     layout = Layout(root_container)
     app = Application(
-        layout=layout,
-        key_bindings=kb,
-        full_screen=False,
-        mouse_support=False)
+        layout=layout, key_bindings=kb, full_screen=False, mouse_support=False
+    )
 
     set_awaiting_user_input(True)
 

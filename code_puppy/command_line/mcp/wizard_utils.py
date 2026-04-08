@@ -31,7 +31,8 @@ def run_interactive_install_wizard(manager, group_id: str) -> bool:
         emit_info("🚀 MCP Server Installation Wizard", message_group=group_id)
         emit_info(
             "This wizard will help you install pre-configured MCP servers",
-            message_group=group_id)
+            message_group=group_id,
+        )
         emit_info("", message_group=group_id)
 
         # Let user select a server
@@ -53,7 +54,8 @@ def run_interactive_install_wizard(manager, group_id: str) -> bool:
         if required_env_vars:
             emit_info(
                 Text.from_markup("\n[yellow]Required Environment Variables:[/yellow]"),
-                message_group=group_id)
+                message_group=group_id,
+            )
             for var in required_env_vars:
                 # Check if already set in environment
                 import os
@@ -62,7 +64,8 @@ def run_interactive_install_wizard(manager, group_id: str) -> bool:
                 if current_value:
                     emit_info(
                         Text.from_markup(f"  {var}: [green]Already set[/green]"),
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
                     env_vars[var] = current_value
                 else:
                     value = emit_prompt(f"  Enter value for {var}: ").strip()
@@ -74,7 +77,8 @@ def run_interactive_install_wizard(manager, group_id: str) -> bool:
         if required_cmd_args:
             emit_info(
                 Text.from_markup("\n[yellow]Command Line Arguments:[/yellow]"),
-                message_group=group_id)
+                message_group=group_id,
+            )
             for arg_config in required_cmd_args:
                 name = arg_config.get("name", "")
                 prompt = arg_config.get("prompt", name)
@@ -186,7 +190,8 @@ def interactive_configure_server(
     server_name: str,
     group_id: str,
     env_vars: dict[str, Any],
-    cmd_args: dict[str, Any]) -> bool:
+    cmd_args: dict[str, Any],
+) -> bool:
     """
     Configure and install the selected server.
 
@@ -241,7 +246,8 @@ def install_server_from_catalog(
     server_name: str,
     env_vars: dict[str, Any],
     cmd_args: dict[str, Any],
-    group_id: str) -> bool:
+    group_id: str,
+) -> bool:
     """
     Install a server from the catalog with the given configuration.
 
@@ -276,15 +282,14 @@ def install_server_from_catalog(
             name=server_name,
             type=selected_server.type,
             enabled=True,
-            config=config_dict)
+            config=config_dict,
+        )
 
         # Register with manager
         server_id = manager.register_server(server_config)
 
         if not server_id:
-            emit_info(
-                "Failed to register server with manager",
-                message_group=group_id)
+            emit_info("Failed to register server with manager", message_group=group_id)
             return False
 
         # Save to mcp_servers.json for persistence
@@ -311,10 +316,12 @@ def install_server_from_catalog(
             Text.from_markup(
                 f"[green]✓ Successfully installed server: {server_name}[/green]"
             ),
-            message_group=group_id)
+            message_group=group_id,
+        )
         emit_info(
             "Use '/mcp start {}' to start the server".format(server_name),
-            message_group=group_id)
+            message_group=group_id,
+        )
 
         return True
 

@@ -84,7 +84,8 @@ class ServerStatusTracker:
                     "old_state": old_state.value if old_state else None,
                     "new_state": state.value,
                     "message": f"State changed from {old_state.value if old_state else 'unknown'} to {state.value}",
-                })
+                },
+            )
 
             logger.debug(f"Server {server_id} state changed: {old_state} -> {state}")
 
@@ -126,7 +127,8 @@ class ServerStatusTracker:
                     "old_value": old_value,
                     "new_value": value,
                     "message": f"Metadata '{key}' updated",
-                })
+                },
+            )
 
             logger.debug(f"Server {server_id} metadata updated: {key} = {value}")
 
@@ -160,7 +162,8 @@ class ServerStatusTracker:
                 details=details.copy()
                 if details
                 else {},  # Copy to prevent modification
-                server_id=server_id)
+                server_id=server_id,
+            )
 
             # Add to deque (automatically handles size limiting)
             self._server_events[server_id].append(event)
@@ -240,7 +243,8 @@ class ServerStatusTracker:
             self.record_event(
                 server_id,
                 "started",
-                {"start_time": start_time.isoformat(), "message": "Server started"})
+                {"start_time": start_time.isoformat(), "message": "Server started"},
+            )
 
             logger.info(f"Recorded start time for server: {server_id}")
 
@@ -269,7 +273,8 @@ class ServerStatusTracker:
                     "stop_time": stop_time.isoformat(),
                     "uptime_seconds": uptime.total_seconds() if uptime else None,
                     "message": "Server stopped",
-                })
+                },
+            )
 
             logger.info(f"Recorded stop time for server: {server_id}")
 

@@ -22,24 +22,26 @@ _had_listener: set[str] = set()
 # Phases that commonly have late-registered listeners during plugin bootstrap.
 # Always buffer these even if no listener exists yet - a plugin might load later.
 # This is required for the backlog replay pattern to work during startup.
-_ALWAYS_BUFFER_PHASES: frozenset[str] = frozenset({
-    "startup",
-    "shutdown",
-    "invoke_agent",
-    "agent_run_start",
-    "agent_run_end",
-    "agent_exception",
-    "custom_command",
-    "custom_command_help",
-    "stream_event",
-    "message_history_processor_start",
-    "message_history_processor_end",
-})
+_ALWAYS_BUFFER_PHASES: frozenset[str] = frozenset(
+    {
+        "startup",
+        "shutdown",
+        "invoke_agent",
+        "agent_run_start",
+        "agent_run_end",
+        "agent_exception",
+        "custom_command",
+        "custom_command_help",
+        "stream_event",
+        "message_history_processor_start",
+        "message_history_processor_end",
+    }
+)
 
 
 def buffer_event(phase: str, args: tuple, kwargs: dict) -> bool:
     """Buffer an event that had no listeners when fired.
-    
+
     Returns True if event was buffered, False if skipped to save memory.
     """
     # Early exit optimization: if no listener was ever registered for this phase,
@@ -47,7 +49,7 @@ def buffer_event(phase: str, args: tuple, kwargs: dict) -> bool:
     # events that will likely never be consumed.
     if phase not in _had_listener and phase not in _ALWAYS_BUFFER_PHASES:
         return False
-    
+
     buf = _backlog.get(phase)
     if buf is None:
         buf = deque(maxlen=_MAX_BACKLOG_PER_PHASE)
@@ -58,7 +60,7 @@ def buffer_event(phase: str, args: tuple, kwargs: dict) -> bool:
 
 def mark_phase_as_having_listener(phase: str) -> None:
     """Mark a phase as having had a listener registered.
-    
+
     Called by callbacks.py when a callback is registered.
     """
     _had_listener.add(phase)

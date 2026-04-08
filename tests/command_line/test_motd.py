@@ -262,4 +262,6 @@ class TestMotdConstants:
 
         # Just verify the filename - CONFIG_DIR is dynamic during tests
         assert str(MOTD_TRACK_FILE).endswith("motd.txt")
-        assert ".code_puppy" in str(MOTD_TRACK_FILE) or "code_puppy" in str(MOTD_TRACK_FILE)
+        assert ".code_puppy" in str(MOTD_TRACK_FILE) or "code_puppy" in str(
+            MOTD_TRACK_FILE
+        )

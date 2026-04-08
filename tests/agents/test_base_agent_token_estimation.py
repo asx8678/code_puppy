@@ -242,12 +242,15 @@ class TestMCPToolCache:
             {
                 "name": f"tool_{i}",
                 "description": f"A test tool number {i} with a sufficiently long description "
-                               f"to ensure measurable token overhead when using the 4-char heuristic. "
-                               f"This description is intentionally verbose to produce reliable results.",
+                f"to ensure measurable token overhead when using the 4-char heuristic. "
+                f"This description is intentionally verbose to produce reliable results.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        f"arg_{j}": {"type": "string", "description": f"Argument {j} for tool {i}"}
+                        f"arg_{j}": {
+                            "type": "string",
+                            "description": f"Argument {j} for tool {i}",
+                        }
                         for j in range(5)
                     },
                 },

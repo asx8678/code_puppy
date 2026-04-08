@@ -15,6 +15,7 @@ try:
     from prompt_toolkit.layout import Dimension, Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -32,15 +33,18 @@ from code_puppy.plugins.agent_skills.config import (
     get_skills_enabled,
     remove_skill_directory,
     set_skill_disabled,
-    set_skills_enabled)
+    set_skills_enabled,
+)
 from code_puppy.plugins.agent_skills.discovery import (
     SkillInfo,
     discover_skills,
-    refresh_skill_cache)
+    refresh_skill_cache,
+)
 from code_puppy.plugins.agent_skills.metadata import (
     SkillMetadata,
     get_skill_resources,
-    parse_skill_metadata)
+    parse_skill_metadata,
+)
 from code_puppy.tools.command_runner import set_awaiting_user_input
 
 PAGE_SIZE = 15  # Items per page
@@ -449,10 +453,8 @@ class SkillsMenu:
 
         layout = Layout(root_container)
         app = Application(
-            layout=layout,
-            key_bindings=kb,
-            full_screen=False,
-            mouse_support=False)
+            layout=layout, key_bindings=kb, full_screen=False, mouse_support=False
+        )
 
         set_awaiting_user_input(True)
 
@@ -594,7 +596,8 @@ def show_skills_menu() -> bool:
 
         elif result == "install":
             from code_puppy.plugins.agent_skills.skills_install_menu import (
-                run_skills_install_menu)
+                run_skills_install_menu,
+            )
 
             install_result = run_skills_install_menu()
             if install_result:

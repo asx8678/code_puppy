@@ -76,20 +76,24 @@ class RestartCommand(MCPCommandBase):
                             Text.from_markup(
                                 "[dim]Agent reloaded with updated servers[/dim]"
                             ),
-                            message_group=group_id)
+                            message_group=group_id,
+                        )
                     except Exception as e:
                         logger.warning(f"Could not reload agent: {e}")
                 else:
                     emit_info(
                         f"✗ Failed to start server after reload: {server_name}",
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
             else:
                 emit_info(
                     f"✗ Failed to reload server configuration: {server_name}",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
 
         except Exception as e:
             logger.error(f"Error restarting server '{server_name}': {e}")
             emit_info(
                 Text.from_markup(f"[red]Failed to restart server: {e}[/red]"),
-                message_group=group_id)
+                message_group=group_id,
+            )

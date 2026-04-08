@@ -291,31 +291,37 @@ def _send_session_list(client: BridgeClient | None = None) -> None:
                 if meta_path.exists():
                     with meta_path.open("r", encoding="utf-8") as f:
                         meta = json.load(f)
-                    sessions.append({
-                        "id": name,
-                        "agent_name": "unknown",  # Not stored in current metadata format
-                        "model_name": "unknown",  # Not stored in current metadata format
-                        "message_count": meta.get("message_count", 0),
-                        "updated_at": meta.get("timestamp"),
-                    })
+                    sessions.append(
+                        {
+                            "id": name,
+                            "agent_name": "unknown",  # Not stored in current metadata format
+                            "model_name": "unknown",  # Not stored in current metadata format
+                            "message_count": meta.get("message_count", 0),
+                            "updated_at": meta.get("timestamp"),
+                        }
+                    )
                 else:
                     # No metadata file - basic entry
-                    sessions.append({
+                    sessions.append(
+                        {
+                            "id": name,
+                            "agent_name": "unknown",
+                            "model_name": "unknown",
+                            "message_count": 0,
+                            "updated_at": None,
+                        }
+                    )
+            except Exception as exc:
+                logger.debug("Failed to read metadata for session %s: %s", name, exc)
+                sessions.append(
+                    {
                         "id": name,
                         "agent_name": "unknown",
                         "model_name": "unknown",
                         "message_count": 0,
                         "updated_at": None,
-                    })
-            except Exception as exc:
-                logger.debug("Failed to read metadata for session %s: %s", name, exc)
-                sessions.append({
-                    "id": name,
-                    "agent_name": "unknown",
-                    "model_name": "unknown",
-                    "message_count": 0,
-                    "updated_at": None,
-                })
+                    }
+                )
     except Exception as exc:
         logger.warning("Failed to list sessions: %s", exc)
 
@@ -348,35 +354,47 @@ def _handle_load_session_request(msg: dict) -> None:
                     agent.restore_compacted_hashes(compacted_hashes)
 
             if _client:
-                _client.send_event("session_loaded", {
-                    "session_id": session_id,
-                    "success": True,
-                    "message_count": len(messages),
-                })
+                _client.send_event(
+                    "session_loaded",
+                    {
+                        "session_id": session_id,
+                        "success": True,
+                        "message_count": len(messages),
+                    },
+                )
             logger.info("Bridge loaded session: %s", session_id)
         else:
             if _client:
-                _client.send_event("session_loaded", {
-                    "session_id": session_id,
-                    "success": False,
-                    "error": "Session empty or not found",
-                })
+                _client.send_event(
+                    "session_loaded",
+                    {
+                        "session_id": session_id,
+                        "success": False,
+                        "error": "Session empty or not found",
+                    },
+                )
     except FileNotFoundError:
         logger.warning("Session not found: %s", session_id)
         if _client:
-            _client.send_event("session_loaded", {
-                "session_id": session_id,
-                "success": False,
-                "error": "Session not found",
-            })
+            _client.send_event(
+                "session_loaded",
+                {
+                    "session_id": session_id,
+                    "success": False,
+                    "error": "Session not found",
+                },
+            )
     except Exception as exc:
         logger.error("Failed to load session via bridge: %s", exc)
         if _client:
-            _client.send_event("session_loaded", {
-                "session_id": session_id,
-                "success": False,
-                "error": str(exc)[:200],
-            })
+            _client.send_event(
+                "session_loaded",
+                {
+                    "session_id": session_id,
+                    "success": False,
+                    "error": str(exc)[:200],
+                },
+            )
 
 
 def _handle_save_session_request(msg: dict) -> None:
@@ -391,14 +409,20 @@ def _handle_save_session_request(msg: dict) -> None:
         agent = get_current_agent()
         if agent is None:
             if _client:
-                _client.send_event("session_saved", {"success": False, "error": "No agent"})
+                _client.send_event(
+                    "session_saved", {"success": False, "error": "No agent"}
+                )
             return
 
         # Get current message history from agent
-        history = agent.get_message_history() if hasattr(agent, "get_message_history") else []
+        history = (
+            agent.get_message_history() if hasattr(agent, "get_message_history") else []
+        )
         if not history:
             # Try to get from agent's message history attribute
-            history = getattr(agent, "_message_history", []) or getattr(agent, "_history", [])
+            history = getattr(agent, "_message_history", []) or getattr(
+                agent, "_history", []
+            )
 
         # Generate session name with timestamp
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -423,17 +447,22 @@ def _handle_save_session_request(msg: dict) -> None:
         )
 
         if _client:
-            _client.send_event("session_saved", {
-                "success": True,
-                "session_id": session_id,
-            })
+            _client.send_event(
+                "session_saved",
+                {
+                    "success": True,
+                    "session_id": session_id,
+                },
+            )
             # Refresh session list
             _send_session_list()
         logger.info("Bridge saved session: %s", session_id)
     except Exception as exc:
         logger.error("Failed to save session via bridge: %s", exc)
         if _client:
-            _client.send_event("session_saved", {"success": False, "error": str(exc)[:200]})
+            _client.send_event(
+                "session_saved", {"success": False, "error": str(exc)[:200]}
+            )
 
 
 def get_pending_bridge_prompts() -> list[str]:
@@ -811,6 +840,7 @@ def _gather_round_robin_status() -> dict[str, Any] | None:
 
         # Check if current model is a round-robin model
         from code_puppy.model_factory import ModelFactory
+
         models_config = ModelFactory.load_config()
         model_cfg = models_config.get(model_name, {})
 
@@ -825,13 +855,16 @@ def _gather_round_robin_status() -> dict[str, Any] | None:
         requests_until_rotation = rotate_every
         try:
             from code_puppy.agents.agent_manager import get_current_agent
+
             agent = get_current_agent()
             if agent and hasattr(agent, "_pydantic_agent"):
                 model = agent._pydantic_agent.model
                 if hasattr(model, "_current_index"):
                     current_index = model._current_index
                 if hasattr(model, "_request_count"):
-                    requests_until_rotation = rotate_every - (model._request_count % rotate_every)
+                    requests_until_rotation = rotate_every - (
+                        model._request_count % rotate_every
+                    )
         except Exception:
             pass
 

@@ -1,7 +1,5 @@
 """Shared HTML templates drenched in ridiculous puppy-fueled OAuth theatrics."""
 
-
-
 CLAUDE_LOGO_URL = "https://voideditor.com/claude-icon.png"
 CHATGPT_LOGO_URL = (
     "https://freelogopng.com/images/all_img/1681038325chatgpt-logo-transparent.png"
@@ -154,7 +152,8 @@ _SUCCESS_PUPPIES = (
     (48, 88, 1.1, "🐺"),
     (64, 94, 1.8, "🐩"),
     (78, 88, 0.6, "🐕"),
-    (90, 82, 1.3, "🐾"))
+    (90, 82, 1.3, "🐾"),
+)
 
 
 _FAILURE_PUPPIES = (
@@ -180,7 +179,8 @@ _FAILURE_PUPPIES = (
     (36, 92, 0.9, "😭🐕‍🦺"),
     (52, 86, 1.2, "😢🐶"),
     (68, 94, 1.5, "😭🐕"),
-    (82, 90, 1.8, "😿🐩"))
+    (82, 90, 1.8, "😿🐩"),
+)
 
 
 _STRAFE_SHELLS: tuple[tuple[float, float], ...] = (
@@ -190,7 +190,8 @@ _STRAFE_SHELLS: tuple[tuple[float, float], ...] = (
     (26.0, 0.2),
     (32.0, 0.55),
     (24.0, 0.9),
-    (30.0, 1.25))
+    (30.0, 1.25),
+)
 
 
 def _build_artillery(projectile: str, *, shells_only: bool = False) -> str:

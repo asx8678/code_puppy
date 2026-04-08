@@ -33,7 +33,8 @@ async def _capture_screenshot(
     full_page: bool = False,
     element_selector: str | None = None,
     save_screenshot: bool = True,
-    group_id: str | None = None) -> dict[str, Any]:
+    group_id: str | None = None,
+) -> dict[str, Any]:
     """Internal screenshot capture function."""
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -77,7 +78,8 @@ async def _capture_screenshot(
 async def take_screenshot(
     full_page: bool = False,
     element_selector: str | None = None,
-    save_screenshot: bool = True) -> Union[ToolReturn, dict[str, Any]]:
+    save_screenshot: bool = True,
+) -> Union[ToolReturn, dict[str, Any]]:
     """Take a screenshot of the browser page.
 
     Returns a ToolReturn with BinaryContent so multimodal models can
@@ -113,7 +115,8 @@ async def take_screenshot(
             full_page=full_page,
             element_selector=element_selector,
             save_screenshot=save_screenshot,
-            group_id=group_id)
+            group_id=group_id,
+        )
 
         if not result["success"]:
             emit_error(result.get("error", "Screenshot failed"), message_group=group_id)
@@ -126,9 +129,7 @@ async def take_screenshot(
             return_value=f"Screenshot captured successfully. Saved to: {screenshot_path}",
             content=[
                 f"Here's the browser screenshot ({target}):",
-                BinaryContent(
-                    data=result["screenshot_bytes"],
-                    media_type="image/png"),
+                BinaryContent(data=result["screenshot_bytes"], media_type="image/png"),
                 "Please analyze what you see and describe any relevant details.",
             ],
             metadata={
@@ -138,7 +139,8 @@ async def take_screenshot(
                 "full_page": full_page,
                 "element_selector": element_selector,
                 "timestamp": time.time(),
-            })
+            },
+        )
 
     except Exception as e:
         error_msg = f"Screenshot failed: {str(e)}"
@@ -153,7 +155,8 @@ def register_take_screenshot_and_analyze(agent):
     async def browser_screenshot_analyze(
         context: RunContext,
         full_page: bool = False,
-        element_selector: str | None = None) -> Union[ToolReturn, dict[str, Any]]:
+        element_selector: str | None = None,
+    ) -> Union[ToolReturn, dict[str, Any]]:
         """
         Take a screenshot of the browser page.
 
@@ -168,5 +171,5 @@ def register_take_screenshot_and_analyze(agent):
             ToolReturn with the screenshot image you can analyze, or error dict.
         """
         return await take_screenshot(
-            full_page=full_page,
-            element_selector=element_selector)
+            full_page=full_page, element_selector=element_selector
+        )

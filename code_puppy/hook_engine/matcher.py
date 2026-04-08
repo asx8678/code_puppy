@@ -30,11 +30,15 @@ def matches(matcher: str, tool_name: str, tool_args: dict[str, Any]) -> bool:
 
     if "||" in matcher:
         # Use generator expression for memory efficiency with large patterns
-        return any(matches(p.strip(), tool_name, tool_args) for p in matcher.split("||"))
+        return any(
+            matches(p.strip(), tool_name, tool_args) for p in matcher.split("||")
+        )
 
     if "&&" in matcher:
         # Use generator expression for memory efficiency with large patterns
-        return all(matches(p.strip(), tool_name, tool_args) for p in matcher.split("&&"))
+        return all(
+            matches(p.strip(), tool_name, tool_args) for p in matcher.split("&&")
+        )
 
     return _match_single(matcher.strip(), tool_name, tool_args)
 

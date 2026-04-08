@@ -20,7 +20,7 @@ def _ensure_state_dir() -> None:
 
 def get_last_agent() -> str | None:
     """Get the last selected agent name.
-    
+
     Returns:
         The agent name if one was saved, None otherwise.
     """
@@ -37,14 +37,14 @@ def get_last_agent() -> str | None:
 
 def set_last_agent(agent_name: str) -> None:
     """Save the last selected agent name.
-    
+
     Args:
         agent_name: The name of the agent to save.
     """
     try:
         _ensure_state_dir()
         data: dict[str, Any] = {"agent_name": agent_name}
-        
+
         # Write atomically (write to temp file, then rename)
         temp_file = _LAST_AGENT_FILE.with_suffix(".tmp")
         with open(temp_file, "w", encoding="utf-8") as f:

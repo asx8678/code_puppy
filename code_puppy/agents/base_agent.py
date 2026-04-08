@@ -1,6 +1,5 @@
 """Base agent configuration class for defining agent properties."""
 
-
 import asyncio
 import contextlib
 import dataclasses
@@ -12,10 +11,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from functools import lru_cache
-from typing import (
-    Any,
-    Callable,
-    Sequence)
+from typing import Any, Callable, Sequence
 
 import mcp
 import pydantic
@@ -28,8 +24,10 @@ from pydantic_ai import (
     ImageUrl,
     RunContext,
     UsageLimitExceeded,
-    UsageLimits)
+    UsageLimits,
+)
 from pydantic_ai.durable_exec.dbos import DBOSAgent
+
 # Rust acceleration bridge (optional - falls back to Python)
 from code_puppy import _core_bridge
 from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
@@ -50,10 +48,10 @@ from pydantic_ai.messages import (
     TextPart,
     ThinkingPart,
     ToolCallPart,
-
     ToolCallPartDelta,
     ToolReturn,
-    ToolReturnPart)
+    ToolReturnPart,
+)
 from rich.text import Text
 
 from code_puppy.agents.agent_prompt_mixin import AgentPromptMixin
@@ -66,7 +64,8 @@ from code_puppy.callbacks import (
     on_agent_run_end,
     on_agent_run_start,
     on_message_history_processor_end,
-    on_message_history_processor_start)
+    on_message_history_processor_start,
+)
 
 # Consolidated relative imports
 from code_puppy.config import (
@@ -77,23 +76,18 @@ from code_puppy.config import (
     get_message_limit,
     get_protected_token_count,
     get_use_dbos,
-    get_value)
+    get_value,
+)
 from code_puppy.error_logging import log_error
 from code_puppy.keymap import cancel_agent_uses_signal, get_cancel_agent_char_code
 from code_puppy.mcp_ import get_mcp_manager
-from code_puppy.messaging import (
-    emit_error,
-    emit_info,
-    emit_warning)
-from code_puppy.messaging.spinner import (
-    SpinnerBase,
-    update_spinner_context)
+from code_puppy.messaging import emit_error, emit_info, emit_warning
+from code_puppy.messaging.spinner import SpinnerBase, update_spinner_context
 from code_puppy.model_factory import ModelFactory, make_model_settings
 from code_puppy.summarization_agent import run_summarization_sync, SummarizationError
 from code_puppy.token_utils import estimate_token_count as _estimate_token_count
 from code_puppy.tools.agent_tools import _active_subagent_tasks
-from code_puppy.tools.command_runner import (
-    is_awaiting_user_input)
+from code_puppy.tools.command_runner import is_awaiting_user_input
 
 
 def _rust_enabled() -> bool:
@@ -109,7 +103,6 @@ def _rust_enabled() -> bool:
 _reload_count = 0
 
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -119,10 +112,10 @@ logger = logging.getLogger(__name__)
 @lru_cache(maxsize=128)
 def _serialize_schema_to_json(schema_tuple: tuple[tuple[str, Any], ...]) -> str:
     """Serialize a tool schema (as sorted tuple) to JSON string.
-    
+
     Args:
         schema_tuple: Schema dict converted to sorted tuple for hashability.
-        
+
     Returns:
         JSON string representation of the schema with sorted keys.
     """
@@ -132,11 +125,11 @@ def _serialize_schema_to_json(schema_tuple: tuple[tuple[str, Any], ...]) -> str:
 
 class BaseAgent(ABC, AgentPromptMixin):
     """Base class for all agent configurations.
-    
+
     This class separates immutable configuration (name, description, system_prompt)
     from mutable runtime state (message history, caches, etc.) using the
     AgentRuntimeState container.
-    
+
     The mutable state is stored in `_state` attribute, while config is provided
     through abstract properties that subclasses must implement.
     """
@@ -241,7 +234,6 @@ class BaseAgent(ABC, AgentPromptMixin):
     def _code_generation_agent(self, value: Any) -> None:
         """Backward-compatible setter delegating to _state.code_generation_agent."""
         self._state.code_generation_agent = value
-
 
     @property
     @abstractmethod
@@ -604,7 +596,9 @@ class BaseAgent(ABC, AgentPromptMixin):
             if prepared.instructions:
                 total_tokens += self.estimate_token_count(prepared.instructions)
         except Exception:
-            logger.debug("Failed to get system prompt for token estimation", exc_info=True)
+            logger.debug(
+                "Failed to get system prompt for token estimation", exc_info=True
+            )
 
         # 2. Estimate tokens for pydantic_agent tool definitions
         pydantic_agent = getattr(self, "pydantic_agent", None)
@@ -641,13 +635,17 @@ class BaseAgent(ABC, AgentPromptMixin):
                                     str(annotations)
                                 )
                     except Exception:
-                        logger.debug("Failed to process tool for token counting", exc_info=True)
+                        logger.debug(
+                            "Failed to process tool for token counting", exc_info=True
+                        )
                         continue
 
         # 3. Estimate tokens for MCP tool definitions from cache
         # MCP tools are fetched asynchronously, so we use a cache that's populated
         # after the first successful run. See _update_mcp_tool_cache() method.
-        mcp_tool_cache = getattr(self, "_state", None) and self._state.mcp_tool_definitions_cache
+        mcp_tool_cache = (
+            getattr(self, "_state", None) and self._state.mcp_tool_definitions_cache
+        )
         if mcp_tool_cache:
             for tool_def in mcp_tool_cache:
                 try:
@@ -672,7 +670,9 @@ class BaseAgent(ABC, AgentPromptMixin):
                             schema_str = str(input_schema)
                         total_tokens += self.estimate_token_count(schema_str)
                 except Exception:
-                    logger.debug("Failed to process tool for token counting", exc_info=True)
+                    logger.debug(
+                        "Failed to process tool for token counting", exc_info=True
+                    )
                     continue
 
         self._state.cached_context_overhead = total_tokens
@@ -769,7 +769,9 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         if _rust_enabled():
             try:
-                serialized = serialized_messages or serialize_messages_for_rust(messages)
+                serialized = serialized_messages or serialize_messages_for_rust(
+                    messages
+                )
                 result = _core_bridge.prune_and_filter(serialized, 50000)
                 return [messages[i] for i in result.surviving_indices]
             except Exception as exc:
@@ -778,7 +780,9 @@ class BaseAgent(ABC, AgentPromptMixin):
                 )
         filtered = [m for m in messages if self.estimate_tokens_for_message(m) < 50000]
         # Pass serialized_messages through to avoid re-serialization
-        pruned = self.prune_interrupted_tool_calls(filtered, serialized_messages=serialized_messages)
+        pruned = self.prune_interrupted_tool_calls(
+            filtered, serialized_messages=serialized_messages
+        )
         return pruned
 
     def _find_safe_split_index(
@@ -874,7 +878,9 @@ class BaseAgent(ABC, AgentPromptMixin):
         if _rust_enabled():
             try:
                 # Use pre-serialized messages if available
-                serialized = serialized_messages or serialize_messages_for_rust(messages)
+                serialized = serialized_messages or serialize_messages_for_rust(
+                    messages
+                )
                 result = _core_bridge.process_messages_batch(serialized, [], [], "")
                 per_message_tokens = result.per_message_tokens
 
@@ -894,7 +900,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                 split_result = _core_bridge.rust_split_for_summarization(
                     per_message_tokens,
                     tool_call_ids_per_message,
-                    protected_tokens_limit)
+                    protected_tokens_limit,
+                )
 
                 # Convert indices back to message lists
                 messages_to_summarize = [
@@ -913,7 +920,9 @@ class BaseAgent(ABC, AgentPromptMixin):
 
                 return messages_to_summarize, protected_messages
             except Exception:
-                logger.debug("Rust bridge failed, falling back to Python", exc_info=True)
+                logger.debug(
+                    "Rust bridge failed, falling back to Python", exc_info=True
+                )
         # ----------------------------------------------------------------
 
         # Calculate tokens for messages from most recent backwards (excluding system message)
@@ -1175,7 +1184,9 @@ class BaseAgent(ABC, AgentPromptMixin):
         if not messages_to_summarize:
             # Nothing to summarize, so just return the original sequence
             # Pass serialized_messages to avoid re-serialization
-            return self.prune_interrupted_tool_calls(messages, serialized_messages=serialized_messages), []
+            return self.prune_interrupted_tool_calls(
+                messages, serialized_messages=serialized_messages
+            ), []
 
         try:
             new_messages = self._binary_split_summarize(messages_to_summarize)
@@ -1183,7 +1194,9 @@ class BaseAgent(ABC, AgentPromptMixin):
             if not new_messages:
                 # Summarization produced nothing (e.g., all messages pruned)
                 # Pass serialized_messages to avoid re-serialization
-                return self.prune_interrupted_tool_calls(messages, serialized_messages=serialized_messages), []
+                return self.prune_interrupted_tool_calls(
+                    messages, serialized_messages=serialized_messages
+                ), []
 
             compacted: list[ModelMessage] = [system_message] + new_messages
 
@@ -1228,7 +1241,9 @@ class BaseAgent(ABC, AgentPromptMixin):
             context_length = model_config.get("context_length", 128000)
             return int(context_length)
         except Exception:
-            logger.debug("Model context lookup failed, using default 128000", exc_info=True)
+            logger.debug(
+                "Model context lookup failed, using default 128000", exc_info=True
+            )
             return 128000
 
     @staticmethod
@@ -1262,12 +1277,16 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         # Compute content-based cache key using message hashes
         import hashlib
+
         hasher = hashlib.sha256()
         hasher.update(str(len(messages)).encode())
         for msg in messages:
             hasher.update(self.hash_message(msg).encode())
         cache_key = hasher.hexdigest()[:32]  # 128 bits is sufficient
-        if self._state.tool_ids_cache is not None and self._state.tool_ids_cache[0] == cache_key:
+        if (
+            self._state.tool_ids_cache is not None
+            and self._state.tool_ids_cache[0] == cache_key
+        ):
             return self._state.tool_ids_cache[1]
         result = self._collect_tool_call_ids_uncached(messages)
         self._state.tool_ids_cache = (cache_key, result)
@@ -1298,7 +1317,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         self._state.delayed_compaction_requested = True
         emit_info(
             "🔄 Delayed compaction requested - will attempt after tool calls complete",
-            message_group="token_context_status")
+            message_group="token_context_status",
+        )
 
     def should_attempt_delayed_compaction(self) -> bool:
         """
@@ -1362,7 +1382,9 @@ class BaseAgent(ABC, AgentPromptMixin):
         return len(tool_call_ids - tool_return_ids)
 
     def prune_interrupted_tool_calls(
-        self, messages: list[ModelMessage], serialized_messages: list[dict] | None = None
+        self,
+        messages: list[ModelMessage],
+        serialized_messages: list[dict] | None = None,
     ) -> list[ModelMessage]:
         """
         Remove any messages that participate in mismatched tool call sequences.
@@ -1385,14 +1407,17 @@ class BaseAgent(ABC, AgentPromptMixin):
         # in a single pass, plus filters empty thinking parts and trailing responses
         if _rust_enabled():
             try:
-                serialized = serialized_messages or serialize_messages_for_rust(messages)
+                serialized = serialized_messages or serialize_messages_for_rust(
+                    messages
+                )
                 result = _core_bridge.prune_and_filter(serialized, 999_999_999)
                 return [messages[i] for i in result.surviving_indices]
             except Exception as exc:
                 logger.debug(
                     "Rust fallback in prune_interrupted_tool_calls: %s",
                     exc,
-                    exc_info=True)
+                    exc_info=True,
+                )
 
         # Python fallback — original implementation
         tool_call_ids, tool_return_ids = self._collect_tool_call_ids(messages)
@@ -1501,7 +1526,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                 emit_warning(
                     f"⚠️  Summarization deferred: {pending_count} pending tool call(s) detected. "
                     "Waiting for tool execution to complete before compaction.",
-                    message_group="token_context_status")
+                    message_group="token_context_status",
+                )
                 # Request delayed compaction for when tool calls complete
                 self.request_delayed_compaction()
                 # Return original messages without compaction
@@ -1519,7 +1545,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                 result_messages = self.truncation(
                     filtered_messages,
                     protected_tokens,
-                    per_message_tokens=cached_tokens)
+                    per_message_tokens=cached_tokens,
+                )
                 # Track dropped messages by hash so message_history_accumulator
                 # won't re-inject them from pydantic-ai's full message list on
                 # subsequent calls within the same run (fixes ghost-task bug).
@@ -1593,7 +1620,9 @@ class BaseAgent(ABC, AgentPromptMixin):
                     tokens = per_message_tokens
                 else:
                     # Compute from scratch when not provided
-                    serialized = serialized_messages or serialize_messages_for_rust(messages)
+                    serialized = serialized_messages or serialize_messages_for_rust(
+                        messages
+                    )
                     batch = _core_bridge.process_messages_batch(serialized, [], [], "")
                     tokens = batch.per_message_tokens
                 second_has_thinking = len(messages) > 1 and any(
@@ -1637,9 +1666,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         return result
 
     def run_summarization_sync(
-        self,
-        instructions: str,
-        message_history: list[ModelMessage]) -> list[ModelMessage] | str:
+        self, instructions: str, message_history: list[ModelMessage]
+    ) -> list[ModelMessage] | str:
         """
         Run summarization synchronously using the configured summarization agent.
         This is exposed as a method so it can be overridden by subclasses if needed.
@@ -1726,7 +1754,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         self,
         requested_model_name: str,
         models_config: dict[str, Any],
-        message_group: str) -> tuple[Any, str]:
+        message_group: str,
+    ) -> tuple[Any, str]:
         """Load the requested model, applying a friendly fallback when unavailable."""
         try:
             model = ModelFactory.get_model(requested_model_name, models_config)
@@ -1743,7 +1772,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                     f"Model '{requested_model_name}' not found. "
                     f"Available models: {available_str}"
                 ),
-                message_group=message_group)
+                message_group=message_group,
+            )
 
             fallback_candidates: list[str] = []
             global_candidate = get_global_model_name()
@@ -1761,7 +1791,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                     model = ModelFactory.get_model(candidate, models_config)
                     emit_info(
                         f"Using fallback model: {candidate}",
-                        message_group=message_group)
+                        message_group=message_group,
+                    )
                     return model, candidate
                 except ValueError:
                     continue
@@ -1770,9 +1801,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                 "No valid model could be loaded. Update the model configuration or set "
                 "a valid model with `config set`."
             )
-            emit_error(
-                friendly_message,
-                message_group=message_group)
+            emit_error(friendly_message, message_group=message_group)
             raise ValueError(friendly_message) from exc
 
     def _build_agent(
@@ -1850,7 +1879,14 @@ class BaseAgent(ABC, AgentPromptMixin):
         register_tools_for_agent(p_agent, agent_tools, model_name=resolved_model_name)
 
         self._state.cur_model = model
-        return p_agent, resolved_model_name, mcp_servers, model, instructions, model_settings
+        return (
+            p_agent,
+            resolved_model_name,
+            mcp_servers,
+            model,
+            instructions,
+            model_settings,
+        )
 
     def reload_code_generation_agent(self, message_group: str | None = None):
         """Force-reload the pydantic-ai Agent based on current config and model."""
@@ -1867,7 +1903,14 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Build agent with freshly-loaded MCP servers so we can inspect its
         # registered tool names for conflict filtering.
         fresh_mcp = self.load_mcp_servers()
-        p_agent, resolved_model_name, mcp_servers, model, instructions, model_settings = self._build_agent(
+        (
+            p_agent,
+            resolved_model_name,
+            mcp_servers,
+            model,
+            instructions,
+            model_settings,
+        ) = self._build_agent(
             output_type=str, message_group=message_group, mcp_servers=fresh_mcp
         )
 
@@ -1935,7 +1978,8 @@ class BaseAgent(ABC, AgentPromptMixin):
             dbos_agent = DBOSAgent(
                 p_agent,
                 name=f"{self.name}-{_reload_count}",
-                event_stream_handler=event_stream_handler)
+                event_stream_handler=event_stream_handler,
+            )
             self._state.cur_model = dbos_agent
             self._state.code_generation_agent = dbos_agent
             self._state.mcp_servers = filtered_mcp_servers
@@ -1944,6 +1988,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             # Reuse model/instructions/model_settings from the first _build_agent
             # call so _load_model_with_fallback is only called once.
             from code_puppy.tools import register_tools_for_agent
+
             final_agent = PydanticAgent(
                 model=model,
                 instructions=instructions,
@@ -1993,9 +2038,11 @@ class BaseAgent(ABC, AgentPromptMixin):
         else:
             # Reuse cached MCP servers from the last reload.
             mcp_servers = self._state.mcp_servers or []
-            p_agent, resolved_model_name, _, _model, _instructions, _model_settings = self._build_agent(
-                output_type=output_type,
-                mcp_servers=mcp_servers,
+            p_agent, resolved_model_name, _, _model, _instructions, _model_settings = (
+                self._build_agent(
+                    output_type=output_type,
+                    mcp_servers=mcp_servers,
+                )
             )
             # Cache the resolved components
             self._state.resolved_model_components_cache[cache_key] = {
@@ -2011,7 +2058,8 @@ class BaseAgent(ABC, AgentPromptMixin):
             dbos_agent = DBOSAgent(
                 p_agent,
                 name=f"{self.name}-structured-{_reload_count}",
-                event_stream_handler=event_stream_handler)
+                event_stream_handler=event_stream_handler,
+            )
             return dbos_agent
         else:
             return p_agent
@@ -2028,7 +2076,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                 agent_name=self.name,
                 session_id=getattr(self, "session_id", None),
                 message_history=list(_message_history),  # Copy to avoid mutation issues
-                incoming_messages=list(messages))
+                incoming_messages=list(messages),
+            )
         # Use Python hashing for dedup in the accumulator.
         # We must stay in the same hash domain as compacted_message_hashes
         # (which are accumulated over turns using Python hash()). Rust
@@ -2077,7 +2126,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                         found_empty_thinking = True
                     else:
                         new_parts.append(p)
-                
+
                 if found_empty_thinking:
                     if not new_parts:
                         filtered_count += 1
@@ -2104,7 +2153,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                 session_id=getattr(self, "session_id", None),
                 message_history=list(final_history),  # Copy to avoid mutation issues
                 messages_added=messages_added,
-                messages_filtered=messages_filtered)
+                messages_filtered=messages_filtered,
+            )
 
         return final_history
 
@@ -2265,7 +2315,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         attachments: Sequence[BinaryContent | None] = None,
         link_attachments: Sequence[ImageUrl | DocumentUrl | None] = None,
         output_type: type[Any | None] = None,
-        **kwargs) -> Any:
+        **kwargs,
+    ) -> Any:
         """Run the agent with MCP servers, attachments, and full cancellation support.
 
         Args:
@@ -2310,7 +2361,9 @@ class BaseAgent(ABC, AgentPromptMixin):
             try:
                 await self._update_mcp_tool_cache()
             except Exception:
-                logger.debug("MCP server not connectable, cache stays empty", exc_info=True)
+                logger.debug(
+                    "MCP server not connectable, cache stays empty", exc_info=True
+                )
 
         # If a custom output_type is specified, create a temporary agent with that type
         if output_type is not None:
@@ -2332,7 +2385,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                 model_name=self.get_model_name(),
                 system_prompt=system_prompt,
                 user_prompt=prompt,
-                prepend_system_to_user=True)
+                prepend_system_to_user=True,
+            )
             prompt = prepared.user_prompt
 
         # Build combined prompt payload when attachments are provided.
@@ -2360,14 +2414,16 @@ class BaseAgent(ABC, AgentPromptMixin):
                 if self.should_attempt_delayed_compaction():
                     emit_info(
                         "🔄 Attempting delayed compaction (tool calls completed)",
-                        message_group="token_context_status")
+                        message_group="token_context_status",
+                    )
                     current_messages = self.get_message_history()
                     compacted_messages, _ = self.compact_messages(current_messages)
                     if compacted_messages != current_messages:
                         self.set_message_history(compacted_messages)
                         emit_info(
                             "✅ Delayed compaction completed successfully",
-                            message_group="token_context_status")
+                            message_group="token_context_status",
+                        )
 
                 usage_limits = UsageLimits(request_limit=get_message_limit())
 
@@ -2375,12 +2431,11 @@ class BaseAgent(ABC, AgentPromptMixin):
                 @contextlib.contextmanager
                 def _mcp_injection():
                     """Temporarily inject MCP servers into DBOS agent toolsets."""
-                    if (
-                        get_use_dbos()
-                        and self._state.mcp_servers
-                    ):
+                    if get_use_dbos() and self._state.mcp_servers:
                         original = pydantic_agent_instance._toolsets
-                        pydantic_agent_instance._toolsets = original + self._state.mcp_servers
+                        pydantic_agent_instance._toolsets = (
+                            original + self._state.mcp_servers
+                        )
                         try:
                             yield
                         finally:
@@ -2401,13 +2456,15 @@ class BaseAgent(ABC, AgentPromptMixin):
                         message_history=self.get_message_history(),
                         usage_limits=usage_limits,
                         event_stream_handler=event_stream_handler,
-                        **kwargs)
+                        **kwargs,
+                    )
                     return result_
             except* UsageLimitExceeded as ule:
                 emit_info(f"Usage limit exceeded: {str(ule)}", group_id=group_id)
                 emit_info(
                     "The agent has reached its usage limit. You can ask it to continue by saying 'please continue' or similar.",
-                    group_id=group_id)
+                    group_id=group_id,
+                )
             except* mcp.shared.exceptions.McpError as mcp_error:
                 emit_info(f"MCP server error: {str(mcp_error)}", group_id=group_id)
                 emit_info(f"{str(mcp_error)}", group_id=group_id)
@@ -2440,7 +2497,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                         log_error(
                             exc,
                             context=f"Agent run (group_id={group_id})",
-                            include_traceback=True)
+                            include_traceback=True,
+                        )
 
                 collect_non_cancelled_exceptions(other_error)
 
@@ -2482,7 +2540,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                 model_name=self.get_model_name(),
                 session_id=group_id,
                 tags=["agent_run"],
-                metadata={"agent_version": getattr(self, 'version', None)})
+                metadata={"agent_version": getattr(self, "version", None)},
+            )
         except Exception:
             logger.debug("agent_run_start hook failed", exc_info=True)
             _run_context = None
@@ -2553,7 +2612,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                 _key_listener_thread = self._spawn_ctrl_x_key_listener(
                     key_listener_stop_event,
                     on_escape=lambda: None,  # Ctrl+X handled by command_runner
-                    on_cancel_agent=schedule_agent_cancel)
+                    on_cancel_agent=schedule_agent_cancel,
+                )
 
             # Wait for the task to complete or be cancelled
             result = await agent_task
@@ -2614,7 +2674,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                     error=_run_error,
                     response_text=_run_response_text,
                     metadata={"model": self.get_model_name()},
-                    run_context=_run_context)
+                    run_context=_run_context,
+                )
             except Exception:
                 logger.debug("Cleanup hook failed", exc_info=True)
 

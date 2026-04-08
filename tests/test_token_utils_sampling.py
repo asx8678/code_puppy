@@ -64,7 +64,10 @@ class TestEstimateTokenCount:
     def test_large_code_uses_sampling(self):
         code = "def func_{i}():\n    return {i}\n".format(i=0) * 200
         # Make it clearly code-heavy
-        code = "import os\nimport sys\n" + "def foo():\n    x = [1, 2, 3];\n    return x\n" * 100
+        code = (
+            "import os\nimport sys\n"
+            + "def foo():\n    x = [1, 2, 3];\n    return x\n" * 100
+        )
         assert len(code) > _SAMPLING_THRESHOLD
         result = estimate_token_count(code)
         assert result >= 1

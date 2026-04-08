@@ -2,7 +2,11 @@
 
 import pytest
 from unittest.mock import MagicMock, patch
-from code_puppy.tui.stream_renderer import StreamRenderer, TOOL_BANNER_MAP, LOADING_MESSAGES
+from code_puppy.tui.stream_renderer import (
+    StreamRenderer,
+    TOOL_BANNER_MAP,
+    LOADING_MESSAGES,
+)
 
 
 class MockApp:

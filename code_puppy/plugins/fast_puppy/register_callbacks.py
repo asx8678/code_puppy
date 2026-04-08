@@ -31,7 +31,7 @@ def _find_crate_dir() -> Path | None:
     pkg_dir = Path(__file__).resolve().parent.parent.parent
     candidates = [
         pkg_dir.parent / "code_puppy_core",  # repo root / code_puppy_core
-        pkg_dir / "code_puppy_core",          # inside package (unlikely)
+        pkg_dir / "code_puppy_core",  # inside package (unlikely)
     ]
     for candidate in candidates:
         if (candidate / "Cargo.toml").exists():
@@ -52,7 +52,9 @@ def _has_maturin() -> bool:
     try:
         result = subprocess.run(
             [sys.executable, "-m", "maturin", "--version"],
-            capture_output=True, timeout=10)
+            capture_output=True,
+            timeout=10,
+        )
         return result.returncode == 0
     except Exception:
         return False
@@ -63,18 +65,31 @@ def _build_rust_module(crate_dir: Path) -> bool:
     try:
         # Try maturin from PATH first, then as Python module
         if shutil.which("maturin"):
-            cmd = ["maturin", "develop", "--release", "--manifest-path",
-                   str(crate_dir / "Cargo.toml")]
+            cmd = [
+                "maturin",
+                "develop",
+                "--release",
+                "--manifest-path",
+                str(crate_dir / "Cargo.toml"),
+            ]
         else:
-            cmd = [sys.executable, "-m", "maturin", "develop", "--release",
-                   "--manifest-path", str(crate_dir / "Cargo.toml")]
+            cmd = [
+                sys.executable,
+                "-m",
+                "maturin",
+                "develop",
+                "--release",
+                "--manifest-path",
+                str(crate_dir / "Cargo.toml"),
+            ]
 
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=300,  # 5 min max for compilation
-            cwd=str(crate_dir))
+            cwd=str(crate_dir),
+        )
         if result.returncode == 0:
             return True
         logger.debug("Rust build failed: %s", result.stderr)
@@ -108,12 +123,17 @@ def _try_auto_build() -> bool:
         try:
             install_result = subprocess.run(
                 [sys.executable, "-m", "pip", "install", "maturin"],
-                capture_output=True, text=True, timeout=60)
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
             if install_result.returncode != 0:
                 stderr = install_result.stderr.strip() if install_result.stderr else ""
                 logger.debug(
                     "pip install maturin failed (rc=%d): %s",
-                    install_result.returncode, stderr)
+                    install_result.returncode,
+                    stderr,
+                )
                 return False
         except Exception as exc:
             logger.debug("Could not install maturin: %s", exc)
@@ -126,11 +146,13 @@ def _try_auto_build() -> bool:
         # Reload the bridge module to pick up the newly built extension
         import importlib
         import code_puppy._core_bridge as bridge
+
         importlib.reload(bridge)
 
         # Also patch the module-level RUST_AVAILABLE that other modules
         # already copied at import time (e.g., base_agent.py line 43)
         import code_puppy.agents.base_agent as _ba
+
         if hasattr(_ba, "RUST_AVAILABLE"):
             _ba.RUST_AVAILABLE = bridge.RUST_AVAILABLE
         # Re-import the Rust functions into base_agent's namespace
@@ -142,7 +164,9 @@ def _try_auto_build() -> bool:
                 _ba.serialize_messages_for_rust = bridge.serialize_messages_for_rust
                 _ba.is_rust_enabled = bridge.is_rust_enabled
             except Exception as exc:
-                logger.warning("Failed to re-export Rust symbols into base_agent: %s", exc)
+                logger.warning(
+                    "Failed to re-export Rust symbols into base_agent: %s", exc
+                )
 
         if bridge.RUST_AVAILABLE:
             emit_info("🐕⚡ Fast Puppy: Rust module compiled and ready — Zoom! Zoom!")
@@ -189,7 +213,11 @@ def _on_startup():
     _try_auto_build()
 
     # Now apply the persisted preference
-    from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled, set_rust_enabled
+    from code_puppy._core_bridge import (
+        RUST_AVAILABLE,
+        is_rust_enabled,
+        set_rust_enabled,
+    )
 
     # Force Rust enabled after successful build
     set_rust_enabled(True)
@@ -199,7 +227,9 @@ def _on_startup():
     if is_rust_enabled():
         emit_info("🐕⚡ Fast Puppy: Rust acceleration active — Zoom! Zoom!")
     elif RUST_AVAILABLE and not is_rust_enabled():
-        emit_info("🐕💤 Fast Puppy: Rust installed but disabled (/fast_puppy enable to activate)")
+        emit_info(
+            "🐕💤 Fast Puppy: Rust installed but disabled (/fast_puppy enable to activate)"
+        )
 
 
 def _custom_help():
@@ -215,7 +245,8 @@ def _handle_fast_puppy(command: str, name: str):
     from code_puppy._core_bridge import (
         RUST_AVAILABLE,
         get_rust_status,
-        set_rust_enabled)
+        set_rust_enabled,
+    )
 
     parts = command.strip().split()
     subcommand = parts[1] if len(parts) > 1 else "status"
@@ -236,6 +267,7 @@ def _handle_fast_puppy(command: str, name: str):
             # Reload status
             import importlib
             import code_puppy._core_bridge as bridge
+
             importlib.reload(bridge)
             set_rust_enabled(True)
             _write_persisted_preference(True)
@@ -250,6 +282,7 @@ def _handle_fast_puppy(command: str, name: str):
             if _try_auto_build():
                 import importlib
                 import code_puppy._core_bridge as bridge
+
                 importlib.reload(bridge)
                 if bridge.RUST_AVAILABLE:
                     bridge.set_rust_enabled(True)
@@ -301,7 +334,11 @@ def _handle_fast_puppy(command: str, name: str):
         emoji = "🐍"
         state = "PURE PYTHON — Rust toolchain not found"
 
-    saved_str = {True: "enabled", False: "disabled", None: "not set (default: enabled)"}[saved]
+    saved_str = {
+        True: "enabled",
+        False: "disabled",
+        None: "not set (default: enabled)",
+    }[saved]
 
     emit_info(f"🐕{emoji} Fast Puppy Status:")
     emit_info(f"   Rust module installed: {'✅' if status['installed'] else '❌'}")

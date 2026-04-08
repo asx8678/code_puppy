@@ -345,7 +345,9 @@ class TestTtsrStreamWatcher:
         rule = self._make_rule("r", "secret_logic", scope="thinking")
         watcher = TtsrStreamWatcher([rule])
 
-        watcher.watch("part_delta", _make_delta_event("ThinkingPartDelta", "using secret_logic"))
+        watcher.watch(
+            "part_delta", _make_delta_event("ThinkingPartDelta", "using secret_logic")
+        )
         assert rule.pending is True
 
     def test_thinking_scope_does_not_trigger_on_text_delta(self):
@@ -354,7 +356,9 @@ class TestTtsrStreamWatcher:
         rule = self._make_rule("r", "secret_logic", scope="thinking")
         watcher = TtsrStreamWatcher([rule])
 
-        watcher.watch("part_delta", _make_delta_event("TextPartDelta", "using secret_logic"))
+        watcher.watch(
+            "part_delta", _make_delta_event("TextPartDelta", "using secret_logic")
+        )
         assert rule.pending is False
 
     def test_tool_scope_triggers_on_tool_delta(self):
@@ -363,7 +367,9 @@ class TestTtsrStreamWatcher:
         rule = self._make_rule("r", "rm -rf", scope="tool")
         watcher = TtsrStreamWatcher([rule])
 
-        watcher.watch("part_delta", _make_delta_event("ToolCallPartDelta", "rm -rf /tmp"))
+        watcher.watch(
+            "part_delta", _make_delta_event("ToolCallPartDelta", "rm -rf /tmp")
+        )
         assert rule.pending is True
 
     def test_tool_scope_does_not_trigger_on_text(self):
@@ -657,12 +663,18 @@ class TestLoadRules:
         project_rules.mkdir(parents=True)
         user_rules.mkdir(parents=True)
 
-        _write_rule(project_rules, "proj.md", "name: proj\ntrigger: proj_pat", "Project rule.")
-        _write_rule(user_rules, "user.md", "name: user\ntrigger: user_pat", "User rule.")
+        _write_rule(
+            project_rules, "proj.md", "name: proj\ntrigger: proj_pat", "Project rule."
+        )
+        _write_rule(
+            user_rules, "user.md", "name: user\ntrigger: user_pat", "User rule."
+        )
 
         with (
-            patch("code_puppy.plugins.ttsr.register_callbacks._rule_directories",
-                  return_value=[project_rules, user_rules]),
+            patch(
+                "code_puppy.plugins.ttsr.register_callbacks._rule_directories",
+                return_value=[project_rules, user_rules],
+            ),
         ):
             rc.load_rules()
 
@@ -704,7 +716,8 @@ class TestHandleTtsrCommand:
         watcher = TtsrStreamWatcher([])
         with (
             patch.object(rc, "_watcher", watcher),
-            patch("code_puppy.plugins.ttsr.register_callbacks.emit_info") if False
+            patch("code_puppy.plugins.ttsr.register_callbacks.emit_info")
+            if False
             else patch("code_puppy.messaging.emit_info"),
             patch("code_puppy.messaging.emit_warning"),
         ):
@@ -732,7 +745,10 @@ class TestHandleTtsrCommand:
         emitted: list[str] = []
         with (
             patch.object(rc, "_watcher", watcher),
-            patch("code_puppy.messaging.emit_info", side_effect=lambda x: emitted.append(str(x))),
+            patch(
+                "code_puppy.messaging.emit_info",
+                side_effect=lambda x: emitted.append(str(x)),
+            ),
             patch("code_puppy.messaging.emit_warning"),
         ):
             handle_ttsr_command("/ttsr", "ttsr")

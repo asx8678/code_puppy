@@ -67,7 +67,7 @@ class ExceptionRegistry:
         except re.PatternError as e:
             logger.error(f"Invalid regex pattern '{pattern}': {e}")
             raise
-        
+
         with cls._lock:
             cls._patterns.append((compiled, ex_info))
         logger.debug(f"Registered pattern '{pattern}' -> {ex_info.name}")

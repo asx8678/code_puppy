@@ -146,7 +146,10 @@ def test_get_agent_entries_sorted() -> None:
 
 def test_get_pinned_model_returns_none_or_str() -> None:
     """_get_pinned_model returns None or a str for any agent name."""
-    from code_puppy.tui.screens.agent_screen import _get_agent_entries, _get_pinned_model
+    from code_puppy.tui.screens.agent_screen import (
+        _get_agent_entries,
+        _get_pinned_model,
+    )
 
     entries = _get_agent_entries()
     if entries:

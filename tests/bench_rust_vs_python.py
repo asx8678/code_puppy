@@ -48,8 +48,8 @@ pytestmark = pytest.mark.skipif(
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
-ITERATIONS = 50          # timing iterations per benchmark
-WARM_UP = 3              # warm-up iterations (discarded)
+ITERATIONS = 50  # timing iterations per benchmark
+WARM_UP = 3  # warm-up iterations (discarded)
 SCALES = [10, 50, 100, 200, 500]  # message-history sizes to test
 
 # Collected across all tests for the final summary table
@@ -57,6 +57,7 @@ _summary_rows: List[Dict] = []
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def _build_realistic_history(n: int) -> List[ModelMessage]:
     """Build a realistic *n*-message history with mixed content types.
@@ -151,7 +152,8 @@ def _build_realistic_history(n: int) -> List[ModelMessage]:
                         TextPart(
                             content=(
                                 f"Looking at module {i}, I can see the following: "
-                                + "This is a detailed analysis of the code. " * (3 + i % 7)
+                                + "This is a detailed analysis of the code. "
+                                * (3 + i % 7)
                             )
                         )
                     ]
@@ -164,7 +166,9 @@ def _build_realistic_history(n: int) -> List[ModelMessage]:
                 ModelResponse(
                     parts=[
                         ThinkingPart(content=f"Hmm, let me think about step {i}..."),
-                        TextPart(content=f"After careful consideration about step {i}..."),
+                        TextPart(
+                            content=f"After careful consideration about step {i}..."
+                        ),
                     ]
                 )
             )
@@ -248,7 +252,11 @@ def _print_result(
     rs_stats: _Stats,
 ) -> float:
     """Print a single benchmark row and return the speedup ratio."""
-    speedup = py_stats.median_ms / rs_stats.median_ms if rs_stats.median_ms > 0 else float("inf")
+    speedup = (
+        py_stats.median_ms / rs_stats.median_ms
+        if rs_stats.median_ms > 0
+        else float("inf")
+    )
 
     marker = "⚡" if speedup >= 1.0 else "🐢"
 
@@ -276,6 +284,7 @@ def _print_result(
 # Comparing against just token estimation understates Rust's value.  The
 # Combined Token+Hash and End-to-End Pipeline benchmarks are the fair tests.
 
+
 class TestBenchTokenEstimation:
     """process_messages_batch (Rust) vs estimate_tokens_for_message (Python).
 
@@ -286,6 +295,7 @@ class TestBenchTokenEstimation:
     @pytest.fixture(autouse=True)
     def _setup(self):
         from code_puppy._core_bridge import process_messages_batch
+
         self._process = process_messages_batch
         self._agent = CodePuppyAgent()
 
@@ -301,9 +311,7 @@ class TestBenchTokenEstimation:
         agent = self._agent
         set_rust_enabled(False)
         try:
-            py = _time_fn(
-                lambda: [agent.estimate_tokens_for_message(m) for m in msgs]
-            )
+            py = _time_fn(lambda: [agent.estimate_tokens_for_message(m) for m in msgs])
         finally:
             set_rust_enabled(True)
 
@@ -314,6 +322,7 @@ class TestBenchTokenEstimation:
 
 # ── Benchmark: Combined Token + Hash (fair comparison) ───────────────────────
 
+
 class TestBenchCombinedTokenHash:
     """process_messages_batch vs Python token estimation + hashing combined.
 
@@ -323,6 +332,7 @@ class TestBenchCombinedTokenHash:
     @pytest.fixture(autouse=True)
     def _setup(self):
         from code_puppy._core_bridge import process_messages_batch
+
         self._process = process_messages_batch
         self._agent = CodePuppyAgent()
 
@@ -338,11 +348,13 @@ class TestBenchCombinedTokenHash:
         agent = self._agent
         set_rust_enabled(False)
         try:
+
             def python_combined():
                 for m in msgs:
                     agent.estimate_tokens_for_message(m)
                 for m in msgs:
                     agent.hash_message(m)
+
             py = _time_fn(python_combined)
         finally:
             set_rust_enabled(True)
@@ -351,10 +363,13 @@ class TestBenchCombinedTokenHash:
         speedup = _print_result("Combined Token+Hash", n, py, rs)
         # At 200+ messages, Rust should win when doing combined work
         if n >= 200:
-            assert speedup > 0.3, f"Rust combined was unexpectedly {1/speedup:.1f}x slower at {n} msgs"
+            assert speedup > 0.3, (
+                f"Rust combined was unexpectedly {1 / speedup:.1f}x slower at {n} msgs"
+            )
 
 
 # ── Benchmark: Message Hashing ───────────────────────────────────────────────
+
 
 class TestBenchMessageHashing:
     """process_messages_batch hashing (Rust) vs hash_message loop (Python)."""
@@ -362,6 +377,7 @@ class TestBenchMessageHashing:
     @pytest.fixture(autouse=True)
     def _setup(self):
         from code_puppy._core_bridge import process_messages_batch
+
         self._process = process_messages_batch
         self._agent = CodePuppyAgent()
 
@@ -375,9 +391,7 @@ class TestBenchMessageHashing:
         agent = self._agent
         set_rust_enabled(False)
         try:
-            py = _time_fn(
-                lambda: [agent.hash_message(m) for m in msgs]
-            )
+            py = _time_fn(lambda: [agent.hash_message(m) for m in msgs])
         finally:
             set_rust_enabled(True)
 
@@ -388,12 +402,14 @@ class TestBenchMessageHashing:
 
 # ── Benchmark: Pruning ───────────────────────────────────────────────────────
 
+
 class TestBenchPruning:
     """prune_and_filter (Rust) vs prune_interrupted_tool_calls (Python)."""
 
     @pytest.fixture(autouse=True)
     def _setup(self):
         from code_puppy._core_bridge import prune_and_filter
+
         self._prune = prune_and_filter
         self._agent = CodePuppyAgent()
 
@@ -418,12 +434,14 @@ class TestBenchPruning:
 
 # ── Benchmark: Pruning with size filtering (fair comparison) ─────────────────
 
+
 class TestBenchPruningWithFilter:
     """prune_and_filter (Rust single-pass) vs Python prune + filter_huge (multi-pass)."""
 
     @pytest.fixture(autouse=True)
     def _setup(self):
         from code_puppy._core_bridge import prune_and_filter
+
         self._prune = prune_and_filter
         self._agent = CodePuppyAgent()
 
@@ -439,9 +457,13 @@ class TestBenchPruningWithFilter:
         agent = self._agent
         set_rust_enabled(False)
         try:
+
             def python_multi_pass():
-                filtered = [m for m in msgs if agent.estimate_tokens_for_message(m) < 50_000]
+                filtered = [
+                    m for m in msgs if agent.estimate_tokens_for_message(m) < 50_000
+                ]
                 agent.prune_interrupted_tool_calls(filtered)
+
             py = _time_fn(python_multi_pass)
         finally:
             set_rust_enabled(True)
@@ -449,10 +471,13 @@ class TestBenchPruningWithFilter:
         print()
         speedup = _print_result("Prune+Filter (multi-pass)", n, py, rs)
         if n >= 200:
-            assert speedup > 0.3, f"Rust was unexpectedly {1/speedup:.1f}x slower at {n} msgs"
+            assert speedup > 0.3, (
+                f"Rust was unexpectedly {1 / speedup:.1f}x slower at {n} msgs"
+            )
 
 
 # ── Benchmark: Truncation ────────────────────────────────────────────────────
+
 
 class TestBenchTruncation:
     """truncation_indices (Rust) vs truncation fallback (Python)."""
@@ -463,6 +488,7 @@ class TestBenchTruncation:
             process_messages_batch,
             truncation_indices as rust_trunc,
         )
+
         self._process = process_messages_batch
         self._trunc = rust_trunc
         self._agent = CodePuppyAgent()
@@ -490,10 +516,13 @@ class TestBenchTruncation:
 
         print()
         speedup = _print_result("Truncation", n, py, rs)
-        assert speedup > 0.5, f"Rust was unexpectedly {1/speedup:.1f}x slower at {n} msgs"
+        assert speedup > 0.5, (
+            f"Rust was unexpectedly {1 / speedup:.1f}x slower at {n} msgs"
+        )
 
 
 # ── Benchmark: Session Serialization ─────────────────────────────────────────
+
 
 class TestBenchSerialization:
     """MessagePack via Rust vs pickle (Python)."""
@@ -504,6 +533,7 @@ class TestBenchSerialization:
             deserialize_session,
             serialize_session,
         )
+
         self._ser = serialize_session
         self._de = deserialize_session
 
@@ -557,13 +587,14 @@ class TestBenchSerialization:
                 "op": "Size (pickle/msgpack)",
                 "n": n,
                 "py_ms": len(pickle_bytes) / 1024,  # KB
-                "rs_ms": len(rust_bytes) / 1024,     # KB
+                "rs_ms": len(rust_bytes) / 1024,  # KB
                 "speedup": ratio,
             }
         )
 
 
 # ── Benchmark: End-to-End Hot Path (THE KEY BENCHMARK) ──────────────────────
+
 
 class TestBenchEndToEnd:
     """Full per-turn hot path: serialize → batch-process → prune → truncate.
@@ -579,6 +610,7 @@ class TestBenchEndToEnd:
             prune_and_filter,
             truncation_indices as rust_trunc,
         )
+
         self._process = process_messages_batch
         self._prune = prune_and_filter
         self._trunc = rust_trunc
@@ -607,7 +639,9 @@ class TestBenchEndToEnd:
             # Pruning (called 3-4x per turn in practice!)
             agent.prune_interrupted_tool_calls(msgs)
             # Size filter + second prune
-            filtered = [m for m in msgs if agent.estimate_tokens_for_message(m) < 50_000]
+            filtered = [
+                m for m in msgs if agent.estimate_tokens_for_message(m) < 50_000
+            ]
             agent.prune_interrupted_tool_calls(filtered)
             # Truncation
             agent.truncation(msgs, protected)
@@ -623,10 +657,13 @@ class TestBenchEndToEnd:
         print()
         speedup = _print_result("★ End-to-End Pipeline", n, py, rs)
         if n >= 100:
-            assert speedup > 0.5, f"Rust pipeline was unexpectedly {1/speedup:.1f}x slower at {n} msgs"
+            assert speedup > 0.5, (
+                f"Rust pipeline was unexpectedly {1 / speedup:.1f}x slower at {n} msgs"
+            )
 
 
 # ── Benchmark: Serialization Overhead ────────────────────────────────────────
+
 
 class TestBenchSerializationOverhead:
     """Measure the serialize_messages_for_rust() bridge cost alone."""
@@ -654,27 +691,39 @@ class TestBenchSerializationOverhead:
 
 # ── Summary Table (printed once at session end) ─────────────────────────────
 
+
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     """Print the grand summary table after all benchmarks complete."""
     if not _summary_rows:
         return
 
     # Filter into comparison rows (with speedup) and info rows
-    comparison = [r for r in _summary_rows if r["speedup"] > 0 and "Size" not in r["op"] and "Bridge" not in r["op"]]
+    comparison = [
+        r
+        for r in _summary_rows
+        if r["speedup"] > 0 and "Size" not in r["op"] and "Bridge" not in r["op"]
+    ]
     sizes = [r for r in _summary_rows if "Size" in r["op"]]
     bridge = [r for r in _summary_rows if "Bridge" in r["op"]]
 
     terminalreporter.write_line("")
     terminalreporter.write_line("=" * 85)
-    terminalreporter.write_line(
-        "                 🐕 Fast Puppy Benchmark Results 🦀"
-    )
+    terminalreporter.write_line("                 🐕 Fast Puppy Benchmark Results 🦀")
     terminalreporter.write_line("=" * 85)
     terminalreporter.write_line(
         f"  {'Operation':<28s} │ {'Msgs':>5s} │ {'Python':>10s} │ {'Rust':>10s} │ {'Speedup':>8s}"
     )
     terminalreporter.write_line(
-        "  " + "─" * 28 + "─┼─" + "─" * 5 + "─┼─" + "─" * 10 + "─┼─" + "─" * 10 + "─┼─" + "─" * 8
+        "  "
+        + "─" * 28
+        + "─┼─"
+        + "─" * 5
+        + "─┼─"
+        + "─" * 10
+        + "─┼─"
+        + "─" * 10
+        + "─┼─"
+        + "─" * 8
     )
 
     for r in comparison:
@@ -693,11 +742,11 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 
     if bridge:
         terminalreporter.write_line("  " + "─" * 85)
-        terminalreporter.write_line("  Bridge serialization overhead (included in Rust E2E timings):")
+        terminalreporter.write_line(
+            "  Bridge serialization overhead (included in Rust E2E timings):"
+        )
         for r in bridge:
-            terminalreporter.write_line(
-                f"    {r['n']:>5d} msgs │ {r['py_ms']:>8.3f}ms"
-            )
+            terminalreporter.write_line(f"    {r['n']:>5d} msgs │ {r['py_ms']:>8.3f}ms")
 
     # Overall summary (only for comparison rows)
     if comparison:

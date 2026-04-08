@@ -223,7 +223,8 @@ async def _capture_terminal_screenshot(
     full_page: bool = False,
     save_to_disk: bool = True,
     group_id: str | None = None,
-    max_height: int = DEFAULT_MAX_HEIGHT) -> dict[str, Any]:
+    max_height: int = DEFAULT_MAX_HEIGHT,
+) -> dict[str, Any]:
     """Internal function to capture terminal screenshot.
 
     Args:
@@ -267,7 +268,8 @@ async def _capture_terminal_screenshot(
             if group_id:
                 emit_success(
                     f"Terminal screenshot saved: {screenshot_path}",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
 
         return result
 
@@ -277,8 +279,8 @@ async def _capture_terminal_screenshot(
 
 
 async def terminal_screenshot(
-    full_page: bool = False,
-    save_to_disk: bool = True) -> Union[ToolReturn, dict[str, Any]]:
+    full_page: bool = False, save_to_disk: bool = True
+) -> Union[ToolReturn, dict[str, Any]]:
     """Take a screenshot of the terminal browser.
 
     Captures a screenshot and returns it via ToolReturn with BinaryContent
@@ -302,12 +304,12 @@ async def terminal_screenshot(
     banner = format_terminal_banner("TERMINAL SCREENSHOT 📷")
     emit_info(
         Text.from_markup(f"{banner} [bold cyan]{target}[/bold cyan]"),
-        message_group=group_id)
+        message_group=group_id,
+    )
 
     result = await _capture_terminal_screenshot(
-        full_page=full_page,
-        save_to_disk=save_to_disk,
-        group_id=group_id)
+        full_page=full_page, save_to_disk=save_to_disk, group_id=group_id
+    )
 
     if not result["success"]:
         emit_error(result.get("error", "Screenshot failed"), message_group=group_id)
@@ -320,9 +322,7 @@ async def terminal_screenshot(
         return_value=f"Terminal screenshot captured. Saved to: {screenshot_path}",
         content=[
             f"Here's the terminal screenshot ({target}):",
-            BinaryContent(
-                data=result["screenshot_bytes"],
-                media_type="image/png"),
+            BinaryContent(data=result["screenshot_bytes"], media_type="image/png"),
             "Please analyze what you see in the terminal.",
         ],
         metadata={
@@ -331,7 +331,8 @@ async def terminal_screenshot(
             "target": target,
             "full_page": full_page,
             "timestamp": time.time(),
-        })
+        },
+    )
 
 
 async def terminal_read_output(lines: int = 50) -> dict[str, Any]:
@@ -354,7 +355,8 @@ async def terminal_read_output(lines: int = 50) -> dict[str, Any]:
     banner = format_terminal_banner("TERMINAL READ OUTPUT 📖")
     emit_info(
         Text.from_markup(f"{banner} [dim]last {lines} lines[/dim]"),
-        message_group=group_id)
+        message_group=group_id,
+    )
 
     try:
         manager = get_session_manager()
@@ -383,7 +385,8 @@ async def terminal_read_output(lines: int = 50) -> dict[str, Any]:
 
         emit_success(
             f"Extracted {len(extracted_lines)} lines from terminal",
-            message_group=group_id)
+            message_group=group_id,
+        )
 
         return {
             "success": True,
@@ -399,8 +402,8 @@ async def terminal_read_output(lines: int = 50) -> dict[str, Any]:
 
 
 async def load_image(
-    image_path: str,
-    max_height: int = DEFAULT_MAX_HEIGHT) -> Union[ToolReturn, dict[str, Any]]:
+    image_path: str, max_height: int = DEFAULT_MAX_HEIGHT
+) -> Union[ToolReturn, dict[str, Any]]:
     """Load an image from the filesystem for visual analysis.
 
     Verifies the file is a real image, derives the MIME type from the actual
@@ -475,7 +478,8 @@ async def load_image(
                 "max_height": max_height,
                 "max_edge": MAX_IMAGE_EDGE,
                 "timestamp": time.time(),
-            })
+            },
+        )
 
     except Exception as e:
         error_msg = f"Failed to load image: {str(e)}"
@@ -494,8 +498,8 @@ def register_terminal_screenshot(agent):
 
     @agent.tool
     async def terminal_screenshot_analyze(
-        context: RunContext,
-        full_page: bool = False) -> Union[ToolReturn, dict[str, Any]]:
+        context: RunContext, full_page: bool = False
+    ) -> Union[ToolReturn, dict[str, Any]]:
         """
         Take a screenshot of the terminal browser.
 
@@ -517,8 +521,8 @@ def register_terminal_read_output(agent):
 
     @agent.tool
     async def terminal_read_output(
-        context: RunContext,
-        lines: int = 50) -> dict[str, Any]:
+        context: RunContext, lines: int = 50
+    ) -> dict[str, Any]:
         """
         Read text from the terminal (scrapes xterm.js DOM).
 
@@ -541,8 +545,8 @@ def register_load_image(agent):
 
     @agent.tool
     async def load_image_for_analysis(
-        context: RunContext,
-        image_path: str) -> Union[ToolReturn, dict[str, Any]]:
+        context: RunContext, image_path: str
+    ) -> Union[ToolReturn, dict[str, Any]]:
         """Load an image file so you can see and analyze it.
 
         Args:
@@ -560,8 +564,8 @@ def register_terminal_compare_mockup(agent):
 
     @agent.tool
     async def terminal_compare_mockup(
-        context: RunContext,
-        mockup_path: str) -> Union[ToolReturn, dict[str, Any]]:
+        context: RunContext, mockup_path: str
+    ) -> Union[ToolReturn, dict[str, Any]]:
         """
         Compare the terminal to a mockup image.
 
@@ -579,13 +583,13 @@ def register_terminal_compare_mockup(agent):
         banner = format_terminal_banner("TERMINAL COMPARE MOCKUP 🖼️")
         emit_info(
             Text.from_markup(f"{banner} [bold cyan]{mockup_path}[/bold cyan]"),
-            message_group=group_id)
+            message_group=group_id,
+        )
 
         # Capture terminal screenshot (get raw result for bytes)
         terminal_capture = await _capture_terminal_screenshot(
-            full_page=False,
-            save_to_disk=True,
-            group_id=group_id)
+            full_page=False, save_to_disk=True, group_id=group_id
+        )
         if not terminal_capture["success"]:
             return terminal_capture
 
@@ -622,8 +626,8 @@ def register_terminal_compare_mockup(agent):
             }
 
         emit_success(
-            "Both images loaded. Compare them visually.",
-            message_group=group_id)
+            "Both images loaded. Compare them visually.", message_group=group_id
+        )
 
         terminal_path = terminal_capture.get("screenshot_path", "(not saved)")
 
@@ -633,12 +637,10 @@ def register_terminal_compare_mockup(agent):
             content=[
                 "Here's the CURRENT terminal screenshot:",
                 BinaryContent(
-                    data=terminal_capture["screenshot_bytes"],
-                    media_type="image/png"),
+                    data=terminal_capture["screenshot_bytes"], media_type="image/png"
+                ),
                 f"And here's the EXPECTED mockup ({mockup_file.name}):",
-                BinaryContent(
-                    data=mockup_bytes,
-                    media_type="image/png"),
+                BinaryContent(data=mockup_bytes, media_type="image/png"),
                 "Please compare these images and describe any differences.",
             ],
             metadata={
@@ -653,4 +655,5 @@ def register_terminal_compare_mockup(agent):
                 ],
                 "mockup_was_resized": mockup_image["was_resized"],
                 "timestamp": time.time(),
-            })
+            },
+        )

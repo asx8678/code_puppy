@@ -107,9 +107,7 @@ class BrowserManager:
     _context: BrowserContext | None = None
     _initialized: bool = False
 
-    def __init__(
-        self, session_id: str | None = None, browser_type: str | None = None
-    ):
+    def __init__(self, session_id: str | None = None, browser_type: str | None = None):
         """Initialize manager settings.
 
         Args:

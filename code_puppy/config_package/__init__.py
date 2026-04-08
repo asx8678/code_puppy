@@ -10,7 +10,7 @@ To migrate gradually:
 
 Submodules:
 - paths: Path resolution and directory helpers
-- feature_flags: Feature toggles and flags  
+- feature_flags: Feature toggles and flags
 - settings: Model settings and configuration values
 """
 

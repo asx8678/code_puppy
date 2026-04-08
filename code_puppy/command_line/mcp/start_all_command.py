@@ -69,12 +69,14 @@ class StartAllCommand(MCPCommandBase):
                     started_count += 1
                     emit_info(
                         Text.from_markup(f"  [green]✓ Started: {server_name}[/green]"),
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
                 else:
                     failed_count += 1
                     emit_info(
                         Text.from_markup(f"  [red]✗ Failed: {server_name}[/red]"),
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
 
             # Summary
             emit_info("", message_group=group_id)
@@ -83,17 +85,20 @@ class StartAllCommand(MCPCommandBase):
                     Text.from_markup(
                         f"[green]Started {started_count} server(s)[/green]"
                     ),
-                    message_group=group_id)
+                    message_group=group_id,
+                )
             if already_running > 0:
                 emit_info(
                     f"{already_running} server(s) already running",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
             if failed_count > 0:
                 emit_info(
                     Text.from_markup(
                         f"[yellow]Failed to start {failed_count} server(s)[/yellow]"
                     ),
-                    message_group=group_id)
+                    message_group=group_id,
+                )
 
             # Reload agent if any servers were started
             if started_count > 0:
@@ -116,7 +121,8 @@ class StartAllCommand(MCPCommandBase):
                         Text.from_markup(
                             "[dim]Agent reloaded with updated servers[/dim]"
                         ),
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
                 except Exception as e:
                     logger.warning(f"Could not reload agent: {e}")
 
@@ -124,4 +130,5 @@ class StartAllCommand(MCPCommandBase):
             logger.error(f"Error starting all servers: {e}")
             emit_info(
                 Text.from_markup(f"[red]Failed to start servers: {e}[/red]"),
-                message_group=group_id)
+                message_group=group_id,
+            )

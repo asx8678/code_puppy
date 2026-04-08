@@ -13,12 +13,13 @@ from .browser_manager import get_session_browser_manager
 async def initialize_browser(
     headless: bool = False,
     browser_type: str = "chromium",
-    homepage: str = "https://www.google.com") -> dict[str, Any]:
+    homepage: str = "https://www.google.com",
+) -> dict[str, Any]:
     """Initialize the browser with specified settings."""
     group_id = generate_group_id("browser_initialize", f"{browser_type}_{homepage}")
     emit_info(
-        f"BROWSER INITIALIZE 🌐 {browser_type} → {homepage}",
-        message_group=group_id)
+        f"BROWSER INITIALIZE 🌐 {browser_type} → {homepage}", message_group=group_id
+    )
     try:
         browser_manager = get_session_browser_manager()
 
@@ -53,9 +54,7 @@ async def initialize_browser(
         }
 
     except Exception as e:
-        emit_error(
-            f"Browser initialization failed: {str(e)}",
-            message_group=group_id)
+        emit_error(f"Browser initialization failed: {str(e)}", message_group=group_id)
         return {
             "success": False,
             "error": str(e),
@@ -67,9 +66,7 @@ async def initialize_browser(
 async def close_browser() -> dict[str, Any]:
     """Close the browser and clean up resources."""
     group_id = generate_group_id("browser_close")
-    emit_info(
-        "BROWSER CLOSE 🔒",
-        message_group=group_id)
+    emit_info("BROWSER CLOSE 🔒", message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         await browser_manager.close()
@@ -85,9 +82,7 @@ async def close_browser() -> dict[str, Any]:
 async def get_browser_status() -> dict[str, Any]:
     """Get current browser status and information."""
     group_id = generate_group_id("browser_status")
-    emit_info(
-        "BROWSER STATUS 📊",
-        message_group=group_id)
+    emit_info("BROWSER STATUS 📊", message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
 
@@ -129,9 +124,7 @@ async def get_browser_status() -> dict[str, Any]:
 async def create_new_page(url: str | None = None) -> dict[str, Any]:
     """Create a new browser page/tab."""
     group_id = generate_group_id("browser_new_page", url or "blank")
-    emit_info(
-        f"BROWSER NEW PAGE 📄 {url or 'blank page'}",
-        message_group=group_id)
+    emit_info(f"BROWSER NEW PAGE 📄 {url or 'blank page'}", message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
 
@@ -157,9 +150,7 @@ async def create_new_page(url: str | None = None) -> dict[str, Any]:
 async def list_pages() -> dict[str, Any]:
     """List all open browser pages/tabs."""
     group_id = generate_group_id("browser_list_pages")
-    emit_info(
-        "BROWSER LIST PAGES 📋",
-        message_group=group_id)
+    emit_info("BROWSER LIST PAGES 📋", message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
 
@@ -204,7 +195,8 @@ def register_initialize_browser(agent):
         context: RunContext,
         headless: bool = False,
         browser_type: str = "chromium",
-        homepage: str = "https://www.google.com") -> dict[str, Any]:
+        homepage: str = "https://www.google.com",
+    ) -> dict[str, Any]:
         """
         Initialize the browser with specified settings. Must be called before using other browser tools.
 
@@ -252,8 +244,8 @@ def register_create_new_page(agent):
 
     @agent.tool
     async def browser_new_page(
-        context: RunContext,
-        url: str | None = None) -> dict[str, Any]:
+        context: RunContext, url: str | None = None
+    ) -> dict[str, Any]:
         """
         Create a new browser page/tab.
 

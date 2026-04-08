@@ -203,7 +203,9 @@ def test_extra_models_json_decode_error(tmp_path, monkeypatch):
     config = ModelFactory.load_config()
 
     # The config should still be loaded, just without the extra models
-    from collections.abc import Mapping; assert isinstance(config, Mapping)
+    from collections.abc import Mapping
+
+    assert isinstance(config, Mapping)
     assert len(config) > 0
 
 
@@ -222,6 +224,7 @@ def test_extra_models_exception_handling(tmp_path, monkeypatch, caplog):
 
     # Invalidate model config cache so patched path is picked up
     from code_puppy.model_factory import invalidate_model_config_cache
+
     invalidate_model_config_cache()
 
     # This should not raise an exception despite the error
@@ -229,7 +232,9 @@ def test_extra_models_exception_handling(tmp_path, monkeypatch, caplog):
         config = ModelFactory.load_config()
 
     # The config should still be loaded
-    from collections.abc import Mapping; assert isinstance(config, Mapping)
+    from collections.abc import Mapping
+
+    assert isinstance(config, Mapping)
     assert len(config) > 0
 
     # Check that warning was logged

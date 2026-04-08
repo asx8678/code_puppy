@@ -20,7 +20,7 @@ async def test_managed_server_header_env_expansion_mocked():
 
     Headers are now passed directly to MCPServerStreamableHTTP instead of
     creating a custom http_client. This is a workaround for MCP 1.25.0 bug.
-    
+
     SECURITY: Only safe environment variables from the whitelist are expanded.
     """
 
@@ -59,7 +59,7 @@ async def test_managed_server_header_env_expansion_mocked():
 
 def test_expand_env_vars_safe_only():
     """Test env var expansion only expands safe/sanctioned variables.
-    
+
     SECURITY: Only well-known safe environment variables are expanded
     to prevent command injection through malicious environment values.
     """
@@ -70,23 +70,23 @@ def test_expand_env_vars_safe_only():
         "PATH": "/usr/bin:/bin",
         "SHELL": "/bin/bash",
     }
-    
+
     # Unsafe variables that should NOT be expanded
     unsafe_env = {
         "MALICIOUS_VAR": "$(rm -rf /)",
         "API_KEY": "secret123",  # Not in safe list
     }
-    
+
     with patch.dict(os.environ, {**safe_env, **unsafe_env}):
         # Safe vars - should be expanded
         assert _expand_env_vars("$HOME") == "/home/testuser"
         assert _expand_env_vars("${USER}") == "testuser"
         assert _expand_env_vars("Shell: $SHELL") == "Shell: /bin/bash"
-        
+
         # Unsafe/unknown vars - should NOT be expanded (prevent injection)
         assert _expand_env_vars("$MALICIOUS_VAR") == "$MALICIOUS_VAR"
         assert _expand_env_vars("$API_KEY") == "$API_KEY"
-        
+
         # Plain string (no vars)
         assert _expand_env_vars("plain text") == "plain text"
 

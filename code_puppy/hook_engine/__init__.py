@@ -7,7 +7,8 @@ from .models import (
     ExecutionResult,
     HookConfig,
     HookRegistry,
-    ProcessEventResult)
+    ProcessEventResult,
+)
 
 __all__ = [
     "HookEngine",

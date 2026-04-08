@@ -120,7 +120,8 @@ class HealthMonitor:
                 is_healthy=False,
                 latency_ms=None,
                 error=str(e),
-                check_type="initial")
+                check_type="initial",
+            )
             await self._record_health_status(server_id, error_status)
 
     async def stop_monitoring(self, server_id: str) -> None:
@@ -168,7 +169,8 @@ class HealthMonitor:
                 is_healthy=False,
                 latency_ms=None,
                 error=f"No health check registered for type '{server_type}'",
-                check_type="unknown")
+                check_type="unknown",
+            )
 
         try:
             result = await self.perform_health_check(server)
@@ -177,7 +179,8 @@ class HealthMonitor:
                 is_healthy=result.success,
                 latency_ms=result.latency_ms,
                 error=result.error,
-                check_type=server_type)
+                check_type=server_type,
+            )
         except Exception as e:
             logger.error(f"Health check failed for server {server.config.id}: {e}")
             return HealthStatus(
@@ -185,7 +188,8 @@ class HealthMonitor:
                 is_healthy=False,
                 latency_ms=None,
                 error=str(e),
-                check_type=server_type)
+                check_type=server_type,
+            )
 
     async def perform_health_check(self, server: ManagedMCPServer) -> HealthCheckResult:
         """
@@ -204,7 +208,8 @@ class HealthMonitor:
             return HealthCheckResult(
                 success=False,
                 latency_ms=0.0,
-                error=f"No health check function for type '{server_type}'")
+                error=f"No health check function for type '{server_type}'",
+            )
 
         start_time = time.time()
         try:
@@ -215,7 +220,8 @@ class HealthMonitor:
                 return HealthCheckResult(
                     success=result,
                     latency_ms=latency_ms,
-                    error=None if result else "Health check returned False")
+                    error=None if result else "Health check returned False",
+                )
             elif isinstance(result, HealthCheckResult):
                 # Update latency if not already set
                 if result.latency_ms == 0.0:
@@ -225,7 +231,8 @@ class HealthMonitor:
                 return HealthCheckResult(
                     success=False,
                     latency_ms=latency_ms,
-                    error=f"Invalid health check result type: {type(result)}")
+                    error=f"Invalid health check result type: {type(result)}",
+                )
 
         except Exception as e:
             latency_ms = (time.time() - start_time) * 1000
@@ -439,7 +446,8 @@ class HealthMonitor:
                 return HealthCheckResult(
                     success=False,
                     latency_ms=0.0,
-                    error="No URL configured for SSE server")
+                    error="No URL configured for SSE server",
+                )
 
             # Add health endpoint if available, otherwise use base URL
             health_url = (
@@ -463,7 +471,8 @@ class HealthMonitor:
                 return HealthCheckResult(
                     success=success,
                     latency_ms=0.0,  # Will be filled by perform_health_check
-                    error=error)
+                    error=error,
+                )
 
         except Exception as e:
             return HealthCheckResult(success=False, latency_ms=0.0, error=str(e))
@@ -511,7 +520,8 @@ class HealthMonitor:
                     return HealthCheckResult(
                         success=False,
                         latency_ms=0.0,
-                        error="No command configured for stdio server")
+                        error="No command configured for stdio server",
+                    )
 
                 # Basic validation that command exists
                 import shutil
@@ -520,7 +530,8 @@ class HealthMonitor:
                     return HealthCheckResult(
                         success=False,
                         latency_ms=0.0,
-                        error=f"Command '{command}' not found in PATH")
+                        error=f"Command '{command}' not found in PATH",
+                    )
 
                 # If we get here, basic checks passed
                 return HealthCheckResult(success=True, latency_ms=0.0, error=None)
@@ -529,7 +540,8 @@ class HealthMonitor:
                 return HealthCheckResult(
                     success=False,
                     latency_ms=0.0,
-                    error=f"Server communication failed: {str(e)}")
+                    error=f"Server communication failed: {str(e)}",
+                )
 
         except Exception as e:
             return HealthCheckResult(success=False, latency_ms=0.0, error=str(e))
@@ -568,6 +580,7 @@ class HealthMonitor:
 
         # Wait for all tasks to complete
         if tasks:
+
             async def _safe_run(coro):
                 try:
                     return await coro

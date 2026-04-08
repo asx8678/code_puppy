@@ -17,6 +17,7 @@ from code_puppy.tools.file_operations import _read_file_sync
 # 1. Success path
 # ---------------------------------------------------------------------------
 
+
 class TestSuccessReturnsTuple:
     """Happy-path: reading a normal file returns (content, tokens, None)."""
 
@@ -59,6 +60,7 @@ class TestSuccessReturnsTuple:
 # 2. Oversized file (>10 000 tokens)
 # ---------------------------------------------------------------------------
 
+
 class TestOversizedFile:
     """Files exceeding the 10 000 token budget return (None, 0, error)."""
 
@@ -95,6 +97,7 @@ class TestOversizedFile:
 # 3. Non-existent file
 # ---------------------------------------------------------------------------
 
+
 class TestNonexistentFile:
     """A path that does not exist returns ('', 0, error_msg)."""
 
@@ -117,6 +120,7 @@ class TestNonexistentFile:
 # ---------------------------------------------------------------------------
 # 4. Permission denied
 # ---------------------------------------------------------------------------
+
 
 class TestPermissionDenied:
     """A file with no read permission returns ('', 0, error_msg)."""
@@ -149,17 +153,14 @@ class TestPermissionDenied:
 # 5. Line-range reading
 # ---------------------------------------------------------------------------
 
+
 class TestLineRange:
     """Reading a subset of lines still returns a proper 3-tuple."""
 
     def test_line_range_success(self, tmp_path):
         f = tmp_path / "lines.txt"
         f.write_text(
-            "line one\n"
-            "line two\n"
-            "line three\n"
-            "line four\n"
-            "line five\n",
+            "line one\nline two\nline three\nline four\nline five\n",
             encoding="utf-8",
         )
 
@@ -193,7 +194,9 @@ class TestLineRange:
 
         assert error is None
         assert content == ""
-        assert num_tokens > 0  # empty string still has ~0 tokens but estimation may vary
+        assert (
+            num_tokens > 0
+        )  # empty string still has ~0 tokens but estimation may vary
 
     def test_line_range_invalid_start_line(self, tmp_path):
         f = tmp_path / "inv.txt"

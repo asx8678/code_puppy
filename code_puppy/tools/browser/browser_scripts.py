@@ -10,14 +10,13 @@ from code_puppy.tools.common import generate_group_id
 from .browser_manager import get_session_browser_manager
 
 
-async def execute_javascript(
-    script: str,
-    timeout: int = 30000) -> dict[str, Any]:
+async def execute_javascript(script: str, timeout: int = 30000) -> dict[str, Any]:
     """Execute JavaScript code in the browser context."""
     group_id = generate_group_id("browser_execute_js", script[:100])
     emit_info(
         f"BROWSER EXECUTE JS 📜 script='{script[:100]}{'...' if len(script) > 100 else ''}'",
-        message_group=group_id)
+        message_group=group_id,
+    )
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -40,15 +39,15 @@ async def execute_javascript(
 
 
 async def scroll_page(
-    direction: str = "down",
-    amount: int = 3,
-    element_selector: str | None = None) -> dict[str, Any]:
+    direction: str = "down", amount: int = 3, element_selector: str | None = None
+) -> dict[str, Any]:
     """Scroll the page or a specific element."""
     target = element_selector or "page"
     group_id = generate_group_id("browser_scroll", f"{direction}_{amount}_{target}")
     emit_info(
         f"BROWSER SCROLL 📋 direction={direction} amount={amount} target='{target}'",
-        message_group=group_id)
+        message_group=group_id,
+    )
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -133,14 +132,12 @@ async def scroll_page(
         }
 
 
-async def scroll_to_element(
-    selector: str,
-    timeout: int = 10000) -> dict[str, Any]:
+async def scroll_to_element(selector: str, timeout: int = 10000) -> dict[str, Any]:
     """Scroll to bring an element into view."""
     group_id = generate_group_id("browser_scroll_to_element", selector[:100])
     emit_info(
-        f"BROWSER SCROLL TO ELEMENT 🎯 selector='{selector}'",
-        message_group=group_id)
+        f"BROWSER SCROLL TO ELEMENT 🎯 selector='{selector}'", message_group=group_id
+    )
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -163,14 +160,10 @@ async def scroll_to_element(
         return {"success": False, "error": str(e), "selector": selector}
 
 
-async def set_viewport_size(
-    width: int,
-    height: int) -> dict[str, Any]:
+async def set_viewport_size(width: int, height: int) -> dict[str, Any]:
     """Set the viewport size."""
     group_id = generate_group_id("browser_set_viewport", f"{width}x{height}")
-    emit_info(
-        f"BROWSER SET VIEWPORT 🖥️ size={width}x{height}",
-        message_group=group_id)
+    emit_info(f"BROWSER SET VIEWPORT 🖥️ size={width}x{height}", message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -180,9 +173,7 @@ async def set_viewport_size(
 
         await page.set_viewport_size({"width": width, "height": height})
 
-        emit_success(
-            f"Set viewport size to {width}x{height}",
-            message_group=group_id)
+        emit_success(f"Set viewport size to {width}x{height}", message_group=group_id)
 
         return {"success": True, "width": width, "height": height}
 
@@ -191,14 +182,14 @@ async def set_viewport_size(
 
 
 async def wait_for_element(
-    selector: str,
-    state: str = "visible",
-    timeout: int = 30000) -> dict[str, Any]:
+    selector: str, state: str = "visible", timeout: int = 30000
+) -> dict[str, Any]:
     """Wait for an element to reach a specific state."""
     group_id = generate_group_id("browser_wait_for_element", f"{selector[:50]}_{state}")
     emit_info(
         f"BROWSER WAIT FOR ELEMENT ⏱️ selector='{selector}' state={state} timeout={timeout}ms",
-        message_group=group_id)
+        message_group=group_id,
+    )
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -218,16 +209,16 @@ async def wait_for_element(
 
 
 async def highlight_element(
-    selector: str,
-    color: str = "red",
-    timeout: int = 10000) -> dict[str, Any]:
+    selector: str, color: str = "red", timeout: int = 10000
+) -> dict[str, Any]:
     """Highlight an element with a colored border."""
     group_id = generate_group_id(
         "browser_highlight_element", f"{selector[:50]}_{color}"
     )
     emit_info(
         f"BROWSER HIGHLIGHT ELEMENT 🔦 selector='{selector}' color={color}",
-        message_group=group_id)
+        message_group=group_id,
+    )
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -261,9 +252,7 @@ async def highlight_element(
 async def clear_highlights() -> dict[str, Any]:
     """Clear all element highlights."""
     group_id = generate_group_id("browser_clear_highlights")
-    emit_info(
-        "BROWSER CLEAR HIGHLIGHTS 🧹",
-        message_group=group_id)
+    emit_info("BROWSER CLEAR HIGHLIGHTS 🧹", message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -301,9 +290,8 @@ def register_execute_javascript(agent):
 
     @agent.tool
     async def browser_execute_js(
-        context: RunContext,
-        script: str,
-        timeout: int = 30000) -> dict[str, Any]:
+        context: RunContext, script: str, timeout: int = 30000
+    ) -> dict[str, Any]:
         """
         Execute JavaScript code in the browser context.
 
@@ -325,7 +313,8 @@ def register_scroll_page(agent):
         context: RunContext,
         direction: str = "down",
         amount: int = 3,
-        element_selector: str | None = None) -> dict[str, Any]:
+        element_selector: str | None = None,
+    ) -> dict[str, Any]:
         """
         Scroll the page or a specific element.
 
@@ -345,9 +334,8 @@ def register_scroll_to_element(agent):
 
     @agent.tool
     async def browser_scroll_to_element(
-        context: RunContext,
-        selector: str,
-        timeout: int = 10000) -> dict[str, Any]:
+        context: RunContext, selector: str, timeout: int = 10000
+    ) -> dict[str, Any]:
         """
         Scroll to bring an element into view.
 
@@ -366,9 +354,8 @@ def register_set_viewport_size(agent):
 
     @agent.tool
     async def browser_set_viewport(
-        context: RunContext,
-        width: int,
-        height: int) -> dict[str, Any]:
+        context: RunContext, width: int, height: int
+    ) -> dict[str, Any]:
         """
         Set the browser viewport size.
 
@@ -387,10 +374,8 @@ def register_wait_for_element(agent):
 
     @agent.tool
     async def browser_wait_for_element(
-        context: RunContext,
-        selector: str,
-        state: str = "visible",
-        timeout: int = 30000) -> dict[str, Any]:
+        context: RunContext, selector: str, state: str = "visible", timeout: int = 30000
+    ) -> dict[str, Any]:
         """
         Wait for an element to reach a specific state.
 
@@ -410,10 +395,8 @@ def register_browser_highlight_element(agent):
 
     @agent.tool
     async def browser_highlight_element(
-        context: RunContext,
-        selector: str,
-        color: str = "red",
-        timeout: int = 10000) -> dict[str, Any]:
+        context: RunContext, selector: str, color: str = "red", timeout: int = 10000
+    ) -> dict[str, Any]:
         """
         Highlight an element with a colored border for visual identification.
 

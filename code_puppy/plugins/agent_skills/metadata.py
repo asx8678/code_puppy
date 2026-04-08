@@ -158,7 +158,8 @@ def parse_skill_metadata(skill_path: Path) -> SkillMetadata | None:
         path=skill_path,
         version=frontmatter.get("version"),
         author=frontmatter.get("author"),
-        tags=tags)
+        tags=tags,
+    )
 
 
 def load_full_skill_content(skill_path: Path) -> str | None:

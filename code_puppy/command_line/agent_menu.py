@@ -14,6 +14,7 @@ try:
     from prompt_toolkit.layout import Dimension, Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -24,7 +25,8 @@ from code_puppy.agents import (
     get_agent_descriptions,
     get_available_agents,
     get_current_agent,
-    is_clone_agent_name)
+    is_clone_agent_name,
+)
 from code_puppy.command_line.model_picker_completion import load_model_names
 from code_puppy.command_line.pagination import (
     ensure_visible_page,
@@ -35,7 +37,8 @@ from code_puppy.command_line.pagination import (
 from code_puppy.config import (
     clear_agent_pinned_model,
     get_agent_pinned_model,
-    set_agent_pinned_model)
+    set_agent_pinned_model,
+)
 from code_puppy.messaging import emit_info, emit_success, emit_warning
 from code_puppy.tools.command_runner import set_awaiting_user_input
 from code_puppy.tools.common import arrow_select_async
@@ -138,8 +141,8 @@ def _get_pinned_model(agent_name: str) -> str | None:
 
 
 def _build_model_picker_choices(
-    pinned_model: str | None,
-    model_names: list[str]) -> list[str]:
+    pinned_model: str | None, model_names: list[str]
+) -> list[str]:
     """Build model picker choices with pinned/unpin indicators."""
     choices = ["✓ (unpin)" if not pinned_model else "  (unpin)"]
 
@@ -178,8 +181,8 @@ async def _select_pinned_model(agent_name: str) -> str | None:
 
     try:
         choice = await arrow_select_async(
-            f"Select a model to pin for '{agent_name}'",
-            choices)
+            f"Select a model to pin for '{agent_name}'", choices
+        )
     except KeyboardInterrupt:
         emit_info("Model pinning cancelled")
         return None
@@ -187,9 +190,7 @@ async def _select_pinned_model(agent_name: str) -> str | None:
     return _normalize_model_choice(choice)
 
 
-def _reload_agent_if_current(
-    agent_name: str,
-    pinned_model: str | None) -> None:
+def _reload_agent_if_current(agent_name: str, pinned_model: str | None) -> None:
     """Reload the current agent when its pinned model changes."""
     current_agent = get_current_agent()
     if not current_agent or current_agent.name != agent_name:
@@ -285,7 +286,8 @@ def _render_menu_panel(
     entries: list[tuple[str, str, str]],
     page: int,
     selected_idx: int,
-    current_agent_name: str) -> List:
+    current_agent_name: str,
+) -> List:
     """Render the left menu panel with pagination.
 
     Args:
@@ -358,8 +360,8 @@ def _render_menu_panel(
 
 
 def _render_preview_panel(
-    entry: tuple[str, str, str | None],
-    current_agent_name: str) -> List:
+    entry: tuple[str, str, str | None], current_agent_name: str
+) -> List:
     """Render the right preview panel with agent details.
 
     Args:
@@ -596,10 +598,8 @@ async def interactive_agent_picker() -> str | None:
 
     layout = Layout(root_container)
     app = Application(
-        layout=layout,
-        key_bindings=kb,
-        full_screen=False,
-        mouse_support=False)
+        layout=layout, key_bindings=kb, full_screen=False, mouse_support=False
+    )
 
     set_awaiting_user_input(True)
 

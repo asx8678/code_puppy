@@ -38,12 +38,14 @@ def mock_user_plugins_dir(tmp_path: Path) -> Path:
 def enable_user_plugins():
     """Mock the config to enable user plugins."""
     with patch("code_puppy.config.get_value") as mock_get_value:
+
         def mock_get_value_impl(key: str):
             if key == "enable_user_plugins":
                 return "true"
             if key == "allowed_user_plugins":
                 return None  # No allowlist restriction
             return None
+
         mock_get_value.side_effect = mock_get_value_impl
         yield mock_get_value
 
@@ -53,6 +55,7 @@ def reset_plugin_state():
     """Reset global plugin loader state before and after tests."""
     # Store original state
     from code_puppy import plugins as plugins_module
+
     original_discovered = plugins_module._PLUGINS_DISCOVERED
     original_registry = plugins_module._LAZY_PLUGIN_REGISTRY.copy()
     original_loaded = plugins_module._LOADED_PLUGINS.copy()
@@ -102,9 +105,9 @@ class TestPluginExceptionHandling:
         # Create register_callbacks.py that raises an exception
         callbacks_file = bad_plugin_dir / "register_callbacks.py"
         callbacks_file.write_text(
-            '''
+            """
 raise RuntimeError("Malicious plugin crashed during registration!")
-'''
+"""
         )
 
         # Should not raise - discovery phase only parses the file, doesn't execute
@@ -133,9 +136,9 @@ raise RuntimeError("Malicious plugin crashed during registration!")
         # Create register_callbacks.py that raises an exception
         callbacks_file = bad_plugin_dir / "register_callbacks.py"
         callbacks_file.write_text(
-            '''
+            """
 raise RuntimeError("Plugin crashed during exec_module!")
-'''
+"""
         )
 
         # Create the loader function
@@ -175,14 +178,16 @@ class TestPluginPathTraversal:
         mock_item.name = "evil..plugin"
         mock_item.is_dir.return_value = True
 
-        with patch.object(Path, 'iterdir', return_value=[mock_item]):
+        with patch.object(Path, "iterdir", return_value=[mock_item]):
             with caplog.at_level(logging.WARNING):
                 discovered = list(_discover_user_plugins(plugins_dir))
 
         # Plugin with '..' in name should not be discovered
         assert not any("evil..plugin" in str(p) for _, p in discovered)
         # Security warning should be logged
-        assert any("SECURITY" in msg and "evil..plugin" in msg for msg in caplog.messages)
+        assert any(
+            "SECURITY" in msg and "evil..plugin" in msg for msg in caplog.messages
+        )
 
     def test_forward_slash_plugin_name_rejected(
         self,
@@ -202,14 +207,16 @@ class TestPluginPathTraversal:
         mock_item.name = "evil/plugin"
         mock_item.is_dir.return_value = True
 
-        with patch.object(Path, 'iterdir', return_value=[mock_item]):
+        with patch.object(Path, "iterdir", return_value=[mock_item]):
             with caplog.at_level(logging.WARNING):
                 discovered = list(_discover_user_plugins(plugins_dir))
 
         # Plugin with '/' in name should not be discovered
         assert not any("evil/plugin" in str(p) for _, p in discovered)
         # Security warning should be logged
-        assert any("SECURITY" in msg and "evil/plugin" in msg for msg in caplog.messages)
+        assert any(
+            "SECURITY" in msg and "evil/plugin" in msg for msg in caplog.messages
+        )
 
     def test_backslash_plugin_name_rejected(
         self,
@@ -229,14 +236,16 @@ class TestPluginPathTraversal:
         mock_item.name = "evil\\plugin"
         mock_item.is_dir.return_value = True
 
-        with patch.object(Path, 'iterdir', return_value=[mock_item]):
+        with patch.object(Path, "iterdir", return_value=[mock_item]):
             with caplog.at_level(logging.WARNING):
                 discovered = list(_discover_user_plugins(plugins_dir))
 
         # Plugin with '\\' in name should not be discovered
         assert not any("evil\\plugin" in str(p) for _, p in discovered)
         # Security warning should be logged
-        assert any("SECURITY" in msg and "evil\\plugin" in msg for msg in caplog.messages)
+        assert any(
+            "SECURITY" in msg and "evil\\plugin" in msg for msg in caplog.messages
+        )
 
     def test_null_byte_plugin_name_rejected(
         self,
@@ -256,7 +265,7 @@ class TestPluginPathTraversal:
         mock_item.name = "evil\x00plugin"
         mock_item.is_dir.return_value = True
 
-        with patch.object(Path, 'iterdir', return_value=[mock_item]):
+        with patch.object(Path, "iterdir", return_value=[mock_item]):
             with caplog.at_level(logging.WARNING):
                 discovered = list(_discover_user_plugins(plugins_dir))
 
@@ -325,11 +334,11 @@ class TestPluginGlobalStateIsolation:
         # Create a plugin that modifies sys.modules
         callbacks_file = plugin_dir / "register_callbacks.py"
         callbacks_file.write_text(
-            '''
+            """
 import sys
 # This plugin can modify global state - no isolation
 sys.modules["__injected_by_malicious_plugin__"] = "compromised"
-'''
+"""
         )
 
         # Load the plugin
@@ -369,14 +378,13 @@ sys.modules["__injected_by_malicious_plugin__"] = "compromised"
         mock_item.name = "suspicious..plugin"
         mock_item.is_dir.return_value = True
 
-        with patch.object(Path, 'iterdir', return_value=[mock_item]):
+        with patch.object(Path, "iterdir", return_value=[mock_item]):
             with caplog.at_level(logging.WARNING):
                 list(_discover_user_plugins(plugins_dir))
 
         # Check that a security warning was logged
         security_warnings = [
-            msg for msg in caplog.messages
-            if "SECURITY" in msg and "suspicious" in msg
+            msg for msg in caplog.messages if "SECURITY" in msg and "suspicious" in msg
         ]
         assert len(security_warnings) > 0, "Expected security warning in logs"
 
@@ -489,7 +497,7 @@ register_callback("startup", _on_startup)
 
         # Should return the module, not None
         assert result is not None
-        assert hasattr(result, '_on_startup')
+        assert hasattr(result, "_on_startup")
 
     def test_multiple_valid_plugins_load(
         self,
@@ -508,14 +516,14 @@ register_callback("startup", _on_startup)
             plugin_dir = plugins_dir / f"valid_plugin_{i}"
             plugin_dir.mkdir()
             (plugin_dir / "register_callbacks.py").write_text(
-                f'''
+                f"""
 from code_puppy.callbacks import register_callback
 
 def _on_startup():
     pass
 
 register_callback("startup", _on_startup)
-'''
+"""
             )
 
         # Discover all plugins
@@ -645,14 +653,14 @@ class TestPluginLoaderIntegration:
         good_plugin_dir.mkdir()
         good_callbacks = good_plugin_dir / "register_callbacks.py"
         good_callbacks.write_text(
-            '''
+            """
 from code_puppy.callbacks import register_callback
 
 def _on_startup():
     pass
 
 register_callback("startup", _on_startup)
-'''
+"""
         )
 
         # Create a bad plugin that will raise on load
@@ -660,9 +668,9 @@ register_callback("startup", _on_startup)
         bad_plugin_dir.mkdir()
         bad_callbacks = bad_plugin_dir / "register_callbacks.py"
         bad_callbacks.write_text(
-            '''
+            """
 raise RuntimeError("Plugin failed!")
-'''
+"""
         )
 
         # Create a plugin that will be rejected due to symlink

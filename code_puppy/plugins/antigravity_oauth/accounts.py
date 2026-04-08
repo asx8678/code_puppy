@@ -1,6 +1,5 @@
 """Multi-account manager for Antigravity OAuth with load balancing."""
 
-
 import logging
 import time
 from dataclasses import dataclass, field
@@ -14,7 +13,8 @@ from .storage import (
     QuotaKey,
     RateLimitState,
     load_accounts,
-    save_accounts)
+    save_accounts,
+)
 from .token import RefreshParts, parse_refresh_parts
 
 logger = logging.getLogger(__name__)
@@ -86,7 +86,8 @@ class AccountManager:
     def __init__(
         self,
         initial_refresh_token: str | None = None,
-        stored: AccountStorage | None = None):
+        stored: AccountStorage | None = None,
+    ):
         self._accounts: list[ManagedAccount] = []
         self._cursor = 0
         self._current_index_by_family: dict[ModelFamily, int] = {
@@ -110,7 +111,8 @@ class AccountManager:
                 parts = RefreshParts(
                     refresh_token=acc.refresh_token,
                     project_id=acc.project_id,
-                    managed_project_id=acc.managed_project_id)
+                    managed_project_id=acc.managed_project_id,
+                )
 
                 # Convert rate limits from storage
                 rate_limits: dict[str, float] = {}
@@ -133,7 +135,8 @@ class AccountManager:
                         access_token=None,  # Tokens loaded separately
                         expires_at=None,
                         rate_limit_reset_times=rate_limits,
-                        last_switch_reason=acc.last_switch_reason)
+                        last_switch_reason=acc.last_switch_reason,
+                    )
                 )
 
             if self._accounts:
@@ -159,7 +162,8 @@ class AccountManager:
                     added_at=now,
                     last_used=0,
                     parts=initial_parts,
-                    rate_limit_reset_times={})
+                    rate_limit_reset_times={},
+                )
             )
             self._current_index_by_family["claude"] = 0
             self._current_index_by_family["gemini"] = 0
@@ -182,8 +186,8 @@ class AccountManager:
         return list(self._accounts)
 
     def get_current_account_for_family(
-        self,
-        family: ModelFamily) -> ManagedAccount | None:
+        self, family: ModelFamily
+    ) -> ManagedAccount | None:
         """Get the current active account for a model family."""
         idx = self._current_index_by_family.get(family, -1)
         if 0 <= idx < len(self._accounts):
@@ -191,8 +195,8 @@ class AccountManager:
         return None
 
     def get_current_or_next_for_family(
-        self,
-        family: ModelFamily) -> ManagedAccount | None:
+        self, family: ModelFamily
+    ) -> ManagedAccount | None:
         """Get current account if not rate limited, otherwise find next available."""
         current = self.get_current_account_for_family(family)
 
@@ -229,25 +233,23 @@ class AccountManager:
         account: ManagedAccount,
         retry_after_ms: float,
         family: ModelFamily,
-        header_style: HeaderStyle = "antigravity") -> None:
+        header_style: HeaderStyle = "antigravity",
+    ) -> None:
         """Mark an account as rate limited."""
         key = _get_quota_key(family, header_style)
         account.rate_limit_reset_times[key] = _now_ms() + retry_after_ms
 
     def is_rate_limited_for_header_style(
-        self,
-        account: ManagedAccount,
-        family: ModelFamily,
-        header_style: HeaderStyle) -> bool:
+        self, account: ManagedAccount, family: ModelFamily, header_style: HeaderStyle
+    ) -> bool:
         """Check if account is rate limited for a specific header style."""
         _clear_expired_rate_limits(account)
         key = _get_quota_key(family, header_style)
         return _is_rate_limited_for_quota_key(account, key)
 
     def get_available_header_style(
-        self,
-        account: ManagedAccount,
-        family: ModelFamily) -> HeaderStyle | None:
+        self, account: ManagedAccount, family: ModelFamily
+    ) -> HeaderStyle | None:
         """Get an available header style for the account, or None if all limited."""
         _clear_expired_rate_limits(account)
 
@@ -298,7 +300,8 @@ class AccountManager:
         self,
         refresh_token: str,
         email: str | None = None,
-        project_id: str | None = None) -> ManagedAccount:
+        project_id: str | None = None,
+    ) -> ManagedAccount:
         """Add a new account to the pool."""
         now = _now_ms()
         parts = parse_refresh_parts(refresh_token)
@@ -311,7 +314,8 @@ class AccountManager:
             added_at=now,
             last_used=0,
             parts=parts,
-            rate_limit_reset_times={})
+            rate_limit_reset_times={},
+        )
         self._accounts.append(account)
 
         # Set as active if this is the first account
@@ -364,7 +368,8 @@ class AccountManager:
             rate_limits = RateLimitState(
                 claude=acc.rate_limit_reset_times.get("claude"),
                 gemini_antigravity=acc.rate_limit_reset_times.get("gemini-antigravity"),
-                gemini_cli=acc.rate_limit_reset_times.get("gemini-cli"))
+                gemini_cli=acc.rate_limit_reset_times.get("gemini-cli"),
+            )
 
             accounts.append(
                 AccountMetadata(
@@ -375,7 +380,8 @@ class AccountManager:
                     added_at=acc.added_at,
                     last_used=acc.last_used,
                     last_switch_reason=acc.last_switch_reason,
-                    rate_limit_reset_times=rate_limits)
+                    rate_limit_reset_times=rate_limits,
+                )
             )
 
         storage = AccountStorage(
@@ -385,6 +391,7 @@ class AccountManager:
             active_index_by_family={
                 "claude": claude_idx,
                 "gemini": gemini_idx,
-            })
+            },
+        )
 
         save_accounts(storage)

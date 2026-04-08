@@ -4,7 +4,6 @@ This module provides non-streaming display functions for rendering
 agent results and other structured content using rich.markdown for markdown.
 """
 
-
 from rich.console import Console
 
 from code_puppy.config import get_banner_color, get_subagent_verbose
@@ -15,7 +14,8 @@ def display_non_streamed_result(
     content: str,
     console: Console | None = None,
     banner_text: str = "AGENT RESPONSE",
-    banner_name: str = "agent_response") -> None:
+    banner_name: str = "agent_response",
+) -> None:
     """Display a non-streamed result with markdown rendering via rich.markdown.
 
     This function renders markdown content using rich.markdown.Markdown for beautiful

@@ -279,6 +279,7 @@ def test_load_raw_bytes_rejects_pickle_for_security():
 
     # SECURITY FIX #zvx9: Pickle is rejected entirely, not deprecated
     import pytest
+
     with pytest.raises(ValueError, match="pickle|RCE|security|CVE"):
         _load_raw_bytes(legacy_bytes)
 
@@ -361,7 +362,9 @@ def test_save_session_async_submits_to_background_thread(
     elapsed = time.time() - start_time
 
     # Should return immediately (not wait for actual file I/O)
-    assert elapsed < 0.1, f"save_session_async blocked for {elapsed}s, expected non-blocking"
+    assert elapsed < 0.1, (
+        f"save_session_async blocked for {elapsed}s, expected non-blocking"
+    )
 
     # Wait for background thread to complete (with timeout)
     max_wait = 2.0

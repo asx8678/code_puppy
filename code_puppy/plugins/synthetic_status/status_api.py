@@ -1,6 +1,5 @@
 """HTTP helpers for Synthetic quota status."""
 
-
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -57,8 +56,8 @@ def _parse_renews_at(value: object) -> datetime | None:
 
 
 def fetch_synthetic_quota(
-    api_key: str,
-    timeout_seconds: float = 15.0) -> SyntheticQuotaResult:
+    api_key: str, timeout_seconds: float = 15.0
+) -> SyntheticQuotaResult:
     """Fetch and validate Synthetic subscription quota status."""
     if not api_key:
         return SyntheticQuotaResult(error="SYN_API_KEY is not configured.")
@@ -70,9 +69,8 @@ def fetch_synthetic_quota(
 
     try:
         response = requests.get(
-            SYNTHETIC_QUOTAS_URL,
-            headers=headers,
-            timeout=timeout_seconds)
+            SYNTHETIC_QUOTAS_URL, headers=headers, timeout=timeout_seconds
+        )
     except requests.Timeout:
         return SyntheticQuotaResult(error="Synthetic API request timed out.")
     except requests.ConnectionError:
@@ -137,7 +135,6 @@ def fetch_synthetic_quota(
 
     return SyntheticQuotaResult(
         quota=SyntheticQuota(
-            limit=limit,
-            requests_used=requests_used,
-            renews_at_utc=renews_at)
+            limit=limit, requests_used=requests_used, renews_at_utc=renews_at
+        )
     )

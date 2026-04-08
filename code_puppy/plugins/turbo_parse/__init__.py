@@ -17,7 +17,7 @@ __all__ = [
 
 def is_turbo_parse_available() -> bool:
     """Check if the turbo_parse Rust module is available.
-    
+
     Returns:
         True if the Rust module is installed and functional, False otherwise.
     """

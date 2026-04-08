@@ -157,7 +157,8 @@ def prompt_and_install_custom_server(manager) -> bool:
             name=server_name,
             type=server_type,
             enabled=True,
-            config=config_dict)
+            config=config_dict,
+        )
 
         # Register with manager
         server_id = manager.register_server(server_config)

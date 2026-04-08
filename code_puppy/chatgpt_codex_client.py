@@ -14,7 +14,6 @@ Removes unsupported parameters:
 - "verbosity" - Not supported by Codex API
 """
 
-
 import json
 import logging
 import time
@@ -81,7 +80,7 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                                 method=request.method,
                                 url=request.url,
                                 headers=dict(request.headers),
-                                content=updated
+                                content=updated,
                             )
                             used_cache = True
 
@@ -112,7 +111,8 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                 self._request_build_time_saved_ms += estimated_saved
                 logger.debug(
                     "Request optimized via cache (took %.2fms, saved ~%.2fms)",
-                    rebuild_time, estimated_saved
+                    rebuild_time,
+                    estimated_saved,
                 )
 
         # Make the actual request
@@ -352,12 +352,13 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
             status_code=response.status_code,
             headers=response.headers,
             content=body_bytes,
-            request=response.request)
+            request=response.request,
+        )
         return new_response
 
     def get_performance_stats(self) -> dict[str, Any]:
         """Get performance statistics for this client.
-        
+
         Returns:
             Dict with performance metrics including:
             - requests_optimized: Number of requests that used cache
@@ -373,12 +374,12 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
 
 
 def create_codex_async_client(
-    headers: dict[str, str] | None = None,
-    verify: str | bool = True,
-    **kwargs: Any) -> ChatGPTCodexAsyncClient:
+    headers: dict[str, str] | None = None, verify: str | bool = True, **kwargs: Any
+) -> ChatGPTCodexAsyncClient:
     """Create a ChatGPT Codex async client with proper configuration."""
     return ChatGPTCodexAsyncClient(
         headers=headers,
         verify=verify,
         timeout=httpx.Timeout(300.0, connect=30.0),
-        **kwargs)
+        **kwargs,
+    )

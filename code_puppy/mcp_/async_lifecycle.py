@@ -45,7 +45,8 @@ class AsyncServerLifecycleManager:
     async def start_server(
         self,
         server_id: str,
-        server: MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP) -> bool:
+        server: MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP,
+    ) -> bool:
         """
         Start an MCP server and maintain its context.
 
@@ -78,7 +79,8 @@ class AsyncServerLifecycleManager:
             # Create a task that will manage this server's lifecycle
             task = asyncio.create_task(
                 self._server_lifecycle_task(server_id, server, ready_event),
-                name=f"mcp_server_{server_id}")
+                name=f"mcp_server_{server_id}",
+            )
 
         # Release the lock while waiting for the server to become ready
         try:
@@ -107,7 +109,8 @@ class AsyncServerLifecycleManager:
         self,
         server_id: str,
         server: MCPServerSSE | MCPServerStdio | MCPServerStreamableHTTP,
-        ready_event: asyncio.Event) -> None:
+        ready_event: asyncio.Event,
+    ) -> None:
         """
         Task that manages a server's lifecycle.
 
@@ -136,7 +139,8 @@ class AsyncServerLifecycleManager:
                     server=server,
                     exit_stack=exit_stack,
                     start_time=datetime.now(),
-                    task=asyncio.current_task())
+                    task=asyncio.current_task(),
+                )
 
             # Signal that the server is registered and ready
             ready_event.set()

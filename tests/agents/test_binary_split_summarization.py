@@ -80,6 +80,7 @@ def _make_response(content: str, token_size: int = None) -> ModelResponse:
 
 # ─── _estimate_batch_tokens ───────────────────────────────────────────
 
+
 class TestEstimateBatchTokens:
     def test_empty(self, agent):
         assert agent._estimate_batch_tokens([]) == 0
@@ -97,6 +98,7 @@ class TestEstimateBatchTokens:
 
 
 # ─── _summarize_single_batch ──────────────────────────────────────────
+
 
 class TestSummarizeSingleBatch:
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
@@ -129,6 +131,7 @@ class TestSummarizeSingleBatch:
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
     def test_summarization_error_propagates(self, mock_sync, agent):
         from code_puppy.summarization_agent import SummarizationError
+
         mock_sync.side_effect = SummarizationError("boom")
 
         with pytest.raises(SummarizationError):
@@ -136,6 +139,7 @@ class TestSummarizeSingleBatch:
 
 
 # ─── _find_safe_summarize_split ───────────────────────────────────────
+
 
 class TestFindSafeSummarizeSplit:
     def test_no_tool_calls_returns_target(self, agent):
@@ -152,19 +156,23 @@ class TestFindSafeSummarizeSplit:
         msgs = [
             _make_msg("user message"),
             ModelResponse(
-                parts=[ToolCallPart(
-                    tool_name="my_tool",
-                    args={"x": 1},
-                    tool_call_id="tc-1",
-                )],
+                parts=[
+                    ToolCallPart(
+                        tool_name="my_tool",
+                        args={"x": 1},
+                        tool_call_id="tc-1",
+                    )
+                ],
                 model_name="test-model",
             ),
             ModelRequest(
-                parts=[ToolReturnPart(
-                    tool_name="my_tool",
-                    content="result",
-                    tool_call_id="tc-1",
-                )]
+                parts=[
+                    ToolReturnPart(
+                        tool_name="my_tool",
+                        content="result",
+                        tool_call_id="tc-1",
+                    )
+                ]
             ),
             _make_msg("after tools"),
         ]
@@ -177,15 +185,23 @@ class TestFindSafeSummarizeSplit:
         """When tool_call and tool_return are both before the split, no adjustment."""
         msgs = [
             ModelResponse(
-                parts=[ToolCallPart(
-                    tool_name="t", args={}, tool_call_id="tc-2",
-                )],
+                parts=[
+                    ToolCallPart(
+                        tool_name="t",
+                        args={},
+                        tool_call_id="tc-2",
+                    )
+                ],
                 model_name="test-model",
             ),
             ModelRequest(
-                parts=[ToolReturnPart(
-                    tool_name="t", content="r", tool_call_id="tc-2",
-                )]
+                parts=[
+                    ToolReturnPart(
+                        tool_name="t",
+                        content="r",
+                        tool_call_id="tc-2",
+                    )
+                ]
             ),
             _make_msg("after tools 1"),
             _make_msg("after tools 2"),
@@ -195,6 +211,7 @@ class TestFindSafeSummarizeSplit:
 
 
 # ─── _binary_split_summarize ─────────────────────────────────────────
+
 
 class TestBinarySplitSummarize:
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
@@ -282,9 +299,12 @@ class TestBinarySplitSummarize:
 
 # ─── summarize_messages (public API) ──────────────────────────────────
 
+
 class TestSummarizeMessages:
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=100000)
+    @patch(
+        "code_puppy.agents.base_agent.get_protected_token_count", return_value=100000
+    )
     @patch("code_puppy.agents.base_agent.emit_info")
     def test_nothing_to_summarize(self, mock_info, mock_tokens, mock_sync, agent):
         """With only a system message, nothing should be summarized."""
@@ -324,6 +344,7 @@ class TestSummarizeMessages:
         self, mock_error, mock_info, mock_tokens, mock_sync, agent
     ):
         from code_puppy.summarization_agent import SummarizationError
+
         mock_sync.side_effect = SummarizationError(
             "LLM failed", original_error=RuntimeError("inner")
         )
@@ -394,8 +415,7 @@ class TestSummarizeMessages:
     ):
         """Verify that _binary_split_summarize is called (not direct sync)."""
         with patch.object(
-            agent, "_binary_split_summarize",
-            return_value=[_make_msg("summary")]
+            agent, "_binary_split_summarize", return_value=[_make_msg("summary")]
         ) as mock_split:
             msgs = [
                 _make_msg("system"),

@@ -52,7 +52,7 @@ def standalone_function():
     """A standalone function."""
     return 42
 '''
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         f.write(content)
         path = f.name
 
@@ -67,26 +67,26 @@ def standalone_function():
 @pytest.fixture
 def sample_directory(tmp_path):
     """Create a sample directory structure for testing."""
-    (tmp_path / "main.py").write_text('''
+    (tmp_path / "main.py").write_text("""
 def main():
     print("Hello")
 
 class App:
     def run(self):
         main()
-''')
+""")
 
-    (tmp_path / "utils.py").write_text('''
+    (tmp_path / "utils.py").write_text("""
 def helper():
     return "helper"
-''')
+""")
 
     subdir = tmp_path / "subdir"
     subdir.mkdir()
-    (subdir / "module.py").write_text('''
+    (subdir / "module.py").write_text("""
 class SubModule:
     pass
-''')
+""")
 
     (tmp_path / "readme.txt").write_text("Hello")
 
@@ -166,7 +166,7 @@ class TestToolRegistration:
 
         # The function should exist and have docstring
         assert tool_func is not None
-        assert hasattr(tool_func, '__doc__')
+        assert hasattr(tool_func, "__doc__")
 
     def test_register_explore_directory_tool(self, mock_agent, mock_run_context):
         """Test explore_directory tool registration."""
@@ -175,7 +175,7 @@ class TestToolRegistration:
         assert len(mock_agent._registered_tools) == 1
         tool_func = mock_agent._registered_tools[0]
         assert tool_func is not None
-        assert 'explore' in tool_func.__doc__.lower()
+        assert "explore" in tool_func.__doc__.lower()
 
     def test_register_get_file_outline_tool(self, mock_agent, mock_run_context):
         """Test get_file_outline tool registration."""
@@ -184,7 +184,7 @@ class TestToolRegistration:
         assert len(mock_agent._registered_tools) == 1
         tool_func = mock_agent._registered_tools[0]
         assert tool_func is not None
-        assert 'outline' in tool_func.__doc__.lower()
+        assert "outline" in tool_func.__doc__.lower()
 
 
 # -----------------------------------------------------------------------------
@@ -260,7 +260,11 @@ class TestCommandHandlers:
         assert "Outline" in result or "Error" in result
         # Should show symbols
         if "Error" not in result:
-            assert "MyClass" in result or "standalone_function" in result or "python" in result.lower()
+            assert (
+                "MyClass" in result
+                or "standalone_function" in result
+                or "python" in result.lower()
+            )
 
     def test_format_file_context_with_symbols(self, sample_python_file):
         """Test formatting file context with symbols."""
@@ -273,7 +277,10 @@ class TestCommandHandlers:
         formatted = _format_file_context(context_dict)
 
         assert isinstance(formatted, str)
-        assert sample_python_file.split('/')[-1].replace('.py', '') in formatted or "📄" in formatted
+        assert (
+            sample_python_file.split("/")[-1].replace(".py", "") in formatted
+            or "📄" in formatted
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -361,22 +368,28 @@ class TestErrorHandling:
 
     def test_handle_file_with_exception(self):
         """Test graceful handling of exceptions in file exploration."""
-        with patch('code_puppy.plugins.code_explorer.register_callbacks._get_code_context',
-                   side_effect=Exception("Test error")):
+        with patch(
+            "code_puppy.plugins.code_explorer.register_callbacks._get_code_context",
+            side_effect=Exception("Test error"),
+        ):
             result = _handle_explore_file("/some/path.py")
             assert "Error" in result or "❌" in result
 
     def test_handle_dir_with_exception(self):
         """Test graceful handling of exceptions in directory exploration."""
-        with patch('code_puppy.plugins.code_explorer.register_callbacks._explore_directory',
-                   side_effect=Exception("Test error")):
+        with patch(
+            "code_puppy.plugins.code_explorer.register_callbacks._explore_directory",
+            side_effect=Exception("Test error"),
+        ):
             result = _handle_explore_dir("/some/dir")
             assert "Error" in result or "❌" in result
 
     def test_handle_outline_with_exception(self):
         """Test graceful handling of exceptions in outline extraction."""
-        with patch('code_puppy.plugins.code_explorer.register_callbacks._get_file_outline',
-                   side_effect=Exception("Test error")):
+        with patch(
+            "code_puppy.plugins.code_explorer.register_callbacks._get_file_outline",
+            side_effect=Exception("Test error"),
+        ):
             result = _handle_explore_outline("/some/path.py")
             assert "Error" in result or "❌" in result
 

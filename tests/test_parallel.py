@@ -79,12 +79,15 @@ class TestMapWithConcurrency:
     @pytest.mark.asyncio
     async def test_result_ordering_matches_input(self):
         """Results must be in the same order as the input regardless of completion order."""
+
         # Give earlier-indexed items *longer* sleeps so they finish last.
         async def slow_first(item: int, idx: int) -> str:
             await asyncio.sleep(0.01 * (5 - idx))  # idx 0 is slowest
             return f"item-{item}"
 
-        result = await map_with_concurrency(list(range(6)), concurrency=6, fn=slow_first)
+        result = await map_with_concurrency(
+            list(range(6)), concurrency=6, fn=slow_first
+        )
 
         assert result.results == [f"item-{i}" for i in range(6)]
 
@@ -135,7 +138,9 @@ class TestAbortSignal:
             called.append(item)
             return item
 
-        result = await map_with_concurrency(list(range(5)), concurrency=2, fn=fn, signal=signal)
+        result = await map_with_concurrency(
+            list(range(5)), concurrency=2, fn=fn, signal=signal
+        )
 
         assert result.aborted is True
         assert all(r is None for r in result.results)
@@ -157,6 +162,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_error_propagates(self):
         """An exception from fn is re-raised to the caller."""
+
         async def fn(item: int, idx: int) -> int:
             if item == 3:
                 raise ValueError("bad item 3")

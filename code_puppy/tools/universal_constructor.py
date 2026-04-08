@@ -20,7 +20,8 @@ from code_puppy.plugins.universal_constructor.models import (
     UCCreateOutput,
     UCInfoOutput,
     UCListOutput,
-    UCUpdateOutput)
+    UCUpdateOutput,
+)
 
 
 class UniversalConstructorOutput(BaseModel):
@@ -56,9 +57,8 @@ class UniversalConstructorOutput(BaseModel):
 def _stub_not_implemented(action: str) -> UniversalConstructorOutput:
     """Return a stub response for unimplemented actions."""
     return UniversalConstructorOutput(
-        action=action,
-        success=False,
-        error="Not implemented yet")
+        action=action, success=False, error="Not implemented yet"
+    )
 
 
 def _run_ruff_format(file_path) -> str | None:
@@ -75,7 +75,8 @@ def _run_ruff_format(file_path) -> str | None:
             ["ruff", "format", str(file_path)],
             capture_output=True,
             text=True,
-            timeout=10)
+            timeout=10,
+        )
         if result.returncode != 0:
             return f"ruff format failed: {result.stderr.strip()}"
         return None
@@ -109,7 +110,8 @@ def _emit_uc_message(
     success: bool,
     summary: str,
     tool_name: str | None = None,
-    details: str | None = None) -> None:
+    details: str | None = None,
+) -> None:
     """Emit a UniversalConstructorMessage to the message bus.
 
     Args:
@@ -125,7 +127,8 @@ def _emit_uc_message(
         tool_name=tool_name,
         success=success,
         summary=summary,
-        details=details)
+        details=details,
+    )
     bus.emit(msg)
 
 
@@ -135,7 +138,8 @@ async def universal_constructor_impl(
     tool_name: str | None = None,
     tool_args: dict | None = None,
     python_code: str | None = None,
-    description: str | None = None) -> UniversalConstructorOutput:
+    description: str | None = None,
+) -> UniversalConstructorOutput:
     """Implementation of the universal_constructor tool.
 
     Routes to appropriate action handler based on the action parameter.
@@ -170,9 +174,8 @@ async def universal_constructor_impl(
         result = _handle_info_action(context, tool_name)
     else:
         result = UniversalConstructorOutput(
-            action=action,
-            success=False,
-            error=f"Unknown action: {action}")
+            action=action, success=False, error=f"Unknown action: {action}"
+        )
 
     # Emit the banner message after the action completes
     summary = _build_summary(result)
@@ -181,7 +184,8 @@ async def universal_constructor_impl(
         success=result.success,
         summary=summary,
         tool_name=tool_name,
-        details=result.error if not result.success else None)
+        details=result.error if not result.success else None,
+    )
 
     return result
 
@@ -239,23 +243,23 @@ def _handle_list_action(context: RunContext) -> UniversalConstructorOutput:
             list_result=UCListOutput(
                 tools=enabled_tools,
                 total_count=len(all_tools),
-                enabled_count=len(enabled_tools)))
+                enabled_count=len(enabled_tools),
+            ),
+        )
     except Exception as e:
         return UniversalConstructorOutput(
             action="list",
             success=False,
             error=f"Failed to list tools: {e}",
             list_result=UCListOutput(
-                tools=[],
-                total_count=0,
-                enabled_count=0,
-                error=str(e)))
+                tools=[], total_count=0, enabled_count=0, error=str(e)
+            ),
+        )
 
 
 def _handle_call_action(
-    context: RunContext,
-    tool_name: str | None,
-    tool_args: dict | None) -> UniversalConstructorOutput:
+    context: RunContext, tool_name: str | None, tool_args: dict | None
+) -> UniversalConstructorOutput:
     """Handle the 'call' action - execute a UC tool.
 
     Validates the tool exists and is enabled, then executes it with a timeout.
@@ -270,9 +274,8 @@ def _handle_call_action(
     """
     if not tool_name:
         return UniversalConstructorOutput(
-            action="call",
-            success=False,
-            error="tool_name is required for call action")
+            action="call", success=False, error="tool_name is required for call action"
+        )
 
     from code_puppy.plugins.universal_constructor.registry import get_registry
 
@@ -281,15 +284,13 @@ def _handle_call_action(
 
     if not tool:
         return UniversalConstructorOutput(
-            action="call",
-            success=False,
-            error=f"Tool '{tool_name}' not found")
+            action="call", success=False, error=f"Tool '{tool_name}' not found"
+        )
 
     if not tool.meta.enabled:
         return UniversalConstructorOutput(
-            action="call",
-            success=False,
-            error=f"Tool '{tool_name}' is disabled")
+            action="call", success=False, error=f"Tool '{tool_name}' is disabled"
+        )
 
     # Read source for preview
     source_preview = None
@@ -307,7 +308,8 @@ def _handle_call_action(
         return UniversalConstructorOutput(
             action="call",
             success=False,
-            error=f"Could not load function for '{tool_name}'")
+            error=f"Could not load function for '{tool_name}'",
+        )
 
     # Handle tool_args being passed as a JSON string (XML marshaling issue)
     args = tool_args or {}
@@ -320,12 +322,14 @@ def _handle_call_action(
             return UniversalConstructorOutput(
                 action="call",
                 success=False,
-                error=f"Invalid tool_args: expected dict or JSON string, got: {args[:100]}")
+                error=f"Invalid tool_args: expected dict or JSON string, got: {args[:100]}",
+            )
     if not isinstance(args, dict):
         return UniversalConstructorOutput(
             action="call",
             success=False,
-            error=f"tool_args must be a dict, got {type(args).__name__}")
+            error=f"tool_args must be a dict, got {type(args).__name__}",
+        )
     start_time = time.time()
 
     try:
@@ -344,30 +348,34 @@ def _handle_call_action(
                 tool_name=tool_name,
                 result=result,
                 execution_time=execution_time,
-                source_preview=source_preview))
+                source_preview=source_preview,
+            ),
+        )
     except FuturesTimeoutError:
         return UniversalConstructorOutput(
             action="call",
             success=False,
-            error=f"Tool '{tool_name}' timed out after 30s")
+            error=f"Tool '{tool_name}' timed out after 30s",
+        )
     except TypeError as e:
         # Invalid arguments
         return UniversalConstructorOutput(
             action="call",
             success=False,
-            error=f"Invalid arguments for '{tool_name}': {e!s}")
+            error=f"Invalid arguments for '{tool_name}': {e!s}",
+        )
     except Exception as e:
         return UniversalConstructorOutput(
-            action="call",
-            success=False,
-            error=f"Tool execution failed: {e!s}")
+            action="call", success=False, error=f"Tool execution failed: {e!s}"
+        )
 
 
 def _handle_create_action(
     context: RunContext,
     tool_name: str | None,
     python_code: str | None,
-    description: str | None) -> UniversalConstructorOutput:
+    description: str | None,
+) -> UniversalConstructorOutput:
     """Handle the 'create' action - create a new UC tool.
 
     Creates a new tool from Python source code. The code can either include
@@ -400,23 +408,24 @@ def _handle_create_action(
         _validate_tool_meta,
         check_dangerous_patterns,
         extract_function_info,
-        validate_syntax)
+        validate_syntax,
+    )
 
     # Validate python_code is provided
     if not python_code or not python_code.strip():
         return UniversalConstructorOutput(
             action="create",
             success=False,
-            error="python_code is required for create action")
+            error="python_code is required for create action",
+        )
 
     # Validate syntax
     syntax_result = validate_syntax(python_code)
     if not syntax_result.valid:
         error_msg = "; ".join(syntax_result.errors)
         return UniversalConstructorOutput(
-            action="create",
-            success=False,
-            error=f"Syntax error in code: {error_msg}")
+            action="create", success=False, error=f"Syntax error in code: {error_msg}"
+        )
 
     # Extract function info
     func_result = extract_function_info(python_code)
@@ -424,7 +433,8 @@ def _handle_create_action(
         return UniversalConstructorOutput(
             action="create",
             success=False,
-            error="No functions found in code - tool must have at least one function")
+            error="No functions found in code - tool must have at least one function",
+        )
 
     # Get the first function as the main tool function
     main_func = func_result.functions[0]
@@ -454,7 +464,8 @@ def _handle_create_action(
         return UniversalConstructorOutput(
             action="create",
             success=False,
-            error="Could not determine tool name - provide tool_name or include TOOL_META in code")
+            error="Could not determine tool name - provide tool_name or include TOOL_META in code",
+        )
 
     # Build file path based on namespace
     if final_namespace:
@@ -476,7 +487,8 @@ def _handle_create_action(
             return UniversalConstructorOutput(
                 action="create",
                 success=False,
-                error="Invalid TOOL_META: " + "; ".join(meta_errors))
+                error="Invalid TOOL_META: " + "; ".join(meta_errors),
+            )
         # Code already has TOOL_META, use as-is
         final_code = python_code
         # Collect any validation warnings
@@ -511,9 +523,8 @@ def _handle_create_action(
         file_path.write_text(final_code, encoding="utf-8")
     except Exception as e:
         return UniversalConstructorOutput(
-            action="create",
-            success=False,
-            error=f"Failed to write tool file: {e}")
+            action="create", success=False, error=f"Failed to write tool file: {e}"
+        )
 
     # Run ruff format on the new file
     format_warning = _run_ruff_format(file_path)
@@ -542,14 +553,17 @@ def _handle_create_action(
             tool_name=full_name,
             source_path=str(file_path),
             preview=_generate_preview(formatted_code),
-            validation_warnings=validation_warnings))
+            validation_warnings=validation_warnings,
+        ),
+    )
 
 
 def _handle_update_action(
     context: RunContext,
     tool_name: str | None,
     python_code: str | None,
-    description: str | None) -> UniversalConstructorOutput:
+    description: str | None,
+) -> UniversalConstructorOutput:
     """Handle the 'update' action - modify an existing UC tool.
 
     Replaces an existing tool's code with new Python source code.
@@ -574,29 +588,31 @@ def _handle_update_action(
     from code_puppy.plugins.universal_constructor.sandbox import (
         _extract_tool_meta,
         _validate_tool_meta,
-        validate_syntax)
+        validate_syntax,
+    )
 
     if not tool_name:
         return UniversalConstructorOutput(
             action="update",
             success=False,
-            error="tool_name is required for update action")
+            error="tool_name is required for update action",
+        )
 
     # python_code is required for updates
     if not python_code:
         return UniversalConstructorOutput(
             action="update",
             success=False,
-            error="python_code is required for update action")
+            error="python_code is required for update action",
+        )
 
     registry = get_registry()
     tool = registry.get_tool(tool_name)
 
     if not tool:
         return UniversalConstructorOutput(
-            action="update",
-            success=False,
-            error=f"Tool '{tool_name}' not found")
+            action="update", success=False, error=f"Tool '{tool_name}' not found"
+        )
 
     source_path = tool.source_path
     source_path_obj = Path(source_path) if source_path else None
@@ -604,7 +620,8 @@ def _handle_update_action(
         return UniversalConstructorOutput(
             action="update",
             success=False,
-            error="Tool has no source path or file does not exist")
+            error="Tool has no source path or file does not exist",
+        )
 
     try:
         # Validate new code syntax
@@ -614,7 +631,8 @@ def _handle_update_action(
             return UniversalConstructorOutput(
                 action="update",
                 success=False,
-                error=f"Syntax error in new code: {error_msg}")
+                error=f"Syntax error in new code: {error_msg}",
+            )
 
         # Validate TOOL_META exists in new code
         new_meta = _extract_tool_meta(python_code)
@@ -622,7 +640,8 @@ def _handle_update_action(
             return UniversalConstructorOutput(
                 action="update",
                 success=False,
-                error="New code must contain a valid TOOL_META dictionary")
+                error="New code must contain a valid TOOL_META dictionary",
+            )
 
         # Validate TOOL_META has required fields
         meta_errors = _validate_tool_meta(new_meta)
@@ -630,7 +649,8 @@ def _handle_update_action(
             return UniversalConstructorOutput(
                 action="update",
                 success=False,
-                error="Invalid TOOL_META: " + "; ".join(meta_errors))
+                error="Invalid TOOL_META: " + "; ".join(meta_errors),
+            )
 
         # Write updated code
         source_path_obj.write_text(python_code, encoding="utf-8")
@@ -657,18 +677,19 @@ def _handle_update_action(
                 tool_name=tool_name,
                 source_path=source_path,
                 preview=_generate_preview(formatted_code),
-                changes_applied=changes))
+                changes_applied=changes,
+            ),
+        )
 
     except Exception as e:
         return UniversalConstructorOutput(
-            action="update",
-            success=False,
-            error=f"Failed to update tool: {e}")
+            action="update", success=False, error=f"Failed to update tool: {e}"
+        )
 
 
 def _handle_info_action(
-    context: RunContext,
-    tool_name: str | None) -> UniversalConstructorOutput:
+    context: RunContext, tool_name: str | None
+) -> UniversalConstructorOutput:
     """Handle the 'info' action - get detailed tool information.
 
     Retrieves comprehensive information about a UC tool including its
@@ -687,18 +708,16 @@ def _handle_info_action(
 
     if not tool_name:
         return UniversalConstructorOutput(
-            action="info",
-            success=False,
-            error="tool_name is required for info action")
+            action="info", success=False, error="tool_name is required for info action"
+        )
 
     registry = get_registry()
     tool = registry.get_tool(tool_name)
 
     if not tool:
         return UniversalConstructorOutput(
-            action="info",
-            success=False,
-            error=f"Tool '{tool_name}' not found")
+            action="info", success=False, error=f"Tool '{tool_name}' not found"
+        )
 
     # Read source code from file
     source_code = ""
@@ -715,10 +734,8 @@ def _handle_info_action(
     return UniversalConstructorOutput(
         action="info",
         success=True,
-        info_result=UCInfoOutput(
-            success=True,
-            tool=tool,
-            source_code=source_code))
+        info_result=UCInfoOutput(success=True, tool=tool, source_code=source_code),
+    )
 
 
 def register_universal_constructor(agent):
@@ -735,7 +752,8 @@ def register_universal_constructor(agent):
         tool_name: str | None = None,
         tool_args: dict | None = None,
         python_code: str | None = None,
-        description: str | None = None) -> UniversalConstructorOutput:
+        description: str | None = None,
+    ) -> UniversalConstructorOutput:
         """Universal Constructor - Your gateway to unlimited capabilities.
 
         **YOU CAN BUILD ANYTHING.** The Universal Constructor empowers you to create

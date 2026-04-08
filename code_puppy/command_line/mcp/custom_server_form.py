@@ -13,15 +13,11 @@ try:
     from prompt_toolkit.application import Application
     from prompt_toolkit.filters import Condition
     from prompt_toolkit.key_binding import KeyBindings
-    from prompt_toolkit.layout import (
-        Dimension,
-        HSplit,
-        Layout,
-        VSplit,
-        Window)
+    from prompt_toolkit.layout import Dimension, HSplit, Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.lexers import PygmentsLexer
     from prompt_toolkit.widgets import Frame, TextArea
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -77,7 +73,8 @@ class CustomServerForm:
         edit_mode: bool = False,
         existing_name: str = "",
         existing_type: str = "stdio",
-        existing_config: dict | None = None):
+        existing_config: dict | None = None,
+    ):
         """Initialize the custom server form.
 
         Args:
@@ -378,7 +375,8 @@ class CustomServerForm:
                         name=server_name,
                         type=server_type,
                         enabled=True,
-                        config=config_dict)
+                        config=config_dict,
+                    )
 
                     # Update the server in the manager
                     success = self.manager.update_server(
@@ -399,7 +397,8 @@ class CustomServerForm:
                         name=server_name,
                         type=server_type,
                         enabled=True,
-                        config=config_dict)
+                        config=config_dict,
+                    )
                     server_id = self.manager.register_server(server_config)
             else:
                 # New server - register it
@@ -408,7 +407,8 @@ class CustomServerForm:
                     name=server_name,
                     type=server_type,
                     enabled=True,
-                    config=config_dict)
+                    config=config_dict,
+                )
 
                 # Register with manager
                 server_id = self.manager.register_server(server_config)
@@ -471,7 +471,8 @@ class CustomServerForm:
             multiline=False,
             wrap_lines=False,
             focusable=True,
-            height=1)
+            height=1,
+        )
 
         # Create JSON text area with syntax highlighting
         self.json_area = TextArea(
@@ -481,17 +482,15 @@ class CustomServerForm:
             scrollbar=True,
             focusable=True,
             height=Dimension(min=8, max=15),
-            lexer=PygmentsLexer(JsonLexer))
+            lexer=PygmentsLexer(JsonLexer),
+        )
 
         # Layout with form on left, preview on right
         form_window = Window(content=form_control, wrap_lines=True)
         preview_window = Window(content=preview_control, wrap_lines=True)
 
         # Right panel: help/preview (narrower - 25% width)
-        right_panel = Frame(
-            preview_window,
-            title="Help",
-            width=Dimension(weight=25))
+        right_panel = Frame(preview_window, title="Help", width=Dimension(weight=25))
 
         # Left panel gets 75% width
         root_container = VSplit(
@@ -501,17 +500,17 @@ class CustomServerForm:
                         Frame(
                             form_window,
                             title="➕ Custom Server",
-                            height=Dimension(min=18, weight=35)),
-                        Frame(
-                            self.name_area,
-                            title="Server Name",
-                            height=3),
+                            height=Dimension(min=18, weight=35),
+                        ),
+                        Frame(self.name_area, title="Server Name", height=3),
                         Frame(
                             self.json_area,
                             title="JSON Config (Ctrl+N for example)",
-                            height=Dimension(min=10, weight=55)),
+                            height=Dimension(min=10, weight=55),
+                        ),
                     ],
-                    width=Dimension(weight=75)),
+                    width=Dimension(weight=75),
+                ),
                 right_panel,
             ]
         )
@@ -599,10 +598,8 @@ class CustomServerForm:
         # Create application - start focused on name input
         layout = Layout(root_container, focused_element=self.name_area)
         app = Application(
-            layout=layout,
-            key_bindings=kb,
-            full_screen=False,
-            mouse_support=True)
+            layout=layout, key_bindings=kb, full_screen=False, mouse_support=True
+        )
 
         set_awaiting_user_input(True)
 
@@ -654,7 +651,8 @@ def run_custom_server_form(
     edit_mode: bool = False,
     existing_name: str = "",
     existing_type: str = "stdio",
-    existing_config: dict | None = None) -> bool:
+    existing_config: dict | None = None,
+) -> bool:
     """Run the custom server form.
 
     Args:
@@ -672,5 +670,6 @@ def run_custom_server_form(
         edit_mode=edit_mode,
         existing_name=existing_name,
         existing_type=existing_type,
-        existing_config=existing_config)
+        existing_config=existing_config,
+    )
     return form.run()

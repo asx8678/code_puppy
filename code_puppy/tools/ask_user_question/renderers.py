@@ -4,13 +4,13 @@ This module contains the panel rendering logic, separated from the main
 TUI logic to keep files under 600 lines.
 """
 
-
 import io
 import shutil
 from typing import TYPE_CHECKING
 
 try:
     from prompt_toolkit.formatted_text import ANSI
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     ANSI = None  # type: ignore
@@ -33,7 +33,8 @@ from .constants import (
     OTHER_OPTION_LABEL,
     PANEL_CONTENT_PADDING,
     PIPE_SEPARATOR,
-    RADIO_FILLED)
+    RADIO_FILLED,
+)
 from .theme import get_rich_colors
 
 if TYPE_CHECKING:
@@ -44,7 +45,8 @@ if TYPE_CHECKING:
 def render_question_panel(
     state: QuestionUIState,
     colors: RichColors | None = None,
-    available_width: int | None = None) -> ANSI:
+    available_width: int | None = None,
+) -> ANSI:
     """Render the right panel with the current question.
 
     Args:
@@ -68,7 +70,8 @@ def render_question_panel(
         legacy_windows=False,
         color_system="truecolor",
         no_color=False,
-        force_interactive=True)
+        force_interactive=True,
+    )
 
     # Show help overlay if requested
     if state.show_help:
@@ -105,7 +108,8 @@ def render_question_panel(
             is_selected=state.is_option_selected(i),
             multi_select=question.multi_select,
             colors=colors,
-            padding=pad)
+            padding=pad,
+        )
 
     # Render "Other" option if enabled
     if AUTO_ADD_OTHER_OPTION:
@@ -126,7 +130,8 @@ def render_question_panel(
             is_selected=state.is_option_selected(other_idx),
             multi_select=question.multi_select,
             colors=colors,
-            padding=pad)
+            padding=pad,
+        )
 
     # If entering "Other" text, show the input field
     if state.entering_other_text:
@@ -179,7 +184,8 @@ _HELP_SECTIONS: list[tuple[str, list[tuple[str, str | None, str]]]] = [
             (ARROW_RIGHT, "l", "Next question"),
             ("g", None, "Jump to first option"),
             ("G", None, "Jump to last option"),
-        ]),
+        ],
+    ),
     (
         "Selection:",
         [
@@ -188,7 +194,8 @@ _HELP_SECTIONS: list[tuple[str, list[tuple[str, str | None, str]]]] = [
             ("a", None, "Select all (multi-select)"),
             ("n", None, "Select none (multi-select)"),
             ("Ctrl+S", None, "Submit all answers"),
-        ]),
+        ],
+    ),
     (
         "Other:",
         [
@@ -196,7 +203,8 @@ _HELP_SECTIONS: list[tuple[str, list[tuple[str, str | None, str]]]] = [
             ("?", None, "Toggle this help"),
             ("Esc", None, "Cancel"),
             ("Ctrl+C", None, "Cancel"),
-        ]),
+        ],
+    ),
 ]
 
 
@@ -250,7 +258,8 @@ def _render_option(
     is_selected: bool,
     multi_select: bool,
     colors: RichColors,
-    padding: str = "") -> None:
+    padding: str = "",
+) -> None:
     """Render a single option line.
 
     Args:

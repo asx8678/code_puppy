@@ -13,6 +13,7 @@ try:
     from prompt_toolkit.layout import Dimension, Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -33,7 +34,8 @@ from code_puppy.config import (
     set_model_setting,
     set_openai_reasoning_effort,
     set_openai_reasoning_summary,
-    set_openai_verbosity)
+    set_openai_verbosity,
+)
 from code_puppy.messaging import emit_info
 from code_puppy.model_factory import ModelFactory
 from code_puppy.tools.command_runner import set_awaiting_user_input
@@ -167,9 +169,7 @@ def _get_model_display_settings(model_name: str) -> Dict:
     return settings
 
 
-def _get_setting_choices(
-    setting_key: str, model_name: str | None = None
-) -> list[str]:
+def _get_setting_choices(setting_key: str, model_name: str | None = None) -> list[str]:
     """Get the available choices for a setting, filtered by model capabilities.
 
     For reasoning_effort, only codex models support 'xhigh' - regular GPT-5.2
@@ -324,7 +324,8 @@ class ModelSettingsMenu:
                 lines.append(
                     (
                         "fg:ansibrightblack",
-                        f"  (Page {self.page + 1}/{self.total_pages})")
+                        f"  (Page {self.page + 1}/{self.total_pages})",
+                    )
                 )
             lines.append(("", "\n\n"))
 
@@ -494,7 +495,8 @@ class ModelSettingsMenu:
                 lines.append(
                     (
                         "fg:ansibrightblack dim",
-                        f"  Model {self.model_index + 1} of {len(self.all_models)}")
+                        f"  Model {self.model_index + 1} of {len(self.all_models)}",
+                    )
                 )
                 lines.append(("", "\n"))
 
@@ -522,7 +524,8 @@ class ModelSettingsMenu:
                 lines.append(
                     (
                         "fg:ansiyellow",
-                        "  ⚠ Global setting (applies to all GPT-5 models)")
+                        "  ⚠ Global setting (applies to all GPT-5 models)",
+                    )
                 )
             lines.append(("", "\n\n"))
 
@@ -536,26 +539,19 @@ class ModelSettingsMenu:
                 lines.append(("", "\n"))
                 # Get filtered choices based on model capabilities
                 choices = _get_setting_choices(setting_key, self.selected_model)
-                lines.append(
-                    (
-                        "fg:ansibrightblack",
-                        f"    {' | '.join(choices)}")
-                )
+                lines.append(("fg:ansibrightblack", f"    {' | '.join(choices)}"))
             elif setting_def.get("type") == "boolean":
                 lines.append(("bold", "  Options:"))
                 lines.append(("", "\n"))
-                lines.append(
-                    (
-                        "fg:ansibrightblack",
-                        "    Enabled | Disabled")
-                )
+                lines.append(("fg:ansibrightblack", "    Enabled | Disabled"))
             else:
                 lines.append(("bold", "  Range:"))
                 lines.append(("", "\n"))
                 lines.append(
                     (
                         "fg:ansibrightblack",
-                        f"    Min: {setting_def['min']}  Max: {setting_def['max']}  Step: {setting_def['step']}")
+                        f"    Min: {setting_def['min']}  Max: {setting_def['max']}  Step: {setting_def['step']}",
+                    )
                 )
             lines.append(("", "\n\n"))
 
@@ -566,7 +562,8 @@ class ModelSettingsMenu:
                 lines.append(
                     (
                         "fg:ansicyan",
-                        f"    {self._format_value(setting_key, current_value)}")
+                        f"    {self._format_value(setting_key, current_value)}",
+                    )
                 )
             else:
                 lines.append(("fg:ansibrightblack dim", "    (using model default)"))
@@ -580,7 +577,8 @@ class ModelSettingsMenu:
                     lines.append(
                         (
                             "fg:ansicyan",
-                            f"    New value: {self._format_value(setting_key, self.edit_value)}")
+                            f"    New value: {self._format_value(setting_key, self.edit_value)}",
+                        )
                     )
                 else:
                     lines.append(
@@ -879,10 +877,8 @@ class ModelSettingsMenu:
 
         layout = Layout(root_container)
         app = Application(
-            layout=layout,
-            key_bindings=kb,
-            full_screen=False,
-            mouse_support=False)
+            layout=layout, key_bindings=kb, full_screen=False, mouse_support=False
+        )
 
         set_awaiting_user_input(True)
 

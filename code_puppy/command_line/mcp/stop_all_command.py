@@ -54,7 +54,8 @@ class StopAllCommand(MCPCommandBase):
 
             emit_info(
                 f"Stopping {len(running_servers)} running server(s)...",
-                message_group=group_id)
+                message_group=group_id,
+            )
 
             for server_info in running_servers:
                 server_id = server_info.id
@@ -100,7 +101,8 @@ class StopAllCommand(MCPCommandBase):
                         Text.from_markup(
                             "[dim]Agent reloaded with updated servers[/dim]"
                         ),
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
                 except Exception as e:
                     logger.warning(f"Could not reload agent: {e}")
 

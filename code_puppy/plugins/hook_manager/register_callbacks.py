@@ -17,7 +17,7 @@ from code_puppy.callbacks import register_callback
 logger = logging.getLogger(__name__)
 
 _COMMAND_NAME = "hooks"
-_ALIASES = ("hook")
+_ALIASES = "hook"
 
 
 # ---------------------------------------------------------------------------
@@ -30,7 +30,8 @@ def _hooks_command_help() -> list[tuple[str, str]]:
     return [
         (
             "hooks",
-            "Manage Claude Code hooks (global + project) – browse, enable/disable, inspect"),
+            "Manage Claude Code hooks (global + project) – browse, enable/disable, inspect",
+        ),
         ("hook", "Alias for /hooks"),
     ]
 
@@ -62,7 +63,8 @@ def _handle_hooks_command(command: str, name: str) -> Any | None:
         _load_project_hooks_config,
         flatten_all_hooks,
         save_global_hooks_config,
-        save_hooks_config)
+        save_hooks_config,
+    )
 
     tokens = command.split()
     subcommand = tokens[1].lower() if len(tokens) > 1 else ""

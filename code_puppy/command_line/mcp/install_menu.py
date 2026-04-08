@@ -15,6 +15,7 @@ try:
     from prompt_toolkit.layout import Dimension, Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -22,9 +23,7 @@ except ImportError:
 from code_puppy.messaging import emit_error, emit_info, emit_warning
 from code_puppy.tools.command_runner import set_awaiting_user_input
 
-from .catalog_server_installer import (
-    install_catalog_server,
-    prompt_for_server_config)
+from .catalog_server_installer import install_catalog_server, prompt_for_server_config
 from .custom_server_form import run_custom_server_form
 
 logger = logging.getLogger(__name__)
@@ -637,10 +636,8 @@ class MCPInstallMenu:
 
         layout = Layout(root_container)
         app = Application(
-            layout=layout,
-            key_bindings=kb,
-            full_screen=False,
-            mouse_support=False)
+            layout=layout, key_bindings=kb, full_screen=False, mouse_support=False
+        )
 
         set_awaiting_user_input(True)
 

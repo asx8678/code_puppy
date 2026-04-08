@@ -74,6 +74,7 @@ def test_run_async_sync_multiple_calls_same_thread() -> None:
 
 def test_run_async_sync_nested_calls() -> None:
     """Test that nested calls within coroutines work correctly."""
+
     async def outer_coro() -> int:
         inner = run_async_sync(simple_coro(5))
         return inner + 10

@@ -35,10 +35,12 @@ class BaseCommand(BaseModel):
 
     id: str = Field(
         default_factory=lambda: str(uuid4()),
-        description="Unique identifier for this command instance")
+        description="Unique identifier for this command instance",
+    )
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        description="When this command was created (UTC)")
+        description="When this command was created (UTC)",
+    )
 
     model_config = {"frozen": False, "extra": "forbid"}
 
@@ -57,7 +59,8 @@ class CancelAgentCommand(BaseCommand):
 
     reason: str | None = Field(
         default=None,
-        description="Optional reason for cancellation (for logging/debugging)")
+        description="Optional reason for cancellation (for logging/debugging)",
+    )
 
 
 class InterruptShellCommand(BaseCommand):
@@ -70,7 +73,8 @@ class InterruptShellCommand(BaseCommand):
 
     command_id: str | None = Field(
         default=None,
-        description="ID of the specific shell command to interrupt (None = current)")
+        description="ID of the specific shell command to interrupt (None = current)",
+    )
 
 
 # =============================================================================
@@ -105,8 +109,8 @@ class ConfirmationResponse(BaseCommand):
         description="Whether the user confirmed (True) or denied (False)"
     )
     feedback: str | None = Field(
-        default=None,
-        description="Optional feedback text from the user")
+        default=None, description="Optional feedback text from the user"
+    )
 
 
 class SelectionResponse(BaseCommand):
@@ -120,8 +124,8 @@ class SelectionResponse(BaseCommand):
         description="ID of the prompt this responds to (must match request)"
     )
     selected_index: int = Field(
-        ge=0,
-        description="Zero-based index of the selected option")
+        ge=0, description="Zero-based index of the selected option"
+    )
     selected_value: str = Field(description="The value of the selected option")
 
 
@@ -131,7 +135,13 @@ class SelectionResponse(BaseCommand):
 
 
 # All concrete command types (excludes BaseCommand itself)
-AnyCommand = CancelAgentCommand | InterruptShellCommand | UserInputResponse | ConfirmationResponse | SelectionResponse
+AnyCommand = (
+    CancelAgentCommand
+    | InterruptShellCommand
+    | UserInputResponse
+    | ConfirmationResponse
+    | SelectionResponse
+)
 """Union of all command types for type checking."""
 
 

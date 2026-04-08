@@ -18,61 +18,70 @@ from typing import Any
 
 # Whitelist of allowed commands for MCP stdio servers
 # These are well-known, safe package managers and interpreters
-ALLOWED_COMMANDS = frozenset([
-    # Package managers
-    "npx",
-    "npm",
-    "node",
-    "uvx",
-    "uv",
-    "pip",
-    "pip3",
-    "python",
-    "python3",
-    # Interpreters
-    "node",
-    "python",
-    "python3",
-    "ruby",
-    "php",
-    "perl",
-    "julia",
-    "R",
-    "java",
-    # Tools
-    "git",
-    "docker",
-    "kubectl",
-    "terraform",
-    "op",  # 1Password CLI
-    "code",  # VS Code
-    "jupyter",
-    "swift",
-    "go",
-    "cargo",
-    "rustc",
-    "dotnet",
-])
+ALLOWED_COMMANDS = frozenset(
+    [
+        # Package managers
+        "npx",
+        "npm",
+        "node",
+        "uvx",
+        "uv",
+        "pip",
+        "pip3",
+        "python",
+        "python3",
+        # Interpreters
+        "node",
+        "python",
+        "python3",
+        "ruby",
+        "php",
+        "perl",
+        "julia",
+        "R",
+        "java",
+        # Tools
+        "git",
+        "docker",
+        "kubectl",
+        "terraform",
+        "op",  # 1Password CLI
+        "code",  # VS Code
+        "jupyter",
+        "swift",
+        "go",
+        "cargo",
+        "rustc",
+        "dotnet",
+    ]
+)
 
 # Dangerous shell metacharacters that could enable command injection
-DANGEROUS_SHELL_CHARS = frozenset([
-    ";",      # Command separator
-    "&",      # Background/command separator
-    "|",      # Pipe
-    "$",      # Variable expansion (except ${...} which we handle separately)
-    "`",      # Command substitution
-    "(", ")", # Subshell
-    "{", "}", # Command grouping (when not used for placeholders)
-    "<", ">", # Redirection
-    "!",      # History expansion
-    "*",      # Glob (can be dangerous in some contexts)
-    "?",      # Glob
-    "[", "]", # Glob
-    "\\",     # Escape character
-    "'", '\"', # Quote manipulation
-    "\n",     # Newline injection
-    "\r",     # Carriage return
-])
+DANGEROUS_SHELL_CHARS = frozenset(
+    [
+        ";",  # Command separator
+        "&",  # Background/command separator
+        "|",  # Pipe
+        "$",  # Variable expansion (except ${...} which we handle separately)
+        "`",  # Command substitution
+        "(",
+        ")",  # Subshell
+        "{",
+        "}",  # Command grouping (when not used for placeholders)
+        "<",
+        ">",  # Redirection
+        "!",  # History expansion
+        "*",  # Glob (can be dangerous in some contexts)
+        "?",  # Glob
+        "[",
+        "]",  # Glob
+        "\\",  # Escape character
+        "'",
+        '"',  # Quote manipulation
+        "\n",  # Newline injection
+        "\r",  # Carriage return
+    ]
+)
 
 # Dangerous command sequences (case-insensitive)
 DANGEROUS_PATTERNS = [
@@ -98,26 +107,31 @@ DANGEROUS_PATTERNS = [
 
 class MCPSecurityError(Exception):
     """Security validation error for MCP configuration."""
+
     pass
 
 
 class CommandNotAllowedError(MCPSecurityError):
     """Raised when a command is not in the whitelist."""
+
     pass
 
 
 class CommandInjectionError(MCPSecurityError):
     """Raised when potential command injection is detected."""
+
     pass
 
 
 class PathTraversalError(MCPSecurityError):
     """Raised when path traversal is detected."""
+
     pass
 
 
 class InvalidArgumentError(MCPSecurityError):
     """Raised when an argument fails security validation."""
+
     pass
 
 
@@ -147,7 +161,9 @@ def validate_command_whitelist(command: str) -> str:
         # Also validate the full path doesn't contain dangerous sequences
         if ".." in command or "~" in command:
             # Allow absolute paths but not relative paths with .. or ~
-            if not command.startswith(("/usr/", "/bin/", "/opt/", "/usr/local/", "C:\\\\", "C:/")):
+            if not command.startswith(
+                ("/usr/", "/bin/", "/opt/", "/usr/local/", "C:\\\\", "C:/")
+            ):
                 raise CommandNotAllowedError(
                     f"Command path contains unsafe elements: {command}. "
                     f"Only absolute paths to system directories are allowed."
@@ -243,13 +259,16 @@ def validate_arguments(args: list[str] | str) -> list[str]:
     # Handle string args by splitting them
     if isinstance(args, str):
         import shlex
+
         try:
             args = shlex.split(args)
         except ValueError:
             args = args.split()
 
     if not isinstance(args, (list, tuple)):
-        raise InvalidArgumentError(f"Arguments must be a list or string, got {type(args).__name__}")
+        raise InvalidArgumentError(
+            f"Arguments must be a list or string, got {type(args).__name__}"
+        )
 
     sanitized = []
     for i, arg in enumerate(args):
@@ -332,9 +351,7 @@ def validate_environment_variables(env: dict[str, str]) -> dict[str, str]:
     for key, value in env.items():
         # Validate key is a valid environment variable name
         if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", key):
-            raise InvalidArgumentError(
-                f"Invalid environment variable name: {key!r}"
-            )
+            raise InvalidArgumentError(f"Invalid environment variable name: {key!r}")
 
         # Validate value doesn't contain dangerous content
         try:
@@ -442,21 +459,23 @@ def safe_expand_env_vars(value: Any) -> Any:
         Value with safe environment variables expanded
     """
     # List of safe environment variables that can be expanded
-    SAFE_ENV_VARS = frozenset([
-        "HOME",
-        "USER",
-        "USERPROFILE",
-        "APPDATA",
-        "LOCALAPPDATA",
-        "TMPDIR",
-        "TMP",
-        "TEMP",
-        "PATH",
-        "SHELL",
-        "TERM",
-        "LANG",
-        "LC_ALL",
-    ])
+    SAFE_ENV_VARS = frozenset(
+        [
+            "HOME",
+            "USER",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "TMPDIR",
+            "TMP",
+            "TEMP",
+            "PATH",
+            "SHELL",
+            "TERM",
+            "LANG",
+            "LC_ALL",
+        ]
+    )
 
     if isinstance(value, str):
         result = value

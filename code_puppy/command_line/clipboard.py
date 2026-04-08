@@ -123,20 +123,14 @@ def _check_linux_clipboard_tool() -> str | None:
     """
     # Check for wl-paste first (Wayland)
     try:
-        subprocess.run(
-            ["wl-paste", "--version"],
-            capture_output=True,
-            timeout=5)
+        subprocess.run(["wl-paste", "--version"], capture_output=True, timeout=5)
         return "wl-paste"
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
     # Check for xclip (X11)
     try:
-        subprocess.run(
-            ["xclip", "-version"],
-            capture_output=True,
-            timeout=5)
+        subprocess.run(["xclip", "-version"], capture_output=True, timeout=5)
         return "xclip"
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
@@ -163,9 +157,8 @@ def _get_linux_clipboard_image() -> bytes | None:
         if tool == "wl-paste":
             # wl-paste for Wayland
             result = subprocess.run(
-                ["wl-paste", "--type", "image/png"],
-                capture_output=True,
-                timeout=10)
+                ["wl-paste", "--type", "image/png"], capture_output=True, timeout=10
+            )
             if result.returncode == 0 and result.stdout:
                 return _validate_clipboard_content(result.stdout)
         elif tool == "xclip":
@@ -173,7 +166,8 @@ def _get_linux_clipboard_image() -> bytes | None:
             result = subprocess.run(
                 ["xclip", "-selection", "clipboard", "-t", "image/png", "-o"],
                 capture_output=True,
-                timeout=10)
+                timeout=10,
+            )
             if result.returncode == 0 and result.stdout:
                 return _validate_clipboard_content(result.stdout)
     except subprocess.TimeoutExpired:
@@ -258,14 +252,16 @@ def has_image_in_clipboard() -> bool:
                     ["wl-paste", "--list-types"],
                     capture_output=True,
                     timeout=5,
-                    text=True)
+                    text=True,
+                )
                 return "image/png" in result.stdout or "image/" in result.stdout
             elif tool == "xclip":
                 result = subprocess.run(
                     ["xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"],
                     capture_output=True,
                     timeout=5,
-                    text=True)
+                    text=True,
+                )
                 return "image/png" in result.stdout or "image/" in result.stdout
         except (subprocess.TimeoutExpired, Exception):
             return False

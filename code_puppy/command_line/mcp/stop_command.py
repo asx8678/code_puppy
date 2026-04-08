@@ -37,7 +37,8 @@ class StopCommand(MCPCommandBase):
         if not args:
             emit_info(
                 Text.from_markup("[yellow]Usage: /mcp stop <server_name>[/yellow]"),
-                message_group=group_id)
+                message_group=group_id,
+            )
             return
 
         server_name = args[0]
@@ -63,8 +64,8 @@ class StopCommand(MCPCommandBase):
                     # Update MCP tool cache immediately so token counts reflect the change
                     agent.update_mcp_tool_cache_sync()
                     emit_info(
-                        "Agent reloaded with updated servers",
-                        message_group=group_id)
+                        "Agent reloaded with updated servers", message_group=group_id
+                    )
                 except Exception as e:
                     logger.warning(f"Could not reload agent: {e}")
             else:

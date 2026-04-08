@@ -38,7 +38,8 @@ class ReopenableAsyncClient:
             parent_client: "ReopenableAsyncClient",
             method: str,
             url: str | httpx.URL,
-            **kwargs):
+            **kwargs,
+        ):
             self.parent_client = parent_client
             self.method = method
             self.url = url

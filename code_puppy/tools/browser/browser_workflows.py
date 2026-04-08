@@ -21,9 +21,7 @@ def get_workflows_directory() -> Path:
 async def save_workflow(name: str, content: str) -> dict[str, Any]:
     """Save a browser workflow as a markdown file."""
     group_id = generate_group_id("save_workflow", name)
-    emit_info(
-        f"SAVE WORKFLOW 💾 name='{name}'",
-        message_group=group_id)
+    emit_info(f"SAVE WORKFLOW 💾 name='{name}'", message_group=group_id)
 
     try:
         workflows_dir = get_workflows_directory()
@@ -62,8 +60,8 @@ async def save_workflow(name: str, content: str) -> dict[str, Any]:
             f.write(content)
 
         emit_success(
-            f"Workflow saved successfully: {workflow_path}",
-            message_group=group_id)
+            f"Workflow saved successfully: {workflow_path}", message_group=group_id
+        )
 
         return {
             "success": True,
@@ -73,18 +71,14 @@ async def save_workflow(name: str, content: str) -> dict[str, Any]:
         }
 
     except Exception as e:
-        emit_error(
-            f"Failed to save workflow: {e}",
-            message_group=group_id)
+        emit_error(f"Failed to save workflow: {e}", message_group=group_id)
         return {"success": False, "error": str(e), "name": name}
 
 
 async def list_workflows() -> dict[str, Any]:
     """List all available browser workflows."""
     group_id = generate_group_id("list_workflows")
-    emit_info(
-        "LIST WORKFLOWS 📋",
-        message_group=group_id)
+    emit_info("LIST WORKFLOWS 📋", message_group=group_id)
 
     try:
         workflows_dir = get_workflows_directory()
@@ -110,9 +104,7 @@ async def list_workflows() -> dict[str, Any]:
         # Sort by modification time (newest first)
         workflows.sort(key=lambda x: x["modified"], reverse=True)
 
-        emit_success(
-            f"Found {len(workflows)} workflow(s)",
-            message_group=group_id)
+        emit_success(f"Found {len(workflows)} workflow(s)", message_group=group_id)
 
         return {
             "success": True,
@@ -122,18 +114,14 @@ async def list_workflows() -> dict[str, Any]:
         }
 
     except Exception as e:
-        emit_error(
-            f"Failed to list workflows: {e}",
-            message_group=group_id)
+        emit_error(f"Failed to list workflows: {e}", message_group=group_id)
         return {"success": False, "error": str(e)}
 
 
 async def read_workflow(name: str) -> dict[str, Any]:
     """Read a saved browser workflow."""
     group_id = generate_group_id("read_workflow", name)
-    emit_info(
-        f"READ WORKFLOW 📖 name='{name}'",
-        message_group=group_id)
+    emit_info(f"READ WORKFLOW 📖 name='{name}'", message_group=group_id)
 
     try:
         workflows_dir = get_workflows_directory()
@@ -145,9 +133,7 @@ async def read_workflow(name: str) -> dict[str, Any]:
         workflow_path = workflows_dir / name
 
         if not workflow_path.exists():
-            emit_error(
-                f"Workflow not found: {name}",
-                message_group=group_id)
+            emit_error(f"Workflow not found: {name}", message_group=group_id)
             return {
                 "success": False,
                 "error": f"Workflow '{name}' not found",
@@ -160,7 +146,8 @@ async def read_workflow(name: str) -> dict[str, Any]:
 
         emit_success(
             f"Workflow read successfully: {len(content)} characters",
-            message_group=group_id)
+            message_group=group_id,
+        )
 
         return {
             "success": True,
@@ -171,9 +158,7 @@ async def read_workflow(name: str) -> dict[str, Any]:
         }
 
     except Exception as e:
-        emit_error(
-            f"Failed to read workflow: {e}",
-            message_group=group_id)
+        emit_error(f"Failed to read workflow: {e}", message_group=group_id)
         return {"success": False, "error": str(e), "name": name}
 
 
@@ -182,9 +167,8 @@ def register_save_workflow(agent):
 
     @agent.tool
     async def browser_save_workflow(
-        context: RunContext,
-        name: str,
-        content: str) -> dict[str, Any]:
+        context: RunContext, name: str, content: str
+    ) -> dict[str, Any]:
         """Save a browser automation workflow to disk for future reuse."""
         return await save_workflow(name, content)
 
@@ -202,8 +186,6 @@ def register_read_workflow(agent):
     """Register the read workflow tool."""
 
     @agent.tool
-    async def browser_read_workflow(
-        context: RunContext,
-        name: str) -> dict[str, Any]:
+    async def browser_read_workflow(context: RunContext, name: str) -> dict[str, Any]:
         """Read the contents of a saved browser automation workflow."""
         return await read_workflow(name)

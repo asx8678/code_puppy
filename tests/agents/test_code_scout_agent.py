@@ -22,7 +22,7 @@ class TestCodeScoutAgent:
     def test_uses_config_based_model_pinning(self):
         """Test that the agent uses config-based model pinning (not hardcoded)."""
         # Agent should NOT override get_model_name - uses BaseAgent config-based pinning
-        assert not hasattr(CodeScoutAgent, 'PINNED_MODEL')
+        assert not hasattr(CodeScoutAgent, "PINNED_MODEL")
 
     def test_available_tools_count(self):
         """Test that the agent has exactly 7 expected tools."""
@@ -173,4 +173,7 @@ class TestCodeScoutAgent:
         assert "Code Scout" in agent.display_name
 
         # Description should expand on the name
-        assert "scout" in agent.description.lower() or "reconnaissance" in agent.description.lower()
+        assert (
+            "scout" in agent.description.lower()
+            or "reconnaissance" in agent.description.lower()
+        )

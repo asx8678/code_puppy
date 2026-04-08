@@ -1,6 +1,5 @@
 """Main handler for ask_user_question tool."""
 
-
 import asyncio
 import logging
 import os
@@ -17,7 +16,8 @@ from .models import (
     AskUserQuestionInput,
     AskUserQuestionOutput,
     Question,
-    QuestionAnswer)
+    QuestionAnswer,
+)
 from .terminal_ui import CancelledException, interactive_question_picker
 
 logger = logging.getLogger(__name__)

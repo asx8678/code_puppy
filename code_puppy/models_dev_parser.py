@@ -12,7 +12,6 @@ The parser supports filtering by cost, context length, capabilities, and provide
 comprehensive type safety throughout the implementation.
 """
 
-
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -118,7 +117,9 @@ class ModelsDevRegistry:
     JSON file if the API is unavailable.
     """
 
-    def __init__(self, json_path: str | Path | None = None, skip_live_api: bool = False) -> None:
+    def __init__(
+        self, json_path: str | Path | None = None, skip_live_api: bool = False
+    ) -> None:
         """
         Initialize the registry by loading bundled JSON or from explicit path.
 
@@ -336,7 +337,8 @@ class ModelsDevRegistry:
             api=data.get("api", ""),  # Optional - empty string for SDK-based providers
             npm=data.get("npm"),
             doc=data.get("doc"),
-            models=data.get("models", {}))
+            models=data.get("models", {}),
+        )
 
     def _parse_model(
         self, provider_id: str, model_id: str, data: dict[str, Any]
@@ -380,7 +382,8 @@ class ModelsDevRegistry:
             knowledge=data.get("knowledge"),
             release_date=data.get("release_date"),
             last_updated=data.get("last_updated"),
-            open_weights=data.get("open_weights", False))
+            open_weights=data.get("open_weights", False),
+        )
 
     def get_providers(self) -> list[ProviderInfo]:
         """
@@ -438,9 +441,8 @@ class ModelsDevRegistry:
         return self.models.get(full_id)
 
     def search_models(
-        self,
-        query: str | None = None,
-        capability_filters: dict[str, Any | None] = None) -> list[ModelInfo]:
+        self, query: str | None = None, capability_filters: dict[str, Any | None] = None
+    ) -> list[ModelInfo]:
         """
         Search models by name/query and filter by capabilities.
 
@@ -483,7 +485,8 @@ class ModelsDevRegistry:
         self,
         models: list[ModelInfo],
         max_input_cost: float | None = None,
-        max_output_cost: float | None = None) -> list[ModelInfo]:
+        max_output_cost: float | None = None,
+    ) -> list[ModelInfo]:
         """
         Filter models by cost constraints.
 

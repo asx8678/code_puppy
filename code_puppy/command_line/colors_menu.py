@@ -18,6 +18,7 @@ try:
     from prompt_toolkit.layout import Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -205,7 +206,8 @@ async def interactive_colors_picker() -> dict | None:
                     choices,
                     dummy_update,
                     get_preview=get_main_preview,
-                    config=config)
+                    config=config,
+                )
             except KeyboardInterrupt:
                 break
 
@@ -260,7 +262,8 @@ async def _split_panel_selector(
     choices: list[str],
     on_change: Callable[[str], None],
     get_preview: Callable[[], ANSI],
-    config: ColorConfiguration | None = None) -> str | None:
+    config: ColorConfiguration | None = None,
+) -> str | None:
     """Split-panel selector with menu on left and live preview on right."""
     selected_index = [0]
     result = [None]
@@ -347,11 +350,10 @@ async def _split_panel_selector(
 
     # Create split layout with left (selector) and right (preview) panels
     left_panel = Window(
-        content=FormattedTextControl(lambda: get_left_panel_text()),
-        width=45)
+        content=FormattedTextControl(lambda: get_left_panel_text()), width=45
+    )
 
-    right_panel = Window(
-        content=FormattedTextControl(lambda: get_right_panel_text()))
+    right_panel = Window(content=FormattedTextControl(lambda: get_right_panel_text()))
 
     # Create vertical split (side-by-side panels)
     root_container = VSplit(
@@ -367,7 +369,8 @@ async def _split_panel_selector(
         key_bindings=kb,
         full_screen=False,
         mouse_support=False,
-        color_depth="DEPTH_24_BIT")
+        color_depth="DEPTH_24_BIT",
+    )
 
     sys.stdout.flush()
 
@@ -402,7 +405,8 @@ def _get_preview_text_for_prompt_toolkit(config: ColorConfiguration) -> ANSI:
         legacy_windows=False,
         color_system="truecolor",
         no_color=False,
-        force_interactive=True)
+        force_interactive=True,
+    )
 
     # Header
     console.print("[bold]═" * 60 + "[/bold]")
@@ -476,7 +480,8 @@ async def _handle_color_menu(config: ColorConfiguration) -> None:
             choices,
             update_preview,
             get_preview=get_preview_header,
-            config=config)
+            config=config,
+        )
     except KeyboardInterrupt:
         # Restore original color on cancel
         config.set_current_banner_color(original_color)
@@ -494,7 +499,8 @@ def _get_single_banner_preview(config: ColorConfiguration) -> ANSI:
         legacy_windows=False,
         color_system="truecolor",
         no_color=False,
-        force_interactive=True)
+        force_interactive=True,
+    )
 
     banner_key = config.get_current_banner_key()
     display_name, icon = BANNER_DISPLAY_INFO[banner_key]

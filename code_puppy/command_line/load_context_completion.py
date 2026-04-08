@@ -20,7 +20,8 @@ class LoadContextCompleter(Completer):
                 self.trigger + " ",
                 start_position=-len(self.trigger),
                 display=self.trigger + " ",
-                display_meta="load saved context")
+                display_meta="load saved context",
+            )
             return
 
         # Require a space after /load_context before showing completions (consistency with other completers)
@@ -44,7 +45,8 @@ class LoadContextCompleter(Completer):
                             session_name,
                             start_position=start_position,
                             display=session_name,
-                            display_meta="saved context session")
+                            display_meta="saved context session",
+                        )
         except Exception:
             # Silently ignore errors (e.g., permission issues, non-existent dir)
             pass

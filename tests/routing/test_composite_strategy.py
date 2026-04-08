@@ -7,6 +7,7 @@ from code_puppy.routing.strategy import RoutingContext, RoutingDecision
 
 class AlwaysDecline:
     """Strategy that always returns None (declines)."""
+
     @property
     def name(self) -> str:
         return "always_decline"
@@ -17,6 +18,7 @@ class AlwaysDecline:
 
 class AlwaysRoute:
     """Strategy that always returns a decision."""
+
     def __init__(self, label: str = "always_route"):
         self._label = label
 
@@ -34,6 +36,7 @@ class AlwaysRoute:
 
 class FailingStrategy:
     """Strategy that raises an exception."""
+
     @property
     def name(self) -> str:
         return "failing"
@@ -44,6 +47,7 @@ class FailingStrategy:
 
 class ConditionalRoute:
     """Strategy that matches only a specific model name."""
+
     def __init__(self, target: str):
         self._target = target
 
@@ -63,7 +67,9 @@ class ConditionalRoute:
 
 @pytest.fixture
 def ctx():
-    return RoutingContext(model_name="test-model", config={"test-model": {"type": "openai"}})
+    return RoutingContext(
+        model_name="test-model", config={"test-model": {"type": "openai"}}
+    )
 
 
 def test_terminal_strategy_always_returns(ctx):
@@ -102,7 +108,11 @@ def test_failing_strategy_caught_gracefully(ctx):
 
 def test_conditional_routing(ctx):
     chain = CompositeStrategy(
-        [ConditionalRoute("gpt-4"), ConditionalRoute("test-model"), AlwaysRoute("terminal")],
+        [
+            ConditionalRoute("gpt-4"),
+            ConditionalRoute("test-model"),
+            AlwaysRoute("terminal"),
+        ],
         name="test",
     )
     decision = chain.route(ctx)

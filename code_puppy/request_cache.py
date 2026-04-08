@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CachedRequest:
     """A cached request entry with metadata.
-    
+
     Attributes:
         request: The cached httpx.Request object
         content_hash: Hash of URL + method + body (what makes requests unique)
@@ -36,6 +36,7 @@ class CachedRequest:
         access_count: Number of times this entry was accessed (for metrics)
         last_accessed: Timestamp of last access
     """
+
     request: httpx.Request
     content_hash: str
     headers_hash: str
@@ -47,7 +48,7 @@ class CachedRequest:
 @dataclass
 class CacheStats:
     """Statistics for request cache performance.
-    
+
     Attributes:
         hits: Number of cache hits (exact match or header-only update)
         header_only_updates: Number of header-only optimizations applied
@@ -55,6 +56,7 @@ class CacheStats:
         evictions: Number of entries evicted due to size limits
         rebuilds_avoided: Estimated number of full rebuilds avoided
     """
+
     hits: int = 0
     header_only_updates: int = 0
     misses: int = 0
@@ -64,15 +66,15 @@ class CacheStats:
 
 class RequestCache:
     """Cache for HTTP requests with header-only change optimization.
-    
+
     This cache stores built requests and provides fast delta updates
     when only headers change. It's designed for scenarios where the
     same request is made multiple times with different authentication
     tokens or header values.
-    
+
     Example usage:
         cache = RequestCache(max_size=100)
-        
+
         # Build or retrieve cached request
         request = cache.get_or_build(
             method="POST",
@@ -81,7 +83,7 @@ class RequestCache:
             content=b'{"messages": [...]}',
             client=httpx_client
         )
-        
+
         # Later, with different headers but same content
         request2 = cache.get_or_build(
             method="POST",
@@ -91,26 +93,26 @@ class RequestCache:
             client=httpx_client
         )
         # request2 is request with updated headers (fast!)
-    
+
     Thread safety: This cache is designed for use within a single
     async event loop. External synchronization is needed for
     multi-threaded usage.
     """
-    
+
     # Default maximum number of cached entries
     DEFAULT_MAX_SIZE = 128
-    
+
     # TTL for cache entries (seconds) - 5 minutes default
     DEFAULT_TTL_SECONDS = 300
-    
+
     def __init__(
         self,
         max_size: int = DEFAULT_MAX_SIZE,
         ttl_seconds: float = DEFAULT_TTL_SECONDS,
-        enable_stats: bool = True
+        enable_stats: bool = True,
     ):
         """Initialize the request cache.
-        
+
         Args:
             max_size: Maximum number of cached requests to keep
             ttl_seconds: Time-to-live for cache entries
@@ -119,26 +121,22 @@ class RequestCache:
         self._max_size = max_size
         self._ttl_seconds = ttl_seconds
         self._enable_stats = enable_stats
-        
+
         # Map from content_hash -> CachedRequest
         self._cache: dict[str, CachedRequest] = {}
-        
+
         # Statistics tracking
         self._stats = CacheStats()
-        
+
         logger.debug(
-            "RequestCache initialized (max_size=%d, ttl=%ds)",
-            max_size, ttl_seconds
+            "RequestCache initialized (max_size=%d, ttl=%ds)", max_size, ttl_seconds
         )
-    
+
     def _compute_content_hash(
-        self,
-        method: str,
-        url: httpx.URL | str,
-        content: bytes | None
+        self, method: str, url: httpx.URL | str, content: bytes | None
     ) -> str:
         """Compute a hash of the request content (method + URL + body).
-        
+
         This hash identifies requests that are identical except for headers.
         """
         hasher = hashlib.blake2b(digest_size=32)
@@ -147,67 +145,68 @@ class RequestCache:
         if content:
             hasher.update(content)
         return hasher.hexdigest()
-    
+
     def _compute_headers_hash(self, headers: dict[str, str]) -> str:
         """Compute a hash of headers for comparison.
-        
+
         Headers are normalized (lowercase keys, sorted) to ensure
         consistent hashing regardless of header ordering.
         """
         hasher = hashlib.blake2b(digest_size=32)
-        
+
         # Normalize headers: lowercase keys, sort for consistency
         normalized = sorted(
             (k.lower(), str(v).lower())
             for k, v in headers.items()
-            if k.lower() not in ("content-length", "content-length")  # Computed from body
+            if k.lower()
+            not in ("content-length", "content-length")  # Computed from body
         )
-        
+
         for key, value in normalized:
             hasher.update(key.encode())
             hasher.update(value.encode())
-        
+
         return hasher.hexdigest()
-    
+
     def _is_entry_valid(self, entry: CachedRequest) -> bool:
         """Check if a cache entry is still valid (not expired)."""
         age = time.time() - entry.created_at
         return age < self._ttl_seconds
-    
+
     def _evict_expired_entries(self) -> None:
         """Remove expired entries from the cache."""
         now = time.time()
         expired = [
-            key for key, entry in self._cache.items()
+            key
+            for key, entry in self._cache.items()
             if now - entry.created_at > self._ttl_seconds
         ]
         for key in expired:
             del self._cache[key]
             self._stats.evictions += 1
-        
+
         if expired:
             logger.debug("Evicted %d expired cache entries", len(expired))
-    
+
     def _evict_lru_if_needed(self) -> None:
         """Evict least recently used entries if cache is at capacity."""
         if len(self._cache) >= self._max_size:
             # Find and remove the least recently used entry
             lru_key = min(
-                self._cache.keys(),
-                key=lambda k: self._cache[k].last_accessed
+                self._cache.keys(), key=lambda k: self._cache[k].last_accessed
             )
             del self._cache[lru_key]
             self._stats.evictions += 1
             logger.debug("Evicted LRU cache entry for key %s...", lru_key[:16])
-    
+
     def _copy_request_with_headers(
         self,
         source: httpx.Request,
         new_headers: dict[str, str],
-        client: httpx.AsyncClient
+        client: httpx.AsyncClient,
     ) -> httpx.Request:
         """Create a copy of a request with new headers.
-        
+
         This is much faster than rebuilding the request from scratch.
         """
         # Build new request to get proper internal structure
@@ -217,46 +216,46 @@ class RequestCache:
             headers=new_headers,
             content=source.content,
         )
-        
+
         return new_request
-    
+
     def get_or_build(
         self,
         method: str,
         url: httpx.URL | str,
         headers: dict[str, str],
         content: bytes | None,
-        client: httpx.AsyncClient
+        client: httpx.AsyncClient,
     ) -> httpx.Request:
         """Get a cached request or build a new one.
-        
+
         This method:
         1. Computes hashes for content (method + URL + body) and headers
         2. Checks if we have a matching cached request
         3. If exact match: returns cached request
         4. If content match but headers differ: applies header delta update
         5. If no match: builds new request and caches it
-        
+
         Args:
             method: HTTP method (GET, POST, etc.)
             url: Request URL
             headers: Request headers dict
             content: Request body content
             client: httpx.AsyncClient for building requests when needed
-            
+
         Returns:
             An httpx.Request ready to use
         """
         content_hash = self._compute_content_hash(method, url, content)
         headers_hash = self._compute_headers_hash(headers)
-        
+
         # Clean up expired entries periodically (1% chance per call)
         if hash(content_hash.encode()) % 100 == 0:
             self._evict_expired_entries()
-        
+
         # Check for existing cached entry
         entry = self._cache.get(content_hash)
-        
+
         if entry is not None:
             if not self._is_entry_valid(entry):
                 # Entry expired, remove it
@@ -277,31 +276,30 @@ class RequestCache:
                 if self._enable_stats:
                     self._stats.header_only_updates += 1
                     self._stats.rebuilds_avoided += 1
-                
+
                 logger.debug(
-                    "Cache HEADER-ONLY UPDATE for %s %s (rebuild avoided!)",
-                    method, url
+                    "Cache HEADER-ONLY UPDATE for %s %s (rebuild avoided!)", method, url
                 )
-                
+
                 # Build new request with same content but new headers
                 new_request = self._copy_request_with_headers(
                     entry.request, headers, client
                 )
-                
+
                 # Update the cache entry with the new request
                 entry.request = new_request
                 entry.headers_hash = headers_hash
                 entry.created_at = time.time()  # Reset TTL
-                
+
                 return new_request
-        
+
         # Cache miss - build new request
         if self._enable_stats:
             self._stats.misses += 1
-        
+
         # Make room if needed
         self._evict_lru_if_needed()
-        
+
         # Build fresh request
         request = client.build_request(
             method=method,
@@ -309,23 +307,21 @@ class RequestCache:
             headers=headers,
             content=content,
         )
-        
+
         # Store in cache
         self._cache[content_hash] = CachedRequest(
-            request=request,
-            content_hash=content_hash,
-            headers_hash=headers_hash
+            request=request, content_hash=content_hash, headers_hash=headers_hash
         )
-        
+
         logger.debug("Cache MISS for %s %s (new entry cached)", method, url)
         return request
-    
+
     def invalidate(self, content_hash: str | None = None) -> int:
         """Invalidate cache entries.
-        
+
         Args:
             content_hash: Specific hash to invalidate, or None to clear all
-            
+
         Returns:
             Number of entries invalidated
         """
@@ -337,10 +333,12 @@ class RequestCache:
         else:
             if content_hash in self._cache:
                 del self._cache[content_hash]
-                logger.debug("Invalidated cache entry for hash %s...", content_hash[:16])
+                logger.debug(
+                    "Invalidated cache entry for hash %s...", content_hash[:16]
+                )
                 return 1
             return 0
-    
+
     def get_stats(self) -> CacheStats:
         """Get cache performance statistics."""
         return CacheStats(
@@ -348,16 +346,16 @@ class RequestCache:
             header_only_updates=self._stats.header_only_updates,
             misses=self._stats.misses,
             evictions=self._stats.evictions,
-            rebuilds_avoided=self._stats.rebuilds_avoided
+            rebuilds_avoided=self._stats.rebuilds_avoided,
         )
-    
+
     def get_stats_dict(self) -> dict[str, Any]:
         """Get cache statistics as a dictionary."""
         total = self._stats.hits + self._stats.header_only_updates + self._stats.misses
         hit_rate = 0.0
         if total > 0:
             hit_rate = (self._stats.hits + self._stats.header_only_updates) / total
-        
+
         return {
             "hits": self._stats.hits,
             "header_only_updates": self._stats.header_only_updates,
@@ -369,7 +367,7 @@ class RequestCache:
             "current_size": len(self._cache),
             "max_size": self._max_size,
         }
-    
+
     def clear_stats(self) -> None:
         """Reset all statistics counters."""
         self._stats = CacheStats()
@@ -382,7 +380,7 @@ _global_request_cache: RequestCache | None = None
 
 def get_global_request_cache() -> RequestCache:
     """Get or create the global request cache.
-    
+
     This shared cache can be used across multiple clients for
     maximum efficiency. Thread-safe for async usage.
     """
@@ -394,7 +392,7 @@ def get_global_request_cache() -> RequestCache:
 
 def reset_global_request_cache() -> None:
     """Reset the global request cache.
-    
+
     Useful for testing or when you want to clear cached data.
     """
     global _global_request_cache
@@ -403,13 +401,13 @@ def reset_global_request_cache() -> None:
 
 class RequestCacheMixin:
     """Mixin class to add request caching to httpx.AsyncClient subclasses.
-    
+
     Usage:
         class MyClient(RequestCacheMixin, httpx.AsyncClient):
             def __init__(self, ...):
                 super().__init__(...)
                 self._init_request_cache()
-            
+
             async def send(self, request):
                 # Use cached_or_build_request to get optimized request
                 optimized = self.cached_or_build_request(
@@ -420,15 +418,15 @@ class RequestCacheMixin:
                 )
                 return await super().send(optimized, ...)
     """
-    
+
     def _init_request_cache(
         self,
         max_size: int = RequestCache.DEFAULT_MAX_SIZE,
         ttl_seconds: float = RequestCache.DEFAULT_TTL_SECONDS,
-        use_global: bool = False
+        use_global: bool = False,
     ) -> None:
         """Initialize request cache for this client.
-        
+
         Args:
             max_size: Maximum cache size
             ttl_seconds: Cache entry TTL
@@ -437,42 +435,37 @@ class RequestCacheMixin:
         if use_global:
             self._request_cache = get_global_request_cache()
         else:
-            self._request_cache = RequestCache(max_size=max_size, ttl_seconds=ttl_seconds)
-    
+            self._request_cache = RequestCache(
+                max_size=max_size, ttl_seconds=ttl_seconds
+            )
+
     def cached_or_build_request(
         self,
         method: str,
         url: httpx.URL | str,
         headers: dict[str, str],
-        content: bytes | None
+        content: bytes | None,
     ) -> httpx.Request:
         """Get cached request or build new one with header optimization.
-        
+
         Requires _request_cache to be initialized via _init_request_cache().
         """
         if not hasattr(self, "_request_cache") or self._request_cache is None:
             # No cache available, build request directly
             return self.build_request(
-                method=method,
-                url=url,
-                headers=headers,
-                content=content
+                method=method, url=url, headers=headers, content=content
             )
-        
+
         return self._request_cache.get_or_build(
-            method=method,
-            url=url,
-            headers=headers,
-            content=content,
-            client=self
+            method=method, url=url, headers=headers, content=content, client=self
         )
-    
+
     def get_cache_stats(self) -> dict[str, Any]:
         """Get cache statistics if caching is enabled."""
         if hasattr(self, "_request_cache") and self._request_cache:
             return self._request_cache.get_stats_dict()
         return {"enabled": False, "message": "Request cache not initialized"}
-    
+
     def invalidate_cache(self, content_hash: str | None = None) -> int:
         """Invalidate cache entries."""
         if hasattr(self, "_request_cache") and self._request_cache:

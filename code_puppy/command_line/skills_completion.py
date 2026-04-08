@@ -8,7 +8,6 @@ This module is intentionally defensive: if the remote catalog isn't available,
 completion simply returns no skill ids.
 """
 
-
 import logging
 import time
 from collections.abc import Iterable
@@ -104,7 +103,8 @@ class SkillsCompleter(Completer):
                     subcommand,
                     start_position=0,
                     display=subcommand,
-                    display_meta=description)
+                    display_meta=description,
+                )
             return
 
         parts = after_skills.split()
@@ -121,7 +121,8 @@ class SkillsCompleter(Completer):
                             skill_id,
                             start_position=0,
                             display=skill_id,
-                            display_meta="Skill")
+                            display_meta="Skill",
+                        )
                     return
 
                 # Case 2: `install <partial>` -> filter ids
@@ -136,7 +137,8 @@ class SkillsCompleter(Completer):
                                 skill_id,
                                 start_position=start_position,
                                 display=skill_id,
-                                display_meta="Skill")
+                                display_meta="Skill",
+                            )
                     return
 
         # If we only have one part and no trailing space, complete subcommands
@@ -148,7 +150,8 @@ class SkillsCompleter(Completer):
                         subcommand,
                         start_position=-(len(partial)),
                         display=subcommand,
-                        display_meta=description)
+                        display_meta=description,
+                    )
             return
 
         # Otherwise, no further completion.

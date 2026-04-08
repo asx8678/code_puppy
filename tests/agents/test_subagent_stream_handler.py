@@ -68,6 +68,7 @@ class TestEstimateTokens:
     def test_realistic_text_estimation(self):
         """Test with realistic text content."""
         import math as _math
+
         text = "Hello, this is a test message for token estimation."
         # int(len(text) / 4) = estimated tokens for prose
         expected = max(1, int(len(text) / 4.0))  # ~4 chars per token

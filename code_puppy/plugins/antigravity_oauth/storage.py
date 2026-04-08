@@ -1,6 +1,5 @@
 """Account storage for multi-account Antigravity OAuth."""
 
-
 import json
 import logging
 import os
@@ -45,7 +44,8 @@ class RateLimitState:
         return cls(
             claude=data.get("claude"),
             gemini_antigravity=data.get("gemini-antigravity"),
-            gemini_cli=data.get("gemini-cli"))
+            gemini_cli=data.get("gemini-cli"),
+        )
 
 
 @dataclass
@@ -96,7 +96,8 @@ class AccountMetadata:
             last_switch_reason=data.get("lastSwitchReason"),
             rate_limit_reset_times=RateLimitState.from_dict(
                 data.get("rateLimitResetTimes")
-            ))
+            ),
+        )
 
 
 @dataclass
@@ -125,7 +126,8 @@ class AccountStorage:
             version=data.get("version", 3),
             accounts=accounts,
             active_index=data.get("activeIndex", 0),
-            active_index_by_family=data.get("activeIndexByFamily", {}))
+            active_index_by_family=data.get("activeIndexByFamily", {}),
+        )
 
 
 def _migrate_v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:

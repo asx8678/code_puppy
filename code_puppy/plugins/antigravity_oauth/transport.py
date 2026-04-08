@@ -4,7 +4,6 @@ Wraps Gemini API requests in the Antigravity envelope format and
 unwraps responses (including streaming SSE events).
 """
 
-
 import asyncio
 import copy
 import json
@@ -19,7 +18,8 @@ from .constants import (
     ANTIGRAVITY_ENDPOINT_FALLBACKS,
     ANTIGRAVITY_HEADERS,
     ANTIGRAVITY_VERSION,
-    _get_platform_tag)
+    _get_platform_tag,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +224,8 @@ def _inline_refs(schema: dict, simplify_unions: bool = False) -> dict:
                     "$id",
                     "default",
                     "examples",
-                    "const"):
+                    "const",
+                ):
                     continue
 
                 # Skip additionalProperties (not supported by Gemini or Claude)
@@ -381,7 +382,8 @@ class AntigravityClient(httpx.AsyncClient):
         refresh_token: str = "",
         expires_at: float | None = None,
         on_token_refreshed: Any | None = None,
-        **kwargs: Any):
+        **kwargs: Any,
+    ):
         super().__init__(**kwargs)
         self.project_id = project_id
         self.model_name = model_name
@@ -433,7 +435,8 @@ class AntigravityClient(httpx.AsyncClient):
 
                     logger.info(
                         "Proactively refreshed Antigravity token (expires in %ds)",
-                        int(self._expires_at - __import__("time").time()))
+                        int(self._expires_at - __import__("time").time()),
+                    )
 
                     # Notify callback (e.g., to persist updated tokens)
                     if self._on_token_refreshed:
@@ -511,7 +514,8 @@ class AntigravityClient(httpx.AsyncClient):
                                         is_claude = "claude" in model.lower()
                                         func_decl["parameters"] = _inline_refs(
                                             func_decl["parameters"],
-                                            simplify_unions=(is_gemini or is_claude))
+                                            simplify_unions=(is_gemini or is_claude),
+                                        )
 
                 # Fix generationConfig for Antigravity compatibility
                 gen_config = original_body.get("generationConfig", {})
@@ -592,7 +596,8 @@ class AntigravityClient(httpx.AsyncClient):
                 json.dumps(wrapped_body).encode(),
                 new_path,
                 new_query,
-                is_claude_thinking)
+                is_claude_thinking,
+            )
 
         except (json.JSONDecodeError, Exception) as e:
             logger.warning("Failed to wrap request: %s", e)
@@ -663,7 +668,8 @@ class AntigravityClient(httpx.AsyncClient):
                         scheme="https",
                         host=endpoint.replace("https://", ""),
                         path=new_path,
-                        query=new_query.encode() if new_query else b"")
+                        query=new_query.encode() if new_query else b"",
+                    )
 
                     # Retry loop for rate limits on this endpoint
                     for rate_limit_attempt in range(max_rate_limit_retries):
@@ -671,7 +677,8 @@ class AntigravityClient(httpx.AsyncClient):
                             method=request.method,
                             url=new_url,
                             headers=new_headers,
-                            content=new_content)
+                            content=new_content,
+                        )
 
                         response = await super().send(req, **kwargs)
                         last_response = response
@@ -702,7 +709,8 @@ class AntigravityClient(httpx.AsyncClient):
                                 logger.debug(
                                     "Rate limit wait too long (%.1fs) on %s, trying next endpoint...",
                                     wait_time or 0,
-                                    endpoint)
+                                    endpoint,
+                                )
                                 break  # Break inner loop, try next endpoint
 
                         # Retry on 403, 404, 5xx errors - try next endpoint
@@ -713,7 +721,8 @@ class AntigravityClient(httpx.AsyncClient):
                             logger.debug(
                                 "Endpoint %s returned %d, trying next...",
                                 endpoint,
-                                response.status_code)
+                                response.status_code,
+                            )
                             break  # Try next endpoint
 
                         # Success or non-retriable error (4xx except 429)
@@ -829,7 +838,8 @@ def create_antigravity_client(
     headers: dict[str, str | None] = None,
     refresh_token: str = "",
     expires_at: float | None = None,
-    on_token_refreshed: TokenRefreshCallback | None = None) -> AntigravityClient:
+    on_token_refreshed: TokenRefreshCallback | None = None,
+) -> AntigravityClient:
     """Create an httpx client configured for Antigravity API.
 
     Args:
@@ -864,4 +874,5 @@ def create_antigravity_client(
         on_token_refreshed=on_token_refreshed,
         base_url=base_url,
         headers=default_headers,
-        timeout=httpx.Timeout(180.0, connect=30.0))
+        timeout=httpx.Timeout(180.0, connect=30.0),
+    )

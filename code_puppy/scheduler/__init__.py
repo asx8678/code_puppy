@@ -21,7 +21,8 @@ from code_puppy.scheduler.config import (
     load_tasks,
     save_tasks,
     toggle_task,
-    update_task)
+    update_task,
+)
 from code_puppy.scheduler.daemon import start_daemon_background
 
 __all__ = [

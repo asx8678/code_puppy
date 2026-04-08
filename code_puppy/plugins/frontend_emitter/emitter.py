@@ -13,7 +13,8 @@ from uuid import uuid4
 from code_puppy.config import (
     get_frontend_emitter_enabled,
     get_frontend_emitter_max_recent_events,
-    get_frontend_emitter_queue_size)
+    get_frontend_emitter_queue_size,
+)
 
 logger = logging.getLogger(__name__)
 

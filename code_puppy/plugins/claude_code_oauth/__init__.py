@@ -13,7 +13,8 @@ from .token_refresh_heartbeat import (
     force_token_refresh,
     get_current_heartbeat,
     is_heartbeat_running,
-    token_refresh_heartbeat_context)
+    token_refresh_heartbeat_context,
+)
 
 __all__ = [
     "TokenRefreshHeartbeat",

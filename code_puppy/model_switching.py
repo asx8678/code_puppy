@@ -1,7 +1,5 @@
 """Shared helpers for switching models and reloading agents safely."""
 
-
-
 from code_puppy.config import set_model_name
 
 
@@ -14,9 +12,8 @@ def _get_effective_agent_model(agent) -> str | None:
 
 
 def set_model_and_reload_agent(
-    model_name: str,
-    *,
-    warn_on_pinned_mismatch: bool = True) -> None:
+    model_name: str, *, warn_on_pinned_mismatch: bool = True
+) -> None:
     """Set the global model and reload the active agent.
 
     This keeps model switching consistent across commands while avoiding

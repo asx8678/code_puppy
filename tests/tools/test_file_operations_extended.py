@@ -350,7 +350,9 @@ class TestFileOperationsExtended:
         async def mock_to_thread(*args, **kwargs):
             raise subprocess.TimeoutExpired("rg", 30)
 
-        with patch("code_puppy.tools.file_operations.asyncio.to_thread", mock_to_thread):
+        with patch(
+            "code_puppy.tools.file_operations.asyncio.to_thread", mock_to_thread
+        ):
             result = await _list_files(None, str(tmp_path), recursive=True)
 
         assert result.content is not None

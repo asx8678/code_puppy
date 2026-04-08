@@ -1018,16 +1018,16 @@ class TestCustomAnthropicModel:
         with patch("code_puppy.model_factory.get_cert_bundle_path", return_value=None):
             with patch("code_puppy.model_factory.get_http2", return_value=True):
                 with patch("code_puppy.claude_cache_client.ClaudeCacheAsyncClient"):
-                    with patch(
-                        "anthropic.AsyncAnthropic"
-                    ) as mock_anthropic:
+                    with patch("anthropic.AsyncAnthropic") as mock_anthropic:
                         with patch(
                             "code_puppy.claude_cache_client.patch_anthropic_client_messages"
                         ):
                             with patch(
                                 "code_puppy.provider_identity.make_anthropic_provider"
                             ):
-                                with patch("pydantic_ai.models.anthropic.AnthropicModel"):
+                                with patch(
+                                    "pydantic_ai.models.anthropic.AnthropicModel"
+                                ):
                                     with patch(
                                         "code_puppy.config.get_effective_model_settings",
                                         return_value={"interleaved_thinking": True},
@@ -1595,7 +1595,9 @@ class TestChatGPTOAuthErrorPaths:
                     with patch(
                         "code_puppy.plugins.chatgpt_oauth.register_callbacks.emit_warning"
                     ) as mock_warn:
-                        with pytest.raises(ValueError, match="could not be initialized"):
+                        with pytest.raises(
+                            ValueError, match="could not be initialized"
+                        ):
                             ModelFactory.get_model("chatgpt-oauth", config)
                         mock_warn.assert_called()
 
@@ -1620,9 +1622,7 @@ class TestAnthropicInterleaved:
             ):
                 with patch("code_puppy.model_factory.get_http2", return_value=True):
                     with patch("code_puppy.claude_cache_client.ClaudeCacheAsyncClient"):
-                        with patch(
-                            "anthropic.AsyncAnthropic"
-                        ) as mock_anthropic:
+                        with patch("anthropic.AsyncAnthropic") as mock_anthropic:
                             with patch(
                                 "code_puppy.claude_cache_client.patch_anthropic_client_messages"
                             ):
@@ -1667,9 +1667,7 @@ class TestAnthropicInterleaved:
             ):
                 with patch("code_puppy.model_factory.get_http2", return_value=True):
                     with patch("code_puppy.claude_cache_client.ClaudeCacheAsyncClient"):
-                        with patch(
-                            "anthropic.AsyncAnthropic"
-                        ) as mock_anthropic:
+                        with patch("anthropic.AsyncAnthropic") as mock_anthropic:
                             with patch(
                                 "code_puppy.claude_cache_client.patch_anthropic_client_messages"
                             ):

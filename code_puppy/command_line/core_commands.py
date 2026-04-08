@@ -34,7 +34,8 @@ def get_commands_help():
     description="Show this help message",
     usage="/help, /h",
     aliases=["h"],
-    category="core")
+    category="core",
+)
 def handle_help_command(command: str) -> bool:
     """Show commands help."""
     import uuid
@@ -51,7 +52,8 @@ def handle_help_command(command: str) -> bool:
     name="cd",
     description="Change directory or show directories",
     usage="/cd <dir>",
-    category="core")
+    category="core",
+)
 def handle_cd_command(command: str) -> bool:
     """Change directory or list current directory."""
     # Use shlex.split to handle quoted paths properly
@@ -103,7 +105,8 @@ def handle_cd_command(command: str) -> bool:
     name="tools",
     description="Show available tools and capabilities",
     usage="/tools",
-    category="core")
+    category="core",
+)
 def handle_tools_command(command: str) -> bool:
     """Display available tools."""
     from rich.markdown import Markdown
@@ -119,7 +122,8 @@ def handle_tools_command(command: str) -> bool:
     name="motd",
     description="Show the latest message of the day (MOTD)",
     usage="/motd",
-    category="core")
+    category="core",
+)
 def handle_motd_command(command: str) -> bool:
     """Show message of the day."""
     try:
@@ -135,13 +139,15 @@ def handle_motd_command(command: str) -> bool:
     description="Paste image from clipboard (same as F3, or Ctrl+V with image)",
     usage="/paste, /clipboard, /cb",
     aliases=["clipboard", "cb"],
-    category="core")
+    category="core",
+)
 def handle_paste_command(command: str) -> bool:
     """Paste an image from the clipboard into the pending attachments."""
     from code_puppy.command_line.clipboard import (
         capture_clipboard_image_to_pending,
         get_clipboard_manager,
-        has_image_in_clipboard)
+        has_image_in_clipboard,
+    )
     from code_puppy.messaging import emit_info, emit_success, emit_warning
 
     if not has_image_in_clipboard():
@@ -166,7 +172,8 @@ def handle_paste_command(command: str) -> bool:
     name="tutorial",
     description="Run the interactive tutorial wizard",
     usage="/tutorial",
-    category="core")
+    category="core",
+)
 def handle_tutorial_command(command: str) -> bool:
     """Run the interactive tutorial wizard.
 
@@ -178,7 +185,8 @@ def handle_tutorial_command(command: str) -> bool:
 
     from code_puppy.command_line.onboarding_wizard import (
         reset_onboarding,
-        run_onboarding_wizard)
+        run_onboarding_wizard,
+    )
     from code_puppy.model_switching import set_model_and_reload_agent
 
     # Always reset so user can re-run the tutorial anytime
@@ -198,7 +206,8 @@ def handle_tutorial_command(command: str) -> bool:
     elif result == "claude":
         emit_info("🔐 Starting Claude Code OAuth flow...")
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
-            _perform_authentication)
+            _perform_authentication,
+        )
 
         _perform_authentication()
         set_model_and_reload_agent("claude-code-claude-opus-4-6")
@@ -215,7 +224,8 @@ def handle_tutorial_command(command: str) -> bool:
     description="Exit interactive mode",
     usage="/exit, /quit",
     aliases=["quit"],
-    category="core")
+    category="core",
+)
 def handle_exit_command(command: str) -> bool:
     """Exit the interactive session."""
     from code_puppy.messaging import emit_success
@@ -235,7 +245,8 @@ def handle_exit_command(command: str) -> bool:
     description="Switch to a different agent or show available agents",
     usage="/agent <name>, /a <name>",
     aliases=["a"],
-    category="core")
+    category="core",
+)
 def handle_agent_command(command: str) -> bool:
     """Handle agent switching."""
     from rich.text import Text
@@ -244,7 +255,8 @@ def handle_agent_command(command: str) -> bool:
         get_agent_descriptions,
         get_available_agents,
         get_current_agent,
-        set_current_agent)
+        set_current_agent,
+    )
     from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
 
     tokens = command.split()
@@ -273,7 +285,8 @@ def handle_agent_command(command: str) -> bool:
                     group_id = str(uuid.uuid4())
                     emit_info(
                         f"Already using agent: {current_agent.display_name}",
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
                     return True
 
                 # Switch to the new agent
@@ -282,20 +295,23 @@ def handle_agent_command(command: str) -> bool:
                 if not set_current_agent(selected_agent):
                     emit_warning(
                         "Agent switch failed after autosave rotation. Your context was preserved.",
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
                     return True
 
                 new_agent = get_current_agent()
                 new_agent.reload_code_generation_agent()
                 emit_success(
                     f"Switched to agent: {new_agent.display_name}",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 emit_info(f"{new_agent.description}", message_group=group_id)
                 emit_info(
                     Text.from_markup(
                         f"[dim]Auto-save session rotated to: {new_session_id}[/dim]"
                     ),
-                    message_group=group_id)
+                    message_group=group_id,
+                )
             else:
                 emit_warning("Agent selection cancelled")
             return True
@@ -319,14 +335,17 @@ def handle_agent_command(command: str) -> bool:
                 Text.from_markup(
                     f"[bold green]Current Agent:[/bold green] {current_agent.display_name}"
                 ),
-                message_group=group_id)
+                message_group=group_id,
+            )
             emit_info(
                 Text.from_markup(f"[dim]{current_agent.description}[/dim]\n"),
-                message_group=group_id)
+                message_group=group_id,
+            )
 
             emit_info(
                 Text.from_markup("[bold magenta]Available Agents:[/bold magenta]"),
-                message_group=group_id)
+                message_group=group_id,
+            )
             for name, display_name in available_agents.items():
                 description = descriptions.get(name, "No description")
                 current_marker = (
@@ -336,12 +355,14 @@ def handle_agent_command(command: str) -> bool:
                     Text.from_markup(
                         f"  [cyan]{name:<12}[/cyan] {display_name}{current_marker}"
                     ),
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 emit_info(f"    {description}", message_group=group_id)
 
             emit_info(
                 Text.from_markup("\n[yellow]Usage:[/yellow] /agent <agent-name>"),
-                message_group=group_id)
+                message_group=group_id,
+            )
             return True
 
     elif len(tokens) == 2:
@@ -357,34 +378,38 @@ def handle_agent_command(command: str) -> bool:
             emit_error(f"Agent '{agent_name}' not found", message_group=group_id)
             emit_warning(
                 f"Available agents: {', '.join(available_agents.keys())}",
-                message_group=group_id)
+                message_group=group_id,
+            )
             return True
 
         current_agent = get_current_agent()
         if current_agent.name == agent_name:
             emit_info(
                 f"Already using agent: {current_agent.display_name}",
-                message_group=group_id)
+                message_group=group_id,
+            )
             return True
 
         new_session_id = finalize_autosave_session()
         if not set_current_agent(agent_name):
             emit_warning(
                 "Agent switch failed after autosave rotation. Your context was preserved.",
-                message_group=group_id)
+                message_group=group_id,
+            )
             return True
 
         new_agent = get_current_agent()
         new_agent.reload_code_generation_agent()
         emit_success(
-            f"Switched to agent: {new_agent.display_name}",
-            message_group=group_id)
+            f"Switched to agent: {new_agent.display_name}", message_group=group_id
+        )
         emit_info(f"{new_agent.description}", message_group=group_id)
         emit_info(
             Text.from_markup(
                 f"[dim]Auto-save session rotated to: {new_session_id}[/dim]"
             ),
-            message_group=group_id)
+            message_group=group_id,
+        )
         return True
     else:
         emit_warning("Usage: /agent [agent-name]")
@@ -396,7 +421,8 @@ def handle_agent_command(command: str) -> bool:
     description="Set active model",
     usage="/model, /m <model>",
     aliases=["m"],
-    category="core")
+    category="core",
+)
 def handle_model_command(command: str) -> bool:
     """Set the active model."""
     import asyncio
@@ -404,7 +430,8 @@ def handle_model_command(command: str) -> bool:
     from code_puppy.command_line.model_picker_completion import (
         get_active_model,
         load_model_names,
-        set_active_model)
+        set_active_model,
+    )
     from code_puppy.messaging import emit_success, emit_warning
 
     tokens = command.split()
@@ -465,7 +492,8 @@ def handle_model_command(command: str) -> bool:
     name="add_model",
     description="Browse and add models from models.dev catalog",
     usage="/add_model",
-    category="core")
+    category="core",
+)
 def handle_add_model_command(command: str) -> bool:
     """Launch interactive model browser TUI."""
     from code_puppy.command_line.add_model_menu import interactive_model_picker
@@ -494,7 +522,8 @@ def handle_add_model_command(command: str) -> bool:
     description="Configure per-model settings (temperature, seed, etc.)",
     usage="/model_settings [--show [model_name]]",
     aliases=["ms"],
-    category="config")
+    category="config",
+)
 def handle_model_settings_command(command: str) -> bool:
     """Launch interactive model settings TUI.
 
@@ -505,7 +534,8 @@ def handle_model_settings_command(command: str) -> bool:
     """
     from code_puppy.command_line.model_settings_menu import (
         interactive_model_settings,
-        show_model_settings_summary)
+        show_model_settings_summary,
+    )
     from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
     from code_puppy.tools.command_runner import set_awaiting_user_input
 
@@ -552,7 +582,8 @@ def handle_model_settings_command(command: str) -> bool:
     name="mcp",
     description="Manage MCP servers (list, start, stop, status, etc.)",
     usage="/mcp",
-    category="core")
+    category="core",
+)
 def handle_mcp_command(command: str) -> bool:
     """Handle MCP server management."""
     from code_puppy.command_line.mcp import MCPCommandHandler
@@ -566,7 +597,8 @@ def handle_mcp_command(command: str) -> bool:
     description="Manage the Code Puppy API server",
     usage="/api [start|stop|status]",
     category="core",
-    detailed_help="Start, stop, or check status of the local FastAPI server for GUI integration.")
+    detailed_help="Start, stop, or check status of the local FastAPI server for GUI integration.",
+)
 def handle_api_command(command: str) -> bool:
     """Handle the /api command."""
     import os
@@ -600,7 +632,8 @@ def handle_api_command(command: str) -> bool:
             [sys.executable, "-m", "code_puppy.api.main"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True)
+            start_new_session=True,
+        )
         pid_file.parent.mkdir(parents=True, exist_ok=True)
         pid_file.write_text(str(proc.pid))
         emit_success(f"API server started (PID {proc.pid})")
@@ -648,7 +681,8 @@ def handle_api_command(command: str) -> bool:
     name="generate-pr-description",
     description="Generate comprehensive PR description",
     usage="/generate-pr-description [@dir]",
-    category="core")
+    category="core",
+)
 def handle_generate_pr_description_command(command: str) -> str:
     """Generate a PR description."""
     # Parse directory argument (e.g., /generate-pr-description @some/dir)
@@ -690,7 +724,8 @@ def handle_generate_pr_description_command(command: str) -> str:
     name="wiggum",
     description="Loop mode: re-run the same prompt when agent finishes (like Wiggum chasing donuts 🍩)",
     usage="/wiggum <prompt>",
-    category="core")
+    category="core",
+)
 def handle_wiggum_command(command: str) -> str | bool:
     """Start wiggum loop mode.
 
@@ -730,7 +765,8 @@ def handle_wiggum_command(command: str) -> str | bool:
     description="Stop wiggum loop mode",
     usage="/wiggum_stop",
     aliases=["stopwiggum", "ws"],
-    category="core")
+    category="core",
+)
 def handle_wiggum_stop_command(command: str) -> bool:
     """Stop wiggum loop mode."""
     from code_puppy.command_line.wiggum_state import is_wiggum_active, stop_wiggum

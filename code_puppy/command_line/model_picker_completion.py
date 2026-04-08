@@ -9,6 +9,7 @@ try:
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.layout import Layout, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     Application = None  # type: ignore
@@ -103,7 +104,8 @@ class ModelNameCompleter(Completer):
                 model_name,
                 start_position=start_position,
                 display=model_name,
-                display_meta=meta)
+                display_meta=meta,
+            )
 
 
 def _find_matching_model(rest: str, model_names: list[str]) -> str | None:
@@ -406,14 +408,14 @@ async def interactive_model_picker() -> Optional[str]:
 
 
 async def get_input_with_model_completion(
-    prompt_str: str = ">>> ",
-    trigger: str = "/model",
-    history_file: str | None = None) -> str:
+    prompt_str: str = ">>> ", trigger: str = "/model", history_file: str | None = None
+) -> str:
     history = FileHistory(os.path.expanduser(history_file)) if history_file else None
     session = PromptSession(
         completer=ModelNameCompleter(trigger),
         history=history,
-        complete_while_typing=True)
+        complete_while_typing=True,
+    )
     text = await session.prompt_async(prompt_str)
     possibly_stripped = update_model_in_input(text)
     if possibly_stripped is not None:

@@ -25,10 +25,7 @@ class LeftJustifiedHeading(Heading):
 
         if self.tag == "h1":
             # Draw a border around h1s (same as Rich default)
-            yield Panel(
-                text,
-                box=box.HEAVY,
-                style="markdown.h1.border")
+            yield Panel(text, box=box.HEAVY, style="markdown.h1.border")
         else:
             # Styled text for h2 and beyond (same as Rich default)
             if self.tag == "h2":

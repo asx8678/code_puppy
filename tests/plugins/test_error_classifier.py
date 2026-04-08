@@ -145,12 +145,12 @@ class TestExInfo:
             description="Testing callbacks.",
             callback=mock_callback,
         )
-        
+
         # Simulate callback invocation (as would happen in register_callbacks.py)
         exc = ValueError("test error")
         if info.callback:
             info.callback(exc)
-        
+
         mock_callback.assert_called_once_with(exc)
 
 
@@ -292,8 +292,7 @@ class TestExceptionRegistry:
         """Test that invalid regex patterns raise PatternError."""
         with pytest.raises(re.PatternError):
             ExceptionRegistry.register_pattern(
-                r"invalid[",
-                ExInfo(name="Invalid", retry=False, description="Test")
+                r"invalid[", ExInfo(name="Invalid", retry=False, description="Test")
             )
 
     def test_list_registered(self):
@@ -433,7 +432,9 @@ class TestThreadSafety:
             t.join()
 
         # Verify no errors occurred
-        assert len(errors_occurred) == 0, f"Errors during concurrent registration: {errors_occurred}"
+        assert len(errors_occurred) == 0, (
+            f"Errors during concurrent registration: {errors_occurred}"
+        )
 
         # Verify all registrations are present
         registered = ExceptionRegistry.list_registered()
@@ -448,7 +449,7 @@ class TestThreadSafety:
             registered_classes.append(exc_class)
             ExceptionRegistry.register(
                 exc_class,
-                ExInfo(name=f"Lookup_{i}", retry=False, description=f"Test {i}")
+                ExInfo(name=f"Lookup_{i}", retry=False, description=f"Test {i}"),
             )
 
         lookup_results = []
@@ -470,7 +471,7 @@ class TestThreadSafety:
                     exc_class = type(f"ConcurrentReg_{i}", (Exception,), {})
                     ExceptionRegistry.register(
                         exc_class,
-                        ExInfo(name=f"Reg_{i}", retry=False, description=f"Reg {i}")
+                        ExInfo(name=f"Reg_{i}", retry=False, description=f"Reg {i}"),
                     )
                     time.sleep(0.0001)
             except Exception as e:
@@ -487,11 +488,14 @@ class TestThreadSafety:
         register_thread.join()
 
         # Verify no errors occurred
-        assert len(lookup_errors) == 0, f"Errors during concurrent lookup/registration: {lookup_errors}"
+        assert len(lookup_errors) == 0, (
+            f"Errors during concurrent lookup/registration: {lookup_errors}"
+        )
 
         # Verify lookups found the expected exceptions
         assert len(lookup_results) > 0
         assert all(name.startswith("Lookup_") for name in lookup_results)
+
     """Tests for the register_custom_pattern helper."""
 
     def test_register_custom_pattern(self, registered_builtins):

@@ -14,9 +14,7 @@ from rich.text import Text as RichText
 from code_puppy.callbacks import register_callback
 from code_puppy.config import get_diff_context_lines, get_yolo_mode
 from code_puppy.messaging import emit_warning
-from code_puppy.tools.common import (
-    _find_best_window,
-    get_user_approval)
+from code_puppy.tools.common import _find_best_window, get_user_approval
 
 # Lock for preventing multiple simultaneous permission prompts
 _FILE_CONFIRMATION_LOCK = threading.Lock()
@@ -95,7 +93,8 @@ def _preview_delete_snippet(file_path: str, snippet: str) -> str | None:
                 modified.splitlines(keepends=True),
                 fromfile=f"a/{os.path.basename(file_path)}",
                 tofile=f"b/{os.path.basename(file_path)}",
-                n=get_diff_context_lines())
+                n=get_diff_context_lines(),
+            )
         )
         return diff_text
     except Exception:
@@ -118,7 +117,8 @@ def _preview_write_to_file(
             content.splitlines(keepends=True),
             fromfile="/dev/null" if not exists else f"a/{os.path.basename(file_path)}",
             tofile=f"b/{os.path.basename(file_path)}",
-            n=get_diff_context_lines())
+            n=get_diff_context_lines(),
+        )
         return "".join(diff_lines)
     except Exception:
         return None
@@ -181,7 +181,8 @@ def _preview_replace_in_file(
                 modified.splitlines(keepends=True),
                 fromfile=f"a/{os.path.basename(file_path)}",
                 tofile=f"b/{os.path.basename(file_path)}",
-                n=get_diff_context_lines())
+                n=get_diff_context_lines(),
+            )
         )
         return diff_text
     except Exception:
@@ -212,7 +213,8 @@ def _preview_delete_file(file_path: str) -> str | None:
                 [],
                 fromfile=f"a/{os.path.basename(file_path)}",
                 tofile=f"b/{os.path.basename(file_path)}",
-                n=get_diff_context_lines())
+                n=get_diff_context_lines(),
+            )
         )
         return diff_text
     except Exception:
@@ -223,7 +225,8 @@ def prompt_for_file_permission(
     file_path: str,
     operation: str,
     preview: str | None = None,
-    message_group: str | None = None) -> tuple[bool, str | None]:
+    message_group: str | None = None,
+) -> tuple[bool, str | None]:
     """Prompt the user for permission to perform a file operation.
 
     This function provides a unified permission prompt system for all file operations.
@@ -246,12 +249,16 @@ def prompt_for_file_permission(
     # SECURITY FIX p8wo/8y6x: Even in yolo_mode, protect sensitive paths
     # Check sensitive paths BEFORE yolo_mode bypass
     from code_puppy.tools.file_operations import _is_sensitive_path
+
     if _is_sensitive_path(file_path):
         emit_warning(
             f"SECURITY: Access to sensitive path blocked even in yolo_mode: {file_path}",
-            message_group=message_group
+            message_group=message_group,
         )
-        return False, "Access to sensitive paths (SSH keys, credentials) is never allowed"
+        return (
+            False,
+            "Access to sensitive paths (SSH keys, credentials) is never allowed",
+        )
 
     # Skip confirmation only if in yolo mode (removed TTY check for better compatibility)
     if yolo_mode:
@@ -281,7 +288,8 @@ def prompt_for_file_permission(
     if not confirmation_lock_acquired:
         emit_warning(
             "Another file operation is currently awaiting confirmation",
-            message_group=message_group)
+            message_group=message_group,
+        )
         return False, None
 
     try:
@@ -298,7 +306,8 @@ def prompt_for_file_permission(
             title="File Operation",
             content=panel_content,
             preview=preview,
-            border_style="dim white")
+            border_style="dim white",
+        )
 
         return confirmed, user_feedback
 
@@ -312,7 +321,8 @@ def handle_edit_file_permission(
     file_path: str,
     operation_type: str,
     operation_data: Any,
-    message_group: str | None = None) -> bool:
+    message_group: str | None = None,
+) -> bool:
     """Handle permission for edit_file operations with automatic preview generation.
 
     Args:
@@ -352,9 +362,8 @@ def handle_edit_file_permission(
 
 
 def handle_delete_file_permission(
-    context: Any,
-    file_path: str,
-    message_group: str | None = None) -> bool:
+    context: Any, file_path: str, message_group: str | None = None
+) -> bool:
     """Handle permission for delete_file operations with automatic preview generation.
 
     Args:
@@ -380,7 +389,8 @@ def handle_file_permission(
     operation: str,
     preview: str | None = None,
     message_group: str | None = None,
-    operation_data: Any = None) -> bool:
+    operation_data: Any = None,
+) -> bool:
     """Callback handler for file permission checks.
 
     This function is called by file operations to check for user permission.

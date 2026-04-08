@@ -73,7 +73,8 @@ class ListCommand(MCPCommandBase):
                     state_display,
                     Text(enabled_display, style=enabled_style),
                     uptime_display,
-                    status_display)
+                    status_display,
+                )
 
             emit_info(table, message_group=group_id)
 
@@ -84,7 +85,8 @@ class ListCommand(MCPCommandBase):
             )
             emit_info(
                 f"\n📊 Summary: {running}/{total} servers running",
-                message_group=group_id)
+                message_group=group_id,
+            )
 
         except Exception as e:
             logger.error(f"Error listing MCP servers: {e}")

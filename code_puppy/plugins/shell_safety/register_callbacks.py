@@ -25,12 +25,13 @@ from code_puppy.tools.command_runner import ShellSafetyAssessment
 # which was vulnerable to prefix spoofing (e.g., "claude-code-malicious").
 # Defense in depth: All models now go through the same safety pipeline.
 
+
 def is_oauth_model(model_name: str | None) -> bool:
     """DEPRECATED: OAuth bypass removed for security.
-    
+
     Previously checked if model was an OAuth model to skip safety checks.
     Now returns False always - all models must go through safety pipeline.
-    
+
     Args:
         model_name: Ignored - kept for API compatibility
 

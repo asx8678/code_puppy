@@ -252,7 +252,9 @@ class TestShellSafetyCallbackCompound:
 
         # First sub-command is safe, second is critical.
         safe_cached = CachedAssessment(risk="low", reasoning="Just a status check")
-        evil_cached = CachedAssessment(risk="critical", reasoning="Downloads and executes")
+        evil_cached = CachedAssessment(
+            risk="critical", reasoning="Downloads and executes"
+        )
 
         def _fake_cache(command, cwd):
             if "git status" in command:
@@ -454,9 +456,7 @@ class TestShellSafetyCallbackCompound:
                     )
                 },
             ),
-            patch(
-                "code_puppy.plugins.shell_safety.register_callbacks.emit_info"
-            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
         ):
             result = await shell_safety_callback(
                 context=None,

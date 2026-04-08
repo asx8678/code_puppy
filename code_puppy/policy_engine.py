@@ -21,7 +21,9 @@ logger = logging.getLogger(__name__)
 Decision = Literal["allow", "deny", "ask_user"]
 
 
-def _safe_regex_search(pattern: re.Pattern, text: str, timeout: float = 1.0) -> bool | None:
+def _safe_regex_search(
+    pattern: re.Pattern, text: str, timeout: float = 1.0
+) -> bool | None:
     """Search with timeout protection against ReDoS. Returns match result or None on timeout."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(pattern.search, text)
@@ -109,7 +111,9 @@ class PolicyEngine:
             # SECURITY FIX: Wrap regex with timeout protection
             try:
                 if rule._compiled_command:
-                    result = _safe_regex_search(rule._compiled_command, str(command), timeout=1.0)
+                    result = _safe_regex_search(
+                        rule._compiled_command, str(command), timeout=1.0
+                    )
                     if result is None:
                         # ReDoS timeout detected
                         logger.warning(
@@ -119,7 +123,9 @@ class PolicyEngine:
                     if not result:
                         continue
                 if rule._compiled_args and stringified:
-                    result = _safe_regex_search(rule._compiled_args, stringified, timeout=1.0)
+                    result = _safe_regex_search(
+                        rule._compiled_args, stringified, timeout=1.0
+                    )
                     if result is None:
                         # ReDoS timeout detected
                         logger.warning(

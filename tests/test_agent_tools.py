@@ -435,7 +435,9 @@ class TestSessionSaveLoad:
         agent_name = "test-agent"
         timestamp = datetime(2026, 4, 1, 12, 0, tzinfo=timezone.utc)
         mock_messages = [
-            ModelRequest(parts=[UserPromptPart(content=f"Timestamp: {timestamp.isoformat()}")]),
+            ModelRequest(
+                parts=[UserPromptPart(content=f"Timestamp: {timestamp.isoformat()}")]
+            ),
             ModelResponse(parts=[TextPart(content="Recorded successfully")]),
         ]
 
@@ -747,10 +749,16 @@ class TestSanitizeSessionId:
     """Tests for _sanitize_session_id()."""
 
     def test_the_exact_failing_input_from_production(self):
-        assert _sanitize_session_id("code_puppy-rjl1.14-worktree") == "code-puppy-rjl1-14-worktree"
+        assert (
+            _sanitize_session_id("code_puppy-rjl1.14-worktree")
+            == "code-puppy-rjl1-14-worktree"
+        )
 
     def test_second_failing_input_from_production(self):
-        assert _sanitize_session_id("code_puppy-rjl1.5-worktree") == "code-puppy-rjl1-5-worktree"
+        assert (
+            _sanitize_session_id("code_puppy-rjl1.5-worktree")
+            == "code-puppy-rjl1-5-worktree"
+        )
 
     def test_uppercase_lowered(self):
         assert _sanitize_session_id("MySession") == "mysession"

@@ -57,7 +57,7 @@ def standalone_function():
 
 CONSTANT = "test"
 '''
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         f.write(content)
         path = f.name
 
@@ -74,27 +74,27 @@ CONSTANT = "test"
 def sample_directory(tmp_path):
     """Create a sample directory structure for testing."""
     # Create Python files
-    (tmp_path / "main.py").write_text('''
+    (tmp_path / "main.py").write_text("""
 def main():
     print("Hello")
 
 class App:
     def run(self):
         main()
-''')
+""")
 
-    (tmp_path / "utils.py").write_text('''
+    (tmp_path / "utils.py").write_text("""
 def helper():
     return "helper"
-''')
+""")
 
     # Create subdirectory
     subdir = tmp_path / "subdir"
     subdir.mkdir()
-    (subdir / "module.py").write_text('''
+    (subdir / "module.py").write_text("""
 class SubModule:
     pass
-''')
+""")
 
     # Create unsupported file
     (tmp_path / "readme.txt").write_text("Hello")
@@ -210,7 +210,13 @@ class TestFileOutline:
         """Test outline property filters."""
         symbols = [
             SymbolInfo(name="MyClass", kind="class", start_line=1, end_line=10),
-            SymbolInfo(name="method1", kind="method", start_line=5, end_line=8, parent="MyClass"),
+            SymbolInfo(
+                name="method1",
+                kind="method",
+                start_line=5,
+                end_line=8,
+                parent="MyClass",
+            ),
             SymbolInfo(name="func1", kind="function", start_line=15, end_line=20),
             SymbolInfo(name="os", kind="import", start_line=1, end_line=1),
         ]
