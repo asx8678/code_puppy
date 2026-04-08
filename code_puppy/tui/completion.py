@@ -6,21 +6,39 @@ completion. Shows results in an OptionList overlay above the input.
 
 import glob
 import os
+import sys
 from dataclasses import dataclass
 from functools import lru_cache
 
 
-@dataclass
-class CompletionItem:
-    """A single completion suggestion."""
+# COMP-L1 fix: Add __slots__ for memory efficiency
+# Use slots=True on Python 3.10+, otherwise manual __slots__
+if sys.version_info >= (3, 10):
+    @dataclass(slots=True)
+    class CompletionItem:
+        """A single completion suggestion."""
 
-    text: str
-    display: str = ""
-    description: str = ""
+        text: str
+        display: str = ""
+        description: str = ""
 
-    def __post_init__(self):
-        if not self.display:
-            self.display = self.text
+        def __post_init__(self):
+            if not self.display:
+                self.display = self.text
+else:
+    @dataclass
+    class CompletionItem:
+        """A single completion suggestion."""
+
+        __slots__ = ('text', 'display', 'description')
+
+        text: str
+        display: str = ""
+        description: str = ""
+
+        def __post_init__(self):
+            if not self.display:
+                self.display = self.text
 
 
 # ---------------------------------------------------------------------------

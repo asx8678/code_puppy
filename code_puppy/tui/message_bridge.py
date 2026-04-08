@@ -35,17 +35,30 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Regex for stripping ANSI escape codes produced by Rich / other renderers
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[mGKHF]")
+# Matches: SGR sequences (colors/styles), cursor movement, OSC sequences,
+# DECSET/DECRST sequences, and other CSI sequences
+_ANSI_RE = re.compile(
+    r"\x1b(?:"
+    r"\[[0-9;]*[a-zA-Z]"  # CSI sequences (SGR, cursor, etc.)
+    r"|\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC sequences (title, etc.)
+    r"|\[\?[0-9;]*[hl]"  # DECSET/DECRST sequences
+    r")"
+)
+
+# Sentinel object to mark message types that need Markdown rendering
+_MARKDOWN_SENTINEL = object()
 
 # Module-scope template dict for plain string styles (types not in this dict
 # fall through to direct chat.write(content_str))
-_PLAIN_STYLES: dict[str, str] = {
+# Use _MARKDOWN_SENTINEL for types that need Markdown rendering instead of plain text
+_PLAIN_STYLES: dict[str, str | object] = {
     "ERROR": "[red]❌ {content}[/red]",
     "WARNING": "[yellow]⚠ {content}[/yellow]",
     "SUCCESS": "[green]✅ {content}[/green]",
     "SYSTEM": "[dim]{content}[/dim]",
     "TOOL_OUTPUT": "[cyan]{content}[/cyan]",
     "HUMAN_INPUT_REQUEST": "[bold cyan]{content}[/bold cyan]",
+    "AGENT_RESPONSE": _MARKDOWN_SENTINEL,  # Special: render as Markdown
 }
 
 
@@ -197,18 +210,15 @@ class TUIMessageBridge:
         if not content_str:
             return
 
-        # Map message type → styled output using dict lookup (faster than if/elif)
-        # AGENT_RESPONSE needs special handling for Markdown, check it first
-        if msg_type == MessageType.AGENT_RESPONSE:
+        # Map message type → styled output using dict lookup (faster than if/elif chain)
+        template = _PLAIN_STYLES.get(msg_type.name)
+        if template is _MARKDOWN_SENTINEL:
+            # AGENT_RESPONSE: render as Markdown with fallback to plain text
             try:
                 chat.write(Markdown(content_str))
             except Exception:
                 chat.write(content_str)
-            return
-
-        # Use dict lookup for plain string templates
-        template = _PLAIN_STYLES.get(msg_type.name)
-        if template:
+        elif template:
             chat.write(template.format(content=content_str))
         else:
             # INFO, DEBUG, DIVIDER, PLANNED_NEXT_STEPS, etc.

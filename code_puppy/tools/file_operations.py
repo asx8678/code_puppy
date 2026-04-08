@@ -26,6 +26,7 @@ from code_puppy.messaging import (  # New structured messaging types
     GrepResultMessage,
     get_message_bus,
 )
+from code_puppy.token_utils import estimate_token_count as _etc
 
 
 # Pydantic models for tool return types
@@ -686,8 +687,6 @@ def _read_file_sync(
             )
 
             # Use shared token estimation (content-aware, sampling for large texts)
-            from code_puppy.token_utils import estimate_token_count as _etc
-
             num_tokens = _etc(content)
             if num_tokens > 10000:
                 return (

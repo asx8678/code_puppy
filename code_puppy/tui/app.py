@@ -19,6 +19,23 @@ from code_puppy.tui.theme import APP_CSS, CODE_PUPPY_THEME
 from code_puppy.tui.widgets.completion_overlay import CompletionOverlay
 from code_puppy.tui.widgets.info_bar import InfoBar
 
+# Hoist all screen imports to module top level (Issue APP-L1)
+# No circular import issues since screens don't import from app.py
+from code_puppy.tui.screens.agent_screen import AgentScreen
+from code_puppy.tui.screens.model_settings_screen import ModelSettingsScreen
+from code_puppy.tui.screens.diff_screen import DiffScreen
+from code_puppy.tui.screens.colors_screen import ColorsScreen
+from code_puppy.tui.screens.onboarding_screen import OnboardingScreen
+from code_puppy.tui.screens.autosave_screen import AutosaveScreen
+from code_puppy.tui.screens.skills_screen import SkillsScreen
+from code_puppy.tui.screens.hooks_screen import HooksScreen
+from code_puppy.tui.screens.scheduler_screen import SchedulerScreen
+from code_puppy.tui.screens.uc_screen import UCScreen
+from code_puppy.tui.screens.add_model_screen import AddModelScreen
+from code_puppy.tui.screens.mcp_screen import MCPScreen
+from code_puppy.tui.screens.mcp_form_screen import MCPFormScreen
+from code_puppy.tui.screens.model_screen import ModelScreen
+
 logger = logging.getLogger(__name__)
 
 # Maximum number of history entries to keep
@@ -438,8 +455,6 @@ class CodePuppyApp(App):
 
     def _cmd_agent(self, command: str, chat) -> None:
         """Handle /agent, /a (no args) → Textual agent picker."""
-        from code_puppy.tui.screens.agent_screen import AgentScreen
-
         def _on_agent_selected_cmd(_result=None) -> None:
             try:
                 self._info_bar.update_from_app_state()
@@ -455,62 +470,42 @@ class CodePuppyApp(App):
 
     def _cmd_settings(self, command: str, chat) -> None:
         """Handle /settings, /model_settings → Textual settings screen."""
-        from code_puppy.tui.screens.model_settings_screen import ModelSettingsScreen
-
         self.push_screen(ModelSettingsScreen(), callback=self._on_screen_dismissed)
 
     def _cmd_diff(self, command: str, chat) -> None:
         """Handle /diff → Textual diff screen."""
-        from code_puppy.tui.screens.diff_screen import DiffScreen
-
         self.push_screen(DiffScreen())
 
     def _cmd_colors(self, command: str, chat) -> None:
         """Handle /colors → Textual colors screen."""
-        from code_puppy.tui.screens.colors_screen import ColorsScreen
-
         self.push_screen(ColorsScreen())
 
     def _cmd_tutorial(self, command: str, chat) -> None:
         """Handle /tutorial → Textual onboarding screen."""
-        from code_puppy.tui.screens.onboarding_screen import OnboardingScreen
-
         self.push_screen(OnboardingScreen())
 
     def _cmd_autosave_load(self, command: str, chat) -> None:
         """Handle /autosave_load → Textual autosave screen."""
-        from code_puppy.tui.screens.autosave_screen import AutosaveScreen
-
         self.push_screen(AutosaveScreen())
 
     def _cmd_skills(self, command: str, chat) -> None:
         """Handle /skills, /skill → Textual skills screen."""
-        from code_puppy.tui.screens.skills_screen import SkillsScreen
-
         self.push_screen(SkillsScreen())
 
     def _cmd_hooks(self, command: str, chat) -> None:
         """Handle /hooks, /hook → Textual hooks screen."""
-        from code_puppy.tui.screens.hooks_screen import HooksScreen
-
         self.push_screen(HooksScreen())
 
     def _cmd_scheduler(self, command: str, chat) -> None:
         """Handle /scheduler, /sched, /cron → Textual scheduler screen."""
-        from code_puppy.tui.screens.scheduler_screen import SchedulerScreen
-
         self.push_screen(SchedulerScreen())
 
     def _cmd_uc(self, command: str, chat) -> None:
         """Handle /uc → Textual UC screen."""
-        from code_puppy.tui.screens.uc_screen import UCScreen
-
         self.push_screen(UCScreen())
 
     def _cmd_add_model(self, command: str, chat) -> None:
         """Handle /add_model → Textual add model screen."""
-        from code_puppy.tui.screens.add_model_screen import AddModelScreen
-
         self.push_screen(AddModelScreen(), callback=self._on_screen_dismissed)
 
     # Dispatch table for slash commands (Issue APP-M1: dict dispatch)
@@ -576,8 +571,6 @@ class CodePuppyApp(App):
             and _cmd_parts[0].lower() == "/mcp"
             and _cmd_parts[1].lower() == "install"
         ):
-            from code_puppy.tui.screens.mcp_screen import MCPScreen
-
             def _on_mcp_selected(server_id: str | None) -> None:
                 if server_id:
                     self._install_mcp_server(server_id)
@@ -591,8 +584,6 @@ class CodePuppyApp(App):
             and _cmd_parts[0].lower() == "/mcp"
             and _cmd_parts[1].lower() == "add"
         ):
-            from code_puppy.tui.screens.mcp_form_screen import MCPFormScreen
-
             def _on_mcp_form_done(server_name: str | None) -> None:
                 if server_name:
                     _chat = self._chat_log
@@ -722,8 +713,6 @@ class CodePuppyApp(App):
 
     def _show_model_picker_screen(self) -> None:
         """Push the ModelScreen and activate the chosen model on return."""
-        from code_puppy.tui.screens.model_screen import ModelScreen
-
         def _on_model_selected(model_name: str | None) -> None:
             if model_name:
                 # Use cached widget references (Issue APP-H1)
@@ -746,8 +735,6 @@ class CodePuppyApp(App):
 
     def action_show_agent_picker(self) -> None:
         """Show agent picker screen."""
-        from code_puppy.tui.screens.agent_screen import AgentScreen
-
         def _on_agent_selected(_result=None) -> None:
             # Use cached widget reference (Issue APP-H1)
             try:

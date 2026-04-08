@@ -593,11 +593,9 @@ async def _edit_file(
                 context, file_path, payload.delete_snippet, message_group=group_id
             )
         elif isinstance(payload, ReplacementsPayload):
-            # Convert Pydantic Replacement models to dict format for legacy compatibility
-            replacements_dict = [
-                {"old_str": rep.old_str, "new_str": rep.new_str}
-                for rep in payload.replacements
-            ]
+            # Convert Pydantic Replacement models to dict format using model_dump
+            # (single direct transformation instead of manual dict construction)
+            replacements_dict = [rep.model_dump() for rep in payload.replacements]
             return await replace_in_file(
                 context, file_path, replacements_dict, message_group=group_id
             )
@@ -861,21 +859,21 @@ def register_replace_in_file(agent):
     async def replace_in_file(
         context: RunContext,
         file_path: str = "",
-        replacements: list[InlineReplacement] = [],
+        replacements: list[InlineReplacement] | None = None,
     ) -> dict[str, Any]:
         """Apply targeted text replacements to an existing file.
 
         Each replacement specifies an old_str to find and a new_str to replace it with.
         Replacements are applied sequentially. Prefer this over full file rewrites.
         """
+        if replacements is None:
+            replacements = []
         file_path = os.path.abspath(file_path)
         group_id = generate_group_id("replace_in_file", file_path)
         # replacements arrive as plain dicts — pass them straight through
-        replacements_dict = [
-            {"old_str": r["old_str"], "new_str": r["new_str"]} for r in replacements
-        ]
+        # (no transformation needed - InlineReplacement is already dict[str, str])
         result = await _replace_in_file_helper(
-            context, file_path, replacements_dict, message_group=group_id
+            context, file_path, replacements, message_group=group_id
         )
         if "diff" in result:
             del result["diff"]

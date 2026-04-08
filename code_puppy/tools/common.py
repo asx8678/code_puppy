@@ -426,7 +426,8 @@ FILE_IGNORE_PATTERNS = [
 
 # Backwards compatibility for any imports still referring to IGNORE_PATTERNS
 # Deduplicate to reduce regex compilation cost (~38 duplicates across categories)
-IGNORE_PATTERNS = list(dict.fromkeys(DIR_IGNORE_PATTERNS + FILE_IGNORE_PATTERNS))
+# Use frozenset to preserve dedup benefit and signal already-deduplicated
+IGNORE_PATTERNS = frozenset(dict.fromkeys(DIR_IGNORE_PATTERNS + FILE_IGNORE_PATTERNS))
 
 
 # ---------------------------------------------------------------------------
@@ -434,16 +435,19 @@ IGNORE_PATTERNS = list(dict.fromkeys(DIR_IGNORE_PATTERNS + FILE_IGNORE_PATTERNS)
 # ---------------------------------------------------------------------------
 
 
-def _compile_patterns(patterns: list[str]) -> _re.Pattern:
+def _compile_patterns(patterns: list[str] | frozenset[str]) -> _re.Pattern:
     """Compile a list of glob/fnmatch patterns into a single regex.
 
     Each pattern is translated via ``fnmatch.translate`` (which handles ``*``
     and ``?``) and the results are OR-joined into one compiled regex.
     Duplicate patterns are removed to keep the regex lean.
     """
-    # Use dict.fromkeys() to deduplicate while preserving order, then
-    # generator expression to translate patterns on-the-fly (no intermediate list)
-    unique_patterns = dict.fromkeys(patterns)
+    # Single dedup pass: frozenset is already deduplicated, list needs dedup
+    # dict.fromkeys() preserves order for lists while deduplicating
+    if isinstance(patterns, frozenset):
+        unique_patterns = patterns  # Already deduplicated
+    else:
+        unique_patterns = dict.fromkeys(patterns)
     if not unique_patterns:
         return _re.compile(r"(?!)")  # matches nothing
     return _re.compile("|".join(f"(?:{fnmatch.translate(p)})" for p in unique_patterns))
@@ -1103,7 +1107,7 @@ async def get_user_approval_async(
     except (ImportError, Exception):
         pass
 
-    await asyncio.sleep(0.3)  # Let spinners fully stop
+    await asyncio.sleep(0.05)  # Let spinners fully stop (CM-M1: reduced from 0.3)
 
     # Display panel
     local_console = Console()
@@ -1114,7 +1118,7 @@ async def get_user_approval_async(
     # Flush and buffer before selector
     sys.stdout.flush()
     sys.stderr.flush()
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0)  # CM-M1: reduced from 0.1, just yield control
 
     user_feedback = None
     confirmed = False
@@ -1298,8 +1302,8 @@ def generate_group_id(tool_name: str, extra_context: str = "") -> str:
     )  # 16 hex chars of cryptographically strong randomness
     context_string = f"{tool_name}_{timestamp}_{random_component}_{extra_context}"
 
-    # Generate a short hash
-    hash_obj = hashlib.md5(context_string.encode())
+    # CM-L2 fix: Use blake2b instead of MD5 (fastest, FIPS-friendly)
+    hash_obj = hashlib.blake2b(context_string.encode(), digest_size=8)
     short_hash = hash_obj.hexdigest()[:8]
 
     return f"{tool_name}_{short_hash}"

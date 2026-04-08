@@ -2,11 +2,15 @@ import configparser
 import json
 import os
 import pathlib
+import re
 import threading
 import time
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
 from typing import Callable
+
+# Compiled regex for _sanitize_model_name_for_key - single pass replacement
+_SANITIZE_MODEL_NAME_RE = re.compile(r'[.\-/]')
 
 from code_puppy.session_storage import save_session_async
 from code_puppy import runtime_state
@@ -583,11 +587,19 @@ def get_model_context_length(model_name: str | None = None) -> int:
 
 
 # --- CONFIG SETTER STARTS HERE ---
+# Module-level cache for default config keys - built once
+_DEFAULT_CONFIG_KEYS_CACHE: list[str] | None = None
+
+
 def get_default_config_keys():
     """
     Returns the list of all known/preset config keys.
     This is the source of truth for default configuration keys.
     """
+    global _DEFAULT_CONFIG_KEYS_CACHE
+    if _DEFAULT_CONFIG_KEYS_CACHE is not None:
+        return _DEFAULT_CONFIG_KEYS_CACHE
+    
     default_keys = [
         "yolo_mode",
         "model",
@@ -608,29 +620,28 @@ def get_default_config_keys():
         "frontend_emitter_enabled",
         "frontend_emitter_max_recent_events",
         "frontend_emitter_queue_size",
+        # Add DBOS control key
+        "enable_dbos",
+        # Add pack agents control key
+        "enable_pack_agents",
+        # Add universal constructor control key
+        "enable_universal_constructor",
+        # Add streaming control key
+        "enable_streaming",
+        # Add cancel agent key configuration
+        "cancel_agent_key",
+        # Add resume message count configuration
+        "resume_message_count",
+        # Add fast puppy (Rust acceleration) control key
+        "enable_fast_puppy",
+        # SECURITY FIX c9z0: User plugin security settings
+        "enable_user_plugins",
+        "allowed_user_plugins",
     ]
-    # Add DBOS control key
-    default_keys.append("enable_dbos")
-    # Add pack agents control key
-    default_keys.append("enable_pack_agents")
-    # Add universal constructor control key
-    default_keys.append("enable_universal_constructor")
-    # Add streaming control key
-    default_keys.append("enable_streaming")
-    # Add cancel agent key configuration
-    default_keys.append("cancel_agent_key")
-    # Add banner color keys
-    for banner_name in DEFAULT_BANNER_COLORS:
-        default_keys.append(f"banner_color_{banner_name}")
-    # Add resume message count configuration
-    default_keys.append("resume_message_count")
-    # Add fast puppy (Rust acceleration) control key
-    default_keys.append("enable_fast_puppy")
-
-    # SECURITY FIX c9z0: User plugin security settings
-    default_keys.append("enable_user_plugins")
-    default_keys.append("allowed_user_plugins")
-
+    # Add banner color keys from DEFAULT_BANNER_COLORS dict keys
+    default_keys.extend(f"banner_color_{banner_name}" for banner_name in DEFAULT_BANNER_COLORS)
+    
+    _DEFAULT_CONFIG_KEYS_CACHE = default_keys
     return default_keys
 
 
@@ -650,14 +661,25 @@ def get_config_keys():
 def set_config_value(key: str, value: str):
     """
     Sets a config value in the persistent config file.
+    Uses atomic write and avoids redundant cache invalidation re-read.
     """
-    config = _get_config()  # Use cached version
+    from io import StringIO
+    from pathlib import Path
+    from code_puppy.persistence import atomic_write_text
+    
+    config = _get_config()  # Use cached version for reading
     if DEFAULT_SECTION not in config:
         config[DEFAULT_SECTION] = {}
     config[DEFAULT_SECTION][key] = value
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        config.write(f)
-    _invalidate_config()  # Invalidate cache after write
+    
+    # Serialize config to string using StringIO
+    buffer = StringIO()
+    config.write(buffer)
+    content = buffer.getvalue()
+    
+    # Write atomically without re-reading (cache already invalidated)
+    atomic_write_text(Path(CONFIG_FILE), content)
+    _invalidate_config()  # Invalidate cache after write - no re-read needed
 
 
 # Alias for API compatibility
@@ -668,11 +690,18 @@ def set_value(key: str, value: str) -> None:
 
 def reset_value(key: str) -> None:
     """Remove a key from the config file, resetting it to default."""
+    from io import StringIO
+    from pathlib import Path
+    from code_puppy.persistence import atomic_write_text
+    
     config = _get_config()  # Use cached version
     if DEFAULT_SECTION in config and key in config[DEFAULT_SECTION]:
         del config[DEFAULT_SECTION][key]
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            config.write(f)
+        # Serialize and write atomically
+        buffer = StringIO()
+        config.write(buffer)
+        content = buffer.getvalue()
+        atomic_write_text(Path(CONFIG_FILE), content)
     _invalidate_config()  # Invalidate cache after write
 
 
@@ -1047,10 +1076,10 @@ def _sanitize_model_name_for_key(model_name: str) -> str:
     """Sanitize model name for use in config keys.
 
     Replaces characters that might cause issues in config keys.
+    Uses compiled regex for single-pass replacement.
     """
-    # Replace problematic characters with underscores
-    sanitized = model_name.replace(".", "_").replace("-", "_").replace("/", "_")
-    return sanitized.lower()
+    # Single-pass replacement using compiled regex (avoids 3 intermediate strings)
+    return _SANITIZE_MODEL_NAME_RE.sub("_", model_name).lower()
 
 
 def get_model_setting(

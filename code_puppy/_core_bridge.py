@@ -153,11 +153,11 @@ def serialize_message_for_rust(message: Any) -> dict:
         elif hasattr(content, "model_dump_json"):
             # Pydantic model path - try/except for safety
             try:
-                part_dict["content_json"] = content.model_dump_json(sort_keys=True)
+                part_dict["content_json"] = content.model_dump_json()
             except (TypeError, ValueError):
                 part_dict["content"] = repr(content)
         elif isinstance(content, dict):
-            part_dict["content_json"] = json.dumps(content, sort_keys=True)
+            part_dict["content_json"] = json.dumps(content)
         else:
             part_dict["content"] = repr(content)
 

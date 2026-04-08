@@ -22,6 +22,7 @@ import shlex
 import signal
 import subprocess
 import sys
+import sys as _sys  # For version check in _run_command_sync
 import tempfile
 import threading
 import time
@@ -49,10 +50,17 @@ from code_puppy.tools.common import generate_group_id, get_user_approval_async
 from code_puppy.tools.subagent_context import is_subagent
 from code_puppy.concurrency_limits import ToolCallsLimiter
 
-# Hoisted lazy imports - imported at module top for performance (CR-M4)
-# These were previously imported inline at 4 different sites
+# Hoisted imports - imported at module top for performance (CR-M4)
 from code_puppy.security import get_security_boundary
 from code_puppy.config import get_yolo_mode, get_puppy_name
+
+# Lazy import for atexit - only used in _get_shell_executor (CR-M4)
+try:
+    import atexit
+    _HAS_ATEXIT = True
+except ImportError:
+    _HAS_ATEXIT = False
+    atexit = None  # type: ignore
 
 # Cache for spinner module functions (lazy-loaded on first use)
 _spinner_module_cache: dict[str, Callable | None] = {
@@ -252,47 +260,9 @@ def validate_shell_command(command: str) -> str:
     return command
 
 
-def safe_execute_subprocess(
-    command: str, cwd: str | None = None, **kwargs
-) -> subprocess.Popen:
-    """Execute a subprocess with security validation.
-
-    This wrapper validates the command before execution and uses proper
-    security settings for the subprocess.
-
-    Args:
-        command: The shell command to execute.
-        cwd: Working directory for command execution.
-        **kwargs: Additional arguments to pass to subprocess.Popen.
-
-    Returns:
-        The subprocess.Popen object.
-
-    Raises:
-        CommandValidationError: If command validation fails.
-        subprocess.SubprocessError: If subprocess creation fails.
-    """
-    # Validate command before execution (defense-in-depth)
-    validate_shell_command(command)
-
-    # SECURITY: shell=True is REQUIRED—commands arrive as complete strings from the
-    # LLM (e.g., "cd /foo && make test" or "cat file | grep pattern") and REQUIRE
-    # shell interpretation for pipes, redirects, chains, and variable expansion.
-    # The command is validated by validate_shell_command() which enforces:
-    # - Length limits (_validate_command_length)
-    # - No forbidden control characters (_validate_forbidden_chars)
-    # - No dangerous patterns like command substitution (_validate_dangerous_patterns)
-    # - Proper tokenization with shlex (_validate_shlex_parse - validates quoting only, NOT injection)
-    # Additional upstream validation: shell_safety plugin + PolicyEngine + user confirmation.
-    # Removing shell=True would break shell features (pipes, redirects, etc.).
-    # nosec B602 - required for shell features (pipes, redirects); risk managed by
-    # upstream policy/user confirmation and dangerous-pattern blocking; shlex validates quoting only
-    return subprocess.Popen(
-        command,
-        shell=True,  # nosec B602 - shell features required; validated via policy/dangerous-pattern checks; shlex validates quoting only
-        cwd=cwd,
-        **kwargs,
-    )
+# safe_execute_subprocess removed - was dead code (CR-L1 fix)
+# Security validation and subprocess execution are handled directly
+# in _run_command_sync with validate_shell_command() and subprocess.Popen
 
 
 # =============================================================================
@@ -409,13 +379,13 @@ def _get_shell_executor() -> ThreadPoolExecutor:
     if _SHELL_EXECUTOR is None:
         with _SHELL_EXECUTOR_LOCK:
             if _SHELL_EXECUTOR is None:  # double-check
-                import atexit
-
+                # CR-M4: atexit already imported at module top
                 _SHELL_EXECUTOR = ThreadPoolExecutor(
                     max_workers=16,
                     thread_name_prefix="shell_cmd_",
                 )
-                atexit.register(_SHELL_EXECUTOR.shutdown, wait=False)
+                if _HAS_ATEXIT and atexit:
+                    atexit.register(_SHELL_EXECUTOR.shutdown, wait=False)
     return _SHELL_EXECUTOR
 
 
@@ -973,25 +943,51 @@ def run_shell_command_streaming(
     stderr_lines = deque(maxlen=256)
 
     # Buffers for batched shell line emissions
+    # CR-L2 fix: batch with lock for thread-safe emission
     stdout_batch = []
     stderr_batch = []
+    _batch_lock = threading.Lock()
 
     stdout_thread = None
     stderr_thread = None
 
     def _emit_stdout_batch():
-        """Emit accumulated stdout lines as a batch."""
-        if not silent and stdout_batch:
-            for line in stdout_batch:
+        """Emit accumulated stdout lines as a batch.
+        
+        CR-L2 fix: Collect lines into buffer, acquire lock once, 
+        emit all buffered lines, release lock.
+        """
+        if silent:
+            return
+        # Capture under lock, emit outside lock
+        lines_to_emit = None
+        with _batch_lock:
+            if stdout_batch:
+                lines_to_emit = stdout_batch.copy()
+                stdout_batch.clear()
+        # Emit outside the lock to minimize lock contention
+        if lines_to_emit:
+            for line in lines_to_emit:
                 emit_shell_line(line, stream="stdout")
-            stdout_batch.clear()
 
     def _emit_stderr_batch():
-        """Emit accumulated stderr lines as a batch."""
-        if not silent and stderr_batch:
-            for line in stderr_batch:
+        """Emit accumulated stderr lines as a batch.
+        
+        CR-L2 fix: Collect lines into buffer, acquire lock once, 
+        emit all buffered lines, release lock.
+        """
+        if silent:
+            return
+        # Capture under lock, emit outside lock
+        lines_to_emit = None
+        with _batch_lock:
+            if stderr_batch:
+                lines_to_emit = stderr_batch.copy()
+                stderr_batch.clear()
+        # Emit outside the lock to minimize lock contention
+        if lines_to_emit:
+            for line in lines_to_emit:
                 emit_shell_line(line, stream="stderr")
-            stderr_batch.clear()
 
     def _flush_all_batches():
         """Flush any remaining batched lines."""
@@ -1022,13 +1018,16 @@ def run_shell_command_streaming(
                                 try:
                                     remaining = process.stdout.read()
                                     if remaining:
+                                        lines_added = 0
                                         for ln in remaining.split("\n"):
                                             ln = _truncate_line(ln)
                                             stdout_lines.append(ln)
                                             if not silent:
-                                                stdout_batch.append(ln)
-                                    if not silent and stdout_batch:
-                                        _emit_stdout_batch()
+                                                with _batch_lock:
+                                                    stdout_batch.append(ln)
+                                                    lines_added += 1
+                                        if not silent and lines_added > 0:
+                                            _emit_stdout_batch()
                                 except (ValueError, OSError):
                                     pass
                             break
@@ -1036,8 +1035,10 @@ def run_shell_command_streaming(
                         line = _truncate_line(line)
                         stdout_lines.append(line)
                         if not silent:
-                            stdout_batch.append(line)
-                            if len(stdout_batch) >= SHELL_BATCH_SIZE:
+                            with _batch_lock:
+                                stdout_batch.append(line)
+                                should_emit = len(stdout_batch) >= SHELL_BATCH_SIZE
+                            if should_emit:
                                 _emit_stdout_batch()
                         last_output_time[0] = time.time()
                     except (ValueError, OSError):
@@ -1057,8 +1058,10 @@ def run_shell_command_streaming(
                         line = _truncate_line(line)
                         stdout_lines.append(line)
                         if not silent:
-                            stdout_batch.append(line)
-                            if len(stdout_batch) >= SHELL_BATCH_SIZE:
+                            with _batch_lock:
+                                stdout_batch.append(line)
+                                should_emit = len(stdout_batch) >= SHELL_BATCH_SIZE
+                            if should_emit:
                                 _emit_stdout_batch()
                         last_output_time[0] = time.time()
                     else:
@@ -1095,13 +1098,16 @@ def run_shell_command_streaming(
                                 try:
                                     remaining = process.stderr.read()
                                     if remaining:
+                                        lines_added = 0
                                         for ln in remaining.split("\n"):
                                             ln = _truncate_line(ln)
                                             stderr_lines.append(ln)
                                             if not silent:
-                                                stderr_batch.append(ln)
-                                    if not silent and stderr_batch:
-                                        _emit_stderr_batch()
+                                                with _batch_lock:
+                                                    stderr_batch.append(ln)
+                                                    lines_added += 1
+                                        if not silent and lines_added > 0:
+                                            _emit_stderr_batch()
                                 except (ValueError, OSError):
                                     pass
                             break
@@ -1109,8 +1115,10 @@ def run_shell_command_streaming(
                         line = _truncate_line(line)
                         stderr_lines.append(line)
                         if not silent:
-                            stderr_batch.append(line)
-                            if len(stderr_batch) >= SHELL_BATCH_SIZE:
+                            with _batch_lock:
+                                stderr_batch.append(line)
+                                should_emit = len(stderr_batch) >= SHELL_BATCH_SIZE
+                            if should_emit:
                                 _emit_stderr_batch()
                         last_output_time[0] = time.time()
                     except (ValueError, OSError):
@@ -1129,8 +1137,10 @@ def run_shell_command_streaming(
                         line = _truncate_line(line)
                         stderr_lines.append(line)
                         if not silent:
-                            stderr_batch.append(line)
-                            if len(stderr_batch) >= SHELL_BATCH_SIZE:
+                            with _batch_lock:
+                                stderr_batch.append(line)
+                                should_emit = len(stderr_batch) >= SHELL_BATCH_SIZE
+                            if should_emit:
                                 _emit_stderr_batch()
                         last_output_time[0] = time.time()
                     else:
@@ -1604,13 +1614,19 @@ def _run_command_sync(
     """Synchronous command execution - runs in thread pool."""
     creationflags = 0
     preexec_fn = None
+    process_group = None
     if sys.platform.startswith("win"):
         try:
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
         except Exception:
             creationflags = 0
     else:
-        preexec_fn = os.setsid if hasattr(os, "setsid") else None
+        # CR-L3 fix: Use process_group=0 for Python 3.11+ (faster, uses posix_spawn)
+        # Fallback to preexec_fn=os.setsid for older Python versions
+        if _sys.version_info >= (3, 11):
+            process_group = 0  # Modern way: posix_spawn with process group
+        else:
+            preexec_fn = os.setsid if hasattr(os, "setsid") else None  # Legacy way
 
     # SECURITY: Validate command before execution (defense-in-depth)
     try:
@@ -1626,21 +1642,24 @@ def _run_command_sync(
             execution_time=0.0,
         )
 
-    process = subprocess.Popen(
-        command,
-        # nosec B602 - shell features required; risk managed by
-        # policy/user confirmation, dangerous-pattern blocking; shlex validates quoting only
-        shell=True,  # nosec B602
+    # Build Popen kwargs - only include process_group on Python 3.11+
+    popen_kwargs = dict(
+        shell=True,  # nosec B602 - shell features required; risk managed by policy
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=cwd,
-        bufsize=-1,  # Use default buffering (bufsize=1 invalid for binary mode in Py3.14)
-        preexec_fn=preexec_fn,
+        bufsize=-1,  # Use default buffering
         creationflags=creationflags,
         text=True,
         encoding="utf-8",
         errors="replace",
     )
+    if process_group is not None:
+        popen_kwargs["process_group"] = process_group
+    elif preexec_fn is not None:
+        popen_kwargs["preexec_fn"] = preexec_fn
+
+    process = subprocess.Popen(command, **popen_kwargs)
     _register_process(process)
     try:
         return run_shell_command_streaming(
@@ -1672,18 +1691,21 @@ async def _run_command_inner(
             stderr = None
 
         # Apply line length limits to stdout/stderr if they exist
+        # CR-M5 fix: No need for list()[-256:] slicing - just truncate last 256 lines
         truncated_stdout = None
         if stdout:
             stdout_lines = stdout.split("\n")
+            # Take last 256 lines (no-op if fewer), truncate each, join
             truncated_stdout = "\n".join(
-                [_truncate_line(line) for line in list(stdout_lines)[-256:]]
+                [_truncate_line(line) for line in stdout_lines[-256:]]
             )
 
         truncated_stderr = None
         if stderr:
             stderr_lines = stderr.split("\n")
+            # Take last 256 lines (no-op if fewer), truncate each, join
             truncated_stderr = "\n".join(
-                [_truncate_line(line) for line in list(stderr_lines)[-256:]]
+                [_truncate_line(line) for line in stderr_lines[-256:]]
             )
 
         return ShellCommandOutput(

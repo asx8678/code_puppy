@@ -267,6 +267,10 @@ class GeminiModel(Model):
         self._owns_client = http_client is None
         # Instance-level cache for _build_tools to avoid repeated processing
         self._tools_cache: dict[int, list[dict[str, Any]]] = {}
+        # Cache for headers (Issue GM-L1: _get_headers rebuilt per request)
+        self._headers_cache: dict[str, str] | None = None
+        # Cache for generation config keyed by settings (Issue GM-L1)
+        self._generation_config_cache: dict[tuple, dict[str, Any]] = {}
 
     @property
     def model_name(self) -> str:
@@ -323,12 +327,18 @@ class GeminiModel(Model):
             self._http_client = None
 
     def _get_headers(self) -> dict[str, str]:
-        """Get HTTP headers for the request."""
-        return {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "x-goog-api-key": self.api_key,
-        }
+        """Get HTTP headers for the request.
+
+        Cached since headers only depend on api_key which doesn't change.
+        Issue GM-L1: _get_headers rebuilt per request
+        """
+        if self._headers_cache is None:
+            self._headers_cache = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "x-goog-api-key": self.api_key,
+            }
+        return self._headers_cache
 
     def _map_user_prompt(self, part: UserPromptPart) -> list[dict[str, Any]]:
         """Map a user prompt part to Gemini format."""
@@ -512,7 +522,26 @@ class GeminiModel(Model):
     def _build_generation_config(
         self, model_settings: ModelSettings | None
     ) -> dict[str, Any]:
-        """Build generation config from model settings."""
+        """Build generation config from model settings.
+
+        Cached based on settings parameters to avoid rebuilding identical dicts.
+        Issue GM-L1: _build_generation_config rebuilt per request
+        """
+        # Create cache key from relevant settings
+        if model_settings is None:
+            cache_key = (None, None, None, None, None)
+        else:
+            cache_key = (
+                model_settings.get("temperature"),
+                model_settings.get("top_p"),
+                model_settings.get("max_tokens"),
+                model_settings.get("thinking_enabled"),
+                model_settings.get("thinking_level"),
+            )
+
+        if cache_key in self._generation_config_cache:
+            return self._generation_config_cache[cache_key]
+
         config: dict[str, Any] = {}
 
         if model_settings:
@@ -545,6 +574,7 @@ class GeminiModel(Model):
                     "includeThoughts": True,
                 }
 
+        self._generation_config_cache[cache_key] = config
         return config
 
     async def request(

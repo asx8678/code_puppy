@@ -15,6 +15,14 @@ from typing import Any, Callable
 
 import msgpack
 
+# Try to import orjson for faster JSON serialization, fallback to stdlib json
+try:
+    import orjson
+    _HAS_ORJSON = True
+except ImportError:
+    orjson = None  # type: ignore[misc,assignment]
+    _HAS_ORJSON = False
+
 logger = logging.getLogger(__name__)
 
 # Cache of directories that have already been created to avoid redundant mkdir calls
@@ -150,9 +158,11 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
 
 
 def atomic_write_json(
-    path: Path, data: Any, indent: int = 2, default: Callable[[Any], Any] | None = None
+    path: Path | str, data: Any, indent: int = 2, default: Callable[[Any], Any] | None = None
 ) -> None:
     """Write JSON file atomically.
+
+    Uses orjson for faster serialization if available, with fallback to stdlib json.
 
     Args:
         path: Target file path
@@ -164,12 +174,24 @@ def atomic_write_json(
         OSError: If write fails
         TypeError: If data is not JSON-serializable
     """
+    # Normalize path to Path object
+    path_obj = Path(path)
+    
     try:
-        content = json.dumps(data, indent=indent, default=default)
+        if _HAS_ORJSON:
+            # orjson.dumps returns bytes, with options for indentation
+            option = orjson.OPT_INDENT_2 if indent == 2 else 0
+            if default:
+                content_bytes = orjson.dumps(data, default=default, option=option)
+            else:
+                content_bytes = orjson.dumps(data, option=option)
+            atomic_write_bytes(path_obj, content_bytes)
+        else:
+            # Fallback to stdlib json
+            content = json.dumps(data, indent=indent, default=default)
+            atomic_write_text(path_obj, content)
     except (TypeError, ValueError) as e:
         raise TypeError(f"Data is not JSON-serializable: {e}") from e
-
-    atomic_write_text(path, content)
 
 
 def atomic_write_msgpack(

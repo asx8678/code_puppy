@@ -8,6 +8,16 @@ import re
 import traceback
 from datetime import datetime
 
+# Compile regex patterns once at module level for _sanitize_session_id
+_SANITIZE_NON_ALPHANUM_RE = re.compile(r"[^a-z0-9-]+")
+_SANITIZE_DASH_RUNS_RE = re.compile(r"-+")
+
+# Hoist ModelMessagesTypeAdapter with try/except guard (fixes lazy import in 3 functions)
+try:
+    from pydantic_ai.messages import ModelMessagesTypeAdapter
+except ImportError:
+    ModelMessagesTypeAdapter = None  # type: ignore[misc,assignment]
+
 # Imports for streaming retry logic (transient HTTP error handling)
 import httpcore
 import httpx
@@ -181,10 +191,10 @@ def _sanitize_session_id(raw: str) -> str:
         raw = str(raw)
     # Lowercase
     s = raw.lower()
-    # Replace any char not in [a-z0-9-] with '-'
-    s = re.sub(r"[^a-z0-9-]+", "-", s)
-    # Collapse runs of '-'
-    s = re.sub(r"-+", "-", s)
+    # Replace any char not in [a-z0-9-] with '-' using compiled regex
+    s = _SANITIZE_NON_ALPHANUM_RE.sub("-", s)
+    # Collapse runs of '-' using compiled regex
+    s = _SANITIZE_DASH_RUNS_RE.sub("-", s)
     # Strip leading/trailing '-'
     s = s.strip("-")
     # Truncate
@@ -278,7 +288,6 @@ def _save_session_history_sync(
 
     # ISSUE 70e FIX: Fold metadata into the msgpack payload; drop separate .txt file.
     # This eliminates TOCTOU race and data-corruption risk from read-modify-write.
-    from pydantic_ai.messages import ModelMessagesTypeAdapter
 
     # Check if we need to preserve initial_prompt from previous save
     saved_initial_prompt = initial_prompt
@@ -293,7 +302,7 @@ def _save_session_history_sync(
 
     payload = {
         "format": "pydantic-ai-json-v2",
-        "payload": ModelMessagesTypeAdapter.dump_python(message_history, mode="json"),
+        "payload": ModelMessagesTypeAdapter.dump_python(message_history, mode="json") if ModelMessagesTypeAdapter else [],  # type: ignore[attr]
         "metadata": {
             "session_id": session_id,
             "agent_name": agent_name,
@@ -332,18 +341,17 @@ def _load_session_history_sync(session_id: str) -> list[ModelMessage]:
         try:
             raw = msgpack_path.read_bytes()
             data = msgpack.unpackb(raw, raw=False)
-            from pydantic_ai.messages import ModelMessagesTypeAdapter
 
             # v2 format with folded metadata
             if isinstance(data, dict) and data.get("format") == "pydantic-ai-json-v2":
                 payload = data.get("payload", [])
-                return ModelMessagesTypeAdapter.validate_python(payload)
+                return ModelMessagesTypeAdapter.validate_python(payload) if ModelMessagesTypeAdapter else []
             # v1 format (legacy, no metadata)
             if isinstance(data, dict) and data.get("format") == "pydantic-ai-json":
                 payload = data.get("payload", [])
-                return ModelMessagesTypeAdapter.validate_python(payload)
+                return ModelMessagesTypeAdapter.validate_python(payload) if ModelMessagesTypeAdapter else []
             # Oldest format: plain list
-            return ModelMessagesTypeAdapter.validate_python(data)
+            return ModelMessagesTypeAdapter.validate_python(data) if ModelMessagesTypeAdapter else []
         except Exception:
             pass  # Fall through to other formats or return empty
 
