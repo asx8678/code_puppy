@@ -1049,7 +1049,12 @@ class TestIgnorePatterns:
             IGNORE_PATTERNS,
         )
 
-        assert IGNORE_PATTERNS == DIR_IGNORE_PATTERNS + FILE_IGNORE_PATTERNS
+        # IGNORE_PATTERNS is now a frozenset (for O(1) membership testing)
+        # Check that it contains all patterns from both DIR and FILE patterns
+        expected_patterns = set(DIR_IGNORE_PATTERNS + FILE_IGNORE_PATTERNS)
+        assert IGNORE_PATTERNS == frozenset(expected_patterns), (
+            "IGNORE_PATTERNS should be a frozenset containing all dir and file patterns"
+        )
 
 
 # ---------------------------------------------------------------------------

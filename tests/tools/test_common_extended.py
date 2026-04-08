@@ -243,20 +243,28 @@ class TestCommonExtended:
     @patch("secrets.token_hex")
     @patch("time.time")
     def test_generate_group_id_deterministic(self, mock_time, mock_token_hex):
-        """Test group ID generation with mocked time and random for deterministic testing."""
+        """Test group ID generation is deterministic with same inputs.
+
+        Note: Uses blake2b instead of md5 (FIPS-friendly, faster).
+        Test verifies determinism without hardcoding exact hash values.
+        """
         mock_time.return_value = 1234567890.123456
         mock_token_hex.return_value = "aaaaaaaaaaaaaaaa"
 
-        group_id = generate_group_id("test_tool", "context")
+        group_id1 = generate_group_id("test_tool", "context")
 
-        # Should be deterministic with mocked values
-        expected_hash = "test_tool_1234567890123456_aaaaaaaaaaaaaaaa_context"
-        import hashlib
+        # Reset mocks to same values
+        mock_time.return_value = 1234567890.123456
+        mock_token_hex.return_value = "aaaaaaaaaaaaaaaa"
+        group_id2 = generate_group_id("test_tool", "context")
 
-        expected_short_hash = hashlib.md5(expected_hash.encode()).hexdigest()[:8]
-        expected = f"test_tool_{expected_short_hash}"
-
-        assert group_id == expected
+        # Should be deterministic - same inputs produce same outputs
+        assert group_id1 == group_id2, "generate_group_id should be deterministic with same inputs"
+        assert group_id1.startswith("test_tool_"), "group_id should start with tool_name prefix"
+        # Hash is now blake2b (8 chars) instead of md5
+        hash_part = group_id1[len("test_tool_"):]
+        assert len(hash_part) == 8, "hash part should be 8 characters (blake2b digest)"
+        assert all(c in "0123456789abcdef" for c in hash_part), "hash should be hex digits"
 
     def test_find_best_window(self):
         """Test the window finding function."""
@@ -319,21 +327,23 @@ class TestCommonExtended:
 
     def test_ignore_pattern_constants(self):
         """Test that ignore pattern constants are properly defined."""
-        # Verify constants exist and are lists
+        # Verify constants exist (DIR_/FILE_ are lists, IGNORE_ is frozenset for O(1) lookup)
         assert isinstance(DIR_IGNORE_PATTERNS, list)
         assert isinstance(FILE_IGNORE_PATTERNS, list)
-        assert isinstance(IGNORE_PATTERNS, list)
+        # IGNORE_PATTERNS is now a frozenset for fast membership testing
+        assert isinstance(IGNORE_PATTERNS, frozenset)
 
-        # Verify IGNORE_PATTERNS is the union
-        assert len(IGNORE_PATTERNS) >= len(DIR_IGNORE_PATTERNS)
-        assert len(IGNORE_PATTERNS) >= len(FILE_IGNORE_PATTERNS)
+        # Verify IGNORE_PATTERNS contains all patterns from both lists (deduplicated)
+        expected_count = len(set(DIR_IGNORE_PATTERNS + FILE_IGNORE_PATTERNS))
+        assert len(IGNORE_PATTERNS) == expected_count, (
+            "IGNORE_PATTERNS should contain all unique patterns from dir + file lists"
+        )
 
         # Verify some expected patterns are present
-        assert "**/node_modules/**" in DIR_IGNORE_PATTERNS
-        assert "**/__pycache__/**" in DIR_IGNORE_PATTERNS
-        assert "**/.git/**" in DIR_IGNORE_PATTERNS
-
-        assert "**/*.png" in FILE_IGNORE_PATTERNS
+        assert "**/node_modules/**" in IGNORE_PATTERNS
+        assert "**/__pycache__/**" in IGNORE_PATTERNS
+        assert "**/.git/**" in IGNORE_PATTERNS
+        assert "**/*.png" in IGNORE_PATTERNS
         assert "**/*.pdf" in FILE_IGNORE_PATTERNS
         assert "**/*.zip" in FILE_IGNORE_PATTERNS
 

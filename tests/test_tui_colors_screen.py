@@ -263,11 +263,17 @@ def test_banner_markup_uses_color():
 
 
 def test_app_handles_colors_command():
-    """app.py _handle_slash_command branches on /colors."""
+    """app.py handles /colors command via dispatch table."""
     import inspect
 
     from code_puppy.tui.app import CodePuppyApp
 
-    source = inspect.getsource(CodePuppyApp._handle_slash_command)
-    assert "colors" in source.lower()
-    assert "ColorsScreen" in source
+    # Check dispatch table has /colors handler
+    assert "/colors" in CodePuppyApp._SLASH_COMMANDS, (
+        "/colors should be in _SLASH_COMMANDS dispatch table"
+    )
+    assert CodePuppyApp._SLASH_COMMANDS["/colors"] == "_cmd_colors"
+
+    # Check _cmd_colors method exists and references ColorsScreen
+    source = inspect.getsource(CodePuppyApp._cmd_colors)
+    assert "ColorsScreen" in source, "_cmd_colors should push ColorsScreen"

@@ -305,82 +305,114 @@ class TestGetConfigKeys:
 
 
 class TestSetConfigValue:
-    @patch("configparser.ConfigParser")
-    @patch("builtins.open", new_callable=mock_open)
-    def test_set_config_value_new_key_section_exists(
-        self, mock_file_open, mock_config_parser_class, mock_config_paths
-    ):
-        _, mock_cfg_file = mock_config_paths
-        mock_parser_instance = MagicMock()
+    """Tests for set_config_value using atomic_write_text.
 
-        section_dict = {}
-        mock_parser_instance.read.return_value = [mock_cfg_file]
-        mock_parser_instance.__contains__.return_value = True
-        mock_parser_instance.__getitem__.return_value = section_dict
-        mock_config_parser_class.return_value = mock_parser_instance
+    Note: The implementation now uses atomic_write_text from persistence.py
+    instead of directly using ConfigParser.write() + open().
+    """
+
+    def _create_mock_configparser(self, initial_sections=None):
+        """Create a mock ConfigParser that behaves like a real one."""
+        from configparser import ConfigParser
+        mock_config = MagicMock(spec=ConfigParser)
+        # Store sections data in a real dict for behavior verification
+        sections_data = initial_sections or {}
+
+        def mock_contains(self, section):
+            return section in sections_data
+
+        def mock_getitem(self, section):
+            if section not in sections_data:
+                sections_data[section] = {}
+            return sections_data[section]
+
+        def mock_setitem(self, section, value):
+            sections_data[section] = value
+
+        def mock_write(fp):
+            # Simulate ConfigParser.write() by writing section data to fp
+            for section_name in sections_data:
+                fp.write(f"[{section_name}]\n")
+                for key, value in sections_data[section_name].items():
+                    fp.write(f"{key} = {value}\n")
+                fp.write("\n")
+
+        mock_config.__contains__ = mock_contains
+        mock_config.__getitem__ = mock_getitem
+        mock_config.__setitem__ = mock_setitem
+        mock_config.write = mock_write
+        mock_config._sections_data = sections_data  # Expose for test verification
+
+        return mock_config, sections_data
+
+    @patch("code_puppy.config._get_config")
+    @patch("code_puppy.persistence.atomic_write_text")
+    def test_set_config_value_new_key_section_exists(
+        self, mock_atomic_write, mock_get_config, mock_config_paths
+    ):
+        """Test setting a new key in an existing section."""
+        # Setup a mock ConfigParser with empty default section
+        mock_config, sections_data = self._create_mock_configparser(
+            {DEFAULT_SECTION_NAME: {}}
+        )
+        mock_get_config.return_value = mock_config
 
         cp_config.set_config_value("a_new_key", "a_new_value")
 
-        assert section_dict["a_new_key"] == "a_new_value"
-        mock_file_open.assert_called_once_with(mock_cfg_file, "w", encoding="utf-8")
-        mock_parser_instance.write.assert_called_once_with(mock_file_open())
+        # Verify the key was set in the config
+        assert sections_data[DEFAULT_SECTION_NAME]["a_new_key"] == "a_new_value"
+        # Verify atomic_write_text was called with the serialized config content
+        mock_atomic_write.assert_called_once()
+        call_args = mock_atomic_write.call_args
+        # First arg is the path, second is the content
+        assert call_args[0][0].name == "puppy.cfg"  # Path ends with puppy.cfg
+        # Content should be a string containing the key=value
+        content = call_args[0][1]
+        assert "a_new_key" in content
+        assert "a_new_value" in content
 
-    @patch("configparser.ConfigParser")
-    @patch("builtins.open", new_callable=mock_open)
+    @patch("code_puppy.config._get_config")
+    @patch("code_puppy.persistence.atomic_write_text")
     def test_set_config_value_update_existing_key(
-        self, mock_file_open, mock_config_parser_class, mock_config_paths
+        self, mock_atomic_write, mock_get_config, mock_config_paths
     ):
-        _, mock_cfg_file = mock_config_paths
-        mock_parser_instance = MagicMock()
-
-        section_dict = {"existing_key": "old_value"}
-        mock_parser_instance.read.return_value = [mock_cfg_file]
-        mock_parser_instance.__contains__.return_value = True
-        mock_parser_instance.__getitem__.return_value = section_dict
-        mock_config_parser_class.return_value = mock_parser_instance
+        """Test updating an existing key's value."""
+        # Setup a mock ConfigParser with existing key
+        mock_config, sections_data = self._create_mock_configparser(
+            {DEFAULT_SECTION_NAME: {"existing_key": "old_value"}}
+        )
+        mock_get_config.return_value = mock_config
 
         cp_config.set_config_value("existing_key", "updated_value")
 
-        assert section_dict["existing_key"] == "updated_value"
-        mock_file_open.assert_called_once_with(mock_cfg_file, "w", encoding="utf-8")
-        mock_parser_instance.write.assert_called_once_with(mock_file_open())
+        # Verify the key was updated
+        assert sections_data[DEFAULT_SECTION_NAME]["existing_key"] == "updated_value"
+        # Verify atomic_write_text was called
+        mock_atomic_write.assert_called_once()
+        # Content should contain the updated value
+        content = mock_atomic_write.call_args[0][1]
+        assert "updated_value" in content
 
-    @patch("configparser.ConfigParser")
-    @patch("builtins.open", new_callable=mock_open)
+    @patch("code_puppy.config._get_config")
+    @patch("code_puppy.persistence.atomic_write_text")
     def test_set_config_value_section_does_not_exist_creates_it(
-        self, mock_file_open, mock_config_parser_class, mock_config_paths
+        self, mock_atomic_write, mock_get_config, mock_config_paths
     ):
-        _, mock_cfg_file = mock_config_paths
-        mock_parser_instance = MagicMock()
-
-        created_sections_store = {}
-
-        def mock_contains_check(section_name):
-            return section_name in created_sections_store
-
-        def mock_setitem_for_section_creation(section_name, value_usually_empty_dict):
-            created_sections_store[section_name] = value_usually_empty_dict
-
-        def mock_getitem_for_section_access(section_name):
-            return created_sections_store[section_name]
-
-        mock_parser_instance.read.return_value = [mock_cfg_file]
-        mock_parser_instance.__contains__.side_effect = mock_contains_check
-        mock_parser_instance.__setitem__.side_effect = mock_setitem_for_section_creation
-        mock_parser_instance.__getitem__.side_effect = mock_getitem_for_section_access
-
-        mock_config_parser_class.return_value = mock_parser_instance
+        """Test that the default section is created if it doesn't exist."""
+        # Setup empty mock ConfigParser (no default section)
+        mock_config, sections_data = self._create_mock_configparser({})
+        mock_get_config.return_value = mock_config
 
         cp_config.set_config_value("key_in_new_section", "value_in_new_section")
 
-        assert DEFAULT_SECTION_NAME in created_sections_store
-        assert (
-            created_sections_store[DEFAULT_SECTION_NAME]["key_in_new_section"]
-            == "value_in_new_section"
-        )
-
-        mock_file_open.assert_called_once_with(mock_cfg_file, "w", encoding="utf-8")
-        mock_parser_instance.write.assert_called_once_with(mock_file_open())
+        # Verify the default section was created and key was set
+        assert DEFAULT_SECTION_NAME in sections_data
+        assert sections_data[DEFAULT_SECTION_NAME]["key_in_new_section"] == "value_in_new_section"
+        # Verify atomic_write_text was called with content containing the key
+        mock_atomic_write.assert_called_once()
+        content = mock_atomic_write.call_args[0][1]
+        assert "key_in_new_section" in content
+        assert "value_in_new_section" in content
 
 
 class TestModelName:

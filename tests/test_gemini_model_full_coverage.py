@@ -334,47 +334,41 @@ class TestClientManagement:
 
 
 class TestMapUserPrompt:
-    @pytest.mark.anyio
-    async def test_string_content(self, model):
+    def test_string_content(self, model):
         part = UserPromptPart(content="hello")
-        result = await model._map_user_prompt(part)
+        result = model._map_user_prompt(part)
         assert result == [{"text": "hello"}]
 
-    @pytest.mark.anyio
-    async def test_list_content_strings(self, model):
+    def test_list_content_strings(self, model):
         part = UserPromptPart(content=["a", "b"])
-        result = await model._map_user_prompt(part)
+        result = model._map_user_prompt(part)
         assert result == [{"text": "a"}, {"text": "b"}]
 
-    @pytest.mark.anyio
-    async def test_list_content_media(self, model):
+    def test_list_content_media(self, model):
         media = MagicMock()
         media.media_type = "image/png"
         media.data = b"\x89PNG"
         part = UserPromptPart(content=[media])
-        result = await model._map_user_prompt(part)
+        result = model._map_user_prompt(part)
         assert "inline_data" in result[0]
         assert result[0]["inline_data"]["mime_type"] == "image/png"
 
-    @pytest.mark.anyio
-    async def test_list_content_media_string_data(self, model):
+    def test_list_content_media_string_data(self, model):
         media = MagicMock()
         media.media_type = "image/jpeg"
         media.data = "already-base64"
         part = UserPromptPart(content=[media])
-        result = await model._map_user_prompt(part)
+        result = model._map_user_prompt(part)
         assert result[0]["inline_data"]["data"] == "already-base64"
 
-    @pytest.mark.anyio
-    async def test_list_content_other(self, model):
+    def test_list_content_other(self, model):
         part = UserPromptPart(content=[42])
-        result = await model._map_user_prompt(part)
+        result = model._map_user_prompt(part)
         assert result == [{"text": "42"}]
 
-    @pytest.mark.anyio
-    async def test_non_string_non_list(self, model):
+    def test_non_string_non_list(self, model):
         part = UserPromptPart(content=123)
-        result = await model._map_user_prompt(part)
+        result = model._map_user_prompt(part)
         assert result == [{"text": "123"}]
 
 

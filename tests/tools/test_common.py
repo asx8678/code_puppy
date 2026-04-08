@@ -40,9 +40,10 @@ def mock_time_and_random(monkeypatch):
 class TestIgnorePatterns:
     """Test the IGNORE_PATTERNS constant."""
 
-    def test_ignore_patterns_is_list(self):
-        """Test that IGNORE_PATTERNS is a list."""
-        assert isinstance(IGNORE_PATTERNS, list)
+    def test_ignore_patterns_is_collection(self):
+        """Test that IGNORE_PATTERNS is a collection (frozenset for fast membership checks)."""
+        # IGNORE_PATTERNS is now a frozenset for O(1) membership testing
+        assert isinstance(IGNORE_PATTERNS, (list, frozenset, set))
 
     def test_ignore_patterns_is_not_empty(self):
         """Test that IGNORE_PATTERNS has entries."""
@@ -64,25 +65,16 @@ class TestIgnorePatterns:
                 f"Expected common pattern '{pattern}' not found"
             )
 
-    def test_ignore_patterns_tracks_duplicates(self):
-        """Test and document any duplicate patterns.
+    def test_ignore_patterns_is_deduplicated(self):
+        """Test that IGNORE_PATTERNS is deduplicated.
 
-        Note: As of this test, IGNORE_PATTERNS contains some duplicates.
-        This is likely intentional for cross-platform compatibility or
-        different pattern matching styles. This test documents the count.
+        Note: IGNORE_PATTERNS is now a frozenset that automatically deduplicates
+        patterns. This provides O(1) membership testing and ensures no duplicates.
         """
+        # For frozenset, len should equal len(set()) since it's already deduplicated
         unique_patterns = set(IGNORE_PATTERNS)
-        duplicate_count = len(IGNORE_PATTERNS) - len(unique_patterns)
-
-        # Document the current state (38 duplicates as of writing)
-        # If this number changes significantly, it might indicate a problem
-        assert duplicate_count >= 0, "Negative duplicates count - logic error"
-
-        # This is informational - duplicates may be intentional
-        # If duplicate_count is unexpectedly high (>50), something might be wrong
-        assert duplicate_count < 100, (
-            f"Unexpectedly high duplicate count: {duplicate_count}. "
-            "This might indicate a problem with pattern definitions."
+        assert len(IGNORE_PATTERNS) == len(unique_patterns), (
+            "IGNORE_PATTERNS should be deduplicated (no duplicates allowed in frozenset)"
         )
 
     def test_ignore_patterns_are_valid_strings(self):
