@@ -30,13 +30,13 @@ def safe_resolve_path(path: Path, allowed_parent: Path | None = None) -> Path:
         OSError: If path resolution fails
     """
     try:
-        resolved = path.resolve(strict=False)
+        resolved = path.absolute()
     except (OSError, RuntimeError) as e:
         raise OSError(f"Failed to resolve path {path}: {e}") from e
 
     if allowed_parent is not None:
         try:
-            resolved.relative_to(allowed_parent.resolve())
+            resolved.relative_to(allowed_parent.absolute())
         except ValueError:
             raise ValueError(
                 f"Path {resolved} is outside allowed parent {allowed_parent}"
