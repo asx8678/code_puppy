@@ -4,22 +4,47 @@ import os
 import pathlib
 import threading
 import time
+from dataclasses import dataclass, field
 from functools import cache, lru_cache
+from typing import Callable
 
 from code_puppy.session_storage import save_session_async
 from code_puppy import runtime_state
 
 
-# --- Config caching (eliminates repeated disk reads) ---
-_config_cache: configparser.ConfigParser | None = None
-_config_mtime: float = 0.0
+@dataclass
+class ConfigState:
+    """Encapsulates all mutable module-level state for config.py.
 
-# --- mtime check debouncing (reduces stat syscall cost) ---
-_last_mtime_check = 0
-_cached_mtime = None
+    Replaces the nine process-global variables that previously scattered
+    mutable state across the module, making the state easier to inspect,
+    reset in tests, and reason about.
+    """
 
-# --- Thread-safe lock for config cache access ---
-_CONFIG_LOCK = threading.Lock()
+    # Config caching (eliminates repeated disk reads)
+    config_cache: configparser.ConfigParser | None = None
+    config_mtime: float = 0.0
+
+    # mtime check debouncing (reduces stat syscall cost)
+    last_mtime_check: float = 0.0
+    cached_mtime: float | None = None
+
+    # Thread-safe lock for config cache access
+    config_lock: threading.Lock = field(default_factory=threading.Lock)
+
+    # Model validation and defaults caching
+    model_validation_cache: dict = field(default_factory=dict)
+    default_model_cache: str | None = None
+    default_vision_model_cache: str | None = None
+    supported_settings_cache: Callable | None = None
+
+    # Model context length cache
+    model_context_length_cache: dict[str, int] = field(default_factory=dict)
+
+
+# Module-level singleton – all functions reference _state.<field> instead of
+# bare module globals so the state is fully encapsulated.
+_state = ConfigState()
 
 
 @lru_cache(maxsize=4)
@@ -66,48 +91,45 @@ def _get_xdg_dir(env_var: str, fallback: str) -> str:
 
 def _get_config() -> configparser.ConfigParser:
     """Return a cached ConfigParser, re-reading only when the file changes."""
-    global _config_cache, _config_mtime, _last_mtime_check, _cached_mtime
-
     now = time.time()
 
     # Only re-check mtime after TTL expires (1 second debounce)
-    if now - _last_mtime_check > 1.0:
+    if now - _state.last_mtime_check > 1.0:
         try:
-            _cached_mtime = os.path.getmtime(CONFIG_FILE)
+            _state.cached_mtime = os.path.getmtime(CONFIG_FILE)
         except OSError:
             # File doesn't exist — return a fresh (uncached) parser each time
             # so that tests which mock ConfigParser or CONFIG_FILE work correctly.
             cfg = configparser.ConfigParser()
             cfg.read(CONFIG_FILE)
             return cfg
-        _last_mtime_check = now
+        _state.last_mtime_check = now
 
-    with _CONFIG_LOCK:
-        if _config_cache is None or _cached_mtime != _config_mtime:
-            _config_cache = configparser.ConfigParser()
-            _config_cache.read(CONFIG_FILE)
-            _config_mtime = _cached_mtime
-        return _config_cache
+    with _state.config_lock:
+        if _state.config_cache is None or _state.cached_mtime != _state.config_mtime:
+            _state.config_cache = configparser.ConfigParser()
+            _state.config_cache.read(CONFIG_FILE)
+            _state.config_mtime = _state.cached_mtime
+        return _state.config_cache
 
 
 def _invalidate_config() -> None:
     """Force next _get_config() call to re-read from disk.
 
-    Also resets the TTL-debounce state (_last_mtime_check, _cached_mtime) so
+    Also resets the TTL-debounce state (_state.last_mtime_check, _state.cached_mtime) so
     the next _get_config() call performs a fresh mtime check rather than
     trusting stale values from before invalidation. This is essential for
     test isolation when CONFIG_FILE is swapped between tests.
     """
-    global _config_cache, _model_context_length_cache, _last_mtime_check, _cached_mtime
-    with _CONFIG_LOCK:
-        _config_cache = None
-        _last_mtime_check = 0
-        _cached_mtime = None
+    with _state.config_lock:
+        _state.config_cache = None
+        _state.last_mtime_check = 0.0
+        _state.cached_mtime = None
     # Also invalidate the protected token count cache
     get_protected_token_count.cache_clear()
     # Clear model context length cache since config changes
     # may affect model resolution
-    _model_context_length_cache.clear()
+    _state.model_context_length_cache.clear()
     # Clear all cached config getter functions
     get_use_dbos.cache_clear()
     get_subagent_verbose.cache_clear()
@@ -284,19 +306,10 @@ REQUIRED_KEYS = ["puppy_name", "owner_name"]
 # - _CURRENT_AUTOSAVE_ID -> runtime_state._CURRENT_AUTOSAVE_ID
 # - _SESSION_MODEL -> runtime_state._SESSION_MODEL
 
-# Cache containers for model validation and defaults (config caching, not runtime state)
-_model_validation_cache = {}
-_default_model_cache = None
-_default_vision_model_cache = None
-
-# LRU cache for supported settings per model (cleared by clear_model_cache)
-_supported_settings_cache = None
-
 
 def _get_supported_settings_cache():
     """Return the LRU cache function for supported settings, creating it if needed."""
-    global _supported_settings_cache
-    if _supported_settings_cache is None:
+    if _state.supported_settings_cache is None:
 
         @lru_cache(maxsize=128)
         def _cached_supported_settings(model_name: str) -> frozenset:
@@ -323,8 +336,8 @@ def _get_supported_settings_cache():
 
             return frozenset(supported_settings)
 
-        _supported_settings_cache = _cached_supported_settings
-    return _supported_settings_cache
+        _state.supported_settings_cache = _cached_supported_settings
+    return _state.supported_settings_cache
 
 
 def ensure_config_exists():
@@ -404,18 +417,14 @@ def get_allow_recursion() -> bool:
     return _is_truthy(get_value("allow_recursion"), default=True)
 
 
-# Cache for model context lengths - cleared when config is invalidated
-_model_context_length_cache: dict[str, int] = {}
-
-
 def _get_model_context_length(model_name: str) -> int:
     """
     Get context length for a model, with caching.
     Cache is cleared when _invalidate_config() is called.
     """
     # Check cache first
-    if model_name in _model_context_length_cache:
-        return _model_context_length_cache[model_name]
+    if model_name in _state.model_context_length_cache:
+        return _state.model_context_length_cache[model_name]
 
     # Lookup in config
     try:
@@ -429,7 +438,7 @@ def _get_model_context_length(model_name: str) -> int:
         result = 128000
 
     # Store in cache
-    _model_context_length_cache[model_name] = result
+    _state.model_context_length_cache[model_name] = result
     return result
 
 
@@ -573,10 +582,8 @@ def _default_model_from_models_json():
     Returns the first model in models.json as the default.
     Falls back to ``gpt-5`` if the file cannot be read.
     """
-    global _default_model_cache
-
-    if _default_model_cache is not None:
-        return _default_model_cache
+    if _state.default_model_cache is not None:
+        return _state.default_model_cache
 
     try:
         from code_puppy.model_factory import ModelFactory
@@ -585,21 +592,19 @@ def _default_model_from_models_json():
         if models_config:
             # Use first model in models.json as default
             first_key = next(iter(models_config))
-            _default_model_cache = first_key
+            _state.default_model_cache = first_key
             return first_key
-        _default_model_cache = "gpt-5"
+        _state.default_model_cache = "gpt-5"
         return "gpt-5"
     except Exception:
-        _default_model_cache = "gpt-5"
+        _state.default_model_cache = "gpt-5"
         return "gpt-5"
 
 
 def _default_vision_model_from_models_json() -> str:
     """Select a default vision-capable model from models.json with caching."""
-    global _default_vision_model_cache
-
-    if _default_vision_model_cache is not None:
-        return _default_vision_model_cache
+    if _state.default_vision_model_cache is not None:
+        return _state.default_vision_model_cache
 
     try:
         from code_puppy.model_factory import ModelFactory
@@ -609,7 +614,7 @@ def _default_vision_model_from_models_json() -> str:
             # Prefer explicitly tagged vision models
             for name, config in models_config.items():
                 if config.get("supports_vision"):
-                    _default_vision_model_cache = name
+                    _state.default_vision_model_cache = name
                     return name
 
             # Fallback heuristic: common multimodal models
@@ -622,27 +627,25 @@ def _default_vision_model_from_models_json() -> str:
             )
             for candidate in preferred_candidates:
                 if candidate in models_config:
-                    _default_vision_model_cache = candidate
+                    _state.default_vision_model_cache = candidate
                     return candidate
 
             # Last resort: use the general default model
-            _default_vision_model_cache = _default_model_from_models_json()
-            return _default_vision_model_cache
+            _state.default_vision_model_cache = _default_model_from_models_json()
+            return _state.default_vision_model_cache
 
-        _default_vision_model_cache = "gpt-4.1"
+        _state.default_vision_model_cache = "gpt-4.1"
         return "gpt-4.1"
     except Exception:
-        _default_vision_model_cache = "gpt-4.1"
+        _state.default_vision_model_cache = "gpt-4.1"
         return "gpt-4.1"
 
 
 def _validate_model_exists(model_name: str) -> bool:
     """Check if a model exists in models.json with caching to avoid redundant calls."""
-    global _model_validation_cache
-
     # Check cache first
-    if model_name in _model_validation_cache:
-        return _model_validation_cache[model_name]
+    if model_name in _state.model_validation_cache:
+        return _state.model_validation_cache[model_name]
 
     try:
         from code_puppy.model_factory import ModelFactory
@@ -651,28 +654,23 @@ def _validate_model_exists(model_name: str) -> bool:
         exists = model_name in models_config
 
         # Cache the result
-        _model_validation_cache[model_name] = exists
+        _state.model_validation_cache[model_name] = exists
         return exists
     except Exception:
         # If we can't validate, assume it exists to avoid breaking things
-        _model_validation_cache[model_name] = True
+        _state.model_validation_cache[model_name] = True
         return True
 
 
 def clear_model_cache():
     """Clear the model validation cache. Call this when models.json changes."""
-    global \
-        _model_validation_cache, \
-        _default_model_cache, \
-        _default_vision_model_cache, \
-        _supported_settings_cache
-    _model_validation_cache.clear()
-    _default_model_cache = None
-    _default_vision_model_cache = None
+    _state.model_validation_cache.clear()
+    _state.default_model_cache = None
+    _state.default_vision_model_cache = None
     # Clear the lru_cache for supported settings
-    if _supported_settings_cache is not None:
-        _supported_settings_cache.cache_clear()
-        _supported_settings_cache = None
+    if _state.supported_settings_cache is not None:
+        _state.supported_settings_cache.cache_clear()
+        _state.supported_settings_cache = None
 
 
 def reset_session_model():

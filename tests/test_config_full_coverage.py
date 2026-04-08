@@ -555,37 +555,37 @@ class TestModelName:
 # ---------------------------------------------------------------------------
 class TestDefaultModel:
     def test_default_model_cached(self):
-        cp_config._default_model_cache = "cached"
+        cp_config._state.default_model_cache = "cached"
         assert cp_config._default_model_from_models_json() == "cached"
-        cp_config._default_model_cache = None
+        cp_config._state.default_model_cache = None
 
     def test_default_model_from_config(self):
-        cp_config._default_model_cache = None
+        cp_config._state.default_model_cache = None
         with patch(
             "code_puppy.model_factory.ModelFactory.load_config",
             return_value={"first": {}, "second": {}},
         ):
             result = cp_config._default_model_from_models_json()
             assert result == "first"
-        cp_config._default_model_cache = None
+        cp_config._state.default_model_cache = None
 
     def test_default_model_empty_config(self):
-        cp_config._default_model_cache = None
+        cp_config._state.default_model_cache = None
         with patch(
             "code_puppy.model_factory.ModelFactory.load_config", return_value={}
         ):
             result = cp_config._default_model_from_models_json()
             assert result == "gpt-5"
-        cp_config._default_model_cache = None
+        cp_config._state.default_model_cache = None
 
     def test_default_model_exception(self):
-        cp_config._default_model_cache = None
+        cp_config._state.default_model_cache = None
         with patch(
             "code_puppy.model_factory.ModelFactory.load_config", side_effect=Exception
         ):
             result = cp_config._default_model_from_models_json()
             assert result == "gpt-5"
-        cp_config._default_model_cache = None
+        cp_config._state.default_model_cache = None
 
 
 # ---------------------------------------------------------------------------
@@ -593,30 +593,30 @@ class TestDefaultModel:
 # ---------------------------------------------------------------------------
 class TestDefaultVisionModel:
     def test_cached(self):
-        cp_config._default_vision_model_cache = "cached-vision"
+        cp_config._state.default_vision_model_cache = "cached-vision"
         assert cp_config._default_vision_model_from_models_json() == "cached-vision"
-        cp_config._default_vision_model_cache = None
+        cp_config._state.default_vision_model_cache = None
 
     def test_supports_vision_tag(self):
-        cp_config._default_vision_model_cache = None
+        cp_config._state.default_vision_model_cache = None
         with patch(
             "code_puppy.model_factory.ModelFactory.load_config",
             return_value={"model-a": {"supports_vision": True}},
         ):
             assert cp_config._default_vision_model_from_models_json() == "model-a"
-        cp_config._default_vision_model_cache = None
+        cp_config._state.default_vision_model_cache = None
 
     def test_preferred_candidates(self):
-        cp_config._default_vision_model_cache = None
+        cp_config._state.default_vision_model_cache = None
         with patch(
             "code_puppy.model_factory.ModelFactory.load_config",
             return_value={"gpt-4.1": {}, "other": {}},
         ):
             assert cp_config._default_vision_model_from_models_json() == "gpt-4.1"
-        cp_config._default_vision_model_cache = None
+        cp_config._state.default_vision_model_cache = None
 
     def test_fallback_to_general_default(self):
-        cp_config._default_vision_model_cache = None
+        cp_config._state.default_vision_model_cache = None
         with patch(
             "code_puppy.model_factory.ModelFactory.load_config",
             return_value={"some-model": {}},
@@ -627,23 +627,23 @@ class TestDefaultVisionModel:
                 assert (
                     cp_config._default_vision_model_from_models_json() == "some-model"
                 )
-        cp_config._default_vision_model_cache = None
+        cp_config._state.default_vision_model_cache = None
 
     def test_empty_config(self):
-        cp_config._default_vision_model_cache = None
+        cp_config._state.default_vision_model_cache = None
         with patch(
             "code_puppy.model_factory.ModelFactory.load_config", return_value={}
         ):
             assert cp_config._default_vision_model_from_models_json() == "gpt-4.1"
-        cp_config._default_vision_model_cache = None
+        cp_config._state.default_vision_model_cache = None
 
     def test_exception(self):
-        cp_config._default_vision_model_cache = None
+        cp_config._state.default_vision_model_cache = None
         with patch(
             "code_puppy.model_factory.ModelFactory.load_config", side_effect=Exception
         ):
             assert cp_config._default_vision_model_from_models_json() == "gpt-4.1"
-        cp_config._default_vision_model_cache = None
+        cp_config._state.default_vision_model_cache = None
 
 
 # ---------------------------------------------------------------------------
@@ -651,26 +651,26 @@ class TestDefaultVisionModel:
 # ---------------------------------------------------------------------------
 class TestValidateModel:
     def test_cached_true(self):
-        cp_config._model_validation_cache["cached-m"] = True
+        cp_config._state.model_validation_cache["cached-m"] = True
         assert cp_config._validate_model_exists("cached-m") is True
-        del cp_config._model_validation_cache["cached-m"]
+        del cp_config._state.model_validation_cache["cached-m"]
 
     def test_found(self):
-        cp_config._model_validation_cache.clear()
+        cp_config._state.model_validation_cache.clear()
         with patch(
             "code_puppy.model_factory.ModelFactory.load_config", return_value={"m": {}}
         ):
             assert cp_config._validate_model_exists("m") is True
 
     def test_not_found(self):
-        cp_config._model_validation_cache.clear()
+        cp_config._state.model_validation_cache.clear()
         with patch(
             "code_puppy.model_factory.ModelFactory.load_config", return_value={}
         ):
             assert cp_config._validate_model_exists("missing") is False
 
     def test_exception(self):
-        cp_config._model_validation_cache.clear()
+        cp_config._state.model_validation_cache.clear()
         with patch(
             "code_puppy.model_factory.ModelFactory.load_config", side_effect=Exception
         ):
@@ -683,7 +683,7 @@ class TestValidateModel:
 class TestModelContextLength:
     def setup_method(self):
         # Clear cache before each test to ensure clean state
-        cp_config._model_context_length_cache.clear()
+        cp_config._state.model_context_length_cache.clear()
 
     def test_from_config(self):
         with patch(
@@ -1112,10 +1112,10 @@ class TestSetEnableDbos:
 # ---------------------------------------------------------------------------
 class TestClearModelCache:
     def test_clears_all(self):
-        cp_config._model_validation_cache["x"] = True
-        cp_config._default_model_cache = "y"
-        cp_config._default_vision_model_cache = "z"
+        cp_config._state.model_validation_cache["x"] = True
+        cp_config._state.default_model_cache = "y"
+        cp_config._state.default_vision_model_cache = "z"
         cp_config.clear_model_cache()
-        assert len(cp_config._model_validation_cache) == 0
-        assert cp_config._default_model_cache is None
-        assert cp_config._default_vision_model_cache is None
+        assert len(cp_config._state.model_validation_cache) == 0
+        assert cp_config._state.default_model_cache is None
+        assert cp_config._state.default_vision_model_cache is None
