@@ -501,6 +501,70 @@ def on_file_permission(
     return security_results
 
 
+async def on_file_permission_async(
+    context: Any,
+    file_path: str,
+    operation: str,
+    preview: str | None = None,
+    message_group: str | None = None,
+    operation_data: Any = None,
+) -> list[Any]:
+    """Async version of on_file_permission.
+
+    This async variant properly awaits async callbacks, ensuring that
+    async file permission handlers (like those that generate diffs in
+    thread pools) are fully executed before returning results.
+
+    SECURITY-CRITICAL: This function implements FAIL-CLOSED semantics.
+    If a security callback raises an exception, the operation is denied
+    (returns False) rather than being allowed to proceed.
+
+    Args:
+        context: The operation context
+        file_path: Path to the file being operated on
+        operation: Description of the operation
+        preview: Optional preview of changes (deprecated - use operation_data instead)
+        message_group: Optional message group
+        operation_data: Operation-specific data for preview generation (recommended)
+
+    Returns:
+        List of boolean results from permission handlers.
+        Returns True if permission should be granted, False if denied.
+        If a callback raises an exception, returns False to deny the operation.
+    """
+    # For backward compatibility, if operation_data is provided, prefer it over preview
+    if operation_data is not None:
+        preview = None
+
+    results = await _trigger_callbacks(
+        "file_permission",
+        context,
+        file_path,
+        operation,
+        preview,
+        message_group,
+        operation_data,
+    )
+
+    # Replace _CALLBACK_FAILED results with False for fail-closed behavior
+    # This ensures that if a security plugin crashes, the file operation is blocked
+    security_results = []
+    for result in results:
+        if result is _CALLBACK_FAILED:
+            # Callback failed with exception - deny the operation
+            logger.warning(
+                "Security callback for file_permission failed with exception; "
+                "denying %s on %s (fail-closed)",
+                operation,
+                file_path,
+            )
+            security_results.append(False)
+        else:
+            security_results.append(result)
+
+    return security_results
+
+
 async def on_pre_tool_call(
     tool_name: str, tool_args: dict, context: Any = None
 ) -> list[Any]:

@@ -317,6 +317,8 @@ class TestHandleDeleteFilePermission:
 
 class TestHandleFilePermission:
     def test_with_operation_data(self, tmp_path):
+        import asyncio
+
         from code_puppy.plugins.file_permission_handler.register_callbacks import (
             handle_file_permission,
         )
@@ -328,11 +330,15 @@ class TestHandleFilePermission:
             return_value=(True, None),
         ):
             assert (
-                handle_file_permission(None, str(f), "delete", operation_data={})
+                asyncio.run(
+                    handle_file_permission(None, str(f), "delete", operation_data={})
+                )
                 is True
             )
 
     def test_without_operation_data(self):
+        import asyncio
+
         from code_puppy.plugins.file_permission_handler.register_callbacks import (
             handle_file_permission,
         )
@@ -341,7 +347,12 @@ class TestHandleFilePermission:
             "code_puppy.plugins.file_permission_handler.register_callbacks.prompt_for_file_permission",
             return_value=(True, None),
         ):
-            assert handle_file_permission(None, "f.txt", "edit", preview="diff") is True
+            assert (
+                asyncio.run(
+                    handle_file_permission(None, "f.txt", "edit", preview="diff")
+                )
+                is True
+            )
 
 
 class TestGeneratePreviewFromOperationData:

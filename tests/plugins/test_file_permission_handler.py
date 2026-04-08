@@ -495,14 +495,18 @@ class TestHandleFilePermission:
     )
     def test_handle_with_operation_data(self, mock_prompt):
         """Test handler with operation data."""
+        import asyncio
+
         mock_prompt.return_value = (True, None)
 
         context = Mock()
         file_path = "/tmp/file.py"
         operation_data = {"content": "print('test')\n"}
 
-        confirmed = handle_file_permission(
-            context, file_path, "write", operation_data=operation_data
+        confirmed = asyncio.run(
+            handle_file_permission(
+                context, file_path, "write", operation_data=operation_data
+            )
         )
 
         assert confirmed is True
@@ -512,13 +516,17 @@ class TestHandleFilePermission:
     )
     def test_handle_with_preview(self, mock_prompt):
         """Test handler with explicit preview."""
+        import asyncio
+
         mock_prompt.return_value = (True, None)
 
         context = Mock()
         file_path = "/tmp/file.py"
         preview = "+ added line\n"
 
-        confirmed = handle_file_permission(context, file_path, "edit", preview=preview)
+        confirmed = asyncio.run(
+            handle_file_permission(context, file_path, "edit", preview=preview)
+        )
 
         assert confirmed is True
         mock_prompt.assert_called_once()
