@@ -317,7 +317,7 @@ async def _list_files(
         if not recursive:
             try:
                 entries = os.listdir(directory)
-                for entry in sorted(entries):
+                for entry in entries:
                     full_entry_path = os.path.join(directory, entry)
                     if not os.path.exists(full_entry_path):
                         continue
