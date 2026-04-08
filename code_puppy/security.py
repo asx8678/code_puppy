@@ -35,8 +35,6 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from code_puppy.callbacks import on_file_permission, on_run_shell_command
-
 logger = logging.getLogger(__name__)
 
 
@@ -136,6 +134,8 @@ class SecurityBoundary:
 
         # --- Plugin callback checks ------------------------------------------
         # Trigger run_shell_command callbacks for plugin validation
+        from code_puppy.callbacks import on_run_shell_command
+
         callback_results = await on_run_shell_command(context, command, cwd, timeout)
 
         # Check if any callback blocked the command
@@ -245,6 +245,8 @@ class SecurityBoundary:
 
         # --- Plugin callback checks --------------------------------------------
         # Trigger file_permission callbacks for plugin validation
+        from code_puppy.callbacks import on_file_permission
+
         callback_results = on_file_permission(
             context,
             path,
