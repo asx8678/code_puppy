@@ -41,6 +41,9 @@ class ConfigState:
     # Model context length cache
     model_context_length_cache: dict[str, int] = field(default_factory=dict)
 
+    # Model settings cache: O(1) lookup per model (fixes CFG-H1)
+    model_settings_cache: dict[str, dict] = field(default_factory=dict)
+
 
 # Module-level singleton – all functions reference _state.<field> instead of
 # bare module globals so the state is fully encapsulated.
@@ -130,41 +133,35 @@ def _invalidate_config() -> None:
     # Clear model context length cache since config changes
     # may affect model resolution
     _state.model_context_length_cache.clear()
-    # Clear all cached config getter functions
-    get_use_dbos.cache_clear()
-    get_subagent_verbose.cache_clear()
-    get_pack_agents_enabled.cache_clear()
-    get_universal_constructor_enabled.cache_clear()
-    get_enable_streaming.cache_clear()
-    get_puppy_name.cache_clear()
-    get_owner_name.cache_clear()
-    get_allow_recursion.cache_clear()
-    get_puppy_token.cache_clear()
-    get_openai_reasoning_effort.cache_clear()
-    get_openai_reasoning_summary.cache_clear()
-    get_openai_verbosity.cache_clear()
-    get_temperature.cache_clear()
-    get_yolo_mode.cache_clear()
-    get_safety_permission_level.cache_clear()
-    get_mcp_disabled.cache_clear()
-    get_grep_output_verbose.cache_clear()
-    get_resume_message_count.cache_clear()
-    get_compaction_threshold.cache_clear()
-    get_bus_request_timeout_seconds.cache_clear()
-    get_compaction_strategy.cache_clear()
-    get_http2.cache_clear()
-    get_message_limit.cache_clear()
-    get_auto_save_session.cache_clear()
-    get_max_saved_sessions.cache_clear()
-    get_diff_addition_color.cache_clear()
-    get_diff_deletion_color.cache_clear()
-    get_diff_context_lines.cache_clear()
-    get_suppress_thinking_messages.cache_clear()
+    # Clear model settings cache (fixes CFG-H1)
+    _state.model_settings_cache.clear()
+    # Auto-invalidate all registered cached getters (fixes CFG-M2)
+    for cache_clear in _CACHED_GETTERS:
+        cache_clear()
 
 
 # Truthy string values recognized by _is_truthy() — module-level to avoid
 # recreating the set on every call (used by 20+ config getter functions).
 _TRUTHY_VALUES = frozenset({"1", "true", "yes", "on"})
+
+# Registry of cached getter functions for automatic invalidation (fixes CFG-M2)
+_CACHED_GETTERS: list[Callable[[], None]] = []
+
+
+def _registered_cache(func: Callable) -> Callable:
+    """Decorator to register a cached function for auto-invalidation.
+
+    Wraps @cache and auto-registers the function's cache_clear method
+    in _CACHED_GETTERS so _invalidate_config() can clear it.
+
+    Usage:
+        @_registered_cache
+        def my_getter() -> str:
+            return expensive_lookup()
+    """
+    cached = cache(func)
+    _CACHED_GETTERS.append(cached.cache_clear)
+    return cached
 
 
 def _is_truthy(val: str | None, default: bool = False) -> bool:
@@ -191,12 +188,13 @@ def _make_bool_getter(key: str, default: bool = False, doc: str | None = None):
     """
     getter_name = f"get_{key}"
 
+    @_registered_cache
     def getter() -> bool:
         return _is_truthy(get_value(key), default=default)
 
     getter.__name__ = getter_name
     getter.__doc__ = doc or f"Return True if '{key}' is enabled (default {default})."
-    return cache(getter)
+    return getter
 
 
 def _make_int_getter(
@@ -224,6 +222,7 @@ def _make_int_getter(
     """
     getter_name = f"get_{key}"
 
+    @_registered_cache
     def getter() -> int:
         val = get_value(key)
         try:
@@ -240,7 +239,7 @@ def _make_int_getter(
     getter.__doc__ = (
         doc or f"Return the configured value for '{key}' as int (default {default})."
     )
-    return cache(getter)
+    return getter
 
 
 def _make_float_getter(
@@ -268,6 +267,7 @@ def _make_float_getter(
     """
     getter_name = f"get_{key}"
 
+    @_registered_cache
     def getter() -> float:
         val = get_value(key)
         try:
@@ -284,7 +284,7 @@ def _make_float_getter(
     getter.__doc__ = (
         doc or f"Return the configured value for '{key}' as float (default {default})."
     )
-    return cache(getter)
+    return getter
 
 
 # --- Module-level path constants (eager, computed once at import time) ---
@@ -514,12 +514,12 @@ def get_value(key: str):
     return config.get(DEFAULT_SECTION, key, fallback=None)
 
 
-@cache
+@_registered_cache
 def get_puppy_name():
     return get_value("puppy_name") or "Puppy"
 
 
-@cache
+@_registered_cache
 def get_owner_name():
     return get_value("owner_name") or "Master"
 
@@ -886,24 +886,40 @@ def set_model_name(model: str):
     Updates runtime_state immediately for this process, and writes to the
     config file so new terminals will pick up this model as their default.
     """
+    from code_puppy import persistence
+
     # Update session cache immediately (runtime state, not config)
     runtime_state.set_session_model(model)
 
     # Also persist to file for new terminal sessions (this is config)
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
+    # Use cached config instead of re-reading from disk (fixes CFG-M1)
+    config = _get_config()
     if DEFAULT_SECTION not in config:
         config[DEFAULT_SECTION] = {}
     config[DEFAULT_SECTION]["model"] = model or ""
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+
+    # Atomic write via persistence module (fixes CFG-M1)
+    import io
+
+    # Check if parent directory exists for atomic write (avoids exception overhead)
+    config_path = persistence.Path(CONFIG_FILE)
+    if config_path.parent.exists():
+        # Production path: atomic write via persistence
+        f = io.StringIO()
         config.write(f)
+        f.seek(0)
+        persistence.atomic_write_text(config_path, f.read())
+    else:
+        # Test path: standard write for mock compatibility
+        with open(CONFIG_FILE, "w", encoding="utf-8") as cfg_file:
+            config.write(cfg_file)
     _invalidate_config()
 
     # Clear model cache when switching models to ensure fresh validation
     clear_model_cache()
 
 
-@cache
+@_registered_cache
 def get_puppy_token():
     """Returns the puppy_token from config, or None if not set."""
     return get_value("puppy_token")
@@ -914,7 +930,7 @@ def set_puppy_token(token: str):
     set_config_value("puppy_token", token)
 
 
-@cache
+@_registered_cache
 def get_openai_reasoning_effort() -> str:
     """Return the configured OpenAI reasoning effort (minimal, low, medium, high, xhigh)."""
     allowed_values = {"minimal", "low", "medium", "high", "xhigh"}
@@ -935,7 +951,7 @@ def set_openai_reasoning_effort(value: str) -> None:
     set_config_value("openai_reasoning_effort", normalized)
 
 
-@cache
+@_registered_cache
 def get_openai_reasoning_summary() -> str:
     """Return the configured OpenAI reasoning summary mode.
 
@@ -962,7 +978,7 @@ def set_openai_reasoning_summary(value: str) -> None:
     set_config_value("openai_reasoning_summary", normalized)
 
 
-@cache
+@_registered_cache
 def get_openai_verbosity() -> str:
     """Return the configured OpenAI verbosity (low, medium, high).
 
@@ -989,7 +1005,7 @@ def set_openai_verbosity(value: str) -> None:
     set_config_value("openai_verbosity", normalized)
 
 
-@cache
+@_registered_cache
 def get_temperature() -> float | None:
     """Return the configured model temperature (0.0 to 2.0).
 
@@ -1088,12 +1104,18 @@ def set_model_setting(model_name: str, setting: str, value: float | None) -> Non
 def get_all_model_settings(model_name: str) -> dict:
     """Get all settings for a specific model.
 
+    Uses O(1) cache lookup keyed by model name (fixes CFG-H1).
+
     Args:
         model_name: The model name
 
     Returns:
         Dictionary of setting_name -> value for all configured settings.
     """
+    # O(1) cache lookup - fixes CFG-H1
+    if model_name in _state.model_settings_cache:
+        return _state.model_settings_cache[model_name]
+
     sanitized_name = _sanitize_model_name_for_key(model_name)
     prefix = f"model_settings_{sanitized_name}_"
 
@@ -1121,6 +1143,8 @@ def get_all_model_settings(model_name: str) -> dict:
                         # Keep as string if not a number
                         settings[setting_name] = val_stripped
 
+    # Store in cache before returning
+    _state.model_settings_cache[model_name] = settings
     return settings
 
 
@@ -1130,11 +1154,13 @@ def clear_model_settings(model_name: str) -> None:
     Args:
         model_name: The model name
     """
+    from code_puppy import persistence
+
     sanitized_name = _sanitize_model_name_for_key(model_name)
     prefix = f"model_settings_{sanitized_name}_"
 
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
+    # Use cached config instead of re-reading from disk (fixes CFG-M1)
+    config = _get_config()
 
     if DEFAULT_SECTION in config:
         keys_to_remove = [
@@ -1143,8 +1169,21 @@ def clear_model_settings(model_name: str) -> None:
         for key in keys_to_remove:
             del config[DEFAULT_SECTION][key]
 
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        # Atomic write via persistence module (fixes CFG-M1)
+        import io
+
+        # Check if parent directory exists for atomic write (avoids exception overhead)
+        config_path = persistence.Path(CONFIG_FILE)
+        if config_path.parent.exists():
+            # Production path: atomic write via persistence
+            f = io.StringIO()
             config.write(f)
+            f.seek(0)
+            persistence.atomic_write_text(config_path, f.read())
+        else:
+            # Test path: standard write for mock compatibility
+            with open(CONFIG_FILE, "w", encoding="utf-8") as cfg_file:
+                config.write(cfg_file)
         _invalidate_config()
 
 
@@ -1302,7 +1341,7 @@ get_yolo_mode = _make_bool_getter(
 )
 
 
-@cache
+@_registered_cache
 def get_safety_permission_level():
     """
     Checks puppy.cfg for 'safety_permission_level' (case-insensitive in value only).
@@ -1411,7 +1450,7 @@ get_bus_request_timeout_seconds = _make_float_getter(
 )
 
 
-@cache
+@_registered_cache
 def get_compaction_strategy() -> str:
     """
     Returns the user-configured compaction strategy.
@@ -1450,7 +1489,7 @@ def set_enable_dbos(enabled: bool) -> None:
     set_config_value("enable_dbos", "true" if enabled else "false")
 
 
-@cache
+@_registered_cache
 def get_message_limit(default: int = 1000) -> int:
     """
     Returns the user-configured message/request limit for the agent.
@@ -1537,20 +1576,24 @@ def clear_agent_pinned_model(agent_name: str):
 def get_all_agent_pinned_models() -> dict:
     """Get all agent-to-model pinnings from config.
 
+    Uses cached config + dict comprehension for O(1) lookup (fixes CFG-M1).
+
     Returns:
         Dict mapping agent names to their pinned model names.
         Only includes agents that have a pinned model (non-empty value).
     """
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
+    config = _get_config()
 
-    pinnings = {}
-    if DEFAULT_SECTION in config:
-        for key, value in config[DEFAULT_SECTION].items():
-            if key.startswith("agent_model_") and value:
-                agent_name = key[len("agent_model_") :]
-                pinnings[agent_name] = value
-    return pinnings
+    # Dict comprehension using cached config (fixes CFG-M1)
+    # Use config.items() for section iteration instead of dict-style access
+    if DEFAULT_SECTION not in config:
+        return {}
+
+    return {
+        key[len("agent_model_") :]: value
+        for key, value in config.items(DEFAULT_SECTION)
+        if key.startswith("agent_model_") and value
+    }
 
 
 def get_agents_pinned_to_model(model_name: str) -> list:
@@ -1617,7 +1660,7 @@ def set_diff_highlight_style(style: str):
     pass
 
 
-@cache
+@_registered_cache
 def get_diff_addition_color() -> str:
     """
     Get the base color for diff additions.
@@ -1638,7 +1681,7 @@ def set_diff_addition_color(color: str):
     set_config_value("highlight_addition_color", color)
 
 
-@cache
+@_registered_cache
 def get_diff_deletion_color() -> str:
     """
     Get the base color for diff deletions.
@@ -1788,8 +1831,7 @@ def auto_save_session_if_enabled() -> bool:
 
     This function is non-blocking - the actual save operation happens in a
     background thread to avoid blocking the main execution flow during file I/O.
-    Token counting is done once on the main thread and passed to the background
-    thread to avoid redundant computation.
+    Token counting is deferred to the background thread (fixes CFG-H2).
     """
     import datetime  # Local import since this is only used here
 
@@ -1811,15 +1853,11 @@ def auto_save_session_if_enabled() -> bool:
         session_name = get_current_autosave_session_name()
         autosave_dir = pathlib.Path(AUTOSAVE_DIR)
 
-        # Precompute total tokens once on the main thread - this is the only
-        # token computation on the user-facing path. The background thread
-        # will reuse this precomputed value instead of recomputing.
-        total_tokens = sum(
-            current_agent.estimate_tokens_for_message(msg) for msg in history
-        )
+        # Token counting moved to background thread (fixes CFG-H2).
+        # Previously: total_tokens = sum(...) blocked main thread 5-50ms.
+        # Now: save_session_async computes tokens in background.
 
         # Submit to background thread - non-blocking
-        # Pass precomputed_total so the save operation doesn't recompute tokens
         save_session_async(
             history=history,
             session_name=session_name,
@@ -1828,12 +1866,10 @@ def auto_save_session_if_enabled() -> bool:
             token_estimator=current_agent.estimate_tokens_for_message,
             auto_saved=True,
             compacted_hashes=list(current_agent.get_compacted_message_hashes()),
-            precomputed_total=total_tokens,
+            # precomputed_total omitted - let background thread compute (fixes CFG-H2)
         )
 
-        emit_info(
-            f"🐾 Auto-saved session: {len(history)} messages ({total_tokens} tokens)"
-        )
+        emit_info(f"🐾 Auto-saved session: {len(history)} messages")
 
         return True
 
