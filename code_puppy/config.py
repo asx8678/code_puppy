@@ -1790,8 +1790,8 @@ def load_api_keys_to_environment():
         try:
             from dotenv import load_dotenv
 
-            # override=True means .env values take precedence over existing env vars
-            load_dotenv(env_file, override=True)
+            # override=False: .env should not override system env vars which may contain security settings
+            load_dotenv(env_file, override=False)
         except ImportError:
             # python-dotenv not installed, skip .env loading
             pass

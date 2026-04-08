@@ -61,6 +61,11 @@ class StagedChange:
     applied: bool = False
     rejected: bool = False
     
+    def __post_init__(self):
+        """Validate that applied and rejected are not both True."""
+        if self.applied and self.rejected:
+            raise ValueError("StagedChange cannot be both applied and rejected")
+    
     def to_dict(self) -> dict[str, Any]:
         """Serialize change to dictionary."""
         return {
@@ -331,9 +336,13 @@ class StagedChangesSandbox:
         return result
     
     def save_to_disk(self) -> Path:
-        """Save staged changes to disk for persistence."""
+        """Save staged changes to disk for persistence.
+        
+        Uses atomic write-to-tmp-then-rename to avoid corruption if interrupted.
+        """
         self._ensure_stage_dir()
         save_path = STAGE_DIR / f"{self._session_id}.json"
+        tmp_path = STAGE_DIR / f"{self._session_id}.json.tmp"
         
         with self._lock:
             data = {
@@ -343,8 +352,10 @@ class StagedChangesSandbox:
                 "saved_at": time.time(),
             }
         
-        with open(save_path, "w") as f:
+        # Atomic write: write to temp file first, then rename
+        with open(tmp_path, "w") as f:
             json.dump(data, f, indent=2)
+        os.replace(tmp_path, save_path)
         
         logger.info(f"Saved staged changes to {save_path}")
         return save_path
