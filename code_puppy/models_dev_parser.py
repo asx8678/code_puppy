@@ -13,6 +13,7 @@ comprehensive type safety throughout the implementation.
 """
 
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,9 @@ MODELS_DEV_API_URL = "https://models.dev/api.json"
 
 # Bundled fallback JSON file (relative to this module)
 BUNDLED_JSON_FILENAME = "models_dev_api.json"
+
+# Cache TTL in seconds (5 minutes)
+CACHE_TTL = 300
 
 
 @dataclass(slots=True)
@@ -141,6 +145,10 @@ class ModelsDevRegistry:
         self.models: dict[str, ModelInfo] = {}
         self.data_source: str = "unknown"  # Track where data came from
 
+        # TTL caching for API fetches
+        self._cached_data: dict[str, Any] | None = None
+        self._cache_time: float = 0.0
+
         # Sync init only loads from file (bundled or explicit path)
         # Use create() for async loading with live API
         self._load_data_sync(skip_live_api=skip_live_api)
@@ -172,21 +180,35 @@ class ModelsDevRegistry:
         instance.models = {}
         instance.data_source = "unknown"
 
+        # TTL caching for API fetches
+        instance._cached_data = None
+        instance._cache_time = 0.0
+
         await instance._load_data_async()
         return instance
 
     async def _fetch_from_api(self) -> dict[str, Any] | None:
-        """Fetch data from the live models.dev API asynchronously.
+        """Fetch data from the live models.dev API asynchronously with TTL caching.
 
         Returns:
             Parsed JSON data if successful, None otherwise.
         """
+        # Check cache first
+        if self._cached_data is not None:
+            age = time.time() - self._cache_time
+            if age < CACHE_TTL:
+                emit_info(f"📦 Using cached models data ({age:.0f}s old)")
+                return self._cached_data
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(MODELS_DEV_API_URL)
                 response.raise_for_status()
                 data = response.json()
                 if isinstance(data, dict) and len(data) > 0:
+                    # Update cache
+                    self._cached_data = data
+                    self._cache_time = time.time()
                     return data
                 return None
         except httpx.TimeoutException:
