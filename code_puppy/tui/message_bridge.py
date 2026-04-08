@@ -20,8 +20,16 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
+# OPTIMIZATION: Eager imports for high-frequency TUI callbacks
+# These are imported at module load to avoid per-message import overhead
+from rich.markdown import Markdown
+from rich.text import Text
+
 if TYPE_CHECKING:
     from code_puppy.tui.app import CodePuppyApp
+
+    # Import MessageType at type-check time only (actual import done eagerly in functions)
+    from code_puppy.messaging.message_queue import MessageType
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +59,8 @@ class TUIMessageBridge:
         self._running = False
         self._task: asyncio.Task | None = None
         self._stop_event: asyncio.Event | None = None
+        # Cached chat log widget reference to avoid query_one() per message
+        self._chat_log: Any | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -63,6 +73,12 @@ class TUIMessageBridge:
         self._running = True
         self._stop_event = asyncio.Event()
         self._task = asyncio.create_task(self._run())
+
+        # Cache the chat log widget reference to avoid query_one() per message
+        try:
+            self._chat_log = self.app.query_one("#chat-log")
+        except Exception:
+            self._chat_log = None  # Widget not yet mounted, will retry on first message
 
         # Subscribe to the structured MessageBus as well
         try:
@@ -146,12 +162,16 @@ class TUIMessageBridge:
 
     def _render_queue_message(self, message) -> None:
         """Render a UIMessage to the chat log (must run on Textual thread)."""
-        try:
-            from code_puppy.messaging.message_queue import MessageType
+        # Use cached chat log reference, or fetch and cache on first use
+        chat = self._chat_log
+        if chat is None:
+            try:
+                chat = self.app.query_one("#chat-log")
+                self._chat_log = chat
+            except Exception:
+                return  # Widget not yet mounted
 
-            chat = self.app.query_one("#chat-log")
-        except Exception:
-            return  # Widget not yet mounted
+        from code_puppy.messaging.message_queue import MessageType
 
         content = message.content
         msg_type = message.type
@@ -178,8 +198,6 @@ class TUIMessageBridge:
             chat.write(f"[cyan]{content_str}[/cyan]")
         elif msg_type == MessageType.AGENT_RESPONSE:
             try:
-                from rich.markdown import Markdown
-
                 chat.write(Markdown(content_str))
             except Exception:
                 chat.write(content_str)
@@ -206,10 +224,14 @@ class TUIMessageBridge:
 
     def _render_agent_response(self, message) -> None:
         """Render an AgentResponseMessage to the chat log."""
-        try:
-            chat = self.app.query_one("#chat-log")
-        except Exception:
-            return
+        # Use cached chat log reference, or fetch and cache on first use
+        chat = self._chat_log
+        if chat is None:
+            try:
+                chat = self.app.query_one("#chat-log")
+                self._chat_log = chat
+            except Exception:
+                return
 
         if not message.content:
             return
@@ -217,8 +239,6 @@ class TUIMessageBridge:
         content = str(message.content)
         if message.is_markdown:
             try:
-                from rich.markdown import Markdown
-
                 chat.write(Markdown(content))
                 return
             except Exception:
@@ -258,10 +278,13 @@ class TUIConsole:
 
     def print(self, *args, **kwargs) -> None:
         """Emulate ``Rich.Console.print()`` → write each arg to the chat log."""
-        try:
-            chat = self.app.query_one("#chat-log")
-        except Exception:
-            return
+        # Use cached chat log reference from bridge
+        chat = self.app._message_bridge._chat_log if hasattr(self.app, '_message_bridge') else None
+        if chat is None:
+            try:
+                chat = self.app.query_one("#chat-log")
+            except Exception:
+                return
 
         end = kwargs.get("end", "\n")
         for arg in args:
@@ -282,8 +305,14 @@ class TUIConsole:
         import traceback
 
         tb = traceback.format_exc()
+        # Use cached chat log reference from bridge
+        chat = self.app._message_bridge._chat_log if hasattr(self.app, '_message_bridge') else None
+        if chat is None:
+            try:
+                chat = self.app.query_one("#chat-log")
+            except Exception:
+                return
         try:
-            chat = self.app.query_one("#chat-log")
             chat.write(f"[red]{tb}[/red]")
         except Exception:
             pass
@@ -301,10 +330,13 @@ class TUIConsole:
         if not text:
             return
 
-        try:
-            chat = self.app.query_one("#chat-log")
-        except Exception:
-            return
+        # Use cached chat log reference from bridge
+        chat = self.app._message_bridge._chat_log if hasattr(self.app, '_message_bridge') else None
+        if chat is None:
+            try:
+                chat = self.app.query_one("#chat-log")
+            except Exception:
+                return
 
         stripped = text.strip()
         if not stripped:
@@ -312,8 +344,6 @@ class TUIConsole:
 
         # Attempt to convert ANSI codes to Rich Text for proper display
         try:
-            from rich.text import Text
-
             rich_text = Text.from_ansi(stripped)
             chat.write(rich_text)
         except Exception:

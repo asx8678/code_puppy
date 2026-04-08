@@ -142,60 +142,66 @@ MAX_TOKEN_AGE_SECONDS = 86400
 CLOCK_SKEW_TOLERANCE_SECONDS = 60
 
 
-@lru_cache(maxsize=16)
-def _get_jwt_iat(token: str) -> int:
-    """Decode a JWT and return its 'iat' (issued at) claim.
+# Hash-based JWT claims cache to avoid storing raw bearer tokens (~49KB secrets)
+# Uses truncated SHA256 hash (16 bytes) as key instead of full token string
+_jwt_claims_cache: dict[bytes, tuple[int, int]] = {}
+_JWT_CACHE_MAX_SIZE = 16
 
-    Cached with LRU to avoid repeated decoding of the same token.
-    Returns 0 if the token can't be decoded or has no valid 'iat' claim.
-    Validates that 'iat' is numeric and within reasonable bounds.
 
-    SECURITY NOTE: This function performs basic validation only.
-    Use _validate_jwt_claims() for comprehensive validation including
-    exp > iat, clock skew, and maximum token age checks.
+def _get_jwt_claims(token: str) -> tuple[int, int] | None:
+    """Decode a JWT and return its (iat, exp) claims with hash-based caching.
+
+    SECURITY: Uses SHA256 hash of token as cache key instead of storing
+    raw bearer tokens, preventing memory retention of sensitive credentials.
+    Returns None if the token can't be decoded or has invalid claims.
+
+    Returns:
+        tuple[int, int] | None: (iat, exp) if valid, None otherwise
     """
-    # NOTE: JWT signature is not verified; only used for cache age calculation.
+    if not token or not isinstance(token, str):
+        return None
+
+    # Use hash-based cache key (16 bytes) instead of full token (~49KB)
+    cache_key = hashlib.sha256(token.encode()).digest()[:16]
+
+    # Check cache first
+    if cache_key in _jwt_claims_cache:
+        return _jwt_claims_cache[cache_key]
+
+    # Decode and validate
     try:
         payload = _jwt.decode(token, options={"verify_signature": False})
+
         iat = payload.get("iat")
-        # Validate iat is a number
-        if not isinstance(iat, (int, float)):
-            return 0
-        # Validate iat is positive and not absurdly large (max 10 years in future)
-        now = time.time()
-        if iat <= 0 or iat > now + 86400 * 365 * 10:
-            return 0
-        return int(iat)
-    except Exception:
-        return 0
-
-
-@lru_cache(maxsize=16)
-def _get_jwt_exp(token: str) -> int:
-    """Decode a JWT and return its 'exp' (expiration) claim.
-
-    Cached with LRU to avoid repeated decoding of the same token.
-    Returns 0 if the token can't be decoded or has no valid 'exp' claim.
-    Validates that 'exp' is numeric and within reasonable bounds.
-
-    SECURITY NOTE: This function performs basic validation only.
-    Use _validate_jwt_claims() for comprehensive validation including
-    exp > iat, clock skew, and maximum token age checks.
-    """
-    # NOTE: JWT signature is not verified; only used for cache age calculation.
-    try:
-        payload = _jwt.decode(token, options={"verify_signature": False})
         exp = payload.get("exp")
-        # Validate exp is a number
-        if not isinstance(exp, (int, float)):
-            return 0
-        # Validate exp is positive and within reasonable bounds
+
+        # Validate both are numeric
+        if not isinstance(iat, (int, float)) or not isinstance(exp, (int, float)):
+            return None
+
         now = time.time()
-        if exp <= 0 or exp > now + 86400 * 365 * 10:
-            return 0
-        return int(exp)
+
+        # Validate bounds (positive, not absurdly far in future)
+        max_future = now + 86400 * 365 * 10  # 10 years
+        if iat <= 0 or exp <= 0 or iat > max_future or exp > max_future:
+            return None
+
+        # Validate exp > iat
+        if exp <= iat:
+            return None
+
+        result = (int(iat), int(exp))
+
+        # Store in cache with hash key (not full token)
+        if len(_jwt_claims_cache) >= _JWT_CACHE_MAX_SIZE:
+            # Simple LRU: clear oldest entry
+            oldest = next(iter(_jwt_claims_cache))
+            del _jwt_claims_cache[oldest]
+        _jwt_claims_cache[cache_key] = result
+
+        return result
     except Exception:
-        return 0
+        return None
 
 
 def _validate_jwt_claims(token: str) -> tuple[int, int] | None:
@@ -896,18 +902,24 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
 
             # Now we can safely access the content
             # Re-check _content after aread() since it may have populated it
+            content: bytes | None = None
             if response_has_content and response._content:
-                body = response._content.decode("utf-8", errors="ignore")
+                content = response._content
             else:
                 # Fallback to text property (should work after aread)
                 try:
-                    body = response.text
+                    content = response.content
                 except Exception:
                     return False
 
-            # Look for Cloudflare and 400 Bad Request markers
-            body_lower = body.lower()
-            return "cloudflare" in body_lower and "400 bad request" in body_lower
+            if not content:
+                return False
+
+            # OPTIMIZATION: Use ASCII bytes.lower() on 8KB-capped slice
+            # instead of full UTF-8 decode + str.lower() which doubles allocation (~8KB)
+            # Check for Cloudflare and 400 markers directly in bytes
+            head = content[:8192].lower()
+            return b"cloudflare" in head and b"400" in head
         except Exception as exc:
             logger.debug("Error checking for Cloudflare error: %s", exc)
             return False

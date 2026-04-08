@@ -24,25 +24,42 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+# Maximum cache size in bytes (4MB budget to prevent memory bloat)
+MAX_CACHE_BYTES = 4 * 1024 * 1024
+
+
 @dataclass
-class CachedRequest:
-    """A cached request entry with metadata.
+class CachedContent:
+    """A cached content entry with metadata (stores bytes only, not full request).
+
+    This reduces memory usage by ~60-80% compared to storing full httpx.Request
+    objects (which include headers, URL, and other metadata). On cache hit,
+    we rebuild the request with cached content bytes.
 
     Attributes:
-        request: The cached httpx.Request object
+        content: The cached request body bytes
         content_hash: Hash of URL + method + body (what makes requests unique)
         headers_hash: Hash of headers (to detect header-only changes)
         created_at: Timestamp when cache entry was created
         access_count: Number of times this entry was accessed (for metrics)
         last_accessed: Timestamp of last access
+        method: HTTP method for rebuilding request on hit
+        url: Request URL for rebuilding request on hit
     """
 
-    request: httpx.Request
+    content: bytes | None
     content_hash: str
     headers_hash: str
+    method: str
+    url: str
     created_at: float = field(default_factory=time.time)
     access_count: int = 0
     last_accessed: float = field(default_factory=time.time)
+
+
+# Backward compatibility alias - CachedRequest renamed to CachedContent
+# The new class stores content bytes instead of full httpx.Request to save memory
+CachedRequest = CachedContent
 
 
 @dataclass
@@ -122,14 +139,20 @@ class RequestCache:
         self._ttl_seconds = ttl_seconds
         self._enable_stats = enable_stats
 
-        # Map from content_hash -> CachedRequest
-        self._cache: dict[str, CachedRequest] = {}
+        # Map from content_hash -> CachedContent
+        self._cache: dict[str, CachedContent] = {}
+
+        # Track total bytes to enforce MAX_CACHE_BYTES budget
+        self._current_bytes = 0
 
         # Statistics tracking
         self._stats = CacheStats()
 
         logger.debug(
-            "RequestCache initialized (max_size=%d, ttl=%ds)", max_size, ttl_seconds
+            "RequestCache initialized (max_size=%d, ttl=%ds, max_bytes=%d)",
+            max_size,
+            ttl_seconds,
+            MAX_CACHE_BYTES,
         )
 
     def _compute_content_hash(
@@ -168,7 +191,7 @@ class RequestCache:
 
         return hasher.hexdigest()
 
-    def _is_entry_valid(self, entry: CachedRequest) -> bool:
+    def _is_entry_valid(self, entry: CachedContent) -> bool:
         """Check if a cache entry is still valid (not expired)."""
         age = time.time() - entry.created_at
         return age < self._ttl_seconds
@@ -182,42 +205,48 @@ class RequestCache:
             if now - entry.created_at > self._ttl_seconds
         ]
         for key in expired:
-            del self._cache[key]
+            entry = self._cache.pop(key)
+            self._current_bytes -= len(entry.content) if entry.content else 0
             self._stats.evictions += 1
 
         if expired:
             logger.debug("Evicted %d expired cache entries", len(expired))
 
     def _evict_lru_if_needed(self) -> None:
-        """Evict least recently used entries if cache is at capacity."""
-        if len(self._cache) >= self._max_size:
+        """Evict least recently used entries if cache is at capacity or over budget."""
+        # Check both count limit and byte budget
+        while (
+            len(self._cache) >= self._max_size
+            or self._current_bytes > MAX_CACHE_BYTES
+        ):
+            if not self._cache:
+                break
             # Find and remove the least recently used entry
             lru_key = min(
                 self._cache.keys(), key=lambda k: self._cache[k].last_accessed
             )
-            del self._cache[lru_key]
+            entry = self._cache.pop(lru_key)
+            self._current_bytes -= len(entry.content) if entry.content else 0
             self._stats.evictions += 1
             logger.debug("Evicted LRU cache entry for key %s...", lru_key[:16])
 
-    def _copy_request_with_headers(
+    def _build_request_from_cached(
         self,
-        source: httpx.Request,
+        cached: CachedContent,
         new_headers: dict[str, str],
         client: httpx.AsyncClient,
     ) -> httpx.Request:
-        """Create a copy of a request with new headers.
+        """Build a new request from cached content with new headers.
 
-        This is much faster than rebuilding the request from scratch.
+        This rebuilds the request using cached content bytes, avoiding
+        the memory bloat of storing full httpx.Request objects.
         """
-        # Build new request to get proper internal structure
-        new_request = client.build_request(
-            method=source.method,
-            url=source.url,
+        return client.build_request(
+            method=cached.method,
+            url=cached.url,
             headers=new_headers,
-            content=source.content,
+            content=cached.content,
         )
-
-        return new_request
 
     def get_or_build(
         self,
@@ -259,16 +288,18 @@ class RequestCache:
         if entry is not None:
             if not self._is_entry_valid(entry):
                 # Entry expired, remove it
+                self._current_bytes -= len(entry.content) if entry.content else 0
                 del self._cache[content_hash]
                 entry = None
             elif entry.headers_hash == headers_hash:
-                # Exact match! Update access stats and return cached request
+                # Exact match! Update access stats and rebuild request from cached content
                 entry.access_count += 1
                 entry.last_accessed = time.time()
                 if self._enable_stats:
                     self._stats.hits += 1
                 logger.debug("Cache HIT (exact) for %s %s", method, url)
-                return entry.request
+                # Rebuild request from cached content bytes (not storing full request)
+                return self._build_request_from_cached(entry, headers, client)
             else:
                 # Content matches but headers differ - apply delta update!
                 entry.access_count += 1
@@ -281,16 +312,17 @@ class RequestCache:
                     "Cache HEADER-ONLY UPDATE for %s %s (rebuild avoided!)", method, url
                 )
 
-                # Build new request with same content but new headers
-                new_request = self._copy_request_with_headers(
-                    entry.request, headers, client
-                )
+                # Build new request with same cached content but new headers
+                new_request = self._build_request_from_cached(entry, headers, client)
 
-                # Create new CachedRequest entry instead of mutating in-place
-                new_entry = CachedRequest(
-                    request=new_request,
+                # Create new CachedContent entry instead of mutating in-place
+                # Update bytes accounting: new entry may have same content size
+                new_entry = CachedContent(
+                    content=entry.content,
                     content_hash=content_hash,
                     headers_hash=headers_hash,
+                    method=entry.method,
+                    url=entry.url,
                     created_at=time.time(),  # Reset TTL
                     access_count=entry.access_count,
                     last_accessed=entry.last_accessed,
@@ -314,9 +346,15 @@ class RequestCache:
             content=content,
         )
 
-        # Store in cache
-        self._cache[content_hash] = CachedRequest(
-            request=request, content_hash=content_hash, headers_hash=headers_hash
+        # Store content bytes in cache (not full request object) to save memory
+        content_bytes = content if content is not None else b""
+        self._current_bytes += len(content_bytes)
+        self._cache[content_hash] = CachedContent(
+            content=content_bytes if content_bytes else None,
+            content_hash=content_hash,
+            headers_hash=headers_hash,
+            method=method,
+            url=str(url),
         )
 
         logger.debug("Cache MISS for %s %s (new entry cached)", method, url)

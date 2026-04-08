@@ -45,22 +45,28 @@ class TestCacheStats:
         assert stats.rebuilds_avoided == 15
 
 
-class TestCachedRequest:
-    """Test CachedRequest dataclass."""
+class TestCachedContent:
+    """Test CachedContent dataclass (stores bytes only, not full request)."""
 
     def test_default_creation(self):
-        """Test creating a CachedRequest with defaults."""
-        request = Mock(spec=httpx.Request)
+        """Test creating a CachedContent with defaults."""
         cached = CachedRequest(
-            request=request, content_hash="abc123", headers_hash="def456"
+            content=b'{"test": true}',
+            content_hash="abc123",
+            headers_hash="def456",
+            method="POST",
+            url="https://api.example.com",
         )
-        assert cached.request == request
+        assert cached.content == b'{"test": true}'
         assert cached.content_hash == "abc123"
         assert cached.headers_hash == "def456"
+        assert cached.method == "POST"
+        assert cached.url == "https://api.example.com"
         assert cached.access_count == 0
         # created_at should be close to now
         assert time.time() - cached.created_at < 1.0
-        assert cached.last_accessed == cached.created_at
+        # last_accessed should be very close to created_at (may differ by microseconds)
+        assert abs(cached.last_accessed - cached.created_at) < 0.001
 
 
 class TestRequestCacheBasics:
@@ -182,18 +188,24 @@ class TestCacheEntryValidity:
     def test_fresh_entry_is_valid(self):
         """Test that recently created entries are valid."""
         cache = RequestCache(ttl_seconds=300)
-        request = Mock(spec=httpx.Request)
-        entry = CachedRequest(request=request, content_hash="abc", headers_hash="def")
+        entry = CachedRequest(
+            content=b'{"test": true}',
+            content_hash="abc",
+            headers_hash="def",
+            method="POST",
+            url="https://api.example.com",
+        )
         assert cache._is_entry_valid(entry) is True
 
     def test_expired_entry_is_invalid(self):
         """Test that expired entries are invalid."""
         cache = RequestCache(ttl_seconds=1)
-        request = Mock(spec=httpx.Request)
         entry = CachedRequest(
-            request=request,
+            content=b'{"test": true}',
             content_hash="abc",
             headers_hash="def",
+            method="POST",
+            url="https://api.example.com",
             created_at=time.time() - 2,  # Created 2 seconds ago
         )
         assert cache._is_entry_valid(entry) is False
