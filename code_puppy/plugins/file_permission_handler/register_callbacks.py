@@ -5,7 +5,6 @@ providing a consistent and extensible permission system.
 """
 
 import asyncio
-import contextvars
 import difflib
 import os
 import threading
@@ -21,38 +20,37 @@ from code_puppy.tools.common import _find_best_window, get_user_approval
 # Lock for preventing multiple simultaneous permission prompts
 _FILE_CONFIRMATION_LOCK = threading.Lock()
 
-# Context variables for async-safe storage of user feedback from permission prompts
-# contextvars is more appropriate than threading.local for async code
-_last_user_feedback_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "last_user_feedback", default=None
-)
-_diff_already_shown_var: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "diff_already_shown", default=False
-)
+# Module-level variables for storing user feedback from permission prompts
+# These are safe to use because _FILE_CONFIRMATION_LOCK prevents concurrent access
+_last_user_feedback: str | None = None
+_diff_already_shown: bool = False
 
 
 def get_last_user_feedback() -> str | None:
-    """Get the last user feedback from a permission prompt in this context.
+    """Get the last user feedback from a permission prompt.
 
     Returns:
         The user feedback string, or None if no feedback was provided.
     """
-    return _last_user_feedback_var.get()
+    return _last_user_feedback
 
 
 def _set_user_feedback(feedback: str | None) -> None:
-    """Store user feedback in context-local storage."""
-    _last_user_feedback_var.set(feedback)
+    """Store user feedback in module-level storage."""
+    global _last_user_feedback
+    _last_user_feedback = feedback
 
 
 def clear_user_feedback() -> None:
     """Clear any stored user feedback."""
-    _last_user_feedback_var.set(None)
+    global _last_user_feedback
+    _last_user_feedback = None
 
 
 def set_diff_already_shown(shown: bool = True) -> None:
     """Mark that a diff preview was already shown during permission prompt."""
-    _diff_already_shown_var.set(shown)
+    global _diff_already_shown
+    _diff_already_shown = shown
 
 
 def was_diff_already_shown() -> bool:
@@ -61,12 +59,13 @@ def was_diff_already_shown() -> bool:
     Returns:
         True if diff was shown, False otherwise
     """
-    return _diff_already_shown_var.get()
+    return _diff_already_shown
 
 
 def clear_diff_shown_flag() -> None:
     """Clear the diff-already-shown flag."""
-    _diff_already_shown_var.set(False)
+    global _diff_already_shown
+    _diff_already_shown = False
 
 
 # Diff formatting is now handled by common.format_diff_with_colors()
@@ -494,7 +493,7 @@ def get_permission_handler_help() -> str:
     return """File Permission Handler Plugin:
 - Unified permission prompts for all file operations
 - YOLO mode support for automatic approval
-- Async-safe confirmation system (contextvars-based)
+- Thread-safe confirmation system (lock-based)
 - Consistent user experience across file operations
 - Detailed preview support with diff highlighting
 - Automatic preview generation from operation data"""
