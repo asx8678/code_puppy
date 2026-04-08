@@ -57,15 +57,15 @@ class StderrFileCapture:
 
         # Open log file for appending stderr (use try-finally for proper cleanup)
         f = open(self.log_path, "a", encoding="utf-8")
+        self.log_file = f
         try:
-            self.log_file = f
             self.stop_monitoring.clear()
             self.monitor_thread = threading.Thread(target=self._monitor_file)
             self.monitor_thread.daemon = True
             self.monitor_thread.start()
         except Exception:
             # Ensure file is closed if thread startup fails
-            f.close()
+            self.log_file.close()
             self.log_file = None
             raise
 
