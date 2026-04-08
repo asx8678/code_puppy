@@ -34,6 +34,21 @@ class ListedFile(BaseModel):
     depth: int | None
 
 
+# Common home directory subdirectories - hoisted to module level for efficiency
+_COMMON_HOME_SUBDIRS = frozenset({
+    "Documents",
+    "Desktop",
+    "Downloads",
+    "Pictures",
+    "Music",
+    "Videos",
+    "Movies",
+    "Public",
+    "Library",
+    "Applications",  # Cover macOS/Linux
+})
+
+
 class ListFileOutput(BaseModel):
     content: str
     error: str | None = None
@@ -66,20 +81,8 @@ def is_likely_home_directory(directory):
         return True
 
     # Check for common home directory subdirectories
-    common_home_subdirs = {
-        "Documents",
-        "Desktop",
-        "Downloads",
-        "Pictures",
-        "Music",
-        "Videos",
-        "Movies",
-        "Public",
-        "Library",
-        "Applications",  # Cover macOS/Linux
-    }
     if (
-        os.path.basename(abs_dir) in common_home_subdirs
+        os.path.basename(abs_dir) in _COMMON_HOME_SUBDIRS
         and os.path.dirname(abs_dir) == home_dir
     ):
         return True
