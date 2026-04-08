@@ -211,6 +211,23 @@ def _log_error(
         emit_error(traceback.format_exc(), highlight=False, message_group=message_group)
 
 
+def _sanitize_surrogates(text: str) -> str:
+    """Sanitize surrogate characters from text read with surrogateescape.
+
+    Args:
+        text: Text potentially containing surrogate characters
+
+    Returns:
+        Text with surrogates replaced
+    """
+    try:
+        return text.encode("utf-8", errors="surrogatepass").decode(
+            "utf-8", errors="replace"
+        )
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text
+
+
 def _delete_snippet_from_file(
     context: RunContext | None,
     file_path: str,
@@ -225,22 +242,20 @@ def _delete_snippet_from_file(
         with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
             original = f.read()
         # Sanitize any surrogate characters from reading
-        try:
-            original = original.encode("utf-8", errors="surrogatepass").decode(
-                "utf-8", errors="replace"
-            )
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            pass
+        original = _sanitize_surrogates(original)
         if snippet not in original:
             return {
                 "error": f"Snippet not found in file '{file_path}'.",
                 "diff": diff_text,
             }
         modified = original.replace(snippet, "", 1)
+        # Split once at entry point and pass lines to helper
+        original_lines = original.splitlines(keepends=True)
+        modified_lines = modified.splitlines(keepends=True)
         diff_text = "".join(
             difflib.unified_diff(
-                original.splitlines(keepends=True),
-                modified.splitlines(keepends=True),
+                original_lines,
+                modified_lines,
                 fromfile=f"a/{os.path.basename(file_path)}",
                 tofile=f"b/{os.path.basename(file_path)}",
                 n=get_diff_context_lines(),
@@ -281,12 +296,7 @@ def _replace_in_file(
             original = f.read()
 
         # Sanitize any surrogate characters from reading
-        try:
-            original = original.encode("utf-8", errors="surrogatepass").decode(
-                "utf-8", errors="replace"
-            )
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            pass
+        original = _sanitize_surrogates(original)
 
         modified = original
         # Cache splitlines result to avoid repeated calls
@@ -358,10 +368,13 @@ def _replace_in_file(
                 "diff": "",
             }
 
+        # Split once at entry point and pass lines to helper
+        original_lines = original.splitlines(keepends=True)
+        modified_lines = modified.splitlines(keepends=True)
         diff_text = "".join(
             difflib.unified_diff(
-                original.splitlines(keepends=True),
-                modified.splitlines(keepends=True),
+                original_lines,
+                modified_lines,
                 fromfile=f"a/{os.path.basename(file_path)}",
                 tofile=f"b/{os.path.basename(file_path)}",
                 n=get_diff_context_lines(),
@@ -404,19 +417,16 @@ def _write_to_file(
         if exists:
             with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
                 old_content = f.read()
-            try:
-                old_content = old_content.encode(
-                    "utf-8", errors="surrogatepass"
-                ).decode("utf-8", errors="replace")
-            except (UnicodeEncodeError, UnicodeDecodeError):
-                pass
+            old_content = _sanitize_surrogates(old_content)
             old_lines = old_content.splitlines(keepends=True)
         else:
             old_lines = []
 
+        # Split once at entry point and pass lines to helper
+        content_lines = content.splitlines(keepends=True)
         diff_lines = difflib.unified_diff(
             old_lines,
-            content.splitlines(keepends=True),
+            content_lines,
             fromfile="/dev/null" if not exists else f"a/{os.path.basename(file_path)}",
             tofile=f"b/{os.path.basename(file_path)}",
             n=get_diff_context_lines(),
@@ -650,24 +660,15 @@ async def _delete_file(
     def _do_delete():
         if not os.path.exists(file_path) or not os.path.isfile(file_path):
             return {"error": f"File '{file_path}' does not exist.", "diff": ""}
+        # Get file stats for summary, avoiding full read for large files
+        file_size = os.path.getsize(file_path)
+        # Count lines efficiently without loading entire file into memory
+        line_count = 0
         with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
-            original = f.read()
-        # Sanitize any surrogate characters from reading
-        try:
-            original = original.encode("utf-8", errors="surrogatepass").decode(
-                "utf-8", errors="replace"
-            )
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            pass
-        diff_text = "".join(
-            difflib.unified_diff(
-                original.splitlines(keepends=True),
-                [],
-                fromfile=f"a/{os.path.basename(file_path)}",
-                tofile=f"b/{os.path.basename(file_path)}",
-                n=get_diff_context_lines(),
-            )
-        )
+            for _ in f:
+                line_count += 1
+        # Create summary diff instead of full content diff
+        diff_text = f"--- a/{os.path.basename(file_path)}\n+++ /dev/null\n@@ -1,{line_count} +0,0 @@\n" + f"< File deleted: {line_count} lines, {file_size} bytes >\n"
         os.remove(file_path)
         return {
             "success": True,
