@@ -60,7 +60,7 @@ DEFAULT_RELEASE_RATE: float = 1.0  # requests per second
 # ── Per-model state ─────────────────────────────────────────────────────────
 
 
-@dataclass
+@dataclass(slots=True)
 class ModelRateLimitState:
     """Tracks rate-limit health for a single model.
 
