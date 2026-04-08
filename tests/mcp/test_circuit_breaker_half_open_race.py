@@ -26,9 +26,9 @@ class TestHalfOpenRaceCondition:
         cb = CircuitBreaker(failure_threshold=1, success_threshold=1, timeout=0)
 
         # Move to OPEN then HALF_OPEN
-        cb.record_failure()
+        await cb.record_failure()
         # timeout=0 means get_state() immediately transitions to HALF_OPEN
-        assert cb.get_state() == CircuitState.HALF_OPEN
+        assert await cb.get_state() == CircuitState.HALF_OPEN
 
         # Create a slow function that holds the "in-flight" slot
         gate = asyncio.Event()
@@ -54,13 +54,13 @@ class TestHalfOpenRaceCondition:
     async def test_half_open_in_flight_cleared_on_success(self):
         """After a successful half-open call, the next call should be allowed."""
         cb = CircuitBreaker(failure_threshold=1, success_threshold=1, timeout=0)
-        cb.record_failure()
+        await cb.record_failure()
         await asyncio.sleep(0.01)
 
         # First call succeeds -> transitions to CLOSED
         result = await cb.call(AsyncMock(return_value="ok"))
         assert result == "ok"
-        assert cb.get_state() == CircuitState.CLOSED
+        assert await cb.get_state() == CircuitState.CLOSED
 
         # Next call should work fine (CLOSED state)
         result2 = await cb.call(AsyncMock(return_value="ok2"))
@@ -70,7 +70,7 @@ class TestHalfOpenRaceCondition:
     async def test_half_open_in_flight_cleared_on_failure(self):
         """After a failed half-open call, the flag resets (circuit goes OPEN)."""
         cb = CircuitBreaker(failure_threshold=1, success_threshold=1, timeout=60)
-        cb.record_failure()
+        await cb.record_failure()
         # Manually set to HALF_OPEN to avoid auto-transition with timeout=0
         cb._state = CircuitState.HALF_OPEN
         cb._success_count = 0
@@ -86,7 +86,7 @@ class TestHalfOpenRaceCondition:
     async def test_many_concurrent_half_open_only_one_passes(self):
         """Of N concurrent half-open calls, exactly 1 passes and N-1 are rejected."""
         cb = CircuitBreaker(failure_threshold=1, success_threshold=1, timeout=0)
-        cb.record_failure()
+        await cb.record_failure()
         await asyncio.sleep(0.01)
 
         gate = asyncio.Event()

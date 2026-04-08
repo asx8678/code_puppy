@@ -9,8 +9,8 @@ failures when MCP servers become unhealthy. The circuit breaker has three states
 """
 
 import asyncio
+import inspect
 import logging
-import threading
 import time
 from enum import Enum
 from typing import Any, Callable
@@ -70,12 +70,9 @@ class CircuitBreaker:
         self._failure_count = 0
         self._success_count = 0
         self._last_failure_time = None
-        # NOTE: We use threading.Lock (not asyncio.Lock) because this lock is shared
-        # between synchronous callers (record_success/record_failure) and async callers
-        # (_on_success/_on_failure called from call()). This is safe because the critical
-        # sections are very short and CPU-bound only (counter increments, state transitions)
-        # — no I/O or awaits occur while the lock is held, so event loop blocking is negligible.
-        self._sync_lock = threading.Lock()
+        # Use asyncio.Lock for proper async safety. This prevents event loop blocking
+        # that can occur with threading.Lock in async contexts.
+        self._lock = asyncio.Lock()
         self._half_open_in_flight = False
 
         logger.info(
@@ -99,7 +96,7 @@ class CircuitBreaker:
             CircuitOpenError: If circuit is in OPEN state
             Exception: Any exception raised by the wrapped function
         """
-        with self._sync_lock:
+        async with self._lock:
             current_state = self._get_current_state()
 
             if current_state == CircuitState.OPEN:
@@ -124,7 +121,7 @@ class CircuitBreaker:
         try:
             result = (
                 await func(*args, **kwargs)
-                if asyncio.iscoroutinefunction(func)
+                if inspect.iscoroutinefunction(func)
                 else func(*args, **kwargs)
             )
             await self._on_success(checked_state=checked_state)
@@ -133,39 +130,39 @@ class CircuitBreaker:
             await self._on_failure(checked_state=checked_state)
             raise
 
-    def record_success(self) -> None:
-        """Record a successful operation (synchronous)."""
-        with self._sync_lock:
+    async def record_success(self) -> None:
+        """Record a successful operation."""
+        async with self._lock:
             self._on_success_sync()
 
-    def record_failure(self) -> None:
-        """Record a failed operation (synchronous)."""
-        with self._sync_lock:
+    async def record_failure(self) -> None:
+        """Record a failed operation."""
+        async with self._lock:
             self._on_failure_sync()
 
-    def get_state(self) -> CircuitState:
+    async def get_state(self) -> CircuitState:
         """Get current circuit breaker state."""
-        with self._sync_lock:
+        async with self._lock:
             return self._get_current_state()
 
-    def is_open(self) -> bool:
+    async def is_open(self) -> bool:
         """Check if circuit breaker is in OPEN state."""
-        with self._sync_lock:
+        async with self._lock:
             return self._get_current_state() == CircuitState.OPEN
 
-    def is_half_open(self) -> bool:
+    async def is_half_open(self) -> bool:
         """Check if circuit breaker is in HALF_OPEN state."""
-        with self._sync_lock:
+        async with self._lock:
             return self._get_current_state() == CircuitState.HALF_OPEN
 
-    def is_closed(self) -> bool:
+    async def is_closed(self) -> bool:
         """Check if circuit breaker is in CLOSED state."""
-        with self._sync_lock:
+        async with self._lock:
             return self._get_current_state() == CircuitState.CLOSED
 
-    def reset(self) -> None:
+    async def reset(self) -> None:
         """Reset circuit breaker to CLOSED state and clear counters."""
-        with self._sync_lock:
+        async with self._lock:
             logger.info("Resetting circuit breaker to CLOSED state")
             self._state = CircuitState.CLOSED
             self._failure_count = 0
@@ -173,17 +170,17 @@ class CircuitBreaker:
             self._last_failure_time = None
             self._half_open_in_flight = False
 
-    def force_open(self) -> None:
+    async def force_open(self) -> None:
         """Force circuit breaker to OPEN state."""
-        with self._sync_lock:
+        async with self._lock:
             logger.warning("Forcing circuit breaker to OPEN state")
             self._state = CircuitState.OPEN
             self._last_failure_time = time.time()
             self._half_open_in_flight = False
 
-    def force_close(self) -> None:
+    async def force_close(self) -> None:
         """Force circuit breaker to CLOSED state and reset counters."""
-        with self._sync_lock:
+        async with self._lock:
             logger.info("Forcing circuit breaker to CLOSED state")
             self._state = CircuitState.CLOSED
             self._failure_count = 0
@@ -270,21 +267,17 @@ class CircuitBreaker:
     async def _on_success(self, checked_state: CircuitState | None = None) -> None:
         """Handle successful operation.
 
-        This method is async to match the await call-site in call(), but the
-        underlying work is purely synchronous. We acquire threading.Lock (not
-        asyncio.Lock) because the same state is accessed from sync contexts
-        (record_success). The critical section is short and CPU-bound, so
-        holding a threading.Lock in an async method does not meaningfully
-        block the event loop.
+        Uses asyncio.Lock to properly handle async concurrency without
+        blocking the event loop.
         """
-        with self._sync_lock:
+        async with self._lock:
             self._on_success_sync(checked_state=checked_state)
 
     async def _on_failure(self, checked_state: CircuitState | None = None) -> None:
         """Handle failed operation.
 
-        See _on_success docstring for rationale on threading.Lock usage in
-        an async method.
+        Uses asyncio.Lock to properly handle async concurrency without
+        blocking the event loop.
         """
-        with self._sync_lock:
+        async with self._lock:
             self._on_failure_sync(checked_state=checked_state)
