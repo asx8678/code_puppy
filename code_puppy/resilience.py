@@ -260,7 +260,7 @@ def with_retry_sync(
         Result from successful execution
     """
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
         warnings.warn("with_retry_sync called from async context - this will block the event loop", stacklevel=2)
     except RuntimeError:
         pass  # No running loop, safe to use
