@@ -808,6 +808,35 @@ _TERMINAL_KEYWORDS: tuple[str, ...] = (
 )
 
 
+def _get_status_code_from_exc(exc: BaseException) -> int | None:
+    """Extract HTTP status code from exception or its nested response.
+
+    Checks exc.status_code, exc.status, then exc.response.status_code,
+    exc.response.status. Returns the first valid integer found, or None.
+    """
+    # Direct attributes on exception (httpx, requests, pydantic-ai, openai ...)
+    code = getattr(exc, "status_code", None)
+    if isinstance(code, int):
+        return code
+
+    code = getattr(exc, "status", None)
+    if isinstance(code, int):
+        return code
+
+    # Some SDKs nest the response: exc.response.status_code
+    response_obj = getattr(exc, "response", None)
+    if response_obj is not None:
+        code = getattr(response_obj, "status_code", None)
+        if isinstance(code, int):
+            return code
+
+        code = getattr(response_obj, "status", None)
+        if isinstance(code, int):
+            return code
+
+    return None
+
+
 def is_quota_exception(exc: BaseException) -> bool:
     """Return True when *exc* looks like a terminal quota / rate-limit error.
 
@@ -818,17 +847,10 @@ def is_quota_exception(exc: BaseException) -> bool:
     This avoids hard dependencies on any specific SDK exception hierarchy and
     therefore works across OpenAI, Anthropic, Gemini, and custom providers.
     """
-    # Check for a status_code attribute (httpx, requests, pydantic-ai, openai ...)
-    for attr in ("status_code", "status"):
-        code = getattr(exc, attr, None)
-        if code is None:
-            # Some SDKs nest the response: exc.response.status_code
-            response_obj = getattr(exc, "response", None)
-            code = getattr(response_obj, "status_code", None) or getattr(
-                response_obj, "status", None
-            )
-        if isinstance(code, int) and code in _TERMINAL_STATUS_CODES:
-            return True
+    # Check for status code on exception or nested response
+    code = _get_status_code_from_exc(exc)
+    if code is not None and code in _TERMINAL_STATUS_CODES:
+        return True
 
     # Keyword scan on the string representation (covers gRPC ResourceExhausted etc.)
     msg = str(exc).lower()
