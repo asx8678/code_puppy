@@ -576,7 +576,7 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                 await response.aclose()
 
                 # Calculate wait time with exponential backoff and jitter
-                wait_time = 1.0 * (2**attempt)  # 1s, 2s, 4s, 8s, 16s
+                wait_time = 2**attempt  # 1s, 2s, 4s, 8s, 16s
                 # Add jitter to prevent thundering herd
                 wait_time = wait_time + random.uniform(0, wait_time * 0.1)
 
@@ -615,7 +615,7 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                 if attempt >= MAX_RETRIES:
                     raise
 
-                wait_time = 1.0 * (2**attempt)
+                wait_time = 2**attempt
                 # Add jitter to prevent thundering herd
                 wait_time = wait_time + random.uniform(0, wait_time * 0.1)
                 wait_time = max(0.5, min(wait_time, 60.0))
