@@ -15,6 +15,7 @@ This module also handles:
 import asyncio
 import json
 import logging
+import random
 import time
 from functools import lru_cache
 from typing import Any, Callable, MutableMapping
@@ -574,8 +575,10 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                 # Close response before retrying
                 await response.aclose()
 
-                # Calculate wait time with exponential backoff
+                # Calculate wait time with exponential backoff and jitter
                 wait_time = 1.0 * (2**attempt)  # 1s, 2s, 4s, 8s, 16s
+                # Add jitter to prevent thundering herd
+                wait_time = wait_time + random.uniform(0, wait_time * 0.1)
 
                 # For 429, respect Retry-After header if present
                 if response.status_code == 429:
@@ -613,6 +616,8 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                     raise
 
                 wait_time = 1.0 * (2**attempt)
+                # Add jitter to prevent thundering herd
+                wait_time = wait_time + random.uniform(0, wait_time * 0.1)
                 wait_time = max(0.5, min(wait_time, 60.0))
 
                 logger.warning(

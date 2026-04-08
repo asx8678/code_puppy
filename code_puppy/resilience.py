@@ -11,6 +11,7 @@ import asyncio
 import functools
 import inspect
 import logging
+import random
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -228,6 +229,8 @@ async def with_retry(
                     cfg.base_delay * (cfg.exponential_base**attempt),
                     cfg.max_delay,
                 )
+                # Add jitter to prevent thundering herd
+                delay = delay + random.uniform(0, delay * 0.1)
                 if cfg.on_retry:
                     cfg.on_retry(attempt + 1, e, delay)
                 logger.warning(
