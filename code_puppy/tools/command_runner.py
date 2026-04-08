@@ -366,6 +366,12 @@ def _unregister_process(proc: subprocess.Popen) -> None:
         _RUNNING_PROCESSES.discard(proc)
 
 
+def _monitor_background_process(proc: subprocess.Popen) -> None:
+    """Wait for background process to finish, then unregister it."""
+    proc.wait()
+    _unregister_process(proc)
+
+
 def _kill_process_group(proc: subprocess.Popen) -> None:
     """Attempt to aggressively terminate a process and its group.
 
@@ -1281,6 +1287,14 @@ if not security_decision.allowed:
 
                 # Register background process for tracking (concurrency management)
                 _register_process(process)
+
+                # Start monitor thread to unregister when process exits (prevents memory leak)
+                threading.Thread(
+                    target=_monitor_background_process,
+                    args=(process,),
+                    daemon=True,
+                    name=f"bg-monitor-{process.pid}",
+                ).start()
 
                 # Emit UI messages so user sees what happened
                 bus = get_message_bus()
