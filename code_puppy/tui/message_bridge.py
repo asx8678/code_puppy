@@ -21,12 +21,24 @@ import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from code_puppy.messaging.message_queue import MessageType
     from code_puppy.tui.app import CodePuppyApp
 
 logger = logging.getLogger(__name__)
 
 # Regex for stripping ANSI escape codes produced by Rich / other renderers
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[mGKHF]")
+
+# Module-scope template dict for plain string styles (types not in this dict
+# fall through to direct chat.write(content_str))
+_PLAIN_STYLES: dict[str, str] = {
+    "ERROR": "[red]❌ {content}[/red]",
+    "WARNING": "[yellow]⚠ {content}[/yellow]",
+    "SUCCESS": "[green]✅ {content}[/green]",
+    "SYSTEM": "[dim]{content}[/dim]",
+    "TOOL_OUTPUT": "[cyan]{content}[/cyan]",
+    "HUMAN_INPUT_REQUEST": "[bold cyan]{content}[/bold cyan]",
+}
 
 
 def _strip_ansi(text: str) -> str:
@@ -165,26 +177,21 @@ class TUIMessageBridge:
         if not content_str:
             return
 
-        # Map message type → styled output
-        if msg_type == MessageType.ERROR:
-            chat.write(f"[red]❌ {content_str}[/red]")
-        elif msg_type == MessageType.WARNING:
-            chat.write(f"[yellow]⚠ {content_str}[/yellow]")
-        elif msg_type == MessageType.SUCCESS:
-            chat.write(f"[green]✅ {content_str}[/green]")
-        elif msg_type == MessageType.SYSTEM:
-            chat.write(f"[dim]{content_str}[/dim]")
-        elif msg_type == MessageType.TOOL_OUTPUT:
-            chat.write(f"[cyan]{content_str}[/cyan]")
-        elif msg_type == MessageType.AGENT_RESPONSE:
+        # Map message type → styled output using dict lookup (faster than if/elif)
+        # AGENT_RESPONSE needs special handling for Markdown, check it first
+        if msg_type == MessageType.AGENT_RESPONSE:
             try:
                 from rich.markdown import Markdown
 
                 chat.write(Markdown(content_str))
             except Exception:
                 chat.write(content_str)
-        elif msg_type == MessageType.HUMAN_INPUT_REQUEST:
-            chat.write(f"[bold cyan]{content_str}[/bold cyan]")
+            return
+
+        # Use dict lookup for plain string templates
+        template = _PLAIN_STYLES.get(msg_type.name)
+        if template:
+            chat.write(template.format(content=content_str))
         else:
             # INFO, DEBUG, DIVIDER, PLANNED_NEXT_STEPS, etc.
             chat.write(content_str)
