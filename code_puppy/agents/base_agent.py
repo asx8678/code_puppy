@@ -792,7 +792,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Collect tool_call_ids from messages AFTER the split (protected zone)
         protected_tool_return_ids: set[str] = set()
         for msg in messages[initial_split_idx:]:
-            for part in getattr(msg, "parts", []) or []:
+            for part in getattr(msg, "parts", None) or ():
                 if getattr(part, "part_kind", None) == "tool-return":
                     tool_call_id = getattr(part, "tool_call_id", None)
                     if tool_call_id:
@@ -808,7 +808,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         ):  # Don't include system message at 0
             msg = messages[i]
             has_matching_tool_use = False
-            for part in getattr(msg, "parts", []) or []:
+            for part in getattr(msg, "parts", None) or ():
                 if getattr(part, "part_kind", None) == "tool-call":
                     tool_call_id = getattr(part, "tool_call_id", None)
                     if tool_call_id and tool_call_id in protected_tool_return_ids:
@@ -872,7 +872,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                 tool_call_ids_per_message: list[list[tuple[str, str]]] = []
                 for msg in messages:
                     ids_for_msg: list[tuple[str, str]] = []
-                    for part in getattr(msg, "parts", []) or []:
+                    for part in getattr(msg, "parts", None) or ():
                         tool_call_id = getattr(part, "tool_call_id", None)
                         if tool_call_id:
                             part_kind = getattr(part, "part_kind", "")
@@ -1099,7 +1099,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Collect tool_call_ids that appear AFTER the proposed split.
         tail_return_ids: set[str] = set()
         for msg in messages[target_idx:]:
-            for part in getattr(msg, "parts", []) or []:
+            for part in getattr(msg, "parts", None) or ():
                 if getattr(part, "part_kind", None) == "tool-return":
                     tid = getattr(part, "tool_call_id", None)
                     if tid:
@@ -1113,7 +1113,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         for candidate in range(target_idx, max(target_idx - 10, 0), -1):
             head_call_ids: set[str] = set()
             for msg in messages[:candidate]:
-                for part in getattr(msg, "parts", []) or []:
+                for part in getattr(msg, "parts", None) or ():
                     if getattr(part, "part_kind", None) == "tool-call":
                         tid = getattr(part, "tool_call_id", None)
                         if tid:
@@ -1238,7 +1238,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         call_ids: set[str] = set()
         return_ids: set[str] = set()
         for msg in messages:
-            for part in getattr(msg, "parts", []) or []:
+            for part in getattr(msg, "parts", None) or ():
                 tcid = getattr(part, "tool_call_id", None)
                 if not tcid:
                     continue
@@ -1427,7 +1427,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         dropped_count = 0
         for msg in messages:
             has_mismatched = False
-            for part in getattr(msg, "parts", []) or []:
+            for part in getattr(msg, "parts", None) or ():
                 tcid = getattr(part, "tool_call_id", None)
                 if tcid and tcid in mismatched:
                     has_mismatched = True
@@ -1893,7 +1893,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             instructions += f"\n{puppy_rules}"
 
         if mcp_servers is None:
-            mcp_servers = getattr(self, "_mcp_servers", []) or []
+            mcp_servers = getattr(self, "_mcp_servers", None) or ()
 
         model_settings = make_model_settings(resolved_model_name)
 

@@ -25,7 +25,7 @@ def _has_only_tool_returns(message: Any) -> bool:
         if not isinstance(message, ModelRequest):
             return False
 
-        parts = getattr(message, "parts", []) or []
+        parts = getattr(message, "parts", None) or ()
         return bool(parts) and all(isinstance(part, ToolReturnPart) for part in parts)
     except Exception:
         return False
@@ -39,7 +39,7 @@ def _has_unresolved_tool_calls(message: Any) -> bool:
         if not isinstance(message, ModelResponse):
             return False
 
-        parts = getattr(message, "parts", []) or []
+        parts = getattr(message, "parts", None) or ()
         return any(isinstance(part, ToolCallPart) for part in parts)
     except Exception:
         return False
