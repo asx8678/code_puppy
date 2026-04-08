@@ -8,6 +8,7 @@ import asyncio
 import logging
 import queue
 import threading
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -73,7 +74,7 @@ class MessageQueue:
         self._listeners = []
         self._running = False
         self._thread = None
-        self._startup_buffer = []  # Buffer messages before any renderer starts
+        self._startup_buffer = deque(maxlen=maxsize)  # Buffer messages before any renderer starts
         self._has_active_renderer = False
         self._event_loop = None  # Store reference to the event loop
         self._prompt_responses = {}  # Store responses to human input requests
