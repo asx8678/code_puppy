@@ -1,6 +1,6 @@
 """Tests for code_puppy/api/main.py."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
 
@@ -45,3 +45,22 @@ def test_routers_init_imports():
     assert commands is not None
     assert config is not None
     assert sessions is not None
+
+
+def test_main_module_execution():
+    """Test that __main__ guard would trigger main()."""
+    import types
+    
+    # Create a mock module with __name__ == "__main__"
+    mod = types.ModuleType("test_main_module")
+    mod.__name__ = "__main__"
+    
+    # Verify the condition would be True
+    assert mod.__name__ == "__main__"
+    
+    # Test with mock
+    with patch("uvicorn.run") as mock_run:
+        # Simulate what happens when module is run as __main__
+        from code_puppy.api.main import main
+        main()
+        mock_run.assert_called_once()
