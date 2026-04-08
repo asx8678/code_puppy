@@ -91,6 +91,21 @@ def _create_loader_user(plugin_name: str, callbacks_file: Path) -> Callable:
                     )
                     return None
 
+            # SECURITY: Verify the plugin file resolves within the expected plugins directory
+            expected_base = Path.home() / ".code_puppy" / "plugins"
+            try:
+                resolved_file = callbacks_file.resolve()
+                resolved_file.relative_to(expected_base.resolve())
+            except ValueError:
+                logger.error(
+                    "SECURITY: User plugin '%s' resolves to '%s' which is outside expected "
+                    "plugin directory '%s'. Refusing to load.",
+                    plugin_name,
+                    callbacks_file,
+                    expected_base,
+                )
+                return None
+
             # SECURITY WARNING: Loading user plugin with full system privileges
             logger.warning(
                 "Loading user plugin %s from %s — executes arbitrary Python code with full system privileges",
