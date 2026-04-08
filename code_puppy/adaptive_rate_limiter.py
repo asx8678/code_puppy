@@ -373,7 +373,6 @@ async def _process_queue(model_name: str, state: ModelRateLimitState) -> None:
     queue = state.request_queue
     if queue is None:
         return
-    released = 0
     total = queue.qsize()
     logger.info(
         "Releasing queued requests (%d pending) for %r at %.1f/s",
@@ -658,9 +657,10 @@ async def acquire_model_slot(
 
     _ensure_recovery_task()
     lock = _ensure_lock()
+    cb_enabled = _state.cfg_circuit_breaker_enabled
 
     # ── Check circuit state (only when circuit breaker enabled) ──────
-    if _state.cfg_circuit_breaker_enabled:
+    if cb_enabled:
         need_wait_open = False
         need_wait_half_open = False
 
@@ -878,8 +878,8 @@ _STATE_ALIASES: dict[str, str] = {
     "_cfg_release_rate": "cfg_release_rate",
 }
 
-import sys as _sys
-from types import ModuleType as _ModuleType
+import sys as _sys  # noqa: E402
+from types import ModuleType as _ModuleType  # noqa: E402
 
 
 class _BackCompatModule(_ModuleType):
