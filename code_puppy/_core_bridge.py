@@ -100,40 +100,44 @@ def serialize_message_for_rust(message: Any) -> dict:
     role = getattr(message, "role", None)
     instructions = getattr(message, "instructions", None)
 
+    # Pre-allocate parts list and use list comprehension for efficiency
     parts: list[dict] = []
     for part in getattr(message, "parts", []):
+        # Bind part attributes once
+        part_kind = getattr(part, "part_kind", None)
+        content = getattr(part, "content", None)
+        tool_call_id = getattr(part, "tool_call_id", None)
+        tool_name = getattr(part, "tool_name", None)
+        args = getattr(part, "args", None)
+
         part_dict: dict[str, Any] = {
-            "part_kind": getattr(part, "part_kind", str(type(part).__name__)),
+            "part_kind": part_kind if part_kind else str(type(part).__name__),
             "content": None,
             "content_json": None,
-            "tool_call_id": getattr(part, "tool_call_id", None),
-            "tool_name": getattr(part, "tool_name", None),
-            "args": str(getattr(part, "args", "")) if hasattr(part, "args") else None,
+            "tool_call_id": tool_call_id,
+            "tool_name": tool_name,
+            "args": str(args) if args is not None else None,
         }
 
-        content = getattr(part, "content", None)
+        # Handle content with faster isinstance chain
         if content is None:
             pass
         elif isinstance(content, str):
             part_dict["content"] = content
         elif isinstance(content, list):
-            text_parts = []
-            for item in content:
-                if isinstance(item, str):
-                    text_parts.append(item)
-                # Skip BinaryContent for token estimation
+            # Use list comprehension for text extraction
+            text_parts = [item for item in content if isinstance(item, str)]
             part_dict["content"] = "\n".join(text_parts) if text_parts else None
-        else:
-            # Dicts, Pydantic models, other — serialize to JSON string
+        elif hasattr(content, "model_dump_json"):
+            # Pydantic model path - try/except for safety
             try:
-                if hasattr(content, "model_dump_json"):
-                    part_dict["content_json"] = content.model_dump_json(sort_keys=True)
-                elif isinstance(content, dict):
-                    part_dict["content_json"] = json.dumps(content, sort_keys=True)
-                else:
-                    part_dict["content"] = repr(content)
+                part_dict["content_json"] = content.model_dump_json(sort_keys=True)
             except (TypeError, ValueError):
                 part_dict["content"] = repr(content)
+        elif isinstance(content, dict):
+            part_dict["content_json"] = json.dumps(content, sort_keys=True)
+        else:
+            part_dict["content"] = repr(content)
 
         parts.append(part_dict)
 
