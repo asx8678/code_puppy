@@ -84,10 +84,7 @@ class TUIMessageBridge:
 
             queue = get_global_queue()
             # Wait for queue to drain with a short timeout (max 2 seconds)
-            import time
-            start = time.time()
-            while not queue.is_empty() and (time.time() - start) < 2.0:
-                time.sleep(0.05)
+            queue.wait_for_empty(timeout=2.0)
         except Exception:
             pass  # Queue not available or error — continue with shutdown
         
