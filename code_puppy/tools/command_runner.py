@@ -18,6 +18,7 @@ import ctypes
 import os
 import re
 import select
+import shlex
 import signal
 import subprocess
 import sys
@@ -172,6 +173,30 @@ def _validate_dangerous_patterns(command: str) -> None:
             )
 
 
+def _validate_shlex_parse(command: str) -> None:
+    """Validate command can be safely parsed by shlex.
+
+    This adds an additional defense-in-depth layer by ensuring the command
+    string can be properly tokenized. Malformed commands that might be
+    attempting injection often fail to parse correctly.
+
+    Args:
+        command: The command string to validate.
+
+    Raises:
+        CommandValidationError: If shlex parsing fails or detects issues.
+    """
+    try:
+        # Attempt to parse the command with shlex
+        # This validates proper quoting and tokenization
+        tokens = shlex.split(command, posix=True)
+        # Verify the command isn't empty after parsing
+        if not tokens or not any(token.strip() for token in tokens):
+            raise CommandValidationError("Command contains no valid tokens after parsing")
+    except ValueError as e:
+        raise CommandValidationError(f"Command parsing failed (possible malformed input): {e}")
+
+
 def validate_shell_command(command: str) -> str:
     """Validate a shell command for security issues before execution.
 
@@ -194,6 +219,7 @@ def validate_shell_command(command: str) -> str:
     _validate_command_length(command)
     _validate_forbidden_chars(command)
     _validate_dangerous_patterns(command)
+    _validate_shlex_parse(command)  # Additional layer: verify command can be parsed
 
     return command
 
@@ -221,17 +247,20 @@ def safe_execute_subprocess(
     # Validate command before execution (defense-in-depth)
     validate_shell_command(command)
 
-    # SECURITY: shell=True is REQUIRED here—commands arrive as complete strings
-    # from the LLM (e.g., "cd /foo && make test" or "cat file | grep pattern")
-    # and REQUIRE shell interpretation for pipes, redirects, chains, and variable
-    # expansion. The command has been validated by validate_shell_command() above
-    # which checks length limits, forbidden characters, and dangerous patterns.
-    # Additional upstream validation happens in the shell_safety plugin and the
-    # PolicyEngine. Removing shell=True would break all non-trivial commands.
-    # noqa: S602 — shell=True justified: upstream validation + user confirmation
+    # SECURITY: shell=True is REQUIRED—commands arrive as complete strings from the
+    # LLM (e.g., "cd /foo && make test" or "cat file | grep pattern") and REQUIRE
+    # shell interpretation for pipes, redirects, chains, and variable expansion.
+    # The command is validated by validate_shell_command() which enforces:
+    # - Length limits (_validate_command_length)
+    # - No forbidden control characters (_validate_forbidden_chars)
+    # - No dangerous patterns like command substitution (_validate_dangerous_patterns)
+    # - Proper tokenization with shlex (_validate_shlex_parse)
+    # Additional upstream validation: shell_safety plugin + PolicyEngine + user confirmation.
+    # Removing shell=True would break shell features (pipes, redirects, etc.).
+    # nosec B602 - validated through multiple defense-in-depth layers
     return subprocess.Popen(
         command,
-        shell=True,  # noqa: S602 — validated above, required for pipes/redirects
+        shell=True,  # nosec B602 - multiple validation layers, shell features required
         cwd=cwd,
         **kwargs,
     )
