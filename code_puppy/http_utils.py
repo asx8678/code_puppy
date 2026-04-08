@@ -211,7 +211,7 @@ class RetryingAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                     wait_time = 3.0 * (2**attempt)
                 else:
                     # Default exponential backoff: 1s, 2s, 4s...
-                    wait_time = 1.0 * (2**attempt)
+                    wait_time = 2**attempt
 
                     # Check Retry-After header (only for non-Cerebras)
                     retry_after = response.headers.get("Retry-After")
@@ -241,7 +241,7 @@ class RetryingAsyncClient(RequestCacheMixin, httpx.AsyncClient):
 
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.PoolTimeout) as e:
                 last_exception = e
-                wait_time = 1.0 * (2**attempt)
+                wait_time = 2**attempt
                 if attempt < self.max_retries:
                     emit_warning(
                         f"HTTP connection error: {e}. Retrying in {wait_time}s..."
