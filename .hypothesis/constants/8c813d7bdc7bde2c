@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/agent_skills/config.py
+# hypothesis_version: 6.151.11
+
+['.code_puppy', '1', 'disabled_skills', 'false', 'on', 'skill_directories', 'skills', 'skills_enabled', 'true', 'yes']

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/agents/event_stream_handler.py
+# hypothesis_version: 6.151.11
+
+[0.1, 'agent_response', 'args_delta', 'code_puppy.callbacks', 'delta', 'delta_type', 'index', 'live_contexts', 'next_part_kind', 'part', 'part_delta', 'part_end', 'part_start', 'part_type', 'text', 'thinking', 'tool-call', 'tool_name_delta', 'visible']

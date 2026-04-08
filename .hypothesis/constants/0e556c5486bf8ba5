@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/routing/composite.py
+# hypothesis_version: 6.151.11
+
+[1000, 'composite', 'latency_ms', 'source']

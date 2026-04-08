@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/run_context.py
+# hypothesis_version: 6.151.11
+
+[1000, 'component_name', 'component_type', 'current_run_context', 'duration_ms', 'end_time', 'error_type', 'metadata', 'parent_run_id', 'run_id', 'session_id', 'start_time', 'success', 'tags']

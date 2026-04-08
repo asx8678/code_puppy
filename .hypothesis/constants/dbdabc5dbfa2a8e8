@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tools/ask_user_question/handler.py
+# hypothesis_version: 6.151.11
+
+['.', '; ', 'Validation error', 'Validation error: ', 'Validation error: %s', 'loc', 'msg', 'questions']

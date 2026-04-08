@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/turbo_parse_bridge.py
+# hypothesis_version: 6.151.11
+
+[0.0, 'active', 'all_succeeded', 'available', 'cache_available', 'cache_evictions', 'cache_hit_ratio', 'cache_hits', 'cache_misses', 'captures', 'count', 'diagnostics', 'enabled', 'error', 'error_count', 'errors', 'extract_symbols', 'extraction_time_ms', 'file_path', 'files_processed', 'folds', 'get_folds', 'get_folds_from_file', 'get_highlights', 'get_language', 'health_check', 'installed', 'language', 'languages', 'languages_used', 'message', 'name', 'parse_file', 'parse_files_batch', 'parse_source', 'parse_time_ms', 'results', 'severity', 'stats', 'success', 'success_count', 'supported', 'supported_languages', 'symbols', 'total_parses', 'total_time_ms', 'tree', 'unknown', 'version', 'warning_count']

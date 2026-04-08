@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/hook_engine/registry.py
+# hypothesis_version: 6.151.11
+
+[5000, '(.)([A-Z][a-z]+)', '([a-z0-9])([A-Z])', '*', 'Notification', 'PostToolUse', 'PreCompact', 'PreToolUse', 'SessionEnd', 'SessionStart', 'Stop', 'SubagentStop', 'UserPromptSubmit', '\\1_\\2', '_', 'by_event', 'command', 'disabled', 'disabled_hooks', 'enabled', 'enabled_hooks', 'hooks', 'id', 'matcher', 'once', 'prompt', 'timeout', 'total', 'total_hooks', 'type']

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/messaging/queue_console.py
+# hypothesis_version: 6.151.11
+
+[100, 'User input cancelled', '__rich_console__', 'blue', 'bold cyan', 'center', 'command', 'completed', 'dim', 'done', 'dots', 'error', 'exception', 'failed', 'green', 'lexer_name', 'magenta', 'purple', 'red', 'rule.line', 'running', 'success', 'sys', 'tool', 'warn', 'warning', 'yellow', '─']

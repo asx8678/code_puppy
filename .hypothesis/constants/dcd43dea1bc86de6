@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/repo_compass/indexer.py
+# hypothesis_version: 6.151.11
+
+['*', '.', '..', '.git', '.hg', '.js', '.json', '.md', '.mypy_cache', '.py', '.pytest_cache', '.rst', '.ruff_cache', '.svn', '.toml', '.ts', '.tsx', '.venv', '.yaml', '.yml', 'Makefile', 'README.md', '__pycache__', 'build', 'dist', 'docs', 'justfile', 'node_modules', 'package.json', 'project-file', 'pyproject.toml', 'python', 'utf-8', 'venv']

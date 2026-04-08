@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/agent_skills/skill_catalog.py
+# hypothesis_version: 6.151.11
+
+['-', 'SkillCatalog', 'SkillCatalogEntry', '_', '_format_display_name', 'ai', 'api', 'aws', 'catalog', 'cli', 'cpu', 'csv', 'db', 'dns', 'gpu', 'html', 'http', 'https', 'id', 'json', 'jwt', 'k8s', 'llm', 'ml', 'mvp', 'oauth', 'pdf', 'psql', 'qa', 'rest', 'rpc', 'sdk', 'sql', 'ssh', 'ssl', 'tls', 'tsv', 'ui', 'url', 'utc', 'uuid', 'xml', 'yaml', 'yml']

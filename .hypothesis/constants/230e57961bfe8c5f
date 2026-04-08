@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/code_context/explorer.py
+# hypothesis_version: 6.151.11
+
+[0.0, 100, '*', '.ex', '.exs', '.heex', '.js', '.jsx', '.py', '.rs', '.ts', '.tsx', '; ', 'cache_hits', 'cache_misses', 'cache_size', 'elixir', 'errors', 'extraction_time_ms', 'hit_ratio', 'javascript', 'parse_count', 'python', 'rust', 'success', 'symbols', 'typescript', 'unknown']

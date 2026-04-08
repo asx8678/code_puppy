@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/shell_safety/agent_shell_safety.py
+# hypothesis_version: 6.151.11
+
+['shell_safety_checker']

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/agents/agent_prompt_mixin.py
+# hypothesis_version: 6.151.11
+
+['\n\n# Environment\n', '%Y-%m-%d', '- Platform: unknown', '.git', 'COMSPEC', 'SHELL', 'nt', 'unknown']

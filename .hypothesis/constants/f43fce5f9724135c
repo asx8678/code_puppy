@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/capability/builtin_providers.py
+# hypothesis_version: 6.151.11
+
+['*.md', '.code_puppy', 'File Rules', 'JSON File Models', 'MCP Servers', 'Models', 'Rules', 'content', 'file_rules', 'json_file_mcps', 'json_file_models', 'mcp_servers.json', 'mcps', 'mcps_capability', 'models', 'models.json', 'models_capability', 'name', 'path', 'rules', 'rules_capability', 'servers', 'utf-8']

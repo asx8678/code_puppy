@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/command_line/attachments.py
+# hypothesis_version: 6.151.11
+
+[1024, '\x00ESCAPED_SPACE\x00', '"', '#', ',;:()[]{}', '../', './', '.bmp', '.gif', '.jpeg', '.jpg', '.png', '.tiff', '.webp', '/', ':', 'ProcessedPrompt', 'PromptAttachment', 'PromptLinkAttachment', '\\ ', 'http', 'https', 'image/png', 'nt', '~']

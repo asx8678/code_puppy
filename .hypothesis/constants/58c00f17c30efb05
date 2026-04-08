@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/console.py
+# hypothesis_version: 6.151.11
+
+['0', '1', 'CODE_PUPPY_NO_COLOR', 'Console', 'auto', 'color_system', 'file', 'force_interactive', 'force_terminal', 'legacy_windows', 'markup', 'no_color', 'soft_wrap', 'width']

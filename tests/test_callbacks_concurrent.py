@@ -15,6 +15,7 @@ from unittest.mock import patch
 import pytest
 
 from code_puppy.callbacks import (
+    _CALLBACK_FAILED,
     _trigger_callbacks,
     _trigger_callbacks_sync,
     clear_callbacks,
@@ -69,9 +70,9 @@ class TestTriggerCallbacksSync:
         register_callback("startup", good2)
 
         ret = _trigger_callbacks_sync("startup")
-        # good1 and good2 ran, bad returned None
+        # good1 and good2 ran, bad returned _CALLBACK_FAILED
         assert results == ["good1", "good2"]
-        assert ret == [1, None, 2]
+        assert ret == [1, _CALLBACK_FAILED, 2]
 
     def test_async_callback_in_sync_context(self):
         """Async callback is awaited via asyncio.run in sync context."""
@@ -171,8 +172,9 @@ class TestTriggerCallbacksAsync:
 
         ret = await _trigger_callbacks("startup")
         assert results == ["ok", "ok2"]
-        assert ret[0] is None  # bad callback
-        assert ret[2] is None  # sync lambda returns None
+        assert ret[0] is None  # first lambda returns None
+        assert ret[1] is _CALLBACK_FAILED  # bad callback
+        assert ret[2] is None  # second lambda returns None
 
     @pytest.mark.asyncio
     async def test_callbacks_receive_args_and_kwargs(self):

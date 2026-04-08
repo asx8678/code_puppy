@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/chatgpt_oauth/oauth_flow.py
+# hypothesis_version: 6.151.11
+
+[0.0, 0.25, 2.0, 200, 302, 400, 404, 500, '+00:00', '/auth/callback', '/success', 'ChatGPT', 'Content-Length', 'Content-Type', 'Location', 'S256', 'Z', '_OAuthServer', 'access_token', 'account_id', 'api_key', 'authorization_code', 'callback_timeout', 'chatgpt_account_id', 'chatgpt_plan_type', 'client_id', 'code', 'code_challenge', 'code_verifier', 'grant_type', 'id', 'id_token', 'is_default', 'issuer', 'last_refresh', 'localhost', 'org_id', 'organization_id', 'organizations', 'plan_type', 'platform_url', 'redirect_uri', 'refresh_token', 'required_port', 'response_type', 'scope', 'state', 'token_url', 'true', 'utf-8', 'verbose']

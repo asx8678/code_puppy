@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/repo_compass/config.py
+# hypothesis_version: 6.151.11
+
+[2400, '1', 'on', 'repo_compass_enabled', 'true', 'yes']

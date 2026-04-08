@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/claude_code_oauth/__init__.py
+# hypothesis_version: 6.151.11
+
+['force_token_refresh', 'is_heartbeat_running']

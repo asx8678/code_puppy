@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/api/routers/config.py
+# hypothesis_version: 6.151.11
+
+[404, '/', '/keys', '/{key}', 'config', 'message']

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tools/agent_tools.py
+# hypothesis_version: 6.151.11
+
+[128, 400, 448, '-', '-+', '1', '[^a-z0-9-]+', '_', 'agent_name', 'created_at', 'disable_mcp_servers', 'format', 'initial_prompt', 'invoke_agent', 'json', 'last_updated', 'list_agents', 'message_count', 'on', 'payload', 'pydantic-ai-json', 'r', 'session', 'session_id', 'subagent_sessions', 'true', 'w', 'yes']

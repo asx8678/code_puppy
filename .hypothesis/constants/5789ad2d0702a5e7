@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tools/browser/browser_manager.py
+# hypothesis_version: 6.151.11
+
+[448, 'BROWSER_HEADLESS', 'BrowserManager', 'browser_profiles', 'browser_session', 'default', 'false', 'storage_state.json', 'true']

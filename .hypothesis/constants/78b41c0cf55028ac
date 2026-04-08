@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tools/ask_user_question/constants.py
+# hypothesis_version: 6.151.11
+
+[0.05, 120, 200, 300, 500, '\x1b[2J\x1b[H', '\x1b[?1049h', '\x1b[?1049l', 'AZURE_PIPELINES', 'BUILDKITE', 'CI', 'CIRCLECI', 'GITHUB_ACTIONS', 'GITLAB_CI', 'JENKINS_URL', 'Other', 'TEAMCITY_VERSION', 'TRAVIS', '←', '↑', '→', '↓', '│', '═', '▶', '●', '✓', '❯']

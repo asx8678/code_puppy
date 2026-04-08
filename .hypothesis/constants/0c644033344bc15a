@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/messaging/spinner/__init__.py
+# hypothesis_version: 6.151.11
+
+['ConsoleSpinner', 'SpinnerBase', 'pause_all_spinners', 'register_spinner', 'resume_all_spinners', 'unregister_spinner']

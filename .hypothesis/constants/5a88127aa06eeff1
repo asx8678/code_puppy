@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tools/browser/terminal_screenshot_tools.py
+# hypothesis_version: 6.151.11
+
+[768, 2048, '%Y%m%d_%H%M%S_%f', '(not saved)', 'Error loading image', 'PNG', 'Screenshot failed', 'actual_media_type', 'error', 'full_page', 'guessed_media_type', 'image/', 'image/png', 'image_bytes', 'image_path', 'line_count', 'lines', 'load_image', 'max_edge', 'max_height', 'media_type', 'mockup_media_type', 'mockup_path', 'mockup_was_resized', 'original_height', 'original_size', 'original_width', 'output', 'output_height', 'output_size', 'output_width', 'png', 'screenshot_bytes', 'screenshot_path', 'success', 'target', 'terminal_path', 'terminal_read_output', 'terminal_screenshot', 'timestamp', 'viewport', 'was_resized', 'wb']

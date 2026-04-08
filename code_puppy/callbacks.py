@@ -4,9 +4,6 @@ import traceback
 from typing import Any, Callable, Literal
 
 from code_puppy import _backlog
-
-# Sentinel value to distinguish callback failures from None returns
-_CALLBACK_FAILED = object()
 from code_puppy.run_context import (
     RunContext,
     get_current_run_context,
@@ -15,6 +12,10 @@ from code_puppy.run_context import (
     create_root_run_context,
     RunContextManager,
 )
+
+# Sentinel value to distinguish callback failures from None returns
+_CALLBACK_FAILED = object()
+"""Sentinel returned by callbacks when they fail with an exception."""
 
 PhaseType = Literal[
     "startup",

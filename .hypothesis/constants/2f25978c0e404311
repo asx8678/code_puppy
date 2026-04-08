@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tui/completion.py
+# hypothesis_version: 6.151.11
+
+['*', '.', '/', '/a', '/agent', '/cd', '/m', '/model', '/set', '@', 'aliases', 'directory', 'model', 'puppy_token', '📁', '📄']

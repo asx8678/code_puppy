@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/synthetic_status/status_api.py
+# hypothesis_version: 6.151.11
+
+[15.0, 200, 401, 403, 429, 500, '+00:00', 'Accept', 'Authorization', 'SYN_API_KEY', 'Z', 'application/json', 'limit', 'renewsAt', 'requests', 'subscription']

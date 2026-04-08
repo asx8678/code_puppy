@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/agents/json_agent.py
+# hypothesis_version: 6.151.11
+
+['*.json', 'description', 'display_name', 'model', 'name', 'r', 'system_prompt', 'tools', 'tools_config', 'user_prompt', 'utf-8']

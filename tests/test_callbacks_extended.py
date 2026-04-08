@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from code_puppy.callbacks import (
+    _CALLBACK_FAILED,
     clear_callbacks,
     count_callbacks,
     get_callbacks,
@@ -239,12 +240,12 @@ class TestCallbacksExtended:
 
         register_callback("startup", failing_callback)
 
-        # Should not raise exception, should return None for failed callback
+        # Should not raise exception, should return _CALLBACK_FAILED for failed callback
         with patch("code_puppy.callbacks.logger") as mock_logger:
             results = await on_startup()
 
             assert len(results) == 1
-            assert results[0] is None
+            assert results[0] is _CALLBACK_FAILED
             # Verify error was logged
             mock_logger.error.assert_called_once()
 
@@ -260,7 +261,7 @@ class TestCallbacksExtended:
             results = on_load_model_config()
 
             assert len(results) == 1
-            assert results[0] is None
+            assert results[0] is _CALLBACK_FAILED
             mock_logger.error.assert_called_once()
 
     def test_execute_async_callback_in_sync_context(self):
@@ -380,6 +381,8 @@ class TestPreToolCallCallback:
     @pytest.mark.asyncio
     async def test_pre_tool_call_error_handling(self):
         """Test that callback errors don't crash the system."""
+        from code_puppy.permission_decision import Deny
+
         results_collected = []
 
         async def failing_callback(tool_name, tool_args, context):
@@ -395,9 +398,9 @@ class TestPreToolCallCallback:
         with patch("code_puppy.callbacks.logger") as mock_logger:
             results = await on_pre_tool_call("run_shell", {"cmd": "ls"}, None)
 
-            # First callback failed (None), second succeeded
+            # First callback failed (converted to Deny for fail-closed), second succeeded
             assert len(results) == 2
-            assert results[0] is None
+            assert isinstance(results[0], Deny)
             assert results[1] == "success"
             assert len(results_collected) == 1
             mock_logger.error.assert_called_once()
@@ -523,7 +526,7 @@ class TestPostToolCallCallback:
             )
 
             assert len(results) == 2
-            assert results[0] is None  # Failed callback
+            assert results[0] is _CALLBACK_FAILED  # Failed callback
             assert results[1] == "OK"  # Successful callback
             assert successful_calls == ["edit_file"]
             mock_logger.error.assert_called_once()
@@ -656,7 +659,7 @@ class TestStreamEventCallback:
             results = await on_stream_event("token", {"content": "x"}, "sess")
 
             assert len(results) == 2
-            assert results[0] is None  # Crashed
+            assert results[0] is _CALLBACK_FAILED  # Crashed
             assert results[1] == "OK"  # Survived
             assert successful_events == ["token"]
             mock_logger.error.assert_called_once()

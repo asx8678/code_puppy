@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tui/stream_renderer.py
+# hypothesis_version: 6.151.11
+
+['AGENT RESPONSE', 'CREATE FILE', 'Chewing on it...', 'DIRECTORY LISTING', 'GREP', 'INVOKE AGENT', 'Puppy pondering...', 'READ FILE', 'SHELL COMMAND', 'Sniffing around...', 'THINKING', 'Wagging tail...', 'agent_response', 'blue', 'cp_create_file', 'cp_grep', 'cp_invoke_agent', 'cp_list_files', 'cp_read_file', 'create_file', 'directory_listing', 'grep', 'invoke_agent', 'mcp_tool_call', 'read_file', 'shell_command', 'thinking', '⚡', '📂', '📝', '🔧', '🚀', '🤖']

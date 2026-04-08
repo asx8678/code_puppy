@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/error_classifier/exinfo.py
+# hypothesis_version: 6.151.11
+
+['critical', 'description', 'error', 'info', 'name', 'retry', 'retry_after_seconds', 'severity', 'suggestion', 'warning']

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/__init__.py
+# hypothesis_version: 6.151.11
+
+['\x00', ',', '.', '..', '.code_puppy', '/', '\\', '_', '__init__.py', 'agent_exception', 'agent_reload', 'agent_run_end', 'agent_run_start', 'allowed_user_plugins', 'builtin', 'create_file', 'custom_command', 'custom_command_help', 'delete_file', 'delete_snippet', 'edit_file', 'enable_user_plugins', 'file_permission', 'get_motd', 'invoke_agent', 'load_model_config', 'load_models_config', 'load_prompt', 'low', 'none', 'plugins', 'post_tool_call', 'pre_tool_call', 'register_agents', 'register_model_type', 'register_tools', 'replace_in_file', 'run_shell_command', 'shell_safety', 'shutdown', 'startup', 'stream_event', 'user', 'version_check']

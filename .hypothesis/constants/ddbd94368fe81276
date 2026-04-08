@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tools/subagent_context.py
+# hypothesis_version: 6.151.11
+
+['get_subagent_depth', 'get_subagent_name', 'is_subagent', 'subagent_context', 'subagent_depth', 'subagent_name']

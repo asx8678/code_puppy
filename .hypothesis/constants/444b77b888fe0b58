@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tui/theme.py
+# hypothesis_version: 6.151.11
+
+[0.15, 0.9, '#000000', '#005faf', '#121212', '#1c1c1c', '#6a9fb5', '#7878af', '#87a987', '#b05070', '#b0b0b0', '#c0a36e', '-', '_', 'code-puppy']

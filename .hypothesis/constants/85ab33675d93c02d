@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/config_presets.py
+# hypothesis_version: 6.151.11
+
+[', ', 'Basic', 'Full', 'Pack', 'Semi', 'basic', 'compaction_strategy', 'enable_pack_agents', 'enable_streaming', 'false', 'full', 'low', 'medium', 'pack', 'semi', 'summarization', 'true', 'yolo_mode']

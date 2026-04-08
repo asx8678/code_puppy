@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/command_line/motd.py
+# hypothesis_version: 6.151.11
+
+['2026-01-01', 'a', 'motd.txt', 'r']

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/utils/symbol_hierarchy.py
+# hypothesis_version: 6.151.11
+
+['T', 'children', 'end_line', 'name', 'parent', 'start_col', 'start_line']

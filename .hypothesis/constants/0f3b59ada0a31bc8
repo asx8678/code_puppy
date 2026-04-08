@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/universal_constructor/models.py
+# hypothesis_version: 6.151.11
+
+['1.0.0', 'Error message if any', 'Function docstring', 'Tool metadata', 'What the tool does', 'allow', 'extra']

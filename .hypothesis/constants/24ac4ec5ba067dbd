@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tools/command_runner.py
+# hypothesis_version: 6.151.11
+
+[0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.6, 1.0, -256, 256, 270, 1024, 8192, '\x18', '$ ', '... [truncated]', '.log', '/F', '/PID', '/T', '<\\s*\\(', '>\\s*\\(', 'Deny', 'Shell Command', '\\$\\([^)]*\\)', '\\d*>&\\d*\\s*\\d*>&', '\\x00', '`[^`]*`', 'absolute', 'blocked', 'bold green', 'bold white', 'bold yellow', 'command', 'critical', 'dim', 'dim cyan', 'dim white', 'error', 'error_message', 'execution_time', 'exit_code', 'high', 'inactivity', 'isatty', 'low', 'medium', 'none', 'reason', 'reasoning', 'replace', 'setsid', 'shell_bg_', 'shell_cmd_', 'shell_command', 'stderr', 'stdin', 'stdout', 'success', 'taskkill', 'timeout', 'unknown', 'user_feedback', 'utf-8', 'w', 'win', '\x7f']

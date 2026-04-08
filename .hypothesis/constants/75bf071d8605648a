@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/command_line/pack_commands.py
+# hypothesis_version: 6.151.11
+
+['/pack [pack_name]', 'Role configuration:', 'config', 'pack', '→ ']
