@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-nkmx/code_puppy/runtime_state.py
+# hypothesis_version: 6.151.11
+
+['%Y%m%d_%H%M%S', 'auto_session_']

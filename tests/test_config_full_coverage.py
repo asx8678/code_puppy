@@ -547,7 +547,7 @@ class TestModelName:
 
         runtime_state.set_session_model("foo")
         cp_config.reset_session_model()
-        assert cp_config._SESSION_MODEL is None
+        assert runtime_state.get_session_model() is None
 
 
 # ---------------------------------------------------------------------------
@@ -872,7 +872,9 @@ class TestBannerColors:
 # ---------------------------------------------------------------------------
 class TestAutosaveSession:
     def test_get_current_autosave_id(self):
-        cp_config._CURRENT_AUTOSAVE_ID = None
+        from code_puppy import runtime_state
+
+        runtime_state.reset_autosave_id()
         aid = cp_config.get_current_autosave_id()
         assert aid is not None
         assert len(aid) > 0
