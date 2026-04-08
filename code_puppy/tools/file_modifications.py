@@ -31,6 +31,16 @@ from code_puppy.messaging import (  # Structured messaging types
 )
 from code_puppy.tools.common import _find_best_window, generate_group_id
 
+# Hoisted import for file_permission_handler with optional dependency guard
+try:
+    from code_puppy.plugins.file_permission_handler.register_callbacks import (
+        clear_user_feedback,
+        get_last_user_feedback,
+    )
+    _FILE_PERMISSION_HANDLER_AVAILABLE = True
+except ImportError:
+    _FILE_PERMISSION_HANDLER_AVAILABLE = False
+
 
 def _create_rejection_response(file_path: str) -> dict[str, Any]:
     """Create a standardized rejection response with user feedback if available.
@@ -42,17 +52,11 @@ def _create_rejection_response(file_path: str) -> dict[str, Any]:
         Dict containing rejection details and any user feedback
     """
     # Check for user feedback from permission handler
-    try:
-        from code_puppy.plugins.file_permission_handler.register_callbacks import (
-            clear_user_feedback,
-            get_last_user_feedback,
-        )
-
+    user_feedback = None
+    if _FILE_PERMISSION_HANDLER_AVAILABLE:
         user_feedback = get_last_user_feedback()
         # Clear feedback after reading it
         clear_user_feedback()
-    except ImportError:
-        user_feedback = None
 
     rejection_message = (
         "USER REJECTED: The user explicitly rejected these file changes."
