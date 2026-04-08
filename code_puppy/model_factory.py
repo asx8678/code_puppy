@@ -767,19 +767,24 @@ def _build_round_robin(model_name: str, model_config: dict, config: dict) -> Any
 # ---------------------------------------------------------------------------
 # Register all built-in builders at module load
 # ---------------------------------------------------------------------------
-register_model_builder("gemini", _build_gemini)
-register_model_builder("openai", _build_openai)
-register_model_builder("anthropic", _build_anthropic)
-register_model_builder("custom_anthropic", _build_custom_anthropic)
-register_model_builder("azure_openai", _build_azure_openai)
-register_model_builder("custom_openai", _build_custom_openai)
-register_model_builder("zai_coding", _build_zai_coding)
-register_model_builder("zai_api", _build_zai_api)
-register_model_builder("custom_gemini", _build_custom_gemini)
-register_model_builder("cerebras", _build_cerebras)
-register_model_builder("openrouter", _build_openrouter)
-register_model_builder("gemini_oauth", _build_gemini_oauth)
-register_model_builder("round_robin", _build_round_robin)
+_BUILTIN_MODEL_BUILDERS: dict[str, Callable] = {
+    "gemini": _build_gemini,
+    "openai": _build_openai,
+    "anthropic": _build_anthropic,
+    "custom_anthropic": _build_custom_anthropic,
+    "azure_openai": _build_azure_openai,
+    "custom_openai": _build_custom_openai,
+    "zai_coding": _build_zai_coding,
+    "zai_api": _build_zai_api,
+    "custom_gemini": _build_custom_gemini,
+    "cerebras": _build_cerebras,
+    "openrouter": _build_openrouter,
+    "gemini_oauth": _build_gemini_oauth,
+    "round_robin": _build_round_robin,
+}
+
+for _type_name, _builder in _BUILTIN_MODEL_BUILDERS.items():
+    register_model_builder(_type_name, _builder)
 
 
 # ---------------------------------------------------------------------------
