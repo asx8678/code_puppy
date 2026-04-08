@@ -373,7 +373,6 @@ async def _process_queue(model_name: str, state: ModelRateLimitState) -> None:
     queue = state.request_queue
     if queue is None:
         return
-    released = 0
     total = queue.qsize()
     logger.info(
         "Releasing queued requests (%d pending) for %r at %.1f/s",
