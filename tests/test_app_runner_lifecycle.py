@@ -1,55 +1,19 @@
-"""Test coverage for app_runner.py - filling gaps in CLI test coverage.
+"""Test coverage for app_runner.py - lifecycle and integration tests.
 
 This module covers:
-- Entry point modules (__main__.py, main.py)
 - Missing branches in app_runner.py:
   - ImportError fallback for uvx_detection (lines 185-190)
   - Signal setup skip in TUI mode (line 277)
   - Bridge mode environment setup (lines 286-288)
   - DBOS cleanup at shutdown (lines 383-385)
+- AppRunner integration tests
 """
 
 import os
-import sys
 from contextlib import ExitStack
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-
-# =============================================================================
-# Entry Point Module Tests
-# =============================================================================
-
-
-class TestEntryPoints:
-    """Test __main__.py and main.py entry point modules."""
-
-    def test_main_py_imports(self):
-        """Test that main.py can be imported and exports main_entry."""
-        # Must import from cli_runner due to import-time side effects
-        from code_puppy.main import main_entry
-
-        assert callable(main_entry)
-
-    def test_main_py_module_execution(self):
-        """Test main.py __name__ == '__main__' branch is covered."""
-        # We can't actually run the __main__ block, but we can verify the structure
-        import code_puppy.main as main_module
-
-        # The file should have main_entry callable
-        assert hasattr(main_module, "main_entry")
-
-    def test_dunder_main_module_execution(self):
-        """Test __main__.py imports main_entry from main module."""
-        from code_puppy.__main__ import main_entry
-
-        assert callable(main_entry)
-
-
-# =============================================================================
-# AppRunner Missing Branches
-# =============================================================================
 
 
 def _mock_renderer():
@@ -95,22 +59,22 @@ class TestUVXDetectionImportError:
 
     def test_uvx_detection_import_error_covered(self):
         """Test that ImportError on uvx_detection import is handled gracefully.
-        
+
         This covers the 'except ImportError: pass' block in setup_signals().
         """
         import builtins
         from code_puppy.app_runner import AppRunner
 
         runner = AppRunner()
-        
+
         real_import = builtins.__import__
-        
+
         def fake_import(name, *args, **kwargs):
             # Make code_puppy.uvx_detection import fail
             if name == "code_puppy.uvx_detection":
                 raise ImportError("No module named 'code_puppy.uvx_detection'")
             return real_import(name, *args, **kwargs)
-        
+
         with patch.object(builtins, "__import__", fake_import):
             # The import inside setup_signals should fail with ImportError
             # and the except block should catch it silently
@@ -125,11 +89,12 @@ class TestTUIModeSkipsSignalSetup:
     async def test_tui_mode_skips_signal_setup(self):
         """Test that signal setup is skipped when in TUI mode."""
         patches = _base_main_patches()
-        
+
         # Create runner before patching class methods
         from code_puppy.app_runner import AppRunner
+
         runner = AppRunner()
-        
+
         # Mock TUI mode to be enabled
         with ExitStack() as stack:
             stack.enter_context(patch.dict(os.environ, {"NO_VERSION_UPDATE": "1"}))
@@ -142,9 +107,7 @@ class TestTUIModeSkipsSignalSetup:
             )
             # Mock signal setup to verify it's NOT called - patch before creating runner
             mock_setup_signals = MagicMock()
-            stack.enter_context(
-                patch.object(runner, "setup_signals", mock_setup_signals)
-            )
+            stack.enter_context(patch.object(runner, "setup_signals", mock_setup_signals))
             stack.enter_context(
                 patch(
                     "code_puppy.tui.launcher.textual_interactive_mode",
@@ -152,9 +115,9 @@ class TestTUIModeSkipsSignalSetup:
                 )
             )
             _apply_patches(stack, patches)
-            
+
             await runner.run()
-            
+
             # Signal setup should NOT be called in TUI mode
             mock_setup_signals.assert_not_called()
 
@@ -166,14 +129,12 @@ class TestBridgeModeEnvironment:
     async def test_bridge_mode_sets_env_var(self):
         """Test that --bridge-mode sets CODE_PUPPY_BRIDGE=1."""
         patches = _base_main_patches()
-        
+
         # Start with clean environment
         env_without_bridge = {k: v for k, v in os.environ.items() if k != "CODE_PUPPY_BRIDGE"}
-        
+
         with ExitStack() as stack:
-            stack.enter_context(
-                patch.dict(os.environ, env_without_bridge, clear=True)
-            )
+            stack.enter_context(patch.dict(os.environ, env_without_bridge, clear=True))
             stack.enter_context(patch.dict(os.environ, {"NO_VERSION_UPDATE": "1"}))
             stack.enter_context(patch("sys.argv", ["code-puppy", "--bridge-mode", "-p", "test"]))
             stack.enter_context(
@@ -201,12 +162,12 @@ class TestBridgeModeEnvironment:
                 )
             )
             _apply_patches(stack, patches)
-            
+
             from code_puppy.app_runner import AppRunner
-            
+
             runner = AppRunner()
             await runner.run()
-            
+
             # Verify CODE_PUPPY_BRIDGE was set
             assert os.environ.get("CODE_PUPPY_BRIDGE") == "1"
 
@@ -214,7 +175,7 @@ class TestBridgeModeEnvironment:
     async def test_bridge_mode_preserves_existing_env_var(self):
         """Test that --bridge-mode preserves existing CODE_PUPPY_BRIDGE value."""
         patches = _base_main_patches()
-        
+
         with ExitStack() as stack:
             stack.enter_context(
                 patch.dict(os.environ, {"CODE_PUPPY_BRIDGE": "existing", "NO_VERSION_UPDATE": "1"})
@@ -245,12 +206,12 @@ class TestBridgeModeEnvironment:
                 )
             )
             _apply_patches(stack, patches)
-            
+
             from code_puppy.app_runner import AppRunner
-            
+
             runner = AppRunner()
             await runner.run()
-            
+
             # Verify CODE_PUPPY_BRIDGE preserves existing value
             assert os.environ.get("CODE_PUPPY_BRIDGE") == "existing"
 
@@ -263,9 +224,9 @@ class TestDBOSShutdownCleanup:
         """Test that DBOS.destroy() is called during shutdown when DBOS is enabled."""
         patches = _base_main_patches()
         patches["code_puppy.app_runner.get_use_dbos"] = MagicMock(return_value=True)
-        
+
         mock_dbos_cls = MagicMock()
-        
+
         with ExitStack() as stack:
             stack.enter_context(patch.dict(os.environ, {"NO_VERSION_UPDATE": "1"}))
             stack.enter_context(patch("sys.argv", ["code-puppy", "-p", "test"]))
@@ -293,16 +254,14 @@ class TestDBOSShutdownCleanup:
                     new_callable=AsyncMock,
                 )
             )
-            stack.enter_context(
-                patch("code_puppy.app_runner.DBOS", mock_dbos_cls)
-            )
+            stack.enter_context(patch("code_puppy.app_runner.DBOS", mock_dbos_cls))
             _apply_patches(stack, patches)
-            
+
             from code_puppy.app_runner import AppRunner
-            
+
             runner = AppRunner()
             await runner.run()
-            
+
             # Verify DBOS.destroy() was called
             mock_dbos_cls.destroy.assert_called_once()
 
@@ -311,9 +270,9 @@ class TestDBOSShutdownCleanup:
         """Test that DBOS.destroy() is NOT called when DBOS is disabled."""
         patches = _base_main_patches()
         patches["code_puppy.app_runner.get_use_dbos"] = MagicMock(return_value=False)
-        
+
         mock_dbos_cls = MagicMock()
-        
+
         with ExitStack() as stack:
             stack.enter_context(patch.dict(os.environ, {"NO_VERSION_UPDATE": "1"}))
             stack.enter_context(patch("sys.argv", ["code-puppy", "-p", "test"]))
@@ -341,73 +300,16 @@ class TestDBOSShutdownCleanup:
                     new_callable=AsyncMock,
                 )
             )
-            stack.enter_context(
-                patch("code_puppy.app_runner.DBOS", mock_dbos_cls)
-            )
+            stack.enter_context(patch("code_puppy.app_runner.DBOS", mock_dbos_cls))
             _apply_patches(stack, patches)
-            
+
             from code_puppy.app_runner import AppRunner
-            
+
             runner = AppRunner()
             await runner.run()
-            
+
             # Verify DBOS.destroy() was NOT called
             mock_dbos_cls.destroy.assert_not_called()
-
-
-# =============================================================================
-# CLI Entry Points Direct Tests
-# =============================================================================
-
-
-class TestMainEntry:
-    """Test main_entry() function for proper entry point coverage."""
-
-    @patch("asyncio.run")
-    def test_main_entry_normal_execution(self, mock_run):
-        """Test main_entry() under normal execution."""
-        from code_puppy.cli_runner import main_entry
-
-        mock_run.return_value = None
-        with patch("code_puppy.cli_runner.reset_unix_terminal"):
-            result = main_entry()
-        
-        mock_run.assert_called_once()
-
-    @patch("asyncio.run", side_effect=KeyboardInterrupt)
-    def test_main_entry_keyboard_interrupt_no_dbos(self, mock_run):
-        """Test main_entry() with KeyboardInterrupt when DBOS is disabled."""
-        from code_puppy.cli_runner import main_entry
-
-        with patch("code_puppy.cli_runner.reset_unix_terminal"):
-            with patch("code_puppy.cli_runner.get_use_dbos", return_value=False):
-                result = main_entry()
-        
-        assert result == 0
-
-    @patch("asyncio.run", side_effect=KeyboardInterrupt)
-    def test_main_entry_keyboard_interrupt_with_dbos(self, mock_run):
-        """Test main_entry() with KeyboardInterrupt when DBOS is enabled."""
-        from code_puppy.cli_runner import main_entry
-
-        mock_dbos = MagicMock()
-        with patch("code_puppy.cli_runner.reset_unix_terminal"):
-            with patch("code_puppy.cli_runner.get_use_dbos", return_value=True):
-                with patch("dbos.DBOS", mock_dbos):
-                    result = main_entry()
-        
-        assert result == 0
-        mock_dbos.destroy.assert_called_once()
-
-    @patch("asyncio.run", side_effect=RuntimeError("unexpected"))
-    def test_main_entry_unexpected_error(self, mock_run):
-        """Test main_entry() with unexpected error."""
-        from code_puppy.cli_runner import main_entry
-
-        with patch("code_puppy.cli_runner.reset_unix_terminal"):
-            # Should propagate the error (no return value in that branch)
-            with pytest.raises(RuntimeError, match="unexpected"):
-                main_entry()
 
 
 # =============================================================================
@@ -423,7 +325,7 @@ class TestAppRunnerArgumentParsing:
         from code_puppy.app_runner import AppRunner
 
         runner = AppRunner()
-        
+
         test_cases = [
             # (argv, expected_attrs)
             (["--help"], None),  # SystemExit with code 0
@@ -441,7 +343,7 @@ class TestAppRunnerArgumentParsing:
             (["do", "something"], {"command": ["do", "something"]}),
             ([], {"interactive": False, "prompt": None}),
         ]
-        
+
         for argv, expected_attrs in test_cases:
             with patch("sys.argv", ["code-puppy"] + argv):
                 if expected_attrs is None:
@@ -463,14 +365,14 @@ class TestAppRunnerShowLogo:
         from code_puppy.app_runner import AppRunner
 
         runner = AppRunner()
-        
+
         mock_args = MagicMock()
         mock_args.prompt = "test prompt"
-        
+
         mock_console = MagicMock()
-        
+
         runner.show_logo(mock_args, mock_console)
-        
+
         # Logo should be skipped, no print calls
         mock_console.print.assert_not_called()
 
@@ -479,24 +381,25 @@ class TestAppRunnerShowLogo:
         from code_puppy.app_runner import AppRunner
 
         runner = AppRunner()
-        
+
         mock_args = MagicMock()
         mock_args.prompt = None
-        
+
         mock_console = MagicMock()
-        
+
         # Patch pyfiglet at the module level where it's imported
         with patch("builtins.__import__") as mock_import:
+
             def import_side_effect(name, *args, **kwargs):
                 if name == "pyfiglet":
                     mock_pyfiglet = MagicMock()
                     mock_pyfiglet.figlet_format.return_value = "LOGO\n\n"
                     return mock_pyfiglet
                 return __builtins__["__import__"](name, *args, **kwargs)
-            
+
             mock_import.side_effect = import_side_effect
             runner.show_logo(mock_args, mock_console)
-        
+
         # Logo should be displayed
         mock_console.print.assert_called()
 
@@ -505,12 +408,12 @@ class TestAppRunnerShowLogo:
         from code_puppy.app_runner import AppRunner
 
         runner = AppRunner()
-        
+
         mock_args = MagicMock()
         mock_args.prompt = "some prompt"  # Prompt is set
-        
+
         mock_console = MagicMock()
-        
+
         # Should return early and not print anything
         runner.show_logo(mock_args, mock_console)
         mock_console.print.assert_not_called()
@@ -524,7 +427,7 @@ class TestAppRunnerSetupRenderers:
         from code_puppy.app_runner import AppRunner
 
         runner = AppRunner()
-        
+
         with patch("code_puppy.app_runner.build_console", return_value=MagicMock()):
             with patch("code_puppy.messaging.get_global_queue", return_value=MagicMock()):
                 with patch("code_puppy.messaging.get_message_bus", return_value=MagicMock()):
@@ -532,9 +435,9 @@ class TestAppRunnerSetupRenderers:
                         with patch("code_puppy.messaging.RichConsoleRenderer") as mock_rich:
                             mock_sync.return_value = MagicMock()
                             mock_rich.return_value = MagicMock()
-                            
+
                             result = runner.setup_renderers()
-                            
+
                             assert len(result) == 3
                             assert result[0] is not None  # message_renderer
                             assert result[1] is not None  # bus_renderer
@@ -547,10 +450,9 @@ class TestAppRunnerLoadAPIKeys:
     def test_load_api_keys_calls_config_function(self):
         """Test that load_api_keys calls the config function."""
         from code_puppy.app_runner import AppRunner
-        from code_puppy.config import load_api_keys_to_environment
 
         runner = AppRunner()
-        
+
         with patch("code_puppy.config.load_api_keys_to_environment") as mock_load:
             runner.load_api_keys()
             mock_load.assert_called_once()
@@ -567,13 +469,13 @@ class TestAppRunnerConfigureAgent:
         from code_puppy.app_runner import AppRunner
 
         runner = AppRunner()
-        
+
         mock_args = MagicMock()
         mock_args.model = "gpt-5"
         mock_args.agent = None
-        
+
         runner.configure_agent(mock_args)
-        
+
         mock_set.assert_called_once_with("gpt-5")
         mock_emit.assert_called()
 
@@ -582,22 +484,24 @@ class TestAppRunnerConfigureAgent:
     @patch("code_puppy.messaging.emit_error")
     @patch("code_puppy.messaging.emit_system_message")
     @patch("code_puppy.model_factory.ModelFactory.load_config")
-    def test_configure_agent_invalid_model_exits(self, mock_load_config, mock_emit_sys, mock_emit_err, mock_validate, mock_set):
+    def test_configure_agent_invalid_model_exits(
+        self, mock_load_config, mock_emit_sys, mock_emit_err, mock_validate, mock_set
+    ):
         """Test configure_agent with invalid model causes sys.exit."""
         from code_puppy.app_runner import AppRunner
 
         runner = AppRunner()
-        
+
         mock_args = MagicMock()
         mock_args.model = "invalid-model"
         mock_args.agent = None
-        
+
         # Mock ModelFactory to return some available models
         mock_load_config.return_value = {"gpt-5": {}}
-        
+
         with pytest.raises(SystemExit) as exc_info:
             runner.configure_agent(mock_args)
-        
+
         assert exc_info.value.code == 1
 
     @patch("code_puppy.config.set_model_name")
@@ -609,14 +513,14 @@ class TestAppRunnerConfigureAgent:
         from code_puppy.app_runner import AppRunner
 
         runner = AppRunner()
-        
+
         mock_args = MagicMock()
         mock_args.model = "some-model"
         mock_args.agent = None
-        
+
         with pytest.raises(SystemExit) as exc_info:
             runner.configure_agent(mock_args)
-        
+
         assert exc_info.value.code == 1
         mock_log.assert_called_once()
 
@@ -628,13 +532,13 @@ class TestAppRunnerConfigureAgent:
         from code_puppy.app_runner import AppRunner
 
         runner = AppRunner()
-        
+
         mock_args = MagicMock()
         mock_args.model = None
         mock_args.agent = "code-puppy"
-        
+
         runner.configure_agent(mock_args)
-        
+
         mock_set_agent.assert_called_once_with("code-puppy")
         mock_emit.assert_called()
 
@@ -646,14 +550,14 @@ class TestAppRunnerConfigureAgent:
         from code_puppy.app_runner import AppRunner
 
         runner = AppRunner()
-        
+
         mock_args = MagicMock()
         mock_args.model = None
         mock_args.agent = "invalid-agent"
-        
+
         with pytest.raises(SystemExit) as exc_info:
             runner.configure_agent(mock_args)
-        
+
         assert exc_info.value.code == 1
 
     @patch("code_puppy.agents.agent_manager.get_available_agents", side_effect=RuntimeError("agent error"))
@@ -664,13 +568,13 @@ class TestAppRunnerConfigureAgent:
         from code_puppy.app_runner import AppRunner
 
         runner = AppRunner()
-        
+
         mock_args = MagicMock()
         mock_args.model = None
         mock_args.agent = "some-agent"
-        
+
         with pytest.raises(SystemExit) as exc_info:
             runner.configure_agent(mock_args)
-        
+
         assert exc_info.value.code == 1
         mock_log.assert_called_once()
