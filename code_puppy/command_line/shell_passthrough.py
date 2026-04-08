@@ -17,6 +17,7 @@ Examples:
 
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -70,10 +71,20 @@ def _validate_passthrough_command(command: str) -> tuple[bool, str]:
     if not command or not command.strip():
         return False, "Empty command"
     if len(command) > MAX_COMMAND_LENGTH:
-        return False, f"Command too long"
+        return False, "Command too long"
     for pattern in _COMPILED_DANGEROUS:
         if pattern.search(command):
-            return False, f"Dangerous pattern detected"
+            return False, "Dangerous pattern detected"
+    # Additional layer: verify command can be properly parsed by shlex
+    # NOTE: shlex validates the command can be tokenized (catches malformed
+    # quoting like unbalanced quotes). It does NOT validate shell semantics
+    # or prevent injection - "echo hi; rm -rf /" parses fine through shlex.
+    try:
+        tokens = shlex.split(command, posix=True)
+        if not tokens or not any(token.strip() for token in tokens):
+            return False, "Command contains no valid tokens"
+    except ValueError:
+        return False, "Command parsing failed (possible malformed input)"
     return True, ""
 
 
@@ -170,23 +181,28 @@ def execute_shell_passthrough(task: str) -> None:
 
     start_time = time.monotonic()
 
-    # SECURITY FIX fv7t: Validate before execution
+    # SECURITY FIX fv7t: Validate before execution (multiple defense layers)
     is_safe, rejection_reason = _validate_passthrough_command(command)
     if not is_safe:
         console.print(f"[bold red]🛡️ Command blocked:[/bold red] {rejection_reason}")
         console.print("[dim]Use agent tools or /yolo mode for this operation.[/dim]")
         return
 
-    # SECURITY: shell=True is required here for pipes/redirects/command chains
+    # SECURITY: shell=True is REQUIRED for pipes/redirects/command chains
     # (e.g., "!cat file | grep pattern"). This is user-initiated direct shell
     # execution—treat it like the user typed it in their terminal. The command
-    # has passed _validate_passthrough_command() which blocks obvious injection
-    # patterns. User confirms intent by prefixing with "!". For stricter
-    # control, users should invoke tools via the agent instead.
+    # has passed _validate_passthrough_command() which validates:
+    # - Length limits, no empty commands
+    # - No dangerous patterns (backticks, command substitution, etc.)
+    # - Proper shlex tokenization (validates quoting only, NOT injection)
+    # User confirms intent by prefixing with "!". For stricter control,
+    # users should invoke tools via the agent instead.
     try:
+        # nosec B602 - required for shell features (user escape hatch with
+        # documented raw-shell semantics); risk managed by explicit user invocation
         result = subprocess.run(
             command,
-            shell=True,
+            shell=True,  # nosec B602 - shell features required, validated above
             cwd=os.getcwd(),
             # Inherit stdio — output goes straight to the terminal
             stdin=sys.stdin,
