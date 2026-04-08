@@ -4,6 +4,7 @@ This module provides atomic file write operations to prevent partial/corrupt
 files on crash or interruption. All writes use temp-file + atomic replace.
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -95,10 +96,8 @@ def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None
     except Exception:
         # Clean up temp file on any error
         if tmp_path is not None:
-            try:
+            with contextlib.suppress(Exception):
                 tmp_path.unlink(missing_ok=True)
-            except Exception:
-                pass
         raise
 
 
@@ -130,10 +129,8 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
 
     except Exception:
         if tmp_path is not None:
-            try:
+            with contextlib.suppress(Exception):
                 tmp_path.unlink(missing_ok=True)
-            except Exception:
-                pass
         raise
 
 
