@@ -77,6 +77,20 @@ class TUIMessageBridge:
         self._running = False
         if self._stop_event:
             self._stop_event.set()
+        
+        # Drain queue before cancelling to avoid dropping in-flight messages
+        try:
+            from code_puppy.messaging import get_global_queue
+
+            queue = get_global_queue()
+            # Wait for queue to drain with a short timeout (max 2 seconds)
+            import time
+            start = time.time()
+            while not queue.is_empty() and (time.time() - start) < 2.0:
+                time.sleep(0.05)
+        except Exception:
+            pass  # Queue not available or error — continue with shutdown
+        
         if self._task:
             self._task.cancel()
             self._task = None
