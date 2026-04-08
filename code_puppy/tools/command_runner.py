@@ -48,6 +48,9 @@ from code_puppy.tools.common import generate_group_id, get_user_approval_async
 from code_puppy.tools.subagent_context import is_subagent
 from code_puppy.concurrency_limits import ToolCallsLimiter
 
+# Absolute timeout for shell commands (seconds)
+ABSOLUTE_TIMEOUT_SECONDS = 270
+
 # Maximum line length for shell command output to prevent massive token usage
 # This helps avoid exceeding model context limits when commands produce very long lines
 MAX_LINE_LENGTH = 256
@@ -859,8 +862,6 @@ def run_shell_command_streaming(
 
     start_time = time.time()
     last_output_time = [start_time]
-
-    ABSOLUTE_TIMEOUT_SECONDS = 270
 
     stdout_lines = deque(maxlen=256)
     stderr_lines = deque(maxlen=256)
