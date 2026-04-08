@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/command_line/session_commands.py
-# hypothesis_version: 6.151.11
-
-[100, '/autosave_load', '/compact', '/dump_context <name>', '/load_context <name>', '/session [id|new]', '/truncate <N>', '__AUTOSAVE_LOAD__', 'autosave_load', 'compact', 'dump_context', 'id', 'load_context', 'new', 'resume', 's', 'session', 'truncate', 'truncation', 'via summarization']

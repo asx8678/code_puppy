@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/agents/subagent_stream_handler.py
-# hypothesis_version: 6.151.11
-
-['args_delta', 'content', 'content_delta', 'delta_type', 'index', 'next_part_kind', 'part_delta', 'part_end', 'part_start', 'part_type', 'running', 'thinking', 'tool_call_id', 'tool_calling', 'tool_name', 'tool_name_delta']

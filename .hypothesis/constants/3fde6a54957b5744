@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/tools/browser/browser_screenshot.py
-# hypothesis_version: 6.151.11
-
-['%Y%m%d_%H%M%S_%f', '(not saved)', 'Screenshot failed', 'browser_screenshot', 'element_selector', 'error', 'full_page', 'image/png', 'screenshot_bytes', 'screenshot_path', 'success', 'target', 'timestamp', 'viewport', 'wb']

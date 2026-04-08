@@ -58,11 +58,21 @@ def _create_loader_builtin(plugin_name: str, module_name: str) -> Callable:
     return _load
 
 
-def _create_loader_user(plugin_name: str, callbacks_file: Path) -> Callable:
+def _create_loader_user(
+    plugin_name: str,
+    callbacks_file: Path,
+    base_dir: Path | None = None,
+) -> Callable:
     """Create a lazy loader function for a user plugin.
 
     SECURITY: User plugins execute with full system privileges via exec_module().
     A malicious plugin can perform any action the user account can perform.
+
+    Args:
+        plugin_name: Name of the plugin.
+        callbacks_file: Path to the register_callbacks.py file.
+        base_dir: Optional base directory for path traversal protection.
+                  Defaults to ~/.code_puppy/plugins if not provided.
     """
 
     def _load():
@@ -90,6 +100,20 @@ def _create_loader_user(plugin_name: str, callbacks_file: Path) -> Callable:
                         f"Add to allowed_user_plugins config to enable."
                     )
                     return None
+
+            # SECURITY: Verify the plugin file resolves within the expected plugins directory
+            expected_base = (base_dir or Path.home() / ".code_puppy" / "plugins").resolve()
+            try:
+                callbacks_file.resolve().relative_to(expected_base)
+            except ValueError:
+                logger.error(
+                    "SECURITY: User plugin '%s' resolves to '%s' which is outside expected "
+                    "plugin directory '%s'. Refusing to load.",
+                    plugin_name,
+                    callbacks_file,
+                    expected_base,
+                )
+                return None
 
             # SECURITY WARNING: Loading user plugin with full system privileges
             logger.warning(
@@ -378,7 +402,9 @@ def load_plugin_callbacks() -> dict[str, list[str]]:
     user_loaded = []
     for plugin_name, phases in user_discovered:
         callbacks_file = USER_PLUGINS_DIR / plugin_name / "register_callbacks.py"
-        load_func = _create_loader_user(plugin_name, callbacks_file)
+        load_func = _create_loader_user(
+            plugin_name, callbacks_file, base_dir=USER_PLUGINS_DIR
+        )
 
         # Register this plugin for lazy loading on each of its phases
         for phase in phases:

@@ -367,9 +367,20 @@ class TestCreateLoaders:
             assert result is None
             assert "Failed to lazy-load built-in plugin" in caplog.text
 
-    def test_create_loader_user_success(self, tmp_path):
+    def test_create_loader_user_success(self, tmp_path, monkeypatch):
         """Test successful user plugin lazy loader."""
-        callbacks_file = tmp_path / "register_callbacks.py"
+        # Set up a fake home directory so the path validation passes
+        fake_home = tmp_path / "fake_home"
+        fake_home.mkdir()
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+
+        # Create the expected plugins directory structure
+        plugins_dir = fake_home / ".code_puppy" / "plugins"
+        plugins_dir.mkdir(parents=True)
+
+        plugin_dir = plugins_dir / "my_user_plugin"
+        plugin_dir.mkdir()
+        callbacks_file = plugin_dir / "register_callbacks.py"
         callbacks_file.write_text("# User plugin")
 
         loader = _create_loader_user("my_user_plugin", callbacks_file)
@@ -379,6 +390,10 @@ class TestCreateLoaders:
         mock_module = MagicMock()
 
         with (
+            patch(
+                "code_puppy.config.get_value",
+                side_effect=lambda key: True if key == "enable_user_plugins" else None,
+            ),
             patch(
                 "code_puppy.plugins.importlib.util.spec_from_file_location",
                 return_value=mock_spec,
@@ -391,16 +406,33 @@ class TestCreateLoaders:
             result = loader()
             assert result is mock_module
 
-    def test_create_loader_user_spec_is_none(self, tmp_path, caplog):
+    def test_create_loader_user_spec_is_none(self, tmp_path, caplog, monkeypatch):
         """Test user loader handles spec being None."""
-        callbacks_file = tmp_path / "register_callbacks.py"
+        # Set up a fake home directory so the path validation passes
+        fake_home = tmp_path / "fake_home"
+        fake_home.mkdir()
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+
+        # Create the expected plugins directory structure
+        plugins_dir = fake_home / ".code_puppy" / "plugins"
+        plugins_dir.mkdir(parents=True)
+
+        plugin_dir = plugins_dir / "bad_plugin"
+        plugin_dir.mkdir()
+        callbacks_file = plugin_dir / "register_callbacks.py"
         callbacks_file.write_text("# User plugin")
 
         loader = _create_loader_user("bad_plugin", callbacks_file)
 
-        with patch(
-            "code_puppy.plugins.importlib.util.spec_from_file_location",
-            return_value=None,
+        with (
+            patch(
+                "code_puppy.config.get_value",
+                side_effect=lambda key: True if key == "enable_user_plugins" else None,
+            ),
+            patch(
+                "code_puppy.plugins.importlib.util.spec_from_file_location",
+                return_value=None,
+            ),
         ):
             result = loader()
             assert result is None

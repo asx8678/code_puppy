@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/agents/agent_code_puppy.py
-# hypothesis_version: 6.151.11
-
-['Code-Puppy 🐶', 'activate_skill', 'ask_user_question', 'code-puppy', 'create_file', 'delete_file', 'delete_snippet', 'grep', 'invoke_agent', 'list_agents', 'list_files', 'loop_rule', 'pre_tool_rule', 'read_file', 'replace_in_file']

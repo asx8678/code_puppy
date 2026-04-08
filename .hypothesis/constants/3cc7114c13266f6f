@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/code_context/models.py
-# hypothesis_version: 6.151.11
-
-[0.0, 'children', 'class', 'content', 'docstring', 'end_col', 'end_line', 'enum', 'error_message', 'errors', 'extraction_time_ms', 'file_path', 'file_size', 'function', 'has_errors', 'import', 'interface', 'kind', 'language', 'method', 'name', 'num_lines', 'num_tokens', 'outline', 'parent', 'parse_time_ms', 'start_col', 'start_line', 'struct', 'success', 'symbols', 'trait', 'unknown']

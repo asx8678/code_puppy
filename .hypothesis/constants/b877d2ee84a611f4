@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/error_classifier/builtins.py
-# hypothesis_version: 6.151.11
-
-['Access Forbidden', 'Account Quota', 'Client Error', 'Connection Failed', 'File Not Found', 'Interrupted', 'Invalid Value', 'Is a Directory', 'Not a Directory', 'Permission Denied', 'Rate Limited', 'Request Timeout', 'Server Error', 'Timeout', 'Type Error', 'Unauthorized', 'forbidden|403', 'timeout|timed out']

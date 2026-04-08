@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/tools/browser/terminal_command_tools.py
-# hypothesis_version: 6.151.11
-
-[0.1, 0.15, 30.0, 100, 500, 1000, '#terminal', '+', '.xterm', '.xterm-screen', '.xterm-viewport', 'Alt', 'Control', 'Enter', 'Meta', 'Shift', 'alt', 'any', 'cmd', 'command', 'control', 'ctrl', 'error', 'image/png', 'keys_sent', 'line_count', 'matched', 'media_type', 'meta', 'method', 'modifiers', 'output', 'repeat_count', 'screenshot_path', 'shift', 'success', 'terminal_run_command', 'terminal_send_keys', 'terminal_wait_output', 'textarea']

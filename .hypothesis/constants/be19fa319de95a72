@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/tools/browser/browser_interactions.py
-# hypothesis_version: 6.151.11
-
-[100, 10000, 'action', 'browser_check', 'browser_click', 'browser_double_click', 'browser_get_text', 'browser_get_value', 'browser_hover', 'browser_set_text', 'browser_uncheck', 'button', 'check', 'double_click', 'error', 'force', 'hover', 'left', 'modifiers', 'selection', 'selector', 'set_text', 'success', 'text', 'timeout', 'uncheck', 'unknown', 'value', 'visible']

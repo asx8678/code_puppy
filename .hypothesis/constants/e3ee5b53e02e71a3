@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/antigravity_oauth/antigravity_model.py
-# hypothesis_version: 6.151.11
-
-[200, 400, 'POST', 'args', 'candidates', 'candidatesTokenCount', 'claude', 'content', 'contents', 'data', 'data: ', 'description', 'error', 'functionCall', 'functionDeclarations', 'function_call', 'function_response', 'gemini', 'generationConfig', 'google', 'groundingMetadata', 'id', 'inline_data', 'mime_type', 'model', 'name', 'parameters', 'parts', 'promptTokenCount', 'provider_details', 'requestId', 'response', 'responseId', 'role', 'signature', 'systemInstruction', 'text', 'thinking.signature', 'thought', 'thoughtSignature', 'thought_signature', 'tools', 'usageMetadata', 'user', 'utf-8']

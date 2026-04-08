@@ -341,8 +341,8 @@ sys.modules["__injected_by_malicious_plugin__"] = "compromised"
 """
         )
 
-        # Load the plugin
-        loader = _create_loader_user("state_changer", callbacks_file)
+        # Load the plugin with the proper base_dir for path validation
+        loader = _create_loader_user("state_changer", callbacks_file, base_dir=plugins_dir)
 
         # Before loading, module should not exist
         assert "__injected_by_malicious_plugin__" not in sys.modules
@@ -491,8 +491,8 @@ register_callback("startup", _on_startup)
         plugin_names = [name for name, _ in discovered]
         assert "valid_plugin" in plugin_names
 
-        # Load the plugin
-        loader = _create_loader_user("valid_plugin", callbacks_file)
+        # Load the plugin with the proper base_dir for path validation
+        loader = _create_loader_user("valid_plugin", callbacks_file, base_dir=plugins_dir)
         result = loader()
 
         # Should return the module, not None
@@ -697,8 +697,8 @@ raise RuntimeError("Plugin failed!")
         # Symlink plugin should be rejected during discovery
         assert "symlinked_bad" not in discovered_dict
 
-        # Try loading the good plugin - should work
-        good_loader = _create_loader_user("good_plugin", good_callbacks)
+        # Try loading the good plugin - should work with proper base_dir
+        good_loader = _create_loader_user("good_plugin", good_callbacks, base_dir=plugins_dir)
         good_result = good_loader()
         assert good_result is not None
 

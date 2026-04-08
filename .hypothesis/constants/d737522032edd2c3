@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/agents/agent_code_scout.py
-# hypothesis_version: 6.151.11
-
-['Code Scout 🔭', 'code-scout', 'grep', 'invoke_agent', 'list_files', 'read_file', 'turbo_execute']

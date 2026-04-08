@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/scheduler/executor.py
-# hypothesis_version: 6.151.11
-
-[448, '--agent', '--model', '-p', '.', 'a', 'code-puppy', 'failed', 'running', 'success', 'win32']
