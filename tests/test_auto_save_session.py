@@ -9,6 +9,28 @@ from code_puppy import config as cp_config
 from code_puppy.session_storage import SessionMetadata
 
 
+def _clear_config_caches():
+    """Helper to clear config caches for functions that use @cache."""
+    cached_functions = [
+        "get_auto_save_session",
+        "get_max_saved_sessions",
+        "get_puppy_name",
+        "get_owner_name",
+        "get_allow_recursion",
+    ]
+    for func_name in cached_functions:
+        func = getattr(cp_config, func_name, None)
+        if func and hasattr(func, "cache_clear"):
+            func.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def clear_config_cache():
+    """Clear config caches before each test to prevent cache pollution."""
+    _clear_config_caches()
+    yield
+
+
 @pytest.fixture
 def mock_config_paths(monkeypatch):
     mock_home = "/mock_home"
@@ -46,6 +68,7 @@ class TestAutoSaveSession:
         true_values = ["true", "1", "YES", "on"]
         for val in true_values:
             mock_get_value.reset_mock()
+            _clear_config_caches()  # Clear cache before each iteration
             mock_get_value.return_value = val
             assert cp_config.get_auto_save_session() is True, (
                 f"Failed for config value: {val}"
@@ -57,6 +80,7 @@ class TestAutoSaveSession:
         false_values = ["false", "0", "NO", "off", "invalid"]
         for val in false_values:
             mock_get_value.reset_mock()
+            _clear_config_caches()  # Clear cache before each iteration
             mock_get_value.return_value = val
             assert cp_config.get_auto_save_session() is False, (
                 f"Failed for config value: {val}"
@@ -104,6 +128,7 @@ class TestMaxSavedSessions:
         invalid_values = ["invalid", "not_a_number", "", None]
         for val in invalid_values:
             mock_get_value.reset_mock()
+            _clear_config_caches()  # Clear cache before each iteration
             mock_get_value.return_value = val
             assert cp_config.get_max_saved_sessions() == 20  # Default value
             mock_get_value.assert_called_once_with("max_saved_sessions")
@@ -136,14 +161,12 @@ class TestAutoSaveSessionFunctionality:
     @patch("code_puppy.messaging.emit_info")
     @patch("code_puppy.config.save_session_async")
     @patch("code_puppy.config.get_current_autosave_session_name")
-    @patch("code_puppy.config.datetime.datetime")
     @patch("code_puppy.config.get_auto_save_session")
     @patch("code_puppy.agents.agent_manager.get_current_agent")
     def test_auto_save_session_if_enabled_success(
         self,
         mock_get_agent,
         mock_get_auto_save,
-        mock_datetime,
         mock_get_session_name,
         mock_save_session_async,
         mock_emit_info,
@@ -151,6 +174,7 @@ class TestAutoSaveSessionFunctionality:
         mock_config_paths,
     ):
         mock_get_auto_save.return_value = True
+        # Return a fixed session name - this should match the format
         mock_get_session_name.return_value = "auto_session_20240101_010101"
 
         history = ["hey", "listen"]
@@ -159,12 +183,45 @@ class TestAutoSaveSessionFunctionality:
         mock_agent.estimate_tokens_for_message.return_value = 3
         mock_get_agent.return_value = mock_agent
 
+        # Mock datetime.datetime at the built-in level, restoring immediately after
+        import datetime
+        import sys
+
         fake_now = MagicMock()
         fake_now.strftime.return_value = "20240101_010101"
         fake_now.isoformat.return_value = "2024-01-01T01:01:01"
-        mock_datetime.now.return_value = fake_now
 
-        result = cp_config.auto_save_session_if_enabled()
+        # Save original datetime.datetime class
+        original_datetime_class = datetime.datetime
+
+        # Create mock datetime class
+        class MockDatetimeClass:
+            @classmethod
+            def now(cls):
+                return fake_now
+
+            def __call__(self, *args, **kwargs):
+                return original_datetime_class(*args, **kwargs)
+
+        # Replace datetime.datetime temporarily
+        datetime.datetime = MockDatetimeClass()
+
+        # Also mock at module level in config for the local import
+        original_config_datetime = getattr(cp_config, "datetime", None)
+        fake_mod = MagicMock()
+        fake_mod.datetime.now.return_value = fake_now
+        fake_mod.datetime.return_value = fake_now
+        cp_config.datetime = fake_mod
+
+        try:
+            result = cp_config.auto_save_session_if_enabled()
+        finally:
+            # Restore original datetime.datetime
+            datetime.datetime = original_datetime_class
+            if original_config_datetime:
+                cp_config.datetime = original_config_datetime
+            elif hasattr(cp_config, "datetime"):
+                delattr(cp_config, "datetime")
 
         assert result is True
         mock_save_session_async.assert_called_once()
