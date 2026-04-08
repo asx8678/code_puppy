@@ -68,7 +68,7 @@ class TestMessageQueueBasic:
         queue = MessageQueue()
         assert queue._running is False
         assert queue._has_active_renderer is False
-        assert queue._startup_buffer == []
+        assert len(queue._startup_buffer) == 0
         assert queue._listeners == []
 
     def test_queue_initialization_custom_maxsize(self):
@@ -396,7 +396,7 @@ class TestMessageQueueLifecycle:
         queue = MessageQueue()
         assert queue._running is False
         assert queue._has_active_renderer is False
-        assert queue._startup_buffer == []
+        assert len(queue._startup_buffer) == 0
         assert queue._thread is None
 
     def test_buffer_clears_on_access(self):
@@ -417,7 +417,7 @@ class TestMessageQueueLifecycle:
 
         # Clear it
         queue.clear_startup_buffer()
-        assert queue._startup_buffer == []
+        assert len(queue._startup_buffer) == 0
 
     def test_renderer_state_affects_buffering(self):
         """Test that renderer state controls message destination."""
