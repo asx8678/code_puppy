@@ -6,6 +6,7 @@ import re as _re
 import secrets
 import sys
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable
 
@@ -545,6 +546,7 @@ EXTENSION_TO_LEXER_NAME = {
 }
 
 
+@lru_cache(maxsize=64)
 def _get_lexer_for_extension(extension: str):
     """Get the appropriate Pygments lexer for a file extension.
 
@@ -571,6 +573,7 @@ def _get_lexer_for_extension(extension: str):
         return TextLexer()
 
 
+@lru_cache(maxsize=256)
 def _get_token_color(token_type) -> str:
     """Get color for a token type from our Monokai scheme.
 
@@ -822,17 +825,35 @@ async def arrow_select_async(
         KeyboardInterrupt: If user cancels with Ctrl-C
     """
     import html
+    import textwrap
 
     selected_index = [0]  # Mutable container for selected index
     result = [None]  # Mutable container for result
 
+    # Hoist invariant escapes outside the closure (CM-M4 fix)
+    # These don't change during arrow key navigation, so escape once upfront
+    safe_message = html.escape(message)
+    safe_choices = [html.escape(choice) for choice in choices]
+    header_lines = [f"<b>{safe_message}</b>", ""]
+    footer_lines = [
+        "",
+        "<ansicyan>(Use ↑↓ or Ctrl+P/N to select, Enter to confirm)</ansicyan>",
+    ]
+
+    # Pre-compute static preview borders
+    box_width = 60
+    border_top = (
+        "<ansiyellow>┌─ Preview "
+        + "─" * (box_width - 10)
+        + "┐</ansiyellow>"
+    )
+    border_bottom = "<ansiyellow>└" + "─" * box_width + "┘</ansiyellow>"
+
     def get_formatted_text():
         """Generate the formatted text for display."""
-        # Escape XML special characters to prevent parsing errors
-        safe_message = html.escape(message)
-        lines = [f"<b>{safe_message}</b>", ""]
-        for i, choice in enumerate(choices):
-            safe_choice = html.escape(choice)
+        # Build dynamic lines (selected index can change)
+        lines = header_lines.copy()
+        for i, safe_choice in enumerate(safe_choices):
             if i == selected_index[0]:
                 lines.append(f"<ansigreen>❯ {safe_choice}</ansigreen>")
             else:
@@ -843,17 +864,6 @@ async def arrow_select_async(
         if preview_callback is not None:
             preview_text = preview_callback(selected_index[0])
             if preview_text:
-                import textwrap
-
-                # Box width (excluding borders and padding)
-                box_width = 60
-                border_top = (
-                    "<ansiyellow>┌─ Preview "
-                    + "─" * (box_width - 10)
-                    + "┐</ansiyellow>"
-                )
-                border_bottom = "<ansiyellow>└" + "─" * box_width + "┘</ansiyellow>"
-
                 lines.append(border_top)
 
                 # Wrap text to fit within box width (minus padding)
@@ -872,9 +882,7 @@ async def arrow_select_async(
                 lines.append(border_bottom)
                 lines.append("")
 
-        lines.append(
-            "<ansicyan>(Use ↑↓ or Ctrl+P/N to select, Enter to confirm)</ansicyan>"
-        )
+        lines.extend(footer_lines)
         return HTML("\n".join(lines))
 
     # Key bindings
@@ -942,7 +950,22 @@ def arrow_select(
 
     Raises:
         KeyboardInterrupt: If user cancels with Ctrl-C
+        RuntimeError: If called from within an active async event loop (CM-M5 fix)
     """
+    # Detect if called from active event loop - require async path for performance
+    try:
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            raise RuntimeError(
+                "arrow_select() called from within an active event loop. "
+                "Use arrow_select_async() for async contexts to avoid thread hop overhead."
+            )
+    except RuntimeError:
+        raise  # Re-raise the one we just created
+    except Exception:
+        # No running loop, proceed with sync wrapper
+        pass
+
     return run_async_sync(arrow_select_async(message, choices, preview_callback))
 
 
@@ -968,7 +991,24 @@ def get_user_approval(
         Tuple of (confirmed: bool, user_feedback: str | None)
         - confirmed: True if approved, False if rejected
         - user_feedback: Optional feedback text if user provided it
+
+    Raises:
+        RuntimeError: If called from within an active async event loop (CM-M5 fix)
     """
+    # Detect if called from active event loop - require async path for performance
+    try:
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            raise RuntimeError(
+                "get_user_approval() called from within an active event loop. "
+                "Use get_user_approval_async() for async contexts to avoid thread hop overhead."
+            )
+    except RuntimeError:
+        raise  # Re-raise the one we just created
+    except Exception:
+        # No running loop, proceed with sync wrapper
+        pass
+
     return run_async_sync(
         get_user_approval_async(title, content, preview, border_style, puppy_name)
     )
