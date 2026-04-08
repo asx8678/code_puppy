@@ -363,22 +363,6 @@ class BaseAgent(ABC, AgentPromptMixin):
         self._state.model_name_cache = pinned
         return self._state.model_name_cache
 
-    def _clean_binaries(self, messages: list[ModelMessage]) -> list[ModelMessage]:
-        """Remove BinaryContent items from message parts.
-
-        Note: This mutates the messages in-place by modifying part.content.
-        The return value is the same list for API consistency.
-        """
-        for message in messages:
-            for part in message.parts:
-                if hasattr(part, "content") and isinstance(part.content, list):
-                    part.content = [
-                        item
-                        for item in part.content
-                        if not isinstance(item, BinaryContent)
-                    ]
-        return messages
-
     def ensure_history_ends_with_request(
         self, messages: list[ModelMessage]
     ) -> list[ModelMessage]:
