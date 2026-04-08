@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Test script to verify file permission prompts work correctly."""
 
+import asyncio
 import os
 import sys
 import tempfile
@@ -110,7 +111,7 @@ class TestFilePermissions(unittest.TestCase):
         mock_permission.return_value = [False]
 
         context = MagicMock()
-        result = write_to_file(context, self.test_file, "New content", True)
+        result = asyncio.run(write_to_file(context, self.test_file, "New content", True))
 
         self.assertFalse(result["success"])
         self.assertIn("USER REJECTED", result["message"])
@@ -124,7 +125,7 @@ class TestFilePermissions(unittest.TestCase):
         mock_permission.return_value = [True]
 
         context = MagicMock()
-        result = write_to_file(context, self.test_file, "New content", True)
+        result = asyncio.run(write_to_file(context, self.test_file, "New content", True))
 
         self.assertTrue(result["success"])
         self.assertTrue(result["changed"])
@@ -140,7 +141,7 @@ class TestFilePermissions(unittest.TestCase):
         mock_yolo.return_value = True
 
         context = MagicMock()
-        result = write_to_file(context, self.test_file, "Yolo content", True)
+        result = asyncio.run(write_to_file(context, self.test_file, "Yolo content", True))
 
         self.assertTrue(result["success"])
         self.assertTrue(result["changed"])
@@ -156,7 +157,7 @@ class TestFilePermissions(unittest.TestCase):
         mock_permission.return_value = [False]
 
         context = MagicMock()
-        result = delete_snippet_from_file(context, self.test_file, "Hello, world!")
+        result = asyncio.run(delete_snippet_from_file(context, self.test_file, "Hello, world!"))
 
         self.assertFalse(result["success"])
         self.assertIn("USER REJECTED", result["message"])
@@ -171,7 +172,7 @@ class TestFilePermissions(unittest.TestCase):
 
         context = MagicMock()
         replacements = [{"old_str": "world", "new_str": "universe"}]
-        result = replace_in_file(context, self.test_file, replacements)
+        result = asyncio.run(replace_in_file(context, self.test_file, replacements))
 
         self.assertFalse(result["success"])
         self.assertIn("USER REJECTED", result["message"])
@@ -185,7 +186,7 @@ class TestFilePermissions(unittest.TestCase):
         mock_permission.return_value = [False]
 
         context = MagicMock()
-        result = _delete_file(context, self.test_file)
+        result = asyncio.run(_delete_file(context, self.test_file))
 
         self.assertFalse(result["success"])
         self.assertIn("USER REJECTED", result["message"])

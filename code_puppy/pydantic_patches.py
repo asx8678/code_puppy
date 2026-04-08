@@ -280,8 +280,6 @@ def patch_tool_call_callbacks() -> None:
                 from code_puppy import callbacks
                 from code_puppy.run_context import (
                     get_current_run_context,
-                    RunContext,
-                    RunContextManager,
                 )
                 from code_puppy.messaging import emit_warning
 
