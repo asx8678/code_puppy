@@ -6,7 +6,6 @@ Consolidates permission logic from shell_safety and file_permission_handler.
 Inspired by Gemini CLI's PolicyEngine.
 """
 
-import bisect
 import concurrent.futures
 import json
 import logging
@@ -82,16 +81,11 @@ class PolicyEngine:
         self._rules: list[PolicyRule] = []
         self._default_decision = default_decision
 
-    def _rule_priority_key(self, rule: PolicyRule) -> int:
-        """Return negative priority for descending sort with bisect."""
-        return -rule.priority
-
     def add_rule(self, rule: PolicyRule) -> None:
-        # Use bisect.insort for O(n) insert vs O(n log n) append+sort
-        bisect.insort(self._rules, rule, key=self._rule_priority_key)
+        self._rules.append(rule)
+        self._rules.sort(key=lambda r: r.priority, reverse=True)
 
     def add_rules(self, rules: list[PolicyRule]) -> None:
-        # For batch insert, extend then sort once is more efficient
         self._rules.extend(rules)
         self._rules.sort(key=lambda r: r.priority, reverse=True)
 
