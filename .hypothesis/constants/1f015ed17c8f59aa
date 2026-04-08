@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/agents/agent_turbo_executor.py
-# hypothesis_version: 6.151.11
-
-[100, 'Turbo Executor 🚀', 'args', 'create_file', 'grep', 'id', 'list_files', 'priority', 'read_file', 'replace_in_file', 'turbo-executor', 'type']

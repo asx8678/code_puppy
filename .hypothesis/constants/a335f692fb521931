@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/turbo_executor/summarizer.py
-# hypothesis_version: 6.151.11
-
-[0.8, 100, 200, 3000, 8000, '### Errors', '(type=', '(type=directory)', '(type=file)', '---', '.', '...', '```', 'content', 'error', 'file_path', 'files', 'line_content', 'line_number', 'matches', 'num_tokens', 'success', 'successful_reads', 'total_files', 'total_matches', 'total_operations', 'unknown', '⏳', '⏸️', '⚠️', '✅', '❌', '📋', '🔍 *No matches found*']

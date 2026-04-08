@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/mcp_/mcp_logs.py
-# hypothesis_version: 6.151.11
-
-[1024, '%Y-%m-%d %H:%M:%S.%f', '*.log*', '-_', '.0123456789', '.log', 'INFO', '_', 'a', 'exists', 'line_count', 'mcp_logs', 'r', 'replace', 'rotated_count', 'size_bytes', 'total_size_bytes', 'utf-8']

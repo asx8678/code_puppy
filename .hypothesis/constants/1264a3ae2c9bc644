@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/mcp_/status_tracker.py
-# hypothesis_version: 6.151.11
-
-[100, 1000, 'Server started', 'Server stopped', 'key', 'last_event_time', 'message', 'metadata', 'metadata_update', 'new_state', 'new_value', 'old_state', 'old_value', 'recent_events_count', 'server_id', 'start_time', 'started', 'state', 'state_change', 'stop_time', 'stopped', 'uptime', 'uptime_seconds']

@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/claude_code_oauth/config.py
-# hypothesis_version: 6.151.11
-
-[180, 448, 8765, 8795, 200000, 1000000, '2023-06-01', 'anthropic_version', 'api_base_url', 'api_key_env_var', 'auth_url', 'callback', 'callback_port_range', 'callback_timeout', 'claude-code-', 'claude-opus-4-6', 'claude_models.json', 'client_id', 'console_redirect_uri', 'http://localhost', 'long_context_length', 'long_context_models', 'prefix', 'redirect_host', 'redirect_path', 'scope', 'token_storage', 'token_url']

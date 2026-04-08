@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/request_cache.py
-# hypothesis_version: 6.151.11
-
-[0.0, 100, 128, 300, '_request_cache', 'content-length', 'current_size', 'enabled', 'evictions', 'header_only_updates', 'hit_rate', 'hits', 'max_size', 'message', 'misses', 'rebuilds_avoided', 'total_requests']

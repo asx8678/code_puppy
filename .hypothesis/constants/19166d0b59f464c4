@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/tools/browser/browser_navigation.py
-# hypothesis_version: 6.151.11
-
-[30000, 'BROWSER GO BACK ⬅️', 'browser_go_back', 'browser_go_forward', 'browser_navigate', 'browser_reload', 'domcontentloaded', 'error', 'requested_url', 'state', 'success', 'title', 'url']

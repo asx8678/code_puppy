@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/tools/browser/browser_workflows.py
-# hypothesis_version: 6.151.11
-
-[448, '*.md', '-', '--', '-{3,}', '.md', 'LIST WORKFLOWS 📋', '[^a-zA-Z0-9\\-_]', '^-+|-+$', 'browser_workflows', 'content', 'count', 'directory', 'error', 'list_workflows', 'modified', 'name', 'path', 'r', 'read_workflow', 'save_workflow', 'size', 'success', 'utf-8', 'w', 'workflow', 'workflows']

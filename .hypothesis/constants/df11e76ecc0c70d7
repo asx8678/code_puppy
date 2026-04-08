@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/scheduler/daemon.py
-# hypothesis_version: 6.151.11
-
-[0.5, 4096, '-m', '.pid_tmp_', '^(\\d+)([smhd])$', 'code_puppy.scheduler', 'cron', 'd', 'daily', 'h', 'hourly', 'interval', 'm', 'r', 's', 'w', 'win32']

@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/messaging/spinner/console_spinner.py
-# hypothesis_version: 6.151.11
-
-[0.05, 0.5, '\x1b[0m', '\x1b[K', 'Windows', '_buffer', 'bold cyan', 'bold white']

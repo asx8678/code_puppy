@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/remember_last_agent/register_callbacks.py
-# hypothesis_version: 6.151.11
-
-['agent_reload', 'clear', 'custom_command', 'custom_command_help', 'last-agent', 'show', 'startup']

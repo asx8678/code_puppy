@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/messaging/subagent_console.py
-# hypothesis_version: 6.151.11
-
-[0.1, 1.0, ' (calling: ', ')', '...', '0', 'AgentState', 'DEFAULT_STYLE', 'Elapsed:', 'Error:', 'Model:', 'No active sub-agents', 'STATUS_STYLES', 'Session:', 'Status:', 'Tokens:', 'Tools:', 'blue', 'bold', 'bold yellow', 'color', 'completed', 'current_tool', 'cyan', 'dim', 'dots', 'dots12', 'emoji', 'error', 'error_message', 'green', 'label', 'magenta', 'red', 'running', 'spinner', 'starting', 'status', 'thinking', 'token_count', 'tool_call_count', 'tool_calling', 'value', 'white', 'yellow', '⏳', '✅', '❌', '🐕', '🐕 ', '🔧', '🚀', '🤔']

@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/turbo_executor/__init__.py
-# hypothesis_version: 6.151.11
-
-['Operation', 'OperationResult', 'OperationType', 'Plan', 'PlanResult', 'PlanStatus', 'TurboOrchestrator', 'quick_summary']

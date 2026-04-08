@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/mcp_/error_isolation.py
-# hypothesis_version: 6.151.11
-
-['401', '403', '429', '500', '501', '502', '503', '504', '505', 'auth', 'authentication', 'bad gateway', 'connection', 'decode', 'dns', 'forbidden', 'gateway timeout', 'internal', 'invalid', 'json', 'limit', 'malformed', 'network', 'parse', 'permission', 'protocol', 'rate', 'rate limit', 'rate_limit', 'refused', 'schema', 'server', 'service unavailable', 'socket', 'ssl', 'throttle', 'timeout', 'too many requests', 'unauthorized', 'unknown', 'unreachable', 'validation']

@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/api/routers/commands.py
-# hypothesis_version: 6.151.11
-
-[30.0, 404, '/', '/autocomplete', '/execute', '/{name}', 'core']

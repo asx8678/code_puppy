@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/antigravity_oauth/config.py
-# hypothesis_version: 6.151.11
-
-[180, 448, 51121, 51150, 200000, 'antigravity-', 'auth_url', 'callback_port_range', 'callback_timeout', 'http://localhost', 'oauth-callback', 'prefix', 'redirect_host', 'redirect_path', 'token_url']

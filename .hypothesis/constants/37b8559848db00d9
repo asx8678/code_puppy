@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/code_explorer/__init__.py
-# hypothesis_version: 6.151.11
-
-['CodeContext', 'CodeExplorer', 'FileOutline', 'SymbolInfo', 'explore_directory', 'format_outline', 'get_code_context', 'get_file_outline']

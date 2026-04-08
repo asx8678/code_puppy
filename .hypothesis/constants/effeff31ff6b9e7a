@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/remember_last_agent/storage.py
-# hypothesis_version: 6.151.11
-
-['.tmp', 'agent_name', 'last_agent.json', 'r', 'utf-8', 'w']

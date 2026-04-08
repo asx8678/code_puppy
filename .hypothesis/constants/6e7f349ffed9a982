@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/plugins/universal_constructor/registry.py
-# hypothesis_version: 6.151.11
-
-['*.py', '.', 'TOOL_META', '_', 'execute', 'namespace', 'run']

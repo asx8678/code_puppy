@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-1vv/code_puppy/session_storage.py
-# hypothesis_version: 6.151.11
-
-[b'CPSESSION\x01', b'MSGPACK\x01', 384, '*.pkl', '.session_hmac_key', '.tmp', 'Return to first page', 'auto_saved', 'autosave', 'class:prompt', 'compacted_hashes', 'file_path', 'json', 'kind', 'message_count', 'messages', 'r', 'session_name', 'timestamp', 'total_tokens', 'unknown size', 'unknown time', 'utf-8', 'w', 'wb', 'xb']
