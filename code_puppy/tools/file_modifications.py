@@ -777,6 +777,7 @@ def register_delete_file(agent):
 
         Shows exactly what content was removed via diff output.
         """
+        file_path = os.path.abspath(file_path)
         # Generate group_id for delete_file tool execution
         group_id = generate_group_id("delete_file", file_path)
         result = await _delete_file(context, file_path, message_group=group_id)
@@ -869,6 +870,7 @@ def register_replace_in_file(agent):
         Each replacement specifies an old_str to find and a new_str to replace it with.
         Replacements are applied sequentially. Prefer this over full file rewrites.
         """
+        file_path = os.path.abspath(file_path)
         group_id = generate_group_id("replace_in_file", file_path)
         # replacements arrive as plain dicts — pass them straight through
         replacements_dict = [
