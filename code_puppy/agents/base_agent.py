@@ -2121,27 +2121,24 @@ class BaseAgent(ABC, AgentPromptMixin):
         result_messages_filtered_empty_thinking = []
         filtered_count = 0
         for msg in self.get_message_history():
-            # Filter out single-part messages that are empty ThinkingParts
-            if len(msg.parts) == 1 and isinstance(msg.parts[0], ThinkingPart):
-                if not msg.parts[0].content:
+            # Single-pass filter: build filtered list and track if any changes
+            original_parts = msg.parts
+            new_parts = []
+            found_empty_thinking = False
+            for p in original_parts:
+                if isinstance(p, ThinkingPart) and not p.content:
+                    found_empty_thinking = True
+                else:
+                    new_parts.append(p)
+
+            if found_empty_thinking:
+                # All parts were empty thinking - filter entire message
+                if not new_parts:
                     filtered_count += 1
                     continue
-            # For multi-part messages, strip empty ThinkingParts but keep the message
-            else:
-                # Single-pass filter: build filtered list and track if any changes in one walk
-                new_parts = []
-                found_empty_thinking = False
-                for p in msg.parts:
-                    if isinstance(p, ThinkingPart) and not p.content:
-                        found_empty_thinking = True
-                    else:
-                        new_parts.append(p)
-
-                if found_empty_thinking:
-                    if not new_parts:
-                        filtered_count += 1
-                        continue
-                    msg = dataclasses.replace(msg, parts=new_parts)
+                # Partial filter - rebuild message with remaining parts
+                msg = dataclasses.replace(msg, parts=new_parts)
+            # else: no changes needed, use msg as-is (parts identical)
             result_messages_filtered_empty_thinking.append(msg)
         self.set_message_history(result_messages_filtered_empty_thinking)
 
