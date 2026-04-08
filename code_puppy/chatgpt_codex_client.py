@@ -145,15 +145,14 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         except Exception:
             pass
 
-        # Fallback to private attr if necessary - use hasattr + direct access
-        # This is faster than getattr() with default for checking attribute existence
-        if hasattr(request, "_content"):
-            try:
-                content = request._content
-                if content:
-                    return content
-            except Exception:
-                pass
+        # Fallback to private attr if necessary - use getattr with exception handling
+        # to gracefully handle property access failures (hasattr can raise if property raises)
+        try:
+            content = getattr(request, "_content", None)
+            if content is not None:
+                return content
+        except Exception:
+            pass
 
         return None
 
