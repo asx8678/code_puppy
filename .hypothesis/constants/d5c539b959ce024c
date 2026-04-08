@@ -1,8 +1,0 @@
-<<<<<<< HEAD
-# file: /Users/adam2/projects/code_puppy-tpkw/code_puppy/hook_engine/engine.py
-=======
-# file: /Users/adam2/projects/code_puppy-yttp/code_puppy/hook_engine/engine.py
->>>>>>> feature/code_puppy-yttp
-# hypothesis_version: 6.151.11
-
-[0.0, 1000, 'No registry loaded', 'error', 'total_hooks']

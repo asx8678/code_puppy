@@ -1,8 +1,0 @@
-<<<<<<< HEAD
-# file: /Users/adam2/projects/code_puppy-tpkw/code_puppy/tools/command_runner.py
-=======
-# file: /Users/adam2/projects/code_puppy-yttp/code_puppy/tools/command_runner.py
->>>>>>> feature/code_puppy-yttp
-# hypothesis_version: 6.151.11
-
-[0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.6, 1.0, -256, 256, 270, 1024, 8192, '\x18', '$ ', '... [truncated]', '.log', '/F', '/PID', '/T', '<\\s*\\(', '>\\s*\\(', 'Shell Command', '\\$\\([^)]*\\)', '\\d*>&\\d*\\s*\\d*>&', '\\x00', '`[^`]*`', 'absolute', 'bold green', 'bold white', 'bold yellow', 'command', 'critical', 'dim', 'dim cyan', 'dim white', 'error', 'execution_time', 'exit_code', 'high', 'inactivity', 'isatty', 'low', 'medium', 'none', 'replace', 'setsid', 'shell_bg_', 'shell_cmd_', 'shell_command', 'stderr', 'stdin', 'stdout', 'success', 'taskkill', 'timeout', 'unknown', 'utf-8', 'w', 'win', '\x7f']

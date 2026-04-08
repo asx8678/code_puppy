@@ -1,5 +1,6 @@
 # file_operations.py
 
+import functools
 import os
 import shutil
 import subprocess
@@ -152,6 +153,38 @@ def would_match_directory(pattern: str, directory: str) -> bool:
             return True
 
     return False
+
+
+@functools.lru_cache(maxsize=512)
+def get_file_icon(file_path: str) -> str:
+    """Return an emoji icon based on file extension."""
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext in [".py", ".pyw"]:
+        return "\U0001f40d"
+    elif ext in [".js", ".jsx", ".ts", ".tsx"]:
+        return "\U0001f4dc"
+    elif ext in [".html", ".htm", ".xml"]:
+        return "\U0001f310"
+    elif ext in [".css", ".scss", ".sass"]:
+        return "\U0001f3a8"
+    elif ext in [".md", ".markdown", ".rst"]:
+        return "\U0001f4dd"
+    elif ext in [".json", ".yaml", ".yml", ".toml"]:
+        return "\u2699\ufe0f"
+    elif ext in [".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp"]:
+        return "\U0001f5bc\ufe0f"
+    elif ext in [".mp3", ".wav", ".ogg", ".flac"]:
+        return "\U0001f3b5"
+    elif ext in [".mp4", ".avi", ".mov", ".webm"]:
+        return "\U0001f3ac"
+    elif ext in [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"]:
+        return "\U0001f4c4"
+    elif ext in [".zip", ".tar", ".gz", ".rar", ".7z"]:
+        return "\U0001f4e6"
+    elif ext in [".exe", ".dll", ".so", ".dylib"]:
+        return "\u26a1"
+    else:
+        return "\U0001f4c4"
 
 
 async def _list_files(
@@ -364,35 +397,6 @@ async def _list_files(
         # Clean up the temporary ignore file
         if ignore_file and os.path.exists(ignore_file):
             os.unlink(ignore_file)
-
-    def get_file_icon(file_path):
-        ext = os.path.splitext(file_path)[1].lower()
-        if ext in [".py", ".pyw"]:
-            return "\U0001f40d"
-        elif ext in [".js", ".jsx", ".ts", ".tsx"]:
-            return "\U0001f4dc"
-        elif ext in [".html", ".htm", ".xml"]:
-            return "\U0001f310"
-        elif ext in [".css", ".scss", ".sass"]:
-            return "\U0001f3a8"
-        elif ext in [".md", ".markdown", ".rst"]:
-            return "\U0001f4dd"
-        elif ext in [".json", ".yaml", ".yml", ".toml"]:
-            return "\u2699\ufe0f"
-        elif ext in [".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp"]:
-            return "\U0001f5bc\ufe0f"
-        elif ext in [".mp3", ".wav", ".ogg", ".flac"]:
-            return "\U0001f3b5"
-        elif ext in [".mp4", ".avi", ".mov", ".webm"]:
-            return "\U0001f3ac"
-        elif ext in [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"]:
-            return "\U0001f4c4"
-        elif ext in [".zip", ".tar", ".gz", ".rar", ".7z"]:
-            return "\U0001f4e6"
-        elif ext in [".exe", ".dll", ".so", ".dylib"]:
-            return "\u26a1"
-        else:
-            return "\U0001f4c4"
 
     # Count items in results - single pass for performance
     dir_count = 0

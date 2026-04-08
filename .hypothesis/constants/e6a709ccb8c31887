@@ -1,8 +1,0 @@
-<<<<<<< HEAD
-# file: /Users/adam2/projects/code_puppy-tpkw/code_puppy/token_utils.py
-=======
-# file: /Users/adam2/projects/code_puppy-yttp/code_puppy/token_utils.py
->>>>>>> feature/code_puppy-yttp
-# hypothesis_version: 6.151.11
-
-[0.3, 4.0, 4.5, 100, 500, 512, 2000]
