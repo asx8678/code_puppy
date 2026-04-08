@@ -568,7 +568,7 @@ class TestRunShellCommandAsync:
             )
 
             assert result.success is False
-            assert "blocked" in result.error.lower() or "Dangerous" in result.error
+            assert "blocked" in result.error.lower() or "rm -rf usage detected" in result.error
 
 
 class TestKeyboardListeners:
