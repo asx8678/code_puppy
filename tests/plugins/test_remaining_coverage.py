@@ -934,7 +934,8 @@ async def bar(x):
     def test_check_dangerous_patterns_dangerous_import(self):
         """Line 266: dangerous import detected."""
         result = check_dangerous_patterns("import subprocess")
-        assert result.valid  # warnings, not errors
+        assert not result.valid  # blocking errors, not just warnings
+        assert len(result.errors) > 0
         assert len(result.warnings) > 0
 
     def test_check_dangerous_patterns_dangerous_call(self):
