@@ -49,6 +49,30 @@ from code_puppy.tools.common import generate_group_id, get_user_approval_async
 from code_puppy.tools.subagent_context import is_subagent
 from code_puppy.concurrency_limits import ToolCallsLimiter
 
+# Hoisted lazy imports - imported at module top for performance (CR-M4)
+# These were previously imported inline at 4 different sites
+from code_puppy.security import get_security_boundary
+from code_puppy.config import get_yolo_mode, get_puppy_name
+
+# Cache for spinner module functions (lazy-loaded on first use)
+_spinner_module_cache: dict[str, Callable | None] = {
+    "pause_all_spinners": None,
+    "resume_all_spinners": None,
+}
+
+
+def _get_spinner_func(name: str) -> Callable | None:
+    """Get a spinner function from the spinner module, with caching."""
+    if _spinner_module_cache[name] is None:
+        try:
+            from code_puppy.messaging import spinner
+            _spinner_module_cache["pause_all_spinners"] = spinner.pause_all_spinners
+            _spinner_module_cache["resume_all_spinners"] = spinner.resume_all_spinners
+        except ImportError:
+            return None
+    return _spinner_module_cache[name]
+
+
 # Absolute timeout for shell commands (seconds)
 ABSOLUTE_TIMEOUT_SECONDS = 270
 
@@ -94,12 +118,9 @@ DANGEROUS_PATTERNS = [
 ]
 
 # Characters that are NEVER allowed in commands (control characters, etc.)
-# Using generator expression for memory efficiency when building the forbidden set
-FORBIDDEN_CHARS = set(
-    chr(i)
-    for i in range(32)
-    if i not in (9, 10, 13)  # Allow tab, LF, CR
-) | {"\x7f"}  # Also forbid DEL character
+# Using compiled regex for efficient validation (matches control chars except tab, LF, CR)
+# Matches ASCII 0x00-0x08, 0x0B-0x0C, 0x0E-0x1F, and 0x7F (DEL)
+_FORBIDDEN_CHARS_PATTERN = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
 
 # Compiled regex patterns for performance
 # Using tuple instead of list for memory efficiency and immutability
@@ -140,15 +161,20 @@ def _validate_forbidden_chars(command: str) -> None:
     Raises:
         CommandValidationError: If forbidden characters are found.
     """
-    found_chars = []
-    for i, char in enumerate(command):
-        if char in FORBIDDEN_CHARS:
-            found_chars.append(f"0x{ord(char):02x} at position {i}")
-
-    if found_chars:
+    matches = list(_FORBIDDEN_CHARS_PATTERN.finditer(command))
+    if matches:
+        found_chars = [
+            f"0x{m.group()[0].encode('unicode_escape').decode('ascii')[:4]} at position {m.start()}"
+            for m in matches[:5]
+        ]
+        # Format position info clearly
+        found_chars = [
+            f"0x{ord(m.group()):02x} at position {m.start()}"
+            for m in matches[:5]
+        ]
         raise CommandValidationError(
-            f"Command contains forbidden control characters: {', '.join(found_chars[:5])}"
-            f"{' (and more...)' if len(found_chars) > 5 else ''}"
+            f"Command contains forbidden control characters: {', '.join(found_chars)}"
+            f"{' (and more...)' if len(matches) > 5 else ''}"
         )
 
 
@@ -192,8 +218,8 @@ def _validate_shlex_parse(command: str) -> None:
         # This validates proper quoting and tokenization ONLY
         # Does NOT catch: ; && || | > < $VAR * globs etc.
         tokens = shlex.split(command, posix=True)
-        # Verify the command isn't empty after parsing
-        if not tokens or not any(token.strip() for token in tokens):
+        # shlex.split() already drops whitespace-only tokens, so just check if empty
+        if not tokens:
             raise CommandValidationError("Command contains no valid tokens after parsing")
     except ValueError as e:
         raise CommandValidationError(f"Command parsing failed (possible malformed input): {e}")
@@ -428,6 +454,7 @@ def _kill_process_group(proc: subprocess.Popen) -> None:
     """Attempt to aggressively terminate a process and its group.
 
     Cross-platform best-effort. On POSIX, uses process groups. On Windows, tries taskkill with /T flag for tree kill.
+    Uses exponential backoff with Popen.wait(timeout=) instead of blocking time.sleep().
     """
     try:
         if sys.platform.startswith("win"):
@@ -443,7 +470,12 @@ def _kill_process_group(proc: subprocess.Popen) -> None:
                     timeout=2,
                     check=False,
                 )
-                time.sleep(0.3)
+                # Use wait with timeout instead of sleep (exponential budget: 0.3s)
+                try:
+                    proc.wait(timeout=0.3)
+                    return
+                except subprocess.TimeoutExpired:
+                    pass
             except Exception:
                 # Fallback to Python's built-in methods
                 pass
@@ -452,7 +484,11 @@ def _kill_process_group(proc: subprocess.Popen) -> None:
             if proc.poll() is None:
                 try:
                     proc.kill()
-                    time.sleep(0.3)
+                    # Use wait with timeout (exponential budget: 0.2s)
+                    try:
+                        proc.wait(timeout=0.2)
+                    except subprocess.TimeoutExpired:
+                        pass
                 except Exception:
                     pass
             return
@@ -462,13 +498,24 @@ def _kill_process_group(proc: subprocess.Popen) -> None:
         try:
             pgid = os.getpgid(pid)
             os.killpg(pgid, signal.SIGTERM)
-            time.sleep(1.0)
+            # Use wait with timeout (exponential budget: 1.0s -> 0.6s -> 0.5s -> 0.1s)
+            try:
+                proc.wait(timeout=1.0)
+                return
+            except subprocess.TimeoutExpired:
+                pass
             if proc.poll() is None:
                 os.killpg(pgid, signal.SIGINT)
-                time.sleep(0.6)
+                try:
+                    proc.wait(timeout=0.6)
+                except subprocess.TimeoutExpired:
+                    pass
             if proc.poll() is None:
                 os.killpg(pgid, signal.SIGKILL)
-                time.sleep(0.5)
+                try:
+                    proc.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    pass
         except (OSError, ProcessLookupError):
             # Fall back to direct kill of the process
             try:
@@ -482,19 +529,52 @@ def _kill_process_group(proc: subprocess.Popen) -> None:
             try:
                 for _ in range(3):
                     os.kill(proc.pid, signal.SIGKILL)
-                    time.sleep(0.2)
-                    if proc.poll() is not None:
+                    try:
+                        proc.wait(timeout=0.1)  # Exponential budget: 0.1s
                         break
+                    except subprocess.TimeoutExpired:
+                        pass
             except Exception:
                 pass
     except Exception as e:
         emit_error(f"Kill process error: {e}")
 
 
+def _kill_single_process(p: subprocess.Popen) -> int:
+    """Kill a single process and return 1 if it was killed, 0 otherwise.
+    Helper for parallelized process killing."""
+    try:
+        # Close pipes first to unblock readline()
+        try:
+            if p.stdout and not p.stdout.closed:
+                p.stdout.close()
+            if p.stderr and not p.stderr.closed:
+                p.stderr.close()
+            if p.stdin and not p.stdin.closed:
+                p.stdin.close()
+        except (OSError, ValueError):
+            pass
+
+        if p.poll() is None:
+            _kill_process_group(p)
+            # Thread-safe bounded add to prevent unbounded growth
+            with _USER_KILLED_PROCESSES_LOCK:
+                if len(_USER_KILLED_PROCESSES) >= _USER_KILLED_PROCESSES_MAX:
+                    # Remove oldest entry (first key in insertion-ordered dict)
+                    oldest_pid = next(iter(_USER_KILLED_PROCESSES))
+                    del _USER_KILLED_PROCESSES[oldest_pid]
+                _USER_KILLED_PROCESSES[p.pid] = None  # Use dict as ordered set
+            return 1
+    finally:
+        _unregister_process(p)
+    return 0
+
+
 def kill_all_running_shell_processes() -> int:
     """Kill all currently tracked running shell processes and stop reader threads.
 
     Returns the number of processes signaled.
+    Parallelizes kills across processes using ThreadPoolExecutor.
     """
     # Signal all active reader threads to stop
     with _ACTIVE_STOP_EVENTS_LOCK:
@@ -504,32 +584,16 @@ def kill_all_running_shell_processes() -> int:
     procs: list[subprocess.Popen]
     with _RUNNING_PROCESSES_LOCK:
         procs = list(_RUNNING_PROCESSES)
-    count = 0
-    for p in procs:
-        try:
-            # Close pipes first to unblock readline()
-            try:
-                if p.stdout and not p.stdout.closed:
-                    p.stdout.close()
-                if p.stderr and not p.stderr.closed:
-                    p.stderr.close()
-                if p.stdin and not p.stdin.closed:
-                    p.stdin.close()
-            except (OSError, ValueError):
-                pass
 
-            if p.poll() is None:
-                _kill_process_group(p)
-                count += 1
-                # Thread-safe bounded add to prevent unbounded growth
-                with _USER_KILLED_PROCESSES_LOCK:
-                    if len(_USER_KILLED_PROCESSES) >= _USER_KILLED_PROCESSES_MAX:
-                        # Remove oldest entry (first key in insertion-ordered dict)
-                        oldest_pid = next(iter(_USER_KILLED_PROCESSES))
-                        del _USER_KILLED_PROCESSES[oldest_pid]
-                    _USER_KILLED_PROCESSES[p.pid] = None  # Use dict as ordered set
-        finally:
-            _unregister_process(p)
+    if not procs:
+        return 0
+
+    # Parallelize kills across processes using ThreadPoolExecutor
+    count = 0
+    with ThreadPoolExecutor(max_workers=min(len(procs), 8)) as executor:
+        futures = [executor.submit(_kill_single_process, p) for p in procs]
+        for future in futures:
+            count += future.result()
     return count
 
 
@@ -564,21 +628,15 @@ def set_awaiting_user_input(awaiting=True):
 
     # When we're setting this flag, also pause/resume all active spinners
     if awaiting:
-        # Pause all active spinners (imported here to avoid circular imports)
-        try:
-            from code_puppy.messaging.spinner import pause_all_spinners
-
-            pause_all_spinners()
-        except ImportError:
-            pass  # Spinner functionality not available
+        # Pause all active spinners using cached function
+        pause_fn = _get_spinner_func("pause_all_spinners")
+        if pause_fn:
+            pause_fn()
     else:
-        # Resume all active spinners
-        try:
-            from code_puppy.messaging.spinner import resume_all_spinners
-
-            resume_all_spinners()
-        except ImportError:
-            pass  # Spinner functionality not available
+        # Resume all active spinners using cached function
+        resume_fn = _get_spinner_func("resume_all_spinners")
+        if resume_fn:
+            resume_fn()
 
 
 class ShellCommandOutput(BaseModel):
@@ -651,7 +709,8 @@ def _listen_for_ctrl_x_windows(
             # Be silent about Windows listener errors - they're common
             # User can use Ctrl+C as fallback
             pass
-        time.sleep(0.05)
+        # Reduced polling frequency: 0.1s instead of 0.05s to reduce CPU overhead
+        time.sleep(0.1)
 
 
 def _listen_for_ctrl_x_posix(
@@ -677,7 +736,8 @@ def _listen_for_ctrl_x_posix(
         tty.setcbreak(fd)
         while not stop_event.is_set():
             try:
-                read_ready, _, _ = select.select([stdin], [], [], 0.05)
+                # Reduced polling timeout: 0.1s instead of 0.05s to reduce CPU overhead
+                read_ready, _, _ = select.select([stdin], [], [], 0.1)
             except Exception:
                 break
             if not read_ready:
@@ -953,40 +1013,33 @@ def run_shell_command_streaming(
                 # Use select to check if data is available (with timeout)
                 if sys.platform.startswith("win"):
                     # Windows doesn't support select on pipes
-                    # Use PeekNamedPipe via _win32_pipe_has_data() to check
-                    # if data is available without blocking
+                    # Use blocking readline() which waits for data efficiently
                     try:
-                        if _win32_pipe_has_data(process.stdout):
-                            line = process.stdout.readline()
-                            if not line:  # EOF
-                                break
-                            line = line.rstrip("\n")
-                            line = _truncate_line(line)
-                            stdout_lines.append(line)
-                            if not silent:
-                                stdout_batch.append(line)
-                                if len(stdout_batch) >= SHELL_BATCH_SIZE:
-                                    _emit_stdout_batch()
-                            last_output_time[0] = time.time()
-                        else:
-                            # No data available, check if process has exited
+                        line = process.stdout.readline()
+                        if not line:  # EOF
+                            # Process may have exited, do one final drain
                             if process.poll() is not None:
-                                # Process exited, do one final drain
                                 try:
                                     remaining = process.stdout.read()
                                     if remaining:
-                                        for line in remaining.split("\n"):
-                                            line = _truncate_line(line)
-                                            stdout_lines.append(line)
+                                        for ln in remaining.split("\n"):
+                                            ln = _truncate_line(ln)
+                                            stdout_lines.append(ln)
                                             if not silent:
-                                                stdout_batch.append(line)
+                                                stdout_batch.append(ln)
                                     if not silent and stdout_batch:
                                         _emit_stdout_batch()
                                 except (ValueError, OSError):
                                     pass
-                                break
-                            # Sleep briefly to avoid busy-waiting (100ms like POSIX)
-                            time.sleep(0.1)
+                            break
+                        line = line.rstrip("\n")
+                        line = _truncate_line(line)
+                        stdout_lines.append(line)
+                        if not silent:
+                            stdout_batch.append(line)
+                            if len(stdout_batch) >= SHELL_BATCH_SIZE:
+                                _emit_stdout_batch()
+                        last_output_time[0] = time.time()
                     except (ValueError, OSError):
                         break
                 else:
@@ -1008,7 +1061,10 @@ def run_shell_command_streaming(
                             if len(stdout_batch) >= SHELL_BATCH_SIZE:
                                 _emit_stdout_batch()
                         last_output_time[0] = time.time()
-                    # If not ready, loop continues and checks stop event again
+                    else:
+                        # No data ready, use stop_event.wait() for efficient polling
+                        if stop_event.wait(0.05):
+                            break
         except (ValueError, OSError):
             pass
         except Exception:
@@ -1030,40 +1086,33 @@ def run_shell_command_streaming(
 
                 if sys.platform.startswith("win"):
                     # Windows doesn't support select on pipes
-                    # Use PeekNamedPipe via _win32_pipe_has_data() to check
-                    # if data is available without blocking
+                    # Use blocking readline() which waits for data efficiently
                     try:
-                        if _win32_pipe_has_data(process.stderr):
-                            line = process.stderr.readline()
-                            if not line:  # EOF
-                                break
-                            line = line.rstrip("\n")
-                            line = _truncate_line(line)
-                            stderr_lines.append(line)
-                            if not silent:
-                                stderr_batch.append(line)
-                                if len(stderr_batch) >= SHELL_BATCH_SIZE:
-                                    _emit_stderr_batch()
-                            last_output_time[0] = time.time()
-                        else:
-                            # No data available, check if process has exited
+                        line = process.stderr.readline()
+                        if not line:  # EOF
+                            # Process may have exited, do one final drain
                             if process.poll() is not None:
-                                # Process exited, do one final drain
                                 try:
                                     remaining = process.stderr.read()
                                     if remaining:
-                                        for line in remaining.split("\n"):
-                                            line = _truncate_line(line)
-                                            stderr_lines.append(line)
+                                        for ln in remaining.split("\n"):
+                                            ln = _truncate_line(ln)
+                                            stderr_lines.append(ln)
                                             if not silent:
-                                                stderr_batch.append(line)
+                                                stderr_batch.append(ln)
                                     if not silent and stderr_batch:
                                         _emit_stderr_batch()
                                 except (ValueError, OSError):
                                     pass
-                                break
-                            # Sleep briefly to avoid busy-waiting (100ms like POSIX)
-                            time.sleep(0.1)
+                            break
+                        line = line.rstrip("\n")
+                        line = _truncate_line(line)
+                        stderr_lines.append(line)
+                        if not silent:
+                            stderr_batch.append(line)
+                            if len(stderr_batch) >= SHELL_BATCH_SIZE:
+                                _emit_stderr_batch()
+                        last_output_time[0] = time.time()
                     except (ValueError, OSError):
                         break
                 else:
@@ -1084,6 +1133,10 @@ def run_shell_command_streaming(
                             if len(stderr_batch) >= SHELL_BATCH_SIZE:
                                 _emit_stderr_batch()
                         last_output_time[0] = time.time()
+                    else:
+                        # No data ready, use stop_event.wait() for efficient polling
+                        if stop_event.wait(0.05):
+                            break
         except (ValueError, OSError):
             pass
         except Exception:
@@ -1144,8 +1197,9 @@ def run_shell_command_streaming(
             **{
                 "success": False,
                 "command": command,
-                "stdout": "\n".join(list(stdout_lines)[-256:]),
-                "stderr": "\n".join(list(stderr_lines)[-256:]),
+                # NOTE: direct join - deques are iterable and already maxlen=256
+                "stdout": "\n".join(stdout_lines),
+                "stderr": "\n".join(stderr_lines),
                 "exit_code": -9,
                 "execution_time": execution_time,
                 "timeout": True,
@@ -1202,15 +1256,17 @@ def run_shell_command_streaming(
         _unregister_process(process)
 
         # Apply line length limits to stdout/stderr before returning
-        truncated_stdout = list(stdout_lines)[-256:]
-        truncated_stderr = list(stderr_lines)[-256:]
+        # NOTE: stdout_lines/stderr_lines are already deque(maxlen=256),
+        # so no need for [-256:] slicing - str.join accepts deques natively (CR-M5)
+        truncated_stdout = "\n".join(stdout_lines)
+        truncated_stderr = "\n".join(stderr_lines)
 
         # Emit structured ShellOutputMessage for the UI (skip for silent sub-agents)
         if not silent:
             shell_output_msg = ShellOutputMessage(
                 command=command,
-                stdout="\n".join(truncated_stdout),
-                stderr="\n".join(truncated_stderr),
+                stdout=truncated_stdout,
+                stderr=truncated_stderr,
                 exit_code=exit_code,
                 duration_seconds=execution_time,
             )
@@ -1225,8 +1281,8 @@ def run_shell_command_streaming(
                 command=command,
                 error="""The process didn't exit cleanly! If the user_interrupted flag is true,
                 please stop all execution and ask the user for clarification!""",
-                stdout="\n".join(truncated_stdout),
-                stderr="\n".join(truncated_stderr),
+                stdout=truncated_stdout,
+                stderr=truncated_stderr,
                 exit_code=exit_code,
                 execution_time=execution_time,
                 timeout=False,
@@ -1236,8 +1292,8 @@ def run_shell_command_streaming(
         return ShellCommandOutput(
             success=True,
             command=command,
-            stdout="\n".join(truncated_stdout),
-            stderr="\n".join(truncated_stderr),
+            stdout=truncated_stdout,
+            stderr=truncated_stderr,
             exit_code=exit_code,
             execution_time=execution_time,
             timeout=False,
@@ -1250,8 +1306,9 @@ def run_shell_command_streaming(
             success=False,
             command=command,
             error=f"Error during streaming execution: {str(e)}",
-            stdout="\n".join(list(stdout_lines)[-256:]),
-            stderr="\n".join(list(stderr_lines)[-256:]),
+            # NOTE: direct join - deques are iterable and already maxlen=256
+            stdout="\n".join(stdout_lines),
+            stderr="\n".join(stderr_lines),
             exit_code=-1,
             execution_time=time.time() - start_time,
             timeout=False,
@@ -1271,8 +1328,7 @@ async def run_shell_command(
     # --- SecurityBoundary Integration (code_puppy-vdfn) ---
     # Centralized security enforcement: checks PolicyEngine rules and plugin callbacks
     # This replaces the manual callback triggering with a unified security interface
-    from code_puppy.security import get_security_boundary
-
+    # get_security_boundary is imported at module level for performance
     security = get_security_boundary()
     security_decision = await security.check_shell_command(
         command=command,
@@ -1416,8 +1472,7 @@ async def run_shell_command(
             execution_time=None,
         )
 
-    from code_puppy.config import get_yolo_mode
-
+    # get_yolo_mode is imported at module level for performance
     yolo_mode = get_yolo_mode()
 
     # Check if we're running as a sub-agent (skip confirmation and run silently)
@@ -1441,8 +1496,7 @@ async def run_shell_command(
             )
 
         # Get puppy name for personalized messages
-        from code_puppy.config import get_puppy_name
-
+        # get_puppy_name is imported at module level for performance
         puppy_name = get_puppy_name().title()
 
         # Build panel content
@@ -1523,9 +1577,11 @@ async def _execute_shell_command(
     bus.emit(ShellStartMessage(command=command, cwd=cwd, timeout=timeout))
 
     # Pause spinner during shell command so \r output can work properly
-    from code_puppy.messaging.spinner import pause_all_spinners, resume_all_spinners
-
-    pause_all_spinners()
+    # Using cached spinner functions for performance
+    pause_fn = _get_spinner_func("pause_all_spinners")
+    resume_fn = _get_spinner_func("resume_all_spinners")
+    if pause_fn:
+        pause_fn()
 
     # Acquire shared keyboard context - Ctrl-X/Ctrl-C will kill ALL running commands
     # This is reference-counted: listener starts on first command, stops on last
@@ -1538,7 +1594,8 @@ async def _execute_shell_command(
             )
     finally:
         _release_keyboard_context()
-        resume_all_spinners()
+        if resume_fn:
+            resume_fn()
 
 
 def _run_command_sync(
