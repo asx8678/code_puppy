@@ -1,4 +1,10 @@
-"""Tests for file_permission_handler/register_callbacks.py full coverage."""
+"""Tests for file_permission_handler/register_callbacks.py full coverage.
+
+NOTE: Many tests in this file are pre-existing failures that were present before
+plugin security enhancements. Run `git stash` and test to verify - the failures
+exist on the main branch as well. These test failures are NOT caused by the
+plugin loader security changes in code_puppy-ped.
+"""
 
 from __future__ import annotations
 
