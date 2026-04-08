@@ -7,6 +7,7 @@ completion. Shows results in an OptionList overlay above the input.
 import glob
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 
 
 @dataclass
@@ -20,6 +21,65 @@ class CompletionItem:
     def __post_init__(self):
         if not self.display:
             self.display = self.text
+
+
+# ---------------------------------------------------------------------------
+# Cached helpers for expensive completion lookups (COMP-H2 fix)
+# These are called per keystroke, so we cache with maxsize=1
+# ---------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=1)
+def _get_cached_commands():
+    """Get commands from registry - cached to avoid per-keystroke lookup."""
+    try:
+        from code_puppy.command_line.command_registry import get_unique_commands
+        return get_unique_commands()
+    except Exception:
+        return []
+
+
+@lru_cache(maxsize=1)
+def _get_cached_models_config():
+    """Get models config from ModelFactory - cached to avoid per-keystroke lookup."""
+    try:
+        from code_puppy.model_factory import ModelFactory
+        return ModelFactory.load_config()
+    except Exception:
+        return {}
+
+
+@lru_cache(maxsize=1)
+def _get_cached_agents():
+    """Get available agents - cached to avoid per-keystroke lookup."""
+    try:
+        from code_puppy.agents import get_available_agents
+        return get_available_agents()
+    except Exception:
+        return {}
+
+
+@lru_cache(maxsize=1)
+def _get_cached_config_keys():
+    """Get config keys - cached to avoid per-keystroke lookup."""
+    try:
+        from code_puppy.config import get_config_keys
+        return list(get_config_keys())
+    except Exception:
+        return []
+
+
+def invalidate_completion_caches():
+    """Invalidate all completion caches. Call this when config reloads."""
+    _get_cached_commands.cache_clear()
+    _get_cached_models_config.cache_clear()
+    _get_cached_agents.cache_clear()
+    _get_cached_config_keys.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# Main completion dispatcher
+# ---------------------------------------------------------------------------
 
 
 def get_completions(text: str, cursor_pos: int | None = None) -> list[CompletionItem]:
@@ -90,9 +150,7 @@ def _complete_command_names(partial: str) -> list[CompletionItem]:
 
     items = []
     try:
-        from code_puppy.command_line.command_registry import get_unique_commands
-
-        commands = get_unique_commands()
+        commands = _get_cached_commands()
 
         for cmd in commands:
             if cmd.name.lower().startswith(partial_name):
@@ -125,9 +183,7 @@ def _complete_model_names(partial: str) -> list[CompletionItem]:
     partial_lower = partial.lower()
     items = []
     try:
-        from code_puppy.model_factory import ModelFactory
-
-        models_config = ModelFactory.load_config()
+        models_config = _get_cached_models_config()
         for name in sorted(models_config.keys()):
             if name.lower().startswith(partial_lower):
                 items.append(CompletionItem(text=name, description="model"))
@@ -141,9 +197,7 @@ def _complete_agent_names(partial: str) -> list[CompletionItem]:
     partial_lower = partial.lower()
     items = []
     try:
-        from code_puppy.agents import get_available_agents
-
-        agents = get_available_agents()
+        agents = _get_cached_agents()
         for name in sorted(agents.keys()):
             display_name = agents[name]
             if name.lower().startswith(partial_lower):
@@ -166,9 +220,9 @@ def _complete_config_keys(partial: str) -> list[CompletionItem]:
     partial_lower = partial.lower()
     items = []
     try:
-        from code_puppy.config import get_config_keys, get_value
+        from code_puppy.config import get_value
 
-        for key in sorted(get_config_keys()):
+        for key in _get_cached_config_keys():
             if key == "puppy_token":
                 continue
             if key.lower().startswith(partial_lower):
@@ -181,7 +235,11 @@ def _complete_config_keys(partial: str) -> list[CompletionItem]:
 
 
 def _complete_file_path(text: str) -> list[CompletionItem]:
-    """Complete file paths after @ symbol."""
+    """Complete file paths after @ symbol.
+
+    Uses os.scandir with early-exit at 50 matches BEFORE stat
+    to avoid freezing TUI on big repos (COMP-H1 fix).
+    """
     # Find the last @ in the text
     at_pos = text.rfind("@")
     if at_pos == -1:
@@ -191,39 +249,53 @@ def _complete_file_path(text: str) -> list[CompletionItem]:
     items = []
 
     try:
-        # Expand the path for globbing
+        # Determine base directory and prefix
         if partial_path:
-            pattern = partial_path + "*"
+            expanded = os.path.expanduser(partial_path)
+            if os.path.isdir(expanded):
+                base_dir = expanded
+                prefix = ""
+            else:
+                base_dir = os.path.dirname(expanded) or "."
+                prefix = os.path.basename(expanded)
         else:
-            pattern = "*"
+            base_dir = "."
+            prefix = ""
 
-        matches = glob.glob(pattern)
-        # Also try with the partial as a directory prefix
-        if partial_path and not partial_path.endswith(os.sep):
-            dir_pattern = partial_path + os.sep + "*"
-            matches.extend(glob.glob(dir_pattern))
+        # Use scandir for efficient directory listing
+        # Early-exit at 50 matches BEFORE stat (avoid glob + isdir per match)
+        prefix_lower = prefix.lower()
+        count = 0
 
-        seen: set[str] = set()
-        for match in sorted(matches):
-            if match in seen:
-                continue
-            seen.add(match)
+        with os.scandir(base_dir) as it:
+            for entry in it:
+                # Check match before stat - name matching only
+                if prefix and not entry.name.lower().startswith(prefix_lower):
+                    continue
 
-            is_dir = os.path.isdir(match)
-            display_path = match + os.sep if is_dir else match
-            icon = "📁" if is_dir else "📄"
+                # Use entry.is_dir() with follow_symlinks=False (cached from readdir)
+                is_dir = entry.is_dir(follow_symlinks=False)
+                display_path = entry.name + os.sep if is_dir else entry.name
+                icon = "📁" if is_dir else "📄"
 
-            items.append(
-                CompletionItem(
-                    text=match,
-                    display=f"{icon} {display_path}",
-                    description="directory" if is_dir else "",
+                items.append(
+                    CompletionItem(
+                        text=os.path.join(base_dir, entry.name),
+                        display=f"{icon} {display_path}",
+                        description="directory" if is_dir else "",
+                    )
                 )
-            )
+
+                count += 1
+                if count >= 50:
+                    break  # Early-exit at 50 matches
+
+        # Sort results alphabetically
+        items.sort(key=lambda x: x.text.lower())
     except Exception:
         pass
 
-    return items[:50]  # Limit to 50 results
+    return items  # Already limited to 50 by early-exit
 
 
 def _complete_directories(partial: str) -> list[CompletionItem]:
