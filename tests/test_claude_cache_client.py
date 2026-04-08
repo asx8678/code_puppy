@@ -37,13 +37,18 @@ def _create_jwt(iat: float | None = None, exp: float | None = None) -> str:
 
 
 class TestJWTAgeDetection:
-    """Test JWT age detection for proactive token refresh."""
+    """Test JWT age detection for proactive token refresh.
 
-    def test_get_jwt_age_with_iat(self):
-        """Test that JWT age is calculated from iat claim."""
-        # Token issued 30 minutes ago
+    SECURITY NOTE: All tests now require both 'iat' and 'exp' claims
+    for comprehensive JWT validation.
+    """
+
+    def test_get_jwt_age_with_valid_claims(self):
+        """Test that JWT age is calculated when both iat and exp are valid."""
+        # Token issued 30 minutes ago, expires in 30 minutes
         iat = time.time() - 1800
-        token = _create_jwt(iat=iat)
+        exp = time.time() + 1800
+        token = _create_jwt(iat=iat, exp=exp)
 
         client = ClaudeCacheAsyncClient()
         age = client._get_jwt_age_seconds(token)
@@ -51,29 +56,41 @@ class TestJWTAgeDetection:
         assert age is not None
         assert 1790 <= age <= 1810  # Allow for timing variance
 
-    def test_get_jwt_age_with_exp_only(self):
-        """Test that JWT age is calculated from exp claim when iat is missing."""
-        # Token expires in 30 minutes (so it's about 30 mins old if 1hr lifetime)
-        exp = time.time() + 1800
-        token = _create_jwt(exp=exp)
+    def test_get_jwt_age_missing_exp_fails_validation(self):
+        """Test that JWT without exp claim fails validation (security requirement)."""
+        # SECURITY: exp claim is required for validation
+        iat = time.time() - 1800
+        token = _create_jwt(iat=iat)  # No exp
 
         client = ClaudeCacheAsyncClient()
         age = client._get_jwt_age_seconds(token)
 
-        assert age is not None
-        # Age should be TOKEN_MAX_AGE_SECONDS - time_until_exp = 3600 - 1800 = 1800
-        assert 1790 <= age <= 1810
+        # Should return None because exp is required for security validation
+        assert age is None
 
-    def test_get_jwt_age_prefers_iat(self):
-        """Test that iat claim is preferred over exp for age calculation."""
-        iat = time.time() - 600  # 10 minutes ago
-        exp = time.time() + 3000  # expires in 50 minutes
+    def test_get_jwt_age_missing_iat_fails_validation(self):
+        """Test that JWT without iat claim fails validation (security requirement)."""
+        # SECURITY: iat claim is required for validation
+        exp = time.time() + 1800
+        token = _create_jwt(exp=exp)  # No iat
+
+        client = ClaudeCacheAsyncClient()
+        age = client._get_jwt_age_seconds(token)
+
+        # Should return None because iat is required for security validation
+        assert age is None
+
+    def test_get_jwt_age_uses_iat_for_age_calculation(self):
+        """Test that iat claim is used for age calculation."""
+        # Token issued 10 minutes ago, expires in 50 minutes
+        iat = time.time() - 600
+        exp = time.time() + 3000
         token = _create_jwt(iat=iat, exp=exp)
 
         client = ClaudeCacheAsyncClient()
         age = client._get_jwt_age_seconds(token)
 
-        # Should use iat (10 mins = 600 secs) not exp
+        # Should use iat (10 mins = 600 secs)
         assert age is not None
         assert 590 <= age <= 610
 
@@ -95,11 +112,84 @@ class TestJWTAgeDetection:
 
         assert age is None
 
+    def test_get_jwt_age_exp_not_after_iat(self):
+        """Test that JWT with exp <= iat fails validation (security requirement)."""
+        now = time.time()
+        # exp is in the past, before iat - invalid token
+        iat = now - 600
+        exp = now - 1200  # exp is BEFORE iat - invalid!
+        token = _create_jwt(iat=iat, exp=exp)
+
+        client = ClaudeCacheAsyncClient()
+        age = client._get_jwt_age_seconds(token)
+
+        # Should fail validation because exp <= iat
+        assert age is None
+
+    def test_get_jwt_age_iat_in_future(self):
+        """Test that JWT with iat in the future fails validation (clock skew check)."""
+        now = time.time()
+        # iat is 5 minutes in the future (beyond 60 second tolerance)
+        iat = now + 300
+        exp = now + 3600
+        token = _create_jwt(iat=iat, exp=exp)
+
+        client = ClaudeCacheAsyncClient()
+        age = client._get_jwt_age_seconds(token)
+
+        # Should fail validation because iat is in the future
+        assert age is None
+
+    def test_get_jwt_age_exceeds_max_lifetime(self):
+        """Test that JWT with lifetime > 24 hours fails validation."""
+        now = time.time()
+        # Token valid for 25 hours (exceeds 24 hour maximum)
+        iat = now - 3600
+        exp = now + 86400 + 3600  # 25 hours from iat
+        token = _create_jwt(iat=iat, exp=exp)
+
+        client = ClaudeCacheAsyncClient()
+        age = client._get_jwt_age_seconds(token)
+
+        # Should fail validation because lifetime exceeds 24 hours
+        assert age is None
+
+    def test_get_jwt_age_already_expired(self):
+        """Test that expired JWT fails validation."""
+        now = time.time()
+        # Token expired 5 minutes ago
+        iat = now - 7200
+        exp = now - 300
+        token = _create_jwt(iat=iat, exp=exp)
+
+        client = ClaudeCacheAsyncClient()
+        age = client._get_jwt_age_seconds(token)
+
+        # Should fail validation because token is expired
+        assert age is None
+
+    def test_get_jwt_age_clock_skew_tolerance(self):
+        """Test that small clock skew in iat is tolerated (60 second window)."""
+        now = time.time()
+        # iat is 30 seconds in the future (within 60 second tolerance)
+        iat = now + 30
+        exp = now + 3600
+        token = _create_jwt(iat=iat, exp=exp)
+
+        client = ClaudeCacheAsyncClient()
+        age = client._get_jwt_age_seconds(token)
+
+        # Should pass validation because clock skew is within tolerance
+        assert age is not None
+        assert age <= 60  # Age should be small (nearly 0 or slightly negative)
+
     def test_should_refresh_token_old(self):
         """Test that old tokens (>1 hour) trigger refresh."""
-        # Token issued 2 hours ago
-        iat = time.time() - 7200
-        token = _create_jwt(iat=iat)
+        now = time.time()
+        # Token issued 2 hours ago, expires in 1 hour
+        iat = now - 7200
+        exp = now + 3600
+        token = _create_jwt(iat=iat, exp=exp)
 
         request = httpx.Request(
             "POST",
@@ -112,9 +202,11 @@ class TestJWTAgeDetection:
 
     def test_should_refresh_token_fresh(self):
         """Test that fresh tokens (<1 hour) don't trigger refresh."""
-        # Token issued 30 minutes ago
-        iat = time.time() - 1800
-        token = _create_jwt(iat=iat)
+        now = time.time()
+        # Token issued 30 minutes ago, expires in 1.5 hours
+        iat = now - 1800
+        exp = now + 5400
+        token = _create_jwt(iat=iat, exp=exp)
 
         request = httpx.Request(
             "POST",
@@ -127,9 +219,11 @@ class TestJWTAgeDetection:
 
     def test_should_refresh_token_exactly_1_hour(self):
         """Test that token exactly 1 hour old triggers refresh."""
-        # Token issued exactly 1 hour ago
-        iat = time.time() - TOKEN_MAX_AGE_SECONDS
-        token = _create_jwt(iat=iat)
+        now = time.time()
+        # Token issued exactly 1 hour ago, expires in 1 hour
+        iat = now - TOKEN_MAX_AGE_SECONDS
+        exp = now + 3600
+        token = _create_jwt(iat=iat, exp=exp)
 
         request = httpx.Request(
             "POST",
@@ -172,9 +266,11 @@ class TestProactiveTokenRefresh:
     @pytest.mark.asyncio
     async def test_proactive_refresh_on_old_token(self):
         """Test that old tokens are refreshed proactively before the request."""
-        # Token issued 2 hours ago
-        iat = time.time() - 7200
-        old_token = _create_jwt(iat=iat)
+        now = time.time()
+        # Token issued 2 hours ago, expires in 1 hour
+        iat = now - 7200
+        exp = now + 3600
+        old_token = _create_jwt(iat=iat, exp=exp)
 
         success_response = Mock(spec=httpx.Response)
         success_response.status_code = 200
@@ -216,9 +312,11 @@ class TestProactiveTokenRefresh:
     @pytest.mark.asyncio
     async def test_no_proactive_refresh_on_fresh_token(self):
         """Test that fresh tokens don't trigger proactive refresh."""
-        # Token issued 30 minutes ago
-        iat = time.time() - 1800
-        fresh_token = _create_jwt(iat=iat)
+        now = time.time()
+        # Token issued 30 minutes ago, expires in 1.5 hours
+        iat = now - 1800
+        exp = now + 5400
+        fresh_token = _create_jwt(iat=iat, exp=exp)
 
         success_response = Mock(spec=httpx.Response)
         success_response.status_code = 200

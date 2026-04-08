@@ -56,24 +56,27 @@ class TestJWTAge:
         # Valid 3-part but bad base64
         assert c._get_jwt_age_seconds("a.!!!.c") is None
 
-    def test_with_iat(self):
-        token = _create_jwt(iat=time.time() - 600)
+    def test_with_iat_and_exp(self):
+        # SECURITY: Both iat and exp are now required for validation
+        now = time.time()
+        token = _create_jwt(iat=now - 600, exp=now + 3000)
         c = ClaudeCacheAsyncClient()
         age = c._get_jwt_age_seconds(token)
         assert 590 <= age <= 610
 
-    def test_with_exp_only(self):
-        token = _create_jwt(exp=time.time() + 1800)
+    def test_missing_exp_fails_validation(self):
+        # SECURITY: exp claim is required
+        token = _create_jwt(iat=time.time() - 600)  # No exp
         c = ClaudeCacheAsyncClient()
         age = c._get_jwt_age_seconds(token)
-        assert 1790 <= age <= 1810
+        assert age is None
 
-    def test_exp_negative_age(self):
-        # exp far in future -> age would be negative, clamped to 0
-        token = _create_jwt(exp=time.time() + TOKEN_MAX_AGE_SECONDS + 1000)
+    def test_missing_iat_fails_validation(self):
+        # SECURITY: iat claim is required
+        token = _create_jwt(exp=time.time() + 1800)  # No iat
         c = ClaudeCacheAsyncClient()
         age = c._get_jwt_age_seconds(token)
-        assert age == 0
+        assert age is None
 
     def test_no_claims(self):
         token = _create_jwt()
@@ -124,7 +127,9 @@ class TestShouldRefresh:
         assert c._should_refresh_token(req) is False
 
     def test_old_token(self):
-        token = _create_jwt(iat=time.time() - 7200)
+        # SECURITY: Both iat and exp are required
+        now = time.time()
+        token = _create_jwt(iat=now - 7200, exp=now + 3600)
         c = ClaudeCacheAsyncClient()
         req = httpx.Request(
             "POST", "https://x.com", headers={"Authorization": f"Bearer {token}"}
@@ -132,7 +137,9 @@ class TestShouldRefresh:
         assert c._should_refresh_token(req) is True
 
     def test_fresh_token(self):
-        token = _create_jwt(iat=time.time() - 100)
+        # SECURITY: Both iat and exp are required
+        now = time.time()
+        token = _create_jwt(iat=now - 100, exp=now + 3500)
         c = ClaudeCacheAsyncClient()
         req = httpx.Request(
             "POST", "https://x.com", headers={"Authorization": f"Bearer {token}"}
@@ -1146,8 +1153,11 @@ class TestJWTAgeCaching:
 
     def test_cache_populated_on_first_decode(self):
         """Test that cache is populated when first decoding a token."""
-        iat = time.time() - 600
-        token = _create_jwt(iat=iat)
+        # SECURITY: Both iat and exp are now required
+        now = time.time()
+        iat = now - 600
+        exp = now + 3000
+        token = _create_jwt(iat=iat, exp=exp)
 
         c = ClaudeCacheAsyncClient()
         age = c._get_jwt_age_seconds(token)
@@ -1163,8 +1173,11 @@ class TestJWTAgeCaching:
 
     def test_cache_hit_avoids_repeated_decoding(self):
         """Test that subsequent calls with the same token use the cache."""
-        iat = time.time() - 600
-        token = _create_jwt(iat=iat)
+        # SECURITY: Both iat and exp are now required
+        now = time.time()
+        iat = now - 600
+        exp = now + 3000
+        token = _create_jwt(iat=iat, exp=exp)
 
         c = ClaudeCacheAsyncClient()
 
@@ -1182,11 +1195,15 @@ class TestJWTAgeCaching:
 
     def test_cache_cleared_on_token_change(self):
         """Test that different token clears the cache."""
-        iat1 = time.time() - 600
-        token1 = _create_jwt(iat=iat1)
+        # SECURITY: Both iat and exp are now required
+        now = time.time()
+        iat1 = now - 600
+        exp1 = now + 3000
+        token1 = _create_jwt(iat=iat1, exp=exp1)
 
-        iat2 = time.time() - 1200
-        token2 = _create_jwt(iat=iat2)
+        iat2 = now - 1200
+        exp2 = now + 2400
+        token2 = _create_jwt(iat=iat2, exp=exp2)
 
         c = ClaudeCacheAsyncClient()
 
@@ -1200,23 +1217,27 @@ class TestJWTAgeCaching:
         assert c._cached_jwt_iat[0] == token2[:64]
         assert c._cached_jwt_iat[1] == int(iat2)
 
-    def test_cache_not_used_for_exp_only_tokens(self):
-        """Test that tokens with only exp claim don't cache (only iat is cached)."""
-        exp = time.time() + 1800
-        token = _create_jwt(exp=exp)
+    def test_cache_not_used_for_invalid_tokens(self):
+        """Test that tokens failing validation don't cache (SECURITY: both claims required)."""
+        # Missing exp claim - should fail validation
+        iat = time.time() - 600
+        token = _create_jwt(iat=iat)  # No exp
 
         c = ClaudeCacheAsyncClient()
         age = c._get_jwt_age_seconds(token)
 
-        # Cache should not be updated (no iat to cache)
+        # Cache should not be updated (token failed validation)
         assert c._cached_jwt_iat is None
-        # But age should still be calculated from exp
-        assert age is not None
+        # Age should be None (validation failed)
+        assert age is None
 
     def test_token_refresh_clears_cache(self):
         """Test that token refresh clears the JWT cache."""
-        iat = time.time() - 600
-        token = _create_jwt(iat=iat)
+        # SECURITY: Both iat and exp are now required
+        now = time.time()
+        iat = now - 600
+        exp = now + 3000
+        token = _create_jwt(iat=iat, exp=exp)
 
         c = ClaudeCacheAsyncClient(headers={"Authorization": "Bearer old"})
 
