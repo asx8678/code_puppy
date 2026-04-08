@@ -286,7 +286,17 @@ class GeminiModel(Model):
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
         if self._http_client is None:
-            self._http_client = httpx.AsyncClient(timeout=180)
+            try:
+                self._http_client = httpx.AsyncClient(timeout=180)
+            except Exception:
+                # Cleanup on initialization failure to prevent resource leak
+                if self._http_client is not None:
+                    try:
+                        await self._http_client.aclose()
+                    except Exception:
+                        pass
+                    self._http_client = None
+                raise
         return self._http_client
 
     async def _close_client(self) -> None:
