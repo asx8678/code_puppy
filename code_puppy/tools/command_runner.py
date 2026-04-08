@@ -1279,6 +1279,9 @@ if not security_decision.allowed:
 
                 log_file.close()  # Close our handle, process keeps writing
 
+                # Register background process for tracking (concurrency management)
+                _register_process(process)
+
                 # Emit UI messages so user sees what happened
                 bus = get_message_bus()
                 bus.emit(
