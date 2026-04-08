@@ -924,7 +924,11 @@ async def arrow_select_async(
     return result[0]
 
 
-def arrow_select(message: str, choices: list[str]) -> str:
+def arrow_select(
+    message: str,
+    choices: list[str],
+    preview_callback: Callable[[int | None, str]] = None,
+) -> str:
     """Show an arrow-key navigable selector (synchronous version).
 
     This is a thin wrapper around arrow_select_async to avoid code duplication.
@@ -932,6 +936,8 @@ def arrow_select(message: str, choices: list[str]) -> str:
     Args:
         message: The prompt message to display
         choices: List of choice strings
+        preview_callback: Optional callback that takes the selected index and returns
+                         preview text to display below the choices
 
     Returns:
         The selected choice string
@@ -939,7 +945,7 @@ def arrow_select(message: str, choices: list[str]) -> str:
     Raises:
         KeyboardInterrupt: If user cancels with Ctrl-C
     """
-    return run_async_sync(arrow_select_async(message, choices))
+    return run_async_sync(arrow_select_async(message, choices, preview_callback))
 
 
 def get_user_approval(
