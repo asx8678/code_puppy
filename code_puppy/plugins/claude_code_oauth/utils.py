@@ -171,7 +171,7 @@ def parse_authorization_code(raw_input: str) -> tuple[str, str | None]:
     return value, None
 
 
-def load_stored_tokens() -> dict[str, Any | None]:
+def load_stored_tokens() -> dict[str, Any] | None:
     try:
         token_path = get_token_storage_path()
         if token_path.exists():
@@ -439,7 +439,7 @@ def save_claude_models(models: dict[str, Any]) -> bool:
 
 def exchange_code_for_tokens(
     auth_code: str, context: OAuthContext
-) -> dict[str, Any | None]:
+) -> dict[str, Any] | None:
     if not context.redirect_uri:
         raise RuntimeError("Redirect URI missing from OAuth context")
 

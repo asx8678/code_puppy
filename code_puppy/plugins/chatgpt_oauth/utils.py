@@ -122,7 +122,7 @@ def parse_authorization_error(url: str) -> str | None:
     return None
 
 
-def parse_jwt_claims(token: str) -> dict[str, Any | None]:
+def parse_jwt_claims(token: str) -> dict[str, Any] | None:
     """Parse JWT token to extract claims."""
     if not token or token.count(".") != 2:
         return None
@@ -136,7 +136,7 @@ def parse_jwt_claims(token: str) -> dict[str, Any | None]:
     return None
 
 
-def load_stored_tokens() -> dict[str, Any | None]:
+def load_stored_tokens() -> dict[str, Any] | None:
     try:
         token_path = get_token_storage_path()
         if token_path.exists():
@@ -284,7 +284,7 @@ def save_chatgpt_models(models: dict[str, Any]) -> bool:
 
 def exchange_code_for_tokens(
     auth_code: str, context: OAuthContext
-) -> dict[str, Any | None]:
+) -> dict[str, Any] | None:
     """Exchange authorization code for access tokens."""
     if not context.redirect_uri:
         raise RuntimeError("Redirect URI missing from OAuth context")

@@ -463,7 +463,7 @@ class ModelsDevRegistry:
         return self.models.get(full_id)
 
     def search_models(
-        self, query: str | None = None, capability_filters: dict[str, Any | None] = None
+        self, query: str | None = None, capability_filters: dict[str, Any] | None = None
     ) -> list[ModelInfo]:
         """
         Search models by name/query and filter by capabilities.

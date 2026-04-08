@@ -96,7 +96,7 @@ def _cache_is_fresh(cache_path: Path, ttl_seconds: int) -> bool:
         return False
 
 
-def _read_cache(cache_path: Path) -> dict[str, Any | None]:
+def _read_cache(cache_path: Path) -> dict[str, Any] | None:
     """Read and deserialize the cached catalog JSON from disk."""
 
     try:
@@ -128,7 +128,7 @@ def _write_cache(cache_path: Path, data: dict[str, Any]) -> bool:
         return False
 
 
-def _fetch_remote_json(url: str) -> dict[str, Any | None]:
+def _fetch_remote_json(url: str) -> dict[str, Any] | None:
     """Fetch the skills catalog JSON from the remote URL."""
 
     headers = {
