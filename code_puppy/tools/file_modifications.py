@@ -335,9 +335,9 @@ def _replace_in_file(
             parts.append(new_snippet.rstrip("\n"))
             if end < len(modified_lines):
                 parts.append("\n".join(modified_lines[end:]))
+            if had_trailing_newline:
+                parts.append("")
             modified = "\n".join(parts)
-            if had_trailing_newline and not modified.endswith("\n"):
-                modified += "\n"
 
             # Update cached lines to reflect the change
             # Re-split only if we need to do more replacements
