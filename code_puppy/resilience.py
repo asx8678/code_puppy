@@ -390,7 +390,11 @@ def get_or_create_circuit_breaker(
     Returns:
         CircuitBreaker instance
     """
-    return _circuit_breakers.setdefault(name, CircuitBreaker(name, config))
+    breaker = _circuit_breakers.get(name)
+    if breaker is None:
+        breaker = CircuitBreaker(name, config)
+        breaker = _circuit_breakers.setdefault(name, breaker)
+    return breaker
 
 
 def get_circuit_breaker_status() -> dict[str, dict[str, Any]]:
