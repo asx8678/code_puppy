@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# file: /Users/adam2/projects/code_puppy-tpkw/code_puppy/staged_changes.py
-=======
-# file: /Users/adam2/projects/code_puppy-yttp/code_puppy/staged_changes.py
->>>>>>> feature/code_puppy-yttp
+# file: /Users/adam2/projects/code_puppy-k0cm/code_puppy/staged_changes.py
 # hypothesis_version: 6.151.11
 
 ['/dev/null', 'StagedChange', 'applied', 'by_file', 'by_type', 'change_id', 'change_type', 'changes', 'code_puppy_staged', 'content', 'created_at', 'description', 'enabled', 'file_path', 'files', 'new_str', 'old_str', 'r', 'rejected', 'saved_at', 'session_id', 'snippet', 'surrogateescape', 'total', 'utf-8', 'w']

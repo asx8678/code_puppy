@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# file: /Users/adam2/projects/code_puppy-tpkw/code_puppy/security.py
-=======
-# file: /Users/adam2/projects/code_puppy-yttp/code_puppy/security.py
->>>>>>> feature/code_puppy-yttp
+# file: /Users/adam2/projects/code_puppy-k0cm/code_puppy/security.py
 # hypothesis_version: 6.151.11
 
 ['Path cannot be empty', 'allowed_by', 'block_count', 'blocked', 'blocked_by', 'check_count', 'denied_by', 'error_message', 'file_path', 'file_permission', 'operation', 'plugin', 'plugin_result', 'policy_engine', 'reason', 'reasoning', 'sensitive_path_check']

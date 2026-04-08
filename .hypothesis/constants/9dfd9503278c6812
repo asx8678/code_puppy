@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# file: /Users/adam2/projects/code_puppy-tpkw/code_puppy/plugins/agent_skills/remote_catalog.py
-=======
-# file: /Users/adam2/projects/code_puppy-yttp/code_puppy/plugins/agent_skills/remote_catalog.py
->>>>>>> feature/code_puppy-yttp
+# file: /Users/adam2/projects/code_puppy-k0cm/code_puppy/plugins/agent_skills/remote_catalog.py
 # hypothesis_version: 6.151.11
 
 ['.code_puppy', '/', 'Accept', 'User-Agent', 'application/json', 'base_url', 'cache', 'contents', 'description', 'download_url', 'file_count', 'group', 'groups', 'has_license', 'has_references', 'has_scripts', 'name', 'skills', 'skills_catalog.json', 'slug', 'total_skills', 'utf-8', 'version', 'zip_size_bytes']

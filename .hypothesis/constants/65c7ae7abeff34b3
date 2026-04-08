@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# file: /Users/adam2/projects/code_puppy-tpkw/code_puppy/pydantic_patches.py
-=======
-# file: /Users/adam2/projects/code_puppy-yttp/code_puppy/pydantic_patches.py
->>>>>>> feature/code_puppy-yttp
+# file: /Users/adam2/projects/code_puppy-k0cm/code_puppy/pydantic_patches.py
 # hypothesis_version: 6.151.11
 
 [1000, '0.0.0-dev', 'KimiCLI/0.63', '[BLOCKED]', 'blocked', 'cache_clear', 'code-puppy', 'cp_', 'error', 'error_message', 'kimi', 'raw', 'reason', 'tool_name', 'user_feedback']
