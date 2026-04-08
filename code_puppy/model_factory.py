@@ -282,6 +282,33 @@ class ZaiChatModel(_OpenAIChatModel):
         return super()._process_response(response)
 
 
+# ─── Lazy cached ZaiCerebrasProvider class (see MEM-MF-H1) ────────────────
+_ZAI_CEREBRAS_PROVIDER_CLASS: type | None = None
+
+
+def _get_zai_cerebras_provider_class() -> type:
+    """Return the cached ZaiCerebrasProvider class, creating it once on first call.
+
+    This avoids leaking types across rebuilds when the class would otherwise be
+    defined inline inside _build_cerebras() on every call.
+    """
+    global _ZAI_CEREBRAS_PROVIDER_CLASS
+    if _ZAI_CEREBRAS_PROVIDER_CLASS is None:
+        from pydantic_ai.providers.cerebras import CerebrasProvider
+        from pydantic_ai.profiles import ModelProfile
+        from pydantic_ai.profiles.qwen import qwen_model_profile
+
+        class _ZaiCerebrasProviderImpl(CerebrasProvider):
+            def model_profile(self, mn: str) -> ModelProfile | None:
+                profile = super().model_profile(mn)
+                if mn.startswith("zai"):
+                    profile = profile.update(qwen_model_profile("qwen-3-coder"))
+                return profile
+
+        _ZAI_CEREBRAS_PROVIDER_CLASS = _ZaiCerebrasProviderImpl
+    return _ZAI_CEREBRAS_PROVIDER_CLASS
+
+
 def _resolve_env_var(match, key=None):
     """Helper to resolve environment variable from regex match.
 
@@ -636,20 +663,10 @@ def _build_custom_gemini(model_name: str, model_config: dict, config: dict) -> A
 
 def _build_cerebras(model_name: str, model_config: dict, config: dict) -> Any:
     from pydantic_ai.models.openai import OpenAIChatModel
-    from pydantic_ai.profiles import ModelProfile
-    from pydantic_ai.providers.cerebras import CerebrasProvider
     from pydantic_ai.providers.openai import OpenAIProvider
 
-    # Define the provider subclass inline so that mocking CerebrasProvider in
-    # tests still works correctly (matches original behaviour).
-    class ZaiCerebrasProvider(CerebrasProvider):
-        def model_profile(self, mn: str) -> ModelProfile | None:
-            profile = super().model_profile(mn)
-            if mn.startswith("zai"):
-                from pydantic_ai.profiles.qwen import qwen_model_profile
-
-                profile = profile.update(qwen_model_profile("qwen-3-coder"))
-            return profile
+    # Use the cached provider class to avoid leaking types across rebuilds
+    ZaiCerebrasProvider = _get_zai_cerebras_provider_class()
 
     url, headers, verify, api_key = get_custom_config(model_config)
     if not api_key:
@@ -858,8 +875,29 @@ def is_quota_exception(exc: BaseException) -> bool:
 
 
 # --- Model config caching (eliminates repeated disk reads) ---
-_model_config_cache: dict[str, Any] | None = None
+_model_config_cache: MappingProxyType | None = None
 _model_config_mtimes: dict[str, float] = {}
+
+
+def _freeze_nested(obj: Any) -> Any:
+    """Recursively convert nested dicts to MappingProxyType for immutability.
+
+    Ensures that deeply nested structures in the cache cannot be modified,
+    providing true nested immutability for the model configuration cache.
+    """
+    if isinstance(obj, dict):
+        # Recursively freeze all values, then wrap in MappingProxyType
+        frozen_dict = {k: _freeze_nested(v) for k, v in obj.items()}
+        return MappingProxyType(frozen_dict)
+    elif isinstance(obj, list):
+        # Recursively freeze all items in lists
+        return [_freeze_nested(item) for item in obj]
+    elif isinstance(obj, tuple):
+        # Recursively freeze all items in tuples
+        return tuple(_freeze_nested(item) for item in obj)
+    else:
+        # Primitive type - return as-is
+        return obj
 
 
 def invalidate_model_config_cache() -> None:
@@ -897,7 +935,7 @@ class ModelFactory:
 
         # Return cache if valid
         if _model_config_cache is not None and current_mtimes == _model_config_mtimes:
-            return MappingProxyType(_model_config_cache)
+            return _model_config_cache
 
         load_model_config_callbacks = callbacks.get_callbacks("load_model_config")
         if len(load_model_config_callbacks) > 0:
@@ -984,12 +1022,12 @@ class ModelFactory:
                 f"Failed to load plugin models config: {exc}"
             )
 
-        # Populate cache
-        _model_config_cache = config.copy()
+        # Populate cache with nested immutability
+        _model_config_cache = _freeze_nested(config)
         _model_config_mtimes.clear()
         _model_config_mtimes.update(current_mtimes)
 
-        return MappingProxyType(config)
+        return _model_config_cache
 
     @staticmethod
     def get_model(model_name: str, config: dict[str, Any]) -> Any:

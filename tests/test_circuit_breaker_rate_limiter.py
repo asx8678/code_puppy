@@ -820,12 +820,19 @@ class TestCircuitBreakerEdgeCases:
 
     @pytest.mark.asyncio
     async def test_model_rate_limit_state_has_circuit_fields(self):
-        """ModelRateLimitState should have circuit breaker fields."""
+        """ModelRateLimitState should have circuit breaker fields (queue is lazily allocated)."""
+        from code_puppy.adaptive_rate_limiter import _ensure_queue
+
         state = ModelRateLimitState(current_limit=10.0)
         assert state.circuit_state == CircuitState.CLOSED
         assert state.circuit_opened_time == 0.0
         assert state.cooldown_multiplier == 1.0
         assert state.half_open_test_count == 0
+        # Queue is lazily allocated (MEM-ARL-H1 fix) - initially None
+        assert state.request_queue is None
+        # _ensure_queue should create the queue when needed
+        queue = _ensure_queue(state)
+        assert queue is not None
         assert state.request_queue is not None
 
     @pytest.mark.asyncio
