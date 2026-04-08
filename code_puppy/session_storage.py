@@ -116,19 +116,27 @@ def _compute_hmac(key: bytes, data: bytes) -> bytes:
 def _get_or_create_hmac_key() -> bytes:
     """Get or create a per-installation HMAC key for session integrity.
 
-    Uses atomic file creation (O_CREAT|O_EXCL via open mode 'xb') to prevent
+    Uses atomic file creation (O_CREAT|O_EXCL via os.open) to prevent
     TOCTOU races when multiple processes start simultaneously. The key is
-    stored at DATA_DIR/.session_hmac_key with chmod 0o600.
+    stored at DATA_DIR/.session_hmac_key with chmod 0o600 (set atomically
+    at creation time via os.open flags).
+
+    SECURITY NOTE (code_puppy-cnj): This key file should be securely deleted
+    when the application is uninstalled. Call delete_hmac_key() during uninstall
+    to overwrite the key with random bytes before deletion.
     """
     from code_puppy import config  # local import to avoid circular deps
 
     key_path = Path(config.DATA_DIR) / ".session_hmac_key"
     key_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with key_path.open("xb") as f:  # O_CREAT|O_EXCL — atomic, prevents TOCTOU
+        # Atomic creation with O_CREAT|O_EXCL and mode 0o600 set atomically
+        fd = os.open(str(key_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
             key = os.urandom(32)
-            f.write(key)
-        key_path.chmod(0o600)
+            os.write(fd, key)
+        finally:
+            os.close(fd)
         return key
     except FileExistsError:
         key = key_path.read_bytes()
@@ -139,9 +147,51 @@ def _get_or_create_hmac_key() -> bytes:
                 len(key),
             )
             key = os.urandom(32)
-            key_path.write_bytes(key)
-            key_path.chmod(0o600)
+            # Use atomic write+rename for regeneration to avoid corruption
+            tmp_path = key_path.with_suffix(".tmp")
+            tmp_path.write_bytes(key)
+            tmp_path.chmod(0o600)
+            tmp_path.replace(key_path)
         return key
+
+
+def delete_hmac_key() -> bool:
+    """Securely delete the HMAC key file by overwriting with random bytes before unlink.
+
+    This function should be called during application uninstall to ensure the
+    session integrity key is properly wiped from disk.
+
+    If the overwrite fails (e.g., permission denied), a warning is logged and
+    deletion is still attempted. OSError propagates only if `unlink()` fails.
+
+    Returns:
+        True if the key file was successfully deleted, False if it didn't exist.
+
+    Raises:
+        OSError: If deletion fails after overwrite (e.g., permission denied).
+    """
+    from code_puppy import config  # local import to avoid circular deps
+
+    key_path = Path(config.DATA_DIR) / ".session_hmac_key"
+    if not key_path.exists():
+        return False
+
+    # Securely overwrite with random bytes using fsync before deletion
+    try:
+        file_size = key_path.stat().st_size
+        if file_size > 0:
+            fd = os.open(str(key_path), os.O_WRONLY)
+            try:
+                os.write(fd, os.urandom(file_size))
+                os.fsync(fd)  # Ensure bytes reach physical media before unlink
+            finally:
+                os.close(fd)
+    except OSError as exc:
+        logger.warning("Could not overwrite HMAC key file before deletion: %s", exc)
+        # Continue to unlink attempt even if overwrite failed
+
+    key_path.unlink()
+    return True
 
 
 _HMAC_KEY: bytes | None = None  # lazily populated on first call
