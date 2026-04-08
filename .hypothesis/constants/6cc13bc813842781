@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # file: /Users/adam2/projects/code_puppy-tpkw/code_puppy/plugins/shell_safety/register_callbacks.py
+=======
+# file: /Users/adam2/projects/code_puppy-yttp/code_puppy/plugins/shell_safety/register_callbacks.py
+>>>>>>> feature/code_puppy-yttp
 # hypothesis_version: 6.151.11
 
 ['blocked', 'critical', 'denied_by_policy', 'error_message', 'high', 'is_fallback', 'low', 'medium', 'none', 'reasoning', 'risk', 'run_shell_command', 'unknown']
