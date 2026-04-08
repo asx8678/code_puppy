@@ -289,33 +289,53 @@ else:
         return False
 
 
+# =============================================================================
+# CONCURRENCY CONTROL
+# =============================================================================
+# This module uses a unified concurrency control approach:
+#
+# 1. CENTRALIZED SEMAPHORE (ToolCallsLimiter):
+#    - From code_puppy.concurrency_limits
+#    - Limits concurrent tool executions system-wide
+#    - Applied at all shell command entry points (background + foreground)
+#
+# 2. THREADING LOCKS (for internal state protection):
+#    All locks follow consistent naming: _<PURPOSE>_LOCK
+#    - _CONFIRMATION_LOCK: Serializes interactive user confirmations
+#    - _RUNNING_PROCESSES_LOCK: Protects process tracking set
+#    - _KEYBOARD_CONTEXT_LOCK: Protects keyboard context refcount
+#    - _ACTIVE_STOP_EVENTS_LOCK: Protects stop events registry
+#    - _SHELL_EXECUTOR_LOCK: Thread-safe lazy executor init
+#
+# For cross-process or system-wide limits, ToolCallsLimiter is preferred.
+# For internal state protection, threading.Lock is used with `with` statements.
+# =============================================================================
+
 _AWAITING_USER_INPUT = threading.Event()
 
+# User confirmation lock - non-blocking acquire pattern for try-once semantics
 _CONFIRMATION_LOCK = threading.Lock()
 
-# Track running shell processes so we can kill them on Ctrl-C from the UI
+# Process tracking - protected by _RUNNING_PROCESSES_LOCK
 _RUNNING_PROCESSES: set[subprocess.Popen] = set()
 _RUNNING_PROCESSES_LOCK = threading.Lock()
-# Bounded set of PIDs killed by user — prevents unbounded growth on long sessions.
-# Uses dict as ordered set (insertion-ordered in Python 3.7+), capped at 1024 entries (evict oldest on overflow).
+
+# Bounded set of PIDs killed by user (dict as ordered set)
 _USER_KILLED_PROCESSES: dict[int, None] = {}
 _USER_KILLED_PROCESSES_MAX = 1024
 
-# Global state for shell command keyboard handling
+# Keyboard handling state (protected by _KEYBOARD_CONTEXT_LOCK where needed)
 _SHELL_CTRL_X_STOP_EVENT: threading.Event | None = None
 _SHELL_CTRL_X_THREAD: threading.Thread | None = None
 _ORIGINAL_SIGINT_HANDLER = None
-
-# Reference-counted keyboard context - stays active while ANY command is running
 _KEYBOARD_CONTEXT_REFCOUNT = 0
 _KEYBOARD_CONTEXT_LOCK = threading.Lock()
 
-# Thread-safe registry of active stop events for concurrent shell commands
+# Stop events registry - protected by _ACTIVE_STOP_EVENTS_LOCK
 _ACTIVE_STOP_EVENTS: set[threading.Event] = set()
 _ACTIVE_STOP_EVENTS_LOCK = threading.Lock()
 
-# Thread pool for running blocking shell commands without blocking the event loop.
-# Lazy-initialized on first use to avoid spawning 16 threads at import time.
+# Thread pool executor - lazy-initialized, thread-safe via _SHELL_EXECUTOR_LOCK
 _SHELL_EXECUTOR: ThreadPoolExecutor | None = None
 _SHELL_EXECUTOR_LOCK = threading.Lock()
 
