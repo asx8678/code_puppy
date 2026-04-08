@@ -878,8 +878,8 @@ _STATE_ALIASES: dict[str, str] = {
     "_cfg_release_rate": "cfg_release_rate",
 }
 
-import sys as _sys
-from types import ModuleType as _ModuleType
+import sys as _sys  # noqa: E402
+from types import ModuleType as _ModuleType  # noqa: E402
 
 
 class _BackCompatModule(_ModuleType):
