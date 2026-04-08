@@ -299,7 +299,11 @@ def _complete_file_path(text: str) -> list[CompletionItem]:
 
 
 def _complete_directories(partial: str) -> list[CompletionItem]:
-    """Complete directory paths for /cd command."""
+    """Complete directory paths for /cd command.
+
+    Uses os.scandir with cached stat results (Issue COMP-M1).
+    Sort after filtering with early-exit at match limit.
+    """
     items = []
     try:
         expanded = os.path.expanduser(partial) if partial else "."
@@ -310,17 +314,33 @@ def _complete_directories(partial: str) -> list[CompletionItem]:
             base = os.path.dirname(expanded) or "."
             prefix = os.path.basename(expanded)
 
-        for entry in sorted(os.listdir(base)):
-            full = os.path.join(base, entry)
-            if os.path.isdir(full) and entry.lower().startswith(prefix.lower()):
-                display_path = os.path.join(base, entry) if base != "." else entry
-                items.append(
-                    CompletionItem(
-                        text=display_path + os.sep,
-                        display=f"📁 {entry}/",
-                        description="directory",
+        prefix_lower = prefix.lower()
+        count = 0
+        MAX_MATCHES = 50  # Early-exit limit
+
+        # Use os.scandir which caches stat results from readdir (COMP-M1)
+        with os.scandir(base) as it:
+            for entry in it:
+                # Check name match before expensive ops
+                if not entry.name.lower().startswith(prefix_lower):
+                    continue
+
+                # entry.is_dir() uses cached stat from scandir (free)
+                if entry.is_dir(follow_symlinks=False):
+                    display_path = os.path.join(base, entry.name) if base != "." else entry.name
+                    items.append(
+                        CompletionItem(
+                            text=display_path + os.sep,
+                            display=f"📁 {entry.name}/",
+                            description="directory",
+                        )
                     )
-                )
+                    count += 1
+                    if count >= MAX_MATCHES:
+                        break  # Early-exit at match limit
+
+        # Sort results alphabetically (after filtering, not before)
+        items.sort(key=lambda x: x.text.lower())
     except Exception:
         pass
     return items
