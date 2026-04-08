@@ -1192,42 +1192,30 @@ async def run_shell_command(
     # Generate unique group_id for this command execution
     group_id = generate_group_id("shell_command", command)
 
-    # Invoke safety check callbacks (only active in yolo_mode)
-    # This allows plugins to intercept and assess commands before execution
-    from code_puppy.callbacks import on_run_shell_command
+    # --- SecurityBoundary Integration (code_puppy-vdfn) ---
+    # Centralized security enforcement: checks PolicyEngine rules and plugin callbacks
+    # This replaces the manual callback triggering with a unified security interface
+    from code_puppy.security import get_security_boundary
 
-    callback_results = await on_run_shell_command(context, command, cwd, timeout)
+    security = get_security_boundary()
+    security_decision = security.check_shell_command(
+        command=command,
+        cwd=cwd,
+        timeout=timeout,
+        context=context,
+    )
 
-    # Check if any callback blocked the command
-    # Callbacks can return:
-    # - None (allow)
-    # - dict with blocked=True (reject)
-    # - Deny object from permission_decision (reject, from failed callbacks)
-    for result in callback_results:
-        # Handle Deny objects from permission_decision (fail-closed semantics)
-        if result is not None and type(result).__name__ == "Deny":
-            return ShellCommandOutput(
-                success=False,
-                command=command,
-                error=getattr(result, "reason", "Command blocked by safety check"),
-                user_feedback=getattr(result, "user_feedback", "") or "",
-                stdout=None,
-                stderr=None,
-                exit_code=None,
-                execution_time=None,
-            )
-        # Handle legacy dict format
-        if result and isinstance(result, dict) and result.get("blocked"):
-            return ShellCommandOutput(
-                success=False,
-                command=command,
-                error=result.get("error_message", "Command blocked by safety check"),
-                user_feedback=result.get("reasoning", ""),
-                stdout=None,
-                stderr=None,
-                exit_code=None,
-                execution_time=None,
-            )
+if not security_decision.allowed:
+        return ShellCommandOutput(
+            success=False,
+            command=command,
+            error=security_decision.reason or "Command blocked by security check",
+            user_feedback=security_decision.reason,
+            stdout=None,
+            stderr=None,
+            exit_code=None,
+            execution_time=None,
+        )
 
     # Handle background execution - runs command detached and returns immediately
     # This happens BEFORE user confirmation since we don't wait for the command
