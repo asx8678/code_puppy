@@ -408,33 +408,41 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                 # Rebuild request if anything changed - USE CACHE for optimization
                 if body_modified or headers_modified or url != request.url:
                     try:
-                        # Use cached request building for optimization
-                        rebuilt = self.cached_or_build_request(
-                            method=request.method,
-                            url=url,
-                            headers=headers,
-                            content=body_bytes,
-                        )
-                        used_cache = True
+                        # Optimization: skip rebuild for header-only changes
+                        # Body re-encode is expensive; if only headers changed, mutate directly
+                        if not body_modified and url == request.url:
+                            # Header-only change: mutate headers directly, skip rebuild
+                            for key, value in headers.items():
+                                request.headers[key] = value
+                            used_cache = True
+                        else:
+                            # Body or URL changed: need full rebuild
+                            rebuilt = self.cached_or_build_request(
+                                method=request.method,
+                                url=url,
+                                headers=headers,
+                                content=body_bytes,
+                            )
+                            used_cache = True
 
-                        # Copy core internals so httpx uses the modified body/stream
-                        if hasattr(rebuilt, "_content"):
-                            request._content = rebuilt._content  # type: ignore[attr-defined]
-                        if hasattr(rebuilt, "stream"):
-                            request.stream = rebuilt.stream
-                        if hasattr(rebuilt, "extensions"):
-                            request.extensions = rebuilt.extensions
+                            # Copy core internals so httpx uses the modified body/stream
+                            if hasattr(rebuilt, "_content"):
+                                request._content = rebuilt._content  # type: ignore[attr-defined]
+                            if hasattr(rebuilt, "stream"):
+                                request.stream = rebuilt.stream
+                            if hasattr(rebuilt, "extensions"):
+                                request.extensions = rebuilt.extensions
 
-                        # Update URL
-                        request.url = url
+                            # Update URL
+                            request.url = url
 
-                        # Update headers
-                        for key, value in headers.items():
-                            request.headers[key] = value
+                            # Update headers
+                            for key, value in headers.items():
+                                request.headers[key] = value
 
-                        # Ensure Content-Length matches the new body
-                        if body_bytes:
-                            request.headers["Content-Length"] = str(len(body_bytes))
+                            # Ensure Content-Length matches the new body
+                            if body_bytes:
+                                request.headers["Content-Length"] = str(len(body_bytes))
 
                     except Exception as exc:
                         logger.debug("Error rebuilding request: %s", exc)
