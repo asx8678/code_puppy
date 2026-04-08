@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/model_packs.py
-# hypothesis_version: 6.151.11
-
-[', ', 'ModelPack', 'User-defined pack', 'always', 'auto', 'capacity', 'claude-sonnet-4', 'coder', 'coding', 'context_overflow', 'default_role', 'description', 'economical', 'fallbacks', 'gemini-2.5-flash', 'gpt-4o', 'gpt-4o-mini', 'model_packs.json', 'planner', 'primary', 'provider_failure', 'reviewer', 'roles', 'single', 'summarizer', 'synthetic-GLM-5', 'title', 'trigger', 'zai-glm-5.1-coding']

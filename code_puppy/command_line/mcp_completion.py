@@ -1,4 +1,5 @@
 import logging
+import time
 from collections.abc import Iterable
 
 from prompt_toolkit.completion import Completer, Completion
@@ -63,8 +64,6 @@ class MCPCompleter(Completer):
 
     def _get_server_names(self):
         """Get server names with caching."""
-        import time
-
         # Cache for 30 seconds to avoid repeated manager calls
         current_time = time.time()
         if (

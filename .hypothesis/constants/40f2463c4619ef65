@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/interactive_loop.py
-# hypothesis_version: 6.151.11
-
-[0.5, 300, '\nGoodbye! (Ctrl+D)', '\nInput cancelled', '/', '/clear', '/exit', '/quit', '1', '>>> ', 'Autosave load error', 'CODE_PUPPY_NO_TUI', 'Darwin', 'Goodbye!', 'MOTD display error', 'Wiggum loop error', '__AUTOSAVE_LOAD__', 'all_messages', 'chatgpt', 'claude', 'clear', 'completed', 'exit', 'flush', 'quit', 'skipped']

@@ -749,7 +749,6 @@ async def _grep(
     context: RunContext, search_string: str, directory: str = "."
 ) -> GrepOutput:
     import json
-    import os
     import shlex
     import shutil
     import subprocess

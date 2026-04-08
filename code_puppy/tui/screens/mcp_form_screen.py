@@ -1,10 +1,10 @@
 """Custom MCP server form screen — Textual replacement for custom_server_form.py.
 
 Provides a single-screen form for configuring a custom MCP server:
-  • Server name  (Input)
-  • Server type  (ListView: stdio / http / sse)
-  • JSON config  (TextArea with placeholder)
-  • Submit: Ctrl+S saves and dismisses with (name, type, config_dict)
+  ● Server name  (Input)
+  ● Server type  (ListView: stdio / http / sse)
+  ● JSON config  (TextArea with placeholder)
+  ● Submit: Ctrl+S saves and dismisses with (name, type, config_dict)
 
 Wired via: /mcp add → app.py pushes MCPFormScreen
 """
@@ -12,6 +12,8 @@ Wired via: /mcp add → app.py pushes MCPFormScreen
 from __future__ import annotations
 
 import json
+import os
+import re
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -74,8 +76,6 @@ _NAME_PATTERN = r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$"
 
 def _validate_name(name: str) -> str | None:
     """Return an error message if *name* is invalid, else None."""
-    import re
-
     name = name.strip()
     if not name:
         return "Server name is required."
@@ -108,8 +108,6 @@ def _save_server(name: str, server_type: str, config: dict) -> str | None:
     Returns None on success, or an error string on failure.
     """
     try:
-        import os
-
         from code_puppy.config import MCP_SERVERS_FILE
         from code_puppy.mcp_.managed_server import ServerConfig
         from code_puppy.mcp_.manager import get_manager

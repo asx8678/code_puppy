@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/command_line/mcp/logs_command.py
-# hypothesis_version: 6.151.11
-
-[1024, '--clear', 'all', 'dim', 'exists', 'line_count', 'log', 'monokai', 'rotated_count', 'total_size_bytes']

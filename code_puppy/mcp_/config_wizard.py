@@ -5,6 +5,7 @@ Note: This module imports ServerConfig and get_mcp_manager directly from
 .code_puppy.mcp.manager to avoid circular imports with the package __init__.py
 """
 
+import os
 import re
 from pathlib import Path
 from urllib.parse import urlparse
@@ -396,7 +397,6 @@ class MCPConfigWizard:
 
     def validate_command(self, command: str) -> bool:
         """Check if command exists (basic check)."""
-        import os
         import shutil
 
         # If it's a path, check if file exists
@@ -509,7 +509,6 @@ def run_add_wizard(group_id: str = None) -> bool:
 
             # Also save to mcp_servers.json for persistence
             import json
-            import os
 
             from code_puppy.config import MCP_SERVERS_FILE
 

@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/keymap.py
-# hypothesis_version: 6.151.11
-
-['\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\x07', '\x08', '\x0e', '\x0f', '\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17', '\x18', '\x19', '\x1a', '\x1b', '+', ', ', 'cancel_agent_key', 'ctrl+', 'ctrl+a', 'ctrl+b', 'ctrl+c', 'ctrl+d', 'ctrl+e', 'ctrl+f', 'ctrl+g', 'ctrl+h', 'ctrl+i', 'ctrl+j', 'ctrl+k', 'ctrl+l', 'ctrl+m', 'ctrl+n', 'ctrl+o', 'ctrl+p', 'ctrl+q', 'ctrl+r', 'ctrl+s', 'ctrl+t', 'ctrl+u', 'ctrl+v', 'ctrl+w', 'ctrl+x', 'ctrl+y', 'ctrl+z', 'escape']

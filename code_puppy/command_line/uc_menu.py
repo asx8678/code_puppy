@@ -5,6 +5,7 @@ with live preview of tool details and inline source code viewing.
 """
 
 import asyncio
+import re
 import sys
 import unicodedata
 from pathlib import Path
@@ -104,8 +105,6 @@ def _toggle_tool_enabled(tool: UCToolInfo) -> bool:
         new_enabled = not tool.meta.enabled
 
         # Try to find and replace the enabled line
-        import re
-
         # Match 'enabled': True/False or "enabled": True/False
         pattern = r'(["\']enabled["\']\s*:\s*)(True|False)'
 
@@ -504,8 +503,6 @@ def _highlight_python_line(line: str) -> list[tuple[str, str]]:
         return result
 
     # Word-by-word highlighting
-    import re
-
     tokens = re.split(r"(\s+|[()\[\]{}:,=.])", line)
 
     in_string = False

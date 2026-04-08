@@ -5,6 +5,7 @@ Defines all data structures used throughout the hook engine with full type
 safety and validation.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -170,8 +171,6 @@ class HookRegistry:
 
     @staticmethod
     def _normalize_event_type(event_type: str) -> str:
-        import re
-
         s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", event_type)
         return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 

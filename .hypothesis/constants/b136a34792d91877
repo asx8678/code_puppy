@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tools/browser/browser_scripts.py
-# hypothesis_version: 6.151.11
-
-[100, 10000, 30000, 'amount', 'attached', 'browser_execute_js', 'browser_scroll', 'browser_set_viewport', 'cleared_count', 'clientHeight', 'color', 'direction', 'down', 'element_selector', 'error', 'height', 'left', 'page', 'red', 'result', 'right', 'script', 'scroll_position', 'selector', 'state', 'success', 'target', 'up', 'visible', 'width']

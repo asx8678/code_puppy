@@ -576,7 +576,6 @@ def _listen_for_ctrl_x_windows(
 ) -> None:
     """Windows-specific Ctrl-X listener."""
     import msvcrt
-    import time
 
     while not stop_event.is_set():
         try:

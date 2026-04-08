@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/api/routers/sessions.py
-# hypothesis_version: 6.151.11
-
-[10.0, 400, 404, 500, 504, '*.txt', '.msgpack', '/', '/{session_id}', '__dict__', 'agent_name', 'content', 'created_at', 'initial_prompt', 'json', 'last_updated', 'message', 'message_count', 'model_dump', 'r', 'subagent_sessions']

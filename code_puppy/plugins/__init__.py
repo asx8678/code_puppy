@@ -12,6 +12,7 @@ steal credentials, install malware, etc.). Only install plugins from trusted sou
 import importlib
 import importlib.util
 import logging
+import re
 import sys
 import threading
 from pathlib import Path
@@ -245,8 +246,6 @@ def _extract_phases_from_callbacks_file(
         content = callbacks_file.read_text()
 
         # Look for register_callback("phase", ...) patterns
-        import re
-
         pattern = r'register_callback\s*\(\s*["\']([^"\']+)["\']'
         matches = re.findall(pattern, content)
 

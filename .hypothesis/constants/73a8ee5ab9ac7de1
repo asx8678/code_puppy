@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/turbo_executor/notifications.py
-# hypothesis_version: 6.151.11
-
-[', ', '.', '...', 'Unknown error', 'content', 'directory', 'error', 'error_count', 'failed', 'file_paths', 'grep', 'id', 'list_files', 'no operations', 'operation_id', 'operation_results', 'operations', 'plan_json', 'post_tool_call', 'pre_tool_call', 'read_files', 'search_string', 'status', 'success_count', 'successful_reads', 'total_duration_ms', 'total_files', 'total_matches', 'turbo_execute', 'type', 'unknown', 'unnamed', '{}', '⚡', '📂', '📄', '🔍']

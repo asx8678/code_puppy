@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/command_line/workflow_commands.py
-# hypothesis_version: 6.151.11
-
-['Context compacted', 'Context/files loaded', 'Error occurred', 'Fallback model used', 'File created', 'File deleted', 'File edited', 'Linting performed', 'Plan created', 'Session saved', 'Tests run', 'Workflow state reset', 'clear', 'config', 'did_check_lint', 'did_create_file', 'did_create_plan', 'did_delete_file', 'did_edit_file', 'did_encounter_error', 'did_execute_shell', 'did_generate_code', 'did_load_context', 'did_run_tests', 'did_save_session', 'dim', 'flags', 'green', 'reset', 'set', '○', '✓']

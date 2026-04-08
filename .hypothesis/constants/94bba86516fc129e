@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/capability/registry.py
-# hypothesis_version: 6.151.11
-
-['description', 'display_name', 'id', 'priority', 'provider_count', 'providers']

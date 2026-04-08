@@ -6,6 +6,7 @@ terminal QA agents to run simultaneously without profile conflicts.
 """
 
 import logging
+import os
 import uuid
 
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
@@ -50,8 +51,6 @@ class ChromiumTerminalManager:
             session_id: Optional session ID for tracking this instance.
                 If None, a UUID will be generated.
         """
-        import os
-
         self.session_id = session_id or str(uuid.uuid4())[:8]
 
         # Default to headless=False - we want to see the terminal browser!

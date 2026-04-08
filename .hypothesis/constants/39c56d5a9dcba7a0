@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/uvx_detection.py
-# hypothesis_version: 6.151.11
-
-[260, 'Windows', 'cntThreads', 'cntUsage', 'current_pid', 'dwFlags', 'dwSize', 'ignore', 'is_launched_via_uvx', 'is_windows', 'parent_process_chain', 'pcPriClassBase', 'python_executable', 'szExeFile', 'th32DefaultHeapID', 'th32ModuleID', 'th32ParentProcessID', 'th32ProcessID', 'utf-8', 'uvx', 'uvx.exe']

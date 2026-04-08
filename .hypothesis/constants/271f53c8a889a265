@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tools/browser/browser_control.py
-# hypothesis_version: 6.151.11
-
-['BROWSER CLOSE 🔒', 'BROWSER LIST PAGES 📋', 'BROWSER STATUS 📊', 'Browser closed', 'Error', 'Unknown', 'blank', 'browser_close', 'browser_initialize', 'browser_list_pages', 'browser_new_page', 'browser_status', 'browser_type', 'chromium', 'closed', 'current_title', 'current_url', 'error', 'headless', 'homepage', 'index', 'initialized', 'message', 'not_initialized', 'page_count', 'pages', 'requested_url', 'status', 'success', 'title', 'url']

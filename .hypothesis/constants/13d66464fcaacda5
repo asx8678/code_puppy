@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/messaging/markdown_patches.py
-# hypothesis_version: 6.151.11
-
-['LeftJustifiedHeading', 'h1', 'h2', 'heading_open', 'left', 'markdown.h1.border']

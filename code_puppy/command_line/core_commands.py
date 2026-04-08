@@ -601,7 +601,6 @@ def handle_mcp_command(command: str) -> bool:
 )
 def handle_api_command(command: str) -> bool:
     """Handle the /api command."""
-    import os
     import signal
     import subprocess
     import sys

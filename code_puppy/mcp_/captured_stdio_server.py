@@ -8,6 +8,7 @@ stderr output and makes it available through proper logging channels.
 import asyncio
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Sequence
 
@@ -235,8 +236,6 @@ class StderrCollector:
 
         def handler(line: str):
             # Store with server identification
-            import time
-
             entry = {"server": server_name, "line": line, "timestamp": time.time()}
 
             if server_name not in self.servers:

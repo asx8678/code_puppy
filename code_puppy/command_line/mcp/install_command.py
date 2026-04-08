@@ -3,6 +3,7 @@ MCP Install Command - Installs pre-configured MCP servers from the registry.
 """
 
 import logging
+import os
 
 from rich.text import Text
 
@@ -158,8 +159,6 @@ class InstallCommand(MCPCommandBase):
                 )
                 for var in required_env_vars:
                     # Check if already set in environment
-                    import os
-
                     current_value = os.environ.get(var, "")
                     if current_value:
                         emit_info(

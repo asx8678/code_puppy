@@ -9,7 +9,8 @@ only structured data with no formatting hints.
 
 import os
 import re
-from functools import cache, lru_cache
+from collections import defaultdict
+from functools import lru_cache
 from typing import Protocol, runtime_checkable
 
 from rich.console import Console
@@ -475,9 +476,6 @@ class RichConsoleRenderer:
         # Skip for sub-agents unless verbose mode
         if self._should_suppress_subagent_output():
             return
-
-        import os
-        from collections import defaultdict
 
         # Header on single line
         rec_flag = f"(recursive={msg.recursive})"

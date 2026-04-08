@@ -10,6 +10,7 @@ This module provides MCP servers that:
 import asyncio
 import os
 import threading
+import time
 import uuid
 from collections import deque
 from contextlib import asynccontextmanager
@@ -349,8 +350,6 @@ class StartupMonitor:
         Returns:
             Dictionary of server names to ready status
         """
-        import time
-
         results = {}
 
         # Create tasks for all servers
