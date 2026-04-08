@@ -399,41 +399,46 @@ class BaseAgent(ABC, AgentPromptMixin):
         emitted at different times. This prevents status updates from blowing up the
         history when they are repeated with new timestamps."""
 
+        # Bind attributes once to avoid repeated lookups
+        role = getattr(part, "role", None)
+        instructions = getattr(part, "instructions", None)
+        tool_call_id = getattr(part, "tool_call_id", None)
+        tool_name = getattr(part, "tool_name", None)
+        content = getattr(part, "content", None)
+
+        # Pre-size attributes list (class name + up to 6 optional attrs + content)
         attributes: list[str] = [part.__class__.__name__]
 
         # Role/instructions help disambiguate parts that otherwise share content
-        if hasattr(part, "role") and part.role:
-            attributes.append(f"role={part.role}")
-        if hasattr(part, "instructions") and part.instructions:
-            attributes.append(f"instructions={part.instructions}")
+        if role:
+            attributes.append(f"role={role}")
+        if instructions:
+            attributes.append(f"instructions={instructions}")
+        if tool_call_id:
+            attributes.append(f"tool_call_id={tool_call_id}")
+        if tool_name:
+            attributes.append(f"tool_name={tool_name}")
 
-        if hasattr(part, "tool_call_id") and part.tool_call_id:
-            attributes.append(f"tool_call_id={part.tool_call_id}")
+        # Handle content with faster isinstance checks instead of match
+        if content is None:
+            attributes.append("content=None")
+        elif isinstance(content, str):
+            attributes.append(f"content={content}")
+        elif isinstance(content, pydantic.BaseModel):
+            attributes.append(f"content={content.model_dump_json()}")
+        elif isinstance(content, dict):
+            attributes.append(f"content={json.dumps(content, sort_keys=True)}")
+        elif isinstance(content, list):
+            # Use list comprehension + generator for content items
+            for item in content:
+                if isinstance(item, str):
+                    attributes.append(f"content={item}")
+                elif isinstance(item, BinaryContent):
+                    attributes.append(f"BinaryContent={hash(item.data)}")
+        else:
+            attributes.append(f"content={content!r}")
 
-        if hasattr(part, "tool_name") and part.tool_name:
-            attributes.append(f"tool_name={part.tool_name}")
-
-        content = getattr(part, "content", None)
-        match content:
-            case None:
-                attributes.append("content=None")
-            case str() as s:
-                attributes.append(f"content={s}")
-            case pydantic.BaseModel():
-                attributes.append(f"content={content.model_dump_json()}")
-            case dict():
-                attributes.append(f"content={json.dumps(content, sort_keys=True)}")
-            case list():
-                for item in content:
-                    match item:
-                        case str():
-                            attributes.append(f"content={item}")
-                        case BinaryContent():
-                            attributes.append(f"BinaryContent={hash(item.data)}")
-            case _:
-                attributes.append(f"content={content!r}")
-        result = "|".join(attributes)
-        return result
+        return "|".join(attributes)
 
     def hash_message(self, message: Any) -> str:
         """Create a stable hash for a model message that ignores timestamps.
@@ -469,43 +474,43 @@ class BaseAgent(ABC, AgentPromptMixin):
         Returns:
             String representation of the message part
         """
-        result = ""
-        if hasattr(part, "part_kind"):
-            result += part.part_kind + ": "
-        else:
-            result += str(type(part)) + ": "
+        # Bind attributes once to avoid repeated lookups
+        part_kind = getattr(part, "part_kind", None)
+        content = getattr(part, "content", None)
+        tool_name = getattr(part, "tool_name", None)
+        args = getattr(part, "args", None)
 
-        # Handle content
-        if hasattr(part, "content") and part.content:
-            match part.content:
-                case str() as s:
-                    result = s
-                case pydantic.BaseModel():
-                    result = part.content.model_dump_json()
-                case dict():
-                    result = json.dumps(part.content)
-                case list():
-                    result_parts = []
-                    for item in part.content:
-                        match item:
-                            case str():
-                                result_parts.append(item)
-                            case BinaryContent():
-                                result_parts.append(f"BinaryContent={hash(item.data)}")
-                    result = "\n".join(result_parts)
-                case _:
-                    result = str(part.content)
+        # Build prefix with single concatenation
+        prefix = f"{part_kind}: " if part_kind else f"{str(type(part))}: "
+
+        # Handle content with faster isinstance checks instead of match
+        if content:
+            if isinstance(content, str):
+                result = content
+            elif isinstance(content, pydantic.BaseModel):
+                result = content.model_dump_json()
+            elif isinstance(content, dict):
+                result = json.dumps(content)
+            elif isinstance(content, list):
+                # Use list comprehension for faster string building
+                result_parts = [
+                    item if isinstance(item, str) else f"BinaryContent={hash(item.data)}"
+                    for item in content
+                    if isinstance(item, str) or isinstance(item, BinaryContent)
+                ]
+                result = "\n".join(result_parts)
+            else:
+                result = str(content)
+        else:
+            result = ""
 
         # Handle tool calls which may have additional token costs
-        # If part also has content, we'll process tool calls separately
-        if hasattr(part, "tool_name") and part.tool_name:
-            # Estimate tokens for tool name and parameters
-            tool_text = part.tool_name
-            if hasattr(part, "args"):
-                tool_text += f" {str(part.args)}"
-            result += tool_text
+        if tool_name:
+            # Estimate tokens for tool name and parameters - single f-string
+            tool_text = f"{tool_name} {args}" if args else tool_name
+            result = f"{result}{tool_text}" if result else tool_text
 
-        return result
+        return f"{prefix}{result}" if result else prefix
 
     def estimate_token_count(self, text: str) -> int:
         """
