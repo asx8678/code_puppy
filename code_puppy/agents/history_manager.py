@@ -111,42 +111,6 @@ class MessageHistoryMixin:
                     parts_str += f"{type(part).__name__}:"
         return hash(parts_str)
 
-    def _clean_binaries(self, messages: list[ModelMessage]) -> list[ModelMessage]:
-        """Remove binary content from messages for display/logging.
-
-        Args:
-            messages: List of messages to clean.
-
-        Returns:
-            Messages with binary content removed.
-        """
-        cleaned = []
-        for msg in messages:
-            if isinstance(msg, ModelRequest):
-                cleaned_parts = []
-                for part in msg.parts:
-                    if isinstance(part, (TextPart, ThinkingPart)):
-                        cleaned_parts.append(part)
-                    elif isinstance(part, ToolReturnPart):
-                        cleaned_parts.append(part)
-                    elif isinstance(part, ToolCallPart):
-                        cleaned_parts.append(part)
-                    # Skip BinaryContent, ImageUrl, DocumentUrl
-                if cleaned_parts:
-                    cleaned.append(ModelRequest(parts=cleaned_parts))
-            elif isinstance(msg, ModelResponse):
-                cleaned_parts = []
-                for part in msg.parts:
-                    if isinstance(part, (TextPart, ThinkingPart)):
-                        cleaned_parts.append(part)
-                    elif isinstance(part, ToolCallPart):
-                        cleaned_parts.append(part)
-                if cleaned_parts:
-                    cleaned.append(ModelResponse(parts=cleaned_parts))
-            else:
-                cleaned.append(msg)
-        return cleaned
-
     def ensure_history_ends_with_request(
         self, messages: list[ModelMessage]
     ) -> list[ModelMessage]:
