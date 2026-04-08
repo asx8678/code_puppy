@@ -1710,17 +1710,21 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         for path_str in possible_paths:
             global_path = Path(CONFIG_DIR) / path_str
-            if global_path.exists():
+            try:
                 global_rules = global_path.read_text(encoding="utf-8-sig")
                 break
+            except FileNotFoundError:
+                continue
 
         # Load project-local rules from current working directory
         project_rules = None
         for path_str in possible_paths:
             project_path = Path(path_str)
-            if project_path.exists():
+            try:
                 project_rules = project_path.read_text(encoding="utf-8-sig")
                 break
+            except FileNotFoundError:
+                continue
 
         # Combine global and project rules
         # Global rules come first, project rules second (allowing project to override)
