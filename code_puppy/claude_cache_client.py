@@ -13,7 +13,6 @@ This module also handles:
 """
 
 import asyncio
-import base64
 import json
 import logging
 import time
@@ -22,6 +21,7 @@ from typing import Any, Callable, MutableMapping
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import httpx
+import jwt as _jwt
 
 from .request_cache import RequestCacheMixin
 
@@ -57,22 +57,7 @@ def _get_jwt_iat(token: str) -> int:
     """
     # NOTE: JWT signature is not verified; only used for cache age calculation.
     try:
-        # JWT format: header.payload.signature
-        # We only need the payload (second part)
-        parts = token.split(".")
-        if len(parts) != 3:
-            return 0
-
-        # Decode the payload (base64url encoded)
-        payload_b64 = parts[1]
-        # Add padding if needed (base64url doesn't require padding)
-        padding = 4 - len(payload_b64) % 4
-        if padding != 4:
-            payload_b64 += "=" * padding
-
-        payload_bytes = base64.urlsafe_b64decode(payload_b64)
-        payload = json.loads(payload_bytes.decode("utf-8"))
-
+        payload = _jwt.decode(token, options={"verify_signature": False})
         iat = payload.get("iat")
         # Validate iat is a number
         if not isinstance(iat, (int, float)):
@@ -135,18 +120,10 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                 return time.time() - iat
 
             # Fall back to calculating from 'exp' claim
-            # (We still decode here as the cache only covers iat extraction)
-            parts = token.split(".")
-            if len(parts) != 3:
+            try:
+                payload = _jwt.decode(token, options={"verify_signature": False})
+            except Exception:
                 return None
-
-            payload_b64 = parts[1]
-            padding = 4 - len(payload_b64) % 4
-            if padding != 4:
-                payload_b64 += "=" * padding
-
-            payload_bytes = base64.urlsafe_b64decode(payload_b64)
-            payload = json.loads(payload_bytes.decode("utf-8"))
 
             now = time.time()
             if "exp" in payload:
