@@ -5,14 +5,46 @@ import pathlib
 import threading
 import time
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 from code_puppy.session_storage import save_session_async
 from code_puppy import runtime_state
 
 
-# --- Path caching (lazy evaluation at first access) ---
-_path_cache: dict[str, pathlib.Path | str] = {}
-_PATH_LOCK = threading.Lock()
+# TYPE_CHECKING block for lazy-evaluated path constants (fixes F821 errors)
+if TYPE_CHECKING:
+    # XDG Base Directory paths
+    CONFIG_DIR: str
+    DATA_DIR: str
+    CACHE_DIR: str
+    STATE_DIR: str
+
+    # Configuration files (XDG_CONFIG_HOME)
+    CONFIG_FILE: pathlib.Path
+    MCP_SERVERS_FILE: pathlib.Path
+
+    # Data files (XDG_DATA_HOME)
+    MODELS_FILE: pathlib.Path
+    EXTRA_MODELS_FILE: pathlib.Path
+    AGENTS_DIR: pathlib.Path
+    SKILLS_DIR: pathlib.Path
+    CONTEXTS_DIR: pathlib.Path
+    _DEFAULT_SQLITE_FILE: pathlib.Path
+
+    # OAuth plugin model files (XDG_DATA_HOME)
+    GEMINI_MODELS_FILE: pathlib.Path
+    CHATGPT_MODELS_FILE: pathlib.Path
+    CLAUDE_MODELS_FILE: pathlib.Path
+    ANTIGRAVITY_MODELS_FILE: pathlib.Path
+
+    # Cache files (XDG_CACHE_HOME)
+    AUTOSAVE_DIR: pathlib.Path
+
+    # State files (XDG_STATE_HOME)
+    COMMAND_HISTORY_FILE: pathlib.Path
+
+    # Database URL
+    DBOS_DATABASE_URL: str
 
 # --- Config caching (eliminates repeated disk reads) ---
 _config_cache: configparser.ConfigParser | None = None
@@ -29,7 +61,10 @@ _CONFIG_LOCK = threading.Lock()
 @lru_cache(maxsize=4)
 def _get_xdg_dir_cached(env_var: str, fallback: str) -> str:
     """
-    Get directory for code_puppy files (cached at module level).
+    Get directory for code_puppy files (lru_cached - computed once per unique args).
+
+    Uses @lru_cache(maxsize=4) to cache results for each unique (env_var, fallback)
+    combination. Cached values persist for the lifetime of the process.
 
     XDG paths are only used when the corresponding environment variable
     is explicitly set by the user. Otherwise, we use the legacy ~/.code_puppy
