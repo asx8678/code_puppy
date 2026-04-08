@@ -10,6 +10,7 @@ by aider's RepoMap.token_count() — sample ~1% of lines and scale up.
 This keeps estimation O(sample_size) instead of O(n) for huge files.
 """
 
+import functools
 import re
 
 # Simple heuristics to detect code-heavy content
@@ -42,6 +43,7 @@ def _chars_per_token(text: str) -> float:
     return 4.5 if _is_code_heavy(text) else 4.0
 
 
+@functools.lru_cache(maxsize=512)
 def estimate_token_count(text: str) -> int:
     """Estimate the number of tokens in a text string.
 
