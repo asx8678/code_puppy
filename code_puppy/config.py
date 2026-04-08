@@ -1043,7 +1043,6 @@ def get_project_agents_directory() -> str | None:
 def initialize_command_history_file():
     """Create the command history file if it doesn't exist.
     Handles migration from the old history file location for backward compatibility.
-    Also normalizes the command history format if needed.
     """
     import os
     from pathlib import Path
@@ -1067,9 +1066,6 @@ def initialize_command_history_file():
 
                 shutil.copy2(Path(old_history_file), Path(COMMAND_HISTORY_FILE))
                 Path(old_history_file).unlink(missing_ok=True)
-
-                # Normalize the command history format if needed
-                normalize_command_history()
         except Exception as e:
             from code_puppy.messaging import emit_error
 
