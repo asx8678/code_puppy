@@ -30,7 +30,7 @@ _api_calls_semaphore: asyncio.Semaphore | None = None
 _tool_calls_semaphore: asyncio.Semaphore | None = None
 
 # Cached config
-_cached_config: dict[str, int] | None = None
+_cached_config: ConcurrencyConfig | None = None
 
 # Lock for thread-safe semaphore initialization
 _semaphore_init_lock = threading.Lock()
@@ -65,11 +65,11 @@ def _read_config() -> ConcurrencyConfig:
     global _cached_config
 
     if _cached_config is not None:
-        return ConcurrencyConfig.from_dict(_cached_config)
+        return _cached_config
 
     if not _CONFIG_PATH.exists():
-        _cached_config = {}
-        return ConcurrencyConfig()
+        _cached_config = ConcurrencyConfig()
+        return _cached_config
 
     try:
         import tomllib  # Python 3.11+
@@ -77,13 +77,13 @@ def _read_config() -> ConcurrencyConfig:
         with open(_CONFIG_PATH, "rb") as fh:
             data = tomllib.load(fh)
 
-        _cached_config = data.get("concurrency", {})
-        return ConcurrencyConfig.from_dict(_cached_config)
+        _cached_config = ConcurrencyConfig.from_dict(data.get("concurrency", {}))
+        return _cached_config
 
     except Exception as exc:
         logger.warning("Failed to read concurrency config %s: %s", _CONFIG_PATH, exc)
-        _cached_config = {}
-        return ConcurrencyConfig()
+        _cached_config = ConcurrencyConfig()
+        return _cached_config
 
 
 def _get_file_ops_semaphore() -> asyncio.Semaphore:
@@ -242,6 +242,7 @@ def reload_concurrency_config() -> None:
         _api_calls_semaphore, \
         _tool_calls_semaphore
 
+    global _cached_config
     _cached_config = None
     _file_ops_semaphore = None
     _api_calls_semaphore = None
