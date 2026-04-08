@@ -500,15 +500,22 @@ class MessageBus:
             future = self._pending_requests.get(prompt_id)
 
         if future is not None and not future.done():
-            # Must set result from the event loop thread if we have one
+            # Must set result from the event loop thread if we have one.
+            # Fast path: if already on the event loop thread, call directly
+            # to avoid the overhead of call_soon_threadsafe.
             if self._event_loop is not None:
-                try:
-                    self._event_loop.call_soon_threadsafe(
-                        self._set_future_result, future, result
-                    )
-                except RuntimeError:
-                    # Event loop closed - try direct set
+                # Fast path: compare thread IDs instead of calling get_running_loop()
+                if threading.current_thread().ident == self._loop_thread_id:
+                    # Already on the event loop thread - call directly
                     self._set_future_result(future, result)
+                else:
+                    try:
+                        self._event_loop.call_soon_threadsafe(
+                            self._set_future_result, future, result
+                        )
+                    except RuntimeError:
+                        # Event loop closed - try direct set
+                        self._set_future_result(future, result)
             else:
                 # No event loop - try direct set
                 self._set_future_result(future, result)
