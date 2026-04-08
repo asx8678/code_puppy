@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-tpkw/code_puppy/tools/file_modifications.py
+# hypothesis_version: 6.151.11
+
+[0.95, '+', '+++', '-', '---', '.', '/dev/null', '@@', 'No changes to apply.', 'Unknown', 'add', 'changed', 'content', 'context', 'create', 'create_file', 'created', 'delete', 'delete snippet from', 'delete_file', 'delete_snippet', 'diff', 'edit_file', 'error', 'explicit_user_denial', 'file_path', 'jw_score', 'message', 'modify', 'new_str', 'object', 'old_str', 'overwrite', 'overwritten', 'path', 'properties', 'r', 'received', 'rejection_type', 'remove', 'replace', 'replace text in', 'replace_in_file', 'replacements', 'required', 'snippet', 'string', 'success', 'surrogateescape', 'surrogatepass', 'type', 'user_feedback', 'user_rejection', 'utf-8', 'w', 'write']

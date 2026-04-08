@@ -168,9 +168,9 @@ def _preview_replace_in_file(
             parts.append(new_snippet.rstrip("\n"))
             if suffix:
                 parts.append(suffix)
+            if had_trailing_newline:
+                parts.append("")
             modified = "\n".join(parts)
-            if had_trailing_newline and not modified.endswith("\n"):
-                modified += "\n"
 
         if modified == original:
             return None

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-tpkw/code_puppy/plugins/file_permission_handler/register_callbacks.py
+# hypothesis_version: 6.151.11
+
+[0.95, '/dev/null', ':\n', 'File Operation', 'bold cyan', 'bold white', 'bold yellow', 'content', 'delete', 'delete snippet from', 'delete_snippet', 'diff_already_shown', 'dim', 'dim white', 'edit_file', 'file_path', 'file_permission', 'last_user_feedback', 'load_prompt', 'new_str', 'old_str', 'operation', 'overwrite', 'r', 'replace', 'replace text in', 'replacements', 'snippet', 'surrogateescape', 'surrogatepass', 'utf-8', 'write', 'write to', '📄 ']

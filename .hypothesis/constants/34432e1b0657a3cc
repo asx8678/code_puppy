@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-tpkw/code_puppy/resilience.py
+# hypothesis_version: 6.151.11
+
+[0.0, 0.1, 1.0, 2.0, 30.0, 60.0, 'P', 'T', '__name__', 'failures', 'state', 'successes']
