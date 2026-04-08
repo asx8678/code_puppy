@@ -14,7 +14,7 @@ provides additional rule-based command filtering.
 import asyncio
 from collections import deque
 import ctypes
-import io
+
 import os
 import re
 import select
@@ -1518,14 +1518,10 @@ def _run_command_sync(
         bufsize=-1,  # Use default buffering (bufsize=1 invalid for binary mode in Py3.14)
         preexec_fn=preexec_fn,
         creationflags=creationflags,
-    )
-
-    # Wrap pipes with TextIOWrapper that preserves \r (newline='' disables translation)
-    process.stdout = io.TextIOWrapper(
-        process.stdout, newline="", encoding="utf-8", errors="replace"
-    )
-    process.stderr = io.TextIOWrapper(
-        process.stderr, newline="", encoding="utf-8", errors="replace"
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        newline="",
     )
     _register_process(process)
     try:
