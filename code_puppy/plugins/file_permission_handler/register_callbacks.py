@@ -4,6 +4,7 @@ This plugin handles user permission prompts for file operations,
 providing a consistent and extensible permission system.
 """
 
+import asyncio
 import difflib
 import os
 import threading
@@ -65,7 +66,7 @@ def clear_diff_shown_flag() -> None:
 # Arrow selector and approval UI now handled by common.get_user_approval()
 
 
-def _preview_delete_snippet(file_path: str, snippet: str) -> str | None:
+async def _preview_delete_snippet(file_path: str, snippet: str) -> str | None:
     """Generate a preview diff for deleting a snippet without modifying the file."""
     try:
         assert os.path.isabs(file_path), f"Expected absolute path, got {file_path!r}"
@@ -87,13 +88,16 @@ def _preview_delete_snippet(file_path: str, snippet: str) -> str | None:
             return None
 
         modified = original.replace(snippet, "")
-        diff_text = "".join(
-            difflib.unified_diff(
-                original.splitlines(keepends=True),
-                modified.splitlines(keepends=True),
-                fromfile=f"a/{os.path.basename(file_path)}",
-                tofile=f"b/{os.path.basename(file_path)}",
-                n=get_diff_context_lines(),
+        # Run CPU-bound difflib.unified_diff in thread pool to avoid blocking event loop
+        diff_text = await asyncio.to_thread(
+            lambda: "".join(
+                difflib.unified_diff(
+                    original.splitlines(keepends=True),
+                    modified.splitlines(keepends=True),
+                    fromfile=f"a/{os.path.basename(file_path)}",
+                    tofile=f"b/{os.path.basename(file_path)}",
+                    n=get_diff_context_lines(),
+                )
             )
         )
         return diff_text
@@ -101,7 +105,7 @@ def _preview_delete_snippet(file_path: str, snippet: str) -> str | None:
         return None
 
 
-def _preview_write_to_file(
+async def _preview_write_to_file(
     file_path: str, content: str, overwrite: bool = False
 ) -> str | None:
     """Generate a preview diff for writing to a file without modifying it."""
@@ -112,19 +116,24 @@ def _preview_write_to_file(
         if exists and not overwrite:
             return None
 
-        diff_lines = difflib.unified_diff(
-            [] if not exists else [""],
-            content.splitlines(keepends=True),
-            fromfile="/dev/null" if not exists else f"a/{os.path.basename(file_path)}",
-            tofile=f"b/{os.path.basename(file_path)}",
-            n=get_diff_context_lines(),
+        # Run CPU-bound difflib.unified_diff in thread pool to avoid blocking event loop
+        diff_lines = await asyncio.to_thread(
+            lambda: list(
+                difflib.unified_diff(
+                    [] if not exists else [""],
+                    content.splitlines(keepends=True),
+                    fromfile="/dev/null" if not exists else f"a/{os.path.basename(file_path)}",
+                    tofile=f"b/{os.path.basename(file_path)}",
+                    n=get_diff_context_lines(),
+                )
+            )
         )
         return "".join(diff_lines)
     except Exception:
         return None
 
 
-def _preview_replace_in_file(
+async def _preview_replace_in_file(
     file_path: str, replacements: list[dict[str, str]]
 ) -> str | None:
     """Generate a preview diff for replacing text in a file without modifying the file."""
@@ -175,13 +184,16 @@ def _preview_replace_in_file(
         if modified == original:
             return None
 
-        diff_text = "".join(
-            difflib.unified_diff(
-                original.splitlines(keepends=True),
-                modified.splitlines(keepends=True),
-                fromfile=f"a/{os.path.basename(file_path)}",
-                tofile=f"b/{os.path.basename(file_path)}",
-                n=get_diff_context_lines(),
+        # Run CPU-bound difflib.unified_diff in thread pool to avoid blocking event loop
+        diff_text = await asyncio.to_thread(
+            lambda: "".join(
+                difflib.unified_diff(
+                    original.splitlines(keepends=True),
+                    modified.splitlines(keepends=True),
+                    fromfile=f"a/{os.path.basename(file_path)}",
+                    tofile=f"b/{os.path.basename(file_path)}",
+                    n=get_diff_context_lines(),
+                )
             )
         )
         return diff_text
@@ -189,7 +201,7 @@ def _preview_replace_in_file(
         return None
 
 
-def _preview_delete_file(file_path: str) -> str | None:
+async def _preview_delete_file(file_path: str) -> str | None:
     """Generate a preview diff for deleting a file without modifying it."""
     try:
         assert os.path.isabs(file_path), f"Expected absolute path, got {file_path!r}"
@@ -207,13 +219,16 @@ def _preview_delete_file(file_path: str) -> str | None:
         except (UnicodeEncodeError, UnicodeDecodeError):
             pass
 
-        diff_text = "".join(
-            difflib.unified_diff(
-                original.splitlines(keepends=True),
-                [],
-                fromfile=f"a/{os.path.basename(file_path)}",
-                tofile=f"b/{os.path.basename(file_path)}",
-                n=get_diff_context_lines(),
+        # Run CPU-bound difflib.unified_diff in thread pool to avoid blocking event loop
+        diff_text = await asyncio.to_thread(
+            lambda: "".join(
+                difflib.unified_diff(
+                    original.splitlines(keepends=True),
+                    [],
+                    fromfile=f"a/{os.path.basename(file_path)}",
+                    tofile=f"b/{os.path.basename(file_path)}",
+                    n=get_diff_context_lines(),
+                )
             )
         )
         return diff_text
@@ -316,7 +331,7 @@ def prompt_for_file_permission(
             _FILE_CONFIRMATION_LOCK.release()
 
 
-def handle_edit_file_permission(
+async def handle_edit_file_permission(
     context: Any,
     file_path: str,
     operation_type: str,
@@ -340,15 +355,15 @@ def handle_edit_file_permission(
     if operation_type == "write":
         content = operation_data.get("content", "")
         overwrite = operation_data.get("overwrite", False)
-        preview = _preview_write_to_file(file_path, content, overwrite)
+        preview = await _preview_write_to_file(file_path, content, overwrite)
         operation_desc = "write to"
     elif operation_type == "replace":
         replacements = operation_data.get("replacements", [])
-        preview = _preview_replace_in_file(file_path, replacements)
+        preview = await _preview_replace_in_file(file_path, replacements)
         operation_desc = "replace text in"
     elif operation_type == "delete_snippet":
         snippet = operation_data.get("delete_snippet", "")
-        preview = _preview_delete_snippet(file_path, snippet)
+        preview = await _preview_delete_snippet(file_path, snippet)
         operation_desc = "delete snippet from"
     else:
         operation_desc = f"perform {operation_type} operation on"
@@ -361,7 +376,7 @@ def handle_edit_file_permission(
     return confirmed
 
 
-def handle_delete_file_permission(
+async def handle_delete_file_permission(
     context: Any, file_path: str, message_group: str | None = None
 ) -> bool:
     """Handle permission for delete_file operations with automatic preview generation.
@@ -374,7 +389,7 @@ def handle_delete_file_permission(
     Returns:
         True if permission granted, False if denied
     """
-    preview = _preview_delete_file(file_path)
+    preview = await _preview_delete_file(file_path)
     confirmed, user_feedback = prompt_for_file_permission(
         file_path, "delete", preview, message_group
     )
@@ -383,7 +398,7 @@ def handle_delete_file_permission(
     return confirmed
 
 
-def handle_file_permission(
+async def handle_file_permission(
     context: Any,
     file_path: str,
     operation: str,
@@ -409,7 +424,7 @@ def handle_file_permission(
     """
     # Generate preview from operation_data if provided
     if operation_data is not None:
-        preview = _generate_preview_from_operation_data(
+        preview = await _generate_preview_from_operation_data(
             file_path, operation, operation_data
         )
 
@@ -421,7 +436,7 @@ def handle_file_permission(
     return confirmed
 
 
-def _generate_preview_from_operation_data(
+async def _generate_preview_from_operation_data(
     file_path: str, operation: str, operation_data: Any
 ) -> str | None:
     """Generate preview diff from operation data.
@@ -436,31 +451,31 @@ def _generate_preview_from_operation_data(
     """
     try:
         if operation == "delete":
-            return _preview_delete_file(file_path)
+            return await _preview_delete_file(file_path)
         elif operation == "write":
             content = operation_data.get("content", "")
             overwrite = operation_data.get("overwrite", False)
-            return _preview_write_to_file(file_path, content, overwrite)
+            return await _preview_write_to_file(file_path, content, overwrite)
         elif operation == "delete snippet from":
             snippet = operation_data.get("snippet", "")
-            return _preview_delete_snippet(file_path, snippet)
+            return await _preview_delete_snippet(file_path, snippet)
         elif operation == "replace text in":
             replacements = operation_data.get("replacements", [])
-            return _preview_replace_in_file(file_path, replacements)
+            return await _preview_replace_in_file(file_path, replacements)
         elif operation == "edit_file":
             # Handle edit_file operations
             if "delete_snippet" in operation_data:
-                return _preview_delete_snippet(
+                return await _preview_delete_snippet(
                     file_path, operation_data["delete_snippet"]
                 )
             elif "replacements" in operation_data:
-                return _preview_replace_in_file(
+                return await _preview_replace_in_file(
                     file_path, operation_data["replacements"]
                 )
             elif "content" in operation_data:
                 content = operation_data.get("content", "")
                 overwrite = operation_data.get("overwrite", False)
-                return _preview_write_to_file(file_path, content, overwrite)
+                return await _preview_write_to_file(file_path, content, overwrite)
 
         return None
     except Exception:

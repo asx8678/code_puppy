@@ -447,10 +447,10 @@ async def delete_snippet_from_file(
     context: RunContext, file_path: str, snippet: str, message_group: str | None = None
 ) -> dict[str, Any]:
     # Use the plugin system for permission handling with operation data
-    from code_puppy.callbacks import on_file_permission
+    from code_puppy.callbacks import on_file_permission_async
 
     operation_data = {"snippet": snippet}
-    permission_results = on_file_permission(
+    permission_results = await on_file_permission_async(
         context, file_path, "delete snippet from", None, message_group, operation_data
     )
 
@@ -481,10 +481,10 @@ async def write_to_file(
     message_group: str | None = None,
 ) -> dict[str, Any]:
     # Use the plugin system for permission handling with operation data
-    from code_puppy.callbacks import on_file_permission
+    from code_puppy.callbacks import on_file_permission_async
 
     operation_data = {"content": content, "overwrite": overwrite}
-    permission_results = on_file_permission(
+    permission_results = await on_file_permission_async(
         context, path, "write", None, message_group, operation_data
     )
 
@@ -517,10 +517,10 @@ async def replace_in_file(
     message_group: str | None = None,
 ) -> dict[str, Any]:
     # Use the plugin system for permission handling with operation data
-    from code_puppy.callbacks import on_file_permission
+    from code_puppy.callbacks import on_file_permission_async
 
     operation_data = {"replacements": replacements}
-    permission_results = on_file_permission(
+    permission_results = await on_file_permission_async(
         context, path, "replace text in", None, message_group, operation_data
     )
 
@@ -636,10 +636,10 @@ async def _delete_file(
     assert os.path.isabs(file_path), f"Expected absolute path, got {file_path!r}"
 
     # Use the plugin system for permission handling with operation data
-    from code_puppy.callbacks import on_file_permission
+    from code_puppy.callbacks import on_file_permission_async
 
     operation_data = {}  # No additional data needed for delete operations
-    permission_results = on_file_permission(
+    permission_results = await on_file_permission_async(
         context, file_path, "delete", None, message_group, operation_data
     )
 
