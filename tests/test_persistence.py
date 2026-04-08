@@ -50,6 +50,29 @@ class TestSafeResolvePath:
         with pytest.raises(ValueError, match="outside allowed parent"):
             safe_resolve_path(test_file, allowed_parent=fake_parent)
 
+    def test_resolve_rejects_parent_traversal(self, tmp_path: Path):
+        """Path with '..' traversal must not escape allowed_parent."""
+        allowed = tmp_path / "jail"
+        allowed.mkdir()
+        evil = allowed / ".." / "outside.txt"
+        with pytest.raises(ValueError, match="outside allowed parent"):
+            safe_resolve_path(evil, allowed_parent=allowed)
+
+    def test_resolve_does_not_follow_symlinks(self, tmp_path: Path):
+        """Symlinks inside allowed_parent are lexically within bounds but not followed."""
+        import os
+        allowed = tmp_path / "jail"
+        allowed.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "secret.txt").write_text("secret")
+        link = allowed / "link.txt"
+        os.symlink(outside / "secret.txt", link)
+        # Lexically within jail, should return the link path (not the target)
+        result = safe_resolve_path(link, allowed_parent=allowed)
+        assert "outside" not in str(result)
+        assert str(allowed) in str(result)
+
 
 class TestAtomicWriteText:
     """Test atomic text file writes."""

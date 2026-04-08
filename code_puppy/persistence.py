@@ -6,6 +6,7 @@ files on crash or interruption. All writes use temp-file + atomic replace.
 
 import json
 import logging
+import os
 import tempfile
 from pathlib import Path
 from typing import Any, Callable
@@ -18,25 +19,30 @@ logger = logging.getLogger(__name__)
 def safe_resolve_path(path: Path, allowed_parent: Path | None = None) -> Path:
     """Resolve path to absolute and optionally verify it's within allowed_parent.
 
+    Uses os.path.normpath to normalize '..' components without following symlinks,
+    preventing path traversal attacks while avoiding TOCTOU (Time-of-Check-Time-of-Use)
+    race conditions that could occur with symlink resolution.
+
     Args:
         path: The path to resolve
         allowed_parent: Optional parent directory that path must be within
 
     Returns:
-        Resolved absolute path
+        Resolved absolute path with normalized '..' components (lexical resolution only)
 
     Raises:
         ValueError: If path resolves outside allowed_parent
         OSError: If path resolution fails
     """
     try:
-        resolved = path.absolute()
+        # Use os.path.normpath to collapse '..' without following symlinks (avoids TOCTOU)
+        resolved = Path(os.path.normpath(path.absolute()))
     except (OSError, RuntimeError) as e:
         raise OSError(f"Failed to resolve path {path}: {e}") from e
 
     if allowed_parent is not None:
         try:
-            resolved.relative_to(allowed_parent.absolute())
+            resolved.relative_to(Path(os.path.normpath(allowed_parent.absolute())))
         except ValueError:
             raise ValueError(
                 f"Path {resolved} is outside allowed parent {allowed_parent}"
