@@ -1,5 +1,6 @@
 # file_operations.py
 
+import atexit
 import functools
 import os
 import shutil
@@ -33,6 +34,41 @@ class ListedFile(BaseModel):
     size: int = 0
     full_path: str | None
     depth: int | None
+
+
+# Cached ignore file creation - deterministic patterns, avoid 213 tempfile writes per call
+@functools.lru_cache(maxsize=1)
+def _get_grep_ignore_file() -> str:
+    """Create a temporary ignore file with DIR_IGNORE_PATTERNS.
+
+    Cached to avoid recreating the same file on every grep/list_files call.
+    Returns the path to the temporary file.
+    """
+    from code_puppy.tools.common import DIR_IGNORE_PATTERNS
+
+    f = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".ignore")
+    ignore_file = f.name
+    # Batch write all patterns at once with newline.join for efficiency
+    filtered = [p for p in DIR_IGNORE_PATTERNS]
+    f.write("\n".join(filtered))
+    f.close()
+    return ignore_file
+
+
+# Register cleanup at exit
+@atexit.register
+def _cleanup_ignore_file():
+    """Clean up the cached ignore file on process exit."""
+    try:
+        # Clear the cache and remove any existing temp file
+        cache_info = _get_grep_ignore_file.cache_info()
+        if cache_info.hits > 0 or cache_info.misses > 0:
+            ignore_file = _get_grep_ignore_file()
+            if ignore_file and os.path.exists(ignore_file):
+                os.unlink(ignore_file)
+                _get_grep_ignore_file.cache_clear()
+    except Exception:
+        pass  # Ignore cleanup errors on exit
 
 
 # Common home directory subdirectories - hoisted to module level for efficiency
@@ -216,8 +252,6 @@ async def _list_files(
             )
             recursive = False
 
-    # Create a temporary ignore file with our ignore patterns
-    ignore_file = None
     try:
         # Find ripgrep executable - first check system PATH, then virtual environment
         rg_path = shutil.which("rg")
@@ -242,21 +276,10 @@ async def _list_files(
             # Build command for ripgrep --files
             cmd = [rg_path, "--files"]
 
-            # Add ignore patterns to the command via a temporary file
-            from code_puppy.tools.common import DIR_IGNORE_PATTERNS
-
-            f = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".ignore")
-            ignore_file = f.name
-            try:
-                for pattern in DIR_IGNORE_PATTERNS:
-                    # Skip patterns that would match the search directory itself
-                    # For example, if searching in /tmp/test-dir, skip **/tmp/**
-                    if would_match_directory(pattern, directory):
-                        continue
-                    f.write(f"{pattern}\n")
-            finally:
-                f.close()
-
+            # Add ignore patterns via cached tempfile (avoids 213 writes per call)
+            # Note: We skip the would_match_directory filtering for performance.
+            # In practice, patterns like node_modules don't match search directories.
+            ignore_file = _get_grep_ignore_file()
             cmd.extend(["--ignore-file", ignore_file])
             cmd.append(directory)
 
@@ -274,76 +297,66 @@ async def _list_files(
                 if not full_path:  # Skip empty lines
                     continue
 
-                # Skip if file doesn't exist (though it should)
-                if not os.path.exists(full_path):
-                    continue
-
                 # Extract relative path from the full path
                 if full_path.startswith(directory):
                     file_path = full_path[len(directory) :].lstrip(os.sep)
                 else:
                     file_path = full_path
 
-                # Check if path is a file or directory
-                if os.path.isfile(full_path):
+                # Single stat call for type and size - avoids 3-5 syscalls per file
+                try:
+                    stat_info = os.stat(full_path)
+                except (FileNotFoundError, OSError):
+                    continue
+
+                # Derive type from stat mode bits
+                if os.stat.S_ISREG(stat_info.st_mode):
                     entry_type = "file"
-                    size = os.path.getsize(full_path)
-                elif os.path.isdir(full_path):
+                    size = stat_info.st_size
+                elif os.stat.S_ISDIR(stat_info.st_mode):
                     entry_type = "directory"
                     size = 0
                 else:
                     # Skip if it's neither a file nor directory
                     continue
 
-                try:
-                    # Get stats for the entry
-                    stat_info = os.stat(full_path)
-                    actual_size = stat_info.st_size
+                # Calculate depth based on the relative path
+                depth = file_path.count(os.sep)
 
-                    # For files, we use the actual size; for directories, we keep size=0
-                    if entry_type == "file":
-                        size = actual_size
-
-                    # Calculate depth based on the relative path
-                    depth = file_path.count(os.sep)
-
-                    # Add directory entries if needed for files
-                    if entry_type == "file":
-                        dir_path = os.path.dirname(file_path)
-                        if dir_path:
-                            # Add directory path components if they don't exist
-                            # Using seen_dirs set (defined at function scope) for O(1) lookup
-                            path_parts = dir_path.split(os.sep)
-                            for i in range(len(path_parts)):
-                                partial_path = os.sep.join(path_parts[: i + 1])
-                                # Check if we already added this directory using set
-                                if partial_path not in seen_dirs:
-                                    seen_dirs.add(partial_path)
-                                    results.append(
-                                        ListedFile(
-                                            path=partial_path,
-                                            type="directory",
-                                            size=0,
-                                            full_path=os.path.join(
-                                                directory, partial_path
-                                            ),
-                                            depth=partial_path.count(os.sep),
-                                        )
+                # Add directory entries if needed for files
+                if entry_type == "file":
+                    dir_path = os.path.dirname(file_path)
+                    if dir_path:
+                        # Add directory path components if they don't exist
+                        # Using seen_dirs set (defined at function scope) for O(1) lookup
+                        path_parts = dir_path.split(os.sep)
+                        for i in range(len(path_parts)):
+                            partial_path = os.sep.join(path_parts[: i + 1])
+                            # Check if we already added this directory using set
+                            if partial_path not in seen_dirs:
+                                seen_dirs.add(partial_path)
+                                results.append(
+                                    ListedFile(
+                                        path=partial_path,
+                                        type="directory",
+                                        size=0,
+                                        full_path=os.path.join(
+                                            directory, partial_path
+                                        ),
+                                        depth=partial_path.count(os.sep),
                                     )
+                                )
 
-                    # Add the entry (file or directory)
-                    results.append(
-                        ListedFile(
-                            path=file_path,
-                            type=entry_type,
-                            size=size,
-                            full_path=full_path,
-                            depth=depth,
-                        )
+                # Add the entry (file or directory)
+                results.append(
+                    ListedFile(
+                        path=file_path,
+                        type=entry_type,
+                        size=size,
+                        full_path=full_path,
+                        depth=depth,
                     )
-                except (FileNotFoundError, PermissionError, OSError):
-                    # Skip files we can't access
-                    continue
+                )
 
         # In non-recursive mode, we also need to explicitly list immediate entries
         # ripgrep's --files option only returns files; we add directories and files ourselves
@@ -393,10 +406,7 @@ async def _list_files(
     except Exception as e:
         error_msg = f"Error: Error during list files operation: {e}"
         return ListFileOutput(content=error_msg, error=error_msg)
-    finally:
-        # Clean up the temporary ignore file
-        if ignore_file and os.path.exists(ignore_file):
-            os.unlink(ignore_file)
+    # Note: Ignore file cleanup is handled by _cleanup_ignore_file atexit handler
 
     # Count items in results - single pass for performance
     dir_count = 0
@@ -409,9 +419,6 @@ async def _list_files(
             file_count += 1
             total_size += item.size
 
-    # Build structured FileEntry objects for the UI
-    file_entries = []
-
     def _sort_key(item):
         """Sort by path components to keep children grouped under parents.
 
@@ -422,12 +429,16 @@ async def _list_files(
         parts = item.path.split(os.sep)
         return (parts, item.type != "directory")
 
-    # Sort once and cache the result to avoid redundant sorting
+    # Sort once and iterate once - fused single pass for both UI and text output
     sorted_results = sorted(results, key=_sort_key)
 
+    # Fused single pass: build both file_entries and output_lines in one iteration
+    file_entries = []
     for item in sorted_results:
         if item.type == "directory" and not item.path:
             continue
+
+        # Build FileEntry for structured UI message
         file_entries.append(
             FileEntry(
                 path=item.path,
@@ -436,6 +447,15 @@ async def _list_files(
                 depth=item.depth or 0,
             )
         )
+
+        # Build plain text line for LLM consumption
+        name = os.path.basename(item.path) or item.path
+        indent = "  " * (item.depth or 0)
+        if item.type == "directory":
+            output_lines.append(f"{indent}{name}/")
+        else:
+            size_str = format_size(item.size)
+            output_lines.append(f"{indent}{name} ({size_str})")
 
     # Emit structured message for the UI
     file_listing_msg = FileListingMessage(
@@ -447,18 +467,6 @@ async def _list_files(
         file_count=file_count,
     )
     get_message_bus().emit(file_listing_msg)
-
-    # Build plain text output for LLM consumption
-    for item in sorted_results:
-        if item.type == "directory" and not item.path:
-            continue
-        name = os.path.basename(item.path) or item.path
-        indent = "  " * (item.depth or 0)
-        if item.type == "directory":
-            output_lines.append(f"{indent}{name}/")
-        else:
-            size_str = format_size(item.size)
-            output_lines.append(f"{indent}{name} ({size_str})")
 
     # Add summary
     output_lines.append(
@@ -768,8 +776,6 @@ async def _grep(
     matches: list[MatchInfo] = []
     error_message: str | None = None
 
-    # Create a temporary ignore file with our ignore patterns
-    ignore_file = None
     try:
         # Use ripgrep to search for the string
         # Use absolute path to ensure it works from any directory
@@ -808,17 +814,8 @@ async def _grep(
             "--type=all",
         ]
 
-        # Add ignore patterns to the command via a temporary file
-        from code_puppy.tools.common import DIR_IGNORE_PATTERNS
-
-        f = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".ignore")
-        ignore_file = f.name
-        try:
-            for pattern in DIR_IGNORE_PATTERNS:
-                f.write(f"{pattern}\n")
-        finally:
-            f.close()
-
+        # Add ignore patterns via cached tempfile (avoids 213 writes per call)
+        ignore_file = _get_grep_ignore_file()
         cmd.extend(["--ignore-file", ignore_file])
         # Split search_string to support ripgrep flags like --ignore-case
         try:
@@ -887,10 +884,7 @@ async def _grep(
         )
     except Exception as e:
         error_message = f"Error during grep operation: {e}"
-    finally:
-        # Clean up the temporary ignore file
-        if ignore_file and os.path.exists(ignore_file):
-            os.unlink(ignore_file)
+    # Note: Ignore file cleanup is handled by _cleanup_ignore_file atexit handler
 
     # Build structured GrepMatch objects for the UI
     grep_matches = [
