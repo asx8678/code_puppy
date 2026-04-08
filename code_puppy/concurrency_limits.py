@@ -37,6 +37,9 @@ _cached_config: ConcurrencyConfig | None = None
 # Lock for thread-safe semaphore initialization
 _semaphore_init_lock = threading.Lock()
 
+# Lock for thread-safe config initialization
+_config_init_lock = threading.Lock()
+
 
 class TrackedSemaphore:
     """Wrapper around asyncio.Semaphore that tracks value without private attribute access.
@@ -108,26 +111,31 @@ def _read_config() -> ConcurrencyConfig:
     """Read concurrency configuration from TOML file."""
     global _cached_config
 
+    # Double-checked locking pattern for thread-safe lazy initialization
     if _cached_config is not None:
         return _cached_config
 
-    if not _CONFIG_PATH.exists():
-        _cached_config = ConcurrencyConfig()
-        return _cached_config
+    with _config_init_lock:
+        if _cached_config is not None:
+            return _cached_config
 
-    try:
-        import tomllib  # Python 3.11+
+        if not _CONFIG_PATH.exists():
+            _cached_config = ConcurrencyConfig()
+            return _cached_config
 
-        with open(_CONFIG_PATH, "rb") as fh:
-            data = tomllib.load(fh)
+        try:
+            import tomllib  # Python 3.11+
 
-        _cached_config = ConcurrencyConfig.from_dict(data.get("concurrency", {}))
-        return _cached_config
+            with open(_CONFIG_PATH, "rb") as fh:
+                data = tomllib.load(fh)
 
-    except Exception as exc:
-        logger.warning("Failed to read concurrency config %s: %s", _CONFIG_PATH, exc)
-        _cached_config = ConcurrencyConfig()
-        return _cached_config
+            _cached_config = ConcurrencyConfig.from_dict(data.get("concurrency", {}))
+            return _cached_config
+
+        except Exception as exc:
+            logger.warning("Failed to read concurrency config %s: %s", _CONFIG_PATH, exc)
+            _cached_config = ConcurrencyConfig()
+            return _cached_config
 
 
 def _get_file_ops_semaphore() -> TrackedSemaphore:
