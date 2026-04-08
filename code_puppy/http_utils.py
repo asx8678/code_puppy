@@ -5,7 +5,6 @@ This module provides functions for creating properly configured HTTP clients.
 """
 
 import asyncio
-import logging
 import os
 import socket
 import time
