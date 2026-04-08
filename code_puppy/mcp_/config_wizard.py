@@ -5,6 +5,7 @@ Note: This module imports ServerConfig and get_mcp_manager directly from
 .code_puppy.mcp.manager to avoid circular imports with the package __init__.py
 """
 
+import os
 import re
 from pathlib import Path
 from urllib.parse import urlparse

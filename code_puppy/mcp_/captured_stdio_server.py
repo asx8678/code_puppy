@@ -8,6 +8,7 @@ stderr output and makes it available through proper logging channels.
 import asyncio
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Sequence
 
