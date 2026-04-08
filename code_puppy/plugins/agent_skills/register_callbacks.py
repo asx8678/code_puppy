@@ -76,7 +76,7 @@ def _get_skills_prompt_section() -> str | None:
 
 def _inject_skills_into_prompt(
     model_name: str, default_system_prompt: str, user_prompt: str
-) -> dict[str, Any | None]:
+) -> dict[str, Any] | None:
     """Callback to inject skills into system prompt.
 
     This is registered with the 'get_model_system_prompt' callback phase.

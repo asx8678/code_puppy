@@ -260,7 +260,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         pass
 
-    def get_tools_config(self) -> dict[str, Any | None]:
+    def get_tools_config(self) -> dict[str, Any] | None:
         """Get tool configuration for this agent.
 
         Returns:

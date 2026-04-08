@@ -163,7 +163,7 @@ async def _assess_single_command(
 
 async def shell_safety_callback(
     context: Any, command: str, cwd: str | None = None, timeout: int = 60
-) -> dict[str, Any | None]:
+) -> dict[str, Any] | None:
     """Callback to assess shell command safety before execution.
 
     For *compound* commands (joined with ``&&``, ``||``, or ``;``) each

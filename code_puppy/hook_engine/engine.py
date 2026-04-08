@@ -32,7 +32,7 @@ class HookEngine:
 
     def __init__(
         self,
-        config: dict[str, Any | None] = None,
+        config: dict[str, Any] | None = None,
         strict_validation: bool = True,
         env_vars: dict[str, str | None] = None,
     ):

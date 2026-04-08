@@ -337,12 +337,12 @@ class ToolFileValidationResult(ValidationResult):
     Includes TOOL_META extraction and main function validation.
     """
 
-    tool_meta: dict[str, Any | None] = None
+    tool_meta: dict[str, Any] | None = None
     main_function: FunctionInfo | None = None
     file_path: Path | None = None
 
 
-def _extract_tool_meta(code: str) -> dict[str, Any | None]:
+def _extract_tool_meta(code: str) -> dict[str, Any] | None:
     """Extract TOOL_META dictionary from code.
 
     Args:
