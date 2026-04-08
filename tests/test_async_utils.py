@@ -1,8 +1,9 @@
 """Tests for async_utils module."""
 
 import asyncio
+import os
 import threading
-from code_puppy.async_utils import run_async_sync
+from code_puppy.async_utils import run_async_sync, _get_executor, _shutdown_executor
 
 
 async def simple_coro(value: int) -> int:
@@ -111,3 +112,27 @@ def test_concurrent_workers_execute_correctly() -> None:
     # All loop IDs should be valid (non-zero)
     loop_ids = [lid for _, _, lid in results]
     assert all(lid > 0 for lid in loop_ids)
+
+
+def test_executor_is_singleton():
+    """_get_executor() returns the same executor on multiple calls."""
+    exec1 = _get_executor()
+    exec2 = _get_executor()
+    assert exec1 is exec2
+
+
+def test_executor_is_bounded():
+    """Executor is bounded to expected max_workers."""
+    executor = _get_executor()
+    expected_max = min(32, (os.cpu_count() or 1) + 4)
+    assert executor._max_workers == expected_max
+
+
+def test_executor_recreated_after_shutdown():
+    """After _shutdown_executor(), a new executor is created on next use."""
+    exec1 = _get_executor()
+    _shutdown_executor()
+    exec2 = _get_executor()
+    assert exec1 is not exec2
+    # Cleanup
+    _shutdown_executor()
