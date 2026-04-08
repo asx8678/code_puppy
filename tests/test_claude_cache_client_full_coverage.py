@@ -1154,7 +1154,9 @@ class TestJWTAgeCaching:
 
         # Cache should be populated: (token_prefix, iat)
         assert c._cached_jwt_iat is not None
-        assert c._cached_jwt_iat[0] == token[:64]  # token prefix (64 chars covers header + payload start)
+        assert (
+            c._cached_jwt_iat[0] == token[:64]
+        )  # token prefix (64 chars covers header + payload start)
         assert c._cached_jwt_iat[1] == int(iat)
         # Age should be correct
         assert 590 <= age <= 610
