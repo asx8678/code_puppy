@@ -299,3 +299,42 @@ class TestPreHmacMsgpackCompat:
                 x for x in w if issubclass(x.category, DeprecationWarning)
             ]
             assert len(deprecation_warnings) == 0
+
+
+# ---------------------------------------------------------------------------
+# delete_hmac_key tests
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteHmacKey:
+    """Tests for secure HMAC key deletion with fsync'd overwrite."""
+
+    def test_delete_hmac_key_returns_false_when_file_does_not_exist(
+        self, tmp_path: Path
+    ) -> None:
+        """delete_hmac_key() returns False when key file doesn't exist."""
+        from code_puppy.session_storage import delete_hmac_key
+        from unittest.mock import patch
+
+        # Patch DATA_DIR to use a temp directory where the key doesn't exist
+        with patch("code_puppy.config.DATA_DIR", str(tmp_path)):
+            result = delete_hmac_key()
+            assert result is False
+
+    def test_delete_hmac_key_returns_true_and_file_is_gone_after_deletion(
+        self, tmp_path: Path
+    ) -> None:
+        """delete_hmac_key() returns True and the file is actually deleted."""
+        from code_puppy.session_storage import delete_hmac_key
+        from unittest.mock import patch
+
+        # Create a key file in the temp directory
+        key_path = tmp_path / ".session_hmac_key"
+        key_path.write_bytes(b"x" * 32)
+        assert key_path.exists()
+
+        # Patch DATA_DIR to use the temp directory
+        with patch("code_puppy.config.DATA_DIR", str(tmp_path)):
+            result = delete_hmac_key()
+            assert result is True
+            assert not key_path.exists(), "Key file should be deleted"

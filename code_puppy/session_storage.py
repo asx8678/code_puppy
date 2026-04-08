@@ -161,6 +161,9 @@ def delete_hmac_key() -> bool:
     This function should be called during application uninstall to ensure the
     session integrity key is properly wiped from disk.
 
+    If the overwrite fails (e.g., permission denied), a warning is logged and
+    deletion is still attempted. OSError propagates only if `unlink()` fails.
+
     Returns:
         True if the key file was successfully deleted, False if it didn't exist.
 
@@ -173,12 +176,16 @@ def delete_hmac_key() -> bool:
     if not key_path.exists():
         return False
 
-    # Securely overwrite with random bytes before deletion
+    # Securely overwrite with random bytes using fsync before deletion
     try:
         file_size = key_path.stat().st_size
         if file_size > 0:
-            # Overwrite with random bytes
-            key_path.write_bytes(os.urandom(file_size))
+            fd = os.open(str(key_path), os.O_WRONLY)
+            try:
+                os.write(fd, os.urandom(file_size))
+                os.fsync(fd)  # Ensure bytes reach physical media before unlink
+            finally:
+                os.close(fd)
     except OSError as exc:
         logger.warning("Could not overwrite HMAC key file before deletion: %s", exc)
         # Continue to unlink attempt even if overwrite failed
