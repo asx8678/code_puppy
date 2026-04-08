@@ -106,6 +106,10 @@ STATE_DIR = _get_xdg_dir("XDG_STATE_HOME", ".local/state")
 CONFIG_FILE = pathlib.Path(CONFIG_DIR) / "puppy.cfg"
 MCP_SERVERS_FILE = pathlib.Path(CONFIG_DIR) / "mcp_servers.json"
 
+# MCP config cache with mtime invalidation
+_MCP_CONFIG_CACHE = None
+_MCP_CONFIG_MTIME = 0
+
 # Data files (XDG_DATA_HOME)
 MODELS_FILE = pathlib.Path(DATA_DIR) / "models.json"
 EXTRA_MODELS_FILE = pathlib.Path(DATA_DIR) / "extra_models.json"
@@ -470,15 +474,32 @@ def load_mcp_server_configs():
     Loads the MCP server configurations from XDG_CONFIG_HOME/code_puppy/mcp_servers.json.
     Returns a dict mapping names to their URL or config dict.
     If file does not exist, returns an empty dict.
+    Cached with mtime invalidation to avoid repeated disk reads.
     """
+    global _MCP_CONFIG_CACHE, _MCP_CONFIG_MTIME
+
     from code_puppy.messaging.message_queue import emit_error
 
     try:
-        if not pathlib.Path(MCP_SERVERS_FILE).exists():
-            return {}
-        with open(MCP_SERVERS_FILE, "r", encoding="utf-8") as f:
+        config_path = pathlib.Path(MCP_SERVERS_FILE)
+        mtime = config_path.stat().st_mtime if config_path.exists() else 0
+
+        # Return cached result if file hasn't changed
+        if _MCP_CONFIG_CACHE is not None and mtime == _MCP_CONFIG_MTIME:
+            return _MCP_CONFIG_CACHE
+
+        # File doesn't exist - cache empty result
+        if not config_path.exists():
+            _MCP_CONFIG_CACHE = {}
+            _MCP_CONFIG_MTIME = mtime
+            return _MCP_CONFIG_CACHE
+
+        # Load and cache new result
+        with open(config_path, "r", encoding="utf-8") as f:
             conf = json.loads(f.read())
-            return conf["mcp_servers"]
+            _MCP_CONFIG_CACHE = conf.get("mcp_servers", {})
+            _MCP_CONFIG_MTIME = mtime
+            return _MCP_CONFIG_CACHE
     except Exception as e:
         emit_error(f"Failed to load MCP servers - {str(e)}")
         return {}
