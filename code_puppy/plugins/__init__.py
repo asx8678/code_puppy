@@ -59,6 +59,87 @@ def _create_loader_builtin(plugin_name: str, module_name: str) -> Callable:
     return _load
 
 
+def _validate_plugin_path(
+    plugin_name: str,
+    callbacks_file: Path,
+    expected_base: Path,
+) -> Path | None:
+    """Validate that a plugin path is safe and within the expected directory.
+
+    SECURITY: This function performs path traversal protection and symlink validation.
+
+    Args:
+        plugin_name: Name of the plugin.
+        callbacks_file: Path to the register_callbacks.py file.
+        expected_base: The expected base directory the file must be within.
+
+    Returns:
+        The resolved absolute path if valid, None if unsafe.
+    """
+    try:
+        callbacks_abs = callbacks_file.resolve()
+        
+        # Check that resolved path is within the plugins directory using proper path containment
+        try:
+            callbacks_abs.relative_to(expected_base)
+        except ValueError:
+            logger.error(
+                "SECURITY: User plugin '%s' resolves to '%s' which is outside expected "
+                "plugin directory '%s'. Refusing to create loader.",
+                plugin_name,
+                callbacks_abs,
+                expected_base,
+            )
+            return None
+
+        # SECURITY: Reject symlinks that escape the plugins directory
+        if callbacks_file.is_symlink():
+            try:
+                link_target = callbacks_file.readlink()
+                if link_target.is_absolute():
+                    target_abs = link_target.resolve()
+                    try:
+                        target_abs.relative_to(expected_base)
+                    except ValueError:
+                        logger.error(
+                            "SECURITY: User plugin '%s' has symlink pointing outside plugins "
+                            "directory ('%s' -> '%s'). Refusing to create loader.",
+                            plugin_name,
+                            callbacks_file,
+                            target_abs,
+                        )
+                        return None
+            except (OSError, ValueError) as e:
+                logger.error(
+                    "SECURITY: Could not verify symlink for user plugin '%s': %s. "
+                    "Refusing to create loader.",
+                    plugin_name,
+                    e,
+                )
+                return None
+
+        # Validate it's a proper file (not a directory or special file)
+        if not callbacks_abs.is_file():
+            logger.error(
+                "SECURITY: User plugin '%s' path is not a regular file: %s. "
+                "Refusing to create loader.",
+                plugin_name,
+                callbacks_abs,
+            )
+            return None
+
+        return callbacks_abs
+
+    except (OSError, ValueError) as e:
+        logger.error(
+            "SECURITY: Could not resolve path for user plugin '%s': %s. "
+            "Refusing to create loader.",
+            plugin_name,
+            e,
+        )
+        return None
+
+
 def _create_loader_user(
     plugin_name: str,
     callbacks_file: Path,
@@ -74,7 +155,17 @@ def _create_loader_user(
         callbacks_file: Path to the register_callbacks.py file.
         base_dir: Optional base directory for path traversal protection.
                   Defaults to ~/.code_puppy/plugins if not provided.
+
+    Returns:
+        A callable that loads the plugin, or a no-op loader if the plugin file is unsafe.
     """
+    # SECURITY: Path traversal protection - validate path before creating loader
+    expected_base = (base_dir or Path.home() / ".code_puppy" / "plugins").resolve()
+
+    # Validate the path - use the validated path for all future operations
+    validated_path = _validate_plugin_path(plugin_name, callbacks_file, expected_base)
+    if validated_path is None:
+        return lambda: None  # Return no-op loader
 
     def _load():
         try:
@@ -102,32 +193,39 @@ def _create_loader_user(
                     )
                     return None
 
-            # SECURITY: Verify the plugin file resolves within the expected plugins directory
-            expected_base = (base_dir or Path.home() / ".code_puppy" / "plugins").resolve()
-            try:
-                callbacks_file.resolve().relative_to(expected_base)
-            except ValueError:
-                logger.error(
-                    "SECURITY: User plugin '%s' resolves to '%s' which is outside expected "
-                    "plugin directory '%s'. Refusing to load.",
-                    plugin_name,
-                    callbacks_file,
-                    expected_base,
-                )
+            # SECURITY: TOCTOU protection - re-validate path at load time
+            # The path may have been swapped between validation and loading
+            load_time_path = _validate_plugin_path(plugin_name, callbacks_file, expected_base)
+            if load_time_path is None:
                 return None
 
-            # SECURITY WARNING: Loading user plugin with full system privileges
+            # SECURITY CRITICAL WARNING: Loading user plugin executes arbitrary code
+            # This is the primary ACE/RCE attack surface. The plugin runs with full
+            # system privileges and can perform any action the user can perform
+            # (delete files, steal credentials, install malware, exfiltrate data, etc.)
             logger.warning(
-                "Loading user plugin %s from %s — executes arbitrary Python code with full system privileges",
+                "SECURITY: Loading user plugin '%s' from %s — executes arbitrary Python code "
+                "with full system privileges. Only load plugins from trusted sources!",
                 plugin_name,
-                callbacks_file,
+                load_time_path,
             )
 
             module_name = f"{plugin_name}.register_callbacks"
-            spec = importlib.util.spec_from_file_location(module_name, callbacks_file)
-            if spec is None or spec.loader is None:
-                logger.warning(
-                    f"Could not create module spec for user plugin: {plugin_name}"
+            spec = importlib.util.spec_from_file_location(module_name, load_time_path)
+
+            # SECURITY: Validate it's a proper Python module before loading
+            if spec is None:
+                logger.error(
+                    "SECURITY: Could not create module spec for user plugin '%s' — "
+                    "not a valid Python module. File may be corrupted or not a Python file.",
+                    plugin_name,
+                )
+                return None
+            if spec.loader is None:
+                logger.error(
+                    "SECURITY: Module spec for user plugin '%s' has no loader — "
+                    "cannot safely import. This may indicate a non-Python file.",
+                    plugin_name,
                 )
                 return None
 
@@ -312,8 +410,10 @@ def _discover_user_plugins(user_plugins_dir: Path) -> list[tuple[str, list[str]]
             try:
                 callbacks_abs = callbacks_file.resolve()
                 plugins_abs = user_plugins_dir.resolve()
-                # Check if the resolved path is within the plugins directory
-                if not str(callbacks_abs).startswith(str(plugins_abs) + "/"):
+                # Check if the resolved path is within the plugins directory using proper path containment
+                try:
+                    callbacks_abs.relative_to(plugins_abs)
+                except ValueError:
                     logger.warning(
                         "SECURITY: User plugin %s attempted path traversal outside plugins directory. Skipping.",
                         plugin_name,
@@ -333,7 +433,9 @@ def _discover_user_plugins(user_plugins_dir: Path) -> list[tuple[str, list[str]]
                     link_target = callbacks_file.readlink()
                     if link_target.is_absolute():
                         target_abs = link_target.resolve()
-                        if not str(target_abs).startswith(str(plugins_abs) + "/"):
+                        try:
+                            target_abs.relative_to(plugins_abs)
+                        except ValueError:
                             logger.warning(
                                 "SECURITY: User plugin %s has symlink pointing outside plugins directory. Skipping.",
                                 plugin_name,
