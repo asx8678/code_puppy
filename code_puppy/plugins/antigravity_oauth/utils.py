@@ -14,7 +14,7 @@ from .constants import ANTIGRAVITY_ENDPOINT, ANTIGRAVITY_HEADERS, ANTIGRAVITY_MO
 logger = logging.getLogger(__name__)
 
 
-def load_stored_tokens() -> dict[str, Any | None]:
+def load_stored_tokens() -> dict[str, Any] | None:
     """Load stored OAuth tokens from disk."""
     try:
         token_path = get_token_storage_path()

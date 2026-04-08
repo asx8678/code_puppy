@@ -36,7 +36,7 @@ class ServerInfo:
     quarantined: bool
     uptime_seconds: float | None
     error_message: str | None
-    health: dict[str, Any | None] = None
+    health: dict[str, Any] | None = None
     start_time: datetime | None = None
     latency_ms: float | None = None
 

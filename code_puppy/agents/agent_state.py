@@ -58,7 +58,7 @@ class AgentRuntimeState:
     # Tool and prompt caching
     mcp_tool_definitions_cache: list[dict[str, Any]] = field(default_factory=list)
     cached_system_prompt: str | None = None
-    cached_tool_defs: list[dict[str, Any | None]] | None = None
+    cached_tool_defs: list[dict[str, Any]] | None = None
 
     # State flags and temporary caches
     delayed_compaction_requested: bool = False

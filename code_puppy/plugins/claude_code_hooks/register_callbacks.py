@@ -56,7 +56,7 @@ _hook_engine = _initialize_engine()
 
 async def on_pre_tool_call_hook(
     tool_name: str, tool_args: dict[str, Any], context: Any = None
-) -> dict[str, Any | None]:
+) -> dict[str, Any] | None:
     """Pre-tool callback — executes hooks before tool runs. Can block."""
     if not _hook_engine:
         return None

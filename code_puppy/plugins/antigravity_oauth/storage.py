@@ -37,7 +37,7 @@ class RateLimitState:
         return result
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any | None]) -> "RateLimitState":
+    def from_dict(cls, data: dict[str, Any]) -> "RateLimitState":
         """Create from dictionary."""
         if not data:
             return cls()

@@ -61,7 +61,7 @@ def _deep_merge_hooks(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str
     return merged
 
 
-def load_hooks_config() -> dict[str, Any | None]:
+def load_hooks_config() -> dict[str, Any] | None:
     """
     Load and merge hooks configuration from available sources.
 

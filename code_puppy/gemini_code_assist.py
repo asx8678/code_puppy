@@ -245,7 +245,7 @@ class GeminiCodeAssistModel(Model):
 
     def _build_generation_config(
         self, model_settings: ModelSettings | None
-    ) -> dict[str, Any | None]:
+    ) -> dict[str, Any] | None:
         """Build generation config from model settings."""
         if not model_settings:
             return None
