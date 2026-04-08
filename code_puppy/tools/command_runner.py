@@ -1456,8 +1456,6 @@ async def run_shell_command(
                     execution_time=None,
                 )
             return result
-    else:
-        time.time()
 
     # Execute the command - sub-agents run silently without keyboard context
     return await _execute_shell_command(
