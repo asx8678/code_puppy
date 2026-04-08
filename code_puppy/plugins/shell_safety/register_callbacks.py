@@ -4,7 +4,6 @@ This module registers a callback that intercepts shell commands in yolo_mode
 and assesses their safety risk before execution.
 """
 
-import shlex
 from typing import Any
 
 from code_puppy.callbacks import register_callback
@@ -84,10 +83,6 @@ def _max_risk(risk_levels: list[str | None]) -> str:
     best_str = "none"
     best_num = RISK_LEVELS["none"]
     for lvl in risk_levels:
-        # shlex is imported at the top; referenced here to satisfy the
-        # "use shlex" requirement — quote-handling in split_compound_command
-        # mirrors shlex quoting rules.
-        _ = shlex  # noqa: F841  (ensures import is used)
         if lvl is None:
             lvl = "high"
         num = RISK_LEVELS.get(lvl, 4)  # unknown → critical
