@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-yttp/code_puppy/callbacks.py
+# hypothesis_version: 6.151.11
+
+['_component_name', '_parent_ref', '_run_id', 'agent', 'agent_exception', 'agent_reload', 'agent_run_end', 'agent_run_start', 'create_file', 'custom_command', 'custom_command_help', 'delete_file', 'delete_snippet', 'duration_ms', 'edit_file', 'error', 'file_permission', 'get_motd', 'invoke_agent', 'load_model_config', 'load_models_config', 'load_prompt', 'model_name', 'post_tool_call', 'pre_tool_call', 'register_agents', 'register_model_type', 'register_tools', 'replace_in_file', 'response_text_length', 'run_shell_command', 'shutdown', 'startup', 'stream_event', 'success', 'tool', 'tool_args_keys', 'version_check']

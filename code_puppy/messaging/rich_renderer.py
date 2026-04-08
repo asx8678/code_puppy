@@ -9,7 +9,7 @@ only structured data with no formatting hints.
 
 import os
 import re
-from functools import lru_cache
+from functools import cache, lru_cache
 from typing import Protocol, runtime_checkable
 
 from rich.console import Console
@@ -231,7 +231,9 @@ class RichConsoleRenderer:
         """Get the Rich console."""
         return self._console
 
-    def _get_banner_color(self, banner_name: str) -> str:
+    @staticmethod
+    @cache
+    def _get_banner_color(banner_name: str) -> str:
         """Get the configured color for a banner.
 
         Args:

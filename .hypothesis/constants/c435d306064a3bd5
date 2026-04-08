@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-yttp/code_puppy/models_dev_parser.py
+# hypothesis_version: 6.151.11
+
+[0.0, 0.001, 10.0, 300, 'ModelsDevRegistry', '__main__', 'anthropic', 'api', 'api_url', 'attachment', 'cache_read', 'capabilities', 'cohere', 'context', 'cost', 'deepseek', 'doc', 'enabled', 'env', 'env_vars', 'gemini', 'google', 'groq', 'image', 'input', 'input_cost_per_token', 'input_modalities', 'knowledge', 'last_updated', 'limit', 'live:models.dev', 'max_output_tokens', 'max_tokens', 'metadata', 'mistral', 'modalities', 'model', 'models', 'models_dev_api.json', 'name', 'npm', 'npm_package', 'ollama', 'open_weights', 'openai', 'output', 'output_modalities', 'provider_id', 'r', 'reasoning', 'release_date', 'structured_output', 'temperature', 'tool_call', 'type', 'unknown', 'utf-8']
