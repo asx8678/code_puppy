@@ -81,6 +81,30 @@ def _get_jwt_iat(token: str) -> int:
         return 0
 
 
+@lru_cache(maxsize=16)
+def _get_jwt_exp(token: str) -> int:
+    """Decode a JWT and return its 'exp' (expiration) claim.
+
+    Cached with LRU to avoid repeated decoding of the same token.
+    Returns 0 if the token can't be decoded or has no valid 'exp' claim.
+    Validates that 'exp' is numeric and within reasonable bounds.
+    """
+    # NOTE: JWT signature is not verified; only used for cache age calculation.
+    try:
+        payload = _jwt.decode(token, options={"verify_signature": False})
+        exp = payload.get("exp")
+        # Validate exp is a number
+        if not isinstance(exp, (int, float)):
+            return 0
+        # Validate exp is positive and within reasonable bounds
+        now = time.time()
+        if exp <= 0 or exp > now + 86400 * 365 * 10:
+            return 0
+        return int(exp)
+    except Exception:
+        return 0
+
+
 class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
     """Async HTTP client with Claude Code OAuth transformations.
 
@@ -102,15 +126,16 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         self._request_build_time_saved_ms = 0.0
         self._requests_optimized = 0
         # JWT age caching: avoid repeated base64+JSON decoding on every request
-        # Stores (token_hash_or_prefix, exp_time) - only re-parse when token changes
-        self._cached_jwt_exp: tuple[str, float] | None = None
+        # Stores (token_hash_or_prefix, iat_value) - only re-parse when token changes
+        self._cached_jwt_iat: tuple[str, float] | None = None
 
     def _get_jwt_age_seconds(self, token: str | None) -> float | None:
         """Decode a JWT and return its age in seconds.
 
         Returns None if the token can't be decoded or has no timestamp claims.
-        Uses cached expiry time when the same token is passed,
+        Uses cached iat time when the same token is passed,
         avoiding repeated base64+JSON decoding on every API request.
+        Falls back to exp claim for tokens without iat (calculates age from exp).
         """
         if not token:
             return None
@@ -118,9 +143,11 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         try:
             # Check instance cache first: compare by token prefix/hash
             # This avoids repeated base64+JSON decoding on retries
-            token_prefix = token[:32]  # First 32 chars are sufficient to uniquely ID the token
-            if self._cached_jwt_exp is not None:
-                cached_prefix, cached_iat = self._cached_jwt_exp
+            # Use first 64 chars: covers JWT header (typically ~36 chars base64)
+            # plus ~28 chars of payload which contains the distinguishing claims
+            token_prefix = token[:64]
+            if self._cached_jwt_iat is not None:
+                cached_prefix, cached_iat = self._cached_jwt_iat
                 if cached_prefix == token_prefix:
                     return time.time() - cached_iat
 
@@ -128,8 +155,28 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
             iat = _get_jwt_iat(token)
             if iat:
                 # Update instance cache with token prefix and iat
-                self._cached_jwt_exp = (token_prefix, float(iat))
+                self._cached_jwt_iat = (token_prefix, float(iat))
                 return time.time() - iat
+
+            # Fallback: try to calculate age from exp claim
+            exp = _get_jwt_exp(token)
+            if exp:
+                # Calculate age assuming typical token lifetime (exp - age = iat)
+                # Since we don't know iat, we estimate age from exp
+                # A token's age is roughly: typical_lifetime - (exp - now)
+                # For safety, if exp is very far in future, assume fresh token (age 0)
+                now = time.time()
+                remaining = exp - now
+                if remaining > 0 and remaining <= TOKEN_MAX_AGE_SECONDS:
+                    # Token is within normal lifetime, age = lifetime - remaining
+                    estimated_age = TOKEN_MAX_AGE_SECONDS - remaining
+                    return max(0.0, estimated_age)
+                elif remaining <= 0:
+                    # Token is already expired, report max age
+                    return float(TOKEN_MAX_AGE_SECONDS)
+                else:
+                    # exp is very far in future, assume fresh token
+                    return 0.0
 
             return None
         except Exception as exc:
@@ -672,7 +719,7 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
             if refreshed_token:
                 self._update_auth_headers(self.headers, refreshed_token)
                 # Clear JWT age cache when token changes
-                self._cached_jwt_exp = None
+                self._cached_jwt_iat = None
                 logger.info("Successfully refreshed Claude Code OAuth token")
             else:
                 logger.warning("Token refresh returned None")

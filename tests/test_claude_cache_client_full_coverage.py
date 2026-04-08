@@ -1142,8 +1142,7 @@ class TestJWTAgeCaching:
     def test_cache_is_initialized_empty(self):
         """Test that cache fields are initialized correctly."""
         c = ClaudeCacheAsyncClient()
-        assert c._cached_token is None
-        assert c._cached_iat == 0
+        assert c._cached_jwt_iat is None
 
     def test_cache_populated_on_first_decode(self):
         """Test that cache is populated when first decoding a token."""
@@ -1153,9 +1152,10 @@ class TestJWTAgeCaching:
         c = ClaudeCacheAsyncClient()
         age = c._get_jwt_age_seconds(token)
 
-        # Cache should be populated
-        assert c._cached_token == token
-        assert c._cached_iat == int(iat)
+        # Cache should be populated: (token_prefix, iat)
+        assert c._cached_jwt_iat is not None
+        assert c._cached_jwt_iat[0] == token[:64]  # token prefix (64 chars covers header + payload start)
+        assert c._cached_jwt_iat[1] == int(iat)
         # Age should be correct
         assert 590 <= age <= 610
 
@@ -1168,11 +1168,12 @@ class TestJWTAgeCaching:
 
         # First call - cache miss, should decode
         age1 = c._get_jwt_age_seconds(token)
-        assert c._cached_token == token
+        assert c._cached_jwt_iat is not None
+        assert c._cached_jwt_iat[0] == token[:64]
 
         # Second call - cache hit, should use cached value
         age2 = c._get_jwt_age_seconds(token)
-        assert c._cached_token == token
+        assert c._cached_jwt_iat[0] == token[:64]
 
         # Both ages should be similar (accounting for slight time difference)
         assert abs(age1 - age2) < 1.0
@@ -1189,13 +1190,13 @@ class TestJWTAgeCaching:
 
         # First token
         c._get_jwt_age_seconds(token1)
-        assert c._cached_token == token1
-        assert c._cached_iat == int(iat1)
+        assert c._cached_jwt_iat[0] == token1[:64]
+        assert c._cached_jwt_iat[1] == int(iat1)
 
         # Second token - should update cache
         c._get_jwt_age_seconds(token2)
-        assert c._cached_token == token2
-        assert c._cached_iat == int(iat2)
+        assert c._cached_jwt_iat[0] == token2[:64]
+        assert c._cached_jwt_iat[1] == int(iat2)
 
     def test_cache_not_used_for_exp_only_tokens(self):
         """Test that tokens with only exp claim don't cache (only iat is cached)."""
@@ -1205,10 +1206,9 @@ class TestJWTAgeCaching:
         c = ClaudeCacheAsyncClient()
         age = c._get_jwt_age_seconds(token)
 
-        # Cache should not be updated (iat = 0 means no valid iat claim)
-        assert c._cached_token is None
-        assert c._cached_iat == 0
-        # But age should still be calculated
+        # Cache should not be updated (no iat to cache)
+        assert c._cached_jwt_iat is None
+        # But age should still be calculated from exp
         assert age is not None
 
     def test_token_refresh_clears_cache(self):
@@ -1220,8 +1220,8 @@ class TestJWTAgeCaching:
 
         # Prime the cache
         c._get_jwt_age_seconds(token)
-        assert c._cached_token == token
-        assert c._cached_iat == int(iat)
+        assert c._cached_jwt_iat is not None
+        assert c._cached_jwt_iat[1] == int(iat)
 
         # Mock refresh token to return a new token
         mock_module = MagicMock()
@@ -1236,8 +1236,7 @@ class TestJWTAgeCaching:
             c._refresh_claude_oauth_token()
 
             # Cache should be cleared
-            assert c._cached_token is None
-            assert c._cached_iat == 0
+            assert c._cached_jwt_iat is None
 
     def test_falling_back_to_exp_when_no_iat(self):
         """Test that cache is only used for iat claims, not exp fallback."""
@@ -1249,8 +1248,9 @@ class TestJWTAgeCaching:
         c = ClaudeCacheAsyncClient()
         age = c._get_jwt_age_seconds(token_both)
 
-        # Cache should be populated with iat
-        assert c._cached_token == token_both
-        assert c._cached_iat == int(iat)
+        # Cache should be populated with iat (not exp)
+        assert c._cached_jwt_iat is not None
+        assert c._cached_jwt_iat[0] == token_both[:64]
+        assert c._cached_jwt_iat[1] == int(iat)
         # Age should be calculated from iat (~600 secs)
         assert 590 <= age <= 610
