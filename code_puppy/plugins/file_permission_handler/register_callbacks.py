@@ -68,7 +68,7 @@ def clear_diff_shown_flag() -> None:
 def _preview_delete_snippet(file_path: str, snippet: str) -> str | None:
     """Generate a preview diff for deleting a snippet without modifying the file."""
     try:
-        file_path = os.path.abspath(file_path)
+        # file_path is already normalized by the caller (public boundary)
         if not os.path.exists(file_path) or not os.path.isfile(file_path):
             return None
 
@@ -106,7 +106,7 @@ def _preview_write_to_file(
 ) -> str | None:
     """Generate a preview diff for writing to a file without modifying it."""
     try:
-        file_path = os.path.abspath(file_path)
+        # file_path is already normalized by the caller (public boundary)
         exists = os.path.exists(file_path)
 
         if exists and not overwrite:
@@ -129,7 +129,7 @@ def _preview_replace_in_file(
 ) -> str | None:
     """Generate a preview diff for replacing text in a file without modifying the file."""
     try:
-        file_path = os.path.abspath(file_path)
+        # file_path is already normalized by the caller (public boundary)
 
         with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
             original = f.read()
@@ -192,7 +192,7 @@ def _preview_replace_in_file(
 def _preview_delete_file(file_path: str) -> str | None:
     """Generate a preview diff for deleting a file without modifying it."""
     try:
-        file_path = os.path.abspath(file_path)
+        # file_path is already normalized by the caller (public boundary)
         if not os.path.exists(file_path) or not os.path.isfile(file_path):
             return None
 

@@ -213,7 +213,7 @@ def _delete_snippet_from_file(
     snippet: str,
     message_group: str | None = None,
 ) -> dict[str, Any]:
-    file_path = os.path.abspath(file_path)
+    # file_path is already normalized by the caller (public boundary)
     diff_text = ""
     try:
         if not os.path.exists(file_path) or not os.path.isfile(file_path):
@@ -268,7 +268,8 @@ def _replace_in_file(
     Optimized to cache splitlines() results and avoid repeated string operations.
     Uses cached line arrays and pre-computed needle lines for fuzzy matching.
     """
-    file_path = os.path.abspath(path)
+    # path is already normalized by the caller (public boundary)
+    file_path = path
     diff_text = ""
     try:
         if not os.path.exists(file_path) or not os.path.isfile(file_path):
@@ -386,7 +387,8 @@ def _write_to_file(
     overwrite: bool = False,
     message_group: str | None = None,
 ) -> dict[str, Any]:
-    file_path = os.path.abspath(path)
+    # path is already normalized by the caller (public boundary)
+    file_path = path
 
     try:
         exists = os.path.exists(file_path)
@@ -631,7 +633,7 @@ async def _edit_file(
 async def _delete_file(
     context: RunContext, file_path: str, message_group: str | None = None
 ) -> dict[str, Any]:
-    file_path = os.path.abspath(file_path)
+    # file_path is already normalized by the caller (public boundary)
 
     # Use the plugin system for permission handling with operation data
     from code_puppy.callbacks import on_file_permission
