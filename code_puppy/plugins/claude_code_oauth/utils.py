@@ -340,11 +340,14 @@ def get_valid_access_token() -> str | None:
 
 
 def save_tokens(tokens: dict[str, Any]) -> bool:
+    # SECURITY: tokens stored with 0o600 permissions only. For enhanced security,
+    # consider using the 'keyring' package for OS-level encryption.
     try:
         token_path = get_token_storage_path()
         with open(token_path, "w", encoding="utf-8") as handle:
             json.dump(tokens, handle, indent=2)
         token_path.chmod(0o600)
+        logger.debug(f"Saved OAuth tokens to {token_path} with 0o600 permissions")
         return True
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Failed to save tokens: %s", exc)
