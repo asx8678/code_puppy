@@ -312,13 +312,18 @@ class TestBaseAgentEdgeCases:
             result is None
         )  # Should return None for empty file (empty string is falsy)
 
-    @patch("pathlib.Path.exists")
-    def test_load_puppy_rules_no_files_exist(self, mock_exists, agent):
+    def test_load_puppy_rules_no_files_exist(self, agent, tmp_path, monkeypatch):
         """Test load_puppy_rules when no AGENT(S).md files exist."""
-        mock_exists.return_value = False
+        # cd to empty dir so no project-local file found
+        monkeypatch.chdir(tmp_path)
 
-        result = agent.load_puppy_rules()
-        assert result is None
+        # Clear any cached rules
+        agent._state.puppy_rules = None
+
+        # Mock CONFIG_DIR to a non-existent location so global rules aren't found
+        with patch("code_puppy.config.CONFIG_DIR", str(tmp_path / "nonexistent")):
+            result = agent.load_puppy_rules()
+            assert result is None
 
     def test_compaction_edge_cases_with_extreme_tokens(self, agent):
         """Test compaction methods with extreme token counts."""

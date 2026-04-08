@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from rich.console import Console
 
+from code_puppy.async_utils import format_size
 from code_puppy.messaging.bus import MessageBus
 from code_puppy.messaging.messages import (
     AgentReasoningMessage,
@@ -888,10 +889,10 @@ async def test_render_dispatches_to_sync(renderer, console):
 
 
 def test_format_size(renderer):
-    assert renderer._format_size(500) == "500 B"
-    assert "KB" in renderer._format_size(2048)
-    assert "MB" in renderer._format_size(2 * 1024 * 1024)
-    assert "GB" in renderer._format_size(2 * 1024 * 1024 * 1024)
+    assert format_size(500) == "500 B"
+    assert "KB" in format_size(2048)
+    assert "MB" in format_size(2 * 1024 * 1024)
+    assert "GB" in format_size(2 * 1024 * 1024 * 1024)
 
 
 def test_get_file_icon(renderer):

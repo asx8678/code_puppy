@@ -10,9 +10,15 @@ class TestBaseAgentConfiguration:
     def agent(self):
         return CodePuppyAgent()
 
-    def test_load_puppy_rules_no_file(self, agent):
-        # Test when no AGENTS.md exists
-        with patch("pathlib.Path.exists", return_value=False):
+    def test_load_puppy_rules_no_file(self, agent, tmp_path, monkeypatch):
+        # Test when no AGENTS.md exists - cd to empty dir so no project-local file found
+        monkeypatch.chdir(tmp_path)
+
+        # Clear any cached rules
+        agent._state.puppy_rules = None
+
+        # Mock CONFIG_DIR to a non-existent location so global rules aren't found
+        with patch("code_puppy.config.CONFIG_DIR", str(tmp_path / "nonexistent")):
             result = agent.load_puppy_rules()
             assert result is None
 
