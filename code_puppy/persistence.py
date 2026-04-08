@@ -17,6 +17,9 @@ import msgpack
 
 logger = logging.getLogger(__name__)
 
+# Cache of directories that have already been created to avoid redundant mkdir calls
+_created_dirs: set[Path] = set()
+
 
 def safe_resolve_path(path: Path, allowed_parent: Path | None = None) -> Path:
     """Resolve path to absolute and optionally verify it's within allowed_parent.
@@ -53,13 +56,24 @@ def safe_resolve_path(path: Path, allowed_parent: Path | None = None) -> Path:
     return resolved
 
 
+def _ensure_parent_dir(path: Path) -> None:
+    """Ensure parent directory exists, using cache to avoid redundant mkdir calls."""
+    parent = path.parent
+    if parent in _created_dirs or parent.exists():
+        if parent.exists():
+            _created_dirs.add(parent)
+        return
+    parent.mkdir(parents=True, exist_ok=True)
+    _created_dirs.add(parent)
+
+
 def _atomic_replace(tmp_path: Path, target_path: Path) -> None:
     """Atomically replace target with tmp file.
 
     Handles cross-platform differences in atomic rename.
     """
     # Ensure parent directory exists
-    target_path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_parent_dir(target_path)
 
     # On Windows, replace may fail if target is open; we accept that risk
     # On Unix, this is truly atomic
@@ -79,8 +93,8 @@ def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None
     """
     path = safe_resolve_path(path)
 
-    # Ensure parent directory exists
-    path.parent.mkdir(parents=True, exist_ok=True)
+    # Ensure parent directory exists (cached to avoid redundant calls)
+    _ensure_parent_dir(path)
 
     # Create temp file in same directory for atomic move
     fd = None
@@ -114,8 +128,8 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
     """
     path = safe_resolve_path(path)
 
-    # Ensure parent directory exists
-    path.parent.mkdir(parents=True, exist_ok=True)
+    # Ensure parent directory exists (cached to avoid redundant calls)
+    _ensure_parent_dir(path)
 
     fd = None
     tmp_path = None
