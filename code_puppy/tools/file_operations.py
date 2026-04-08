@@ -86,6 +86,30 @@ _COMMON_HOME_SUBDIRS = frozenset({
     "Applications",  # Cover macOS/Linux
 })
 
+# SECURITY FIX 8c0/egh: Sensitive path data - module-level frozensets for O(1) lookup
+# (was being rebuilt on every validate_file_path call)
+_SENSITIVE_DIR_PREFIXES = frozenset({
+    os.path.join(os.path.expanduser("~"), ".ssh") + os.sep,
+    os.path.join(os.path.expanduser("~"), ".aws") + os.sep,
+    os.path.join(os.path.expanduser("~"), ".gnupg") + os.sep,
+    os.path.join(os.path.expanduser("~"), ".gcp") + os.sep,
+    os.path.join(os.path.expanduser("~"), ".config", "gcloud") + os.sep,
+    os.path.join(os.path.expanduser("~"), ".azure") + os.sep,
+    os.path.join(os.path.expanduser("~"), ".kube") + os.sep,
+    os.path.join(os.path.expanduser("~"), ".docker") + os.sep,
+})
+
+_SENSITIVE_EXACT_FILES = frozenset({
+    os.path.join(os.path.expanduser("~"), ".netrc"),
+    os.path.join(os.path.expanduser("~"), ".pgpass"),
+    os.path.join(os.path.expanduser("~"), ".my.cnf"),
+    "/etc/shadow",
+    "/etc/sudoers",
+    "/etc/master.passwd",  # BSD/macOS
+})
+
+_SENSITIVE_EXTENSIONS = frozenset({".pem", ".key", ".p12", ".pfx", ".keystore"})
+
 
 class ListFileOutput(BaseModel):
     content: str
@@ -324,15 +348,21 @@ async def _list_files(
                 # Calculate depth based on the relative path
                 depth = file_path.count(os.sep)
 
+                # PERFORMANCE FIX 2np/hlc: O(depth) parent-path construction
                 # Add directory entries if needed for files
                 if entry_type == "file":
                     dir_path = os.path.dirname(file_path)
                     if dir_path:
                         # Add directory path components if they don't exist
                         # Using seen_dirs set (defined at function scope) for O(1) lookup
+                        # Accumulate paths efficiently instead of O(depth²) repeated joins
                         path_parts = dir_path.split(os.sep)
-                        for i in range(len(path_parts)):
-                            partial_path = os.sep.join(path_parts[: i + 1])
+                        partial_path = ""
+                        for i, part in enumerate(path_parts):
+                            if i == 0:
+                                partial_path = part
+                            else:
+                                partial_path = partial_path + os.sep + part
                             # Check if we already added this directory using set
                             if partial_path not in seen_dirs:
                                 seen_dirs.add(partial_path)
@@ -344,7 +374,7 @@ async def _list_files(
                                         full_path=os.path.join(
                                             directory, partial_path
                                         ),
-                                        depth=partial_path.count(os.sep),
+                                        depth=i,  # depth is just the index
                                     )
                                 )
 
@@ -490,6 +520,7 @@ def _is_sensitive_path(file_path: str) -> bool:
     access to credentials, SSH keys, and other secrets — even in yolo_mode.
 
     SECURITY FIX peis/wslg/p8wo/8y6x: sensitive-path blocklist.
+    PERFORMANCE FIX 8c0/egh: Uses module-level frozensets for O(1) lookup.
 
     Args:
         file_path: Path to check (may be relative, absolute, or contain ~).
@@ -512,45 +543,19 @@ def _is_sensitive_path(file_path: str) -> bool:
         # genuinely bad input.
         return False
 
-    home = os.path.expanduser("~")
-
-    # Directory prefixes that are always sensitive (any file under them)
-    sensitive_dir_prefixes = [
-        os.path.join(home, ".ssh"),
-        os.path.join(home, ".aws"),
-        os.path.join(home, ".gnupg"),
-        os.path.join(home, ".gcp"),
-        os.path.join(home, ".config", "gcloud"),
-        os.path.join(home, ".azure"),
-        os.path.join(home, ".kube"),
-        os.path.join(home, ".docker"),
-    ]
-
-    # Exact-match sensitive files
-    sensitive_exact_files = {
-        os.path.join(home, ".netrc"),
-        os.path.join(home, ".pgpass"),
-        os.path.join(home, ".my.cnf"),
-        "/etc/shadow",
-        "/etc/sudoers",
-        "/etc/master.passwd",  # BSD/macOS
-    }
-
     # Check directory prefixes (with trailing separator to avoid
     # "/home/user/.sshfoo" matching "/home/user/.ssh")
-    for prefix in sensitive_dir_prefixes:
-        prefix_with_sep = prefix + os.sep
-        if resolved == prefix or resolved.startswith(prefix_with_sep):
+    for prefix in _SENSITIVE_DIR_PREFIXES:
+        if resolved.startswith(prefix):
             return True
 
     # Check exact-match files
-    if resolved in sensitive_exact_files:
+    if resolved in _SENSITIVE_EXACT_FILES:
         return True
 
     # Check for private key files by extension anywhere
-    sensitive_extensions = {".pem", ".key", ".p12", ".pfx", ".keystore"}
     _, ext = os.path.splitext(resolved)
-    if ext.lower() in sensitive_extensions:
+    if ext.lower() in _SENSITIVE_EXTENSIONS:
         # Only block .pem/.key if they live in a directory that sounds
         # credential-ish — otherwise legitimate project files would be blocked.
         parent_lower = os.path.dirname(resolved).lower()
@@ -633,13 +638,10 @@ def _read_file_sync(
 ) -> tuple[str | None, int, str | None]:
     """Synchronous file reading - runs in thread pool.
 
-    SECURITY FIX peis/wslg: Normalizes and validates path.
+    SECURITY FIX peis/wslg: Normalizes path.
+    PERFORMANCE FIX 25g/c6w: Path validation happens in _read_file, not duplicated here.
     """
-    # SECURITY: Validate and normalize path
-    is_valid, error_msg = validate_file_path(file_path, "read")
-    if not is_valid:
-        return None, 0, f"Security: {error_msg}"
-
+    # SECURITY: Normalize path (validation done in _read_file before thread pool dispatch)
     file_path = os.path.abspath(os.path.expanduser(file_path))
 
     if not os.path.exists(file_path):
@@ -673,20 +675,15 @@ def _read_file_sync(
                 # Read the entire file
                 content = f.read()
 
+            # PERFORMANCE FIX esd/5zl: Fast surrogate cleanup using encode/decode
+            # instead of slow per-character Python loop.
             # Sanitize the content to remove any surrogate characters that could
-            # cause issues when the content is later serialized or displayed
+            # cause issues when the content is later serialized or displayed.
             # This re-encodes with surrogatepass then decodes with replace to
-            # convert lone surrogates to replacement characters
-            try:
-                content = content.encode("utf-8", errors="surrogatepass").decode(
-                    "utf-8", errors="replace"
-                )
-            except (UnicodeEncodeError, UnicodeDecodeError):
-                # If that fails, do a more aggressive cleanup
-                content = "".join(
-                    char if ord(char) < 0xD800 or ord(char) > 0xDFFF else "\ufffd"
-                    for char in content
-                )
+            # convert lone surrogates to replacement characters.
+            content = content.encode("utf-8", errors="surrogatepass").decode(
+                "utf-8", errors="replace"
+            )
 
             # Use shared token estimation (content-aware, sampling for large texts)
             from code_puppy.token_utils import estimate_token_count as _etc
@@ -738,27 +735,21 @@ def _sanitize_string(text: str) -> str:
     """Sanitize a string to remove invalid Unicode surrogates.
 
     This handles encoding issues common on Windows with copy-paste operations.
+    PERFORMANCE FIX esd/5zl: Uses encode/decode in one pass instead of slow loop.
     """
     if not text:
         return text
+    # Fast path: try encoding - if it works, string is clean
     try:
-        # Try encoding - if it works, string is clean
         text.encode("utf-8")
         return text
     except UnicodeEncodeError:
         pass
 
-    try:
-        # Encode allowing surrogates, then decode replacing them
-        return text.encode("utf-8", errors="surrogatepass").decode(
-            "utf-8", errors="replace"
-        )
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        # Last resort: filter out surrogate characters
-        return "".join(
-            char if ord(char) < 0xD800 or ord(char) > 0xDFFF else "\ufffd"
-            for char in text
-        )
+    # PERFORMANCE FIX esd/5zl: Single-pass encode/decode instead of per-char loop
+    return text.encode("utf-8", errors="surrogatepass").decode(
+        "utf-8", errors="replace"
+    )
 
 
 async def _grep(
