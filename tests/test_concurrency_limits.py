@@ -1,9 +1,7 @@
 """Tests for concurrency limiters."""
 
 import asyncio
-import os
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -14,7 +12,6 @@ from code_puppy.concurrency_limits import (
     ApiCallsLimiter,
     ToolCallsLimiter,
     get_concurrency_status,
-    reload_concurrency_config,
     create_default_config,
     ensure_config_file,
     _read_config,
