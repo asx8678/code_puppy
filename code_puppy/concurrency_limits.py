@@ -214,25 +214,26 @@ def ToolCallsLimiter():
 
 def get_concurrency_status() -> dict[str, int]:
     """Get current semaphore status (for monitoring)."""
+    config = _read_config()
     return {
-        "file_ops_limit": _get_file_ops_semaphore()._value,
+        "file_ops_limit": config.file_ops_limit,
         "file_ops_available": getattr(
-            _file_ops_semaphore, "_value", DEFAULT_FILE_OPS_LIMIT
+            _file_ops_semaphore, "_value", config.file_ops_limit
         )
         if _file_ops_semaphore
-        else DEFAULT_FILE_OPS_LIMIT,
-        "api_calls_limit": _get_api_calls_semaphore()._value,
+        else config.file_ops_limit,
+        "api_calls_limit": config.api_calls_limit,
         "api_calls_available": getattr(
-            _api_calls_semaphore, "_value", DEFAULT_API_CALLS_LIMIT
+            _api_calls_semaphore, "_value", config.api_calls_limit
         )
         if _api_calls_semaphore
-        else DEFAULT_API_CALLS_LIMIT,
-        "tool_calls_limit": _get_tool_calls_semaphore()._value,
+        else config.api_calls_limit,
+        "tool_calls_limit": config.tool_calls_limit,
         "tool_calls_available": getattr(
-            _tool_calls_semaphore, "_value", DEFAULT_TOOL_CALLS_LIMIT
+            _tool_calls_semaphore, "_value", config.tool_calls_limit
         )
         if _tool_calls_semaphore
-        else DEFAULT_TOOL_CALLS_LIMIT,
+        else config.tool_calls_limit,
     }
 
 
