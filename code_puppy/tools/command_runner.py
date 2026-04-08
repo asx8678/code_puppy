@@ -14,7 +14,7 @@ provides additional rule-based command filtering.
 import asyncio
 from collections import deque
 import ctypes
-
+import io
 import os
 import re
 import select

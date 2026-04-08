@@ -96,9 +96,14 @@ class MessageQueue:
         self._thread.start()
 
     def get_buffered_messages(self):
-        """Get all currently buffered messages without waiting."""
-        # First get any startup buffered messages
-        messages = list(self._startup_buffer)
+        """Get all currently buffered messages without waiting.
+
+        Uses swap-and-clear pattern for atomic buffer retrieval and reset.
+        """
+        # Swap-and-clear: atomically swap buffer with new empty one
+        old_buffer = self._startup_buffer
+        self._startup_buffer = deque(maxlen=self._maxsize)
+        messages = list(old_buffer)
 
         # Then get any queued messages
         while True:
@@ -108,10 +113,6 @@ class MessageQueue:
             except queue.Empty:
                 break
         return messages
-
-    def clear_startup_buffer(self):
-        """Clear the startup buffer after processing."""
-        self._startup_buffer.clear()
 
     def stop(self):
         """Stop the queue processing."""

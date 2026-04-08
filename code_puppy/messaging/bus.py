@@ -577,18 +577,16 @@ class MessageBus:
     def get_buffered_messages(self) -> list[AnyMessage]:
         """Get all messages buffered before renderer attached.
 
-        Returns a copy of the buffer. Call clear_buffer() after processing.
+        Uses swap-and-clear pattern for atomic buffer retrieval and reset.
 
         Returns:
             List of buffered messages.
         """
         with self._lock:
-            return list(self._startup_buffer)
-
-    def clear_buffer(self) -> None:
-        """Clear the startup buffer after processing."""
-        with self._lock:
-            self._startup_buffer.clear()
+            # Swap-and-clear: atomically swap buffer with new empty one
+            old_buffer = self._startup_buffer
+            self._startup_buffer = deque(maxlen=self._maxsize)
+            return list(old_buffer)
 
     def mark_renderer_active(self) -> None:
         """Mark that a renderer is now active and consuming messages.
