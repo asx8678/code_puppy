@@ -26,6 +26,16 @@ from code_puppy.terminal_utils import (
 )
 
 
+def _sync_history_from_result(agent, result) -> None:
+    """Sync agent message history from result.all_messages().
+
+    pydantic-ai's all_messages() already returns a list; this helper
+    deduplicates the sync logic across multiple call sites.
+    """
+    if hasattr(result, "all_messages"):
+        agent.set_message_history(result.all_messages())
+
+
 async def interactive_mode(message_renderer, initial_command: str = None) -> None:
     """Run the agent in interactive mode."""
     from code_puppy.command_line.command_handler import handle_command
@@ -116,8 +126,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
 
                 # Update the agent's message history with the complete conversation
                 # including the final assistant response
-                if hasattr(response, "all_messages"):
-                    agent.set_message_history(list(response.all_messages()))
+                _sync_history_from_result(agent, response)
 
                 # Emit structured message for proper markdown rendering
                 from code_puppy.messaging import get_message_bus
@@ -489,8 +498,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 # including the final assistant response. The history_processors callback
                 # may not capture the final message, so we use result.all_messages()
                 # to ensure the autosave includes the complete conversation.
-                if hasattr(result, "all_messages"):
-                    current_agent.set_message_history(list(result.all_messages()))
+                _sync_history_from_result(current_agent, result)
 
                 # Ensure console output is flushed before next prompt
                 # This fixes the issue where prompt doesn't appear after agent response
@@ -578,8 +586,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                     get_message_bus().emit(response_msg)
 
                     # Update message history
-                    if hasattr(result, "all_messages"):
-                        current_agent.set_message_history(list(result.all_messages()))
+                    _sync_history_from_result(current_agent, result)
 
                     # Flush console
                     if hasattr(display_console.file, "flush"):
