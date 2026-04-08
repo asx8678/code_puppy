@@ -41,6 +41,16 @@ TOOL_PREFIX = "cp_"
 # User-Agent to send with Claude Code OAuth requests
 CLAUDE_CLI_USER_AGENT = "claude-cli/2.1.2 (external, cli)"
 
+# Required betas for Claude Code OAuth (base set)
+REQUIRED_BETAS_BASE = ("oauth-2025-04-20", "interleaved-thinking-2025-05-14")
+REQUIRED_BETAS_BASE_SET = frozenset(REQUIRED_BETAS_BASE)
+
+# Optional beta that gets added if present in incoming headers
+CLAUDE_CODE_BETA_OPTIONAL = "claude-code-20250219"
+
+# X-API-Key header variants to remove (using Bearer auth instead)
+X_API_KEY_VARIANTS = ("x-api-key", "X-API-Key", "X-Api-Key")
+
 try:
     from anthropic import AsyncAnthropic
 except ImportError:  # pragma: no cover - optional dep
@@ -312,26 +322,23 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         incoming_beta = headers.get("anthropic-beta", "")
         incoming_betas = [b.strip() for b in incoming_beta.split(",") if b.strip()]
 
-        # Always-required betas for Claude Code OAuth
-        required_betas = [
-            "oauth-2025-04-20",
-            "interleaved-thinking-2025-05-14",
-        ]
-        if "claude-code-20250219" in incoming_betas:
-            required_betas.append("claude-code-20250219")
+        # Build required set based on base required betas + optional claude-code beta
+        required_set = REQUIRED_BETAS_BASE_SET
+        if CLAUDE_CODE_BETA_OPTIONAL in incoming_betas:
+            required_set = required_set | {CLAUDE_CODE_BETA_OPTIONAL}
 
-        # Merge: start with required, then append any extras from the
-        # incoming headers that aren't already in the required set.
-        merged = list(required_betas)
-        required_set = set(required_betas)
+        # Merge: start with required base, then optional, then append extras
+        merged = list(REQUIRED_BETAS_BASE)
+        if CLAUDE_CODE_BETA_OPTIONAL in incoming_betas:
+            merged.append(CLAUDE_CODE_BETA_OPTIONAL)
         for beta in incoming_betas:
             if beta not in required_set:
                 merged.append(beta)
 
         headers["anthropic-beta"] = ",".join(merged)
 
-        # Remove x-api-key if present (we use Bearer auth)
-        for key in ["x-api-key", "X-API-Key", "X-Api-Key"]:
+        # Remove x-api-key if present (we use Bearer auth instead)
+        for key in X_API_KEY_VARIANTS:
             if key in headers:
                 del headers[key]
 
