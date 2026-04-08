@@ -454,10 +454,10 @@ def get_model_context_length(model_name: str | None = None) -> int:
 
 
 # --- CONFIG SETTER STARTS HERE ---
-def get_config_keys():
+def get_default_config_keys():
     """
-    Returns the list of all config keys currently in puppy.cfg,
-    plus certain preset expected keys (e.g. "yolo_mode", "model", "compaction_strategy", "message_limit", "allow_recursion").
+    Returns the list of all known/preset config keys.
+    This is the source of truth for default configuration keys.
     """
     default_keys = [
         "yolo_mode",
@@ -501,6 +501,16 @@ def get_config_keys():
     # SECURITY FIX c9z0: User plugin security settings
     default_keys.append("enable_user_plugins")
     default_keys.append("allowed_user_plugins")
+
+    return default_keys
+
+
+def get_config_keys():
+    """
+    Returns the list of all config keys currently in puppy.cfg,
+    plus certain preset expected keys (e.g. "yolo_mode", "model", "compaction_strategy", "message_limit", "allow_recursion").
+    """
+    default_keys = get_default_config_keys()
 
     config = _get_config()
     keys = set(config[DEFAULT_SECTION].keys()) if DEFAULT_SECTION in config else set()

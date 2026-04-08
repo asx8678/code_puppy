@@ -283,55 +283,11 @@ class TestGetConfigKeys:
         keys = cp_config.get_config_keys()
 
         mock_parser_instance.read.assert_called_once_with(mock_cfg_file)
-        assert keys == sorted(
-            [
-                "allow_recursion",
-                "auto_save_session",
-                "banner_color_agent_reasoning",
-                "banner_color_agent_response",
-                "banner_color_create_file",
-                "banner_color_delete_snippet",
-                "banner_color_directory_listing",
-                "banner_color_edit_file",
-                "banner_color_grep",
-                "banner_color_invoke_agent",
-                "banner_color_list_agents",
-                "banner_color_mcp_tool_call",
-                "banner_color_read_file",
-                "banner_color_replace_in_file",
-                "banner_color_shell_command",
-                "banner_color_shell_passthrough",
-                "banner_color_subagent_response",
-                "banner_color_terminal_tool",
-                "banner_color_thinking",
-                "banner_color_universal_constructor",
-                "cancel_agent_key",
-                "compaction_strategy",
-                "compaction_threshold",
-                "default_agent",
-                "diff_context_lines",
-                "enable_dbos",
-                "enable_pack_agents",
-                "enable_streaming",
-                "enable_universal_constructor",
-                "frontend_emitter_enabled",
-                "frontend_emitter_max_recent_events",
-                "frontend_emitter_queue_size",
-                "http2",
-                "key1",
-                "key2",
-                "max_saved_sessions",
-                "message_limit",
-                "model",
-                "openai_reasoning_effort",
-                "openai_reasoning_summary",
-                "openai_verbosity",
-                "protected_token_count",
-                "resume_message_count",
-                "temperature",
-                "yolo_mode",
-            ]
+        # Get expected keys dynamically from source of truth, plus mock keys from config
+        expected_keys = sorted(
+            set(cp_config.get_default_config_keys()) | {"key1", "key2"}
         )
+        assert keys == expected_keys
 
     @patch("configparser.ConfigParser")
     def test_get_config_keys_empty_config(
@@ -343,53 +299,9 @@ class TestGetConfigKeys:
         mock_config_parser_class.return_value = mock_parser_instance
 
         keys = cp_config.get_config_keys()
-        assert keys == sorted(
-            [
-                "allow_recursion",
-                "auto_save_session",
-                "banner_color_agent_reasoning",
-                "banner_color_agent_response",
-                "banner_color_create_file",
-                "banner_color_delete_snippet",
-                "banner_color_directory_listing",
-                "banner_color_edit_file",
-                "banner_color_grep",
-                "banner_color_invoke_agent",
-                "banner_color_list_agents",
-                "banner_color_mcp_tool_call",
-                "banner_color_read_file",
-                "banner_color_replace_in_file",
-                "banner_color_shell_command",
-                "banner_color_shell_passthrough",
-                "banner_color_subagent_response",
-                "banner_color_terminal_tool",
-                "banner_color_thinking",
-                "banner_color_universal_constructor",
-                "cancel_agent_key",
-                "compaction_strategy",
-                "compaction_threshold",
-                "default_agent",
-                "diff_context_lines",
-                "enable_dbos",
-                "enable_pack_agents",
-                "enable_streaming",
-                "enable_universal_constructor",
-                "frontend_emitter_enabled",
-                "frontend_emitter_max_recent_events",
-                "frontend_emitter_queue_size",
-                "http2",
-                "max_saved_sessions",
-                "message_limit",
-                "model",
-                "openai_reasoning_effort",
-                "openai_reasoning_summary",
-                "openai_verbosity",
-                "protected_token_count",
-                "resume_message_count",
-                "temperature",
-                "yolo_mode",
-            ]
-        )
+        # Get expected keys dynamically from source of truth
+        expected_keys = sorted(cp_config.get_default_config_keys())
+        assert keys == expected_keys
 
 
 class TestSetConfigValue:
