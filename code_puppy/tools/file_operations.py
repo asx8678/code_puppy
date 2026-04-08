@@ -418,7 +418,10 @@ async def _list_files(
         parts = item.path.split(os.sep)
         return (parts, item.type != "directory")
 
-    for item in sorted(results, key=_sort_key):
+    # Sort once and cache the result to avoid redundant sorting
+    sorted_results = sorted(results, key=_sort_key)
+
+    for item in sorted_results:
         if item.type == "directory" and not item.path:
             continue
         file_entries.append(
@@ -442,7 +445,7 @@ async def _list_files(
     get_message_bus().emit(file_listing_msg)
 
     # Build plain text output for LLM consumption
-    for item in sorted(results, key=_sort_key):
+    for item in sorted_results:
         if item.type == "directory" and not item.path:
             continue
         name = os.path.basename(item.path) or item.path
