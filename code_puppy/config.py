@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import pathlib
+import threading
 import time
 from functools import lru_cache
 
@@ -16,6 +17,9 @@ _config_mtime: float = 0.0
 # --- mtime check debouncing (reduces stat syscall cost) ---
 _last_mtime_check = 0
 _cached_mtime = None
+
+# --- Thread-safe lock for config cache access ---
+_CONFIG_LOCK = threading.Lock()
 
 
 def _get_config() -> configparser.ConfigParser:
@@ -36,17 +40,19 @@ def _get_config() -> configparser.ConfigParser:
             return cfg
         _last_mtime_check = now
 
-    if _config_cache is None or _cached_mtime != _config_mtime:
-        _config_cache = configparser.ConfigParser()
-        _config_cache.read(CONFIG_FILE)
-        _config_mtime = _cached_mtime
-    return _config_cache
+    with _CONFIG_LOCK:
+        if _config_cache is None or _cached_mtime != _config_mtime:
+            _config_cache = configparser.ConfigParser()
+            _config_cache.read(CONFIG_FILE)
+            _config_mtime = _cached_mtime
+        return _config_cache
 
 
 def _invalidate_config() -> None:
     """Force next _get_config() call to re-read from disk."""
     global _config_cache, _model_context_length_cache
-    _config_cache = None
+    with _CONFIG_LOCK:
+        _config_cache = None
     # Also invalidate the protected token count cache
     get_protected_token_count.cache_clear()
     # Clear model context length cache since config changes
