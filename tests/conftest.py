@@ -64,6 +64,10 @@ def isolate_config_between_tests(tmp_path_factory):
     cp_config.CONFIG_FILE = temp_config_file
     cp_config.CONFIG_DIR = temp_config_dir
 
+    # Invalidate the config cache so _get_config() re-reads from the new
+    # temp path instead of serving stale data from a previous test.
+    cp_config._invalidate_config()
+
     # Clear model cache to ensure fresh state
     cp_config.clear_model_cache()
     # Clear session-local model cache (required for /model session sticky behavior)
@@ -83,6 +87,9 @@ def isolate_config_between_tests(tmp_path_factory):
     # Restore original config paths
     cp_config.CONFIG_FILE = original_config_file
     cp_config.CONFIG_DIR = original_config_dir
+
+    # Invalidate the config cache so the next test starts from a clean slate.
+    cp_config._invalidate_config()
 
     # Clear cache again after test
     cp_config.clear_model_cache()

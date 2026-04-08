@@ -5,46 +5,10 @@ import pathlib
 import threading
 import time
 from functools import cache, lru_cache
-from typing import TYPE_CHECKING
 
 from code_puppy.session_storage import save_session_async
 from code_puppy import runtime_state
 
-
-# TYPE_CHECKING block for lazy-evaluated path constants (fixes F821 errors)
-if TYPE_CHECKING:
-    # XDG Base Directory paths
-    CONFIG_DIR: str
-    DATA_DIR: str
-    CACHE_DIR: str
-    STATE_DIR: str
-
-    # Configuration files (XDG_CONFIG_HOME)
-    CONFIG_FILE: pathlib.Path
-    MCP_SERVERS_FILE: pathlib.Path
-
-    # Data files (XDG_DATA_HOME)
-    MODELS_FILE: pathlib.Path
-    EXTRA_MODELS_FILE: pathlib.Path
-    AGENTS_DIR: pathlib.Path
-    SKILLS_DIR: pathlib.Path
-    CONTEXTS_DIR: pathlib.Path
-    _DEFAULT_SQLITE_FILE: pathlib.Path
-
-    # OAuth plugin model files (XDG_DATA_HOME)
-    GEMINI_MODELS_FILE: pathlib.Path
-    CHATGPT_MODELS_FILE: pathlib.Path
-    CLAUDE_MODELS_FILE: pathlib.Path
-    ANTIGRAVITY_MODELS_FILE: pathlib.Path
-
-    # Cache files (XDG_CACHE_HOME)
-    AUTOSAVE_DIR: pathlib.Path
-
-    # State files (XDG_STATE_HOME)
-    COMMAND_HISTORY_FILE: pathlib.Path
-
-    # Database URL
-    DBOS_DATABASE_URL: str
 
 # --- Config caching (eliminates repeated disk reads) ---
 _config_cache: configparser.ConfigParser | None = None
@@ -87,8 +51,17 @@ def _get_xdg_dir_cached(env_var: str, fallback: str) -> str:
 
 
 def _get_xdg_dir(env_var: str, fallback: str) -> str:
-    """Get XDG directory (wrapper for backward compatibility)."""
-    return _get_xdg_dir_cached(env_var, fallback)
+    """Get XDG directory (uncached: always reads current env var).
+
+    Deliberately bypasses `_get_xdg_dir_cached` so that callers who change
+    XDG_* env vars at runtime (notably tests using `patch.dict(os.environ)`)
+    always get fresh results. The cached variant is still used for the
+    module-level path constants computed once at import time.
+    """
+    xdg_base = os.getenv(env_var)
+    if xdg_base:
+        return os.path.join(xdg_base, "code_puppy")
+    return os.path.join(os.path.expanduser("~"), ".code_puppy")
 
 
 def _get_config() -> configparser.ConfigParser:
@@ -118,10 +91,18 @@ def _get_config() -> configparser.ConfigParser:
 
 
 def _invalidate_config() -> None:
-    """Force next _get_config() call to re-read from disk."""
-    global _config_cache, _model_context_length_cache
+    """Force next _get_config() call to re-read from disk.
+
+    Also resets the TTL-debounce state (_last_mtime_check, _cached_mtime) so
+    the next _get_config() call performs a fresh mtime check rather than
+    trusting stale values from before invalidation. This is essential for
+    test isolation when CONFIG_FILE is swapped between tests.
+    """
+    global _config_cache, _model_context_length_cache, _last_mtime_check, _cached_mtime
     with _CONFIG_LOCK:
         _config_cache = None
+        _last_mtime_check = 0
+        _cached_mtime = None
     # Also invalidate the protected token count cache
     get_protected_token_count.cache_clear()
     # Clear model context length cache since config changes
@@ -170,71 +151,48 @@ def _is_truthy(val: str | None, default: bool = False) -> bool:
     return str(val).strip().lower() in _TRUTHY_VALUES
 
 
-# --- Lazy-evaluated path constants ---
-# Use module-level __getattr__ for true lazy evaluation at first access
+# --- Module-level path constants (eager, computed once at import time) ---
+# Previously these were lazy-evaluated via a module-level __getattr__ for a
+# microscopic startup perf win. That broke horribly: PEP 562 module __getattr__
+# only intercepts *external* `module.ATTR` access. It does NOT resolve bare-name
+# lookups inside the module's own functions, so every `CONFIG_FILE` reference
+# inside config.py raised NameError at runtime (see issue code_puppy-9tcr).
+# _get_xdg_dir_cached() already has @lru_cache, so these are effectively free.
 
+# XDG Base Directory paths
+CONFIG_DIR = _get_xdg_dir_cached("XDG_CONFIG_HOME", ".config")
+DATA_DIR = _get_xdg_dir_cached("XDG_DATA_HOME", ".local/share")
+CACHE_DIR = _get_xdg_dir_cached("XDG_CACHE_HOME", ".cache")
+STATE_DIR = _get_xdg_dir_cached("XDG_STATE_HOME", ".local/state")
 
-def __getattr__(name: str) -> pathlib.Path | str:
-    """Lazy evaluator for path constants - computed only on first access."""
-    # XDG Base Directory paths (cached after first access)
-    if name == "CONFIG_DIR":
-        return _get_xdg_dir_cached("XDG_CONFIG_HOME", ".config")
-    if name == "DATA_DIR":
-        return _get_xdg_dir_cached("XDG_DATA_HOME", ".local/share")
-    if name == "CACHE_DIR":
-        return _get_xdg_dir_cached("XDG_CACHE_HOME", ".cache")
-    if name == "STATE_DIR":
-        return _get_xdg_dir_cached("XDG_STATE_HOME", ".local/state")
+# Configuration files (XDG_CONFIG_HOME)
+CONFIG_FILE = pathlib.Path(CONFIG_DIR) / "puppy.cfg"
+MCP_SERVERS_FILE = pathlib.Path(CONFIG_DIR) / "mcp_servers.json"
 
-    # Configuration files (XDG_CONFIG_HOME)
-    if name == "CONFIG_FILE":
-        return pathlib.Path(__getattr__("CONFIG_DIR")) / "puppy.cfg"
-    if name == "MCP_SERVERS_FILE":
-        return pathlib.Path(__getattr__("CONFIG_DIR")) / "mcp_servers.json"
+# Data files (XDG_DATA_HOME)
+MODELS_FILE = pathlib.Path(DATA_DIR) / "models.json"
+EXTRA_MODELS_FILE = pathlib.Path(DATA_DIR) / "extra_models.json"
+AGENTS_DIR = pathlib.Path(DATA_DIR) / "agents"
+SKILLS_DIR = pathlib.Path(DATA_DIR) / "skills"
+CONTEXTS_DIR = pathlib.Path(DATA_DIR) / "contexts"
+_DEFAULT_SQLITE_FILE = pathlib.Path(DATA_DIR) / "dbos_store.sqlite"
 
-    # Data files (XDG_DATA_HOME)
-    if name == "MODELS_FILE":
-        return pathlib.Path(__getattr__("DATA_DIR")) / "models.json"
-    if name == "EXTRA_MODELS_FILE":
-        return pathlib.Path(__getattr__("DATA_DIR")) / "extra_models.json"
-    if name == "AGENTS_DIR":
-        return pathlib.Path(__getattr__("DATA_DIR")) / "agents"
-    if name == "SKILLS_DIR":
-        return pathlib.Path(__getattr__("DATA_DIR")) / "skills"
-    if name == "CONTEXTS_DIR":
-        return pathlib.Path(__getattr__("DATA_DIR")) / "contexts"
-    if name == "_DEFAULT_SQLITE_FILE":
-        return pathlib.Path(__getattr__("DATA_DIR")) / "dbos_store.sqlite"
+# OAuth plugin model files (XDG_DATA_HOME)
+GEMINI_MODELS_FILE = pathlib.Path(DATA_DIR) / "gemini_models.json"
+CHATGPT_MODELS_FILE = pathlib.Path(DATA_DIR) / "chatgpt_models.json"
+CLAUDE_MODELS_FILE = pathlib.Path(DATA_DIR) / "claude_models.json"
+ANTIGRAVITY_MODELS_FILE = pathlib.Path(DATA_DIR) / "antigravity_models.json"
 
-    # OAuth plugin model files (XDG_DATA_HOME)
-    if name == "GEMINI_MODELS_FILE":
-        return pathlib.Path(__getattr__("DATA_DIR")) / "gemini_models.json"
-    if name == "CHATGPT_MODELS_FILE":
-        return pathlib.Path(__getattr__("DATA_DIR")) / "chatgpt_models.json"
-    if name == "CLAUDE_MODELS_FILE":
-        return pathlib.Path(__getattr__("DATA_DIR")) / "claude_models.json"
-    if name == "ANTIGRAVITY_MODELS_FILE":
-        return pathlib.Path(__getattr__("DATA_DIR")) / "antigravity_models.json"
+# Cache files (XDG_CACHE_HOME)
+AUTOSAVE_DIR = pathlib.Path(CACHE_DIR) / "autosaves"
 
-    # Cache files (XDG_CACHE_HOME)
-    if name == "AUTOSAVE_DIR":
-        return pathlib.Path(__getattr__("CACHE_DIR")) / "autosaves"
+# State files (XDG_STATE_HOME)
+COMMAND_HISTORY_FILE = pathlib.Path(STATE_DIR) / "command_history.txt"
 
-    # State files (XDG_STATE_HOME)
-    if name == "COMMAND_HISTORY_FILE":
-        return pathlib.Path(__getattr__("STATE_DIR")) / "command_history.txt"
-
-    # Database URL (lazy since it depends on _DEFAULT_SQLITE_FILE)
-    if name == "DBOS_DATABASE_URL":
-        return os.environ.get(
-            "DBOS_SYSTEM_DATABASE_URL", f"sqlite:///{__getattr__('_DEFAULT_SQLITE_FILE')}"
-        )
-
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
-
-
-# Note: All path constants are now lazy-evaluated via __getattr__ above.
-# They are computed only on first access and cached thereafter.
+# Database URL (depends on _DEFAULT_SQLITE_FILE)
+DBOS_DATABASE_URL = os.environ.get(
+    "DBOS_SYSTEM_DATABASE_URL", f"sqlite:///{_DEFAULT_SQLITE_FILE}"
+)
 # DBOS enable switch is controlled solely via puppy.cfg using key 'enable_dbos'.
 # Default: True (DBOS enabled) unless explicitly disabled.
 
