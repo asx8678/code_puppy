@@ -659,6 +659,22 @@ class RichConsoleRenderer:
 
         # Show verbose or concise based on message flag
         if msg.verbose:
+            # Extract the actual search term (not ripgrep flags) once
+            parts = msg.search_term.split()
+            search_term = msg.search_term  # fallback
+            for part in parts:
+                if not part.startswith("-"):
+                    search_term = part
+                    break
+
+            # Pre-compile regex for highlighting if we have a valid search term
+            highlight_regex = None
+            if search_term and not search_term.startswith("-"):
+                highlight_regex = re.compile(
+                    f"({re.escape(search_term)})",
+                    flags=re.IGNORECASE,
+                )
+
             # Verbose mode: Show full output with line numbers and content
             for file_path in sorted(by_file.keys()):
                 file_matches = by_file[file_path]
@@ -670,21 +686,12 @@ class RichConsoleRenderer:
                 # Show each match with line number and content
                 for match in file_matches:
                     line = match.line_content
-                    # Extract the actual search term (not ripgrep flags)
-                    parts = msg.search_term.split()
-                    search_term = msg.search_term  # fallback
-                    for part in parts:
-                        if not part.startswith("-"):
-                            search_term = part
-                            break
 
-                    # Case-insensitive highlighting
-                    if search_term and not search_term.startswith("-"):
-                        highlighted_line = re.sub(
-                            f"({re.escape(search_term)})",
+                    # Case-insensitive highlighting using pre-compiled regex
+                    if highlight_regex:
+                        highlighted_line = highlight_regex.sub(
                             r"[bold yellow]\1[/bold yellow]",
                             line,
-                            flags=re.IGNORECASE,
                         )
                     else:
                         highlighted_line = line
