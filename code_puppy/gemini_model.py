@@ -9,6 +9,14 @@ import base64
 import json
 import logging
 import uuid
+
+# Use orjson for faster JSON parsing if available, with stdlib fallback
+try:
+    import orjson
+
+    _json_loads = orjson.loads
+except ImportError:
+    _json_loads = json.loads
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -41,6 +49,9 @@ logger = logging.getLogger(__name__)
 # Bypass thought signature for Gemini when no pending signature is available.
 # This allows function calls to work with thinking models.
 BYPASS_THOUGHT_SIGNATURE = "context_engineering_is_the_way_to_go"
+
+# Cache for sanitized schemas to avoid repeated deepcopy overhead
+_SCHEMA_SANITIZE_CACHE: dict[int, dict] = {}
 
 
 def generate_tool_call_id() -> str:
@@ -115,6 +126,11 @@ def _sanitize_schema_for_gemini(schema: dict) -> dict:
 
     if not isinstance(schema, dict):
         return schema
+
+    # Check cache to avoid repeated deepcopy for the same schema
+    schema_id = id(schema)
+    if schema_id in _SCHEMA_SANITIZE_CACHE:
+        return _SCHEMA_SANITIZE_CACHE[schema_id]
 
     # Make a deep copy to avoid modifying original
     schema = copy.deepcopy(schema)
@@ -227,7 +243,9 @@ def _sanitize_schema_for_gemini(schema: dict) -> dict:
         else:
             return obj
 
-    return resolve_refs(schema)
+    result = resolve_refs(schema)
+    _SCHEMA_SANITIZE_CACHE[schema_id] = result
+    return result
 
 
 class GeminiModel(Model):
@@ -248,6 +266,8 @@ class GeminiModel(Model):
         self._base_url = base_url.rstrip("/")
         self._http_client = http_client
         self._owns_client = http_client is None
+        # Instance-level cache for _build_tools to avoid repeated processing
+        self._tools_cache: dict[int, list[dict[str, Any]]] = {}
 
     @property
     def model_name(self) -> str:
@@ -467,6 +487,11 @@ class GeminiModel(Model):
 
     def _build_tools(self, tools: list[ToolDefinition]) -> list[dict[str, Any]]:
         """Build tool definitions for the API."""
+        # Use instance cache to avoid repeated processing
+        tools_id = id(tools)
+        if tools_id in self._tools_cache:
+            return self._tools_cache[tools_id]
+
         function_declarations = []
 
         for tool in tools:
@@ -481,7 +506,9 @@ class GeminiModel(Model):
                 )
             function_declarations.append(func_decl)
 
-        return [{"functionDeclarations": function_declarations}]
+        result = [{"functionDeclarations": function_declarations}]
+        self._tools_cache[tools_id] = result
+        return result
 
     def _build_generation_config(
         self, model_settings: ModelSettings | None
@@ -661,7 +688,7 @@ class GeminiModel(Model):
                         json_str = line[6:]
                         if json_str:
                             try:
-                                yield json.loads(json_str)
+                                yield _json_loads(json_str)
                             except json.JSONDecodeError:
                                 continue
 
