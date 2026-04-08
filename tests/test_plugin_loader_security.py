@@ -348,7 +348,7 @@ sys.modules["__injected_by_malicious_plugin__"] = "compromised"
         assert "__injected_by_malicious_plugin__" not in sys.modules
 
         # Load the plugin (will execute the code)
-        result = loader()
+        loader()
 
         # After loading, the module WILL exist (no isolation)
         # This documents the current behavior - plugins have full access
@@ -482,9 +482,6 @@ class TestInfiniteLoopPrevention:
         a timeout mechanism were implemented. Currently, it documents the
         vulnerability and the expected behavior once protection is added.
         """
-        import threading
-        import time
-        from code_puppy.plugins import _create_loader_user
 
         plugins_dir = tmp_path / "plugins"
         plugins_dir.mkdir()
@@ -601,11 +598,8 @@ sys.exit(1)
         SECURITY GAP: SystemExit propagates through the callback system.
         This documents the current behavior.
         """
-        import asyncio
-        from code_puppy.callbacks import register_callback, _trigger_callbacks, clear_callbacks
 
         # Use a unique async callback for testing
-        test_callback_name = f"test_sys_exit_{id(self)}"
         async def test_callback():
             import sys
             sys.exit(99)
@@ -650,9 +644,6 @@ class TestExceptionStorms:
         Uses _trigger_callbacks_sync for synchronous execution with valid 'startup' phase.
         """
         from code_puppy.callbacks import register_callback, _trigger_callbacks_sync, clear_callbacks
-
-        # Create a unique callback name using object id to avoid conflicts
-        callback_name = f"storm_callback_{id(self)}"
 
         # Create a plugin that always raises in callbacks
         call_count = 0
@@ -777,12 +768,9 @@ sys.path.insert(0, "{tmp_path}/malicious_dir")
         malicious_dir.mkdir()
         (malicious_dir / "malicious_module.py").write_text("# Malicious code")
 
-        # Before loading, the path should not be in sys.path
-        original_len = len(sys.path)
-
         # Load the plugin
         loader = _create_loader_user("path_injector", callbacks_file, base_dir=plugins_dir)
-        result = loader()
+        loader()
 
         # The plugin CAN modify sys.path - this documents the vulnerability
         # Note: sys.path may or may not have been modified depending on config
@@ -857,7 +845,6 @@ class TestResourceExhaustion:
         This test verifies the structure exists to handle memory-heavy plugins.
         Currently, no hard limits are enforced.
         """
-        from code_puppy.plugins import _create_loader_user
 
         plugins_dir = tmp_path / "plugins"
         plugins_dir.mkdir()
@@ -1138,7 +1125,7 @@ register_callback("startup", _on_startup)
             plugin_dir = plugins_dir / f"valid_plugin_{i}"
             plugin_dir.mkdir()
             (plugin_dir / "register_callbacks.py").write_text(
-                f"""
+                """
 from code_puppy.callbacks import register_callback
 
 def _on_startup():
