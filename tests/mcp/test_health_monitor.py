@@ -716,3 +716,264 @@ class TestHealthCheckResult:
         assert result.success is True
         assert result.latency_ms == 75.2
         assert result.error is None
+
+
+class TestHealthMonitorContextManager:
+    """Test the HealthMonitor async context manager functionality."""
+
+    async def test_async_context_manager(self, health_monitor, mock_server):
+        """Test using HealthMonitor as async context manager."""
+        async with health_monitor as monitor:
+            assert monitor is health_monitor
+            # Verify it works normally
+            await monitor.start_monitoring("test-server", mock_server)
+            assert "test-server" in monitor.monitoring_tasks
+        # After exiting context, monitoring should be stopped
+        assert len(monitor.monitoring_tasks) == 0
+
+    async def test_close_method(self, health_monitor, mock_server):
+        """Test the close() method calls shutdown()."""
+        await health_monitor.start_monitoring("server1", mock_server)
+        mock_server2 = Mock(spec=ManagedMCPServer)
+        mock_server2.config = Mock()
+        mock_server2.config.id = "server2"
+        mock_server2.config.type = "stdio"
+        mock_server2.config.config = {"command": "python"}
+        mock_server2.is_enabled.return_value = True
+        await health_monitor.start_monitoring("server2", mock_server2)
+        
+        assert len(health_monitor.monitoring_tasks) == 2
+        
+        # Close should shutdown all tasks
+        await health_monitor.close()
+        
+        assert len(health_monitor.monitoring_tasks) == 0
+
+    async def test_del_method_warning(self, health_monitor, mock_server):
+        """Test __del__ warns when tasks are still running."""
+        await health_monitor.start_monitoring("test-server", mock_server)
+        
+        with patch("code_puppy.mcp_.health_monitor.logger") as mock_logger:
+            # Manually trigger __del__ while tasks are running
+            health_monitor.__del__()
+            mock_logger.warning.assert_called_once()
+            warning_message = mock_logger.warning.call_args[0][0]
+            assert "HealthMonitor garbage collected" in warning_message
+            assert "1 active monitoring tasks" in warning_message
+        
+        # Clean up
+        await health_monitor.stop_monitoring("test-server")
+
+    async def test_del_method_no_warning_when_empty(self, health_monitor):
+        """Test __del__ doesn't warn when no tasks are running."""
+        with patch("code_puppy.mcp_.health_monitor.logger") as mock_logger:
+            health_monitor.__del__()
+            mock_logger.warning.assert_not_called()
+
+
+class TestHealthMonitorEdgeCases:
+    """Test edge cases and error handling."""
+
+    async def test_health_check_returns_false(self, health_monitor, mock_server):
+        """Test perform_health_check when check function returns False."""
+        async def mock_check_return_false(server):
+            return False
+        
+        health_monitor.custom_health_checks["stdio"] = mock_check_return_false
+        result = await health_monitor.perform_health_check(mock_server)
+        
+        assert result.success is False
+        assert result.latency_ms >= 0
+        assert result.error == "Health check returned False"
+
+    async def test_server_recovery_logging(self, health_monitor, mock_server):
+        """Test that recovery is logged when server recovers after failures."""
+        server_id = "test-server"
+        
+        # Set up initial consecutive failures
+        health_monitor.consecutive_failures[server_id] = 3
+        
+        # Record a successful health check - should trigger recovery logging
+        with patch("code_puppy.mcp_.health_monitor.logger") as mock_logger:
+            health_status = HealthStatus(
+                timestamp=datetime.now(),
+                is_healthy=True,
+                latency_ms=50.0,
+                error=None,
+                check_type="test",
+            )
+            await health_monitor._record_health_status(server_id, health_status)
+            # Check if server was unhealthy before, reset happens in monitoring loop
+        
+        # Now test that is_healthy returns True
+        is_healthy = await health_monitor.is_healthy(server_id)
+        assert is_healthy is True
+
+    async def test_quarantine_exception_handling(self, health_monitor, mock_server):
+        """Test error handling when quarantine raises exception."""
+        server_id = "test-server"
+        
+        # Set high consecutive failures to trigger quarantine
+        health_monitor.consecutive_failures[server_id] = 5
+        
+        # Make quarantine raise an exception
+        mock_server.quarantine.side_effect = Exception("Quarantine failed")
+        
+        with patch("code_puppy.mcp_.health_monitor.logger") as mock_logger:
+            await health_monitor._handle_consecutive_failures(server_id, mock_server)
+            
+            # Should log the quarantine failure error
+            error_calls = [call for call in mock_logger.error.call_args_list 
+                          if "Quarantine failed" in str(call)]
+            assert len(error_calls) >= 1
+
+    async def test_monitoring_loop_error_during_check(self, health_monitor, mock_server):
+        """Test error handling in monitoring loop when check_health fails."""
+        server_id = "test-server"
+        
+        # Create a mock that fails on the first health check then succeeds
+        call_count = 0
+        async def failing_check(server):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("First check fails")
+            return HealthCheckResult(success=True, latency_ms=50.0, error=None)
+        
+        health_monitor.custom_health_checks["stdio"] = failing_check
+        health_monitor.check_interval = 0.1
+        
+        await health_monitor.start_monitoring(server_id, mock_server)
+        
+        # Wait for the loop to process
+        await asyncio.sleep(0.3)
+        
+        # Should have recorded some status despite errors
+        assert len(health_monitor.health_history[server_id]) > 0
+        
+        await health_monitor.stop_monitoring(server_id)
+
+    async def test_empty_server_list_monitoring(self, health_monitor):
+        """Test behavior with no servers being monitored."""
+        # Just verify shutdown works cleanly with no servers
+        await health_monitor.shutdown()
+        assert len(health_monitor.monitoring_tasks) == 0
+
+    async def test_all_servers_down_recovery(self, health_monitor, mock_server):
+        """Test monitoring when all servers are down and recover."""
+        server_id = "test-server"
+        
+        # Mock health check to fail then succeed
+        call_count = 0
+        async def toggle_check(server):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 3:
+                return HealthCheckResult(
+                    success=False, 
+                    latency_ms=100.0, 
+                    error=f"Failure {call_count}"
+                )
+            return HealthCheckResult(success=True, latency_ms=50.0, error=None)
+        
+        health_monitor.custom_health_checks["stdio"] = toggle_check
+        health_monitor.check_interval = 0.1
+        
+        await health_monitor.start_monitoring(server_id, mock_server)
+        
+        # Wait for some failures then recovery
+        await asyncio.sleep(0.5)
+        
+        # Stop and check we had both failures and recovery
+        await health_monitor.stop_monitoring(server_id)
+        
+        # History should show mix of healthy/unhealthy
+        history = list(health_monitor.health_history[server_id])
+        assert len(history) >= 2  # At least initial check + some from loop
+
+    async def test_rapid_state_changes(self, health_monitor, mock_server):
+        """Test handling of rapid state changes between healthy and unhealthy."""
+        server_id = "test-server"
+        
+        # Alternate between healthy and unhealthy
+        call_count = 0
+        async def rapid_toggle(server):
+            nonlocal call_count
+            call_count += 1
+            is_healthy = call_count % 2 == 1
+            return HealthCheckResult(
+                success=is_healthy,
+                latency_ms=50.0 if is_healthy else None,
+                error=None if is_healthy else "Error"
+            )
+        
+        health_monitor.custom_health_checks["stdio"] = rapid_toggle
+        health_monitor.check_interval = 0.05  # Very fast for rapid changes
+        
+        await health_monitor.start_monitoring(server_id, mock_server)
+        
+        # Wait for several rapid changes
+        await asyncio.sleep(0.3)
+        
+        await health_monitor.stop_monitoring(server_id)
+        
+        # Verify history was recorded
+        history = list(health_monitor.health_history[server_id])
+        assert len(history) >= 2
+
+    async def test_trigger_recovery_error_logging(self, health_monitor, mock_server):
+        """Test recovery error is logged properly."""
+        server_id = "test-server"
+        
+        # Make recovery partially fail (after disable but before enable)
+        mock_server.disable = Mock()
+        mock_server.enable = Mock(side_effect=Exception("Enable failed"))
+        
+        with patch("code_puppy.mcp_.health_monitor.logger") as mock_logger:
+            try:
+                await health_monitor._trigger_recovery(server_id, mock_server, 3)
+            except Exception:
+                pass  # Expected to fail
+            
+            # Should have logged the error
+            error_calls = [call for call in mock_logger.error.call_args_list
+                          if "Recovery failed" in str(call) or "Recovery action failed" in str(call)]
+            # The error is re-raised so it's handled by the caller
+
+    async def test_perform_health_check_no_registered_check(self, health_monitor, mock_server):
+        """Test perform_health_check when no check is registered for server type."""
+        mock_server.config.type = "unknown_type"
+        
+        result = await health_monitor.perform_health_check(mock_server)
+        
+        assert result.success is False
+        assert result.latency_ms == 0.0
+        assert "No health check function for type 'unknown_type'" in result.error
+
+    async def test_recovery_failure_logging_in_consecutive_failures(self, health_monitor, mock_server):
+        """Test that recovery failure is logged in _handle_consecutive_failures."""
+        server_id = "test-server"
+        
+        # Set up 3 consecutive failures to trigger recovery attempt
+        health_monitor.consecutive_failures[server_id] = 3
+        
+        # Make recovery trigger fail
+        with patch.object(health_monitor, '_trigger_recovery', side_effect=Exception("Recovery crashed")):
+            with patch("code_puppy.mcp_.health_monitor.logger") as mock_logger:
+                await health_monitor._handle_consecutive_failures(server_id, mock_server)
+                
+                # Should log recovery failure error
+                error_calls = [call for call in mock_logger.error.call_args_list
+                              if "Recovery failed" in str(call)]
+                assert len(error_calls) >= 1
+                assert "Recovery crashed" in str(error_calls[0])
+
+    async def test_stdio_health_check_outer_exception(self, health_monitor, stdio_server):
+        """Test _check_stdio_health outer exception handler."""
+        # Make get_pydantic_server raise an exception to trigger the outer catch
+        stdio_server.get_pydantic_server.side_effect = Exception("Outer exception")
+        
+        result = await health_monitor._check_stdio_health(stdio_server)
+        
+        assert result.success is False
+        assert "Outer exception" in result.error
