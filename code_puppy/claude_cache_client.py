@@ -56,6 +56,7 @@ def _get_jwt_iat(token: str) -> int:
     Returns 0 if the token can't be decoded or has no valid 'iat' claim.
     Validates that 'iat' is numeric and within reasonable bounds.
     """
+    # NOTE: JWT signature is not verified; only used for cache age calculation.
     try:
         # JWT format: header.payload.signature
         # We only need the payload (second part)

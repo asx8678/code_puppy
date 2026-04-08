@@ -144,6 +144,7 @@ def _get_or_create_hmac_key() -> bytes:
         return key
 
 
+# NOTE: HMAC key is per-install; all sessions share one key. See code_puppy-aqc.
 _HMAC_KEY: bytes | None = None  # lazily populated on first call
 
 
