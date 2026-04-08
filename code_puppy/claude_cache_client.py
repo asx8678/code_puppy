@@ -136,6 +136,12 @@ except ImportError:  # pragma: no cover - optional dep
     AsyncAnthropic = None  # type: ignore
 
 
+# Maximum allowed token age (24 hours in seconds)
+MAX_TOKEN_AGE_SECONDS = 86400
+# Clock skew tolerance for future iat claims (60 seconds)
+CLOCK_SKEW_TOLERANCE_SECONDS = 60
+
+
 @lru_cache(maxsize=16)
 def _get_jwt_iat(token: str) -> int:
     """Decode a JWT and return its 'iat' (issued at) claim.
@@ -143,6 +149,10 @@ def _get_jwt_iat(token: str) -> int:
     Cached with LRU to avoid repeated decoding of the same token.
     Returns 0 if the token can't be decoded or has no valid 'iat' claim.
     Validates that 'iat' is numeric and within reasonable bounds.
+
+    SECURITY NOTE: This function performs basic validation only.
+    Use _validate_jwt_claims() for comprehensive validation including
+    exp > iat, clock skew, and maximum token age checks.
     """
     # NOTE: JWT signature is not verified; only used for cache age calculation.
     try:
@@ -167,6 +177,10 @@ def _get_jwt_exp(token: str) -> int:
     Cached with LRU to avoid repeated decoding of the same token.
     Returns 0 if the token can't be decoded or has no valid 'exp' claim.
     Validates that 'exp' is numeric and within reasonable bounds.
+
+    SECURITY NOTE: This function performs basic validation only.
+    Use _validate_jwt_claims() for comprehensive validation including
+    exp > iat, clock skew, and maximum token age checks.
     """
     # NOTE: JWT signature is not verified; only used for cache age calculation.
     try:
@@ -182,6 +196,100 @@ def _get_jwt_exp(token: str) -> int:
         return int(exp)
     except Exception:
         return 0
+
+
+def _validate_jwt_claims(token: str) -> tuple[int, int] | None:
+    """Comprehensively validate JWT claims for security.
+
+    Validates:
+    1. Both 'exp' and 'iat' claims exist and are valid positive integers
+    2. exp > iat (expiry must be after issued-at)
+    3. iat is not in the future (allows small clock skew of ~60 seconds)
+    4. Token age (exp - iat) does not exceed 24 hours (86400 seconds)
+    5. Token is not already expired
+
+    Returns:
+        tuple[int, int] | None: (iat, exp) if validation passes, None otherwise
+
+    SECURITY: This is a critical security function. Any change to validation
+    logic must be carefully reviewed for security implications.
+    """
+    if not token or not isinstance(token, str):
+        return None
+
+    try:
+        payload = _jwt.decode(token, options={"verify_signature": False})
+    except Exception:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    # Extract raw 'exp' claim (validate as numeric before truncation)
+    exp = payload.get("exp")
+    if exp is None:
+        logger.debug("JWT validation failed: missing 'exp' claim")
+        return None
+    if not isinstance(exp, (int, float)):
+        logger.debug("JWT validation failed: 'exp' is not numeric (%s)", type(exp))
+        return None
+    # SECURITY: Validate using RAW numeric values (not truncated to int)
+    if exp <= 0:
+        logger.debug("JWT validation failed: 'exp' is not positive (%s)", exp)
+        return None
+
+    # Extract raw 'iat' claim (validate as numeric before truncation)
+    iat = payload.get("iat")
+    if iat is None:
+        logger.debug("JWT validation failed: missing 'iat' claim")
+        return None
+    if not isinstance(iat, (int, float)):
+        logger.debug("JWT validation failed: 'iat' is not numeric (%s)", type(iat))
+        return None
+    # SECURITY: Validate using RAW numeric values (not truncated to int)
+    if iat <= 0:
+        logger.debug("JWT validation failed: 'iat' is not positive (%s)", iat)
+        return None
+
+    # Validate exp > iat using RAW values (expiry must be after issued-at)
+    if exp <= iat:
+        logger.debug(
+            "JWT validation failed: 'exp' (%s) is not after 'iat' (%s)",
+            exp,
+            iat,
+        )
+        return None
+
+    # Validate iat is not in the future using RAW values (allow clock skew tolerance)
+    now = time.time()
+    if iat > now + CLOCK_SKEW_TOLERANCE_SECONDS:
+        logger.debug(
+            "JWT validation failed: 'iat' (%s) is in the future (now: %s, skew: %s)",
+            iat,
+            now,
+            CLOCK_SKEW_TOLERANCE_SECONDS,
+        )
+        return None
+
+    # Validate maximum token age using RAW values (24 hours)
+    token_lifetime = exp - iat
+    if token_lifetime > MAX_TOKEN_AGE_SECONDS:
+        logger.debug(
+            "JWT validation failed: token lifetime (%s seconds) exceeds maximum (%s)",
+            token_lifetime,
+            MAX_TOKEN_AGE_SECONDS,
+        )
+        return None
+
+    # Validate token is not already expired using RAW values
+    if exp < now - CLOCK_SKEW_TOLERANCE_SECONDS:
+        logger.debug(
+            "JWT validation failed: token expired (exp: %s, now: %s)", exp, now
+        )
+        return None
+
+    # SECURITY: Only convert to int at the very end for return values
+    return (int(iat), int(exp))
 
 
 class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
@@ -209,17 +317,34 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         self._cached_jwt_iat: tuple[str, float] | None = None
 
     def _get_jwt_age_seconds(self, token: str | None) -> float | None:
-        """Decode a JWT and return its age in seconds.
+        """Decode a JWT and return its age in seconds with comprehensive validation.
 
-        Returns None if the token can't be decoded or has no timestamp claims.
+        SECURITY: This function now performs comprehensive JWT claim validation
+        including exp > iat, clock skew checks, and maximum token age enforcement.
+
+        Returns None if:
+        - Token is missing or invalid
+        - exp or iat claims are missing or malformed
+        - exp <= iat (invalid timestamp ordering)
+        - iat is in the future (beyond clock skew tolerance)
+        - Token lifetime exceeds 24 hours
+        - Token is already expired
+
         Uses cached iat time when the same token is passed,
         avoiding repeated base64+JSON decoding on every API request.
-        Falls back to exp claim for tokens without iat (calculates age from exp).
         """
         if not token:
             return None
 
         try:
+            # First, perform comprehensive security validation
+            validated_claims = _validate_jwt_claims(token)
+            if validated_claims is None:
+                # Token failed security validation
+                return None
+
+            iat_int, _ = validated_claims
+
             # Check instance cache first: compare by token prefix/hash
             # This avoids repeated base64+JSON decoding on retries
             # Use first 64 chars: covers JWT header (typically ~36 chars base64)
@@ -230,34 +355,10 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                 if cached_prefix == token_prefix:
                     return time.time() - cached_iat
 
-            # Cache miss: decode the token using LRU-cached function
-            iat = _get_jwt_iat(token)
-            if iat:
-                # Update instance cache with token prefix and iat
-                self._cached_jwt_iat = (token_prefix, float(iat))
-                return time.time() - iat
+            # Update instance cache with validated iat
+            self._cached_jwt_iat = (token_prefix, float(iat_int))
+            return time.time() - iat_int
 
-            # Fallback: try to calculate age from exp claim
-            exp = _get_jwt_exp(token)
-            if exp:
-                # Calculate age assuming typical token lifetime (exp - age = iat)
-                # Since we don't know iat, we estimate age from exp
-                # A token's age is roughly: typical_lifetime - (exp - now)
-                # For safety, if exp is very far in future, assume fresh token (age 0)
-                now = time.time()
-                remaining = exp - now
-                if remaining > 0 and remaining <= TOKEN_MAX_AGE_SECONDS:
-                    # Token is within normal lifetime, age = lifetime - remaining
-                    estimated_age = TOKEN_MAX_AGE_SECONDS - remaining
-                    return max(0.0, estimated_age)
-                elif remaining <= 0:
-                    # Token is already expired, report max age
-                    return float(TOKEN_MAX_AGE_SECONDS)
-                else:
-                    # exp is very far in future, assume fresh token
-                    return 0.0
-
-            return None
         except Exception as exc:
             logger.debug("Failed to decode JWT age: %s", exc)
             return None
@@ -746,15 +847,14 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         except Exception:
             pass
 
-        # Fallback to private attr if necessary - use hasattr + direct access
-        # This is faster than getattr() with default for checking attribute existence
-        if hasattr(request, "_content"):
-            try:
-                content = request._content
-                if content:
-                    return content
-            except Exception:
-                pass
+        # Fallback to private attr if necessary - use getattr with exception handling
+        # to gracefully handle property access failures (hasattr can raise if property raises)
+        try:
+            content = getattr(request, "_content", None)
+            if content is not None:
+                return content
+        except Exception:
+            pass
 
         return None
 
