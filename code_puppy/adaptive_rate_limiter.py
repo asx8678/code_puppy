@@ -84,13 +84,13 @@ class ModelRateLimitState:
     circuit_opened_time: float = 0.0
     cooldown_multiplier: float = 1.0
     half_open_test_count: int = 0
+    # Lazy allocation: queue is None until circuit actually opens
     request_queue: asyncio.Queue | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         if self.condition is None:
             self.condition = asyncio.Condition()
-        if self.request_queue is None:
-            self.request_queue = asyncio.Queue(maxsize=DEFAULT_QUEUE_MAX_SIZE)
+        # Note: request_queue is lazily allocated by _ensure_queue()
 
 
 # ── Singleton state ─────────────────────────────────────────────────────────
@@ -198,6 +198,17 @@ def _ensure_state(model_name: str) -> ModelRateLimitState:
             _state.cfg_initial_limit,
         )
     return _state.model_states[model_name]
+
+
+def _ensure_queue(state: ModelRateLimitState) -> asyncio.Queue:
+    """Lazily allocate the request queue for circuit breaker use.
+
+    Queue is only created when the circuit actually opens, saving memory
+    for the common case where circuit breaker is disabled or never triggers.
+    """
+    if state.request_queue is None:
+        state.request_queue = asyncio.Queue(maxsize=_state.cfg_queue_max_size)
+    return state.request_queue
 
 
 def _cleanup_old_states(max_age_seconds: float = 3600) -> int:
