@@ -10,6 +10,7 @@ Usage:
 
 import importlib.metadata
 import logging
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -191,8 +192,6 @@ def patch_tool_call_callbacks() -> None:
     ``pre_tool_call`` and ``post_tool_call`` callbacks defined in
     ``code_puppy.callbacks``.
     """
-    import time
-
     try:
         from pydantic_ai._tool_manager import ToolManager
 

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-cp6b/code_puppy/mcp_/manager.py
+# hypothesis_version: 6.151.11
+
+['Server disabled', 'Server not found', 'Server removed', 'agent_access_error', 'details', 'disabled', 'enabled', 'error', 'error_message', 'event_type', 'exists', 'health', 'id', 'initialization_error', 'is_healthy', 'last_event_time', 'latency_ms', 'message', 'metadata', 'name', 'recent_events', 'recent_events_count', 'registered', 'reload_error', 'reloaded', 'removed', 'running', 'server_id', 'sse', 'start_error', 'start_time', 'started', 'state', 'stop_error', 'stopped', 'timestamp', 'tracker_metadata', 'tracker_state', 'tracker_uptime', 'type', 'uptime']

@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-cp6b/code_puppy/mcp_/config_wizard.py
+# hypothesis_version: 6.151.11
+
+['\nServer types:', '  • node server.js', '.tmp', '/', '0', '1', '30', ': ', 'Add another header?', 'Add custom headers?', 'Continue anyway?', 'Enter command', 'Enter server name', 'Examples:', 'HTTP', 'Header name', 'SSE', 'Select server type', 'Test connection?', 'Variable name', '[Y/n]', '[y/N]', '\\', '^[a-zA-Z0-9_-]+$', 'args', 'command', 'cwd', 'env', 'false', 'headers', 'http', 'https', 'mcp_servers', 'n', 'no', 'r', 'sse', 'stdio', 'timeout', 'true', 'type', 'url', 'utf-8', 'w', 'y', 'yes']

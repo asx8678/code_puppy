@@ -9,6 +9,8 @@ from rich.console import Console
 from code_puppy.config import get_banner_color, get_subagent_verbose
 from code_puppy.tools.subagent_context import is_subagent
 
+import time
+
 
 def display_non_streamed_result(
     content: str,
@@ -35,8 +37,6 @@ def display_non_streamed_result(
     # Skip display for sub-agents unless verbose mode
     if is_subagent() and not get_subagent_verbose():
         return
-
-    import time
 
     from rich.markdown import Markdown
     from rich.text import Text

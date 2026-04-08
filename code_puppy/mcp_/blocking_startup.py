@@ -349,8 +349,6 @@ class StartupMonitor:
         Returns:
             Dictionary of server names to ready status
         """
-        import time
-
         results = {}
 
         # Create tasks for all servers

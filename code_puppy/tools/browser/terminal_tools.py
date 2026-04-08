@@ -11,6 +11,7 @@ and connect to the Code Puppy API server's terminal endpoint.
 
 import contextvars
 import logging
+import os
 from typing import Any
 
 import httpx
@@ -326,7 +327,6 @@ async def start_api_server(port: int = 8765) -> dict[str, Any]:
         >>> if result["success"]:
         ...     print(f"Server running at {result['url']}")
     """
-    import os
     import subprocess
     import sys
     from pathlib import Path

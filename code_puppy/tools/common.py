@@ -636,13 +636,11 @@ def _extract_file_extension_from_diff(diff_text: str) -> str:
     Returns:
         File extension (e.g., '.py') or '.txt' as fallback
     """
-    import re
-
     # Look for +++ b/filename.ext or --- a/filename.ext headers
     pattern = r"^(?:\+\+\+|---) [ab]/.*?(\.[a-zA-Z0-9]+)$"
 
     for line in diff_text.split("\n")[:10]:  # Check first 10 lines
-        match = re.search(pattern, line)
+        match = _re.search(pattern, line)
         if match:
             return match.group(1)
 

@@ -474,9 +474,6 @@ class RichConsoleRenderer:
         if self._should_suppress_subagent_output():
             return
 
-        import os
-        from collections import defaultdict
-
         # Header on single line
         rec_flag = f"(recursive={msg.recursive})"
         banner = self._format_banner("directory_listing", "DIRECTORY LISTING")

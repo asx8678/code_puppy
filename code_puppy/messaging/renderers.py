@@ -7,6 +7,7 @@ appropriately for their respective interfaces.
 
 import asyncio
 import threading
+import time
 from abc import ABC, abstractmethod
 
 from rich.console import Console
@@ -211,8 +212,6 @@ class SynchronousInteractiveRenderer:
                 self._render_message(message)
             else:
                 # No messages, sleep briefly
-                import time
-
                 time.sleep(0.01)
 
     def _render_message(self, message: UIMessage):

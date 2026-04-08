@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-cp6b/code_puppy/messaging/bus.py
+# hypothesis_version: 6.151.11
+
+[300.0, 1000, 'MessageBus', 'No', 'Yes', '_current_session_id', '_event_loop', '_has_active_renderer', '_incoming', '_lock', '_loop_thread_id', '_maxsize', '_outgoing', '_pending_requests', '_renderer_event', '_startup_buffer', '_wakeup_callback', 'emit', 'emit_debug', 'emit_error', 'emit_info', 'emit_shell_line', 'emit_success', 'emit_warning', 'get_message_bus', 'get_session_context', 'reset_message_bus', 'set_session_context', 'stdout', 'text']

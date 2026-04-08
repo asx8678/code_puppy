@@ -1,5 +1,6 @@
 """Browser workflow management tools for saving and reusing automation patterns."""
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,6 @@ async def save_workflow(name: str, content: str) -> dict[str, Any]:
         workflows_dir = get_workflows_directory()
 
         # Clean up the filename - convert spaces to hyphens, handle special chars
-        import re
 
         # Remove .md extension if present (we'll add it back at the end)
         if name.lower().endswith(".md"):

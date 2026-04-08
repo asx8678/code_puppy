@@ -396,7 +396,6 @@ class MCPConfigWizard:
 
     def validate_command(self, command: str) -> bool:
         """Check if command exists (basic check)."""
-        import os
         import shutil
 
         # If it's a path, check if file exists
@@ -509,7 +508,6 @@ def run_add_wizard(group_id: str = None) -> bool:
 
             # Also save to mcp_servers.json for persistence
             import json
-            import os
 
             from code_puppy.config import MCP_SERVERS_FILE
 

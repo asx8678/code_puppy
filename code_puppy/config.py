@@ -1039,7 +1039,6 @@ def initialize_command_history_file():
     """Create the command history file if it doesn't exist.
     Handles migration from the old history file location for backward compatibility.
     """
-    import os
     from pathlib import Path
 
     # Ensure the state directory exists before trying to create the history file

@@ -214,8 +214,6 @@ def _onboard_user(
                         return project_id
 
                 # Wait and retry if not done
-                import time
-
                 time.sleep(3)
 
             except Exception as e:

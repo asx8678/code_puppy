@@ -11,6 +11,7 @@ Pressing Enter on a tool opens an inline source-code sub-screen.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from textual.app import ComposeResult
@@ -42,8 +43,6 @@ def _get_tool_entries():
 def _toggle_tool_enabled(tool) -> bool:
     """Toggle a tool's enabled flag in its source file."""
     try:
-        import re
-
         source_path = Path(tool.source_path)
         content = source_path.read_text()
         new_enabled = not tool.meta.enabled

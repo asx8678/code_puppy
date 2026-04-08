@@ -8,6 +8,7 @@ an input line at the bottom, and a status bar showing token rate.
 import asyncio
 from collections import deque
 import logging
+import os
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -707,8 +708,6 @@ class CodePuppyApp(App):
 
     def _install_mcp_server(self, server_id: str) -> None:
         """Install a catalog MCP server with env-var defaults (no interactive prompt)."""
-        import os
-
         chat = self.query_one("#chat-log", RichLog)
         try:
             from code_puppy.mcp_.server_registry_catalog import catalog

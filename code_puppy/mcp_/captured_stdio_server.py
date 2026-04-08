@@ -235,8 +235,6 @@ class StderrCollector:
 
         def handler(line: str):
             # Store with server identification
-            import time
-
             entry = {"server": server_name, "line": line, "timestamp": time.time()}
 
             if server_name not in self.servers:

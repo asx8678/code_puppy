@@ -13,6 +13,7 @@ import asyncio
 import difflib
 import json
 import os
+import re
 import traceback
 import warnings
 from typing import Annotated, Any
@@ -129,8 +130,6 @@ def _parse_diff_lines(diff_text: str) -> list[DiffLine]:
         elif line.startswith("@@"):
             # Parse hunk header to get line number
             # Format: @@ -start,count +start,count @@
-            import re
-
             match = re.search(r"@@ -\d+(?:,\d+)? \+(\d+)", line)
             if match:
                 line_number = (

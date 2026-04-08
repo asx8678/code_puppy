@@ -215,7 +215,6 @@ def start_daemon_background() -> bool:
         True if daemon started successfully, False otherwise.
     """
     import subprocess
-    import time
 
     # NOTE: There is an inherent TOCTOU race between checking if the daemon
     # is running and starting a new one. Full mitigation would require file

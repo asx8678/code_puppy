@@ -1,0 +1,4 @@
+# file: /Users/adam2/projects/code_puppy-cp6b/code_puppy/mcp_/system_tools.py
+# hypothesis_version: 6.151.11
+
+[100, '(\\d+\\.\\d+\\.\\d+)', '--version', '-g', '-version', '/', '@', 'R', 'cargo', 'code', 'docker', 'dotnet', 'emacs', 'git', 'go', 'java', 'julia', 'jupyter', 'list', 'matplotlib', 'node', 'npm', 'npx', 'numpy', 'pandas', 'perl', 'php', 'pip', 'pip3', 'python', 'python3', 'ruby', 'rust', 'rustc', 'swift', 'v?(\\d+\\.\\d+)', 'version', 'vim']

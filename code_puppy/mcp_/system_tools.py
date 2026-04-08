@@ -2,6 +2,7 @@
 System tool detection and validation for MCP server requirements.
 """
 
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -100,8 +101,6 @@ class SystemToolDetector:
             return None
 
         # Common version patterns
-        import re
-
         # Try to find version pattern like "v1.2.3" or "1.2.3"
         version_patterns = [
             r"v?(\d+\.\d+\.\d+(?:\.\d+)?)",  # Standard semver

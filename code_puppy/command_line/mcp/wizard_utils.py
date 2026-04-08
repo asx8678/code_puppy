@@ -5,6 +5,7 @@ Provides interactive functionality for installing and configuring MCP servers.
 """
 
 import logging
+import os
 from typing import Any
 
 from rich.text import Text
@@ -58,8 +59,6 @@ def run_interactive_install_wizard(manager, group_id: str) -> bool:
             )
             for var in required_env_vars:
                 # Check if already set in environment
-                import os
-
                 current_value = os.environ.get(var, "")
                 if current_value:
                     emit_info(
@@ -255,7 +254,6 @@ def install_server_from_catalog(
     """
     try:
         import json
-        import os
 
         from code_puppy.config import MCP_SERVERS_FILE
         from code_puppy.mcp_.managed_server import ServerConfig
