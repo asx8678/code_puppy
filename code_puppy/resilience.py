@@ -153,7 +153,7 @@ class CircuitBreaker:
                 result = await result
             await self._on_success(was_half_open)
             return result
-        except Exception as e:
+        except Exception:
             await self._on_failure(was_half_open, failure_threshold)
             raise
 
