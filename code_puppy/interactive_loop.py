@@ -596,6 +596,8 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                     emit_warning("\n🍩 Wiggum loop interrupted by Ctrl+C")
                     stop_wiggum()
                     break
+                except asyncio.CancelledError:
+                    raise  # Let cancellation propagate properly
                 except Exception as e:
                     from code_puppy.messaging import emit_error
 
