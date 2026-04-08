@@ -7,7 +7,6 @@ user feedback handling, and YOLO mode support.
 
 import os
 import tempfile
-import threading
 from unittest.mock import Mock, patch
 
 from code_puppy.plugins.file_permission_handler.register_callbacks import (
@@ -31,8 +30,8 @@ from code_puppy.plugins.file_permission_handler.register_callbacks import (
 )
 
 
-class TestThreadLocalStorage:
-    """Test thread-local storage for user feedback and diff tracking."""
+class TestUserFeedbackState:
+    """Test user feedback and diff tracking state (shared across threads, serialized by lock)."""
 
     def test_set_and_get_user_feedback(self):
         """Test setting and retrieving user feedback."""
@@ -50,30 +49,6 @@ class TestThreadLocalStorage:
         clear_user_feedback()
         assert get_last_user_feedback() is None
 
-    def test_user_feedback_thread_isolation(self):
-        """Test that user feedback is isolated per thread."""
-        clear_user_feedback()
-        _set_user_feedback("Main thread feedback")
-
-        results = {}
-
-        def other_thread():
-            # Other thread should not see main thread's feedback
-            results["initial"] = get_last_user_feedback()
-            _set_user_feedback("Other thread feedback")
-            results["after_set"] = get_last_user_feedback()
-
-        thread = threading.Thread(target=other_thread)
-        thread.start()
-        thread.join()
-
-        # Other thread should have seen None initially
-        assert results["initial"] is None
-        assert results["after_set"] == "Other thread feedback"
-
-        # Main thread feedback should be unchanged
-        assert get_last_user_feedback() == "Main thread feedback"
-
     def test_diff_shown_flag(self):
         """Test diff-already-shown flag."""
         clear_diff_shown_flag()
@@ -84,29 +59,6 @@ class TestThreadLocalStorage:
 
         clear_diff_shown_flag()
         assert was_diff_already_shown() is False
-
-    def test_diff_flag_thread_isolation(self):
-        """Test that diff flag is isolated per thread."""
-        clear_diff_shown_flag()
-        set_diff_already_shown(True)
-
-        results = {}
-
-        def other_thread():
-            results["initial"] = was_diff_already_shown()
-            set_diff_already_shown(False)
-            results["after_set"] = was_diff_already_shown()
-
-        thread = threading.Thread(target=other_thread)
-        thread.start()
-        thread.join()
-
-        # Other thread should see default False
-        assert results["initial"] is False
-        assert results["after_set"] is False
-
-        # Main thread flag should still be True
-        assert was_diff_already_shown() is True
 
 
 class TestPreviewDeletion:
