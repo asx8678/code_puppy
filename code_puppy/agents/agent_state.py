@@ -47,7 +47,7 @@ class AgentRuntimeState:
     # Message history and tracking
     message_history: list[Any] = field(default_factory=list)
     compacted_message_hashes: set[str] = field(default_factory=set)
-    message_history_hashes: set[int] = field(default_factory=set)
+    message_history_hashes: set[str] = field(default_factory=set)
 
     # Agent and model caching
     code_generation_agent: Any = None
@@ -77,12 +77,12 @@ class AgentRuntimeState:
         self.compacted_message_hashes.clear()
         self.message_history_hashes.clear()
 
-    def append_message(self, message: Any, message_hash: int) -> None:
+    def append_message(self, message: Any, message_hash: str) -> None:
         """Append a message and its hash to history."""
         self.message_history.append(message)
         self.message_history_hashes.add(message_hash)
 
-    def extend_history(self, messages: list[Any], message_hashes: list[int]) -> None:
+    def extend_history(self, messages: list[Any], message_hashes: list[str]) -> None:
         """Extend history with multiple messages and their hashes."""
         self.message_history.extend(messages)
         self.message_history_hashes.update(message_hashes)
