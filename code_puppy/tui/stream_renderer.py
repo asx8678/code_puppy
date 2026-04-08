@@ -123,6 +123,7 @@ class StreamRenderer:
         "_start_time",
         "_message_index",
         "_text_buffer",
+        "_thinking_buffer",  # Buffer for thinking deltas (Issue SR-M1)
         "_last_rate_update",
         "_last_spinner_update",
     )
@@ -137,7 +138,8 @@ class StreamRenderer:
         self._token_count: int = 0
         self._start_time: float = time.monotonic()
         self._message_index: int = 0
-        self._text_buffer: dict[int, str] = {}
+        self._text_buffer: dict[int, list[str]] = {}  # list buffer per key (Issue SR-H3)
+        self._thinking_buffer: dict[int, list[str]] = {}  # list buffer for thinking (Issue SR-M1)
         # Throttling timestamps for rate updates and spinner rotation (Issue SR-H1)
         self._last_rate_update: float = 0.0
         self._last_spinner_update: float = 0.0
@@ -167,11 +169,17 @@ class StreamRenderer:
 
         Flushes remaining buffers and prints completion stats.
         """
-        # Flush all remaining buffers
-        for idx, buf in self._text_buffer.items():
-            if buf:
-                self.app.write_to_chat(buf)
+        # Flush all remaining text buffers (join list chunks, Issue SR-H3)
+        for idx, chunks in self._text_buffer.items():
+            if chunks:
+                self.app.write_to_chat(''.join(chunks))
         self._text_buffer.clear()
+
+        # Flush all remaining thinking buffers (escape on render, Issue SR-M1)
+        for idx, chunks in self._thinking_buffer.items():
+            if chunks:
+                self.app.write_to_chat(f"[dim]{escape(''.join(chunks))}[/dim]")
+        self._thinking_buffer.clear()
 
         # Print completion stats only when tokens were actually streamed
         elapsed = time.monotonic() - self._start_time
@@ -194,6 +202,7 @@ class StreamRenderer:
         self._tool_parts.clear()
         self._banner_printed.clear()
         self._text_buffer.clear()
+        self._thinking_buffer.clear()
         self._token_count = 0
         self._start_time = time.monotonic()
         self._message_index = 0
@@ -224,11 +233,11 @@ class StreamRenderer:
         elif isinstance(part, TextPart):
             self._streaming_parts.add(event.index)
             self._text_parts.add(event.index)
-            self._text_buffer[event.index] = ""
+            self._text_buffer[event.index] = []  # list buffer per key (Issue SR-H3)
             self._print_banner("AGENT RESPONSE", "agent_response", "")
             self._banner_printed.add(event.index)
             if part.content and part.content.strip():
-                self._text_buffer[event.index] = part.content
+                self._text_buffer[event.index].append(part.content)
 
         elif isinstance(part, ToolCallPart):
             self._streaming_parts.add(event.index)
@@ -250,24 +259,23 @@ class StreamRenderer:
 
         if isinstance(delta, ThinkingPartDelta):
             if delta.content_delta:
-                self.app.write_to_chat(f"[dim]{escape(delta.content_delta)}[/dim]")
+                # Buffer raw thinking content, escape only at render (Issue SR-M1)
+                self._thinking_buffer.setdefault(event.index, []).append(delta.content_delta)
 
         elif isinstance(delta, TextPartDelta):
             if delta.content_delta:
                 self._token_count += 1
                 self._update_rate()
 
-                # Buffer text and flush periodically
-                if event.index in self._text_buffer:
-                    self._text_buffer[event.index] += delta.content_delta
-                else:
-                    self._text_buffer[event.index] = delta.content_delta
+                # Buffer text using list per key (Issue SR-H3)
+                self._text_buffer.setdefault(event.index, []).append(delta.content_delta)
 
                 # Flush on newlines or every ~20 chars for responsiveness
-                buf = self._text_buffer[event.index]
+                chunks = self._text_buffer[event.index]
+                buf = ''.join(chunks)
                 if "\n" in buf or len(buf) > 20:
                     self.app.write_to_chat(buf)
-                    self._text_buffer[event.index] = ""
+                    self._text_buffer[event.index] = []
 
         elif isinstance(delta, ToolCallPartDelta):
             # Tool call deltas contain args JSON fragments — usually not shown
@@ -277,10 +285,19 @@ class StreamRenderer:
         """Handle the end of a part — flush any buffered content."""
         idx = event.index
 
-        # Flush any remaining text buffer
-        if idx in self._text_buffer and self._text_buffer[idx]:
-            self.app.write_to_chat(self._text_buffer[idx])
-            self._text_buffer[idx] = ""
+        # Flush any remaining text buffer (Issue SR-H3)
+        if idx in self._text_buffer:
+            chunks = self._text_buffer[idx]
+            if chunks:
+                self.app.write_to_chat(''.join(chunks))
+            del self._text_buffer[idx]
+
+        # Flush any remaining thinking buffer (Issue SR-M1)
+        if idx in self._thinking_buffer:
+            chunks = self._thinking_buffer[idx]
+            if chunks:
+                self.app.write_to_chat(f"[dim]{escape(''.join(chunks))}[/dim]")
+            del self._thinking_buffer[idx]
 
         # Clean up tracking sets
         self._streaming_parts.discard(idx)
