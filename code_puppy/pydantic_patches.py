@@ -378,6 +378,154 @@ def patch_tool_call_callbacks() -> None:
         pass
 
 
+def patch_anthropic_tool_id_sanitization() -> None:
+    """Patch AnthropicModel to sanitize tool_call_id values before requests.
+
+    When using mixed provider setups (e.g. ChatGPT history sent to Claude),
+    OpenAI tool_call_id values can contain characters outside the Anthropic-allowed
+    pattern ^[a-zA-Z0-9_-]+$ (dots, slashes, colons, etc.). Anthropic rejects these
+    with 400 errors.
+
+    This patch wraps request/request_stream to normalize tool_call_id values on
+    all ToolCallPart and ToolReturnPart instances before they're serialized.
+
+    IMPORTANT: We do NOT mutate the caller's message history in place. Instead,
+    we create shallow copies of messages and use dataclasses.replace() to create
+    sanitized part copies. This preserves the async context manager contract
+    of request_stream and doesn't corrupt shared history.
+
+    This function is idempotent - calling it multiple times is safe.
+    """
+    try:
+        from contextlib import asynccontextmanager
+        import dataclasses
+
+        from pydantic_ai.models.anthropic import AnthropicModel
+        from pydantic_ai.messages import ToolCallPart, ToolReturnPart, RetryPromptPart
+
+        # Import our sanitizer (fails gracefully if not available)
+        try:
+            from code_puppy.claude_cache_client import sanitize_tool_id
+        except Exception:
+            logger.debug("sanitize_tool_id not available, skipping patch")
+            return
+
+        # Types that have tool_call_id we need to sanitize
+        _PARTS_WITH_TOOL_CALL_ID = (ToolCallPart, ToolReturnPart, RetryPromptPart)
+
+        def _sanitize_message_history(messages: list) -> list:
+            """Build a shallow-copied message history with sanitized tool_call_ids.
+
+            Returns a new list of messages; the original is untouched.
+            """
+            if not messages or not isinstance(messages, list):
+                return messages
+
+            sanitized_messages = []
+            for message in messages:
+                if not message:
+                    sanitized_messages.append(message)
+                    continue
+
+                # Get parts from ModelRequest or ModelResponse
+                parts = getattr(message, "parts", None)
+                if not parts or not isinstance(parts, (list, tuple)):
+                    sanitized_messages.append(message)
+                    continue
+
+                # Build new parts list with sanitized copies where needed
+                new_parts = []
+                parts_changed = False
+                for part in parts:
+                    if not part:
+                        new_parts.append(part)
+                        continue
+
+                    if isinstance(part, _PARTS_WITH_TOOL_CALL_ID):
+                        raw_id = part.tool_call_id
+                        if isinstance(raw_id, str):
+                            new_id = sanitize_tool_id(raw_id)
+                            if new_id != raw_id:
+                                # Create a new part with the sanitized id
+                                # ToolCallPart/ToolReturnPart/RetryPromptPart are dataclasses
+                                try:
+                                    new_part = dataclasses.replace(part, tool_call_id=new_id)
+                                    new_parts.append(new_part)
+                                    parts_changed = True
+                                    continue
+                                except (TypeError, ValueError, dataclasses.FrozenInstanceError):
+                                    # Fallback: try direct attribute assignment (mutable dataclass)
+                                    try:
+                                        part.tool_call_id = new_id
+                                        new_parts.append(part)
+                                        parts_changed = True
+                                        continue
+                                    except (AttributeError, TypeError):
+                                        # Last resort: keep original
+                                        pass
+                    # If we get here, part was not replaced
+                    new_parts.append(part)
+
+                if parts_changed:
+                    # Build a shallow copy of the message with new parts
+                    # ModelRequest and ModelResponse are dataclasses
+                    try:
+                        new_message = dataclasses.replace(message, parts=new_parts)
+                        sanitized_messages.append(new_message)
+                    except (TypeError, ValueError, dataclasses.FrozenInstanceError):
+                        # Fallback: try to set parts directly
+                        try:
+                            message.parts = new_parts
+                            sanitized_messages.append(message)
+                        except (AttributeError, TypeError):
+                            sanitized_messages.append(message)
+                else:
+                    sanitized_messages.append(message)
+
+            return sanitized_messages
+
+        # Get the current method - this could be the original or already patched
+        # If already patched, we re-wrap (outer wrapper calls inner wrapper which calls original)
+        _original_request = AnthropicModel.request
+
+        async def _patched_request(self, messages, model_settings, model_request_parameters):
+            try:
+                sanitized_messages = _sanitize_message_history(messages)
+            except Exception as exc:
+                # Sanitization must NEVER crash the request path
+                logger.debug("Error during tool id sanitization (pydantic-ai request): %s", exc)
+                sanitized_messages = messages
+            return await _original_request(self, sanitized_messages, model_settings, model_request_parameters)
+
+        # Patch request_stream method - MUST preserve async context manager contract
+        _original_request_stream = AnthropicModel.request_stream
+
+        @asynccontextmanager
+        async def _patched_request_stream(
+            self, messages, model_settings, model_request_parameters, run_context=None
+        ):
+            try:
+                sanitized_messages = _sanitize_message_history(messages)
+            except Exception as exc:
+                # Sanitization must NEVER crash the request path
+                logger.debug("Error during tool id sanitization (pydantic-ai stream): %s", exc)
+                sanitized_messages = messages
+
+            # The original is an @asynccontextmanager, so we must use 'async with'
+            async with _original_request_stream(
+                self, sanitized_messages, model_settings, model_request_parameters, run_context
+            ) as response:
+                yield response
+
+        AnthropicModel.request = _patched_request
+        AnthropicModel.request_stream = _patched_request_stream
+
+    except ImportError:
+        pass  # pydantic-ai or anthropic model not available
+    except Exception as exc:
+        logger.debug("Failed to apply Anthropic tool id sanitization patch: %s", exc)
+
+
 def apply_all_patches() -> None:
     """Apply all pydantic-ai monkey patches.
 
@@ -388,3 +536,4 @@ def apply_all_patches() -> None:
     patch_process_message_history()
     patch_tool_call_json_repair()
     patch_tool_call_callbacks()
+    patch_anthropic_tool_id_sanitization()

@@ -10,12 +10,15 @@ This module also handles:
 - Tool name prefixing/unprefixing for Claude Code OAuth compatibility
 - Header transformations (anthropic-beta, user-agent)
 - URL modifications (adding ?beta=true query param)
+- Tool ID sanitization for cross-provider message history compatibility
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import random
+import re
 import time
 from email.utils import parsedate_to_datetime
 from functools import lru_cache
@@ -26,6 +29,80 @@ import httpx
 import jwt as _jwt
 
 from .request_cache import RequestCacheMixin
+
+# Anthropic requires tool_use.id and tool_result.tool_use_id to match this pattern.
+# See: https://docs.anthropic.com/ (messages API 400 errors)
+_ANTHROPIC_TOOL_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def sanitize_tool_id(raw):
+    """Rewrite a tool id so it matches Anthropic's ^[a-zA-Z0-9_-]+$ pattern.
+
+    Deterministic: the same input ALWAYS maps to the same output, so
+    tool_use/tool_result pairs stay consistent across the whole history
+    without any external state.
+
+    Valid ids are returned unchanged (idempotent), so calling this twice
+    is safe. Empty strings are passed through unchanged because the caller
+    filters None/empty before this point.
+    """
+    if not isinstance(raw, str) or not raw:
+        return raw
+    if _ANTHROPIC_TOOL_ID_RE.match(raw):
+        return raw
+    try:
+        encoded = raw.encode("utf-8", errors="surrogatepass")
+    except (UnicodeEncodeError, UnicodeError):
+        # absolute last-resort: hash the repr
+        encoded = repr(raw).encode("utf-8", errors="replace")
+    digest = hashlib.md5(encoded, usedforsecurity=False).hexdigest()[:16]
+    return f"sanitized_{digest}"
+
+
+def _sanitize_tool_ids_in_payload(payload: dict) -> bool:
+    """In-place sanitization of tool_use/tool_result ids in an Anthropic
+    messages payload.
+
+    Walks payload["messages"] -> each message's content list. For any
+    block where type == "tool_use", rewrites block["id"]. For any block
+    where type == "tool_result", rewrites block["tool_use_id"].
+
+    Because sanitize_tool_id is deterministic, the same invalid id
+    always maps to the same sanitized id, so pairs stay linked even
+    across messages.
+
+    Returns True if anything was rewritten.
+    """
+    messages = payload.get("messages")
+    if not isinstance(messages, list):
+        return False
+
+    changed = False
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type")
+            if btype == "tool_use":
+                raw = block.get("id")
+                if isinstance(raw, str):
+                    new = sanitize_tool_id(raw)
+                    if new != raw:
+                        block["id"] = new
+                        changed = True
+            elif btype == "tool_result":
+                raw = block.get("tool_use_id")
+                if isinstance(raw, str):
+                    new = sanitize_tool_id(raw)
+                    if new != raw:
+                        block["tool_use_id"] = new
+                        changed = True
+    return changed
 
 logger = logging.getLogger(__name__)
 
@@ -253,11 +330,12 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
 
     @staticmethod
     def _transform_request_body(body: bytes) -> tuple[bytes | None, bool, bool]:
-        """Single-pass transform for tool prefixing and cache_control injection.
+        """Single-pass transform for tool prefixing, cache_control injection, and tool_id sanitization.
 
-        Parses the JSON body once and applies both transformations:
+        Parses the JSON body once and applies all transformations:
         1. Prefixes tool names with TOOL_PREFIX for Claude Code OAuth compatibility
         2. Injects cache_control into the last message's last content block
+        3. Sanitizes tool_use.id and tool_result.tool_use_id for Anthropic pattern compliance
 
         Returns: (transformed_body_or_None, tools_modified, cache_modified)
         """
@@ -282,7 +360,15 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                         tool["name"] = f"{TOOL_PREFIX}{name}"
                         tools_modified = True
 
-        # 2. Inject cache_control into last message's last content block
+        # 2. Sanitize tool ids (defense in depth for cross-provider message history)
+        try:
+            ids_modified = _sanitize_tool_ids_in_payload(data)
+        except Exception as exc:
+            # Sanitization must NEVER crash the request path
+            logger.debug("Error during tool id sanitization (transform body): %s", exc)
+            ids_modified = False
+
+        # 3. Inject cache_control into last message's last content block
         messages = data.get("messages")
         if isinstance(messages, list) and messages:
             last = messages[-1]
@@ -297,7 +383,7 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                         last_block["cache_control"] = {"type": "ephemeral"}
                         cache_modified = True
 
-        if not tools_modified and not cache_modified:
+        if not tools_modified and not cache_modified and not ids_modified:
             return None, False, False
 
         return json.dumps(data).encode("utf-8"), tools_modified, cache_modified
