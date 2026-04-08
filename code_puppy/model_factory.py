@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import pathlib
+import re
 from types import MappingProxyType
 from typing import Any, Callable
 
@@ -35,6 +36,9 @@ _MIN_OUTPUT_TOKENS = 2048
 _MAX_OUTPUT_TOKENS = 65536
 
 logger = logging.getLogger(__name__)
+
+# Pre-compiled regex pattern for environment variable substitution (e.g., ${VAR_NAME})
+_ENV_VAR_RE = re.compile(r"\$\{([^}]+)\}")
 
 # Registry for custom model provider classes from plugins
 _CUSTOM_MODEL_PROVIDERS: dict[str, type] = {}
@@ -278,6 +282,31 @@ class ZaiChatModel(_OpenAIChatModel):
         return super()._process_response(response)
 
 
+def _resolve_env_var(match, key=None):
+    """Helper to resolve environment variable from regex match.
+
+    Args:
+        match: The regex match object containing the env var name in group 1
+        key: Optional header key for warning messages
+
+    Returns:
+        The resolved value or empty string if not found
+    """
+    env_var_name = match.group(1)
+    resolved_value = get_api_key(env_var_name)
+    if resolved_value is None:
+        if key:
+            emit_warning(
+                f"'{env_var_name}' is not set (check config or environment) for custom endpoint header '{key}'. Proceeding with empty value."
+            )
+        else:
+            emit_warning(
+                f"'{env_var_name}' is not set (check config or environment). Proceeding with empty value."
+            )
+        return ""
+    return resolved_value
+
+
 def get_custom_config(model_config):
     custom_config = model_config.get("custom_endpoint", {})
     if not custom_config:
@@ -289,44 +318,27 @@ def get_custom_config(model_config):
 
     headers = {}
     for key, value in custom_config.get("headers", {}).items():
-        if value.startswith("$"):
-            env_var_name = value[1:]
-            resolved_value = get_api_key(env_var_name)
-            if resolved_value is None:
-                emit_warning(
-                    f"'{env_var_name}' is not set (check config or environment) for custom endpoint header '{key}'. Proceeding with empty value."
-                )
-                resolved_value = ""
-            value = resolved_value
-        elif "$" in value:
-            tokens = value.split(" ")
-            resolved_values = []
-            for token in tokens:
-                if token.startswith("$"):
-                    env_var = token[1:]
-                    resolved_value = get_api_key(env_var)
-                    if resolved_value is None:
-                        emit_warning(
-                            f"'{env_var}' is not set (check config or environment) for custom endpoint header '{key}'. Proceeding with empty value."
-                        )
-                        resolved_values.append("")
-                    else:
-                        resolved_values.append(resolved_value)
-                else:
-                    resolved_values.append(token)
-            value = " ".join(resolved_values)
+        # Use pre-compiled regex for efficient environment variable substitution
+        value = _ENV_VAR_RE.sub(lambda m: _resolve_env_var(m, key), value)
         headers[key] = value
     api_key = None
     if "api_key" in custom_config:
-        if custom_config["api_key"].startswith("$"):
-            env_var_name = custom_config["api_key"][1:]
-            api_key = get_api_key(env_var_name)
-            if api_key is None:
-                emit_warning(
-                    f"API key '{env_var_name}' is not set (checked config and environment); proceeding without API key."
-                )
-        else:
-            api_key = custom_config["api_key"]
+        # Use pre-compiled regex for API key substitution as well
+        api_key = _ENV_VAR_RE.sub(
+            lambda m: _resolve_env_var(m) or "",
+            custom_config["api_key"],
+        )
+        # If no substitution happened and value doesn't contain ${}, use as-is
+        if api_key == custom_config["api_key"] and not _ENV_VAR_RE.search(api_key):
+            if api_key.startswith("$"):
+                # Handle legacy $VAR format
+                env_var_name = api_key[1:]
+                api_key = get_api_key(env_var_name)
+                if api_key is None:
+                    emit_warning(
+                        f"API key '{env_var_name}' is not set (checked config and environment); proceeding without API key."
+                    )
+            # else: api_key is the literal value, keep it
     if "ca_certs_path" in custom_config:
         verify = custom_config["ca_certs_path"]
     else:
