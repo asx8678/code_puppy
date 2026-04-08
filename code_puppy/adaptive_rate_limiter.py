@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import enum
+import functools
 import logging
 import math
 import time
@@ -173,6 +174,7 @@ def _ensure_lock() -> asyncio.Lock:
     return _state.lock
 
 
+@functools.lru_cache(maxsize=128)
 def _normalize_model_name(model_name: str) -> str | None:
     """Normalize model name to lowercase and strip whitespace.
 
