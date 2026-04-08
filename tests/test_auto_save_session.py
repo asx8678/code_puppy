@@ -136,7 +136,7 @@ class TestAutoSaveSessionFunctionality:
     @patch("code_puppy.messaging.emit_info")
     @patch("code_puppy.config.save_session_async")
     @patch("code_puppy.config.get_current_autosave_session_name")
-    @patch("code_puppy.config.datetime.datetime")
+    @patch("datetime.datetime")
     @patch("code_puppy.config.get_auto_save_session")
     @patch("code_puppy.agents.agent_manager.get_current_agent")
     def test_auto_save_session_if_enabled_success(
