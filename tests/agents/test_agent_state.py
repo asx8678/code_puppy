@@ -57,7 +57,7 @@ class TestAgentRuntimeStateClearHistory:
         # Populate the fields
         state.message_history = [MagicMock(), MagicMock()]
         state.compacted_message_hashes = {"hash1", "hash2"}
-        state.message_history_hashes = {123, 456}
+        state.message_history_hashes = {"123", "456"}
 
         # Clear history
         state.clear_history()
@@ -87,7 +87,7 @@ class TestAgentRuntimeStateAppendMessage:
         state = AgentRuntimeState()
 
         message = {"role": "user", "content": "Hello"}
-        message_hash = hash("Hello")
+        message_hash = str(hash("Hello"))
 
         state.append_message(message, message_hash)
 
@@ -100,7 +100,7 @@ class TestAgentRuntimeStateAppendMessage:
 
         message1 = {"role": "user", "content": "Hello"}
         message2 = {"role": "assistant", "content": "Hi there"}
-        hash1, hash2 = hash("Hello"), hash("Hi there")
+        hash1, hash2 = str(hash("Hello")), str(hash("Hi there"))
 
         state.append_message(message1, hash1)
         state.append_message(message2, hash2)
@@ -115,7 +115,7 @@ class TestAgentRuntimeStateAppendMessage:
 
         message1 = {"role": "user", "content": "Hello"}
         message2 = {"role": "user", "content": "Hello again"}
-        same_hash = 12345
+        same_hash = "12345"
 
         state.append_message(message1, same_hash)
         state.append_message(message2, same_hash)
@@ -137,12 +137,12 @@ class TestAgentRuntimeStateExtendHistory:
             {"role": "assistant", "content": "Hi"},
             {"role": "user", "content": "How are you?"},
         ]
-        hashes = [111, 222, 333]
+        hashes = ["111", "222", "333"]
 
         state.extend_history(messages, hashes)
 
         assert state.message_history == messages
-        assert state.message_history_hashes == {111, 222, 333}
+        assert state.message_history_hashes == {"111", "222", "333"}
 
     def test_extend_empty_lists(self):
         """Test extend_history() with empty lists."""
@@ -159,11 +159,11 @@ class TestAgentRuntimeStateExtendHistory:
 
         # Initial state
         state.message_history = [{"role": "system", "content": "Setup"}]
-        state.message_history_hashes = {999}
+        state.message_history_hashes = {"999"}
 
         # Extend
         new_messages = [{"role": "user", "content": "Hello"}]
-        new_hashes = [111]
+        new_hashes = ["111"]
 
         state.extend_history(new_messages, new_hashes)
 
@@ -171,7 +171,7 @@ class TestAgentRuntimeStateExtendHistory:
             {"role": "system", "content": "Setup"},
             {"role": "user", "content": "Hello"},
         ]
-        assert state.message_history_hashes == {999, 111}
+        assert state.message_history_hashes == {"999", "111"}
 
 
 class TestAgentRuntimeStateInvalidateCaches:
@@ -216,7 +216,7 @@ class TestAgentRuntimeStateInvalidateCaches:
 
         # Set various state fields
         state.message_history = [{"role": "user", "content": "Hello"}]
-        state.message_history_hashes = {123}
+        state.message_history_hashes = {"123"}
         state.compacted_message_hashes = {"abc"}
         state.model_name_cache = "gpt-4"
         state.delayed_compaction_requested = True
@@ -231,7 +231,7 @@ class TestAgentRuntimeStateInvalidateCaches:
 
         # Other state should be preserved
         assert state.message_history == [{"role": "user", "content": "Hello"}]
-        assert state.message_history_hashes == {123}
+        assert state.message_history_hashes == {"123"}
         assert state.compacted_message_hashes == {"abc"}
         assert state.model_name_cache == "gpt-4"
         assert state.delayed_compaction_requested is True
