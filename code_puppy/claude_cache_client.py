@@ -225,7 +225,7 @@ def _validate_jwt_claims(token: str) -> tuple[int, int] | None:
     if not isinstance(payload, dict):
         return None
 
-    # Extract and validate 'exp' claim
+    # Extract raw 'exp' claim (validate as numeric before truncation)
     exp = payload.get("exp")
     if exp is None:
         logger.debug("JWT validation failed: missing 'exp' claim")
@@ -233,13 +233,12 @@ def _validate_jwt_claims(token: str) -> tuple[int, int] | None:
     if not isinstance(exp, (int, float)):
         logger.debug("JWT validation failed: 'exp' is not numeric (%s)", type(exp))
         return None
-    # Convert to int, truncating fractional seconds (standard JWT practice)
-    exp_int = int(exp)
-    if exp_int <= 0:
-        logger.debug("JWT validation failed: 'exp' is not positive (%d)", exp_int)
+    # SECURITY: Validate using RAW numeric values (not truncated to int)
+    if exp <= 0:
+        logger.debug("JWT validation failed: 'exp' is not positive (%s)", exp)
         return None
 
-    # Extract and validate 'iat' claim
+    # Extract raw 'iat' claim (validate as numeric before truncation)
     iat = payload.get("iat")
     if iat is None:
         logger.debug("JWT validation failed: missing 'iat' claim")
@@ -247,50 +246,50 @@ def _validate_jwt_claims(token: str) -> tuple[int, int] | None:
     if not isinstance(iat, (int, float)):
         logger.debug("JWT validation failed: 'iat' is not numeric (%s)", type(iat))
         return None
-    # Convert to int, truncating fractional seconds (standard JWT practice)
-    iat_int = int(iat)
-    if iat_int <= 0:
-        logger.debug("JWT validation failed: 'iat' is not positive (%d)", iat_int)
+    # SECURITY: Validate using RAW numeric values (not truncated to int)
+    if iat <= 0:
+        logger.debug("JWT validation failed: 'iat' is not positive (%s)", iat)
         return None
 
-    # Validate exp > iat (expiry must be after issued-at)
-    if exp_int <= iat_int:
+    # Validate exp > iat using RAW values (expiry must be after issued-at)
+    if exp <= iat:
         logger.debug(
-            "JWT validation failed: 'exp' (%d) is not after 'iat' (%d)",
-            exp_int,
-            iat_int,
+            "JWT validation failed: 'exp' (%s) is not after 'iat' (%s)",
+            exp,
+            iat,
         )
         return None
 
-    # Validate iat is not in the future (allow clock skew tolerance)
+    # Validate iat is not in the future using RAW values (allow clock skew tolerance)
     now = time.time()
-    if iat_int > now + CLOCK_SKEW_TOLERANCE_SECONDS:
+    if iat > now + CLOCK_SKEW_TOLERANCE_SECONDS:
         logger.debug(
-            "JWT validation failed: 'iat' (%d) is in the future (now: %d, skew: %d)",
-            iat_int,
-            int(now),
+            "JWT validation failed: 'iat' (%s) is in the future (now: %s, skew: %s)",
+            iat,
+            now,
             CLOCK_SKEW_TOLERANCE_SECONDS,
         )
         return None
 
-    # Validate maximum token age (24 hours)
-    token_lifetime = exp_int - iat_int
+    # Validate maximum token age using RAW values (24 hours)
+    token_lifetime = exp - iat
     if token_lifetime > MAX_TOKEN_AGE_SECONDS:
         logger.debug(
-            "JWT validation failed: token lifetime (%d seconds) exceeds maximum (%d)",
+            "JWT validation failed: token lifetime (%s seconds) exceeds maximum (%s)",
             token_lifetime,
             MAX_TOKEN_AGE_SECONDS,
         )
         return None
 
-    # Validate token is not already expired
-    if exp_int < now - CLOCK_SKEW_TOLERANCE_SECONDS:
+    # Validate token is not already expired using RAW values
+    if exp < now - CLOCK_SKEW_TOLERANCE_SECONDS:
         logger.debug(
-            "JWT validation failed: token expired (exp: %d, now: %d)", exp_int, int(now)
+            "JWT validation failed: token expired (exp: %s, now: %s)", exp, now
         )
         return None
 
-    return (iat_int, exp_int)
+    # SECURITY: Only convert to int at the very end for return values
+    return (int(iat), int(exp))
 
 
 class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):

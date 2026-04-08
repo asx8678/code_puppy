@@ -10,10 +10,10 @@ import pytest
 
 from code_puppy.claude_cache_client import (
     CLAUDE_CLI_USER_AGENT,
-    TOKEN_MAX_AGE_SECONDS,
     TOOL_PREFIX,
     ClaudeCacheAsyncClient,
     _inject_cache_control_in_payload,
+    _validate_jwt_claims,
     patch_anthropic_client_messages,
 )
 
@@ -82,6 +82,124 @@ class TestJWTAge:
         token = _create_jwt()
         c = ClaudeCacheAsyncClient()
         assert c._get_jwt_age_seconds(token) is None
+
+
+# --- Direct JWT claim validation tests (code_puppy-e60 security fix) ---
+
+
+class TestValidateJWTClaims:
+    """Direct tests for _validate_jwt_claims() - security critical."""
+
+    def test_none_token(self):
+        assert _validate_jwt_claims(None) is None
+
+    def test_empty_token(self):
+        assert _validate_jwt_claims("") is None
+
+    def test_invalid_jwt_structure(self):
+        assert _validate_jwt_claims("only.two") is None
+        assert _validate_jwt_claims("a.b.c.d") is None
+        assert _validate_jwt_claims("not.a.jwt") is None
+
+    def test_valid_integer_claims(self):
+        """Test with valid integer iat and exp claims."""
+        now = int(time.time())
+        token = _create_jwt(iat=now - 600, exp=now + 3000)
+        result = _validate_jwt_claims(token)
+        assert result is not None
+        iat, exp = result
+        assert iat == now - 600
+        assert exp == now + 3000
+
+    def test_valid_float_claims_with_fractional_seconds(self):
+        """Test with valid float claims that have fractional seconds."""
+        now = time.time()
+        # Add fractional seconds to show we validate against raw values
+        iat_float = now - 600.5
+        exp_float = now + 3000.7
+        token = _create_jwt(iat=iat_float, exp=exp_float)
+        result = _validate_jwt_claims(token)
+        assert result is not None
+        iat, exp = result
+        # Should be truncated to int in return value
+        assert iat == int(iat_float)
+        assert exp == int(exp_float)
+
+    def test_missing_exp_claim(self):
+        """Token without exp claim should fail validation."""
+        now = time.time()
+        token = _create_jwt(iat=now - 600)  # No exp
+        assert _validate_jwt_claims(token) is None
+
+    def test_missing_iat_claim(self):
+        """Token without iat claim should fail validation."""
+        now = time.time()
+        token = _create_jwt(exp=now + 1800)  # No iat
+        assert _validate_jwt_claims(token) is None
+
+    def test_exp_less_than_or_equal_to_iat(self):
+        """exp must be strictly greater than iat."""
+        now = time.time()
+        # exp == iat
+        token = _create_jwt(iat=now, exp=now)
+        assert _validate_jwt_claims(token) is None
+        # exp < iat
+        token = _create_jwt(iat=now + 100, exp=now)
+        assert _validate_jwt_claims(token) is None
+
+    def test_future_iat_beyond_60_second_skew(self):
+        """iat in the future beyond 60 seconds should fail."""
+        now = time.time()
+        # iat 70 seconds in the future - should fail
+        token = _create_jwt(iat=now + 70, exp=now + 3600)
+        assert _validate_jwt_claims(token) is None
+
+    def test_future_iat_within_60_second_skew_passes(self):
+        """iat within 60 seconds of current time should pass."""
+        now = time.time()
+        # iat 30 seconds in the future - should pass
+        token = _create_jwt(iat=now + 30, exp=now + 3600)
+        result = _validate_jwt_claims(token)
+        assert result is not None
+
+    def test_lifetime_exceeds_24h(self):
+        """Token lifetime > 24 hours (86400 seconds) should fail."""
+        now = time.time()
+        # 25 hours lifetime
+        token = _create_jwt(iat=now - 100, exp=now + 25 * 3600)
+        assert _validate_jwt_claims(token) is None
+
+    def test_already_expired_token(self):
+        """Already expired token should fail (beyond clock skew tolerance)."""
+        now = time.time()
+        # exp 70 seconds ago (beyond 60 second clock skew tolerance)
+        token = _create_jwt(iat=now - 600, exp=now - 70)
+        assert _validate_jwt_claims(token) is None
+
+    def test_fractional_boundary_at_exactly_60s_skew(self):
+        """Test edge case: iat exactly at 60 second skew limit."""
+        now = time.time()
+        # iat at exactly 60 seconds in the future - should pass (edge case)
+        token = _create_jwt(iat=now + 60, exp=now + 3600)
+        result = _validate_jwt_claims(token)
+        assert result is not None
+
+    def test_fractional_boundary_just_over_60s_skew(self):
+        """Test edge case: iat just over 60 second skew limit with floats."""
+        now = time.time()
+        # Using float to test boundary: iat at 60.1 seconds in future
+        # Validated against raw float value, not truncated to int
+        token = _create_jwt(iat=now + 60.1, exp=now + 3600)
+        assert _validate_jwt_claims(token) is None
+
+    def test_fractional_boundary_just_under_60s_skew(self):
+        """Test edge case: iat just under 60 second skew limit with floats."""
+        now = time.time()
+        # Using float to test boundary: iat at 59.9 seconds in future
+        # Validated against raw float value
+        token = _create_jwt(iat=now + 59.9, exp=now + 3600)
+        result = _validate_jwt_claims(token)
+        assert result is not None
 
 
 # --- Bearer token extraction ---
