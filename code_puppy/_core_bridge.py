@@ -174,3 +174,15 @@ def serialize_message_for_rust(message: Any) -> dict:
 def serialize_messages_for_rust(messages: list) -> list[dict]:
     """Batch convert messages for Rust consumption."""
     return [serialize_message_for_rust(m) for m in messages]
+
+    return {
+        "kind": kind,
+        "role": msg_role,
+        "instructions": msg_instructions,
+        "parts": parts,
+    }
+
+
+def serialize_messages_for_rust(messages: list) -> list[dict]:
+    """Batch convert messages for Rust consumption."""
+    return [serialize_message_for_rust(m) for m in messages]

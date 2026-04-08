@@ -428,7 +428,7 @@ class TestRegisterInvokeAgentExecution:
         with (
             patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(
-                "code_puppy.tools.agent_tools._load_session_history", return_value=[]
+                "code_puppy.tools.agent_tools._load_session_history_async", return_value=[]
             ),
             patch(
                 "code_puppy.tools.agent_tools.generate_group_id",
@@ -488,7 +488,7 @@ class TestRegisterInvokeAgentExecution:
                 return_value={},  # No models configured
             ),
             patch(
-                "code_puppy.tools.agent_tools._load_session_history",
+                "code_puppy.tools.agent_tools._load_session_history_async",
                 return_value=[],
             ),
             patch(
@@ -547,7 +547,7 @@ class TestRegisterInvokeAgentExecution:
                 side_effect=RuntimeError("Config load failed"),
             ),
             patch(
-                "code_puppy.tools.agent_tools._load_session_history",
+                "code_puppy.tools.agent_tools._load_session_history_async",
                 return_value=[],
             ),
             patch(
@@ -634,7 +634,7 @@ class TestSessionIdValidationInInvokeAgent:
 
         with (
             patch(
-                "code_puppy.tools.agent_tools._load_session_history", return_value=[]
+                "code_puppy.tools.agent_tools._load_session_history_async", return_value=[]
             ),
             patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(
@@ -667,7 +667,7 @@ class TestSessionIdValidationInInvokeAgent:
 
         with (
             patch(
-                "code_puppy.tools.agent_tools._load_session_history", return_value=[]
+                "code_puppy.tools.agent_tools._load_session_history_async", return_value=[]
             ),
             patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(
@@ -700,7 +700,7 @@ class TestSessionIdValidationInInvokeAgent:
 
         with (
             patch(
-                "code_puppy.tools.agent_tools._load_session_history", return_value=[]
+                "code_puppy.tools.agent_tools._load_session_history_async", return_value=[]
             ),
             patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(
@@ -731,7 +731,7 @@ class TestSessionIdValidationInInvokeAgent:
 
         with (
             patch(
-                "code_puppy.tools.agent_tools._load_session_history", return_value=[]
+                "code_puppy.tools.agent_tools._load_session_history_async", return_value=[]
             ),
             patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(

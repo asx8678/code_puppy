@@ -8,3 +8,6 @@ try:
 except Exception:
     # Fallback for dev environments where metadata might not be available
     __version__ = "0.0.0-dev"
+
+# Expose submodules for reliable import patterns
+from . import agents

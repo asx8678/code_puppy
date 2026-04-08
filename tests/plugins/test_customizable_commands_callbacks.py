@@ -8,7 +8,10 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 import code_puppy.plugins.customizable_commands.register_callbacks as callbacks_module
+from code_puppy.callbacks import register_callback
 from code_puppy.plugins.customizable_commands.register_callbacks import (
     MarkdownCommandResult,
     _command_descriptions,
@@ -17,6 +20,18 @@ from code_puppy.plugins.customizable_commands.register_callbacks import (
     _handle_custom_command,
     _load_markdown_commands,
 )
+
+
+@pytest.fixture(autouse=True)
+def _ensure_callbacks_registered():
+    """Ensure callbacks are registered before each test.
+
+    Other tests may clear the callback registry. Re-register our callbacks
+    to ensure tests that check for them pass.
+    """
+    register_callback("custom_command_help", _custom_help)
+    register_callback("custom_command", _handle_custom_command)
+    yield
 
 
 def _reset_commands_cache():

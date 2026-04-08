@@ -542,19 +542,23 @@ def test_agent_manager_discover_agents_error():
 def test_next_clone_index():
     """Cover _next_clone_index (line 585)."""
     from pathlib import Path
-
     from code_puppy.agents.agent_manager import _next_clone_index
 
-    # No existing clones
+    # No existing clones → should return 1
     with patch("pathlib.Path.exists", return_value=False):
-        idx = _next_clone_index("test", [], Path("/tmp"))
-        assert isinstance(idx, int)
-        assert idx >= 1
+        idx = _next_clone_index("test", set(), Path("/tmp"))
+        assert idx == 1
 
-    # With existing clones
+    # With gap: existing clones 1 and 3 → should return 4 (max+1), NOT 2
+    # This assertion catches the \\d+ regex bug.
     with patch("pathlib.Path.exists", return_value=False):
-        idx = _next_clone_index("test", ["test-clone-1", "test-clone-3"], Path("/tmp"))
-        assert idx >= 1
+        idx = _next_clone_index(
+            "test", {"test-clone-1", "test-clone-3"}, Path("/tmp")
+        )
+        assert idx == 4, (
+            f"Expected 4 (max existing clone index + 1), got {idx}. "
+            "If this fails with idx=2, the clone_pattern regex is broken."
+        )
 
 
 def test_clone_agent_failure():

@@ -67,96 +67,104 @@ class TestSubagentSessionsDir:
 
 class TestSaveSessionHistory:
     def test_save_new_session(self, tmp_path):
-        from code_puppy.tools.agent_tools import _save_session_history
+        from code_puppy.tools.agent_tools import _save_session_history_sync
 
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,
         ):
-            _save_session_history("my-session", ["msg1"], "agent", "hello")
+            _save_session_history_sync("my-session", [], "agent", "hello")
         msgpack_file = tmp_path / "my-session.msgpack"
-        txt = tmp_path / "my-session.txt"
         assert msgpack_file.exists()
-        assert txt.exists()
-        with open(txt) as f:
-            meta = json.load(f)
-        assert meta["session_id"] == "my-session"
-        assert meta["initial_prompt"] == "hello"
+        # msgpack format stores metadata inside the msgpack file now
+        import msgpack
+        data = msgpack.unpackb(msgpack_file.read_bytes(), raw=False)
+        assert data["metadata"]["session_id"] == "my-session"
+        assert data["metadata"]["initial_prompt"] == "hello"
 
     def test_save_updates_existing(self, tmp_path):
-        from code_puppy.tools.agent_tools import _save_session_history
+        from code_puppy.tools.agent_tools import _save_session_history_sync
 
-        txt = tmp_path / "my-session.txt"
-        txt.write_text(json.dumps({"session_id": "my-session", "message_count": 1}))
+        # First save
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,
         ):
-            _save_session_history("my-session", ["msg1", "msg2"], "agent")
-        with open(txt) as f:
-            meta = json.load(f)
-        assert meta["message_count"] == 2
+            _save_session_history_sync("my-session", [], "agent", "hello")
+        # Second save (update)
+        with patch(
+            "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
+            return_value=tmp_path,
+        ):
+            _save_session_history_sync("my-session", [{"role": "user", "content": "test"}], "agent")
+        # Verify update happened (check metadata updated)
+        import msgpack
+        data = msgpack.unpackb((tmp_path / "my-session.msgpack").read_bytes(), raw=False)
+        assert data["metadata"]["message_count"] == 1
+        # initial_prompt preserved from first save
+        assert data["metadata"]["initial_prompt"] == "hello"
 
     def test_save_invalid_session_id(self):
-        from code_puppy.tools.agent_tools import _save_session_history
+        from code_puppy.tools.agent_tools import _save_session_history_sync
 
         with pytest.raises(ValueError):
-            _save_session_history("INVALID", [], "agent")
+            _save_session_history_sync("INVALID", [], "agent")
 
     def test_save_corrupted_txt(self, tmp_path):
-        from code_puppy.tools.agent_tools import _save_session_history
+        from code_puppy.tools.agent_tools import _save_session_history_sync
 
-        txt = tmp_path / "my-session.txt"
-        txt.write_text("not json")
+        # Note: With msgpack format, the .txt file is not used anymore,
+        # so this test just verifies saving still works
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,
         ):
-            _save_session_history("my-session", ["msg"], "agent")  # shouldn't raise
+            _save_session_history_sync("my-session", [], "agent")  # shouldn't raise
 
 
 class TestLoadSessionHistory:
     def test_load_nonexistent(self, tmp_path):
-        from code_puppy.tools.agent_tools import _load_session_history
+        from code_puppy.tools.agent_tools import _load_session_history_sync
 
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,
         ):
-            result = _load_session_history("no-session")
+            result = _load_session_history_sync("no-session")
         assert result == []
 
     def test_load_existing(self, tmp_path):
         from code_puppy.tools.agent_tools import (
-            _load_session_history,
-            _save_session_history,
+            _load_session_history_sync,
+            _save_session_history_sync,
         )
 
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,
         ):
-            _save_session_history("my-session", [], "agent", "hello")
-            result = _load_session_history("my-session")
+            _save_session_history_sync("my-session", [], "agent", "hello")
+            result = _load_session_history_sync("my-session")
+        # Empty list because we saved an empty message history
         assert result == []
 
     def test_load_corrupted(self, tmp_path):
-        from code_puppy.tools.agent_tools import _load_session_history
+        from code_puppy.tools.agent_tools import _load_session_history_sync
 
         msgpack_file = tmp_path / "my-session.msgpack"
-        msgpack_file.write_bytes(b"not pickle")
+        msgpack_file.write_bytes(b"invalid msgpack data")
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",
             return_value=tmp_path,
         ):
-            result = _load_session_history("my-session")
+            result = _load_session_history_sync("my-session")
         assert result == []
 
     def test_load_invalid_session_id(self):
-        from code_puppy.tools.agent_tools import _load_session_history
+        from code_puppy.tools.agent_tools import _load_session_history_sync
 
         with pytest.raises(ValueError):
-            _load_session_history("INVALID")
+            _load_session_history_sync("INVALID")
 
 
 class TestModels:
@@ -233,22 +241,24 @@ class TestRegisterListAgents:
 class TestRegisterInvokeAgent:
     @pytest.mark.asyncio
     async def test_invalid_session_id(self):
-        from code_puppy.tools.agent_tools import register_invoke_agent
+        """Test that invalid session_id is sanitized, not rejected with error."""
+        from code_puppy.tools.agent_tools import _sanitize_session_id
 
-        agent = MagicMock()
-        captured = {}
-        agent.tool = lambda fn: (captured.update({"fn": fn}), fn)[-1]
-        register_invoke_agent(agent)
+        # Test the sanitization function directly
+        sanitized = _sanitize_session_id("INVALID_ID")
+        assert sanitized == "invalid-id"
 
-        ctx = MagicMock()
-        with (
-            patch("code_puppy.tools.agent_tools.generate_group_id", return_value="grp"),
-            patch("code_puppy.tools.agent_tools.emit_error"),
-        ):
-            result = await captured["fn"](
-                ctx, agent_name="test", prompt="hi", session_id="INVALID_ID"
-            )
-        assert result.error is not None
+        # Test various invalid patterns
+        assert _sanitize_session_id("MySession") == "mysession"
+        assert _sanitize_session_id("my_session") == "my-session"
+        assert _sanitize_session_id("my session") == "my-session"
+        assert _sanitize_session_id("session@123") == "session-123"
+        assert _sanitize_session_id("") == "session"  # empty defaults to "session"
+
+        # Test that long IDs are truncated
+        long_id = "a" * 200
+        truncated = _sanitize_session_id(long_id)
+        assert len(truncated) <= 128
 
     @pytest.mark.asyncio
     async def test_agent_not_found(self):

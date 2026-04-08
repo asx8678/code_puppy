@@ -102,13 +102,16 @@ class TestSetAwaitingUserInput:
         mock_pause = MagicMock()
         mock_resume = MagicMock()
 
-        # Mock the spinner module import to return our mock functions
-        mock_spinner_module = MagicMock()
-        mock_spinner_module.pause_all_spinners = mock_pause
-        mock_spinner_module.resume_all_spinners = mock_resume
+        # Mock _get_spinner_func to return appropriate mock functions
+        def mock_get_spinner_func(name):
+            if name == "pause_all_spinners":
+                return mock_pause
+            elif name == "resume_all_spinners":
+                return mock_resume
+            return None
 
-        with patch.dict(
-            "sys.modules", {"code_puppy.messaging.spinner": mock_spinner_module}
+        with patch.object(
+            command_runner_module, "_get_spinner_func", side_effect=mock_get_spinner_func
         ):
             set_awaiting_user_input(True)
 
@@ -122,13 +125,16 @@ class TestSetAwaitingUserInput:
         mock_pause = MagicMock()
         mock_resume = MagicMock()
 
-        # Mock the spinner module import to return our mock functions
-        mock_spinner_module = MagicMock()
-        mock_spinner_module.pause_all_spinners = mock_pause
-        mock_spinner_module.resume_all_spinners = mock_resume
+        # Mock _get_spinner_func to return appropriate mock functions
+        def mock_get_spinner_func(name):
+            if name == "pause_all_spinners":
+                return mock_pause
+            elif name == "resume_all_spinners":
+                return mock_resume
+            return None
 
-        with patch.dict(
-            "sys.modules", {"code_puppy.messaging.spinner": mock_spinner_module}
+        with patch.object(
+            command_runner_module, "_get_spinner_func", side_effect=mock_get_spinner_func
         ):
             set_awaiting_user_input(False)
 
@@ -138,32 +144,30 @@ class TestSetAwaitingUserInput:
 
     def test_set_awaiting_handles_import_error(self, monkeypatch):
         """Test that function handles ImportError gracefully when spinner module not available."""
+        # Clear spinner cache to force reimport attempt
+        original_cache = command_runner_module._spinner_module_cache.copy()
+        command_runner_module._spinner_module_cache["pause_all_spinners"] = None
+        command_runner_module._spinner_module_cache["resume_all_spinners"] = None
 
-        # Create a mock that raises ImportError when the import is attempted
-        def mock_import(name, *args, **kwargs):
-            if name == "code_puppy.messaging.spinner":
-                raise ImportError("No module named 'code_puppy.messaging.spinner'")
-            # Use original import for everything else
-            return __builtins__["__import__"](name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=mock_import):
+        # Mock _get_spinner_func to return None (simulates ImportError)
+        with patch.object(
+            command_runner_module, "_get_spinner_func", return_value=None
+        ):
             set_awaiting_user_input(True)
             assert command_runner_module._AWAITING_USER_INPUT.is_set()
 
             set_awaiting_user_input(False)
             assert not command_runner_module._AWAITING_USER_INPUT.is_set()
 
+        # Restore cache
+        command_runner_module._spinner_module_cache.update(original_cache)
+
     def test_set_awaiting_default_true(self, monkeypatch):
         """Test that default parameter is True."""
-
-        # Create a mock that raises ImportError when the import is attempted
-        def mock_import(name, *args, **kwargs):
-            if name == "code_puppy.messaging.spinner":
-                raise ImportError("No module named 'code_puppy.messaging.spinner'")
-            # Use original import for everything else
-            return __builtins__["__import__"](name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=mock_import):
+        # Mock _get_spinner_func to avoid actual spinner imports
+        with patch.object(
+            command_runner_module, "_get_spinner_func", return_value=None
+        ):
             set_awaiting_user_input()
             assert command_runner_module._AWAITING_USER_INPUT.is_set()
 

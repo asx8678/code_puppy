@@ -772,7 +772,7 @@ def _next_clone_index(
     base_name: str, existing_names: set[str], agents_dir: Path
 ) -> int:
     """Compute the next clone index for a base name."""
-    clone_pattern = re.compile(rf"^{re.escape(base_name)}-clone-(\\d+)$")
+    clone_pattern = re.compile(rf"^{re.escape(base_name)}-clone-(\d+)$")
     indices = []
     for name in existing_names:
         match = clone_pattern.match(name)
@@ -872,6 +872,8 @@ def clone_agent(agent_name: str) -> str | None:
         with open(clone_path, "w", encoding="utf-8") as f:
             json.dump(clone_config, f, indent=2, ensure_ascii=False)
         emit_success(f"Cloned '{agent_name}' to '{clone_name}'.")
+        _invalidate_agent_registry()
+        _discover_agents(message_group_id=message_group_id)
         return clone_name
     except Exception as exc:
         emit_warning(f"Failed to write clone file '{clone_path}': {exc}")
@@ -924,6 +926,8 @@ def delete_clone_agent(agent_name: str) -> bool:
         emit_success(f"Deleted clone '{agent_name}'.")
         _state.agent_registry.pop(agent_name, None)
         _state.agent_histories.pop(agent_name, None)
+        _invalidate_agent_registry()
+        _discover_agents(message_group_id=message_group_id)
         return True
     except Exception as exc:
         emit_warning(f"Failed to delete clone '{agent_name}': {exc}")

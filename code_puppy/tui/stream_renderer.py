@@ -96,6 +96,10 @@ LOADING_MESSAGES = [
 _RATE_UPDATE_INTERVAL = 0.2
 
 
+# Rate update throttle interval (5 Hz max) (Issue SR-H1)
+_RATE_UPDATE_INTERVAL = 0.2
+
+
 class StreamRenderer:
     """Renders streaming LLM events into a Textual CodePuppyApp.
 

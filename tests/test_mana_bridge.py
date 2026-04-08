@@ -282,7 +282,14 @@ class TestCallbackRegistration:
 
     def _reload_register_callbacks(self):
         """Force re-import of the register_callbacks module."""
+        import sys
+
         from code_puppy.plugins.mana_bridge import register_callbacks as rc_mod
+
+        # Ensure module is in sys.modules before reloading
+        # (may have been removed by test isolation in some orderings)
+        if rc_mod.__name__ not in sys.modules:
+            sys.modules[rc_mod.__name__] = rc_mod
 
         importlib.reload(rc_mod)
         return rc_mod
@@ -928,7 +935,14 @@ class TestRequestHandlers:
 
     def _reload_register_callbacks(self):
         """Force re-import of the register_callbacks module."""
+        import sys
+
         from code_puppy.plugins.mana_bridge import register_callbacks as rc_mod
+
+        # Ensure module is in sys.modules before reloading
+        # (may have been removed by test isolation in some orderings)
+        if rc_mod.__name__ not in sys.modules:
+            sys.modules[rc_mod.__name__] = rc_mod
 
         importlib.reload(rc_mod)
         return rc_mod
@@ -1427,7 +1441,14 @@ class TestSwitchModel:
 
     def _reload_register_callbacks(self):
         """Force re-import of the register_callbacks module."""
+        import sys
+
         from code_puppy.plugins.mana_bridge import register_callbacks as rc_mod
+
+        # Ensure module is in sys.modules before reloading
+        # (may have been removed by test isolation in some orderings)
+        if rc_mod.__name__ not in sys.modules:
+            sys.modules[rc_mod.__name__] = rc_mod
 
         importlib.reload(rc_mod)
         return rc_mod

@@ -556,13 +556,19 @@ class TestCloneHelpers:
     def test_next_clone_index(self, tmp_path):
         existing = {"agent", "agent-clone-1"}
         idx = am._next_clone_index("agent", existing, tmp_path)
-        assert idx >= 2
+        assert idx == 2
+
+    def test_next_clone_index_with_gap(self, tmp_path):
+        """Regression test for the \\d+ regex bug — must pick max+1, not first gap."""
+        existing = {"agent-clone-1", "agent-clone-5"}
+        idx = am._next_clone_index("agent", existing, tmp_path)
+        assert idx == 6
 
     def test_next_clone_index_with_file_conflict(self, tmp_path):
         # Create a file that would conflict
         (tmp_path / "agent-clone-1.json").touch()
         idx = am._next_clone_index("agent", set(), tmp_path)
-        assert idx >= 1
+        assert idx == 2  # tightened from >= 1
 
 
 class TestCloneAgent:
@@ -980,3 +986,82 @@ class TestRefreshAgents:
     def test_refresh(self, mock_discover):
         am.refresh_agents()
         mock_discover.assert_called_once()
+
+
+class TestCloneCacheRefresh:
+    """Integration tests for clone/delete cache invalidation — regression tests."""
+
+    def test_clone_agent_refreshes_registry(self, tmp_path, monkeypatch):
+        """Regression test: cloning an agent must make it immediately visible via get_available_agents."""
+        import code_puppy.agents.agent_manager as am_module
+        from code_puppy.agents.agent_manager import clone_agent, get_available_agents
+        from code_puppy.agents.agent_code_puppy import CodePuppyAgent
+
+        # Ensure code-puppy is registered
+        am_module._state.agent_registry["code-puppy"] = am.AgentInfo(
+            name="code-puppy",
+            display_name="Code Puppy",
+            description="The main code puppy agent",
+            factory=CodePuppyAgent,
+        )
+
+        # Point user agents directory at tmp_path
+        monkeypatch.setattr(
+            "code_puppy.config.get_user_agents_directory",
+            lambda: str(tmp_path),
+        )
+        # Ensure a fresh registry
+        am_module._invalidate_agent_registry()
+
+        # Sanity check: code-puppy should be available
+        agents_before = get_available_agents()
+        assert "code-puppy" in agents_before, "code-puppy should be in registry for this test"
+        assert "code-puppy-clone-1" not in agents_before
+
+        # Clone it
+        result = clone_agent("code-puppy")
+        assert result == "code-puppy-clone-1"
+
+        # THE KEY ASSERTION: the clone must appear in get_available_agents()
+        # WITHOUT requiring a manual refresh_agents() call
+        agents_after = get_available_agents()
+        assert "code-puppy-clone-1" in agents_after, (
+            "After clone_agent(), the new clone must be immediately visible "
+            "via get_available_agents(). This is the regression test for the "
+            "stale registry cache bug."
+        )
+
+    def test_delete_clone_agent_refreshes_registry(self, tmp_path, monkeypatch):
+        """Regression test: deleting a clone must immediately remove it from get_available_agents."""
+        import code_puppy.agents.agent_manager as am_module
+        from code_puppy.agents.agent_manager import (
+            clone_agent,
+            delete_clone_agent,
+            get_available_agents,
+        )
+        from code_puppy.agents.agent_code_puppy import CodePuppyAgent
+
+        # Ensure code-puppy is registered
+        am_module._state.agent_registry["code-puppy"] = am.AgentInfo(
+            name="code-puppy",
+            display_name="Code Puppy",
+            description="The main code puppy agent",
+            factory=CodePuppyAgent,
+        )
+
+        monkeypatch.setattr(
+            "code_puppy.config.get_user_agents_directory",
+            lambda: str(tmp_path),
+        )
+        am_module._invalidate_agent_registry()
+
+        # Clone then delete
+        clone_name = clone_agent("code-puppy")
+        assert clone_name is not None
+        assert clone_name in get_available_agents()
+
+        assert delete_clone_agent(clone_name) is True
+        assert clone_name not in get_available_agents(), (
+            "After delete_clone_agent(), the clone must be immediately removed "
+            "from get_available_agents()."
+        )

@@ -551,6 +551,10 @@ async def _execute_bridge_prompt(text: str) -> None:
     (stream_event, agent_run_start/end, tool calls) fire automatically
     and are forwarded to Mana by the existing bridge plumbing.
     """
+    global _executor_lock
+    # Lazily initialize lock if not already created (e.g., in tests)
+    if _executor_lock is None:
+        _executor_lock = asyncio.Lock()
     async with _executor_lock:
         try:
             from code_puppy.agents.agent_manager import get_current_agent
