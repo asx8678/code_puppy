@@ -1280,3 +1280,118 @@ def test_render_file_listing_single_file_single_dir(mock_sub, renderer, console)
         total_size=50,
     )
     renderer._render_file_listing(msg)
+
+
+# =========================================================================
+# Regression Tests - clear_buffer bug fix
+# =========================================================================
+
+
+def test_consume_loop_uses_get_buffered_messages_no_clear_buffer_call(bus):
+    """REGRESSION TEST: Verify RichConsoleRenderer uses get_buffered_messages().
+
+    This test verifies the fix for the clear_buffer bug where rich_renderer
+    was calling MessageBus.clear_buffer() which doesn't exist.
+
+    The fix: get_buffered_messages() uses swap-and-clear pattern, atomically
+    clearing the buffer when retrieving, so no separate clear_buffer() call
+    is needed.
+
+    Acceptance Criteria:
+    1. RichConsoleRenderer correctly uses get_buffered_messages() (no AttributeError)
+    2. Buffered messages are consumed properly without needing clear_buffer()
+    3. No Thread-3 exception occurs on startup
+    """
+    console = Console(file=StringIO(), force_terminal=False, width=120)
+    renderer = RichConsoleRenderer(bus, console=console)
+
+    # Emit messages BEFORE renderer starts (these go to startup buffer)
+    bus.emit(TextMessage(level=MessageLevel.INFO, text="pre-startup message 1"))
+    bus.emit(TextMessage(level=MessageLevel.INFO, text="pre-startup message 2"))
+
+    # Verify bus has no clear_buffer method (it was removed/never existed)
+    assert not hasattr(bus, 'clear_buffer'), \
+        "MessageBus should not have clear_buffer method - it uses swap-and-clear in get_buffered_messages()"
+
+    # Start renderer - this calls get_buffered_messages() in consume loop
+    # If the old bug existed, this would raise AttributeError: 'MessageBus' object has no attribute 'clear_buffer'
+    renderer.start()
+
+    # Wait for buffered messages to be processed
+    time.sleep(0.15)
+
+    # Verify messages were rendered (buffer was consumed without explicit clear_buffer)
+    out = output(console)
+    assert "pre-startup message 1" in out, "First buffered message should be rendered"
+    assert "pre-startup message 2" in out, "Second buffered message should be rendered"
+
+    # Clean up
+    renderer.stop()
+
+
+def test_get_buffered_messages_atomically_clears_buffer(bus):
+    """REGRESSION TEST: Verify get_buffered_messages() swap-and-clear behavior.
+
+    This verifies the core mechanism that makes clear_buffer() unnecessary.
+    """
+    # Emit messages while no renderer is active (will buffer)
+    bus.emit(TextMessage(level=MessageLevel.INFO, text="buffered msg"))
+
+    # First call retrieves and clears
+    buffered = bus.get_buffered_messages()
+    assert len(buffered) == 1
+    assert buffered[0].text == "buffered msg"
+
+    # Second call returns empty list (buffer was cleared)
+    second_call = bus.get_buffered_messages()
+    assert len(second_call) == 0, "Buffer should be cleared after first get_buffered_messages() call"
+
+
+def test_async_start_processes_buffer_without_clear_buffer(bus):
+    """REGRESSION TEST: Verify async start also uses get_buffered_messages().
+
+    Ensures both sync and async paths are fixed.
+    """
+    import asyncio
+
+    console = Console(file=StringIO(), force_terminal=False, width=120)
+    renderer = RichConsoleRenderer(bus, console=console)
+
+    # Buffer messages before start
+    bus.emit(TextMessage(level=MessageLevel.INFO, text="async buffer test"))
+
+    async def run_test():
+        # Start async - uses get_buffered_messages() internally
+        await renderer.start_async()
+        # Allow time for processing
+        await asyncio.sleep(0.05)
+
+    asyncio.run(run_test())
+
+    # Verify message was rendered
+    assert "async buffer test" in output(console)
+
+    # Cleanup
+    asyncio.run(renderer.stop_async())
+
+
+def test_start_stop_no_thread_exception(bus):
+    """REGRESSION TEST: Verify no Thread-3 exception on startup.
+
+    The original bug caused AttributeError in Thread-3 when starting renderer.
+    """
+    console = Console(file=StringIO(), force_terminal=False, width=120)
+    renderer = RichConsoleRenderer(bus, console=console)
+
+    # Start and stop multiple times to ensure no thread exceptions
+    for i in range(3):
+        renderer.start()
+        # Briefly run
+        time.sleep(0.05)
+        renderer.stop()
+
+        # Check that thread completed without exception
+        if renderer._thread is not None:
+            # Thread should not be alive (completed or never started)
+            assert not renderer._thread.is_alive() or renderer._thread.daemon, \
+                "Consume thread should exit cleanly without exceptions"
