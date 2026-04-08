@@ -10,7 +10,7 @@ only structured data with no formatting hints.
 import os
 import re
 from collections import defaultdict
-from functools import lru_cache
+from functools import cache, lru_cache
 from typing import Protocol, runtime_checkable
 
 from rich.console import Console
