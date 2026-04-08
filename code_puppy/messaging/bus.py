@@ -138,6 +138,44 @@ class MessageBus:
     # Outgoing Messages (Agent → UI)
     # =========================================================================
 
+    def _emit_under_lock(self, message: AnyMessage) -> None:
+        """Internal: emit a message with lock already held.
+
+        This method assumes the caller has already acquired self._lock.
+        It performs the actual message tagging and delivery logic.
+
+        Args:
+            message: The message to emit.
+        """
+        if message.session_id is None and self._current_session_id is not None:
+            message.session_id = self._current_session_id
+
+        # Double-check renderer status (could have changed)
+        if not self._has_active_renderer:
+            self._startup_buffer.append(message)
+            # deque with maxlen handles eviction automatically (O(1))
+            return
+
+        # Thread-safe put: if already on the event loop thread, call
+        # directly to ensure immediate delivery (avoids deferred put that
+        # could cause get_message_nowait to miss the message). For true
+        # cross-thread calls, use call_soon_threadsafe.
+        if self._event_loop is not None:
+            # Fast path: compare thread IDs instead of calling get_running_loop()
+            if threading.current_thread().ident == self._loop_thread_id:
+                # Already on the event loop thread - put directly
+                self._put_to_outgoing(message)
+            else:
+                try:
+                    self._event_loop.call_soon_threadsafe(
+                        self._put_to_outgoing, message
+                    )
+                except RuntimeError:
+                    # Loop closed – fall back to direct put
+                    self._put_to_outgoing(message)
+        else:
+            self._put_to_outgoing(message)
+
     def emit(self, message: AnyMessage) -> None:
         """Emit a message to the UI.
 
@@ -151,7 +189,7 @@ class MessageBus:
         # Lock-free fast path: check if renderer is active without acquiring lock.
         # This avoids lock contention in the common case of emit with no subscribers.
         if not self._renderer_event.is_set():
-            # No active renderer - buffer the message without acquiring lock
+            # No active renderer - buffer the message under lock
             with self._lock:
                 if message.session_id is None and self._current_session_id is not None:
                     message.session_id = self._current_session_id
@@ -161,34 +199,7 @@ class MessageBus:
 
         # Renderer is active - need to acquire lock for session tagging and delivery
         with self._lock:
-            if message.session_id is None and self._current_session_id is not None:
-                message.session_id = self._current_session_id
-
-            # Double-check renderer status (could have changed)
-            if not self._has_active_renderer:
-                self._startup_buffer.append(message)
-                # deque with maxlen handles eviction automatically (O(1))
-                return
-
-            # Thread-safe put: if already on the event loop thread, call
-            # directly to ensure immediate delivery (avoids deferred put that
-            # could cause get_message_nowait to miss the message). For true
-            # cross-thread calls, use call_soon_threadsafe.
-            if self._event_loop is not None:
-                # Fast path: compare thread IDs instead of calling get_running_loop()
-                if threading.current_thread().ident == self._loop_thread_id:
-                    # Already on the event loop thread - put directly
-                    self._put_to_outgoing(message)
-                else:
-                    try:
-                        self._event_loop.call_soon_threadsafe(
-                            self._put_to_outgoing, message
-                        )
-                    except RuntimeError:
-                        # Loop closed – fall back to direct put
-                        self._put_to_outgoing(message)
-            else:
-                self._put_to_outgoing(message)
+            self._emit_under_lock(message)
 
         # Signal the renderer to wake up and check for new messages
         if self._wakeup_callback is not None:
@@ -212,7 +223,25 @@ class MessageBus:
             category: Message category for routing.
         """
         message = TextMessage(level=level, text=text, category=category)
-        self.emit(message)
+
+        # Lock-free fast path: check if renderer is active without acquiring lock
+        if not self._renderer_event.is_set():
+            with self._lock:
+                if message.session_id is None and self._current_session_id is not None:
+                    message.session_id = self._current_session_id
+                self._startup_buffer.append(message)
+            return
+
+        # Renderer is active - single lock acquisition for delivery
+        with self._lock:
+            self._emit_under_lock(message)
+
+        # Signal the renderer to wake up
+        if self._wakeup_callback is not None:
+            try:
+                self._wakeup_callback()
+            except Exception:
+                pass
 
     def emit_info(self, text: str) -> None:
         """Emit an INFO level text message."""
@@ -244,7 +273,25 @@ class MessageBus:
         from .messages import ShellLineMessage
 
         message = ShellLineMessage(line=line, stream=stream)  # type: ignore[arg-type]
-        self.emit(message)
+
+        # Lock-free fast path: check if renderer is active without acquiring lock
+        if not self._renderer_event.is_set():
+            with self._lock:
+                if message.session_id is None and self._current_session_id is not None:
+                    message.session_id = self._current_session_id
+                self._startup_buffer.append(message)
+            return
+
+        # Renderer is active - single lock acquisition for delivery
+        with self._lock:
+            self._emit_under_lock(message)
+
+        # Signal the renderer to wake up
+        if self._wakeup_callback is not None:
+            try:
+                self._wakeup_callback()
+            except Exception:
+                pass
 
     # =========================================================================
     # Internal put helpers (must be called from the event loop thread)
