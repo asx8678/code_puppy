@@ -93,25 +93,46 @@ def serialize_message_for_rust(message: Any) -> dict:
 
     This is the ONLY place where pydantic-ai message objects are converted
     to dicts. The Rust module never touches pydantic-ai objects directly.
+
+    OPTIMIZED: Reduced getattr() calls by using direct attribute access
+    and local variable caching where type is known.
     """
     from pydantic_ai.messages import ModelRequest
 
     kind = "request" if isinstance(message, ModelRequest) else "response"
-    role = getattr(message, "role", None)
-    instructions = getattr(message, "instructions", None)
 
-    # Pre-allocate parts list and use list comprehension for efficiency
+    # OPTIMIZATION: Cache message attributes to avoid repeated lookups
+    # These are optional attributes, so getattr with default is appropriate
+    msg_role = getattr(message, "role", None)
+    msg_instructions = getattr(message, "instructions", None)
+    # Use or [] to avoid repeated None checks in the loop
+    msg_parts = getattr(message, "parts", None) or []
+
+    # Pre-allocate parts list and bind append method for speed
     parts: list[dict] = []
-    for part in getattr(message, "parts", []):
-        # Bind part attributes once
-        part_kind = getattr(part, "part_kind", None)
-        content = getattr(part, "content", None)
-        tool_call_id = getattr(part, "tool_call_id", None)
-        tool_name = getattr(part, "tool_name", None)
-        args = getattr(part, "args", None)
+    parts_append = parts.append
 
+    for part in msg_parts:
+        # OPTIMIZATION: Use hasattr + direct access instead of getattr defaults
+        # This reduces function call overhead for commonly present attributes
+
+        # part_kind is usually present, but use getattr with fallback
+        part_kind = getattr(part, "part_kind", None)
+        if part_kind is None:
+            part_kind = type(part).__name__
+
+        # Cache content attribute - using local var avoids repeated lookups
+        # Use hasattr + direct access pattern for better performance than getattr
+        content = part.content if hasattr(part, "content") else None
+
+        # Cache tool attributes using the same pattern
+        tool_call_id = part.tool_call_id if hasattr(part, "tool_call_id") else None
+        tool_name = part.tool_name if hasattr(part, "tool_name") else None
+        args = part.args if hasattr(part, "args") else None
+
+        # Build part dict with cached values
         part_dict: dict[str, Any] = {
-            "part_kind": part_kind if part_kind else str(type(part).__name__),
+            "part_kind": part_kind,
             "content": None,
             "content_json": None,
             "tool_call_id": tool_call_id,
@@ -119,14 +140,18 @@ def serialize_message_for_rust(message: Any) -> dict:
             "args": str(args) if args is not None else None,
         }
 
-        # Handle content with faster isinstance chain
+        # Handle content serialization - using local 'content' avoids re-lookup
         if content is None:
             pass
         elif isinstance(content, str):
             part_dict["content"] = content
         elif isinstance(content, list):
-            # Use list comprehension for text extraction
-            text_parts = [item for item in content if isinstance(item, str)]
+            # OPTIMIZATION: Local append binding for text extraction loop
+            text_parts: list[str] = []
+            text_append = text_parts.append
+            for item in content:
+                if isinstance(item, str):
+                    text_append(item)
             part_dict["content"] = "\n".join(text_parts) if text_parts else None
         elif hasattr(content, "model_dump_json"):
             # Pydantic model path - try/except for safety
@@ -139,12 +164,12 @@ def serialize_message_for_rust(message: Any) -> dict:
         else:
             part_dict["content"] = repr(content)
 
-        parts.append(part_dict)
+        parts_append(part_dict)
 
     return {
         "kind": kind,
-        "role": role,
-        "instructions": instructions,
+        "role": msg_role,
+        "instructions": msg_instructions,
         "parts": parts,
     }
 

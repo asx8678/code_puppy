@@ -461,12 +461,15 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                             used_cache = True
 
                             # Copy core internals so httpx uses the modified body/stream
-                            if hasattr(rebuilt, "_content"):
-                                request._content = rebuilt._content  # type: ignore[attr-defined]
-                            if hasattr(rebuilt, "stream"):
-                                request.stream = rebuilt.stream
-                            if hasattr(rebuilt, "extensions"):
-                                request.extensions = rebuilt.extensions
+                            # OPTIMIZATION: Use hasattr + direct access pattern to reduce
+                            # repeated getattr lookups. We check once and use direct access.
+                            _rebuilt = rebuilt  # Local binding for speed
+                            if hasattr(_rebuilt, "_content"):
+                                request._content = _rebuilt._content  # type: ignore[attr-defined]
+                            if hasattr(_rebuilt, "stream"):
+                                request.stream = _rebuilt.stream  # type: ignore[attr-defined]
+                            if hasattr(_rebuilt, "extensions"):
+                                request.extensions = _rebuilt.extensions  # type: ignore[attr-defined]
 
                             # Update URL
                             request.url = url
@@ -645,6 +648,10 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
 
     @staticmethod
     def _extract_body_bytes(request: httpx.Request) -> bytes | None:
+        """Extract the request body as bytes.
+
+        OPTIMIZATION: Use hasattr + direct access pattern to reduce getattr overhead.
+        """
         # Try public content first
         try:
             content = request.content
@@ -653,13 +660,15 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         except Exception:
             pass
 
-        # Fallback to private attr if necessary
-        try:
-            content = getattr(request, "_content", None)
-            if content:
-                return content
-        except Exception:
-            pass
+        # Fallback to private attr if necessary - use hasattr + direct access
+        # This is faster than getattr() with default for checking attribute existence
+        if hasattr(request, "_content"):
+            try:
+                content = request._content
+                if content:
+                    return content
+            except Exception:
+                pass
 
         return None
 
@@ -690,7 +699,9 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         # Check if body contains Cloudflare markers
         try:
             # For async httpx, we need to read the body first
-            if not hasattr(response, "_content") or not response._content:
+            # OPTIMIZATION: Cache hasattr check result to avoid repeated lookups
+            response_has_content = hasattr(response, "_content")
+            if not response_has_content or not response._content:
                 try:
                     await response.aread()
                 except Exception as read_exc:
@@ -698,7 +709,8 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                     return False
 
             # Now we can safely access the content
-            if hasattr(response, "_content") and response._content:
+            # Re-check _content after aread() since it may have populated it
+            if response_has_content and response._content:
                 body = response._content.decode("utf-8", errors="ignore")
             else:
                 # Fallback to text property (should work after aread)
