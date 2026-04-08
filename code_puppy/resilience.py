@@ -13,6 +13,7 @@ import inspect
 import logging
 import random
 import time
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Callable, Generic, ParamSpec, TypeVar
@@ -258,6 +259,11 @@ def with_retry_sync(
     Returns:
         Result from successful execution
     """
+    try:
+        asyncio.get_running_loop()
+        warnings.warn("with_retry_sync called from async context - this will block the event loop", stacklevel=2)
+    except RuntimeError:
+        pass  # No running loop, safe to use
     return run_async_sync(with_retry(func, config))
 
 
