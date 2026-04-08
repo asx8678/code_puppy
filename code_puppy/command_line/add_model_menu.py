@@ -16,6 +16,7 @@ try:
     from prompt_toolkit.layout import Dimension, Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -361,7 +362,8 @@ class AddModelMenu:
                 lines.append(
                     (
                         "fg:ansibrightblack",
-                        "  Models from this provider cannot be added.")
+                        "  Models from this provider cannot be added.",
+                    )
                 )
                 lines.append(("", "\n"))
 
@@ -474,21 +476,24 @@ class AddModelMenu:
                     lines.append(
                         (
                             "fg:ansibrightblack",
-                            f"    Input: ${model.cost_input:.6f}/token")
+                            f"    Input: ${model.cost_input:.6f}/token",
+                        )
                     )
                     lines.append(("", "\n"))
                 if model.cost_output is not None:
                     lines.append(
                         (
                             "fg:ansibrightblack",
-                            f"    Output: ${model.cost_output:.6f}/token")
+                            f"    Output: ${model.cost_output:.6f}/token",
+                        )
                     )
                     lines.append(("", "\n"))
                 if model.cost_cache_read is not None:
                     lines.append(
                         (
                             "fg:ansibrightblack",
-                            f"    Cache Read: ${model.cost_cache_read:.6f}/token")
+                            f"    Cache Read: ${model.cost_cache_read:.6f}/token",
+                        )
                     )
                     lines.append(("", "\n"))
             else:
@@ -504,14 +509,16 @@ class AddModelMenu:
                 lines.append(
                     (
                         "fg:ansibrightblack",
-                        f"    Context: {model.context_length:,} tokens")
+                        f"    Context: {model.context_length:,} tokens",
+                    )
                 )
                 lines.append(("", "\n"))
             if model.max_output > 0:
                 lines.append(
                     (
                         "fg:ansibrightblack",
-                        f"    Max Output: {model.max_output:,} tokens")
+                        f"    Max Output: {model.max_output:,} tokens",
+                    )
                 )
                 lines.append(("", "\n"))
 
@@ -525,14 +532,16 @@ class AddModelMenu:
                     lines.append(
                         (
                             "fg:ansibrightblack",
-                            f"    Input: {', '.join(model.input_modalities)}")
+                            f"    Input: {', '.join(model.input_modalities)}",
+                        )
                     )
                     lines.append(("", "\n"))
                 if model.output_modalities:
                     lines.append(
                         (
                             "fg:ansibrightblack",
-                            f"    Output: {', '.join(model.output_modalities)}")
+                            f"    Output: {', '.join(model.output_modalities)}",
+                        )
                     )
                     lines.append(("", "\n"))
 
@@ -852,7 +861,8 @@ class AddModelMenu:
                 16384, context_length // 4
             ),  # Reasonable default based on context
             input_modalities=["text"],
-            output_modalities=["text"])
+            output_modalities=["text"],
+        )
 
     def _prompt_for_custom_model(self) -> tuple[str, int | None]:
         """Prompt user for custom model details.
@@ -1032,10 +1042,8 @@ class AddModelMenu:
 
         layout = Layout(root_container)
         app = Application(
-            layout=layout,
-            key_bindings=kb,
-            full_screen=False,
-            mouse_support=False)
+            layout=layout, key_bindings=kb, full_screen=False, mouse_support=False
+        )
 
         set_awaiting_user_input(True)
 

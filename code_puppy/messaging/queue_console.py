@@ -25,9 +25,8 @@ class QueueConsole:
     """
 
     def __init__(
-        self,
-        queue: MessageQueue | None = None,
-        fallback_console: Console | None = None):
+        self, queue: MessageQueue | None = None, fallback_console: Console | None = None
+    ):
         self.queue = queue or get_global_queue()
         self.fallback_console = fallback_console or Console()
 
@@ -38,7 +37,8 @@ class QueueConsole:
         end: str = "\n",
         style: str | None = None,
         highlight: bool = True,
-        **kwargs):
+        **kwargs,
+    ):
         """Print values to the message queue."""
         # Handle Rich objects properly
         if len(values) == 1 and hasattr(values[0], "__rich_console__"):
@@ -88,7 +88,8 @@ class QueueConsole:
         show_locals: bool = False,
         indent_guides: bool = True,
         suppress: tuple = (),
-        max_frames: int = 100):
+        max_frames: int = 100,
+    ):
         """Print exception information to the queue."""
         # Get the exception traceback
         exc_text = traceback.format_exc()
@@ -98,7 +99,8 @@ class QueueConsole:
             MessageType.ERROR,
             f"Exception:\n{exc_text}",
             exception=True,
-            show_locals=show_locals)
+            show_locals=show_locals,
+        )
 
     def log(
         self,
@@ -110,7 +112,8 @@ class QueueConsole:
         emoji: bool | None = None,
         markup: bool | None = None,
         highlight: bool | None = None,
-        log_locals: bool = False):
+        log_locals: bool = False,
+    ):
         """Log a message (similar to print but with logging semantics)."""
         content = sep.join(str(v) for v in values) + end
 
@@ -194,7 +197,8 @@ class QueueConsole:
             MessageType.SYSTEM,
             f"─── {title} ───" if title else "─" * 40,
             rule=True,
-            style=style)
+            style=style,
+        )
 
     def status(self, status: str, *, spinner: str = "dots"):
         """Show a status message (simplified)."""

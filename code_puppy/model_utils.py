@@ -70,7 +70,8 @@ def prepare_prompt_for_model(
     model_name: str,
     system_prompt: str,
     user_prompt: str,
-    prepend_system_to_user: bool = True) -> PreparedPrompt:
+    prepend_system_to_user: bool = True,
+) -> PreparedPrompt:
     """Prepare instructions and prompt for a specific model.
 
     This function handles model-specific system prompt requirements. Plugins can
@@ -125,7 +126,8 @@ def prepare_prompt_for_model(
         return PreparedPrompt(
             instructions=CLAUDE_CODE_INSTRUCTIONS,
             user_prompt=modified_prompt,
-            is_claude_code=True)
+            is_claude_code=True,
+        )
 
     # Handle Antigravity models
     if is_antigravity_model(model_name):
@@ -143,12 +145,12 @@ def prepare_prompt_for_model(
         return PreparedPrompt(
             instructions=_load_antigravity_prompt(),
             user_prompt=modified_prompt,
-            is_claude_code=False)
+            is_claude_code=False,
+        )
 
     return PreparedPrompt(
-        instructions=system_prompt,
-        user_prompt=user_prompt,
-        is_claude_code=False)
+        instructions=system_prompt, user_prompt=user_prompt, is_claude_code=False
+    )
 
 
 def get_claude_code_instructions() -> str:

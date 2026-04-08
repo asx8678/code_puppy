@@ -50,6 +50,9 @@ CLIPBOARD_RATE_LIMIT_SECONDS: float = 0.5  # SEC-CLIP-004: Max 2 captures per se
 # Rate limiting state
 _last_clipboard_capture: float = 0.0
 
+# Clipboard validation limits
+MAX_CLIPBOARD_CONTENT_BYTES = 1024 * 1024  # 1MB
+
 
 def _safe_open_image(image_bytes: bytes) -> "Image.Image" | None:
     """Safely open and verify an image from bytes.
@@ -87,6 +90,31 @@ def _safe_open_image(image_bytes: bytes) -> "Image.Image" | None:
         return None
 
 
+def _validate_clipboard_content(content: bytes | None) -> bytes | None:
+    """Validate clipboard content before processing.
+
+    Rejects content that is excessively long (> 1MB) or contains null bytes,
+    which could indicate corrupted or malicious data.
+
+    Args:
+        content: Raw clipboard content bytes, or None.
+
+    Returns:
+        Content if valid, None if validation fails.
+    """
+    if content is None:
+        return None
+    if len(content) > MAX_CLIPBOARD_CONTENT_BYTES:
+        logger.warning(
+            f"Clipboard content too large ({len(content) / 1024 / 1024:.2f}MB), rejecting"
+        )
+        return None
+    if b"\x00" in content:
+        logger.warning("Clipboard content contains null bytes, rejecting")
+        return None
+    return content
+
+
 def _check_linux_clipboard_tool() -> str | None:
     """Check which Linux clipboard tool is available.
 
@@ -95,20 +123,14 @@ def _check_linux_clipboard_tool() -> str | None:
     """
     # Check for wl-paste first (Wayland)
     try:
-        subprocess.run(
-            ["wl-paste", "--version"],
-            capture_output=True,
-            timeout=5)
+        subprocess.run(["wl-paste", "--version"], capture_output=True, timeout=5)
         return "wl-paste"
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
     # Check for xclip (X11)
     try:
-        subprocess.run(
-            ["xclip", "-version"],
-            capture_output=True,
-            timeout=5)
+        subprocess.run(["xclip", "-version"], capture_output=True, timeout=5)
         return "xclip"
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
@@ -135,19 +157,19 @@ def _get_linux_clipboard_image() -> bytes | None:
         if tool == "wl-paste":
             # wl-paste for Wayland
             result = subprocess.run(
-                ["wl-paste", "--type", "image/png"],
-                capture_output=True,
-                timeout=10)
+                ["wl-paste", "--type", "image/png"], capture_output=True, timeout=10
+            )
             if result.returncode == 0 and result.stdout:
-                return result.stdout
+                return _validate_clipboard_content(result.stdout)
         elif tool == "xclip":
             # xclip for X11
             result = subprocess.run(
                 ["xclip", "-selection", "clipboard", "-t", "image/png", "-o"],
                 capture_output=True,
-                timeout=10)
+                timeout=10,
+            )
             if result.returncode == 0 and result.stdout:
-                return result.stdout
+                return _validate_clipboard_content(result.stdout)
     except subprocess.TimeoutExpired:
         logger.warning(f"Timeout reading clipboard with {tool}")
     except Exception as e:
@@ -230,14 +252,16 @@ def has_image_in_clipboard() -> bool:
                     ["wl-paste", "--list-types"],
                     capture_output=True,
                     timeout=5,
-                    text=True)
+                    text=True,
+                )
                 return "image/png" in result.stdout or "image/" in result.stdout
             elif tool == "xclip":
                 result = subprocess.run(
                     ["xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"],
                     capture_output=True,
                     timeout=5,
-                    text=True)
+                    text=True,
+                )
                 return "image/png" in result.stdout or "image/" in result.stdout
         except (subprocess.TimeoutExpired, Exception):
             return False

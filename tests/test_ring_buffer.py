@@ -538,7 +538,7 @@ class TestMixedOperations:
         buf.push("b")
         buf.push("c")
         buf.unshift("a")  # [a, b, c]
-        buf.push("d")     # [a, b, c, d] – full
+        buf.push("d")  # [a, b, c, d] – full
         assert buf.shift() == "a"
         assert buf.pop() == "d"
         assert list(buf) == ["b", "c"]

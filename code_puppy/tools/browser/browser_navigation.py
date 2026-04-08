@@ -13,9 +13,7 @@ from .browser_manager import get_session_browser_manager
 async def navigate_to_url(url: str) -> dict[str, Any]:
     """Navigate to a specific URL."""
     group_id = generate_group_id("browser_navigate", url)
-    emit_info(
-        f"BROWSER NAVIGATE 🌐 {url}",
-        message_group=group_id)
+    emit_info(f"BROWSER NAVIGATE 🌐 {url}", message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -42,9 +40,7 @@ async def navigate_to_url(url: str) -> dict[str, Any]:
 async def get_page_info() -> dict[str, Any]:
     """Get current page information."""
     group_id = generate_group_id("browser_get_page_info")
-    emit_info(
-        "BROWSER GET PAGE INFO 📌",
-        message_group=group_id)
+    emit_info("BROWSER GET PAGE INFO 📌", message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -64,9 +60,7 @@ async def get_page_info() -> dict[str, Any]:
 async def go_back() -> dict[str, Any]:
     """Navigate back in browser history."""
     group_id = generate_group_id("browser_go_back")
-    emit_info(
-        "BROWSER GO BACK ⬅️",
-        message_group=group_id)
+    emit_info("BROWSER GO BACK ⬅️", message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -85,9 +79,7 @@ async def go_back() -> dict[str, Any]:
 async def go_forward() -> dict[str, Any]:
     """Navigate forward in browser history."""
     group_id = generate_group_id("browser_go_forward")
-    emit_info(
-        "BROWSER GO FORWARD ➡️",
-        message_group=group_id)
+    emit_info("BROWSER GO FORWARD ➡️", message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -106,9 +98,7 @@ async def go_forward() -> dict[str, Any]:
 async def reload_page(wait_until: str = "domcontentloaded") -> dict[str, Any]:
     """Reload the current page."""
     group_id = generate_group_id("browser_reload", wait_until)
-    emit_info(
-        f"BROWSER RELOAD 🔄 wait_until={wait_until}",
-        message_group=group_id)
+    emit_info(f"BROWSER RELOAD 🔄 wait_until={wait_until}", message_group=group_id)
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()
@@ -131,7 +121,8 @@ async def wait_for_load_state(
     group_id = generate_group_id("browser_wait_for_load", f"{state}_{timeout}")
     emit_info(
         f"BROWSER WAIT FOR LOAD ⏱️ state={state} timeout={timeout}ms",
-        message_group=group_id)
+        message_group=group_id,
+    )
     try:
         browser_manager = get_session_browser_manager()
         page = await browser_manager.get_current_page()

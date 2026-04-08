@@ -104,7 +104,8 @@ class MCPCommandHandler(MCPCommandBase):
             except ValueError as e:
                 emit_info(
                     Text.from_markup(f"[red]Invalid command syntax: {e}[/red]"),
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 return True
 
             if not args:
@@ -124,7 +125,8 @@ class MCPCommandHandler(MCPCommandBase):
                     Text.from_markup(
                         f"[yellow]Unknown MCP subcommand: {subcommand}[/yellow]"
                     ),
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 emit_info(
                     "Type '/mcp help' for available commands", message_group=group_id
                 )

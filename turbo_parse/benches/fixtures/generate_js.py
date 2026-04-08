@@ -7,7 +7,7 @@ from pathlib import Path
 def generate_function(index: int, complexity: str = "medium") -> str:
     """Generate a JavaScript function with realistic code."""
     if complexity == "simple":
-        return f'''/**
+        return f"""/**
  * Simple function {index}
  * @param {{number}} x - Input value
  * @returns {{number}} - Result
@@ -16,9 +16,9 @@ function func_{index}(x) {{
     return x * {index};
 }}
 
-'''
+"""
     elif complexity == "medium":
-        return f'''/**
+        return f"""/**
  * Data processor {index}
  * @param {{Array<Object>}} data - Data to process
  * @param {{Function}} filterFn - Filter function
@@ -46,9 +46,9 @@ function processData_{index}(data, filterFn) {{
     return results;
 }}
 
-'''
+"""
     else:  # complex
-        return f'''/**
+        return f"""/**
  * DataProcessor class {index}
  */
 class DataProcessor{index} {{
@@ -179,12 +179,12 @@ class DataProcessor{index} {{
     }}
 }}
 
-'''
+"""
 
 
 def generate_imports() -> str:
     """Generate realistic JavaScript imports."""
-    return '''/**
+    return """/**
  * Large JavaScript module for benchmark testing
  * @module benchmark-sample
  */
@@ -225,22 +225,22 @@ const DEFAULT_CONFIG = {{
 
 module.exports = {{ VERSION, DEFAULT_CONFIG }};
 
-'''
+"""
 
 
 def generate_fixture(target_lines: int, output_path: Path) -> int:
     """Generate a JavaScript file with approximately target_lines lines of code."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     lines_written = 0
     functions_written = 0
-    
+
     with open(output_path, "w") as f:
         # Write imports (approx 30 lines)
         imports = generate_imports()
         f.write(imports)
         lines_written += len(imports.split("\n"))
-        
+
         # Mix of function complexities
         while lines_written < target_lines:
             # Vary complexity based on progress
@@ -250,15 +250,15 @@ def generate_fixture(target_lines: int, output_path: Path) -> int:
                 complexity = "medium"
             else:
                 complexity = "complex"
-            
+
             func_code = generate_function(functions_written, complexity)
             f.write(func_code)
             lines_written += len(func_code.split("\n"))
             functions_written += 1
-            
+
             # Add occasional utilities and constants
             if functions_written % 15 == 0:
-                util_code = f'''// Utility set {{functions_written // 15}}
+                util_code = f"""// Utility set {{functions_written // 15}}
 const CONSTANTS_{functions_written // 15} = {{
     MAX_SIZE: {functions_written * 100},
     TIMEOUT: {functions_written * 1000},
@@ -272,14 +272,14 @@ const CONSTANTS_{functions_written // 15} = {{
  */
 const util_{functions_written // 15} = (arr) => arr.map(x => x * 2).filter(x => x > 0);
 
-'''
+"""
                 f.write(util_code)
                 lines_written += len(util_code.split("\n"))
-    
+
     # Count actual lines
     with open(output_path) as f:
         actual_lines = len(f.readlines())
-    
+
     print(f"Generated {output_path}: {actual_lines} lines (target: {target_lines})")
     return actual_lines
 
@@ -287,16 +287,16 @@ const util_{functions_written // 15} = (arr) => arr.map(x => x * 2).filter(x => 
 def main():
     """Generate all JavaScript fixtures."""
     base_dir = Path(__file__).parent / "javascript"
-    
+
     # Generate 1k LOC
     generate_fixture(1000, base_dir / "sample_1k.js")
-    
+
     # Generate 10k LOC
     generate_fixture(10000, base_dir / "sample_10k.js")
-    
+
     # Generate 100k LOC
     generate_fixture(100000, base_dir / "sample_100k.js")
-    
+
     print("JavaScript fixtures generated successfully!")
 
 

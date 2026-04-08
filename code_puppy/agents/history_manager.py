@@ -15,7 +15,8 @@ from pydantic_ai.messages import (
     TextPart,
     ThinkingPart,
     ToolCallPart,
-    ToolReturnPart)
+    ToolReturnPart,
+)
 
 
 class MessageHistoryMixin:
@@ -167,7 +168,5 @@ class MessageHistoryMixin:
         if isinstance(last_msg, ModelResponse):
             # Add a placeholder user message to satisfy API requirement
             messages = list(messages)  # Make a copy
-            messages.append(
-                ModelRequest(parts=[TextPart(content="(continuing...)")])
-            )
+            messages.append(ModelRequest(parts=[TextPart(content="(continuing...)")]))
         return messages

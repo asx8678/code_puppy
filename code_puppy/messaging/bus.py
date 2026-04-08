@@ -42,7 +42,8 @@ from .commands import (
     AnyCommand,
     ConfirmationResponse,
     SelectionResponse,
-    UserInputResponse)
+    UserInputResponse,
+)
 from .messages import (
     AnyMessage,
     ConfirmationRequest,
@@ -50,7 +51,8 @@ from .messages import (
     MessageLevel,
     SelectionRequest,
     TextMessage,
-    UserInputRequest)
+    UserInputRequest,
+)
 
 
 # Default timeout in seconds for user-facing request_* methods.
@@ -200,7 +202,8 @@ class MessageBus:
         self,
         level: MessageLevel,
         text: str,
-        category: MessageCategory = MessageCategory.SYSTEM) -> None:
+        category: MessageCategory = MessageCategory.SYSTEM,
+    ) -> None:
         """Emit a text message with the specified level.
 
         Args:
@@ -301,10 +304,8 @@ class MessageBus:
     # =========================================================================
 
     async def request_input(
-        self,
-        prompt_text: str,
-        default: str | None = None,
-        input_type: str = "text") -> str:
+        self, prompt_text: str, default: str | None = None, input_type: str = "text"
+    ) -> str:
         """Request text input from the user.
 
         Emits a UserInputRequest and blocks until the UI provides a response.
@@ -357,7 +358,8 @@ class MessageBus:
         title: str,
         description: str,
         options: list[str | None] = None,
-        allow_feedback: bool = False) -> tuple[bool, str | None]:
+        allow_feedback: bool = False,
+    ) -> tuple[bool, str | None]:
         """Request confirmation from the user.
 
         Emits a ConfirmationRequest and blocks until the UI provides a response.
@@ -387,7 +389,8 @@ class MessageBus:
             title=title,
             description=description,
             options=options or ["Yes", "No"],
-            allow_feedback=allow_feedback)
+            allow_feedback=allow_feedback,
+        )
         self.emit(request)
 
         try:
@@ -401,10 +404,8 @@ class MessageBus:
                 self._pending_requests.pop(prompt_id, None)
 
     async def request_selection(
-        self,
-        prompt_text: str,
-        options: list[str],
-        allow_cancel: bool = True) -> tuple[int, str]:
+        self, prompt_text: str, options: list[str], allow_cancel: bool = True
+    ) -> tuple[int, str]:
         """Request the user to select from a list of options.
 
         Emits a SelectionRequest and blocks until the UI provides a response.
@@ -433,7 +434,8 @@ class MessageBus:
             prompt_id=prompt_id,
             prompt_text=prompt_text,
             options=options,
-            allow_cancel=allow_cancel)
+            allow_cancel=allow_cancel,
+        )
         self.emit(request)
 
         try:

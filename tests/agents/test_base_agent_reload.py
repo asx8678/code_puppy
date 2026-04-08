@@ -141,10 +141,12 @@ class TestBaseAgentReload:
             # and would append content after the puppy rules.
             patch(
                 "code_puppy.model_utils.prepare_prompt_for_model",
-                side_effect=lambda model_name, system_prompt, user_prompt, **kw: PreparedPrompt(
-                    instructions=system_prompt,
-                    user_prompt=user_prompt,
-                    is_claude_code=False,
+                side_effect=lambda model_name, system_prompt, user_prompt, **kw: (
+                    PreparedPrompt(
+                        instructions=system_prompt,
+                        user_prompt=user_prompt,
+                        is_claude_code=False,
+                    )
                 ),
             ),
         ):

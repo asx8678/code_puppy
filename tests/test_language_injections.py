@@ -13,7 +13,7 @@ import sys
 import os
 
 # Add the turbo_parse module to path if needed
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'turbo_parse'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "turbo_parse"))
 
 
 try:
@@ -39,14 +39,16 @@ def get_users(cursor, user_id):
     return cursor.fetchall()
 '''
         result = turbo_parse.get_injections(source, "python")
-        
+
         assert result["success"], f"Detection failed: {result.get('errors', [])}"
         assert result["parent_language"] == "python"
-        
+
         # Should detect at least one SQL injection
-        sql_injections = [i for i in result["injections"] if i["injected_language"] == "sql"]
+        sql_injections = [
+            i for i in result["injections"] if i["injected_language"] == "sql"
+        ]
         assert len(sql_injections) > 0, "Should detect SQL injection"
-        
+
         # Check the detected SQL content
         sql = sql_injections[0]
         assert "SELECT" in sql["content"]
@@ -63,10 +65,12 @@ VALUES (%s, %s, NOW())
 cursor.execute(sql)
 '''
         result = turbo_parse.get_injections(source, "python")
-        
+
         assert result["success"]
-        
-        sql_injections = [i for i in result["injections"] if i["injected_language"] == "sql"]
+
+        sql_injections = [
+            i for i in result["injections"] if i["injected_language"] == "sql"
+        ]
         assert len(sql_injections) > 0
         assert "INSERT" in sql_injections[0]["content"]
 
@@ -80,10 +84,12 @@ WHERE id = %s
 """
 '''
         result = turbo_parse.get_injections(source, "python")
-        
+
         assert result["success"]
-        
-        sql_injections = [i for i in result["injections"] if i["injected_language"] == "sql"]
+
+        sql_injections = [
+            i for i in result["injections"] if i["injected_language"] == "sql"
+        ]
         assert len(sql_injections) > 0
         assert "UPDATE" in sql_injections[0]["content"]
 
@@ -98,10 +104,12 @@ html_content = """
 """
 '''
         result = turbo_parse.get_injections(source, "python")
-        
+
         assert result["success"]
-        
-        html_injections = [i for i in result["injections"] if i["injected_language"] == "html"]
+
+        html_injections = [
+            i for i in result["injections"] if i["injected_language"] == "html"
+        ]
         # HTML detection might depend on heuristics
         # Just verify the function does not crash
 
@@ -117,7 +125,7 @@ json_data = """
 """
 '''
         result = turbo_parse.get_injections(source, "python")
-        
+
         assert result["success"]
         # JSON detection is heuristic-based
 
@@ -145,12 +153,14 @@ defmodule MyAppWeb.UserComponent do
 end
 '''
         result = turbo_parse.get_injections(source, "elixir")
-        
+
         assert result["success"], f"Detection failed: {result.get('errors', [])}"
         assert result["parent_language"] == "elixir"
-        
+
         # Should detect the HEEx template
-        heex_injections = [i for i in result["injections"] if i["injected_language"] == "heex"]
+        heex_injections = [
+            i for i in result["injections"] if i["injected_language"] == "heex"
+        ]
         assert len(heex_injections) > 0, "Should detect HEEx injection"
 
     def test_detect_sql_in_elixir(self):
@@ -172,10 +182,12 @@ defmodule MyApp.Users do
 end
 '''
         result = turbo_parse.get_injections(source, "elixir")
-        
+
         assert result["success"]
-        
-        sql_injections = [i for i in result["injections"] if i["injected_language"] == "sql"]
+
+        sql_injections = [
+            i for i in result["injections"] if i["injected_language"] == "sql"
+        ]
         assert len(sql_injections) > 0, "Should detect SQL in Elixir"
 
 
@@ -207,13 +219,17 @@ html_template = """
 """
 '''
         result = turbo_parse.get_injections(source, "python")
-        
+
         assert result["success"]
-        
+
         # Should detect both HTML and JavaScript
-        html_injections = [i for i in result["injections"] if i["injected_language"] == "html"]
-        js_injections = [i for i in result["injections"] if i["injected_language"] == "javascript"]
-        
+        html_injections = [
+            i for i in result["injections"] if i["injected_language"] == "html"
+        ]
+        js_injections = [
+            i for i in result["injections"] if i["injected_language"] == "javascript"
+        ]
+
         # HTML should always be detected
         assert len(html_injections) > 0 or len(result["injections"]) > 0
 
@@ -240,7 +256,7 @@ html_content = """
 """
 '''
         result = turbo_parse.get_injections(source, "python")
-        
+
         assert result["success"]
 
 
@@ -249,7 +265,7 @@ class TestInjectionParsing:
 
     def test_parse_detected_sql_injection(self):
         """Test parsing a detected SQL injection with actual grammar."""
-        # Note: SQL is not in our supported languages yet, 
+        # Note: SQL is not in our supported languages yet,
         # so this tests the error handling path
         source = '''
 query = """
@@ -257,10 +273,10 @@ SELECT * FROM users
 """
 '''
         detection = turbo_parse.get_injections(source, "python")
-        
+
         # Parse injections - SQL will likely not be supported
         parsed = turbo_parse.parse_injections_py(detection)
-        
+
         assert "parsed_injections" in parsed
         assert "total_time_ms" in parsed
 
@@ -274,10 +290,10 @@ def helper():
 """
 '''
         detection = turbo_parse.get_injections(source, "python")
-        
+
         # If any Python code was detected, verify parsing
         parsed = turbo_parse.parse_injections_py(detection)
-        
+
         assert "parent_language" in parsed
         assert "parsed_injections" in parsed
 
@@ -298,9 +314,9 @@ def fetch_users(cursor):
     cursor.execute(query)
     return cursor.fetchall()
 ''')
-        
+
         result = turbo_parse.get_injections_from_file(str(py_file))
-        
+
         assert result["success"]
         assert result["parent_language"] == "python"
 
@@ -318,9 +334,9 @@ defmodule MyApp.Templates do
   end
 end
 ''')
-        
+
         result = turbo_parse.get_injections_from_file(str(ex_file))
-        
+
         assert result["success"]
         assert result["parent_language"] == "elixir"
 
@@ -331,14 +347,14 @@ class TestErrorHandling:
     def test_empty_source(self):
         """Test handling empty source code."""
         result = turbo_parse.get_injections("", "python")
-        
+
         assert result["success"]
         assert len(result["injections"]) == 0
 
     def test_unsupported_language(self):
         """Test handling unsupported languages gracefully."""
         result = turbo_parse.get_injections("some code", "unsupported_lang")
-        
+
         # Should succeed but return empty
         assert result["success"]
         assert len(result["injections"]) == 0
@@ -346,7 +362,7 @@ class TestErrorHandling:
     def test_nonexistent_file(self):
         """Test error handling for nonexistent file."""
         result = turbo_parse.get_injections_from_file("/nonexistent/path/file.py")
-        
+
         assert not result["success"]
         assert len(result["errors"]) > 0
         assert "Failed to read file" in result["errors"][0]
@@ -361,13 +377,13 @@ class TestInjectionRange:
         # InjectionRange should be accessible as a Python class
         range_obj = turbo_parse.InjectionRange(
             "python",  # parent_language
-            "sql",     # injected_language
-            10,        # start_byte
-            50,        # end_byte
+            "sql",  # injected_language
+            10,  # start_byte
+            50,  # end_byte
             "SELECT * FROM users",  # content
-            "string"   # node_kind
+            "string",  # node_kind
         )
-        
+
         assert range_obj.parent_language == "python"
         assert range_obj.injected_language == "sql"
         assert range_obj.start_byte == 10
@@ -383,14 +399,14 @@ class TestLanguageAliases:
         """Test 'py' alias works for injection detection."""
         source = 'query = """SELECT 1"""'
         result = turbo_parse.get_injections(source, "py")
-        
+
         assert result["parent_language"] == "python"
 
     def test_javascript_alias_js(self):
         """Test 'js' alias works for injection detection."""
-        source = 'var x = 1;'
+        source = "var x = 1;"
         result = turbo_parse.get_injections(source, "js")
-        
+
         assert result["parent_language"] == "javascript"
 
 

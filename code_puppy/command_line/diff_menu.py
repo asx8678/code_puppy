@@ -16,6 +16,7 @@ try:
     from prompt_toolkit.layout import Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -51,7 +52,8 @@ LANGUAGE_SAMPLES = {
 -        'discount': discount,
 -        'tax': tax,
 -        'total': final_total
--    }"""),
+-    }""",
+    ),
     "javascript": (
         "app.js",
         """--- a/app.js
@@ -73,7 +75,8 @@ LANGUAGE_SAMPLES = {
 +        console.error('Failed to fetch user:', error);
 +        throw error;
 +    }
- }"""),
+ }""",
+    ),
     "typescript": (
         "service.ts",
         """--- a/service.ts
@@ -95,7 +98,8 @@ LANGUAGE_SAMPLES = {
 -    deleteUser(id: number) {
 -        return this.http.delete(`/users/${id}`);
 -    }
- }"""),
+ }""",
+    ),
     "rust": (
         "main.rs",
         """--- a/main.rs
@@ -115,7 +119,8 @@ LANGUAGE_SAMPLES = {
      }
 -    total
 +    calculate_sum(numbers) as f64 / numbers.len() as f64
- }"""),
+ }""",
+    ),
     "go": (
         "handler.go",
         """--- a/handler.go
@@ -138,7 +143,8 @@ LANGUAGE_SAMPLES = {
 -    return map[string]interface{}{"status": "ok"}
 +func getData() (map[string]interface{}, error) {
 +    return map[string]interface{}{"status": "ok"}, nil
- }"""),
+ }""",
+    ),
     "java": (
         "Calculator.java",
         """--- a/Calculator.java
@@ -160,7 +166,8 @@ LANGUAGE_SAMPLES = {
 +        }
 +        return calculateTotal(prices) / prices.size();
      }
- }"""),
+ }""",
+    ),
     "ruby": (
         "calculator.rb",
         """--- a/calculator.rb
@@ -180,7 +187,8 @@ LANGUAGE_SAMPLES = {
 +    
 +    calculate_total(items) / items.size.to_f
    end
- end"""),
+ end""",
+    ),
     "csharp": (
         "Calculator.cs",
         """--- a/Calculator.cs
@@ -203,7 +211,8 @@ LANGUAGE_SAMPLES = {
 +        var priceList = prices.ToList();
 +        return priceList.Any() ? priceList.Average() : 0m;
      }
- }"""),
+ }""",
+    ),
     "php": (
         "Calculator.php",
         """--- a/Calculator.php
@@ -225,7 +234,8 @@ LANGUAGE_SAMPLES = {
 +        }
 +        return $this->calculateTotal($items) / count($items);
      }
- }"""),
+ }""",
+    ),
     "html": (
         "index.html",
         """--- a/index.html
@@ -241,7 +251,8 @@ LANGUAGE_SAMPLES = {
 +            <a href="#about">About</a>
 +        </nav>
 +    </header>
- </div>"""),
+ </div>""",
+    ),
     "css": (
         "styles.css",
         """--- a/styles.css
@@ -259,7 +270,8 @@ LANGUAGE_SAMPLES = {
 +    display: flex;
 +    justify-content: space-between;
 +    align-items: center;
- }"""),
+ }""",
+    ),
     "json": (
         "config.json",
         """--- a/config.json
@@ -273,7 +285,8 @@ LANGUAGE_SAMPLES = {
 +    "description": "An awesome application",
 +    "author": "Code Puppy",
 +    "license": "MIT"
- }"""),
+ }""",
+    ),
     "yaml": (
         "config.yml",
         """--- a/config.yml
@@ -287,7 +300,8 @@ LANGUAGE_SAMPLES = {
 +  
 +database:
 +  host: localhost
-+  port: 5432"""),
++  port: 5432""",
+    ),
     "bash": (
         "deploy.sh",
         """--- a/deploy.sh
@@ -301,7 +315,8 @@ LANGUAGE_SAMPLES = {
 +echo \"Starting deployment...\"
 +npm run build --production
 +npm run test
-+echo \"Deployment complete!\""""),
++echo \"Deployment complete!\"""",
+    ),
     "sql": (
         "schema.sql",
         """--- a/schema.sql
@@ -315,7 +330,8 @@ LANGUAGE_SAMPLES = {
 +    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
  );
 +
-+CREATE INDEX idx_users_email ON users(email);"""),
++CREATE INDEX idx_users_email ON users(email);""",
+    ),
 }
 
 # Get all supported languages in a consistent order
@@ -343,9 +359,7 @@ class DiffConfiguration:
 
     def __init__(self):
         """Initialize configuration from current settings."""
-        from code_puppy.config import (
-            get_diff_addition_color,
-            get_diff_deletion_color)
+        from code_puppy.config import get_diff_addition_color, get_diff_deletion_color
 
         self.current_add_color = get_diff_addition_color()
         self.current_del_color = get_diff_deletion_color()
@@ -421,7 +435,8 @@ async def interactive_diff_picker() -> dict | None:
                     choices,
                     dummy_update,
                     get_preview=get_main_preview,
-                    config=config)
+                    config=config,
+                )
             except KeyboardInterrupt:
                 break
 
@@ -463,7 +478,8 @@ async def _split_panel_selector(
     choices: list[str],
     on_change: Callable[[str], None],
     get_preview: Callable[[], ANSI],
-    config: DiffConfiguration | None = None) -> str | None:
+    config: DiffConfiguration | None = None,
+) -> str | None:
     """Split-panel selector with menu on left and live preview on right.
 
     Supports left/right arrow navigation through languages if config is provided.
@@ -561,11 +577,10 @@ async def _split_panel_selector(
 
     # Create split layout with left (selector) and right (preview) panels
     left_panel = Window(
-        content=FormattedTextControl(lambda: get_left_panel_text()),
-        width=50)
+        content=FormattedTextControl(lambda: get_left_panel_text()), width=50
+    )
 
-    right_panel = Window(
-        content=FormattedTextControl(lambda: get_right_panel_text()))
+    right_panel = Window(content=FormattedTextControl(lambda: get_right_panel_text()))
 
     # Create vertical split (side-by-side panels)
     root_container = VSplit(
@@ -748,7 +763,8 @@ def _get_preview_text_for_prompt_toolkit(config: DiffConfiguration) -> ANSI:
         get_diff_addition_color,
         get_diff_deletion_color,
         set_diff_addition_color,
-        set_diff_deletion_color)
+        set_diff_deletion_color,
+    )
 
     # Save original values
     original_add_color = get_diff_addition_color()
@@ -836,7 +852,8 @@ async def _handle_color_menu(config: DiffConfiguration, color_type: str) -> None
             choices,
             update_preview,
             get_preview=get_preview_header,
-            config=config)
+            config=config,
+        )
     except KeyboardInterrupt:
         # Restore original color on cancel
         if color_type == "additions":

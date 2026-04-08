@@ -27,13 +27,17 @@ class TestOnPreToolCall:
 
     def test_ignores_non_turbo_tools_list_files(self):
         """Test that _on_pre_tool_call ignores non-turbo tools like list_files."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             _on_pre_tool_call("list_files", {"directory": "."})
             mock_emit.assert_not_called()
 
     def test_ignores_non_turbo_tools_other_tools(self):
         """Test that _on_pre_tool_call ignores other non-turbo tools."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             _on_pre_tool_call("some_other_tool", {"arg": "value"})
             mock_emit.assert_not_called()
 
@@ -52,7 +56,9 @@ class TestOnPreToolCall:
             ],
         }
 
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             _on_pre_tool_call("turbo_execute", {"plan_json": json.dumps(plan_data)})
 
             # Should be called twice: once for banner, once for summary
@@ -74,11 +80,17 @@ class TestOnPreToolCall:
             "operations": [
                 {"type": "list_files", "args": {"directory": "src"}, "priority": 1},
                 {"type": "grep", "args": {"search_string": "def "}, "priority": 2},
-                {"type": "read_files", "args": {"file_paths": ["a.py", "b.py"]}, "priority": 3},
+                {
+                    "type": "read_files",
+                    "args": {"file_paths": ["a.py", "b.py"]},
+                    "priority": 3,
+                },
             ],
         }
 
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             _on_pre_tool_call("turbo_execute", {"plan_json": json.dumps(plan_data)})
 
             assert mock_emit.call_count == 2
@@ -100,7 +112,9 @@ class TestOnPreToolCall:
             "operations": [],
         }
 
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             _on_pre_tool_call("turbo_execute", {"plan_json": json.dumps(plan_data)})
 
             assert mock_emit.call_count == 2
@@ -113,8 +127,14 @@ class TestOnPostToolCall:
 
     def test_ignores_non_turbo_tools(self):
         """Test that _on_post_tool_call ignores non-turbo tools."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_success") as mock_success, \
-             patch("code_puppy.plugins.turbo_executor.notifications.emit_warning") as mock_warning:
+        with (
+            patch(
+                "code_puppy.plugins.turbo_executor.notifications.emit_success"
+            ) as mock_success,
+            patch(
+                "code_puppy.plugins.turbo_executor.notifications.emit_warning"
+            ) as mock_warning,
+        ):
             _on_post_tool_call("list_files", {}, {"status": "success"}, 100.0)
             mock_success.assert_not_called()
             mock_warning.assert_not_called()
@@ -133,7 +153,9 @@ class TestOnPostToolCall:
             ],
         }
 
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_success") as mock_success:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_success"
+        ) as mock_success:
             _on_post_tool_call("turbo_execute", {}, result, 250.5)
 
             mock_success.assert_called_once()
@@ -141,7 +163,9 @@ class TestOnPostToolCall:
             assert "✅ Turbo Plan completed" in call_args
             assert "3 success" in call_args
             assert "0 errors" in call_args
-            assert "251ms" in call_args or "250.5ms" in call_args or "250ms" in call_args
+            assert (
+                "251ms" in call_args or "250.5ms" in call_args or "250ms" in call_args
+            )
 
     def test_emits_error_warnings_for_failed_operations(self):
         """Test that _on_post_tool_call emits warnings for failed operations."""
@@ -152,13 +176,29 @@ class TestOnPostToolCall:
             "total_duration_ms": 150.0,
             "operation_results": [
                 {"operation_id": "op1", "type": "list_files", "status": "success"},
-                {"operation_id": "op2", "type": "grep", "status": "error", "error": "Permission denied"},
-                {"operation_id": "op3", "type": "read_files", "status": "error", "error": "File not found"},
+                {
+                    "operation_id": "op2",
+                    "type": "grep",
+                    "status": "error",
+                    "error": "Permission denied",
+                },
+                {
+                    "operation_id": "op3",
+                    "type": "read_files",
+                    "status": "error",
+                    "error": "File not found",
+                },
             ],
         }
 
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_success") as mock_success, \
-             patch("code_puppy.plugins.turbo_executor.notifications.emit_warning") as mock_warning:
+        with (
+            patch(
+                "code_puppy.plugins.turbo_executor.notifications.emit_success"
+            ) as mock_success,
+            patch(
+                "code_puppy.plugins.turbo_executor.notifications.emit_warning"
+            ) as mock_warning,
+        ):
             _on_post_tool_call("turbo_execute", {}, result, 150.0)
 
             mock_success.assert_called_once()
@@ -186,8 +226,14 @@ class TestOnPostToolCall:
             "operation_results": [],
         }
 
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_success") as mock_success, \
-             patch("code_puppy.plugins.turbo_executor.notifications.emit_warning") as mock_warning:
+        with (
+            patch(
+                "code_puppy.plugins.turbo_executor.notifications.emit_success"
+            ) as mock_success,
+            patch(
+                "code_puppy.plugins.turbo_executor.notifications.emit_warning"
+            ) as mock_warning,
+        ):
             _on_post_tool_call("turbo_execute", {}, result, 50.0)
 
             mock_success.assert_called_once()
@@ -199,7 +245,9 @@ class TestOnPostToolCall:
 
     def test_handles_non_dict_result_gracefully(self):
         """Test handling when result is not a dict."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_success") as mock_success:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_success"
+        ) as mock_success:
             _on_post_tool_call("turbo_execute", {}, "unexpected result format", 100.0)
 
             mock_success.assert_called_once()
@@ -213,8 +261,12 @@ class TestEmitOperationStart:
 
     def test_formatting_list_files(self):
         """Test emit_operation_start formatting for list_files."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
-            emit_operation_start(1, 3, "list_files", {"directory": "src", "recursive": True})
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
+            emit_operation_start(
+                1, 3, "list_files", {"directory": "src", "recursive": True}
+            )
 
             mock_emit.assert_called_once()
             output = mock_emit.call_args[0][0]
@@ -224,8 +276,12 @@ class TestEmitOperationStart:
 
     def test_formatting_grep(self):
         """Test emit_operation_start formatting for grep."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
-            emit_operation_start(2, 5, "grep", {"search_string": "def hello", "directory": "."})
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
+            emit_operation_start(
+                2, 5, "grep", {"search_string": "def hello", "directory": "."}
+            )
 
             mock_emit.assert_called_once()
             output = mock_emit.call_args[0][0]
@@ -236,7 +292,9 @@ class TestEmitOperationStart:
     def test_formatting_grep_truncates_long_search(self):
         """Test that grep search strings are truncated if too long."""
         long_search = "a" * 50
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             emit_operation_start(1, 1, "grep", {"search_string": long_search})
 
             output = mock_emit.call_args[0][0]
@@ -247,8 +305,12 @@ class TestEmitOperationStart:
 
     def test_formatting_read_files(self):
         """Test emit_operation_start formatting for read_files."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
-            emit_operation_start(3, 3, "read_files", {"file_paths": ["a.py", "b.py", "c.py"]})
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
+            emit_operation_start(
+                3, 3, "read_files", {"file_paths": ["a.py", "b.py", "c.py"]}
+            )
 
             mock_emit.assert_called_once()
             output = mock_emit.call_args[0][0]
@@ -258,7 +320,9 @@ class TestEmitOperationStart:
 
     def test_formatting_unknown_operation(self):
         """Test emit_operation_start formatting for unknown operation type."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             emit_operation_start(1, 1, "unknown_op", {"some_arg": "value"})
 
             mock_emit.assert_called_once()
@@ -272,12 +336,16 @@ class TestEmitOperationComplete:
 
     def test_formatting_list_files(self):
         """Test emit_operation_complete formatting for list_files."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             data = {
                 "content": "file1.py\nfile2.py\ndir1/",
                 "successful_reads": 0,
             }
-            emit_operation_complete(1, 3, "list_files", {"directory": "src"}, 125.5, data)
+            emit_operation_complete(
+                1, 3, "list_files", {"directory": "src"}, 125.5, data
+            )
 
             mock_emit.assert_called_once()
             output = mock_emit.call_args[0][0]
@@ -287,7 +355,9 @@ class TestEmitOperationComplete:
 
     def test_formatting_grep(self):
         """Test emit_operation_complete formatting for grep."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             data = {
                 "matches": [{}, {}, {}],
                 "total_matches": 3,
@@ -302,13 +372,22 @@ class TestEmitOperationComplete:
 
     def test_formatting_read_files(self):
         """Test emit_operation_complete formatting for read_files."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             data = {
                 "files": [{"success": True}, {"success": True}, {"success": False}],
                 "total_files": 3,
                 "successful_reads": 2,
             }
-            emit_operation_complete(3, 3, "read_files", {"file_paths": ["a.py", "b.py", "c.py"]}, 200.0, data)
+            emit_operation_complete(
+                3,
+                3,
+                "read_files",
+                {"file_paths": ["a.py", "b.py", "c.py"]},
+                200.0,
+                data,
+            )
 
             mock_emit.assert_called_once()
             output = mock_emit.call_args[0][0]
@@ -322,7 +401,9 @@ class TestEmitOperationError:
 
     def test_formatting_error_message(self):
         """Test emit_operation_error formatting."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             emit_operation_error(2, 5, "read_files", "File not found: /path/to/file.py")
 
             mock_emit.assert_called_once()
@@ -332,7 +413,9 @@ class TestEmitOperationError:
 
     def test_formatting_different_operation_types(self):
         """Test emit_operation_error with different operation types."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             emit_operation_error(1, 3, "list_files", "Permission denied")
             output1 = mock_emit.call_args[0][0]
             assert "❌ list_files failed:" in output1
@@ -350,7 +433,9 @@ class TestMalformedPlanJson:
 
     def test_handles_invalid_json_gracefully(self):
         """Test that invalid JSON in plan_json doesn't raise exception."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             # Should not raise
             _on_pre_tool_call("turbo_execute", {"plan_json": "not valid json"})
 
@@ -361,7 +446,9 @@ class TestMalformedPlanJson:
 
     def test_handles_missing_plan_json_key(self):
         """Test handling when plan_json key is missing."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             # Should not raise
             _on_pre_tool_call("turbo_execute", {})
 
@@ -370,9 +457,13 @@ class TestMalformedPlanJson:
 
     def test_handles_partial_malformed_data(self):
         """Test handling of partial/malformed plan data."""
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_emit:
+        with patch(
+            "code_puppy.plugins.turbo_executor.notifications.emit_info"
+        ) as mock_emit:
             # Missing operations array
-            _on_pre_tool_call("turbo_execute", {"plan_json": json.dumps({"id": "test"})})
+            _on_pre_tool_call(
+                "turbo_execute", {"plan_json": json.dumps({"id": "test"})}
+            )
 
             mock_emit.assert_called()
             first_call = mock_emit.call_args_list[0][0][0]
@@ -405,7 +496,9 @@ class TestFormatBriefArgs:
 
     def test_read_files_formatting(self):
         """Test _format_brief_args for read_files."""
-        result = _format_brief_args("read_files", {"file_paths": ["a.py", "b.py", "c.py"]})
+        result = _format_brief_args(
+            "read_files", {"file_paths": ["a.py", "b.py", "c.py"]}
+        )
         assert result == "3 files"
 
         result_single = _format_brief_args("read_files", {"file_paths": ["single.py"]})
@@ -487,8 +580,14 @@ class TestIntegration:
             ],
         }
 
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_info, \
-             patch("code_puppy.plugins.turbo_executor.notifications.emit_success") as mock_success:
+        with (
+            patch(
+                "code_puppy.plugins.turbo_executor.notifications.emit_info"
+            ) as mock_info,
+            patch(
+                "code_puppy.plugins.turbo_executor.notifications.emit_success"
+            ) as mock_success,
+        ):
             # Pre-tool call
             _on_pre_tool_call("turbo_execute", {"plan_json": json.dumps(plan_data)})
 
@@ -511,7 +610,11 @@ class TestIntegration:
         plan_data = {
             "id": "error-test",
             "operations": [
-                {"type": "list_files", "args": {"directory": "/nonexistent"}, "priority": 1},
+                {
+                    "type": "list_files",
+                    "args": {"directory": "/nonexistent"},
+                    "priority": 1,
+                },
             ],
         }
 
@@ -521,13 +624,26 @@ class TestIntegration:
             "error_count": 1,
             "total_duration_ms": 50.0,
             "operation_results": [
-                {"operation_id": "op1", "type": "list_files", "status": "error", "error": "Directory not found"},
+                {
+                    "operation_id": "op1",
+                    "type": "list_files",
+                    "status": "error",
+                    "error": "Directory not found",
+                },
             ],
         }
 
-        with patch("code_puppy.plugins.turbo_executor.notifications.emit_info") as mock_info, \
-             patch("code_puppy.plugins.turbo_executor.notifications.emit_success") as mock_success, \
-             patch("code_puppy.plugins.turbo_executor.notifications.emit_warning") as mock_warning:
+        with (
+            patch(
+                "code_puppy.plugins.turbo_executor.notifications.emit_info"
+            ) as mock_info,
+            patch(
+                "code_puppy.plugins.turbo_executor.notifications.emit_success"
+            ) as mock_success,
+            patch(
+                "code_puppy.plugins.turbo_executor.notifications.emit_warning"
+            ) as mock_warning,
+        ):
             # Pre-tool call
             _on_pre_tool_call("turbo_execute", {"plan_json": json.dumps(plan_data)})
 

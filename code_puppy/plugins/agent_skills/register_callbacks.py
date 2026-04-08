@@ -104,7 +104,8 @@ def _register_skills_tools() -> list[dict[str, Any]]:
     """
     from code_puppy.tools.skills_tools import (
         register_activate_skill,
-        register_list_or_search_skills)
+        register_list_or_search_skills,
+    )
 
     return [
         {"name": "activate_skill", "register_func": register_activate_skill},
@@ -120,7 +121,7 @@ def _register_skills_tools() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 _COMMAND_NAME = "skills"
-_ALIASES = ("skill")
+_ALIASES = "skill"
 
 
 def _skills_command_help() -> list[tuple[str, str]]:
@@ -148,7 +149,8 @@ def _handle_skills_command(command: str, name: str) -> Any | None:
     from code_puppy.plugins.agent_skills.config import (
         get_disabled_skills,
         get_skills_enabled,
-        set_skills_enabled)
+        set_skills_enabled,
+    )
     from code_puppy.plugins.agent_skills.discovery import discover_skills
     from code_puppy.plugins.agent_skills.metadata import parse_skill_metadata
     from code_puppy.plugins.agent_skills.skills_menu import show_skills_menu
@@ -202,7 +204,8 @@ def _handle_skills_command(command: str, name: str) -> Any | None:
 
         elif subcommand == "install":
             from code_puppy.plugins.agent_skills.skills_install_menu import (
-                run_skills_install_menu)
+                run_skills_install_menu,
+            )
 
             run_skills_install_menu()
             return True

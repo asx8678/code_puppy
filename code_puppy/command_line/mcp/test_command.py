@@ -55,7 +55,8 @@ class TestCommand(MCPCommandBase):
 
             emit_info(
                 f"🔍 Testing connectivity to server: {server_name}",
-                message_group=group_id)
+                message_group=group_id,
+            )
 
             # Basic connectivity test - try to get the pydantic server
             try:
@@ -67,27 +68,33 @@ class TestCommand(MCPCommandBase):
                 # Try to get server info if available
                 emit_info(
                     f"  • Server type: {managed_server.config.type}",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 emit_info(
                     f"  • Server enabled: {managed_server.is_enabled()}",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 emit_info(
                     f"  • Server quarantined: {managed_server.is_quarantined()}",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
 
                 if not managed_server.is_enabled():
                     emit_info(
                         "  • Server is disabled - enable it with '/mcp start'",
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
 
                 if managed_server.is_quarantined():
                     emit_info(
                         "  • Server is quarantined - may have recent errors",
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
 
                 emit_info(
                     f"✓ Connectivity test passed for: {server_name}",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
 
             except Exception as test_error:
                 emit_info(

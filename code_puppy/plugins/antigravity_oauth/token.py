@@ -1,6 +1,5 @@
 """Token management for Antigravity OAuth."""
 
-
 import logging
 import time
 from dataclasses import dataclass
@@ -38,10 +37,8 @@ class TokenRefreshError(Exception):
     """Error during token refresh."""
 
     def __init__(
-        self,
-        message: str,
-        code: str | None = None,
-        status: int | None = None):
+        self, message: str, code: str | None = None, status: int | None = None
+    ):
         super().__init__(message)
         self.code = code
         self.status = status
@@ -53,7 +50,8 @@ def parse_refresh_parts(refresh: str) -> RefreshParts:
     return RefreshParts(
         refresh_token=parts[0] if len(parts) > 0 else "",
         project_id=parts[1] if len(parts) > 1 and parts[1] else None,
-        managed_project_id=parts[2] if len(parts) > 2 and parts[2] else None)
+        managed_project_id=parts[2] if len(parts) > 2 and parts[2] else None,
+    )
 
 
 def format_refresh_parts(parts: RefreshParts) -> str:
@@ -77,7 +75,8 @@ def is_token_expired(expires_at: float | None) -> bool:
 def refresh_access_token(
     refresh_token_composite: str,
     current_access: str | None = None,
-    current_expires: float | None = None) -> OAuthTokens | None:
+    current_expires: float | None = None,
+) -> OAuthTokens | None:
     """Refresh an Antigravity OAuth access token.
 
     Args:
@@ -106,7 +105,8 @@ def refresh_access_token(
                 "client_id": ANTIGRAVITY_CLIENT_ID,
                 "client_secret": ANTIGRAVITY_CLIENT_SECRET,
             },
-            timeout=30)
+            timeout=30,
+        )
 
         if not response.ok:
             error_data = {}
@@ -125,13 +125,15 @@ def refresh_access_token(
                 raise TokenRefreshError(
                     f"Token revoked: {error_desc}",
                     code="invalid_grant",
-                    status=response.status_code)
+                    status=response.status_code,
+                )
 
             logger.warning(
                 "Token refresh failed: %s %s - %s",
                 response.status_code,
                 error_code,
-                error_desc)
+                error_desc,
+            )
             return None
 
         payload = response.json()
@@ -143,12 +145,14 @@ def refresh_access_token(
         updated_parts = RefreshParts(
             refresh_token=new_refresh,
             project_id=parts.project_id,
-            managed_project_id=parts.managed_project_id)
+            managed_project_id=parts.managed_project_id,
+        )
 
         return OAuthTokens(
             access_token=new_access,
             refresh_token=format_refresh_parts(updated_parts),
-            expires_at=time.time() + expires_in)
+            expires_at=time.time() + expires_in,
+        )
 
     except TokenRefreshError:
         raise

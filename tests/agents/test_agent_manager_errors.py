@@ -118,11 +118,7 @@ class TestAgentManagerErrors:
         mock_discover.return_value = None
 
         # Mock registry with corrupted entry (neither class nor string)
-        with patch.object(
-            _am._state,
-            "agent_registry",
-            {"bad-agent": 12345}
-        ):
+        with patch.object(_am._state, "agent_registry", {"bad-agent": 12345}):
             # This should raise an error when trying to instantiate the corrupted entry
             with pytest.raises((TypeError, AttributeError)):
                 load_agent("bad-agent")

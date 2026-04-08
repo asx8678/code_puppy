@@ -9,9 +9,9 @@ from pathlib import Path
 def run_generator(script_name: str) -> None:
     """Run a generator script."""
     script_path = Path(__file__).parent / script_name
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running {script_name}...")
-    print('='*60)
+    print("=" * 60)
     result = subprocess.run(
         [sys.executable, str(script_path)],
         cwd=script_path.parent,
@@ -25,29 +25,33 @@ def run_generator(script_name: str) -> None:
 def main():
     """Generate all fixtures."""
     base_dir = Path(__file__).parent
-    
+
     print("Generating benchmark test fixtures...")
     print(f"Output directory: {base_dir.absolute()}")
-    
+
     # Generate Python fixtures
     run_generator("generate_python.py")
-    
+
     # Generate Rust fixtures
     run_generator("generate_rust.py")
-    
+
     # Generate JavaScript fixtures
     run_generator("generate_js.py")
-    
-    print("\n" + "="*60)
+
+    print("\n" + "=" * 60)
     print("All fixtures generated successfully!")
-    print("="*60)
-    
+    print("=" * 60)
+
     # List generated files
     for lang in ["python", "rust", "javascript"]:
         lang_dir = base_dir / lang
         if lang_dir.exists():
             print(f"\n{lang.upper()} files:")
-            for f in sorted(lang_dir.glob("*.py" if lang == "python" else "*.rs" if lang == "rust" else "*.js")):
+            for f in sorted(
+                lang_dir.glob(
+                    "*.py" if lang == "python" else "*.rs" if lang == "rust" else "*.js"
+                )
+            ):
                 size = f.stat().st_size / 1024
                 with open(f) as file:
                     lines = len(file.readlines())

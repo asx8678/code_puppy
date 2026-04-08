@@ -33,7 +33,8 @@ def _validate_session_id(session_id: str) -> str:
     if not _VALID_SESSION_ID_RE.match(session_id):
         raise HTTPException(
             status_code=400,
-            detail="Invalid session_id: must match ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
+            detail="Invalid session_id: must match ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$",
+        )
     return session_id
 
 
@@ -120,6 +121,7 @@ def _load_session_sync(file_path: Path) -> Any:
             raw = msgpack_path.read_bytes()
             data = msgpack.unpackb(raw, raw=False)
             from pydantic_ai.messages import ModelMessagesTypeAdapter
+
             return ModelMessagesTypeAdapter.validate_python(data)
         except Exception:
             pass  # Fall through to pickle
@@ -151,7 +153,8 @@ async def list_sessions() -> list[SessionInfo]:
             # Run blocking I/O in thread pool with timeout
             metadata = await asyncio.wait_for(
                 loop.run_in_executor(_executor, _load_json_sync, txt_file),
-                timeout=FILE_IO_TIMEOUT)
+                timeout=FILE_IO_TIMEOUT,
+            )
             sessions.append(
                 SessionInfo(
                     session_id=session_id,
@@ -159,7 +162,8 @@ async def list_sessions() -> list[SessionInfo]:
                     initial_prompt=metadata.get("initial_prompt"),
                     created_at=metadata.get("created_at"),
                     last_updated=metadata.get("last_updated"),
-                    message_count=metadata.get("message_count", 0))
+                    message_count=metadata.get("message_count", 0),
+                )
             )
         except asyncio.TimeoutError:
             # Timed out reading file, include basic info
@@ -196,7 +200,8 @@ async def get_session(session_id: str) -> SessionInfo:
     try:
         metadata = await asyncio.wait_for(
             loop.run_in_executor(_executor, _load_json_sync, txt_file),
-            timeout=FILE_IO_TIMEOUT)
+            timeout=FILE_IO_TIMEOUT,
+        )
     except asyncio.TimeoutError:
         raise HTTPException(504, f"Timeout reading session '{session_id}'") from None
 
@@ -206,7 +211,8 @@ async def get_session(session_id: str) -> SessionInfo:
         initial_prompt=metadata.get("initial_prompt"),
         created_at=metadata.get("created_at"),
         last_updated=metadata.get("last_updated"),
-        message_count=metadata.get("message_count", 0))
+        message_count=metadata.get("message_count", 0),
+    )
 
 
 @router.get("/{session_id}/messages")
@@ -234,7 +240,8 @@ async def get_session_messages(session_id: str) -> list[dict[str, Any]]:
     try:
         messages = await asyncio.wait_for(
             loop.run_in_executor(_executor, _load_session_sync, pkl_file),
-            timeout=FILE_IO_TIMEOUT)
+            timeout=FILE_IO_TIMEOUT,
+        )
         return [_serialize_message(msg) for msg in messages]
     except asyncio.TimeoutError:
         raise HTTPException(

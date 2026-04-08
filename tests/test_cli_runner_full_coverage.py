@@ -1812,7 +1812,9 @@ class TestImportErrorFallbacks:
                 )
             )
             stack.enter_context(
-                patch("code_puppy.interactive_loop.get_current_agent", return_value=agent)
+                patch(
+                    "code_puppy.interactive_loop.get_current_agent", return_value=agent
+                )
             )
             stack.enter_context(
                 patch(

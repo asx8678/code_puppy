@@ -155,7 +155,8 @@ class SystemToolDetector:
                 ["npm", "list", "-g", package],
                 capture_output=True,
                 text=True,
-                timeout=10)
+                timeout=10,
+            )
             return result.returncode == 0
         except Exception:
             return False

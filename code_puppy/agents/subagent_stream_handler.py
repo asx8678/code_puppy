@@ -23,7 +23,8 @@ from pydantic_ai.messages import (
     ThinkingPart,
     ThinkingPartDelta,
     ToolCallPart,
-    ToolCallPartDelta)
+    ToolCallPartDelta,
+)
 from code_puppy.token_utils import estimate_token_count as _estimate_token_count
 
 logger = logging.getLogger(__name__)
@@ -67,7 +68,6 @@ def _fire_callback(event_type: str, event_data: Any, session_id: str | None) -> 
 # =============================================================================
 
 
-
 def _estimate_tokens(content: str) -> int:
     """Estimate token count from content string.
 
@@ -91,9 +91,8 @@ def _estimate_tokens(content: str) -> int:
 
 
 async def subagent_stream_handler(
-    ctx: RunContext,
-    events: AsyncIterable[Any],
-    session_id: str | None = None) -> None:
+    ctx: RunContext, events: AsyncIterable[Any], session_id: str | None = None
+) -> None:
     """Silent event stream handler for sub-agents.
 
     Processes streaming events without producing any console output.
@@ -129,7 +128,8 @@ async def subagent_stream_handler(
                 session_id=effective_session_id,
                 token_count=token_count,
                 tool_call_count=tool_call_count,
-                active_tool_parts=active_tool_parts)
+                active_tool_parts=active_tool_parts,
+            )
 
             # Update metrics from returned values
             # (we need to track these at this level since they're modified in _handle_event)
@@ -159,7 +159,8 @@ async def _handle_event(
     session_id: str | None,
     token_count: int,
     tool_call_count: int,
-    active_tool_parts: set[int]) -> None:
+    active_tool_parts: set[int],
+) -> None:
     """Handle a single streaming event.
 
     Updates the console manager and fires callbacks for each event type.
@@ -201,7 +202,8 @@ async def _handle_event(
                 session_id,
                 status="tool_calling",
                 tool_call_count=tool_call_count + 1,  # +1 for this new one
-                current_tool=part.tool_name)
+                current_tool=part.tool_name,
+            )
             event_data["tool_name"] = part.tool_name
             event_data["tool_call_id"] = getattr(part, "tool_call_id", None)
 
@@ -254,10 +256,7 @@ async def _handle_event(
             # If no more active tool parts after removal, reset to running
             remaining_active = active_tool_parts - {event.index}
             if not remaining_active:
-                manager.update_agent(
-                    session_id,
-                    current_tool=None,
-                    status="running")
+                manager.update_agent(session_id, current_tool=None, status="running")
 
         _fire_callback("part_end", event_data, session_id)
 

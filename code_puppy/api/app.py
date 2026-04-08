@@ -32,16 +32,15 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         try:
-            return await asyncio.wait_for(
-                call_next(request),
-                timeout=self.timeout)
+            return await asyncio.wait_for(call_next(request), timeout=self.timeout)
         except asyncio.TimeoutError:
             return JSONResponse(
                 status_code=504,
                 content={
                     "detail": f"Request timed out after {self.timeout}s",
                     "error": "timeout",
-                })
+                },
+            )
 
 
 @asynccontextmanager
@@ -86,7 +85,8 @@ def create_app() -> FastAPI:
         description="REST API and Interactive Terminal for Code Puppy",
         version="1.0.0",
         docs_url="/docs",
-        redoc_url="/redoc")
+        redoc_url="/redoc",
+    )
 
     # Timeout middleware - added first so it wraps everything
     app.add_middleware(TimeoutMiddleware, timeout=REQUEST_TIMEOUT)
@@ -97,7 +97,8 @@ def create_app() -> FastAPI:
         allow_origins=["*"],  # Local/trusted
         allow_credentials=True,
         allow_methods=["*"],
-        allow_headers=["*"])
+        allow_headers=["*"],
+    )
 
     # Include routers
     from code_puppy.api.routers import agents, commands, config, sessions
@@ -154,8 +155,8 @@ def create_app() -> FastAPI:
         if html_file.exists():
             return FileResponse(html_file, media_type="text/html")
         return HTMLResponse(
-            content="<h1>Terminal template not found</h1>",
-            status_code=404)
+            content="<h1>Terminal template not found</h1>", status_code=404
+        )
 
     @app.get("/health")
     async def health():

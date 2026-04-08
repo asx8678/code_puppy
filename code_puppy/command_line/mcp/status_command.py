@@ -17,7 +17,8 @@ from .utils import (
     find_server_id_by_name,
     format_state_indicator,
     format_uptime,
-    suggest_similar_servers)
+    suggest_similar_servers,
+)
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -86,7 +87,8 @@ class StatusCommand(MCPCommandBase):
             if not status.get("exists", True):
                 emit_info(
                     f"Server '{server_name}' not found or not accessible",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 return
 
             # Create detailed status panel

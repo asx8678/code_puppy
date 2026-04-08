@@ -229,7 +229,6 @@ After logging in, you can use the model with:
 """
 
 
-
 def _start_ollama_serve() -> Optional[subprocess.Popen]:
     """Start ``ollama serve`` as a background subprocess if not already running.
 

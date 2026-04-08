@@ -161,6 +161,7 @@ def _ensure_plugins_loaded_for_phase(phase: PhaseType) -> None:
     """
     try:
         from code_puppy.plugins import ensure_plugins_loaded_for_phase
+
         ensure_plugins_loaded_for_phase(phase)
     except ImportError:
         # Plugin system not available (shouldn't happen in normal operation)
@@ -256,7 +257,6 @@ async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> list[Any]:
         tasks = [tg.create_task(_run_one(cb)) for cb in callbacks]
     results = [t.result() for t in tasks]
     return results
-
 
 
 def drain_backlog(phase: PhaseType) -> list[Any]:
@@ -388,7 +388,8 @@ def on_file_permission(
     operation: str,
     preview: str | None = None,
     message_group: str | None = None,
-    operation_data: Any = None) -> list[Any]:
+    operation_data: Any = None,
+) -> list[Any]:
     """Trigger file permission callbacks.
 
     This allows plugins to register handlers for file permission checks
@@ -416,7 +417,8 @@ def on_file_permission(
         operation,
         preview,
         message_group,
-        operation_data)
+        operation_data,
+    )
 
 
 async def on_pre_tool_call(
@@ -460,7 +462,8 @@ async def on_post_tool_call(
     tool_args: dict,
     result: Any,
     duration_ms: float,
-    context: Any = None) -> list[Any]:
+    context: Any = None,
+) -> list[Any]:
     """Trigger callbacks after a tool completes.
 
     This allows plugins to inspect tool results, log execution times,
@@ -481,7 +484,11 @@ async def on_post_tool_call(
     """
     # Close the tool-level child context and restore the parent.
     ctx = get_current_run_context()
-    if ctx is not None and ctx.component_type == "tool" and ctx.component_name == tool_name:
+    if (
+        ctx is not None
+        and ctx.component_type == "tool"
+        and ctx.component_name == tool_name
+    ):
         ctx.close()
         ctx.metadata["duration_ms"] = duration_ms
         # Restore the parent context that was stashed by on_pre_tool_call.
@@ -616,9 +623,8 @@ def on_get_model_system_prompt(
 
 
 async def on_agent_run_start(
-    agent_name: str,
-    model_name: str,
-    session_id: str | None = None) -> list[Any]:
+    agent_name: str, model_name: str, session_id: str | None = None
+) -> list[Any]:
     """Trigger callbacks when an agent run starts.
 
     This fires at the beginning of run_with_mcp, before the agent task is created.
@@ -660,7 +666,8 @@ async def on_agent_run_end(
     success: bool = True,
     error: Exception | None = None,
     response_text: str | None = None,
-    metadata: dict | None = None) -> list[Any]:
+    metadata: dict | None = None,
+) -> list[Any]:
     """Trigger callbacks when an agent run ends.
 
     This fires at the end of run_with_mcp, in the finally block.
@@ -709,7 +716,8 @@ async def on_agent_run_end(
         success,
         error,
         response_text,
-        metadata)
+        metadata,
+    )
 
 
 def on_register_mcp_catalog_servers() -> list[Any]:
@@ -777,7 +785,8 @@ def on_message_history_processor_start(
     agent_name: str,
     session_id: str | None,
     message_history: list[Any],
-    incoming_messages: list[Any]) -> list[Any]:
+    incoming_messages: list[Any],
+) -> list[Any]:
     """Trigger callbacks at the start of message history processing.
 
     This hook fires at the beginning of the message_history_accumulator,
@@ -800,7 +809,8 @@ def on_message_history_processor_start(
         agent_name,
         session_id,
         message_history,
-        incoming_messages)
+        incoming_messages,
+    )
 
 
 def on_message_history_processor_end(
@@ -808,7 +818,8 @@ def on_message_history_processor_end(
     session_id: str | None,
     message_history: list[Any],
     messages_added: int,
-    messages_filtered: int) -> list[Any]:
+    messages_filtered: int,
+) -> list[Any]:
     """Trigger callbacks at the end of message history processing.
 
     This hook fires at the end of the message_history_accumulator,
@@ -833,4 +844,5 @@ def on_message_history_processor_end(
         session_id,
         message_history,
         messages_added,
-        messages_filtered)
+        messages_filtered,
+    )

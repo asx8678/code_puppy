@@ -235,7 +235,9 @@ class TestRestoreAutosaveErrors:
             ):
                 _PTK_KEY = "code_puppy.command_line.prompt_toolkit_completion"
                 mock_ptk = ModuleType(_PTK_KEY)
-                mock_ptk.get_input_with_combined_completion = AsyncMock(side_effect=fake_prompt)
+                mock_ptk.get_input_with_combined_completion = AsyncMock(
+                    side_effect=fake_prompt
+                )
                 _prev = sys.modules.get(_PTK_KEY)
                 sys.modules[_PTK_KEY] = mock_ptk
                 try:
@@ -269,7 +271,9 @@ class TestRestoreAutosaveErrors:
             ):
                 _PTK_KEY = "code_puppy.command_line.prompt_toolkit_completion"
                 mock_ptk = ModuleType(_PTK_KEY)
-                mock_ptk.get_input_with_combined_completion = AsyncMock(side_effect=fake_prompt)
+                mock_ptk.get_input_with_combined_completion = AsyncMock(
+                    side_effect=fake_prompt
+                )
                 _prev = sys.modules.get(_PTK_KEY)
                 sys.modules[_PTK_KEY] = mock_ptk
                 try:

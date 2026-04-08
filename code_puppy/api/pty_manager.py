@@ -98,7 +98,8 @@ class PTYManager:
         cols: int = 80,
         rows: int = 24,
         on_output: Callable[[bytes | None, None]] = None,
-        shell: str | None = None) -> PTYSession:
+        shell: str | None = None,
+    ) -> PTYSession:
         """Create a new PTY session.
 
         Args:
@@ -138,7 +139,8 @@ class PTYManager:
         cols: int,
         rows: int,
         on_output: Callable[[bytes | None, None]],
-        shell: str | None) -> PTYSession:
+        shell: str | None,
+    ) -> PTYSession:
         """Create a PTY session on Unix systems."""
         shell = shell or os.environ.get("SHELL", "/bin/bash")
 
@@ -163,7 +165,8 @@ class PTYManager:
                 pid=pid,
                 cols=cols,
                 rows=rows,
-                on_output=on_output)
+                on_output=on_output,
+            )
             session._running = True
 
             # Start reader task
@@ -177,7 +180,8 @@ class PTYManager:
         cols: int,
         rows: int,
         on_output: Callable[[bytes | None, None]],
-        shell: str | None) -> PTYSession:
+        shell: str | None,
+    ) -> PTYSession:
         """Create a PTY session on Windows systems."""
         if not HAS_WINPTY:
             raise RuntimeError(
@@ -188,16 +192,15 @@ class PTYManager:
         shell = shell or os.environ.get("COMSPEC", "cmd.exe")
 
         # Create winpty process
-        winpty_process = winpty.PtyProcess.spawn(
-            shell,
-            dimensions=(rows, cols))
+        winpty_process = winpty.PtyProcess.spawn(shell, dimensions=(rows, cols))
 
         session = PTYSession(
             session_id=session_id,
             winpty_process=winpty_process,
             cols=cols,
             rows=rows,
-            on_output=on_output)
+            on_output=on_output,
+        )
         session._running = True
 
         # Start reader task

@@ -103,9 +103,7 @@ def _on_agent_run_end(
     # If it's an exception we haven't classified yet, just log
     ex_info = ExceptionRegistry.get_ex_info(error)
     if ex_info is None:
-        logger.debug(
-            f"Agent run error not classified: {type(error).__name__}: {error}"
-        )
+        logger.debug(f"Agent run error not classified: {type(error).__name__}: {error}")
         return
 
     # Check if we already emitted for this exception instance

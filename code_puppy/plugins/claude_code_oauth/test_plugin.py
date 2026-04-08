@@ -20,7 +20,8 @@ def test_plugin_imports() -> bool:
     try:
         from code_puppy.plugins.claude_code_oauth.config import (
             CLAUDE_CODE_OAUTH_CONFIG,
-            get_token_storage_path)
+            get_token_storage_path,
+        )
 
         print("✅ Config import successful")
         print(f"✅ Token storage path: {get_token_storage_path()}")
@@ -41,7 +42,8 @@ def test_plugin_imports() -> bool:
             prepare_oauth_context,
             remove_claude_code_models,
             save_claude_models,
-            save_tokens)
+            save_tokens,
+        )
 
         _ = (
             add_models_to_extra_config,
@@ -54,7 +56,8 @@ def test_plugin_imports() -> bool:
             prepare_oauth_context,
             remove_claude_code_models,
             save_claude_models,
-            save_tokens)
+            save_tokens,
+        )
         print("✅ Utils import successful")
     except Exception as exc:  # pragma: no cover - manual harness
         print(f"❌ Utils import failed: {exc}")
@@ -63,7 +66,8 @@ def test_plugin_imports() -> bool:
     try:
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _custom_help,
-            _handle_custom_command)
+            _handle_custom_command,
+        )
 
         commands = _custom_help()
         print("✅ Callback registration import successful")
@@ -89,7 +93,8 @@ def test_oauth_helpers() -> bool:
             assign_redirect_uri,
             build_authorization_url,
             parse_authorization_code,
-            prepare_oauth_context)
+            prepare_oauth_context,
+        )
 
         context = prepare_oauth_context()
         assert context.state, "Expected non-empty OAuth state"
@@ -137,10 +142,12 @@ def test_file_operations() -> bool:
     try:
         from code_puppy.plugins.claude_code_oauth.config import (
             get_claude_models_path,
-            get_token_storage_path)
+            get_token_storage_path,
+        )
         from code_puppy.plugins.claude_code_oauth.utils import (
             load_claude_models,
-            load_stored_tokens)
+            load_stored_tokens,
+        )
 
         tokens = load_stored_tokens()
         print(f"✅ Token load result: {'present' if tokens else 'none'}")
@@ -172,7 +179,8 @@ def test_command_handlers() -> bool:
     print("\n=== Testing Command Handlers ===")
 
     from code_puppy.plugins.claude_code_oauth.register_callbacks import (
-        _handle_custom_command)
+        _handle_custom_command,
+    )
 
     unknown = _handle_custom_command("/bogus", "bogus")
     print(f"✅ Unknown command returned: {unknown}")

@@ -36,11 +36,7 @@ class TestCacheStats:
     def test_custom_values(self):
         """Test that CacheStats can be initialized with custom values."""
         stats = CacheStats(
-            hits=10,
-            header_only_updates=5,
-            misses=3,
-            evictions=2,
-            rebuilds_avoided=15
+            hits=10, header_only_updates=5, misses=3, evictions=2, rebuilds_avoided=15
         )
         assert stats.hits == 10
         assert stats.header_only_updates == 5
@@ -56,9 +52,7 @@ class TestCachedRequest:
         """Test creating a CachedRequest with defaults."""
         request = Mock(spec=httpx.Request)
         cached = CachedRequest(
-            request=request,
-            content_hash="abc123",
-            headers_hash="def456"
+            request=request, content_hash="abc123", headers_hash="def456"
         )
         assert cached.request == request
         assert cached.content_hash == "abc123"
@@ -94,8 +88,12 @@ class TestContentHashComputation:
     def test_same_content_same_hash(self):
         """Test that same content produces same hash."""
         cache = RequestCache()
-        hash1 = cache._compute_content_hash("POST", "https://api.example.com", b'{"test": true}')
-        hash2 = cache._compute_content_hash("POST", "https://api.example.com", b'{"test": true}')
+        hash1 = cache._compute_content_hash(
+            "POST", "https://api.example.com", b'{"test": true}'
+        )
+        hash2 = cache._compute_content_hash(
+            "POST", "https://api.example.com", b'{"test": true}'
+        )
         assert hash1 == hash2
 
     def test_different_method_different_hash(self):
@@ -115,8 +113,12 @@ class TestContentHashComputation:
     def test_different_body_different_hash(self):
         """Test that different bodies produce different hashes."""
         cache = RequestCache()
-        hash1 = cache._compute_content_hash("POST", "https://api.example.com", b'{"a": 1}')
-        hash2 = cache._compute_content_hash("POST", "https://api.example.com", b'{"a": 2}')
+        hash1 = cache._compute_content_hash(
+            "POST", "https://api.example.com", b'{"a": 1}'
+        )
+        hash2 = cache._compute_content_hash(
+            "POST", "https://api.example.com", b'{"a": 2}'
+        )
         assert hash1 != hash2
 
     def test_empty_body_hash(self):
@@ -156,24 +158,21 @@ class TestHeadersHashComputation:
     def test_header_order_independence(self):
         """Test that header order doesn't affect hash."""
         cache = RequestCache()
-        hash1 = cache._compute_headers_hash({
-            "Authorization": "Bearer token123",
-            "Content-Type": "application/json"
-        })
-        hash2 = cache._compute_headers_hash({
-            "Content-Type": "application/json",
-            "Authorization": "Bearer token123"
-        })
+        hash1 = cache._compute_headers_hash(
+            {"Authorization": "Bearer token123", "Content-Type": "application/json"}
+        )
+        hash2 = cache._compute_headers_hash(
+            {"Content-Type": "application/json", "Authorization": "Bearer token123"}
+        )
         assert hash1 == hash2
 
     def test_content_length_excluded(self):
         """Test that Content-Length header is excluded from hash."""
         cache = RequestCache()
         hash1 = cache._compute_headers_hash({"Authorization": "Bearer token123"})
-        hash2 = cache._compute_headers_hash({
-            "Authorization": "Bearer token123",
-            "Content-Length": "1234"
-        })
+        hash2 = cache._compute_headers_hash(
+            {"Authorization": "Bearer token123", "Content-Length": "1234"}
+        )
         assert hash1 == hash2
 
 
@@ -184,11 +183,7 @@ class TestCacheEntryValidity:
         """Test that recently created entries are valid."""
         cache = RequestCache(ttl_seconds=300)
         request = Mock(spec=httpx.Request)
-        entry = CachedRequest(
-            request=request,
-            content_hash="abc",
-            headers_hash="def"
-        )
+        entry = CachedRequest(request=request, content_hash="abc", headers_hash="def")
         assert cache._is_entry_valid(entry) is True
 
     def test_expired_entry_is_invalid(self):
@@ -199,7 +194,7 @@ class TestCacheEntryValidity:
             request=request,
             content_hash="abc",
             headers_hash="def",
-            created_at=time.time() - 2  # Created 2 seconds ago
+            created_at=time.time() - 2,  # Created 2 seconds ago
         )
         assert cache._is_entry_valid(entry) is False
 
@@ -222,8 +217,12 @@ class TestEviction:
         )
 
         assert len(cache._cache) == 2
-        content_hash_1 = cache._compute_content_hash("POST", "https://api.example.com/1", b"body1")
-        content_hash_2 = cache._compute_content_hash("POST", "https://api.example.com/2", b"body2")
+        content_hash_1 = cache._compute_content_hash(
+            "POST", "https://api.example.com/1", b"body1"
+        )
+        content_hash_2 = cache._compute_content_hash(
+            "POST", "https://api.example.com/2", b"body2"
+        )
         assert content_hash_1 in cache._cache
         assert content_hash_2 in cache._cache
 
@@ -273,7 +272,11 @@ class TestGetOrBuild:
         client.build_request = Mock(return_value=mock_request)
 
         request = cache.get_or_build(
-            "POST", "https://api.example.com", {"Auth": "token"}, b'{"test": true}', client
+            "POST",
+            "https://api.example.com",
+            {"Auth": "token"},
+            b'{"test": true}',
+            client,
         )
 
         assert request == mock_request
@@ -401,9 +404,7 @@ class TestCacheStats:
         cache._stats.rebuilds_avoided = 8
 
         # Add an entry to cache - this will count as a miss
-        cache.get_or_build(
-            "POST", "https://api.example.com", {}, b"body", client
-        )
+        cache.get_or_build("POST", "https://api.example.com", {}, b"body", client)
 
         stats_dict = cache.get_stats_dict()
         assert stats_dict["hits"] == 5
@@ -439,11 +440,11 @@ class TestInvalidate:
         client.build_request = Mock(return_value=Mock(spec=httpx.Request))
 
         # Add entry
-        cache.get_or_build(
-            "POST", "https://api.example.com", {}, b"body", client
-        )
+        cache.get_or_build("POST", "https://api.example.com", {}, b"body", client)
 
-        content_hash = cache._compute_content_hash("POST", "https://api.example.com", b"body")
+        content_hash = cache._compute_content_hash(
+            "POST", "https://api.example.com", b"body"
+        )
 
         # Invalidate it
         count = cache.invalidate(content_hash)
@@ -458,12 +459,8 @@ class TestInvalidate:
         client.build_request = Mock(return_value=Mock(spec=httpx.Request))
 
         # Add multiple entries
-        cache.get_or_build(
-            "POST", "https://api.example.com/1", {}, b"body1", client
-        )
-        cache.get_or_build(
-            "POST", "https://api.example.com/2", {}, b"body2", client
-        )
+        cache.get_or_build("POST", "https://api.example.com/1", {}, b"body1", client)
+        cache.get_or_build("POST", "https://api.example.com/2", {}, b"body2", client)
 
         # Invalidate all
         count = cache.invalidate()
@@ -604,12 +601,16 @@ class TestPerformanceOptimization:
 
         # First request with token1
         headers1 = {"Authorization": "Bearer token1_old"}
-        result1 = cache.get_or_build("POST", "https://api.anthropic.com/v1/messages", headers1, body, client)
+        result1 = cache.get_or_build(
+            "POST", "https://api.anthropic.com/v1/messages", headers1, body, client
+        )
         assert cache._stats.misses == 1
 
         # Token refresh - same body, new auth header (header-only change!)
         headers2 = {"Authorization": "Bearer token2_new"}
-        result2 = cache.get_or_build("POST", "https://api.anthropic.com/v1/messages", headers2, body, client)
+        result2 = cache.get_or_build(
+            "POST", "https://api.anthropic.com/v1/messages", headers2, body, client
+        )
 
         # Should be a header-only update
         assert cache._stats.header_only_updates == 1

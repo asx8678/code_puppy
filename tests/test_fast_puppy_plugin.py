@@ -24,6 +24,7 @@ from code_puppy.plugins.fast_puppy.register_callbacks import (
 # _has_maturin()
 # ---------------------------------------------------------------------------
 
+
 class TestHasMaturin:
     """_has_maturin should return True only when maturin is genuinely available."""
 
@@ -32,9 +33,14 @@ class TestHasMaturin:
         mock_which.return_value = "/usr/bin/maturin"
         assert _has_maturin() is True
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.shutil.which", return_value=None)
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks.shutil.which",
+        return_value=None,
+    )
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.subprocess.run")
-    def test_returns_true_on_zero_rc(self, mock_run: MagicMock, _mock_which: MagicMock) -> None:
+    def test_returns_true_on_zero_rc(
+        self, mock_run: MagicMock, _mock_which: MagicMock
+    ) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         assert _has_maturin() is True
         mock_run.assert_called_once_with(
@@ -43,16 +49,29 @@ class TestHasMaturin:
             timeout=10,
         )
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.shutil.which", return_value=None)
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks.shutil.which",
+        return_value=None,
+    )
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.subprocess.run")
-    def test_returns_false_on_nonzero_rc(self, mock_run: MagicMock, _mock_which: MagicMock) -> None:
+    def test_returns_false_on_nonzero_rc(
+        self, mock_run: MagicMock, _mock_which: MagicMock
+    ) -> None:
         """Bug fix: a completed-but-failing subprocess must *not* be treated as success."""
         mock_run.return_value = MagicMock(returncode=1)
         assert _has_maturin() is False
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.shutil.which", return_value=None)
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.subprocess.run", side_effect=FileNotFoundError)
-    def test_returns_false_on_exception(self, _mock_run: MagicMock, _mock_which: MagicMock) -> None:
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks.shutil.which",
+        return_value=None,
+    )
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks.subprocess.run",
+        side_effect=FileNotFoundError,
+    )
+    def test_returns_false_on_exception(
+        self, _mock_run: MagicMock, _mock_which: MagicMock
+    ) -> None:
         assert _has_maturin() is False
 
 
@@ -60,14 +79,21 @@ class TestHasMaturin:
 # _try_auto_build()
 # ---------------------------------------------------------------------------
 
+
 class TestTryAutoBuild:
     """_try_auto_build must not proceed to build when maturin install fails."""
 
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
     @patch("code_puppy.plugins.fast_puppy.register_callbacks._build_rust_module")
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._has_rust_toolchain", return_value=True)
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._has_rust_toolchain",
+        return_value=True,
+    )
     @patch("code_puppy.plugins.fast_puppy.register_callbacks._find_crate_dir")
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._has_maturin", return_value=False)
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._has_maturin",
+        return_value=False,
+    )
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.subprocess.run")
     def test_bails_on_failed_pip_install(
         self,
@@ -93,10 +119,19 @@ class TestTryAutoBuild:
             mock_build.assert_not_called()
 
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._build_rust_module", return_value=True)
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._has_rust_toolchain", return_value=True)
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._build_rust_module",
+        return_value=True,
+    )
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._has_rust_toolchain",
+        return_value=True,
+    )
     @patch("code_puppy.plugins.fast_puppy.register_callbacks._find_crate_dir")
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._has_maturin", return_value=False)
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._has_maturin",
+        return_value=False,
+    )
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.subprocess.run")
     def test_proceeds_on_successful_pip_install(
         self,
@@ -121,6 +156,7 @@ class TestTryAutoBuild:
 # _handle_fast_puppy()
 # ---------------------------------------------------------------------------
 
+
 class TestHandleFastPuppy:
     """_handle_fast_puppy routes commands correctly."""
 
@@ -128,7 +164,9 @@ class TestHandleFastPuppy:
         result = _handle_fast_puppy("/something_else", "something_else")
         assert result is None
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference")
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference"
+    )
     @patch("code_puppy.plugins.fast_puppy.register_callbacks._has_rust_toolchain")
     @patch("code_puppy.plugins.fast_puppy.register_callbacks._find_crate_dir")
     @patch("code_puppy._core_bridge.get_rust_status")
@@ -152,7 +190,9 @@ class TestHandleFastPuppy:
         # Status should emit multiple diagnostic lines
         assert mock_emit.call_count >= 2
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference")
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
+    )
     @patch("code_puppy._core_bridge.set_rust_enabled")
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
     @patch("code_puppy._core_bridge.RUST_AVAILABLE", True)
@@ -167,7 +207,9 @@ class TestHandleFastPuppy:
         mock_set_rust.assert_called_once_with(False)
         mock_write.assert_called_once_with(False)
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference")
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
+    )
     @patch("code_puppy._core_bridge.set_rust_enabled")
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
     @patch("code_puppy._core_bridge.RUST_AVAILABLE", True)
@@ -187,6 +229,7 @@ class TestHandleFastPuppy:
 # _on_startup()
 # ---------------------------------------------------------------------------
 
+
 class TestOnStartup:
     """_on_startup applies persisted preferences and optionally auto-builds."""
 
@@ -195,7 +238,10 @@ class TestOnStartup:
     @patch("code_puppy._core_bridge.is_rust_enabled", return_value=False)
     @patch("code_puppy._core_bridge.RUST_AVAILABLE", False)
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference", return_value=False)
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference",
+        return_value=False,
+    )
     def test_always_auto_builds_even_when_disabled(
         self,
         mock_pref: MagicMock,
@@ -213,8 +259,13 @@ class TestOnStartup:
     @patch("code_puppy._core_bridge.is_rust_enabled", return_value=True)
     @patch("code_puppy._core_bridge.RUST_AVAILABLE", True)
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference", return_value=True)
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference")
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference",
+        return_value=True,
+    )
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
+    )
     def test_on_startup_force_enables_rust(
         self,
         mock_write_pref: MagicMock,
@@ -234,8 +285,13 @@ class TestOnStartup:
     @patch("code_puppy._core_bridge.is_rust_enabled", return_value=True)
     @patch("code_puppy._core_bridge.RUST_AVAILABLE", True)
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference", return_value=False)
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference")
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference",
+        return_value=False,
+    )
+    @patch(
+        "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
+    )
     def test_force_enables_rust_even_when_persisted_disabled(
         self,
         mock_write_pref: MagicMock,

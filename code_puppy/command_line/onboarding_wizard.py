@@ -24,6 +24,7 @@ try:
     from prompt_toolkit.layout import Layout, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -37,7 +38,8 @@ from .onboarding_slides import (
     slide_mcp,
     slide_models,
     slide_use_cases,
-    slide_welcome)
+    slide_welcome,
+)
 
 # ============================================================================
 # State Tracking
@@ -187,7 +189,8 @@ def _get_slide_panel_content(wizard: OnboardingWizard) -> ANSI:
         legacy_windows=False,
         color_system="truecolor",
         no_color=False,
-        force_interactive=True)
+        force_interactive=True,
+    )
 
     # Progress indicator
     progress = wizard.get_progress_indicator()
@@ -300,7 +303,8 @@ async def run_onboarding_wizard() -> str | None:
             key_bindings=kb,
             full_screen=False,
             mouse_support=False,
-            color_depth="DEPTH_24_BIT")
+            color_depth="DEPTH_24_BIT",
+        )
 
         sys.stdout.write("\033[2J\033[H")
         sys.stdout.flush()

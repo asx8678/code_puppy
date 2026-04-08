@@ -96,7 +96,7 @@ def model_request_params() -> ModelRequestParameters:
 @pytest.fixture(scope="session")
 def turbo_parse_available() -> bool:
     """Detect if the turbo_parse Rust module is available.
-    
+
     Returns True if the turbo_parse module is installed and functional,
     False otherwise.
     """
@@ -106,10 +106,10 @@ def turbo_parse_available() -> bool:
 @pytest.fixture
 def mock_turbo_parse_present() -> Generator[mock.MagicMock, None, None]:
     """Fixture that mocks the turbo_parse module as present.
-    
+
     This is useful for testing the Rust-available path without requiring
     the actual Rust module to be installed.
-    
+
     Yields:
         MagicMock: A mock turbo_parse module with realistic behavior.
     """
@@ -141,7 +141,7 @@ def mock_turbo_parse_present() -> Generator[mock.MagicMock, None, None]:
         "supported": True,
         "version": "3.x",
     }
-    
+
     # Mock parsing functions with realistic responses
     def mock_parse_source(source: str, language: str) -> dict:
         return {
@@ -151,7 +151,7 @@ def mock_turbo_parse_present() -> Generator[mock.MagicMock, None, None]:
             "success": True,
             "errors": [],
         }
-    
+
     def mock_parse_file(path: str, language: str | None = None) -> dict:
         return {
             "language": language or Path(path).suffix.lstrip(".") or "unknown",
@@ -160,7 +160,7 @@ def mock_turbo_parse_present() -> Generator[mock.MagicMock, None, None]:
             "success": True,
             "errors": [],
         }
-    
+
     def mock_parse_files_batch(paths, max_workers=None, timeout_ms=None) -> dict:
         return {
             "results": [
@@ -180,39 +180,49 @@ def mock_turbo_parse_present() -> Generator[mock.MagicMock, None, None]:
             "error_count": 0,
             "all_succeeded": True,
         }
-    
+
     def mock_extract_symbols(source: str, language: str) -> dict:
         return {
             "symbols": [
-                {"name": "test_func", "kind": "function", "start_line": 1, "end_line": 2},
+                {
+                    "name": "test_func",
+                    "kind": "function",
+                    "start_line": 1,
+                    "end_line": 2,
+                },
             ],
             "extraction_time_ms": 2.0,
             "success": True,
         }
-    
+
     def mock_extract_symbols_from_file(path: str, language: str | None = None) -> dict:
         return {
             "symbols": [
-                {"name": "test_func", "kind": "function", "start_line": 1, "end_line": 2},
+                {
+                    "name": "test_func",
+                    "kind": "function",
+                    "start_line": 1,
+                    "end_line": 2,
+                },
             ],
             "extraction_time_ms": 2.0,
             "success": True,
         }
-    
+
     def mock_extract_syntax_diagnostics(source: str, language: str) -> dict:
         return {
             "diagnostics": [],
             "error_count": 0,
             "warning_count": 0,
         }
-    
+
     mock_module.parse_source = mock_parse_source
     mock_module.parse_file = mock_parse_file
     mock_module.parse_files_batch = mock_parse_files_batch
     mock_module.extract_symbols = mock_extract_symbols
     mock_module.extract_symbols_from_file = mock_extract_symbols_from_file
     mock_module.extract_syntax_diagnostics = mock_extract_syntax_diagnostics
-    
+
     # Add the mock to sys.modules
     with mock.patch.dict("sys.modules", {"turbo_parse": mock_module}):
         # Also mock find_spec to return a valid spec
@@ -224,17 +234,17 @@ def mock_turbo_parse_present() -> Generator[mock.MagicMock, None, None]:
 @pytest.fixture
 def mock_turbo_parse_absent() -> Generator[None, None, None]:
     """Fixture that ensures turbo_parse is unavailable.
-    
+
     This is useful for testing the fallback path even if the actual
     turbo_parse Rust module is installed.
     """
     # Remove turbo_parse from sys.modules if present
     original_module = sys.modules.pop("turbo_parse", None)
-    
+
     # Mock find_spec to return None (module not found)
     with mock.patch("importlib.util.find_spec", return_value=None):
         yield
-    
+
     # Restore original module if it was present
     if original_module:
         sys.modules["turbo_parse"] = original_module
@@ -243,10 +253,10 @@ def mock_turbo_parse_absent() -> Generator[None, None, None]:
 @pytest.fixture
 def disable_turbo_parse() -> Generator[None, None, None]:
     """Fixture to temporarily disable turbo_parse for fallback testing.
-    
+
     Unlike mock_turbo_parse_absent which mocks module discovery,
     this fixture works with the already-imported bridge module.
-    
+
     Example:
         def test_something(disable_turbo_parse):
             # turbo_parse is temporarily disabled here
@@ -254,17 +264,17 @@ def disable_turbo_parse() -> Generator[None, None, None]:
             # result will show fallback behavior
     """
     from code_puppy import turbo_parse_bridge
-    
+
     # Save original state
     original_available = turbo_parse_bridge.TURBO_PARSE_AVAILABLE
     original_enabled = turbo_parse_bridge._turbo_parse_user_enabled
-    
+
     # Disable at both levels
     turbo_parse_bridge.TURBO_PARSE_AVAILABLE = False
     turbo_parse_bridge._turbo_parse_user_enabled = False
-    
+
     yield
-    
+
     # Restore original state
     turbo_parse_bridge.TURBO_PARSE_AVAILABLE = original_available
     turbo_parse_bridge._turbo_parse_user_enabled = original_enabled
@@ -273,7 +283,7 @@ def disable_turbo_parse() -> Generator[None, None, None]:
 @pytest.fixture
 def test_python_file(tmp_path: Path) -> str:
     """Create a temporary Python file for testing.
-    
+
     Returns:
         str: Path to the created temporary file.
     """
@@ -293,7 +303,7 @@ class MyClass:
 @pytest.fixture
 def test_rust_file(tmp_path: Path) -> str:
     """Create a temporary Rust file for testing.
-    
+
     Returns:
         str: Path to the created temporary file.
     """
@@ -313,7 +323,7 @@ fn add(a: i32, b: i32) -> i32 {
 @pytest.fixture
 def test_javascript_file(tmp_path: Path) -> str:
     """Create a temporary JavaScript file for testing.
-    
+
     Returns:
         str: Path to the created temporary file.
     """

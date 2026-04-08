@@ -127,7 +127,10 @@ class TestLoadSessionHistory:
         assert result == []
 
     def test_load_existing(self, tmp_path):
-        from code_puppy.tools.agent_tools import _load_session_history, _save_session_history
+        from code_puppy.tools.agent_tools import (
+            _load_session_history,
+            _save_session_history,
+        )
 
         with patch(
             "code_puppy.tools.agent_tools._get_subagent_sessions_dir",

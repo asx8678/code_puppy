@@ -86,7 +86,8 @@ class AgentState:
             token_count=self.token_count,
             current_tool=self.current_tool,
             elapsed_seconds=self.elapsed_seconds(),
-            error_message=self.error_message)
+            error_message=self.error_message,
+        )
 
 
 # =============================================================================
@@ -130,9 +131,7 @@ class SubAgentConsoleManager:
         self._stop_event = threading.Event()
 
     @classmethod
-    def get_instance(
-        cls, console: Console | None = None
-    ) -> "SubAgentConsoleManager":
+    def get_instance(cls, console: Console | None = None) -> "SubAgentConsoleManager":
         """Get or create the singleton instance.
 
         Thread-safe singleton pattern using double-checked locking.
@@ -177,9 +176,8 @@ class SubAgentConsoleManager:
         with self._agents_lock:
             # Create new agent state
             self._agents[session_id] = AgentState(
-                session_id=session_id,
-                agent_name=agent_name,
-                model_name=model_name)
+                session_id=session_id, agent_name=agent_name, model_name=model_name
+            )
 
             # Start display if this is the first agent
             if len(self._agents) == 1:
@@ -403,11 +401,7 @@ class SubAgentConsoleManager:
         title.append(agent.agent_name, style=f"bold {color}")
 
         # Create panel
-        return Panel(
-            table,
-            title=title,
-            border_style=color,
-            padding=(0, 1))
+        return Panel(table, title=title, border_style=color, padding=(0, 1))
 
     # =========================================================================
     # Context Manager Support
@@ -428,7 +422,8 @@ class SubAgentConsoleManager:
 
 
 def get_subagent_console_manager(
-    console: Console | None = None) -> SubAgentConsoleManager:
+    console: Console | None = None,
+) -> SubAgentConsoleManager:
     """Get the singleton SubAgentConsoleManager instance.
 
     Convenience function for accessing the manager.

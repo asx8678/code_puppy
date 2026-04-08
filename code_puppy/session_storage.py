@@ -45,6 +45,7 @@ def save_session_async(
     in a background thread, preventing file I/O from blocking the main thread.
     Errors are logged but not raised to avoid disrupting the main flow.
     """
+
     def _do_save():
         try:
             save_session(
@@ -146,6 +147,7 @@ def _get_or_create_hmac_key() -> bytes:
         return key
 
 
+# NOTE: HMAC key is per-install; all sessions share one key. See code_puppy-aqc.
 _HMAC_KEY: bytes | None = None  # lazily populated on first call
 
 

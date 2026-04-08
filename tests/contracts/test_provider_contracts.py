@@ -19,51 +19,57 @@ class TestProviderInterfaceValidation:
 
     def test_valid_provider_passes(self):
         """Test that a valid provider class passes validation."""
+
         class ValidProvider:
             def create_model(self, model_name: str, **kwargs):
                 return None
-            
+
             def is_available(self) -> bool:
                 return True
-        
+
         # Should not raise
         ProviderContract.validate_provider_interface(ValidProvider, "valid")
 
     def test_missing_create_model_fails(self):
         """Test that missing create_model method fails."""
+
         class BadProvider:
             def is_available(self) -> bool:
                 return True
+
             # Missing create_model
-        
+
         with pytest.raises(ContractViolation) as exc_info:
             ProviderContract.validate_provider_interface(BadProvider, "bad")
-        
+
         assert "create_model" in str(exc_info.value)
 
     def test_missing_is_available_fails(self):
         """Test that missing is_available method fails."""
+
         class BadProvider:
             def create_model(self, model_name: str, **kwargs):
                 return None
+
             # Missing is_available
-        
+
         with pytest.raises(ContractViolation) as exc_info:
             ProviderContract.validate_provider_interface(BadProvider, "bad")
-        
+
         assert "is_available" in str(exc_info.value)
 
     def test_non_callable_method_fails(self):
         """Test that non-callable methods are flagged."""
+
         class BadProvider:
             create_model = "not a function"  # Not callable
-            
+
             def is_available(self) -> bool:
                 return True
-        
+
         with pytest.raises(ContractViolation) as exc_info:
             ProviderContract.validate_provider_interface(BadProvider, "bad")
-        
+
         assert "not callable" in str(exc_info.value)
 
 
@@ -77,7 +83,7 @@ class TestModelConfigValidation:
             "provider": "openai",
             "temperature": 0.7,
         }
-        
+
         # Should not raise
         ProviderContract.validate_model_config(config, "openai")
 
@@ -86,10 +92,10 @@ class TestModelConfigValidation:
         config = {
             "provider": "openai",
         }
-        
+
         with pytest.raises(ContractViolation) as exc_info:
             ProviderContract.validate_model_config(config, "openai")
-        
+
         assert "model_name" in str(exc_info.value)
 
     def test_missing_provider_fails(self):
@@ -97,10 +103,10 @@ class TestModelConfigValidation:
         config = {
             "model_name": "gpt-4",
         }
-        
+
         with pytest.raises(ContractViolation) as exc_info:
             ProviderContract.validate_model_config(config, "openai")
-        
+
         assert "provider" in str(exc_info.value)
 
 
@@ -114,7 +120,7 @@ class TestContractViolation:
             "Something went wrong",
             {"detail": "info"},
         )
-        
+
         assert violation.component == "test:component"
         assert violation.issue == "Something went wrong"
         assert violation.details == {"detail": "info"}

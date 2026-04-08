@@ -1,6 +1,5 @@
 """ChatGPT OAuth flow closely matching the ChatMock implementation."""
 
-
 import datetime
 import threading
 import time
@@ -21,7 +20,8 @@ from .utils import (
     load_stored_tokens,
     parse_jwt_claims,
     prepare_oauth_context,
-    save_tokens)
+    save_tokens,
+)
 
 REQUIRED_PORT = CHATGPT_OAUTH_CONFIG["required_port"]
 URL_BASE = f"http://localhost:{REQUIRED_PORT}"
@@ -43,11 +43,7 @@ class AuthBundle:
 
 
 class _OAuthServer(HTTPServer):
-    def __init__(
-        self,
-        *,
-        client_id: str,
-        verbose: bool = False) -> None:
+    def __init__(self, *, client_id: str, verbose: bool = False) -> None:
         super().__init__(
             ("localhost", REQUIRED_PORT), _CallbackHandler, bind_and_activate=True
         )
@@ -89,7 +85,8 @@ class _OAuthServer(HTTPServer):
             self.token_endpoint,
             data=data,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=30)
+            timeout=30,
+        )
         response.raise_for_status()
         payload = response.json()
 
@@ -108,7 +105,8 @@ class _OAuthServer(HTTPServer):
         if organizations:
             default_org = next(
                 (org for org in organizations if org.get("is_default")),
-                organizations[0])
+                organizations[0],
+            )
             org_id = default_org.get("id")
         # Fallback to top-level org_id if still not found
         if not org_id:
@@ -118,7 +116,8 @@ class _OAuthServer(HTTPServer):
             id_token=id_token,
             access_token=access_token,
             refresh_token=refresh_token,
-            account_id=chatgpt_account_id)
+            account_id=chatgpt_account_id,
+        )
 
         # Instead of exchanging for an API key, just use the access_token directly
         # This matches how ChatMock works - no token exchange, just OAuth tokens
@@ -153,8 +152,8 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         if path == "/success":
             success_html = oauth_success_html(
-                "ChatGPT",
-                "You can now close this window and return to Code Puppy.")
+                "ChatGPT", "You can now close this window and return to Code Puppy."
+            )
             self._send_html(success_html)
             self._shutdown_after_delay(2.0)
             return

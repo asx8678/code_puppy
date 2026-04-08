@@ -4,7 +4,6 @@ This model handles the special Antigravity envelope format and preserves
 Claude thinking signatures for Gemini 3 models.
 """
 
-
 import base64
 import json
 import logging
@@ -31,15 +30,14 @@ from pydantic_ai.messages import (
     ThinkingPart,
     ToolCallPart,
     ToolReturnPart,
-    UserPromptPart)
+    UserPromptPart,
+)
 from pydantic_ai.models import ModelRequestParameters, StreamedResponse
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 from typing_extensions import assert_never
 
-from code_puppy.gemini_model import (
-    GeminiModel,
-    generate_tool_call_id)
+from code_puppy.gemini_model import GeminiModel, generate_tool_call_id
 from code_puppy.model_utils import _load_antigravity_prompt
 from code_puppy.plugins.antigravity_oauth.transport import _inline_refs
 
@@ -77,10 +75,7 @@ class AntigravityModel(GeminiModel):
     - Special message merging for parallel function calls
     """
 
-    def _get_instructions(
-        self,
-        messages: list,
-        model_request_parameters) -> str | None:
+    def _get_instructions(self, messages: list, model_request_parameters) -> str | None:
         """Return the Antigravity system prompt.
 
         The Antigravity endpoint expects requests to include the special
@@ -120,7 +115,8 @@ class AntigravityModel(GeminiModel):
     async def _map_messages(
         self,
         messages: list[ModelMessage],
-        model_request_parameters: ModelRequestParameters) -> tuple[ContentDict | None, list[dict]]:
+        model_request_parameters: ModelRequestParameters,
+    ) -> tuple[ContentDict | None, list[dict]]:
         """Map messages to Gemini API format, preserving thinking signatures.
 
         IMPORTANT: For Gemini with parallel function calls, the API expects:
@@ -218,7 +214,8 @@ class AntigravityModel(GeminiModel):
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters) -> ModelResponse:
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
         """Override request to handle Antigravity envelope and thinking signatures."""
         system_instruction, contents = await self._map_messages(
             messages, model_request_parameters
@@ -252,7 +249,8 @@ class AntigravityModel(GeminiModel):
             if response.status_code == 400 and _is_signature_error(error_text):
                 logger.warning(
                     "Received 400 signature error. Backfilling with bypass signatures and retrying. Error: %s",
-                    error_text[:200])
+                    error_text[:200],
+                )
                 _backfill_thought_signatures(messages)
 
                 # Re-map messages
@@ -284,7 +282,8 @@ class AntigravityModel(GeminiModel):
             return ModelResponse(
                 parts=[TextPart(content="")],
                 model_name=self._model_name,
-                usage=RequestUsage())
+                usage=RequestUsage(),
+            )
 
         candidate = candidates[0]
         content = candidate.get("content", {})
@@ -294,7 +293,8 @@ class AntigravityModel(GeminiModel):
         usage_meta = data.get("usageMetadata", {})
         usage = RequestUsage(
             input_tokens=usage_meta.get("promptTokenCount", 0),
-            output_tokens=usage_meta.get("candidatesTokenCount", 0))
+            output_tokens=usage_meta.get("candidatesTokenCount", 0),
+        )
 
         return _antigravity_process_response_from_parts(
             parts,
@@ -302,7 +302,8 @@ class AntigravityModel(GeminiModel):
             self._model_name,
             self.system,
             usage,
-            vendor_id=data.get("requestId"))
+            vendor_id=data.get("requestId"),
+        )
 
     @asynccontextmanager
     async def request_stream(
@@ -310,7 +311,8 @@ class AntigravityModel(GeminiModel):
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
-        run_context: RunContext[Any] | None = None) -> AsyncIterator[StreamedResponse]:
+        run_context: RunContext[Any] | None = None,
+    ) -> AsyncIterator[StreamedResponse]:
         """Override request_stream for streaming with signature handling."""
         system_instruction, contents = await self._map_messages(
             messages, model_request_parameters
@@ -394,7 +396,8 @@ class AntigravityModel(GeminiModel):
             model_request_parameters=model_request_parameters,
             _chunks=stream_chunks(),
             _model_name_str=self._model_name,
-            _provider_name_str=self.system)
+            _provider_name_str=self.system,
+        )
         yield streamed
 
 
@@ -424,7 +427,8 @@ class AntigravityStreamingResponse(StreamedResponse):
             if usage_meta:
                 self._usage = RequestUsage(
                     input_tokens=usage_meta.get("promptTokenCount", 0),
-                    output_tokens=usage_meta.get("candidatesTokenCount", 0))
+                    output_tokens=usage_meta.get("candidatesTokenCount", 0),
+                )
 
             # Extract response ID
             if chunk.get("responseId"):
@@ -450,8 +454,8 @@ class AntigravityStreamingResponse(StreamedResponse):
                     text = part["text"]
 
                     for event in self._parts_manager.handle_thinking_delta(
-                        vendor_part_id=None,
-                        content=text):
+                        vendor_part_id=None, content=text
+                    ):
                         yield event
 
                     # For Claude: signature is ON the thinking block itself
@@ -469,8 +473,8 @@ class AntigravityStreamingResponse(StreamedResponse):
                     if len(text) == 0:
                         continue
                     for event in self._parts_manager.handle_text_delta(
-                        vendor_part_id=None,
-                        content=text):
+                        vendor_part_id=None, content=text
+                    ):
                         yield event
 
                 # Handle function call
@@ -490,7 +494,8 @@ class AntigravityStreamingResponse(StreamedResponse):
                         vendor_part_id=uuid4(),
                         tool_name=fc.get("name"),
                         args=fc.get("args"),
-                        tool_call_id=fc.get("id") or generate_tool_call_id())
+                        tool_call_id=fc.get("id") or generate_tool_call_id(),
+                    )
                     if event is not None:
                         yield event
 
@@ -602,7 +607,8 @@ def _antigravity_process_response_from_parts(
     provider_name: str,
     usage: RequestUsage,
     vendor_id: str | None,
-    vendor_details: dict[str, Any] | None = None) -> ModelResponse:
+    vendor_details: dict[str, Any] | None = None,
+) -> ModelResponse:
     """Custom response parser that extracts signatures from ThinkingParts."""
     items: list[ModelResponsePart] = []
 
@@ -676,7 +682,8 @@ def _antigravity_process_response_from_parts(
         usage=usage,
         provider_response_id=vendor_id,
         provider_details=vendor_details,
-        provider_name=provider_name)
+        provider_name=provider_name,
+    )
 
 
 def _backfill_thought_signatures(messages: list[ModelMessage]) -> None:

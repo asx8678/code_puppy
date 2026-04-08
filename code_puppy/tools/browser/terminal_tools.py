@@ -119,7 +119,8 @@ async def check_terminal_server(
     banner = format_terminal_banner("TERMINAL CHECK SERVER 🔍")
     emit_info(
         Text.from_markup(f"{banner} [bold cyan]{host}:{port}[/bold cyan]"),
-        message_group=group_id)
+        message_group=group_id,
+    )
 
     server_url = f"http://{host}:{port}"
     health_url = f"{server_url}/health"
@@ -134,8 +135,8 @@ async def check_terminal_server(
 
             if health_data.get("status") == "healthy":
                 emit_success(
-                    f"Server is healthy at {server_url}",
-                    message_group=group_id)
+                    f"Server is healthy at {server_url}", message_group=group_id
+                )
                 return {
                     "success": True,
                     "server_url": server_url,
@@ -145,7 +146,8 @@ async def check_terminal_server(
                 # Server responded but not with expected health status
                 emit_error(
                     f"Server responded but health check failed: {health_data}",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 return {
                     "success": False,
                     "error": f"Unexpected health response: {health_data}",
@@ -205,7 +207,8 @@ async def open_terminal(host: str = "localhost", port: int = 8765) -> dict[str, 
     banner = format_terminal_banner("TERMINAL OPEN 🖥️")
     emit_info(
         Text.from_markup(f"{banner} [bold cyan]{host}:{port}[/bold cyan]"),
-        message_group=group_id)
+        message_group=group_id,
+    )
 
     # First, check if the server is running
     server_check = await check_terminal_server(host, port)
@@ -236,9 +239,7 @@ async def open_terminal(host: str = "localhost", port: int = 8765) -> dict[str, 
         # Wait for xterm.js to be loaded and ready
         # The terminal container should have the xterm class when ready
         try:
-            await page.wait_for_selector(
-                ".xterm",
-                timeout=TERMINAL_LOAD_TIMEOUT)
+            await page.wait_for_selector(".xterm", timeout=TERMINAL_LOAD_TIMEOUT)
             emit_info("Terminal xterm.js loaded", message_group=group_id)
         except Exception as e:
             logger.warning(f"Timeout waiting for xterm.js: {e}")
@@ -248,9 +249,7 @@ async def open_terminal(host: str = "localhost", port: int = 8765) -> dict[str, 
         final_url = page.url
         page_title = await page.title()
 
-        emit_success(
-            f"Terminal opened: {final_url}",
-            message_group=group_id)
+        emit_success(f"Terminal opened: {final_url}", message_group=group_id)
 
         return {
             "success": True,
@@ -284,9 +283,7 @@ async def close_terminal() -> dict[str, Any]:
     """
     group_id = generate_group_id("terminal_close")
     banner = format_terminal_banner("TERMINAL CLOSE 🔒")
-    emit_info(
-        Text.from_markup(f"{banner}"),
-        message_group=group_id)
+    emit_info(Text.from_markup(f"{banner}"), message_group=group_id)
 
     try:
         manager = get_session_manager()
@@ -339,7 +336,8 @@ async def start_api_server(port: int = 8765) -> dict[str, Any]:
     group_id = generate_group_id("start_api_server", str(port))
     emit_info(
         Text.from_markup(format_terminal_banner(f"START API SERVER 🚀 port:{port}")),
-        message_group=group_id)
+        message_group=group_id,
+    )
 
     pid_file = Path(STATE_DIR) / "api_server.pid"
     server_url = f"http://127.0.0.1:{port}"
@@ -367,7 +365,8 @@ async def start_api_server(port: int = 8765) -> dict[str, Any]:
             [sys.executable, "-m", "code_puppy.api.main"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True)
+            start_new_session=True,
+        )
         pid_file.parent.mkdir(parents=True, exist_ok=True)
         pid_file.write_text(str(proc.pid))
 
@@ -403,9 +402,8 @@ def register_check_terminal_server(agent):
 
     @agent.tool
     async def terminal_check_server(
-        context: RunContext,
-        host: str = "localhost",
-        port: int = 8765) -> dict[str, Any]:
+        context: RunContext, host: str = "localhost", port: int = 8765
+    ) -> dict[str, Any]:
         """
         Check if the Code Puppy API server is running and healthy.
 
@@ -432,9 +430,8 @@ def register_open_terminal(agent):
 
     @agent.tool
     async def terminal_open(
-        context: RunContext,
-        host: str = "localhost",
-        port: int = 8765) -> dict[str, Any]:
+        context: RunContext, host: str = "localhost", port: int = 8765
+    ) -> dict[str, Any]:
         """
         Open the terminal browser interface.
 
@@ -464,8 +461,7 @@ def register_close_terminal(agent):
     """
 
     @agent.tool
-    async def terminal_close(
-        context: RunContext) -> dict[str, Any]:
+    async def terminal_close(context: RunContext) -> dict[str, Any]:
         """
         Close the terminal browser and clean up resources.
 
@@ -487,9 +483,7 @@ def register_start_api_server(agent):
     """
 
     @agent.tool
-    async def start_api_server(
-        context: RunContext,
-        port: int = 8765) -> dict[str, Any]:
+    async def start_api_server(context: RunContext, port: int = 8765) -> dict[str, Any]:
         """
         Start the Code Puppy API server in the background.
 

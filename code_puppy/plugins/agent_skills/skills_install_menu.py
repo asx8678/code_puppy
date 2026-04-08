@@ -24,6 +24,7 @@ try:
     from prompt_toolkit.layout import Dimension, Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -197,9 +198,7 @@ class SkillsInstallMenu:
             lines.append(("fg:ansiyellow", "  No remote categories available."))
             lines.append(("", "\n"))
             lines.append(
-                (
-                    "fg:ansibrightblack",
-                    "  (Remote catalog unavailable or empty)\n")
+                ("fg:ansibrightblack", "  (Remote catalog unavailable or empty)\n")
             )
             self._render_navigation_hints(lines)
             return lines
@@ -374,13 +373,15 @@ class SkillsInstallMenu:
         lines.append(
             (
                 "fg:ansibrightblack",
-                f"    scripts: {'yes' if entry.has_scripts else 'no'}")
+                f"    scripts: {'yes' if entry.has_scripts else 'no'}",
+            )
         )
         lines.append(("", "\n"))
         lines.append(
             (
                 "fg:ansibrightblack",
-                f"    references: {'yes' if entry.has_references else 'no'}")
+                f"    references: {'yes' if entry.has_references else 'no'}",
+            )
         )
         lines.append(("", "\n"))
         lines.append(("fg:ansibrightblack", f"    files: {entry.file_count}"))
@@ -389,9 +390,7 @@ class SkillsInstallMenu:
         lines.append(("bold", "  Download:"))
         lines.append(("", "\n"))
         lines.append(
-            (
-                "fg:ansibrightblack",
-                f"    size: {_format_bytes(entry.zip_size_bytes)}")
+            ("fg:ansibrightblack", f"    size: {_format_bytes(entry.zip_size_bytes)}")
         )
         lines.append(("", "\n"))
         lines.append(("fg:ansibrightblack", f"    url: {entry.download_url}"))
@@ -582,10 +581,8 @@ class SkillsInstallMenu:
 
         layout = Layout(root_container)
         app = Application(
-            layout=layout,
-            key_bindings=kb,
-            full_screen=False,
-            mouse_support=False)
+            layout=layout, key_bindings=kb, full_screen=False, mouse_support=False
+        )
 
         set_awaiting_user_input(True)
 
@@ -659,9 +656,8 @@ def _prompt_and_install(entry: SkillCatalogEntry) -> bool:
     result: InstallResult
     try:
         result = download_and_install_skill(
-            skill_name=entry.id,
-            download_url=entry.download_url,
-            force=force)
+            skill_name=entry.id, download_url=entry.download_url, force=force
+        )
     except Exception as e:
         logger.exception(f"Unexpected error during skill install: {e}")
         emit_error(f"Installation error: {e}")

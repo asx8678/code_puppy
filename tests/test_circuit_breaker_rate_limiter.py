@@ -168,6 +168,7 @@ class TestOpenCloseCircuit:
         status = get_status()
         # Access state directly
         from code_puppy import adaptive_rate_limiter as arl
+
         state = arl._model_states["gpt-4"]
         assert state.cooldown_multiplier == 2.0
 
@@ -180,12 +181,14 @@ class TestOpenCloseCircuit:
         await open_circuit("gpt-4")
         await open_circuit("gpt-4")
         from code_puppy import adaptive_rate_limiter as arl
+
         state = arl._model_states["gpt-4"]
         assert state.cooldown_multiplier == 4.0
 
     @pytest.mark.asyncio
     async def test_open_already_open_caps_multiplier_at_64(self):
         from code_puppy import adaptive_rate_limiter as arl
+
         await open_circuit("gpt-4")
         arl._model_states["gpt-4"].cooldown_multiplier = 32.0
         await open_circuit("gpt-4")
@@ -264,6 +267,7 @@ class TestCircuitBreakerWith429:
         await record_rate_limit("gpt-4")
         await record_rate_limit("gpt-4")
         from code_puppy import adaptive_rate_limiter as arl
+
         state = arl._model_states["gpt-4"]
         assert state.cooldown_multiplier == 4.0
 
@@ -287,6 +291,7 @@ class TestCircuitBreakerTransitions:
 
         await record_rate_limit("gpt-4")
         from code_puppy import adaptive_rate_limiter as arl
+
         state = arl._model_states["gpt-4"]
         assert state.circuit_state == CircuitState.OPEN
 
@@ -313,6 +318,7 @@ class TestCircuitBreakerTransitions:
         await asyncio.sleep(0.3)
 
         from code_puppy import adaptive_rate_limiter as arl
+
         state = arl._model_states["gpt-4"]
         assert state.circuit_state == CircuitState.HALF_OPEN
 
@@ -366,6 +372,7 @@ class TestCircuitBreakerTransitions:
         await asyncio.sleep(0.3)  # → HALF_OPEN
 
         from code_puppy import adaptive_rate_limiter as arl
+
         state = arl._model_states["gpt-4"]
         assert state.circuit_state == CircuitState.HALF_OPEN
 
@@ -387,6 +394,7 @@ class TestCircuitBreakerTransitions:
         release_model_slot("gpt-4")
 
         from code_puppy import adaptive_rate_limiter as arl
+
         state = arl._model_states["gpt-4"]
 
         # CLOSED initially
@@ -416,6 +424,7 @@ class TestCircuitBreakerTransitions:
         release_model_slot("gpt-4")
 
         from code_puppy import adaptive_rate_limiter as arl
+
         state = arl._model_states["gpt-4"]
 
         # First 429 → 0.1s cooldown
@@ -453,6 +462,7 @@ class TestRequestQueuing:
         release_model_slot("gpt-4")
 
         from code_puppy import adaptive_rate_limiter as arl
+
         state = arl._model_states["gpt-4"]
 
         # Open circuit
@@ -553,6 +563,7 @@ class TestHalfOpenBehavior:
         await asyncio.sleep(0.3)  # → HALF_OPEN
 
         from code_puppy import adaptive_rate_limiter as arl
+
         state = arl._model_states["gpt-4"]
 
         # Should allow 2 test requests
@@ -649,6 +660,7 @@ class TestNotifySuccess:
     def test_notify_success_import(self):
         """_notify_success should be importable."""
         from code_puppy.http_utils import _notify_success
+
         assert callable(_notify_success)
 
     @pytest.mark.asyncio
@@ -679,6 +691,7 @@ class TestNotifySuccess:
 
         await open_circuit("gpt-4")
         from code_puppy import adaptive_rate_limiter as arl
+
         state = arl._model_states["gpt-4"]
         state.circuit_state = CircuitState.HALF_OPEN
 

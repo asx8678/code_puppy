@@ -386,9 +386,11 @@ class TestCreateServerStdio:
         ) as mock_stdio:
             mock_stdio.return_value = MagicMock()
             server = ManagedMCPServer(config)
-            
+
             # Check if server was created successfully
-            assert server._pydantic_server is not None, f"Server creation failed: {server._error_message}"
+            assert server._pydantic_server is not None, (
+                f"Server creation failed: {server._error_message}"
+            )
             assert mock_stdio.called, "BlockingMCPServerStdio was not called"
 
             call_kwargs = mock_stdio.call_args.kwargs
@@ -594,7 +596,7 @@ class TestGetHttpClient:
 
     def test_creates_client_with_expanded_headers(self):
         """Test that headers env vars are expanded with safe variables only.
-        
+
         SECURITY: Only environment variables in the safe list are expanded.
         """
         config = ServerConfig(

@@ -145,7 +145,8 @@ def extract_function_info(code: str) -> ValidationResult:
 
 
 def _extract_single_function(
-    node: ast.FunctionDef | ast.AsyncFunctionDef) -> FunctionInfo:
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> FunctionInfo:
     """Extract info from a single function AST node."""
     # Get parameter names
     params = []
@@ -193,7 +194,8 @@ def _extract_single_function(
         return_annotation=return_annotation,
         is_async=isinstance(node, ast.AsyncFunctionDef),
         decorators=decorators,
-        line_number=node.lineno)
+        line_number=node.lineno,
+    )
 
 
 def check_dangerous_patterns(code: str) -> ValidationResult:

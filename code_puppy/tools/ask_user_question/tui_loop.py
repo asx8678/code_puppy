@@ -4,7 +4,6 @@ This module contains the main TUI application loop and all keyboard bindings.
 Separated from terminal_ui.py to keep files under 600 lines.
 """
 
-
 import asyncio
 import shutil
 import sys
@@ -22,6 +21,7 @@ try:
     from prompt_toolkit.output import create_output
     from prompt_toolkit.output.color_depth import ColorDepth
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -32,7 +32,8 @@ from .constants import (
     ARROW_RIGHT,
     ARROW_UP,
     CHECK_MARK,
-    CURSOR_TRIANGLE)
+    CURSOR_TRIANGLE,
+)
 from .renderers import render_question_panel
 from .theme import get_rich_colors, get_tui_colors
 
@@ -82,7 +83,8 @@ class TUIResult:
 
 
 async def run_question_tui(
-    state: QuestionUIState) -> tuple[list[QuestionAnswer], bool, bool]:
+    state: QuestionUIState,
+) -> tuple[list[QuestionAnswer], bool, bool]:
     """Run the main question TUI loop.
 
     Returns:
@@ -110,7 +112,8 @@ async def run_question_tui(
 
     # --- Factory for arrow key navigation (don't type in text mode) ---
     def make_arrow_handler(
-        action: Callable[[], None]) -> Callable[[KeyPressEvent], None]:
+        action: Callable[[], None],
+    ) -> Callable[[KeyPressEvent], None]:
         """Create handler that only fires when not in text input mode."""
 
         def handler(event: KeyPressEvent) -> None:
@@ -357,7 +360,8 @@ async def run_question_tui(
 
     left_panel = Window(
         content=FormattedTextControl(lambda: get_left_panel_text()),
-        width=Dimension(preferred=left_panel_width, max=left_panel_width))
+        width=Dimension(preferred=left_panel_width, max=left_panel_width),
+    )
 
     right_panel = Window(
         content=FormattedTextControl(lambda: get_right_panel_text()),
@@ -383,7 +387,8 @@ async def run_question_tui(
         full_screen=True,
         mouse_support=False,
         color_depth=ColorDepth.DEPTH_24_BIT,
-        output=output)
+        output=output,
+    )
 
     # Timeout checker background task
     async def timeout_checker() -> None:

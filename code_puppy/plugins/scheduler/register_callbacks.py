@@ -18,9 +18,7 @@ _DESCRIPTION = "Manage scheduled tasks – create, run, and monitor automated pr
 def _scheduler_help() -> list[tuple[str, str]]:
     """Return help entries for the scheduler commands."""
     return [
-        (
-            "scheduler",
-            "Manage scheduled tasks – launch TUI or use sub-commands"),
+        ("scheduler", "Manage scheduled tasks – launch TUI or use sub-commands"),
         ("sched", "Alias for /scheduler"),
         ("cron", "Alias for /scheduler"),
     ]
@@ -46,7 +44,8 @@ def _handle_scheduler_command(command: str, name: str) -> Any | None:
         handle_scheduler_run,
         handle_scheduler_start,
         handle_scheduler_status,
-        handle_scheduler_stop)
+        handle_scheduler_stop,
+    )
 
     tokens = command.split()
 

@@ -13,6 +13,7 @@ def _disable_prompt_plugins(monkeypatch):
         lambda model_name, default_system_prompt, user_prompt: [],
     )
 
+
 from code_puppy.model_utils import (
     CLAUDE_CODE_INSTRUCTIONS,
     PreparedPrompt,

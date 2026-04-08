@@ -13,7 +13,8 @@ from .error_isolation import (
     ErrorStats,
     MCPErrorIsolator,
     QuarantinedServerError,
-    get_error_isolator)
+    get_error_isolator,
+)
 from .managed_server import ManagedMCPServer, ServerConfig, ServerState
 from .manager import MCPManager, ServerInfo, get_mcp_manager
 from .mcp_logs import (
@@ -23,7 +24,8 @@ from .mcp_logs import (
     get_mcp_logs_dir,
     list_servers_with_logs,
     read_logs,
-    write_log)
+    write_log,
+)
 from .mcp_security import (
     ALLOWED_COMMANDS,
     CommandInjectionError,

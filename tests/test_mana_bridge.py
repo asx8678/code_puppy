@@ -447,7 +447,10 @@ class TestPromptExecutor:
         # so we patch at the agent_manager module level.
         with (
             patch.object(rc, "_client", mock_client),
-            patch("code_puppy.agents.agent_manager.get_current_agent", return_value=mock_agent),
+            patch(
+                "code_puppy.agents.agent_manager.get_current_agent",
+                return_value=mock_agent,
+            ),
         ):
             await rc._execute_bridge_prompt("test prompt")
 
@@ -470,7 +473,9 @@ class TestPromptExecutor:
         mock_client = MagicMock()
 
         with patch.object(rc, "_client", mock_client):
-            with patch("code_puppy.agents.agent_manager.get_current_agent", return_value=None):
+            with patch(
+                "code_puppy.agents.agent_manager.get_current_agent", return_value=None
+            ):
                 await rc._execute_bridge_prompt("test prompt")
 
         mock_client.send_event.assert_called_once()
@@ -490,7 +495,10 @@ class TestPromptExecutor:
         mock_client = MagicMock()
 
         with patch.object(rc, "_client", mock_client):
-            with patch("code_puppy.agents.agent_manager.get_current_agent", return_value=mock_agent):
+            with patch(
+                "code_puppy.agents.agent_manager.get_current_agent",
+                return_value=mock_agent,
+            ):
                 await rc._execute_bridge_prompt("test prompt")
 
         mock_client.send_event.assert_called_once()
@@ -508,7 +516,10 @@ class TestPromptExecutor:
         mock_agent.run_with_mcp = AsyncMock(return_value=None)
 
         with patch.object(rc, "_client", None):
-            with patch("code_puppy.agents.agent_manager.get_current_agent", return_value=mock_agent):
+            with patch(
+                "code_puppy.agents.agent_manager.get_current_agent",
+                return_value=mock_agent,
+            ):
                 # Should not raise
                 await rc._execute_bridge_prompt("test prompt")
 
@@ -541,7 +552,10 @@ class TestPromptExecutor:
         mock_client = MagicMock()
 
         with patch.object(rc, "_client", mock_client):
-            with patch("code_puppy.agents.agent_manager.get_current_agent", return_value=mock_agent):
+            with patch(
+                "code_puppy.agents.agent_manager.get_current_agent",
+                return_value=mock_agent,
+            ):
                 # Should not raise
                 await rc._execute_bridge_prompt("test prompt")
         mock_client.send_event.assert_called_once()

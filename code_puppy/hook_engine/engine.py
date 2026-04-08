@@ -8,16 +8,13 @@ from typing import Any
 
 from .executor import execute_hooks_sequential, get_blocking_result
 from .matcher import matches
-from .models import (
-    EventData,
-    HookConfig,
-    HookRegistry,
-    ProcessEventResult)
+from .models import EventData, HookConfig, HookRegistry, ProcessEventResult
 from .registry import build_registry_from_config, get_registry_stats
 from .validator import (
     format_validation_report,
     get_config_suggestions,
-    validate_hooks_config)
+    validate_hooks_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +34,8 @@ class HookEngine:
         self,
         config: dict[str, Any | None] = None,
         strict_validation: bool = True,
-        env_vars: dict[str, str | None] = None):
+        env_vars: dict[str, str | None] = None,
+    ):
         self.env_vars = env_vars or {}
         self.strict_validation = strict_validation
         self._registry: HookRegistry | None = None
@@ -79,7 +77,8 @@ class HookEngine:
         event_type: str,
         event_data: EventData,
         sequential: bool = True,
-        stop_on_block: bool = True) -> ProcessEventResult:
+        stop_on_block: bool = True,
+    ) -> ProcessEventResult:
         """Process an event through the hook engine."""
         start_time = time.perf_counter()
 
@@ -96,7 +95,8 @@ class HookEngine:
                 blocked=False,
                 executed_hooks=0,
                 results=[],
-                total_duration_ms=duration_ms)
+                total_duration_ms=duration_ms,
+            )
 
         matching_hooks = self._filter_hooks_by_matcher(
             all_hooks, event_data.tool_name, event_data.tool_args
@@ -108,7 +108,8 @@ class HookEngine:
                 blocked=False,
                 executed_hooks=0,
                 results=[],
-                total_duration_ms=duration_ms)
+                total_duration_ms=duration_ms,
+            )
 
         logger.debug(
             f"Processing {event_type}: {len(matching_hooks)} matching hook(s) for tool '{event_data.tool_name}'"
@@ -145,13 +146,12 @@ class HookEngine:
             executed_hooks=len(results),
             results=results,
             blocking_reason=blocking_reason,
-            total_duration_ms=duration_ms)
+            total_duration_ms=duration_ms,
+        )
 
     def _filter_hooks_by_matcher(
-        self,
-        hooks: list[HookConfig],
-        tool_name: str,
-        tool_args: dict[str, Any]) -> list[HookConfig]:
+        self, hooks: list[HookConfig], tool_name: str, tool_args: dict[str, Any]
+    ) -> list[HookConfig]:
         matching_hooks = []
         for hook in hooks:
             try:

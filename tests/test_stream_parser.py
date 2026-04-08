@@ -415,6 +415,6 @@ class TestParseJsonlLenient:
 
     def test_leading_trailing_whitespace_stripped(self):
         """Leading/trailing whitespace around a valid JSON value is OK."""
-        text = "  42  \n  {\"a\": 1}  "
+        text = '  42  \n  {"a": 1}  '
         result = parse_jsonl_lenient(text)
         assert result == [42, {"a": 1}]

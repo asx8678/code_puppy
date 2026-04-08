@@ -5,7 +5,6 @@ Provides OAuth authentication for Claude Code models and registers
 the 'claude_code' model type handler.
 """
 
-
 import logging
 import threading
 import time
@@ -35,7 +34,8 @@ from .utils import (
     load_stored_tokens,
     prepare_oauth_context,
     remove_claude_code_models,
-    save_tokens)
+    save_tokens,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,14 +63,14 @@ class _CallbackHandler(BaseHTTPRequestHandler):
             self.result.code = code
             self.result.state = state
             success_html = oauth_success_html(
-                "Claude Code",
-                "You're totally synced with Claude Code now!")
+                "Claude Code", "You're totally synced with Claude Code now!"
+            )
             self._write_response(200, success_html)
         else:
             self.result.error = "Missing code or state"
             failure_html = oauth_failure_html(
-                "Claude Code",
-                "Missing code or state parameter 🥺")
+                "Claude Code", "Missing code or state parameter 🥺"
+            )
             self._write_response(400, failure_html)
 
         self.received_event.set()
@@ -86,7 +86,8 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 
 
 def _start_callback_server(
-    context: OAuthContext) -> tuple[HTTPServer, _OAuthResult, threading.Event | None]:
+    context: OAuthContext,
+) -> tuple[HTTPServer, _OAuthResult, threading.Event | None]:
     port_range = CLAUDE_CODE_OAUTH_CONFIG["callback_port_range"]
 
     for port in range(port_range[0], port_range[1] + 1):
@@ -174,10 +175,12 @@ def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             "claude-code-auth",
-            "Authenticate with Claude Code via OAuth and import available models"),
+            "Authenticate with Claude Code via OAuth and import available models",
+        ),
         (
             "claude-code-status",
-            "Check Claude Code OAuth authentication status and configured models"),
+            "Check Claude Code OAuth authentication status and configured models",
+        ),
         ("claude-code-logout", "Remove Claude Code OAuth tokens and imported models"),
     ]
 
@@ -288,7 +291,8 @@ def _create_claude_code_model(model_name: str, model_config: Dict, config: Dict)
 
     from code_puppy.claude_cache_client import (
         ClaudeCacheAsyncClient,
-        patch_anthropic_client_messages)
+        patch_anthropic_client_messages,
+    )
     from code_puppy.config import get_effective_model_settings
     from code_puppy.http_utils import get_cert_bundle_path
     from code_puppy.model_factory import get_custom_config
@@ -348,15 +352,12 @@ def _create_claude_code_model(model_name: str, model_config: Dict, config: Dict)
     # that transforms tool names in streaming responses doesn't play well
     # with HTTP/2's compression handling, causing zlib decompression errors.
     client = ClaudeCacheAsyncClient(
-        headers=headers,
-        verify=verify,
-        timeout=180,
-        http2=False)
+        headers=headers, verify=verify, timeout=180, http2=False
+    )
 
     anthropic_client = AsyncAnthropic(
-        base_url=url,
-        http_client=client,
-        auth_token=api_key)
+        base_url=url, http_client=client, auth_token=api_key
+    )
     patch_anthropic_client_messages(anthropic_client)
     anthropic_client.api_key = None
     anthropic_client.auth_token = api_key
@@ -378,9 +379,8 @@ _active_heartbeats: dict[str, Any] = {}
 
 
 async def _on_agent_run_start(
-    agent_name: str,
-    model_name: str,
-    session_id: str | None = None) -> None:
+    agent_name: str, model_name: str, session_id: str | None = None
+) -> None:
     """Start token refresh heartbeat for Claude Code OAuth models.
 
     This callback is triggered when an agent run starts. If the model is a
@@ -403,7 +403,8 @@ async def _on_agent_run_start(
         logger.debug(
             "Started token refresh heartbeat for session %s (model: %s)",
             key,
-            model_name)
+            model_name,
+        )
     except ImportError:
         logger.debug("Token refresh heartbeat module not available")
     except Exception as exc:
@@ -417,7 +418,8 @@ async def _on_agent_run_end(
     success: bool = True,
     error: Exception | None = None,
     response_text: str | None = None,
-    metadata: dict[str, Any | None] = None) -> None:
+    metadata: dict[str, Any | None] = None,
+) -> None:
     """Stop token refresh heartbeat when agent run ends.
 
     This callback is triggered when an agent run completes (success or failure).
@@ -433,7 +435,8 @@ async def _on_agent_run_end(
             logger.debug(
                 "Stopped token refresh heartbeat for session %s (refreshed %d times)",
                 key,
-                heartbeat.refresh_count)
+                heartbeat.refresh_count,
+            )
         except Exception as exc:
             logger.debug("Error stopping token refresh heartbeat: %s", exc)
 

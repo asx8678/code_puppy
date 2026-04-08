@@ -141,7 +141,8 @@ class CapturedMCPServerStdio(MCPServerStdio):
         env: dict[str, str] | None = None,
         cwd: str | None = None,
         stderr_handler: callable | None = None,
-        **kwargs):
+        **kwargs,
+    ):
         """
         Initialize captured stdio server.
 
@@ -160,7 +161,8 @@ class CapturedMCPServerStdio(MCPServerStdio):
 
     @asynccontextmanager
     async def client_streams(
-        self) -> AsyncIterator[
+        self,
+    ) -> AsyncIterator[
         tuple[
             MemoryObjectReceiveStream[SessionMessage | Exception],
             MemoryObjectSendStream[SessionMessage],
@@ -189,7 +191,8 @@ class CapturedMCPServerStdio(MCPServerStdio):
         with open(os.devnull, "w") as devnull:
             async with stdio_client(server=server, errlog=devnull) as (
                 read_stream,
-                write_stream):
+                write_stream,
+            ):
                 yield read_stream, write_stream
 
     def get_captured_stderr(self) -> list[str]:

@@ -112,7 +112,9 @@ class TestTriggerCallbacksSync:
 
     def test_sync_callback_with_args(self):
         captured = {}
-        register_callback("agent_exception", lambda exc, **kw: captured.update({"exc": str(exc)}))
+        register_callback(
+            "agent_exception", lambda exc, **kw: captured.update({"exc": str(exc)})
+        )
         _trigger_callbacks_sync("agent_exception", ValueError("test"))
         assert captured == {"exc": "test"}
 

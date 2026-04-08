@@ -130,9 +130,7 @@ class UCInfoOutput(BaseModel):
     tool: UCToolInfo | None = Field(
         default=None, description="Tool information if found"
     )
-    source_code: str | None = Field(
-        default=None, description="Source code of the tool"
-    )
+    source_code: str | None = Field(default=None, description="Source code of the tool")
     error: str | None = Field(default=None, description="Error message if failed")
 
     model_config = {"arbitrary_types_allowed": True}

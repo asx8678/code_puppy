@@ -16,13 +16,13 @@ import pytest
 try:
     from code_puppy.agents.agent_code_scout import CodeScoutAgent
     from code_puppy.agents.base_agent import BaseAgent
+
     HAS_AGENT = True
 except ImportError:
     HAS_AGENT = False
 
 requires_agent = pytest.mark.skipif(
-    not HAS_AGENT,
-    reason="CodeScoutAgent import failed (likely missing dependency)"
+    not HAS_AGENT, reason="CodeScoutAgent import failed (likely missing dependency)"
 )
 
 
@@ -234,21 +234,33 @@ class TestSystemPromptTurboIntegration:
         agent = CodeScoutAgent()
         prompt = agent.get_system_prompt()
 
-        assert "Phase 2" in prompt or "Phase 2: DEEP READ" in prompt or "DEEP READ" in prompt
+        assert (
+            "Phase 2" in prompt
+            or "Phase 2: DEEP READ" in prompt
+            or "DEEP READ" in prompt
+        )
 
     def test_prompt_contains_phase_3_targeted_search(self):
         """Test that prompt contains Phase 3: TARGETED SEARCH reconnaissance phase."""
         agent = CodeScoutAgent()
         prompt = agent.get_system_prompt()
 
-        assert "Phase 3" in prompt or "Phase 3: TARGETED SEARCH" in prompt or "TARGETED SEARCH" in prompt
+        assert (
+            "Phase 3" in prompt
+            or "Phase 3: TARGETED SEARCH" in prompt
+            or "TARGETED SEARCH" in prompt
+        )
 
     def test_prompt_contains_phase_4_synthesize(self):
         """Test that prompt contains Phase 4: SYNTHESIZE reconnaissance phase."""
         agent = CodeScoutAgent()
         prompt = agent.get_system_prompt()
 
-        assert "Phase 4" in prompt or "Phase 4: SYNTHESIZE" in prompt or "SYNTHESIZE" in prompt
+        assert (
+            "Phase 4" in prompt
+            or "Phase 4: SYNTHESIZE" in prompt
+            or "SYNTHESIZE" in prompt
+        )
 
     def test_prompt_contains_sub_agent_delegation_section(self):
         """Test that prompt contains sub-agent delegation guidance."""
@@ -294,7 +306,10 @@ class TestNoPluginConflicts:
         """Test that description mentions turbo-executor integration."""
         agent = CodeScoutAgent()
 
-        assert "turbo" in agent.description.lower() or "turbo-executor" in agent.description
+        assert (
+            "turbo" in agent.description.lower()
+            or "turbo-executor" in agent.description
+        )
 
 
 @requires_agent
@@ -317,7 +332,10 @@ class TestAgentIdentity:
         """Test that description mentions minimal LLM turns efficiency."""
         agent = CodeScoutAgent()
 
-        assert "minimal LLM turns" in agent.description or "efficient" in agent.description.lower()
+        assert (
+            "minimal LLM turns" in agent.description
+            or "efficient" in agent.description.lower()
+        )
 
     def test_has_user_prompt(self):
         """Test that agent provides a user prompt/greeting."""
@@ -352,14 +370,20 @@ class TestTurboFirstPrinciple:
         agent = CodeScoutAgent()
         prompt = agent.get_system_prompt()
 
-        assert "ALWAYS use turbo_execute" in prompt or "always use turbo_execute" in prompt.lower()
+        assert (
+            "ALWAYS use turbo_execute" in prompt
+            or "always use turbo_execute" in prompt.lower()
+        )
 
     def test_prompt_contains_only_use_individual_tools(self):
         """Test that prompt explains when to only use individual tools."""
         agent = CodeScoutAgent()
         prompt = agent.get_system_prompt()
 
-        assert "Only use individual tools" in prompt or "only use individual" in prompt.lower()
+        assert (
+            "Only use individual tools" in prompt
+            or "only use individual" in prompt.lower()
+        )
 
 
 @requires_agent

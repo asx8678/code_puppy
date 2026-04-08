@@ -426,7 +426,7 @@ class TestInitialCommandPassthrough:
 
 class TestValidatePassthroughCommand:
     """Test validation of dangerous command patterns.
-    
+
     These tests verify that the shell_passthrough security validation
     correctly blocks dangerous patterns while allowing benign commands.
     """
@@ -469,7 +469,7 @@ class TestValidatePassthroughCommand:
 
     def test_evaluate_method_not_blocked(self):
         """`something.evaluate(x)` should NOT be blocked (false-positive fix).
-        
+
         The pattern should only match the standalone 'eval' command,
         not words that contain 'eval' as a substring like 'evaluate'.
         """

@@ -38,7 +38,7 @@ def _on_startup() -> None:
 
 def _on_agent_reload(agent_id: str, agent_name: str) -> None:
     """Save the agent name whenever an agent is selected.
-    
+
     Args:
         agent_id: The unique ID of the agent instance.
         agent_name: The name of the agent (e.g., "code-puppy").
@@ -49,22 +49,22 @@ def _on_agent_reload(agent_id: str, agent_name: str) -> None:
 
 def _handle_last_agent_command(command: str, name: str) -> bool | None:
     """Handle /last-agent command.
-    
+
     Commands:
         /last-agent clear  - Clear the saved last agent
         /last-agent show   - Show the saved last agent
-    
+
     Returns:
         True if handled, None otherwise.
     """
     if name != "last-agent":
         return None
-    
+
     from .storage import get_last_agent
-    
+
     parts = command.split()[1:]  # drop "/last-agent" itself
     subcmd = parts[0] if parts else "show"
-    
+
     if subcmd == "clear":
         clear_last_agent()
         emit_info("🐾 Last agent cleared. Will use default on next startup.")

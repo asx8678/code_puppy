@@ -25,7 +25,9 @@ def _build_repo_context(root: Path | None = None) -> str | None:
             max_files=cfg.max_files,
             max_symbols_per_file=cfg.max_symbols_per_file,
         )
-        return format_structure_map(project_root, summaries, max_chars=cfg.max_prompt_chars)
+        return format_structure_map(
+            project_root, summaries, max_chars=cfg.max_prompt_chars
+        )
     except Exception as exc:  # fail gracefully per plugin rules
         logger.debug("Repo Compass failed to build context: %s", exc)
         return None

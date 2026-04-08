@@ -10,6 +10,7 @@ Security is enforced UPSTREAM by the shell_safety plugin, which classifies
 commands before execution and can block dangerous operations. The PolicyEngine
 provides additional rule-based command filtering.
 """
+
 import asyncio
 from collections import deque
 import ctypes
@@ -41,7 +42,8 @@ from code_puppy.messaging import (  # Structured messaging types
     emit_info,
     emit_shell_line,
     emit_warning,
-    get_message_bus)
+    get_message_bus,
+)
 from code_puppy.tools.common import generate_group_id, get_user_approval_async
 from code_puppy.tools.subagent_context import is_subagent
 from code_puppy.concurrency_limits import ToolCallsLimiter
@@ -53,6 +55,7 @@ MAX_LINE_LENGTH = 256
 # Batch size for shell output emissions to reduce bus overhead
 # Collects multiple lines and emits them together rather than one at a time
 SHELL_BATCH_SIZE = 10
+
 
 def _truncate_line(line: str) -> str:
     """Truncate a line to MAX_LINE_LENGTH if it exceeds the limit."""
@@ -75,22 +78,24 @@ MAX_COMMAND_LENGTH = 8192
 # These patterns could indicate command injection attempts
 DANGEROUS_PATTERNS = [
     # Command substitution that could execute arbitrary code
-    r'`[^`]*`',  # Backtick command substitution: `rm -rf /`
-    r'\$\([^)]*\)',  # $() command substitution: $(rm -rf /)
+    r"`[^`]*`",  # Backtick command substitution: `rm -rf /`
+    r"\$\([^)]*\)",  # $() command substitution: $(rm -rf /)
     # Process substitution (bash-specific, can be dangerous)
-    r'<\s*\(',  # Input process substitution: <(command)
-    r'>\s*\(',  # Output process substitution: >(command)
+    r"<\s*\(",  # Input process substitution: <(command)
+    r">\s*\(",  # Output process substitution: >(command)
     # Multiple redirections that could be abused
-    r'\d*>&\d*\s*\d*>&',  # Multiple fd redirections
+    r"\d*>&\d*\s*\d*>&",  # Multiple fd redirections
     # Null byte injection (can cause issues in some contexts)
-    r'\x00',
+    r"\x00",
 ]
 
 # Characters that are NEVER allowed in commands (control characters, etc.)
 # Using generator expression for memory efficiency when building the forbidden set
 FORBIDDEN_CHARS = set(
-    chr(i) for i in range(32) if i not in (9, 10, 13)  # Allow tab, LF, CR
-) | {'\x7f'}  # Also forbid DEL character
+    chr(i)
+    for i in range(32)
+    if i not in (9, 10, 13)  # Allow tab, LF, CR
+) | {"\x7f"}  # Also forbid DEL character
 
 # Compiled regex patterns for performance
 # Using tuple instead of list for memory efficiency and immutability
@@ -191,9 +196,7 @@ def validate_shell_command(command: str) -> str:
 
 
 def safe_execute_subprocess(
-    command: str,
-    cwd: str | None = None,
-    **kwargs
+    command: str, cwd: str | None = None, **kwargs
 ) -> subprocess.Popen:
     """Execute a subprocess with security validation.
 
@@ -227,7 +230,7 @@ def safe_execute_subprocess(
         command,
         shell=True,  # noqa: S602 — validated above, required for pipes/redirects
         cwd=cwd,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -325,8 +328,10 @@ def _get_shell_executor() -> ThreadPoolExecutor:
         with _SHELL_EXECUTOR_LOCK:
             if _SHELL_EXECUTOR is None:  # double-check
                 import atexit
+
                 _SHELL_EXECUTOR = ThreadPoolExecutor(
-                    max_workers=16, thread_name_prefix="shell_cmd_",
+                    max_workers=16,
+                    thread_name_prefix="shell_cmd_",
                 )
                 atexit.register(_SHELL_EXECUTOR.shutdown, wait=False)
     return _SHELL_EXECUTOR
@@ -359,7 +364,8 @@ def _kill_process_group(proc: subprocess.Popen) -> None:
                     ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
                     capture_output=True,
                     timeout=2,
-                    check=False)
+                    check=False,
+                )
                 time.sleep(0.3)
             except Exception:
                 # Fallback to Python's built-in methods
@@ -535,8 +541,8 @@ class ShellSafetyAssessment(BaseModel):
 
 
 def _listen_for_ctrl_x_windows(
-    stop_event: threading.Event,
-    on_escape: Callable[[], None]) -> None:
+    stop_event: threading.Event, on_escape: Callable[[], None]
+) -> None:
     """Windows-specific Ctrl-X listener."""
     import msvcrt
     import time
@@ -572,8 +578,8 @@ def _listen_for_ctrl_x_windows(
 
 
 def _listen_for_ctrl_x_posix(
-    stop_event: threading.Event,
-    on_escape: Callable[[], None]) -> None:
+    stop_event: threading.Event, on_escape: Callable[[], None]
+) -> None:
     """POSIX-specific Ctrl-X listener."""
     import select
     import sys
@@ -614,8 +620,8 @@ def _listen_for_ctrl_x_posix(
 
 
 def _spawn_ctrl_x_key_listener(
-    stop_event: threading.Event,
-    on_escape: Callable[[], None]) -> threading.Thread | None:
+    stop_event: threading.Event, on_escape: Callable[[], None]
+) -> threading.Thread | None:
     """Start a Ctrl+X key listener thread for CLI sessions."""
     try:
         import sys
@@ -674,8 +680,8 @@ def _shell_command_keyboard_context():
     # Set up Ctrl-X listener
     _SHELL_CTRL_X_STOP_EVENT = threading.Event()
     _SHELL_CTRL_X_THREAD = _spawn_ctrl_x_key_listener(
-        _SHELL_CTRL_X_STOP_EVENT,
-        handle_ctrl_x_press)
+        _SHELL_CTRL_X_STOP_EVENT, handle_ctrl_x_press
+    )
 
     # Replace SIGINT handler temporarily
     try:
@@ -732,8 +738,8 @@ def _start_keyboard_listener() -> None:
     # Set up Ctrl-X listener
     _SHELL_CTRL_X_STOP_EVENT = threading.Event()
     _SHELL_CTRL_X_THREAD = _spawn_ctrl_x_key_listener(
-        _SHELL_CTRL_X_STOP_EVENT,
-        _handle_ctrl_x_press)
+        _SHELL_CTRL_X_STOP_EVENT, _handle_ctrl_x_press
+    )
 
     # Replace SIGINT handler temporarily
     try:
@@ -817,7 +823,8 @@ def run_shell_command_streaming(
     timeout: int = 60,
     command: str = "",
     group_id: str = None,
-    silent: bool = False):
+    silent: bool = False,
+):
     stop_event = threading.Event()
     with _ACTIVE_STOP_EVENTS_LOCK:
         _ACTIVE_STOP_EVENTS.add(stop_event)
@@ -1040,14 +1047,16 @@ def run_shell_command_streaming(
                 if stdout_thread.is_alive() and not silent:
                     emit_warning(
                         f"stdout reader thread failed to terminate after {timeout_type} timeout",
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
 
             if stderr_thread and stderr_thread.is_alive():
                 stderr_thread.join(timeout=3)
                 if stderr_thread.is_alive() and not silent:
                     emit_warning(
                         f"stderr reader thread failed to terminate after {timeout_type} timeout",
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
 
         except Exception as e:
             if not silent:
@@ -1083,14 +1092,16 @@ def run_shell_command_streaming(
                 if not silent:
                     emit_error(
                         "Process killed: absolute timeout reached",
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
                 return cleanup_process_and_threads("absolute")
 
             if current_time - last_output_time[0] > timeout:
                 if not silent:
                     emit_error(
                         "Process killed: inactivity timeout reached",
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
                 return cleanup_process_and_threads("inactivity")
 
             time.sleep(0.1)
@@ -1126,7 +1137,8 @@ def run_shell_command_streaming(
                 stdout="\n".join(truncated_stdout),
                 stderr="\n".join(truncated_stderr),
                 exit_code=exit_code,
-                duration_seconds=execution_time)
+                duration_seconds=execution_time,
+            )
             get_message_bus().emit(shell_output_msg)
 
         with _ACTIVE_STOP_EVENTS_LOCK:
@@ -1143,7 +1155,8 @@ def run_shell_command_streaming(
                 exit_code=exit_code,
                 execution_time=execution_time,
                 timeout=False,
-                user_interrupted=process.pid in _USER_KILLED_PROCESSES)
+                user_interrupted=process.pid in _USER_KILLED_PROCESSES,
+            )
 
         return ShellCommandOutput(
             success=True,
@@ -1152,7 +1165,8 @@ def run_shell_command_streaming(
             stderr="\n".join(truncated_stderr),
             exit_code=exit_code,
             execution_time=execution_time,
-            timeout=False)
+            timeout=False,
+        )
 
     except Exception as e:
         with _ACTIVE_STOP_EVENTS_LOCK:
@@ -1164,7 +1178,8 @@ def run_shell_command_streaming(
             stdout="\n".join(list(stdout_lines)[-256:]),
             stderr="\n".join(list(stderr_lines)[-256:]),
             exit_code=-1,
-            timeout=False)
+            timeout=False,
+        )
 
 
 async def run_shell_command(
@@ -1172,7 +1187,8 @@ async def run_shell_command(
     command: str,
     cwd: str = None,
     timeout: int = 60,
-    background: bool = False) -> ShellCommandOutput:
+    background: bool = False,
+) -> ShellCommandOutput:
     # Generate unique group_id for this command execution
     group_id = generate_group_id("shell_command", command)
 
@@ -1194,7 +1210,8 @@ async def run_shell_command(
                 stdout=None,
                 stderr=None,
                 exit_code=None,
-                execution_time=None)
+                execution_time=None,
+            )
 
     # Handle background execution - runs command detached and returns immediately
     # This happens BEFORE user confirmation since we don't wait for the command
@@ -1224,7 +1241,8 @@ async def run_shell_command(
                         stderr=subprocess.STDOUT,
                         stdin=subprocess.DEVNULL,
                         cwd=cwd,
-                        creationflags=creationflags)
+                        creationflags=creationflags,
+                    )
                 else:
                     process = subprocess.Popen(
                         command,
@@ -1245,7 +1263,8 @@ async def run_shell_command(
                         command=command,
                         cwd=cwd,
                         timeout=0,  # No timeout for background processes
-                        background=True)
+                        background=True,
+                    )
                 )
 
                 # Emit info about background execution
@@ -1264,7 +1283,8 @@ async def run_shell_command(
                     execution_time=0.0,
                     background=True,
                     log_file=log_file.name,
-                    pid=process.pid)
+                    pid=process.pid,
+                )
             except Exception as e:
                 try:
                     log_file.close()
@@ -1285,7 +1305,8 @@ async def run_shell_command(
                     stderr=None,
                     exit_code=None,
                     execution_time=None,
-                    background=True)
+                    background=True,
+                )
 
     # Rest of the existing function continues...
     if not command or not command.strip():
@@ -1311,7 +1332,8 @@ async def run_shell_command(
             return ShellCommandOutput(
                 success=False,
                 command=command,
-                error="Another command is currently awaiting confirmation")
+                error="Another command is currently awaiting confirmation",
+            )
 
         # Get puppy name for personalized messages
         from code_puppy.config import get_puppy_name
@@ -1335,7 +1357,8 @@ async def run_shell_command(
             content=panel_content,
             preview=None,
             border_style="dim white",
-            puppy_name=puppy_name)
+            puppy_name=puppy_name,
+        )
 
         # Release lock after approval
         if confirmation_lock_acquired:
@@ -1351,7 +1374,8 @@ async def run_shell_command(
                     stdout=None,
                     stderr=None,
                     exit_code=None,
-                    execution_time=None)
+                    execution_time=None,
+                )
             else:
                 result = ShellCommandOutput(
                     success=False,
@@ -1360,7 +1384,8 @@ async def run_shell_command(
                     stdout=None,
                     stderr=None,
                     exit_code=None,
-                    execution_time=None)
+                    execution_time=None,
+                )
             return result
     else:
         time.time()
@@ -1371,15 +1396,13 @@ async def run_shell_command(
         cwd=cwd,
         timeout=timeout,
         group_id=group_id,
-        silent=running_as_subagent)
+        silent=running_as_subagent,
+    )
 
 
 async def _execute_shell_command(
-    command: str,
-    cwd: str | None,
-    timeout: int,
-    group_id: str,
-    silent: bool = False) -> ShellCommandOutput:
+    command: str, cwd: str | None, timeout: int, group_id: str, silent: bool = False
+) -> ShellCommandOutput:
     """Internal helper to execute a shell command.
 
     Args:
@@ -1394,12 +1417,7 @@ async def _execute_shell_command(
     """
     # Always emit the ShellStartMessage banner (even for sub-agents)
     bus = get_message_bus()
-    bus.emit(
-        ShellStartMessage(
-            command=command,
-            cwd=cwd,
-            timeout=timeout)
-    )
+    bus.emit(ShellStartMessage(command=command, cwd=cwd, timeout=timeout))
 
     # Pause spinner during shell command so \r output can work properly
     from code_puppy.messaging.spinner import pause_all_spinners, resume_all_spinners
@@ -1412,18 +1430,17 @@ async def _execute_shell_command(
     try:
         # Respect centralized concurrency controls for tool calls
         async with ToolCallsLimiter():
-            return await _run_command_inner(command, cwd, timeout, group_id, silent=silent)
+            return await _run_command_inner(
+                command, cwd, timeout, group_id, silent=silent
+            )
     finally:
         _release_keyboard_context()
         resume_all_spinners()
 
 
 def _run_command_sync(
-    command: str,
-    cwd: str | None,
-    timeout: int,
-    group_id: str,
-    silent: bool = False) -> ShellCommandOutput:
+    command: str, cwd: str | None, timeout: int, group_id: str, silent: bool = False
+) -> ShellCommandOutput:
     """Synchronous command execution - runs in thread pool."""
     creationflags = 0
     preexec_fn = None
@@ -1448,7 +1465,8 @@ def _run_command_sync(
             stdout=None,
             stderr=None,
             exit_code=-1,
-            execution_time=0.0)
+            execution_time=0.0,
+        )
 
     process = subprocess.Popen(
         command,
@@ -1458,7 +1476,8 @@ def _run_command_sync(
         cwd=cwd,
         bufsize=-1,  # Use default buffering (bufsize=1 invalid for binary mode in Py3.14)
         preexec_fn=preexec_fn,
-        creationflags=creationflags)
+        creationflags=creationflags,
+    )
 
     # Wrap pipes with TextIOWrapper that preserves \r (newline='' disables translation)
     process.stdout = io.TextIOWrapper(
@@ -1478,11 +1497,8 @@ def _run_command_sync(
 
 
 async def _run_command_inner(
-    command: str,
-    cwd: str | None,
-    timeout: int,
-    group_id: str,
-    silent: bool = False) -> ShellCommandOutput:
+    command: str, cwd: str | None, timeout: int, group_id: str, silent: bool = False
+) -> ShellCommandOutput:
     """Inner command execution logic - runs blocking code in thread pool."""
     loop = asyncio.get_running_loop()
     try:
@@ -1490,7 +1506,8 @@ async def _run_command_inner(
         # This allows multiple sub-agents to run shell commands in parallel
         return await loop.run_in_executor(
             _get_shell_executor(),
-            partial(_run_command_sync, command, cwd, timeout, group_id, silent))
+            partial(_run_command_sync, command, cwd, timeout, group_id, silent),
+        )
     except Exception as e:
         if not silent:
             emit_error(traceback.format_exc(), message_group=group_id)
@@ -1521,7 +1538,8 @@ async def _run_command_inner(
             stdout=truncated_stdout,
             stderr=truncated_stderr,
             exit_code=-1,
-            timeout=False)
+            timeout=False,
+        )
 
 
 class ReasoningOutput(BaseModel):
@@ -1543,7 +1561,8 @@ def share_your_reasoning(
         reasoning=reasoning,
         next_steps=formatted_next_steps
         if formatted_next_steps and formatted_next_steps.strip()
-        else None)
+        else None,
+    )
     get_message_bus().emit(reasoning_msg)
 
     return ReasoningOutput(success=True)
@@ -1558,7 +1577,8 @@ def register_agent_run_shell_command(agent):
         command: str = "",
         cwd: str = None,
         timeout: int = 60,
-        background: bool = False) -> ShellCommandOutput:
+        background: bool = False,
+    ) -> ShellCommandOutput:
         """Execute a shell command with comprehensive monitoring and safety features.
 
         Supports streaming output, timeout handling, and background execution.
@@ -1573,7 +1593,8 @@ def register_agent_share_your_reasoning(agent):
     def agent_share_your_reasoning(
         context: RunContext,
         reasoning: str = "",
-        next_steps: str | list[str] | None = None) -> ReasoningOutput:
+        next_steps: str | list[str] | None = None,
+    ) -> ReasoningOutput:
         """Share the agent's current reasoning and planned next steps with the user.
 
         Displays reasoning and upcoming actions in a formatted panel for transparency.

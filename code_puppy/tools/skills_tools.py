@@ -9,7 +9,8 @@ from code_puppy.messaging import (
     SkillActivateMessage,
     SkillEntry,
     SkillListMessage,
-    get_message_bus)
+    get_message_bus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +47,13 @@ def register_activate_skill(agent):
 
         from code_puppy.plugins.agent_skills.config import (
             get_skill_directories,
-            get_skills_enabled)
+            get_skills_enabled,
+        )
         from code_puppy.plugins.agent_skills.discovery import discover_skills
         from code_puppy.plugins.agent_skills.metadata import (
             get_skill_resources,
-            load_full_skill_content)
+            load_full_skill_content,
+        )
 
         # Check if skills enabled
         if not get_skills_enabled():
@@ -58,7 +61,8 @@ def register_activate_skill(agent):
                 skill_name=skill_name,
                 content="",
                 resources=[],
-                error="Skills integration is disabled. Enable it with /set skills_enabled=true")
+                error="Skills integration is disabled. Enable it with /set skills_enabled=true",
+            )
 
         # Discover skills
         try:
@@ -70,7 +74,8 @@ def register_activate_skill(agent):
                 skill_name=skill_name,
                 content="",
                 resources=[],
-                error=f"Failed to discover skills: {e}")
+                error=f"Failed to discover skills: {e}",
+            )
 
         # Find skill by name
         skill_path = None
@@ -84,7 +89,8 @@ def register_activate_skill(agent):
                 skill_name=skill_name,
                 content="",
                 resources=[],
-                error=f"Skill '{skill_name}' not found. Use list_or_search_skills to see available skills.")
+                error=f"Skill '{skill_name}' not found. Use list_or_search_skills to see available skills.",
+            )
 
         # Load full content
         content = load_full_skill_content(skill_path)
@@ -93,7 +99,8 @@ def register_activate_skill(agent):
                 skill_name=skill_name,
                 content="",
                 resources=[],
-                error=f"Failed to load content for skill '{skill_name}'")
+                error=f"Failed to load content for skill '{skill_name}'",
+            )
 
         # Get resource list
         resource_paths = get_skill_resources(skill_path)
@@ -106,7 +113,8 @@ def register_activate_skill(agent):
             skill_path=str(skill_path),
             content_preview=content_preview,
             resource_count=len(resources),
-            success=True)
+            success=True,
+        )
         get_message_bus().emit(skill_msg)
 
         return SkillActivateOutput(
@@ -135,7 +143,8 @@ def register_list_or_search_skills(agent):
         from code_puppy.plugins.agent_skills.config import (
             get_disabled_skills,
             get_skill_directories,
-            get_skills_enabled)
+            get_skills_enabled,
+        )
         from code_puppy.plugins.agent_skills.discovery import discover_skills
         from code_puppy.plugins.agent_skills.metadata import parse_skill_metadata
 
@@ -145,7 +154,8 @@ def register_list_or_search_skills(agent):
                 skills=[],
                 total_count=0,
                 query=query,
-                error="Skills integration is disabled. Enable it with /set skills_enabled=true")
+                error="Skills integration is disabled. Enable it with /set skills_enabled=true",
+            )
 
         # Get disabled skills
         disabled_skills = get_disabled_skills()
@@ -160,7 +170,8 @@ def register_list_or_search_skills(agent):
                 skills=[],
                 total_count=0,
                 query=query,
-                error=f"Failed to discover skills: {e}")
+                error=f"Failed to discover skills: {e}",
+            )
 
         # Parse metadata for each skill
         skills_list = []
@@ -214,13 +225,13 @@ def register_list_or_search_skills(agent):
                 description=s["description"],
                 path=s["path"],
                 tags=s["tags"],
-                enabled=s["name"] not in disabled_skills)
+                enabled=s["name"] not in disabled_skills,
+            )
             for s in skills_list
         ]
         skill_msg = SkillListMessage(
-            skills=skill_entries,
-            query=query,
-            total_count=len(skills_list))
+            skills=skill_entries, query=query, total_count=len(skills_list)
+        )
         get_message_bus().emit(skill_msg)
 
         return SkillListOutput(

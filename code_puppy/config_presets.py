@@ -21,7 +21,7 @@ from code_puppy.messaging import emit_info, emit_success, emit_warning
 @dataclass(frozen=True)
 class ConfigPreset:
     """A named collection of configuration values.
-    
+
     Attributes:
         name: Preset identifier (e.g., "basic", "full")
         display_name: Human-readable name for UI display
@@ -29,6 +29,7 @@ class ConfigPreset:
         detailed_help: Multi-line help text explaining the preset
         values: Dictionary of config keys to values
     """
+
     name: str
     display_name: str
     description: str
@@ -61,7 +62,7 @@ BASIC_PRESET = ConfigPreset(
         "safety_permission_level": "medium",
         "compaction_strategy": "summarization",
         "enable_streaming": "true",
-    }
+    },
 )
 
 
@@ -87,7 +88,7 @@ SEMI_PRESET = ConfigPreset(
         "safety_permission_level": "medium",
         "compaction_strategy": "summarization",
         "enable_streaming": "true",
-    }
+    },
 )
 
 
@@ -114,7 +115,7 @@ FULL_PRESET = ConfigPreset(
         "safety_permission_level": "low",
         "compaction_strategy": "summarization",
         "enable_streaming": "true",
-    }
+    },
 )
 
 
@@ -141,7 +142,7 @@ PACK_PRESET = ConfigPreset(
         "safety_permission_level": "medium",
         "compaction_strategy": "summarization",
         "enable_streaming": "true",
-    }
+    },
 )
 
 
@@ -156,10 +157,10 @@ BUILTIN_PRESETS: dict[str, ConfigPreset] = {
 
 def get_preset(name: str) -> ConfigPreset | None:
     """Get a preset by name.
-    
+
     Args:
         name: Preset name (e.g., "basic", "full")
-        
+
     Returns:
         ConfigPreset if found, None otherwise
     """
@@ -168,7 +169,7 @@ def get_preset(name: str) -> ConfigPreset | None:
 
 def list_presets() -> list[ConfigPreset]:
     """Get all available presets.
-    
+
     Returns:
         List of all built-in presets
     """
@@ -177,11 +178,11 @@ def list_presets() -> list[ConfigPreset]:
 
 def apply_preset(name: str, emit: bool = True) -> bool:
     """Apply a preset by name.
-    
+
     Args:
         name: Preset name to apply
         emit: Whether to emit status messages
-        
+
     Returns:
         True if preset was applied successfully, False otherwise
     """
@@ -192,22 +193,24 @@ def apply_preset(name: str, emit: bool = True) -> bool:
             emit_warning(f"Unknown preset: {name}")
             emit_info(f"Available presets: {available}")
         return False
-    
+
     # Apply all preset values
     for key, value in preset.values.items():
         set_value(key, value)
-    
+
     if emit:
         emit_success(f"Applied '{preset.display_name}' preset: {preset.description}")
         if preset.name == "full":
-            emit_warning("YOLO mode is now enabled - shell commands will execute without confirmation!")
-    
+            emit_warning(
+                "YOLO mode is now enabled - shell commands will execute without confirmation!"
+            )
+
     return True
 
 
 def get_current_preset_guess() -> str | None:
     """Try to guess which preset matches current config.
-    
+
     Returns:
         Preset name if there's a good match, None otherwise
     """
@@ -219,20 +222,22 @@ def get_current_preset_guess() -> str | None:
         get_compaction_strategy,
         get_enable_streaming,
     )
-    
+
     # Get current config state
     current = {
         "yolo_mode": str(get_yolo_mode()).lower(),
         "enable_pack_agents": str(get_pack_agents_enabled()).lower(),
-        "enable_universal_constructor": str(get_universal_constructor_enabled()).lower(),
+        "enable_universal_constructor": str(
+            get_universal_constructor_enabled()
+        ).lower(),
         "safety_permission_level": get_safety_permission_level(),
         "compaction_strategy": get_compaction_strategy(),
         "enable_streaming": str(get_enable_streaming()).lower(),
     }
-    
+
     # Check each preset for match
     for name, preset in BUILTIN_PRESETS.items():
         if all(current.get(k) == v.lower() for k, v in preset.values.items()):
             return name
-    
+
     return None

@@ -56,56 +56,74 @@ def test_wildcard_matches_all(engine):
 
 
 def test_command_pattern_matching(engine):
-    engine.add_rule(PolicyRule(
-        tool_name="run_shell_command",
-        command_pattern=r"^git\b",
-        decision="allow",
-        priority=10,
-    ))
-    engine.add_rule(PolicyRule(
-        tool_name="run_shell_command",
-        command_pattern=r"^rm\b",
-        decision="deny",
-        priority=10,
-    ))
-    assert isinstance(engine.check("run_shell_command", {"command": "git status"}), Allow)
+    engine.add_rule(
+        PolicyRule(
+            tool_name="run_shell_command",
+            command_pattern=r"^git\b",
+            decision="allow",
+            priority=10,
+        )
+    )
+    engine.add_rule(
+        PolicyRule(
+            tool_name="run_shell_command",
+            command_pattern=r"^rm\b",
+            decision="deny",
+            priority=10,
+        )
+    )
+    assert isinstance(
+        engine.check("run_shell_command", {"command": "git status"}), Allow
+    )
     assert isinstance(engine.check("run_shell_command", {"command": "rm -rf /"}), Deny)
     # No pattern match → default
     assert isinstance(engine.check("run_shell_command", {"command": "ls"}), AskUser)
 
 
 def test_compound_shell_deny_on_any(engine):
-    engine.add_rule(PolicyRule(
-        tool_name="run_shell_command",
-        command_pattern=r"^sudo\b",
-        decision="deny",
-        priority=100,
-    ))
-    engine.add_rule(PolicyRule(
-        tool_name="run_shell_command",
-        decision="allow",
-        priority=1,
-    ))
+    engine.add_rule(
+        PolicyRule(
+            tool_name="run_shell_command",
+            command_pattern=r"^sudo\b",
+            decision="deny",
+            priority=100,
+        )
+    )
+    engine.add_rule(
+        PolicyRule(
+            tool_name="run_shell_command",
+            decision="allow",
+            priority=1,
+        )
+    )
     result = engine.check_shell_command("echo hi && sudo rm -rf /")
     assert isinstance(result, Deny)
 
 
 def test_compound_shell_all_allowed(engine):
-    engine.add_rule(PolicyRule(
-        tool_name="run_shell_command",
-        decision="allow",
-        priority=1,
-    ))
+    engine.add_rule(
+        PolicyRule(
+            tool_name="run_shell_command",
+            decision="allow",
+            priority=1,
+        )
+    )
     result = engine.check_shell_command("echo a && echo b")
     assert isinstance(result, Allow)
 
 
 def test_load_rules_from_file(tmp_path):
     rules_file = tmp_path / "policy.json"
-    rules_file.write_text(json.dumps({"rules": [
-        {"tool_name": "read_file", "decision": "allow", "priority": 5},
-        {"tool_name": "delete_file", "decision": "deny", "priority": 10},
-    ]}))
+    rules_file.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {"tool_name": "read_file", "decision": "allow", "priority": 5},
+                    {"tool_name": "delete_file", "decision": "deny", "priority": 10},
+                ]
+            }
+        )
+    )
     engine = PolicyEngine()
     count = engine.load_rules_from_file(rules_file, source="test")
     assert count == 2
@@ -116,6 +134,7 @@ def test_load_rules_from_file(tmp_path):
 def test_load_rules_missing_file():
     engine = PolicyEngine()
     from pathlib import Path
+
     count = engine.load_rules_from_file(Path("/nonexistent/policy.json"))
     assert count == 0
 
@@ -129,11 +148,13 @@ def test_remove_rules_by_source(engine):
 
 
 def test_args_pattern_matching(engine):
-    engine.add_rule(PolicyRule(
-        tool_name="run_shell_command",
-        args_pattern=r'"dangerous"',
-        decision="deny",
-    ))
+    engine.add_rule(
+        PolicyRule(
+            tool_name="run_shell_command",
+            args_pattern=r'"dangerous"',
+            decision="deny",
+        )
+    )
     assert isinstance(
         engine.check("run_shell_command", {"command": "echo", "flag": "dangerous"}),
         Deny,
@@ -147,6 +168,7 @@ def test_args_pattern_matching(engine):
 # ---------------------------------------------------------------------------
 # check_explicit — only explicit rules, no default fallback
 # ---------------------------------------------------------------------------
+
 
 def test_check_explicit_returns_none_when_no_rule():
     """check_explicit returns None when no rule matches (no default fallback)."""
@@ -184,6 +206,7 @@ def test_check_explicit_wildcard():
 # check_shell_command_explicit — explicit rules for shell cmds
 # ---------------------------------------------------------------------------
 
+
 def test_check_shell_command_explicit_no_rules_returns_none():
     """With no rules, check_shell_command_explicit returns None."""
     eng = PolicyEngine(default_decision="allow")
@@ -192,22 +215,26 @@ def test_check_shell_command_explicit_no_rules_returns_none():
 
 def test_check_shell_command_explicit_allow_rule():
     eng = PolicyEngine()
-    eng.add_rule(PolicyRule(
-        tool_name="run_shell_command",
-        command_pattern=r"^git\b",
-        decision="allow",
-    ))
+    eng.add_rule(
+        PolicyRule(
+            tool_name="run_shell_command",
+            command_pattern=r"^git\b",
+            decision="allow",
+        )
+    )
     result = eng.check_shell_command_explicit("git status")
     assert isinstance(result, Allow)
 
 
 def test_check_shell_command_explicit_deny_rule():
     eng = PolicyEngine()
-    eng.add_rule(PolicyRule(
-        tool_name="run_shell_command",
-        command_pattern=r"^rm\b",
-        decision="deny",
-    ))
+    eng.add_rule(
+        PolicyRule(
+            tool_name="run_shell_command",
+            command_pattern=r"^rm\b",
+            decision="deny",
+        )
+    )
     result = eng.check_shell_command_explicit("rm -rf /")
     assert isinstance(result, Deny)
 
@@ -215,16 +242,20 @@ def test_check_shell_command_explicit_deny_rule():
 def test_check_shell_command_explicit_compound_deny_one():
     """One sub-command denied → whole compound denied."""
     eng = PolicyEngine()
-    eng.add_rule(PolicyRule(
-        tool_name="run_shell_command",
-        command_pattern=r"^sudo\b",
-        decision="deny",
-    ))
-    eng.add_rule(PolicyRule(
-        tool_name="run_shell_command",
-        command_pattern=r"^echo\b",
-        decision="allow",
-    ))
+    eng.add_rule(
+        PolicyRule(
+            tool_name="run_shell_command",
+            command_pattern=r"^sudo\b",
+            decision="deny",
+        )
+    )
+    eng.add_rule(
+        PolicyRule(
+            tool_name="run_shell_command",
+            command_pattern=r"^echo\b",
+            decision="allow",
+        )
+    )
     result = eng.check_shell_command_explicit("echo hi && sudo rm -rf /")
     assert isinstance(result, Deny)
 
@@ -241,6 +272,7 @@ def test_check_shell_command_explicit_compound_no_match():
 # policy_config — load rules from files
 # ---------------------------------------------------------------------------
 
+
 def test_policy_config_load_rules(tmp_path):
     """policy_config.load_policy_rules populates the engine from JSON files."""
     import json
@@ -249,12 +281,24 @@ def test_policy_config_load_rules(tmp_path):
     user_file = tmp_path / "user_policy.json"
     proj_file = tmp_path / "proj_policy.json"
 
-    user_file.write_text(json.dumps({"rules": [
-        {"tool_name": "read_file", "decision": "allow", "priority": 5},
-    ]}))
-    proj_file.write_text(json.dumps({"rules": [
-        {"tool_name": "delete_file", "decision": "deny", "priority": 10},
-    ]}))
+    user_file.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {"tool_name": "read_file", "decision": "allow", "priority": 5},
+                ]
+            }
+        )
+    )
+    proj_file.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {"tool_name": "delete_file", "decision": "deny", "priority": 10},
+                ]
+            }
+        )
+    )
 
     eng = PolicyEngine()
     count = load_policy_rules(eng, user_policy=user_file, project_policy=proj_file)
@@ -287,12 +331,24 @@ def test_policy_config_project_overrides_user(tmp_path):
     proj_file = tmp_path / "proj.json"
 
     # User says allow, project says deny (higher priority)
-    user_file.write_text(json.dumps({"rules": [
-        {"tool_name": "sensitive_tool", "decision": "allow", "priority": 5},
-    ]}))
-    proj_file.write_text(json.dumps({"rules": [
-        {"tool_name": "sensitive_tool", "decision": "deny", "priority": 20},
-    ]}))
+    user_file.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {"tool_name": "sensitive_tool", "decision": "allow", "priority": 5},
+                ]
+            }
+        )
+    )
+    proj_file.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {"tool_name": "sensitive_tool", "decision": "deny", "priority": 20},
+                ]
+            }
+        )
+    )
 
     eng = PolicyEngine(default_decision="ask_user")
     load_policy_rules(eng, user_policy=user_file, project_policy=proj_file)
@@ -304,6 +360,7 @@ def test_policy_config_project_overrides_user(tmp_path):
 # ---------------------------------------------------------------------------
 # PolicyRule regex compilation tests
 # ---------------------------------------------------------------------------
+
 
 def test_policy_rule_with_regex_pattern_compiles():
     """Regression test: PolicyRule with command_pattern should compile without error."""

@@ -5,7 +5,6 @@ the dict format that Rust expects. The Rust module never touches pydantic-ai
 objects directly.
 """
 
-
 import json
 from typing import Any
 
@@ -20,7 +19,8 @@ try:
         serialize_session,
         serialize_session_incremental,
         split_for_summarization,
-        truncation_indices)
+        truncation_indices,
+    )
 
     RUST_AVAILABLE = True
 except ImportError:
@@ -47,6 +47,7 @@ try:
         strip_hashline_prefixes,
         validate_hashline_anchor,
     )
+
     HASHLINE_RUST_AVAILABLE = True
 except ImportError:
     HASHLINE_RUST_AVAILABLE = False
@@ -82,6 +83,8 @@ def get_rust_status() -> dict:
         "enabled": _rust_user_enabled,
         "active": is_rust_enabled(),
     }
+
+
 # --------------------------------------------------------------------------
 
 
@@ -124,9 +127,7 @@ def serialize_message_for_rust(message: Any) -> dict:
             # Dicts, Pydantic models, other — serialize to JSON string
             try:
                 if hasattr(content, "model_dump_json"):
-                    part_dict["content_json"] = content.model_dump_json(
-                        sort_keys=True
-                    )
+                    part_dict["content_json"] = content.model_dump_json(sort_keys=True)
                 elif isinstance(content, dict):
                     part_dict["content_json"] = json.dumps(content, sort_keys=True)
                 else:

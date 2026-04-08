@@ -92,7 +92,8 @@ async def list_commands() -> list[CommandInfo]:
                 usage=cmd.usage,
                 aliases=cmd.aliases,
                 category=cmd.category,
-                detailed_help=cmd.detailed_help)
+                detailed_help=cmd.detailed_help,
+            )
         )
     return sorted(commands, key=lambda c: c.name)
 
@@ -124,7 +125,8 @@ async def get_command_info(name: str) -> CommandInfo:
         usage=cmd.usage,
         aliases=cmd.aliases,
         category=cmd.category,
-        detailed_help=cmd.detailed_help)
+        detailed_help=cmd.detailed_help,
+    )
 
 
 @router.post("/execute")
@@ -153,7 +155,8 @@ async def execute_command(request: CommandExecuteRequest) -> CommandExecuteRespo
         # Run blocking command in thread pool with timeout
         result = await asyncio.wait_for(
             loop.run_in_executor(_executor, handle_command, command),
-            timeout=COMMAND_TIMEOUT)
+            timeout=COMMAND_TIMEOUT,
+        )
         return CommandExecuteResponse(success=True, result=result)
     except asyncio.TimeoutError:
         return CommandExecuteResponse(
@@ -180,7 +183,8 @@ async def autocomplete_command(request: AutocompleteRequest) -> AutocompleteResp
     """
     from code_puppy.command_line.command_registry import (
         get_command,
-        get_unique_commands)
+        get_unique_commands,
+    )
 
     partial = request.partial.lstrip("/")
 

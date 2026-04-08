@@ -361,7 +361,9 @@ class AppRunner:
 
             # Verify DBOS actually initialized despite no exception
             if not is_dbos_initialized():
-                emit_error("DBOS initialization verification failed. Workflow durability may be unavailable.")
+                emit_error(
+                    "DBOS initialization verification failed. Workflow durability may be unavailable."
+                )
 
         shutdown_flag = False
         try:

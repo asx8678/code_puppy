@@ -48,6 +48,7 @@ class TestGetPlatformInfo:
         assert "- Current date:" in info
         # Date should be in YYYY-MM-DD format
         import re
+
         assert re.search(r"\d{4}-\d{2}-\d{2}", info)
 
     def test_contains_working_directory(self, agent):
@@ -101,6 +102,7 @@ class TestGetPlatformInfo:
     def test_platform_error_handled(self, agent):
         """If platform.platform() raises, should fall back gracefully."""
         import platform as _platform
+
         with patch.object(_platform, "platform", side_effect=Exception("boom")):
             info = agent.get_platform_info()
             assert "- Platform: unknown" in info

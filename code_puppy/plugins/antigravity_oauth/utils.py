@@ -1,6 +1,5 @@
 """Utility helpers for the Antigravity OAuth plugin."""
 
-
 import json
 import logging
 from typing import Any
@@ -8,7 +7,8 @@ from typing import Any
 from .config import (
     ANTIGRAVITY_OAUTH_CONFIG,
     get_antigravity_models_path,
-    get_token_storage_path)
+    get_token_storage_path,
+)
 from .constants import ANTIGRAVITY_ENDPOINT, ANTIGRAVITY_HEADERS, ANTIGRAVITY_MODELS
 
 logger = logging.getLogger(__name__)

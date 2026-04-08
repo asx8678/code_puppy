@@ -19,7 +19,8 @@ sys.path.insert(0, str(project_root))
 
 from code_puppy.mcp_.retry_manager import (  # noqa: E402
     get_retry_manager,
-    retry_mcp_call)
+    retry_mcp_call,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,8 @@ async def demonstrate_basic_retry():
             func=list_tools_call,
             max_attempts=3,
             strategy="exponential",
-            server_id="demo-server")
+            server_id="demo-server",
+        )
         print(f"✅ Success: Retrieved {len(result)} tools")
         print(f"Server call count: {server.call_count}")
     except Exception as e:
@@ -124,7 +126,8 @@ async def demonstrate_different_strategies():
                 ),
                 server_id=f"server-{strategy}",
                 max_attempts=3,
-                strategy=strategy)
+                strategy=strategy,
+            )
 
             end_time = asyncio.get_event_loop().time()
             print(f"  ✅ Success: {result}")
@@ -157,7 +160,8 @@ async def demonstrate_concurrent_retries():
                 func=lambda: server.list_tools(),
                 max_attempts=3,
                 strategy="exponential_jitter",
-                server_id=server_name)
+                server_id=server_name,
+            )
             return f"{server_name}: Success (calls: {server.call_count})"
         except Exception as e:
             return f"{server_name}: Failed - {e} (calls: {server.call_count})"

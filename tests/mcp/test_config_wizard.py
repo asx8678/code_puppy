@@ -485,7 +485,10 @@ class TestPromptStdioConfig:
         mock_prompt.side_effect = ["npx", "", "/tmp", "30"]
         # Confirmations: skip env
         mock_confirm.side_effect = [False]
-        with patch("code_puppy.mcp_.config_wizard.validate_working_directory", return_value="/tmp"):
+        with patch(
+            "code_puppy.mcp_.config_wizard.validate_working_directory",
+            return_value="/tmp",
+        ):
             config = wizard.prompt_stdio_config()
         assert config["cwd"] == "/tmp"
 
@@ -501,8 +504,11 @@ class TestPromptStdioConfig:
         mock_prompt.side_effect = ["npx", "", "/nonexistent", "30"]
         # Confirmations: continue without cwd after error, skip env
         mock_confirm.side_effect = [True, False]
-        with patch("code_puppy.mcp_.config_wizard.validate_working_directory") as mock_validate:
+        with patch(
+            "code_puppy.mcp_.config_wizard.validate_working_directory"
+        ) as mock_validate:
             from code_puppy.mcp_.mcp_security import PathTraversalError
+
             mock_validate.side_effect = PathTraversalError("Path not allowed")
             config = wizard.prompt_stdio_config()
         # Should not have cwd when validation fails

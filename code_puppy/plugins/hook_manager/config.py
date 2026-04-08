@@ -151,7 +151,8 @@ class HookEntry:
         "hook_id",
         "source",
         "_group_index",
-        "_hook_index")
+        "_hook_index",
+    )
 
     def __init__(
         self,
@@ -164,7 +165,8 @@ class HookEntry:
         hook_id: str | None = None,
         source: HookSource = "project",
         group_index: int = 0,
-        hook_index: int = 0) -> None:
+        hook_index: int = 0,
+    ) -> None:
         self.event_type = event_type
         self.matcher = matcher
         self.hook_type = hook_type
@@ -223,7 +225,8 @@ def flatten_hooks(
                         hook_id=hook.get("id"),
                         source=source,
                         group_index=g_idx,
-                        hook_index=h_idx)
+                        hook_index=h_idx,
+                    )
                 )
     return entries
 
@@ -248,7 +251,8 @@ def toggle_hook_enabled(
     event_type: str,
     group_index: int,
     hook_index: int,
-    enabled: bool) -> dict[str, Any]:
+    enabled: bool,
+) -> dict[str, Any]:
     """Return a deep copy of hooks_config with the specified hook toggled.
 
     Does NOT write to disk – call save_hooks_config() afterwards.
@@ -263,10 +267,8 @@ def toggle_hook_enabled(
 
 
 def delete_hook(
-    hooks_config: dict[str, Any],
-    event_type: str,
-    group_index: int,
-    hook_index: int) -> dict[str, Any]:
+    hooks_config: dict[str, Any], event_type: str, group_index: int, hook_index: int
+) -> dict[str, Any]:
     """Return a deep copy of hooks_config with the specified hook removed.
 
     Empty groups and event keys are pruned automatically.

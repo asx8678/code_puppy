@@ -38,7 +38,10 @@ class TestCommandWhitelist:
     def test_allowed_command_with_path(self):
         """Test that allowed commands with absolute paths pass validation."""
         assert validate_command_whitelist("/usr/bin/npx") == "/usr/bin/npx"
-        assert validate_command_whitelist("/usr/local/bin/python3") == "/usr/local/bin/python3"
+        assert (
+            validate_command_whitelist("/usr/local/bin/python3")
+            == "/usr/local/bin/python3"
+        )
 
     def test_disallowed_command(self):
         """Test that disallowed commands raise error."""
@@ -129,7 +132,10 @@ class TestArgumentValidation:
         """Test that injected arguments are rejected."""
         with pytest.raises(InvalidArgumentError) as exc_info:
             validate_arguments(["-m", "server; rm -rf /"])
-        assert "injection" in str(exc_info.value).lower() or "unsafe" in str(exc_info.value).lower()
+        assert (
+            "injection" in str(exc_info.value).lower()
+            or "unsafe" in str(exc_info.value).lower()
+        )
 
     def test_empty_arguments(self):
         """Test that empty list is valid."""
@@ -203,8 +209,7 @@ class TestPlaceholderExpansion:
     def test_multiple_placeholders(self):
         """Test expansion with multiple placeholders."""
         result = safe_expand_placeholders(
-            "${greeting} ${name}!",
-            {"greeting": "Hello", "name": "World"}
+            "${greeting} ${name}!", {"greeting": "Hello", "name": "World"}
         )
         assert result == "Hello World!"
 
@@ -261,7 +266,11 @@ class TestStdioConfigValidation:
         }
         result = validate_stdio_config(config)
         assert result["command"] == "npx"
-        assert result["args"] == ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+        assert result["args"] == [
+            "-y",
+            "@modelcontextprotocol/server-filesystem",
+            "/tmp",
+        ]
 
     def test_invalid_command_rejected(self):
         """Test that invalid command is rejected."""
@@ -271,19 +280,16 @@ class TestStdioConfigValidation:
     def test_injected_args_rejected(self):
         """Test that injected args are rejected."""
         with pytest.raises(InvalidArgumentError):
-            validate_stdio_config({
-                "command": "npx",
-                "args": ["-y", "package; rm -rf /"]
-            })
+            validate_stdio_config(
+                {"command": "npx", "args": ["-y", "package; rm -rf /"]}
+            )
 
     def test_path_traversal_in_cwd_rejected(self):
         """Test that path traversal in cwd is rejected."""
         with pytest.raises(PathTraversalError):
-            validate_stdio_config({
-                "command": "npx",
-                "args": ["-y", "package"],
-                "cwd": "../../../etc"
-            })
+            validate_stdio_config(
+                {"command": "npx", "args": ["-y", "package"], "cwd": "../../../etc"}
+            )
 
 
 class TestSecurityErrorHierarchy:

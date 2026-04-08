@@ -48,7 +48,7 @@ class TestConditionVariable:
         queue = MessageQueue()
         import threading
 
-        assert hasattr(queue, '_queue_condition')
+        assert hasattr(queue, "_queue_condition")
         assert isinstance(queue._queue_condition, threading.Condition)
 
     @pytest.mark.asyncio
@@ -75,7 +75,7 @@ class TestConditionVariable:
     def test_message_queue_has_pending_count_attribute(self):
         """MessageQueue should have _pending_count attribute initialized to 0."""
         queue = MessageQueue()
-        assert hasattr(queue, '_pending_count')
+        assert hasattr(queue, "_pending_count")
         assert queue._pending_count == 0
 
 

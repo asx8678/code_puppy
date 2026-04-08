@@ -147,7 +147,8 @@ async def run_terminal_command(
     command: str,
     wait_for_prompt: bool = True,
     timeout: float = DEFAULT_COMMAND_TIMEOUT,
-    capture_screenshot: bool = False) -> dict[str, Any]:
+    capture_screenshot: bool = False,
+) -> dict[str, Any]:
     """Execute a command in the terminal browser.
 
     Types the command into the xterm.js terminal and presses Enter to execute.
@@ -189,7 +190,8 @@ async def run_terminal_command(
         if not focus_result.get("success"):
             emit_info(
                 f"Warning: Could not focus terminal: {focus_result.get('error')}",
-                message_group=group_id)
+                message_group=group_id,
+            )
 
         # Type and execute command
         await page.keyboard.type(command)
@@ -231,10 +233,8 @@ async def run_terminal_command(
 
 
 async def send_terminal_keys(
-    keys: str,
-    modifiers: list[str | None] = None,
-    repeat: int = 1,
-    delay_ms: int = 50) -> dict[str, Any]:
+    keys: str, modifiers: list[str | None] = None, repeat: int = 1, delay_ms: int = 50
+) -> dict[str, Any]:
     """Send special keys or key combinations to the terminal.
 
     Sends keyboard input to the xterm.js terminal, supporting special keys
@@ -272,7 +272,8 @@ async def send_terminal_keys(
     banner = format_terminal_banner("TERMINAL SEND KEYS ⌨️")
     emit_info(
         Text.from_markup(f"{banner} [bold cyan]{key_combo}{repeat_str}[/bold cyan]"),
-        message_group=group_id)
+        message_group=group_id,
+    )
 
     try:
         manager = get_session_manager()
@@ -334,7 +335,8 @@ async def send_terminal_keys(
 async def wait_for_terminal_output(
     pattern: str | None = None,
     timeout: float = DEFAULT_OUTPUT_TIMEOUT,
-    capture_screenshot: bool = False) -> dict[str, Any]:
+    capture_screenshot: bool = False,
+) -> dict[str, Any]:
     """Wait for terminal output, optionally matching a pattern.
 
     Reads the terminal text output and checks for a pattern match.
@@ -359,7 +361,8 @@ async def wait_for_terminal_output(
     banner = format_terminal_banner("TERMINAL WAIT OUTPUT 👁️")
     emit_info(
         Text.from_markup(f"{banner} [dim]pattern={pattern_display}[/dim]"),
-        message_group=group_id)
+        message_group=group_id,
+    )
 
     try:
         # Read terminal text output
@@ -368,7 +371,8 @@ async def wait_for_terminal_output(
         if not read_result["success"]:
             emit_error(
                 read_result.get("error", "Failed to read output"),
-                message_group=group_id)
+                message_group=group_id,
+            )
             return {
                 "success": False,
                 "error": read_result.get("error"),
@@ -437,7 +441,8 @@ def register_run_terminal_command(agent):
         context: RunContext,
         command: str,
         wait_for_prompt: bool = True,
-        capture_screenshot: bool = False) -> dict[str, Any]:
+        capture_screenshot: bool = False,
+    ) -> dict[str, Any]:
         """
         Execute a command in the terminal browser.
 
@@ -457,7 +462,8 @@ def register_run_terminal_command(agent):
         return await run_terminal_command(
             command=command,
             wait_for_prompt=wait_for_prompt,
-            capture_screenshot=capture_screenshot)
+            capture_screenshot=capture_screenshot,
+        )
 
 
 def register_send_terminal_keys(agent):
@@ -469,7 +475,8 @@ def register_send_terminal_keys(agent):
         keys: str,
         modifiers: list[str | None] = None,
         repeat: int = 1,
-        delay_ms: int = 50) -> dict[str, Any]:
+        delay_ms: int = 50,
+    ) -> dict[str, Any]:
         """
         Send special keys or key combinations to the terminal.
 
@@ -503,7 +510,8 @@ def register_wait_terminal_output(agent):
     async def terminal_wait_output(
         context: RunContext,
         pattern: str | None = None,
-        capture_screenshot: bool = False) -> dict[str, Any]:
+        capture_screenshot: bool = False,
+    ) -> dict[str, Any]:
         """
         Read terminal output and optionally match a pattern.
 
@@ -518,5 +526,5 @@ def register_wait_terminal_output(agent):
         """
         # Session is set by invoke_agent via contextvar
         return await wait_for_terminal_output(
-            pattern=pattern,
-            capture_screenshot=capture_screenshot)
+            pattern=pattern, capture_screenshot=capture_screenshot
+        )

@@ -17,6 +17,7 @@ try:
     from prompt_toolkit.layout import Dimension, Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.widgets import Frame
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -31,7 +32,8 @@ from .config import (
     flatten_all_hooks,
     save_global_hooks_config,
     save_hooks_config,
-    toggle_hook_enabled)
+    toggle_hook_enabled,
+)
 
 PAGE_SIZE = 12
 
@@ -98,7 +100,8 @@ class HooksMenu:
                     entry.event_type,
                     entry._group_index,
                     entry._hook_index,
-                    new_enabled)
+                    new_enabled,
+                )
             save_global_hooks_config(global_config)
         else:  # project
             project_config = _load_project_hooks_config()
@@ -108,7 +111,8 @@ class HooksMenu:
                     entry.event_type,
                     entry._group_index,
                     entry._hook_index,
-                    new_enabled)
+                    new_enabled,
+                )
             save_hooks_config(project_config)
 
     # ------------------------------------------------------------------
@@ -137,18 +141,14 @@ class HooksMenu:
         if entry.source == "global":
             global_config = _load_global_hooks_config()
             global_config = delete_hook(
-                global_config,
-                entry.event_type,
-                entry._group_index,
-                entry._hook_index)
+                global_config, entry.event_type, entry._group_index, entry._hook_index
+            )
             save_global_hooks_config(global_config)
         else:  # project
             project_config = _load_project_hooks_config()
             project_config = delete_hook(
-                project_config,
-                entry.event_type,
-                entry._group_index,
-                entry._hook_index)
+                project_config, entry.event_type, entry._group_index, entry._hook_index
+            )
             save_hooks_config(project_config)
 
         self._refresh_data()
@@ -487,10 +487,8 @@ class HooksMenu:
 
         layout = Layout(root_container)
         app = Application(
-            layout=layout,
-            key_bindings=kb,
-            full_screen=False,
-            mouse_support=False)
+            layout=layout, key_bindings=kb, full_screen=False, mouse_support=False
+        )
 
         try:
             from code_puppy.tools.command_runner import set_awaiting_user_input

@@ -36,7 +36,8 @@ def register_command(
     usage: str = "",
     aliases: list[str | None] = None,
     category: str = "core",
-    detailed_help: str | None = None):
+    detailed_help: str | None = None,
+):
     """Decorator to register a command handler.
 
     This decorator registers a command function so it can be:
@@ -77,7 +78,8 @@ def register_command(
             usage=usage,
             aliases=aliases or [],
             category=category,
-            detailed_help=detailed_help)
+            detailed_help=detailed_help,
+        )
 
         # Register primary name
         _COMMAND_REGISTRY[name] = cmd_info

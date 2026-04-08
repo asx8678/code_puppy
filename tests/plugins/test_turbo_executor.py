@@ -70,7 +70,9 @@ class TestPlanModels:
             id="test-plan",
             operations=[
                 Operation(type=OperationType.LIST_FILES, priority=2),
-                Operation(type=OperationType.GREP, args={"search_string": "def"}, priority=1),
+                Operation(
+                    type=OperationType.GREP, args={"search_string": "def"}, priority=1
+                ),
             ],
             metadata={"description": "Test plan"},
         )
@@ -556,8 +558,16 @@ class TestResultSummarization:
 
         data = {
             "matches": [
-                {"file_path": "test.py", "line_number": 1, "line_content": "def hello():"},
-                {"file_path": "test.py", "line_number": 5, "line_content": "def world():"},
+                {
+                    "file_path": "test.py",
+                    "line_number": 1,
+                    "line_content": "def hello():",
+                },
+                {
+                    "file_path": "test.py",
+                    "line_number": 5,
+                    "line_content": "def world():",
+                },
             ],
             "total_matches": 2,
             "error": None,
@@ -635,14 +645,22 @@ class TestResultSummarization:
 
     def test_summarize_operation_result(self):
         """Test summarizing an operation result object."""
-        from code_puppy.plugins.turbo_executor.summarizer import summarize_operation_result
+        from code_puppy.plugins.turbo_executor.summarizer import (
+            summarize_operation_result,
+        )
 
         result = OperationResult(
             operation_id="test-op",
             type=OperationType.GREP,
             status="success",
             data={
-                "matches": [{"file_path": "test.py", "line_number": 1, "line_content": "def test():"}],
+                "matches": [
+                    {
+                        "file_path": "test.py",
+                        "line_number": 1,
+                        "line_content": "def test():",
+                    }
+                ],
                 "total_matches": 1,
                 "error": None,
             },
@@ -655,7 +673,9 @@ class TestResultSummarization:
 
     def test_summarize_operation_error(self):
         """Test summarizing an errored operation result."""
-        from code_puppy.plugins.turbo_executor.summarizer import summarize_operation_result
+        from code_puppy.plugins.turbo_executor.summarizer import (
+            summarize_operation_result,
+        )
 
         result = OperationResult(
             operation_id="test-op",

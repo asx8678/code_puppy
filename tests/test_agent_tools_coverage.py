@@ -427,7 +427,9 @@ class TestRegisterInvokeAgentExecution:
 
         with (
             patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
-            patch("code_puppy.tools.agent_tools._load_session_history", return_value=[]),
+            patch(
+                "code_puppy.tools.agent_tools._load_session_history", return_value=[]
+            ),
             patch(
                 "code_puppy.tools.agent_tools.generate_group_id",
                 return_value="test-group",
@@ -446,7 +448,9 @@ class TestRegisterInvokeAgentExecution:
             )
 
             # Should NOT return error - sanitization should happen
-            assert result.error is None or "must be kebab-case" not in (result.error or "")
+            assert result.error is None or "must be kebab-case" not in (
+                result.error or ""
+            )
 
             # Warning should be logged about sanitization
             mock_logger.warning.assert_called_once()
@@ -629,7 +633,9 @@ class TestSessionIdValidationInInvokeAgent:
         mock_context = MagicMock()
 
         with (
-            patch("code_puppy.tools.agent_tools._load_session_history", return_value=[]),
+            patch(
+                "code_puppy.tools.agent_tools._load_session_history", return_value=[]
+            ),
             patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(
                 "code_puppy.tools.agent_tools.generate_group_id",
@@ -647,7 +653,9 @@ class TestSessionIdValidationInInvokeAgent:
             )
 
             # Should NOT error - should be sanitized to "my-session"
-            assert result.error is None or "must be kebab-case" not in (result.error or "")
+            assert result.error is None or "must be kebab-case" not in (
+                result.error or ""
+            )
             # Warning should be logged about sanitization
             mock_logger.warning.assert_called_once()
 
@@ -658,7 +666,9 @@ class TestSessionIdValidationInInvokeAgent:
         mock_context = MagicMock()
 
         with (
-            patch("code_puppy.tools.agent_tools._load_session_history", return_value=[]),
+            patch(
+                "code_puppy.tools.agent_tools._load_session_history", return_value=[]
+            ),
             patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(
                 "code_puppy.tools.agent_tools.generate_group_id",
@@ -676,7 +686,9 @@ class TestSessionIdValidationInInvokeAgent:
             )
 
             # Should NOT error - should be sanitized to "session-123"
-            assert result.error is None or "must be kebab-case" not in (result.error or "")
+            assert result.error is None or "must be kebab-case" not in (
+                result.error or ""
+            )
             # Warning should be logged about sanitization
             mock_logger.warning.assert_called_once()
 
@@ -687,7 +699,9 @@ class TestSessionIdValidationInInvokeAgent:
         mock_context = MagicMock()
 
         with (
-            patch("code_puppy.tools.agent_tools._load_session_history", return_value=[]),
+            patch(
+                "code_puppy.tools.agent_tools._load_session_history", return_value=[]
+            ),
             patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(
                 "code_puppy.tools.agent_tools.generate_group_id",
@@ -716,7 +730,9 @@ class TestSessionIdValidationInInvokeAgent:
         mock_context = MagicMock()
 
         with (
-            patch("code_puppy.tools.agent_tools._load_session_history", return_value=[]),
+            patch(
+                "code_puppy.tools.agent_tools._load_session_history", return_value=[]
+            ),
             patch("code_puppy.tools.agent_tools.logging.getLogger") as mock_getlogger,
             patch(
                 "code_puppy.tools.agent_tools.generate_group_id",

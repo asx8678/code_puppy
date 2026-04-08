@@ -66,7 +66,8 @@ class RetryManager:
         func: Callable,
         max_attempts: int = 3,
         strategy: str = "exponential",
-        server_id: str = "unknown") -> Any:
+        server_id: str = "unknown",
+    ) -> Any:
         """
         Execute a function with retry logic and backoff strategy.
 
@@ -252,7 +253,8 @@ class RetryManager:
                 successful_retries=stats.successful_retries,
                 failed_retries=stats.failed_retries,
                 average_attempts=stats.average_attempts,
-                last_retry=stats.last_retry)
+                last_retry=stats.last_retry,
+            )
 
     async def get_all_stats(self) -> dict[str, RetryStats]:
         """
@@ -268,7 +270,8 @@ class RetryManager:
                     successful_retries=stats.successful_retries,
                     failed_retries=stats.failed_retries,
                     average_attempts=stats.average_attempts,
-                    last_retry=stats.last_retry)
+                    last_retry=stats.last_retry,
+                )
                 for server_id, stats in self._stats.items()
             }
 
@@ -314,7 +317,8 @@ async def retry_mcp_call(
     func: Callable,
     server_id: str,
     max_attempts: int = 3,
-    strategy: str = "exponential_jitter") -> Any:
+    strategy: str = "exponential_jitter",
+) -> Any:
     """
     Convenience function for retrying MCP calls with sensible defaults.
 

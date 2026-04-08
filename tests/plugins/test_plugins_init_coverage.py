@@ -80,11 +80,11 @@ class TestExtractPhasesFromCallbacksFile:
     def test_extracts_multiple_phases(self, tmp_path):
         """Test extracting multiple register_callback phases."""
         callbacks_file = tmp_path / "register_callbacks.py"
-        callbacks_file.write_text('''
+        callbacks_file.write_text("""
 register_callback("startup", my_func)
 register_callback("shutdown", my_shutdown)
 register_callback("stream_event", my_stream)
-''')
+""")
 
         result = _extract_phases_from_callbacks_file(callbacks_file, "test_plugin")
         assert sorted(result) == sorted(["startup", "shutdown", "stream_event"])
@@ -92,10 +92,10 @@ register_callback("stream_event", my_stream)
     def test_ignores_invalid_phases(self, tmp_path):
         """Test that invalid/unsupported phases are ignored."""
         callbacks_file = tmp_path / "register_callbacks.py"
-        callbacks_file.write_text('''
+        callbacks_file.write_text("""
 register_callback("startup", my_func)
 register_callback("invalid_phase", my_func)
-''')
+""")
 
         result = _extract_phases_from_callbacks_file(callbacks_file, "test_plugin")
         assert result == ["startup"]
@@ -103,7 +103,7 @@ register_callback("invalid_phase", my_func)
     def test_defaults_to_startup_if_no_register_callback(self, tmp_path):
         """Test that startup is default if no register_callback calls found."""
         callbacks_file = tmp_path / "register_callbacks.py"
-        callbacks_file.write_text('# Just some code without register_callback')
+        callbacks_file.write_text("# Just some code without register_callback")
 
         result = _extract_phases_from_callbacks_file(callbacks_file, "test_plugin")
         assert result == ["startup"]
@@ -136,7 +136,9 @@ class TestDiscoverBuiltinPlugins:
         callbacks_file = plugin_dir / "register_callbacks.py"
         callbacks_file.write_text('register_callback("startup", my_func)')
 
-        with patch("code_puppy.config.get_safety_permission_level", return_value="high"):
+        with patch(
+            "code_puppy.config.get_safety_permission_level", return_value="high"
+        ):
             result = _discover_builtin_plugins(tmp_path)
             assert len(result) == 1
             assert result[0][0] == "my_plugin"
@@ -148,7 +150,9 @@ class TestDiscoverBuiltinPlugins:
         private_dir.mkdir()
         (private_dir / "register_callbacks.py").write_text("# Private")
 
-        with patch("code_puppy.config.get_safety_permission_level", return_value="high"):
+        with patch(
+            "code_puppy.config.get_safety_permission_level", return_value="high"
+        ):
             result = _discover_builtin_plugins(tmp_path)
             assert result == []
 
@@ -156,7 +160,9 @@ class TestDiscoverBuiltinPlugins:
         """Test that regular files are skipped."""
         (tmp_path / "some_file.py").write_text("# Just a file")
 
-        with patch("code_puppy.config.get_safety_permission_level", return_value="high"):
+        with patch(
+            "code_puppy.config.get_safety_permission_level", return_value="high"
+        ):
             result = _discover_builtin_plugins(tmp_path)
             assert result == []
 
@@ -166,7 +172,9 @@ class TestDiscoverBuiltinPlugins:
         plugin_dir.mkdir()
         (plugin_dir / "__init__.py").write_text("# Just init")
 
-        with patch("code_puppy.config.get_safety_permission_level", return_value="high"):
+        with patch(
+            "code_puppy.config.get_safety_permission_level", return_value="high"
+        ):
             result = _discover_builtin_plugins(tmp_path)
             assert result == []
 
@@ -199,9 +207,13 @@ class TestDiscoverBuiltinPlugins:
         for name in ["plugin_a", "plugin_b", "plugin_c"]:
             plugin_dir = tmp_path / name
             plugin_dir.mkdir()
-            (plugin_dir / "register_callbacks.py").write_text(f'register_callback("startup", func)')
+            (plugin_dir / "register_callbacks.py").write_text(
+                f'register_callback("startup", func)'
+            )
 
-        with patch("code_puppy.config.get_safety_permission_level", return_value="high"):
+        with patch(
+            "code_puppy.config.get_safety_permission_level", return_value="high"
+        ):
             result = _discover_builtin_plugins(tmp_path)
             assert len(result) == 3
             assert set(r[0] for r in result) == {"plugin_a", "plugin_b", "plugin_c"}
@@ -329,19 +341,28 @@ class TestCreateLoaders:
 
     def test_create_loader_builtin_success(self):
         """Test successful built-in plugin lazy loader."""
-        loader = _create_loader_builtin("my_plugin", "code_puppy.plugins.my_plugin.register_callbacks")
+        loader = _create_loader_builtin(
+            "my_plugin", "code_puppy.plugins.my_plugin.register_callbacks"
+        )
 
         with patch("code_puppy.plugins.importlib.import_module") as mock_import:
             mock_import.return_value = MagicMock()
             result = loader()
             assert result is not None
-            mock_import.assert_called_once_with("code_puppy.plugins.my_plugin.register_callbacks")
+            mock_import.assert_called_once_with(
+                "code_puppy.plugins.my_plugin.register_callbacks"
+            )
 
     def test_create_loader_builtin_import_error(self, caplog):
         """Test built-in loader handles ImportError."""
-        loader = _create_loader_builtin("broken_plugin", "code_puppy.plugins.broken.register_callbacks")
+        loader = _create_loader_builtin(
+            "broken_plugin", "code_puppy.plugins.broken.register_callbacks"
+        )
 
-        with patch("code_puppy.plugins.importlib.import_module", side_effect=ImportError("No module")):
+        with patch(
+            "code_puppy.plugins.importlib.import_module",
+            side_effect=ImportError("No module"),
+        ):
             result = loader()
             assert result is None
             assert "Failed to lazy-load built-in plugin" in caplog.text
@@ -358,8 +379,14 @@ class TestCreateLoaders:
         mock_module = MagicMock()
 
         with (
-            patch("code_puppy.plugins.importlib.util.spec_from_file_location", return_value=mock_spec),
-            patch("code_puppy.plugins.importlib.util.module_from_spec", return_value=mock_module),
+            patch(
+                "code_puppy.plugins.importlib.util.spec_from_file_location",
+                return_value=mock_spec,
+            ),
+            patch(
+                "code_puppy.plugins.importlib.util.module_from_spec",
+                return_value=mock_module,
+            ),
         ):
             result = loader()
             assert result is mock_module
@@ -371,7 +398,10 @@ class TestCreateLoaders:
 
         loader = _create_loader_user("bad_plugin", callbacks_file)
 
-        with patch("code_puppy.plugins.importlib.util.spec_from_file_location", return_value=None):
+        with patch(
+            "code_puppy.plugins.importlib.util.spec_from_file_location",
+            return_value=None,
+        ):
             result = loader()
             assert result is None
             assert "Could not create module spec for user plugin" in caplog.text
@@ -430,7 +460,9 @@ class TestLoadPluginsForPhase:
         _LAZY_PLUGIN_REGISTRY.clear()
 
         mock_loader = MagicMock(return_value=None)  # Failed load
-        _LAZY_PLUGIN_REGISTRY["test_phase"] = [("builtin", "failing_plugin", mock_loader)]
+        _LAZY_PLUGIN_REGISTRY["test_phase"] = [
+            ("builtin", "failing_plugin", mock_loader)
+        ]
 
         original_loaded = set(_LOADED_PLUGINS)
         _LOADED_PLUGINS.clear()
@@ -486,7 +518,11 @@ class TestRegisterLazyPlugin:
             _register_lazy_plugin("startup", "builtin", "test_plugin", mock_loader)
             assert "startup" in _LAZY_PLUGIN_REGISTRY
             assert len(_LAZY_PLUGIN_REGISTRY["startup"]) == 1
-            assert _LAZY_PLUGIN_REGISTRY["startup"][0] == ("builtin", "test_plugin", mock_loader)
+            assert _LAZY_PLUGIN_REGISTRY["startup"][0] == (
+                "builtin",
+                "test_plugin",
+                mock_loader,
+            )
         finally:
             _LAZY_PLUGIN_REGISTRY.clear()
             _LAZY_PLUGIN_REGISTRY.update(original_registry)
@@ -536,11 +572,14 @@ class TestLoadPluginCallbacks:
         with (
             patch(
                 "code_puppy.plugins._discover_builtin_plugins",
-                return_value=[("plugin_a", ["startup"]), ("plugin_b", ["startup", "shutdown"])]
+                return_value=[
+                    ("plugin_a", ["startup"]),
+                    ("plugin_b", ["startup", "shutdown"]),
+                ],
             ) as mock_discover_builtin,
             patch(
                 "code_puppy.plugins._discover_user_plugins",
-                return_value=[("user_plugin", ["startup"])]
+                return_value=[("user_plugin", ["startup"])],
             ) as mock_discover_user,
         ):
             try:
@@ -583,8 +622,14 @@ class TestLoadPluginCallbacks:
         plugins_module._PLUGINS_DISCOVERED = False
 
         with (
-            patch("code_puppy.plugins._discover_builtin_plugins", return_value=[("test_builtin", ["startup"])]),
-            patch("code_puppy.plugins._discover_user_plugins", return_value=[("test_user", ["startup"])]),
+            patch(
+                "code_puppy.plugins._discover_builtin_plugins",
+                return_value=[("test_builtin", ["startup"])],
+            ),
+            patch(
+                "code_puppy.plugins._discover_user_plugins",
+                return_value=[("test_user", ["startup"])],
+            ),
             caplog.at_level(logging.DEBUG),
         ):
             try:

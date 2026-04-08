@@ -103,7 +103,9 @@ def test_thread_safety(svc):
         except Exception as e:
             errors.append(e)
 
-    threads = [threading.Thread(target=mark_and_check, args=(f"m-{i}",)) for i in range(8)]
+    threads = [
+        threading.Thread(target=mark_and_check, args=(f"m-{i}",)) for i in range(8)
+    ]
     for t in threads:
         t.start()
     for t in threads:

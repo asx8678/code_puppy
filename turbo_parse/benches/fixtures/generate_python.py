@@ -118,16 +118,16 @@ T = TypeVar("T")
 def generate_fixture(target_lines: int, output_path: Path) -> None:
     """Generate a Python file with approximately target_lines lines of code."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     lines_written = 0
     functions_written = 0
-    
+
     with open(output_path, "w") as f:
         # Write imports (approx 25 lines)
         imports = generate_imports()
         f.write(imports)
         lines_written += len(imports.split("\n"))
-        
+
         # Mix of function complexities to simulate real codebase
         while lines_written < target_lines:
             # Progress from simple to complex as file grows
@@ -137,22 +137,22 @@ def generate_fixture(target_lines: int, output_path: Path) -> None:
                 complexity = "medium"
             else:
                 complexity = "complex"
-            
+
             func_code = generate_function(functions_written, complexity)
             f.write(func_code)
             lines_written += len(func_code.split("\n"))
             functions_written += 1
-            
+
             # Add occasional blank lines and comments (5% chance)
             if functions_written % 20 == 0:
                 comment = f"\n# Section {{functions_written // 20}}\n\n"
                 f.write(comment)
                 lines_written += len(comment.split("\n"))
-    
+
     # Count actual lines
     with open(output_path) as f:
         actual_lines = len(f.readlines())
-    
+
     print(f"Generated {output_path}: {actual_lines} lines (target: {target_lines})")
     return actual_lines
 
@@ -160,16 +160,16 @@ def generate_fixture(target_lines: int, output_path: Path) -> None:
 def main():
     """Generate all Python fixtures."""
     base_dir = Path(__file__).parent / "python"
-    
+
     # Generate 1k LOC
     generate_fixture(1000, base_dir / "sample_1k.py")
-    
+
     # Generate 10k LOC
     generate_fixture(10000, base_dir / "sample_10k.py")
-    
+
     # Generate 100k LOC
     generate_fixture(100000, base_dir / "sample_100k.py")
-    
+
     print("Python fixtures generated successfully!")
 
 

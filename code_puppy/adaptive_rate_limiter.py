@@ -208,7 +208,8 @@ def _cleanup_old_states(max_age_seconds: float = 3600) -> int:
     """
     now = time.monotonic()
     to_remove = [
-        k for k, s in _state.model_states.items()
+        k
+        for k, s in _state.model_states.items()
         if s.last_429_time is None or (now - s.last_429_time) > max_age_seconds
     ]
     for k in to_remove:
@@ -237,16 +238,16 @@ async def _recovery_loop() -> None:
         while True:
             await asyncio.sleep(_state.cfg_cooldown_seconds)
             lock = _ensure_lock()
-            
+
             # Snapshot state under lock, then process outside the lock
             recovery_items = []
             cleanup_needed = False
-            
+
             async with lock:
                 # Periodically clean up stale model states
                 if len(_state.model_states) > 100:
                     cleanup_needed = True
-                
+
                 now = time.monotonic()
                 for model_name, st in _state.model_states.items():
                     if st.last_429_time is None:
@@ -254,7 +255,7 @@ async def _recovery_loop() -> None:
                     elapsed = now - st.last_429_time
                     if elapsed < _state.cfg_cooldown_seconds:
                         continue  # still in cooldown
-                    
+
                     old_limit = st.current_limit
                     increment = max(1.0, st.current_limit * _state.cfg_recovery_rate)
                     new_limit = min(
@@ -263,21 +264,22 @@ async def _recovery_loop() -> None:
                     )
                     if abs(new_limit - old_limit) < LIMIT_EPSILON:
                         continue  # already at max
-                    
+
                     # Capture recovery item to process outside the lock
-                    recovery_items.append((model_name, st, old_limit, new_limit, elapsed))
-            
+                    recovery_items.append(
+                        (model_name, st, old_limit, new_limit, elapsed)
+                    )
+
             # Perform cleanup outside the lock if needed
             if cleanup_needed:
                 removed = _cleanup_old_states(max_age_seconds=3600)
                 if removed:
                     logger.info(
-                        "adaptive_rate_limiter: pruned %d stale state(s), "
-                        "%d remaining",
+                        "adaptive_rate_limiter: pruned %d stale state(s), %d remaining",
                         removed,
                         len(_state.model_states),
                     )
-            
+
             # Process recovery mutations outside the lock
             for model_name, st, old_limit, new_limit, elapsed in recovery_items:
                 st.current_limit = new_limit
@@ -328,12 +330,9 @@ async def _circuit_cooldown_loop(model_name: str, state: ModelRateLimitState) ->
     elapses, the circuit transitions to HALF_OPEN which allows test
     requests through.
     """
-    effective_cooldown = (
-        _state.cfg_circuit_cooldown_seconds * state.cooldown_multiplier
-    )
+    effective_cooldown = _state.cfg_circuit_cooldown_seconds * state.cooldown_multiplier
     logger.info(
-        "Circuit OPEN for %r: holding requests for %.1fs "
-        "(cooldown ×%.0f)",
+        "Circuit OPEN for %r: holding requests for %.1fs (cooldown ×%.0f)",
         model_name,
         effective_cooldown,
         state.cooldown_multiplier,
@@ -697,14 +696,16 @@ async def acquire_model_slot(
                 # Re-check under condition lock to close the TOCTOU gap
                 while state.circuit_state == CircuitState.OPEN:
                     await asyncio.wait_for(
-                        state.condition.wait(), timeout=timeout,
+                        state.condition.wait(),
+                        timeout=timeout,
                     )
 
         elif need_wait_half_open:
             async with state.condition:
                 while state.circuit_state == CircuitState.HALF_OPEN:
                     await asyncio.wait_for(
-                        state.condition.wait(), timeout=timeout,
+                        state.condition.wait(),
+                        timeout=timeout,
                     )
 
     # ── Normal slot acquisition ─────────────────────────────────────────
@@ -716,7 +717,8 @@ async def acquire_model_slot(
     async with state.condition:
         while state.active_count >= math.ceil(state.current_limit):
             await asyncio.wait_for(
-                state.condition.wait(), timeout=timeout,
+                state.condition.wait(),
+                timeout=timeout,
             )
         state.active_count += 1
 
@@ -781,9 +783,7 @@ def get_status() -> dict[str, dict[str, Any]]:
             st.last_429_time is not None
             and (now - st.last_429_time) < _state.cfg_cooldown_seconds
         )
-        queue_depth = (
-            st.request_queue.qsize() if st.request_queue is not None else 0
-        )
+        queue_depth = st.request_queue.qsize() if st.request_queue is not None else 0
         result[model_name] = {
             "current_limit": st.current_limit,
             "active_count": st.active_count,
@@ -886,9 +886,7 @@ class _BackCompatModule(_ModuleType):
     def __getattr__(self, name: str) -> Any:
         if name in _STATE_ALIASES:
             return getattr(_state, _STATE_ALIASES[name])
-        raise AttributeError(
-            f"module {self.__name__!r} has no attribute {name!r}"
-        )
+        raise AttributeError(f"module {self.__name__!r} has no attribute {name!r}")
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name in _STATE_ALIASES:

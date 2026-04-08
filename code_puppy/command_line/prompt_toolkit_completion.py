@@ -24,17 +24,20 @@ from code_puppy.command_line.attachments import (
     DEFAULT_ACCEPTED_DOCUMENT_EXTENSIONS,
     DEFAULT_ACCEPTED_IMAGE_EXTENSIONS,
     _detect_path_tokens,
-    _tokenise)
+    _tokenise,
+)
 from code_puppy.command_line.clipboard import (
     capture_clipboard_image_to_pending,
-    has_image_in_clipboard)
+    has_image_in_clipboard,
+)
 from code_puppy.command_line.command_registry import get_unique_commands
 from code_puppy.command_line.file_path_completion import FilePathCompleter
 from code_puppy.command_line.load_context_completion import LoadContextCompleter
 from code_puppy.command_line.mcp_completion import MCPCompleter
 from code_puppy.command_line.model_picker_completion import (
     ModelNameCompleter,
-    get_active_model)
+    get_active_model,
+)
 from code_puppy.command_line.pin_command_completion import PinCompleter, UnpinCompleter
 from code_puppy.command_line.skills_completion import SkillsCompleter
 from code_puppy.command_line.utils import list_directory
@@ -42,7 +45,8 @@ from code_puppy.config import (
     COMMAND_HISTORY_FILE,
     get_config_keys,
     get_puppy_name,
-    get_value)
+    get_value,
+)
 
 
 def _sanitize_for_encoding(text: str) -> str:
@@ -122,7 +126,8 @@ class SetCompleter(Completer):
                 display=self.trigger + " ",
                 display_meta=FormattedText(
                     [("class:set-completer-meta", "set config key")]
-                ))
+                ),
+            )
             return
 
         # Require a space after /set before showing completions
@@ -155,9 +160,8 @@ class SetCompleter(Completer):
                 completion_text = f"{key}{value_part}"
 
                 yield Completion(
-                    completion_text,
-                    start_position=start_position,
-                    display_meta="")
+                    completion_text, start_position=start_position, display_meta=""
+                )
 
 
 class AttachmentPlaceholderProcessor(Processor):
@@ -275,7 +279,8 @@ class AttachmentPlaceholderProcessor(Processor):
         return Transformation(
             new_fragments,
             source_to_display=source_to_display,
-            display_to_source=display_to_source)
+            display_to_source=display_to_source,
+        )
 
 
 class CDCompleter(Completer):
@@ -329,7 +334,8 @@ class CDCompleter(Completer):
                     suggestion,
                     start_position=start_position,
                     display=d + os.sep,
-                    display_meta="Directory")
+                    display_meta="Directory",
+                )
         except Exception:
             # Silently ignore errors (e.g., permission issues, non-existent dir)
             pass
@@ -372,7 +378,8 @@ class AgentCompleter(Completer):
         # Filter and yield agent completions
         try:
             from code_puppy.command_line.pin_command_completion import (
-                _get_agent_display_meta)
+                _get_agent_display_meta,
+            )
         except ImportError:
             _get_agent_display_meta = lambda x: "default"  # noqa: E731
 
@@ -382,7 +389,8 @@ class AgentCompleter(Completer):
                     agent_name,
                     start_position=start_position,
                     display=agent_name,
-                    display_meta=_get_agent_display_meta(agent_name))
+                    display_meta=_get_agent_display_meta(agent_name),
+                )
 
 
 class SlashCompleter(Completer):
@@ -497,7 +505,8 @@ class SlashCompleter(Completer):
                 completion["text"],
                 start_position=start_position,
                 display=completion["display"],
-                display_meta=completion["meta"])
+                display_meta=completion["meta"],
+            )
 
 
 def get_prompt_with_active_model(base: str = ">>> "):
@@ -737,7 +746,8 @@ async def get_input_with_combined_completion(
                     ["powershell", "-command", "Get-Clipboard"],
                     capture_output=True,
                     text=True,
-                    timeout=2)
+                    timeout=2,
+                )
                 if result.returncode == 0:
                     text = result.stdout
             else:  # Linux
@@ -790,7 +800,8 @@ async def get_input_with_combined_completion(
         history=history,
         complete_while_typing=True,
         key_bindings=bindings,
-        input_processors=[AttachmentPlaceholderProcessor()])
+        input_processors=[AttachmentPlaceholderProcessor()],
+    )
     # If they pass a string, backward-compat: convert it to formatted_text
     if isinstance(prompt_str, str):
         from prompt_toolkit.formatted_text import FormattedText

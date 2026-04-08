@@ -12,7 +12,6 @@ This module also handles:
 - URL modifications (adding ?beta=true query param)
 """
 
-
 import asyncio
 import base64
 import json
@@ -51,11 +50,12 @@ except ImportError:  # pragma: no cover - optional dep
 @lru_cache(maxsize=16)
 def _get_jwt_iat(token: str) -> int:
     """Decode a JWT and return its 'iat' (issued at) claim.
-    
+
     Cached with LRU to avoid repeated decoding of the same token.
     Returns 0 if the token can't be decoded or has no valid 'iat' claim.
     Validates that 'iat' is numeric and within reasonable bounds.
     """
+    # NOTE: JWT signature is not verified; only used for cache age calculation.
     try:
         # JWT format: header.payload.signature
         # We only need the payload (second part)
@@ -200,7 +200,8 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                 logger.info(
                     "JWT token is %.1f seconds old (>= %d), will refresh proactively",
                     age,
-                    TOKEN_MAX_AGE_SECONDS)
+                    TOKEN_MAX_AGE_SECONDS,
+                )
             return should_refresh
 
         # Strategy 2: Fall back to stored expires_at from token file
@@ -208,7 +209,8 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         if should_refresh:
             logger.info(
                 "Stored token expires within %d seconds, will refresh proactively",
-                TOKEN_MAX_AGE_SECONDS)
+                TOKEN_MAX_AGE_SECONDS,
+            )
         return should_refresh
 
     @staticmethod
@@ -221,7 +223,8 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         try:
             from code_puppy.plugins.claude_code_oauth.utils import (
                 is_token_expired,
-                load_stored_tokens)
+                load_stored_tokens,
+            )
 
             tokens = load_stored_tokens()
             if not tokens:
@@ -317,8 +320,7 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         return json.dumps(data).encode("utf-8")
 
     @staticmethod
-    def _transform_headers_for_claude_code(
-        headers: MutableMapping[str, str]) -> None:
+    def _transform_headers_for_claude_code(headers: MutableMapping[str, str]) -> None:
         """Transform headers for Claude Code OAuth compatibility.
 
         - Sets user-agent to claude-cli
@@ -396,7 +398,7 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                             method=request.method,
                             url=request.url,
                             headers=headers,
-                            content=body_bytes
+                            content=body_bytes,
                         )
                         used_cache = True
                         request.extensions["claude_oauth_refresh_attempted"] = True
@@ -434,7 +436,7 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                             method=request.method,
                             url=url,
                             headers=headers,
-                            content=body_bytes
+                            content=body_bytes,
                         )
                         used_cache = True
 
@@ -471,7 +473,8 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
             self._request_build_time_saved_ms += estimated_saved
             logger.debug(
                 "Request optimized via cache (took %.2fms, saved ~%.2fms)",
-                rebuild_time, estimated_saved
+                rebuild_time,
+                estimated_saved,
             )
 
         # Send the request with retry logic for transient errors
@@ -509,7 +512,7 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                             method=request.method,
                             url=request.url,
                             headers=headers,
-                            content=body_bytes
+                            content=body_bytes,
                         )
                         retry_request.extensions["claude_oauth_refresh_attempted"] = (
                             True
@@ -580,7 +583,8 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                     response.status_code,
                     wait_time,
                     attempt + 1,
-                    MAX_RETRIES)
+                    MAX_RETRIES,
+                )
                 await asyncio.sleep(wait_time)
 
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.PoolTimeout) as exc:
@@ -598,7 +602,8 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                     exc,
                     wait_time,
                     attempt + 1,
-                    MAX_RETRIES)
+                    MAX_RETRIES,
+                )
                 await asyncio.sleep(wait_time)
 
             except Exception:
@@ -708,7 +713,7 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
 
     def get_performance_stats(self) -> dict[str, Any]:
         """Get performance statistics for this client.
-        
+
         Returns:
             Dict with performance metrics including:
             - requests_optimized: Number of requests that used cache
@@ -773,7 +778,7 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
 
 def _inject_cache_control_in_payload(payload: dict[str, Any]) -> bool:
     """In-place cache_control injection on Anthropic messages.create payload.
-    
+
     Returns True if cache_control was injected, False otherwise.
     """
     injected = False

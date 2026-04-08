@@ -55,9 +55,8 @@ _hook_engine = _initialize_engine()
 
 
 async def on_pre_tool_call_hook(
-    tool_name: str,
-    tool_args: dict[str, Any],
-    context: Any = None) -> dict[str, Any | None]:
+    tool_name: str, tool_args: dict[str, Any], context: Any = None
+) -> dict[str, Any | None]:
     """Pre-tool callback — executes hooks before tool runs. Can block."""
     if not _hook_engine:
         return None
@@ -66,7 +65,8 @@ async def on_pre_tool_call_hook(
         event_type="PreToolUse",
         tool_name=tool_name,
         tool_args=tool_args,
-        context={"context": context} if context else {})
+        context={"context": context} if context else {},
+    )
 
     try:
         result = await _hook_engine.process_event("PreToolUse", event_data)
@@ -91,7 +91,8 @@ async def on_post_tool_call_hook(
     tool_args: dict[str, Any],
     result: Any,
     duration_ms: float,
-    context: Any = None) -> None:
+    context: Any = None,
+) -> None:
     """Post-tool callback — executes hooks after tool completes (observation only)."""
     if not _hook_engine:
         return
@@ -100,7 +101,8 @@ async def on_post_tool_call_hook(
         event_type="PostToolUse",
         tool_name=tool_name,
         tool_args=tool_args,
-        context={"result": result, "duration_ms": duration_ms, "context": context})
+        context={"result": result, "duration_ms": duration_ms, "context": context},
+    )
 
     try:
         await _hook_engine.process_event("PostToolUse", event_data)
@@ -117,10 +119,7 @@ async def on_startup_hook() -> None:
     if not _hook_engine:
         return
 
-    event_data = EventData(
-        event_type="SessionStart",
-        tool_name="session",
-        tool_args={})
+    event_data = EventData(event_type="SessionStart", tool_name="session", tool_args={})
 
     try:
         await _hook_engine.process_event("SessionStart", event_data)
@@ -135,7 +134,8 @@ async def on_agent_run_end_hook(
     success: bool = True,
     error: Exception | None = None,
     response_text: str | None = None,
-    metadata: dict | None = None) -> None:
+    metadata: dict | None = None,
+) -> None:
     """agent_run_end callback — fires Stop or SubagentStop hooks."""
     if not _hook_engine:
         return
@@ -154,7 +154,8 @@ async def on_agent_run_end_hook(
             "session_id": session_id,
             "success": success,
             "error": str(error) if error else None,
-        })
+        },
+    )
 
     try:
         await _hook_engine.process_event(event_type, event_data)

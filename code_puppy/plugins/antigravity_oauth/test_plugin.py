@@ -1,6 +1,5 @@
 """Tests for the Antigravity OAuth plugin."""
 
-
 import time
 
 import pytest
@@ -13,15 +12,15 @@ from .oauth import (
     _decode_state,
     _encode_state,
     _generate_code_verifier,
-    prepare_oauth_context)
-from .storage import (
-    _migrate_v1_to_v2,
-    _migrate_v2_to_v3)
+    prepare_oauth_context,
+)
+from .storage import _migrate_v1_to_v2, _migrate_v2_to_v3
 from .token import (
     RefreshParts,
     format_refresh_parts,
     is_token_expired,
-    parse_refresh_parts)
+    parse_refresh_parts,
+)
 
 
 class TestPKCE:
@@ -120,9 +119,8 @@ class TestRefreshParts:
     def test_format_roundtrip(self):
         """Format and parse should be inverse operations."""
         original = RefreshParts(
-            refresh_token="token",
-            project_id="project",
-            managed_project_id="managed")
+            refresh_token="token", project_id="project", managed_project_id="managed"
+        )
         formatted = format_refresh_parts(original)
         parsed = parse_refresh_parts(formatted)
 

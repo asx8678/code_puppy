@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import pathlib
+import threading
 import time
 from functools import lru_cache
 
@@ -16,6 +17,9 @@ _config_mtime: float = 0.0
 # --- mtime check debouncing (reduces stat syscall cost) ---
 _last_mtime_check = 0
 _cached_mtime = None
+
+# --- Thread-safe lock for config cache access ---
+_CONFIG_LOCK = threading.Lock()
 
 
 def _get_config() -> configparser.ConfigParser:
@@ -36,17 +40,19 @@ def _get_config() -> configparser.ConfigParser:
             return cfg
         _last_mtime_check = now
 
-    if _config_cache is None or _cached_mtime != _config_mtime:
-        _config_cache = configparser.ConfigParser()
-        _config_cache.read(CONFIG_FILE)
-        _config_mtime = _cached_mtime
-    return _config_cache
+    with _CONFIG_LOCK:
+        if _config_cache is None or _cached_mtime != _config_mtime:
+            _config_cache = configparser.ConfigParser()
+            _config_cache.read(CONFIG_FILE)
+            _config_mtime = _cached_mtime
+        return _config_cache
 
 
 def _invalidate_config() -> None:
     """Force next _get_config() call to re-read from disk."""
     global _config_cache, _model_context_length_cache
-    _config_cache = None
+    with _CONFIG_LOCK:
+        _config_cache = None
     # Also invalidate the protected token count cache
     get_protected_token_count.cache_clear()
     # Clear model context length cache since config changes
@@ -218,6 +224,7 @@ _default_vision_model_cache = None
 # LRU cache for supported settings per model (cleared by clear_model_cache)
 _supported_settings_cache = None
 
+
 def _get_supported_settings_cache():
     """Return the LRU cache function for supported settings, creating it if needed."""
     global _supported_settings_cache
@@ -235,7 +242,9 @@ def _get_supported_settings_cache():
             if supported_settings is None:
                 # Default: assume common settings are supported for backwards compatibility
                 # For Anthropic/Claude models, include extended thinking settings
-                if model_name.startswith("claude-") or model_name.startswith("anthropic-"):
+                if model_name.startswith("claude-") or model_name.startswith(
+                    "anthropic-"
+                ):
                     base = ["temperature", "extended_thinking", "budget_tokens"]
                     # Opus 4-6 models also support the effort setting
                     lower = model_name.lower()
@@ -417,7 +426,7 @@ def get_config_keys():
     default_keys.append("resume_message_count")
     # Add fast puppy (Rust acceleration) control key
     default_keys.append("enable_fast_puppy")
-    
+
     # SECURITY FIX c9z0: User plugin security settings
     default_keys.append("enable_user_plugins")
     default_keys.append("allowed_user_plugins")
@@ -528,7 +537,8 @@ def _default_vision_model_from_models_json() -> str:
                 "gpt-4.1-mini",
                 "gpt-4.1-nano",
                 "claude-4-0-sonnet",
-                "gemini-2.5-flash-preview-05-20")
+                "gemini-2.5-flash-preview-05-20",
+            )
             for candidate in preferred_candidates:
                 if candidate in models_config:
                     _default_vision_model_cache = candidate
@@ -570,7 +580,11 @@ def _validate_model_exists(model_name: str) -> bool:
 
 def clear_model_cache():
     """Clear the model validation cache. Call this when models.json changes."""
-    global _model_validation_cache, _default_model_cache, _default_vision_model_cache, _supported_settings_cache
+    global \
+        _model_validation_cache, \
+        _default_model_cache, \
+        _default_vision_model_cache, \
+        _supported_settings_cache
     _model_validation_cache.clear()
     _default_model_cache = None
     _default_vision_model_cache = None
@@ -998,8 +1012,7 @@ def get_effective_seed(model_name: str | None = None) -> int | None:
     seed = settings.get("seed")
     return int(seed) if seed is not None else None
 
-
-# Legacy functions for backward compatibility
+    # Legacy functions for backward compatibility
     import os
     import re
 

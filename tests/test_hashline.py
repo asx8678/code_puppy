@@ -36,6 +36,7 @@ from code_puppy.utils.hashline import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _force_python(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable Rust backend for the duration of a test."""
     monkeypatch.setattr(hashline_mod, "_USING_RUST", False)
@@ -417,10 +418,12 @@ class TestCoreBridge:
 
     def test_bridge_imports_cleanly(self):
         from code_puppy._core_bridge import HASHLINE_RUST_AVAILABLE
+
         assert isinstance(HASHLINE_RUST_AVAILABLE, bool)
 
     def test_bridge_exposes_symbols(self):
         import code_puppy._core_bridge as bridge
+
         # These may be None if Rust is unavailable, but the names must exist
         assert hasattr(bridge, "compute_line_hash")
         assert hasattr(bridge, "format_hashlines")
@@ -429,6 +432,7 @@ class TestCoreBridge:
 
     def test_bridge_rust_available_consistent(self):
         import code_puppy._core_bridge as bridge
+
         if bridge.HASHLINE_RUST_AVAILABLE:
             assert bridge.compute_line_hash is not None
             assert bridge.format_hashlines is not None

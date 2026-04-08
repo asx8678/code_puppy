@@ -93,7 +93,10 @@ class TestMCPScreen:
 
     def test_get_server_by_id_known_server(self) -> None:
         """If the catalog loads, a known server should be findable."""
-        from code_puppy.tui.screens.mcp_screen import _get_server_by_id, _load_catalog_servers
+        from code_puppy.tui.screens.mcp_screen import (
+            _get_server_by_id,
+            _load_catalog_servers,
+        )
 
         servers = _load_catalog_servers()
         if servers:
@@ -265,7 +268,11 @@ class TestMCPFormScreen:
 
     def test_examples_pass_validation(self) -> None:
         """All built-in examples should pass their own validation."""
-        from code_puppy.tui.screens.mcp_form_screen import SERVER_TYPES, _EXAMPLES, _validate_json
+        from code_puppy.tui.screens.mcp_form_screen import (
+            SERVER_TYPES,
+            _EXAMPLES,
+            _validate_json,
+        )
 
         for t in SERVER_TYPES:
             example = _EXAMPLES.get(t, "{}")

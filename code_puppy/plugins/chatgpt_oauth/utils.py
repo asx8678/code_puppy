@@ -1,6 +1,5 @@
 """Utility helpers for the ChatGPT OAuth plugin."""
 
-
 import base64
 import datetime
 import hashlib
@@ -18,7 +17,8 @@ import requests
 from .config import (
     CHATGPT_OAUTH_CONFIG,
     get_chatgpt_models_path,
-    get_token_storage_path)
+    get_token_storage_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,8 @@ def prepare_oauth_context() -> OAuthContext:
         code_verifier=code_verifier,
         code_challenge=code_challenge,
         created_at=time.time(),
-        expires_at=expires_at)
+        expires_at=expires_at,
+    )
 
 
 def assign_redirect_uri(context: OAuthContext, port: int) -> str:
@@ -206,10 +207,8 @@ def refresh_access_token() -> str | None:
 
     try:
         response = requests.post(
-            CHATGPT_OAUTH_CONFIG["token_url"],
-            data=payload,
-            headers=headers,
-            timeout=30)
+            CHATGPT_OAUTH_CONFIG["token_url"], data=payload, headers=headers, timeout=30
+        )
 
         if response.status_code == 200:
             new_tokens = response.json()
@@ -309,10 +308,8 @@ def exchange_code_for_tokens(
     logger.info("Exchanging code for tokens: %s", CHATGPT_OAUTH_CONFIG["token_url"])
     try:
         response = requests.post(
-            CHATGPT_OAUTH_CONFIG["token_url"],
-            data=payload,
-            headers=headers,
-            timeout=30)
+            CHATGPT_OAUTH_CONFIG["token_url"], data=payload, headers=headers, timeout=30
+        )
         logger.info("Token exchange response: %s", response.status_code)
         if response.status_code == 200:
             token_data = response.json()
@@ -325,9 +322,8 @@ def exchange_code_for_tokens(
             return token_data
         else:
             logger.error(
-                "Token exchange failed: %s - %s",
-                response.status_code,
-                response.text)
+                "Token exchange failed: %s - %s", response.status_code, response.text
+            )
             # Try to parse OAuth error
             if response.headers.get("content-type", "").startswith("application/json"):
                 try:
@@ -335,7 +331,8 @@ def exchange_code_for_tokens(
                     if "error" in error_data:
                         logger.error(
                             "OAuth error: %s",
-                            error_data.get("error_description", error_data["error"]))
+                            error_data.get("error_description", error_data["error"]),
+                        )
                 except Exception:
                     pass
     except Exception as exc:
@@ -359,23 +356,25 @@ DEFAULT_CODEX_MODELS = [
 # prefixed form ("chatgpt-gpt-5.2"), as well as the full key for non-
 # prefixed entries like ``claude-3-opus``. Add an entry here to
 # permanently suppress a model in the UI/model picker.
-BLOCKED_CHATGPT_MODELS = frozenset({
-    # Stale Codex GPT-5.x variants
-    "gpt-5",
-    "gpt-5-codex",
-    "gpt-5-codex-mini",
-    "gpt-5.1",
-    "gpt-5.1-codex",
-    "gpt-5.1-codex-max",
-    "gpt-5.1-codex-mini",
-    "gpt-5.2",
-    "gpt-5.2-codex",
-    # Legacy ChatGPT models we no longer want surfaced
-    "gpt-4o",
-    "gpt-3.5-turbo",
-    # Misc legacy entries that historically lived in chatgpt_models.json
-    "claude-3-opus",
-})
+BLOCKED_CHATGPT_MODELS = frozenset(
+    {
+        # Stale Codex GPT-5.x variants
+        "gpt-5",
+        "gpt-5-codex",
+        "gpt-5-codex-mini",
+        "gpt-5.1",
+        "gpt-5.1-codex",
+        "gpt-5.1-codex-max",
+        "gpt-5.1-codex-mini",
+        "gpt-5.2",
+        "gpt-5.2-codex",
+        # Legacy ChatGPT models we no longer want surfaced
+        "gpt-4o",
+        "gpt-3.5-turbo",
+        # Misc legacy entries that historically lived in chatgpt_models.json
+        "claude-3-opus",
+    }
+)
 
 
 def _is_blocked_chatgpt_model(model_name: str) -> bool:
@@ -389,7 +388,7 @@ def _is_blocked_chatgpt_model(model_name: str) -> bool:
     name = model_name
     prefix = CHATGPT_OAUTH_CONFIG.get("prefix", "chatgpt-")
     if prefix and name.startswith(prefix):
-        name = name[len(prefix):]
+        name = name[len(prefix) :]
     return name in BLOCKED_CHATGPT_MODELS or model_name in BLOCKED_CHATGPT_MODELS
 
 
@@ -407,6 +406,7 @@ def _filter_blocked_chatgpt_models(models: list[str]) -> list[str]:
     if dropped:
         logger.info("Filtered blocked ChatGPT models: %s", dropped)
     return kept
+
 
 # Models that MUST always be registered, even if the /models endpoint
 # doesn't return them (e.g. newly launched, not yet in the API catalogue).
@@ -508,7 +508,8 @@ def fetch_chatgpt_models(access_token: str, account_id: str) -> list[str | None]
         # API didn't return valid models, use default list
         logger.info(
             "Models endpoint returned %d, using default model list",
-            response.status_code)
+            response.status_code,
+        )
 
     except requests.exceptions.Timeout:
         logger.warning("Timeout fetching models, using default list")
@@ -529,15 +530,12 @@ def add_models_to_extra_config(models: list[str]) -> bool:
         # Drop any entries already in the config that are now blocked,
         # so stale files get cleaned up on next sync.
         stale_blocked = [
-            name for name in list(chatgpt_models)
-            if _is_blocked_chatgpt_model(name)
+            name for name in list(chatgpt_models) if _is_blocked_chatgpt_model(name)
         ]
         for name in stale_blocked:
             chatgpt_models.pop(name, None)
         if stale_blocked:
-            logger.info(
-                "Removed stale blocked models from config: %s", stale_blocked
-            )
+            logger.info("Removed stale blocked models from config: %s", stale_blocked)
         models = _filter_blocked_chatgpt_models(models)
         added = 0
         for model_name in models:

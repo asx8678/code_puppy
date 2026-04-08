@@ -13,7 +13,8 @@ from code_puppy.mcp_.mcp_logs import (
     get_log_file_path,
     get_log_stats,
     list_servers_with_logs,
-    read_logs)
+    read_logs,
+)
 from code_puppy.messaging import emit_error, emit_info
 
 from .base import MCPCommandBase
@@ -73,12 +74,14 @@ class LogsCommand(MCPCommandBase):
                     if lines <= 0:
                         emit_info(
                             "Lines must be positive, using default: 50",
-                            message_group=group_id)
+                            message_group=group_id,
+                        )
                         lines = 50
                 except ValueError:
                     emit_info(
                         f"Invalid number '{args[1]}', using default: 50",
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
 
         self._show_logs(server_name, lines if not show_all else None, group_id)
 
@@ -90,7 +93,8 @@ class LogsCommand(MCPCommandBase):
             emit_info(
                 "📋 No MCP server logs found.\n"
                 "Logs are created when servers are started.",
-                message_group=group_id)
+                message_group=group_id,
+            )
             return
 
         lines = ["📋 **Servers with logs:**\n"]
@@ -132,7 +136,8 @@ class LogsCommand(MCPCommandBase):
                 if not stats["exists"]:
                     emit_info(
                         f"Server '{server_name}' not found and has no logs.",
-                        message_group=group_id)
+                        message_group=group_id,
+                    )
                     suggest_similar_servers(
                         self.manager, server_name, group_id=group_id
                     )
@@ -145,7 +150,8 @@ class LogsCommand(MCPCommandBase):
                 emit_info(
                     f"📋 No logs found for server: **{server_name}**\n"
                     f"Log file: `{get_log_file_path(server_name)}`",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 return
 
             # Get stats for header
@@ -166,17 +172,15 @@ class LogsCommand(MCPCommandBase):
 
             # Create a panel with the logs
             syntax = Syntax(
-                log_content,
-                "log",
-                theme="monokai",
-                word_wrap=True,
-                line_numbers=False)
+                log_content, "log", theme="monokai", word_wrap=True, line_numbers=False
+            )
 
             panel = Panel(
                 syntax,
                 title=header,
                 subtitle=f"Log file: {get_log_file_path(server_name)}",
-                border_style="dim")
+                border_style="dim",
+            )
 
             emit_info(panel, message_group=group_id)
 
@@ -187,7 +191,8 @@ class LogsCommand(MCPCommandBase):
                         f"[dim]💡 Use `/mcp logs {server_name} all` to see all logs, "
                         f"or `/mcp logs {server_name} <number>` for specific count[/dim]"
                     ),
-                    message_group=group_id)
+                    message_group=group_id,
+                )
 
         except Exception as e:
             logger.error(f"Error getting logs for server '{server_name}': {e}")
@@ -207,7 +212,8 @@ class LogsCommand(MCPCommandBase):
             if not stats["exists"] and stats["rotated_count"] == 0:
                 emit_info(
                     f"No logs to clear for server: {server_name}",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 return
 
             # Clear the logs
@@ -216,7 +222,8 @@ class LogsCommand(MCPCommandBase):
             cleared_count = 1 + stats["rotated_count"]
             emit_info(
                 f"🗑️  Cleared {cleared_count} log file(s) for **{server_name}**",
-                message_group=group_id)
+                message_group=group_id,
+            )
 
         except Exception as e:
             logger.error(f"Error clearing logs for server '{server_name}': {e}")

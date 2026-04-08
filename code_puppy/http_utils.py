@@ -80,7 +80,8 @@ def _resolve_proxy_config(verify: bool | str | None = None) -> ProxyConfig:
         trust_env=trust_env,
         proxy_url=proxy_url,
         disable_retry=disable_retry,
-        http2_enabled=http2_enabled)
+        http2_enabled=http2_enabled,
+    )
 
 
 try:
@@ -108,13 +109,13 @@ def _notify_adaptive_rate_limiter(model_name: str, status_code: int) -> None:
     """
     if status_code != 429 or not model_name:
         return
-    
+
     # Import here to avoid circular imports
     try:
         from code_puppy.adaptive_rate_limiter import record_rate_limit
     except ImportError:
         return  # Rate limiter not available
-    
+
     # Schedule the notification as a fire-and-forget task
     try:
         loop = asyncio.get_running_loop()
@@ -137,13 +138,13 @@ def _notify_success(model_name: str) -> None:
     """
     if not model_name:
         return
-    
+
     # Import here to avoid circular imports
     try:
         from code_puppy.adaptive_rate_limiter import record_success
     except ImportError:
         return  # Rate limiter not available
-    
+
     # Schedule the notification as a fire-and-forget task
     try:
         loop = asyncio.get_running_loop()
@@ -168,7 +169,8 @@ class RetryingAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         retry_status_codes: tuple = (429, 502, 503, 504),
         max_retries: int = 5,
         model_name: str = "",
-        **kwargs):
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.retry_status_codes = retry_status_codes
         self.max_retries = max_retries
@@ -197,9 +199,7 @@ class RetryingAsyncClient(RequestCacheMixin, httpx.AsyncClient):
 
                 # Notify adaptive rate limiter on 429
                 if response.status_code == 429 and self.model_name:
-                    _notify_adaptive_rate_limiter(
-                        self.model_name, response.status_code
-                    )
+                    _notify_adaptive_rate_limiter(self.model_name, response.status_code)
 
                 # Close response if we're going to retry
                 await response.aclose()
@@ -275,7 +275,8 @@ def create_client(
     timeout: int = 180,
     verify: bool | str = None,
     headers: dict[str, str | None] = None,
-    retry_status_codes: tuple = (429, 502, 503, 504)) -> httpx.Client:
+    retry_status_codes: tuple = (429, 502, 503, 504),
+) -> httpx.Client:
     if verify is None:
         verify = get_cert_bundle_path()
 
@@ -286,10 +287,8 @@ def create_client(
     # Note: TenacityTransport was removed. For now we just return a standard client.
     # Future TODO: Implement RetryingClient(httpx.Client) if needed.
     return httpx.Client(
-        verify=verify,
-        headers=headers or {},
-        timeout=timeout,
-        http2=http2_enabled)
+        verify=verify, headers=headers or {}, timeout=timeout, http2=http2_enabled
+    )
 
 
 def create_async_client(
@@ -297,7 +296,8 @@ def create_async_client(
     verify: bool | str = None,
     headers: dict[str, str | None] = None,
     retry_status_codes: tuple = (429, 502, 503, 504),
-    model_name: str = "") -> httpx.AsyncClient:
+    model_name: str = "",
+) -> httpx.AsyncClient:
     config = _resolve_proxy_config(verify)
 
     if not config.disable_retry:
@@ -309,7 +309,8 @@ def create_async_client(
             headers=headers or {},
             timeout=timeout,
             http2=config.http2_enabled,
-            trust_env=config.trust_env)
+            trust_env=config.trust_env,
+        )
     else:
         return httpx.AsyncClient(
             proxy=config.proxy_url,
@@ -317,13 +318,15 @@ def create_async_client(
             headers=headers or {},
             timeout=timeout,
             http2=config.http2_enabled,
-            trust_env=config.trust_env)
+            trust_env=config.trust_env,
+        )
 
 
 def create_requests_session(
     timeout: float = 5.0,
     verify: bool | str = None,
-    headers: dict[str, str | None] = None) -> "requests.Session":
+    headers: dict[str, str | None] = None,
+) -> "requests.Session":
     import requests
 
     session = requests.Session()
@@ -366,7 +369,8 @@ def create_reopenable_async_client(
     verify: bool | str = None,
     headers: dict[str, str | None] = None,
     retry_status_codes: tuple = (429, 502, 503, 504),
-    model_name: str = "") -> ReopenableAsyncClient | httpx.AsyncClient:
+    model_name: str = "",
+) -> ReopenableAsyncClient | httpx.AsyncClient:
     config = _resolve_proxy_config(verify)
 
     base_kwargs = {
@@ -393,7 +397,8 @@ def create_reopenable_async_client(
             return RetryingAsyncClient(
                 retry_status_codes=retry_status_codes,
                 model_name=model_name,
-                **base_kwargs)
+                **base_kwargs,
+            )
         else:
             return httpx.AsyncClient(**base_kwargs)
 

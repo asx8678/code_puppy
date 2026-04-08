@@ -253,7 +253,8 @@ class MessageQueue:
         message = UIMessage(
             type=MessageType.HUMAN_INPUT_REQUEST,
             content=prompt_text,
-            metadata={"prompt_id": prompt_id})
+            metadata={"prompt_id": prompt_id},
+        )
         self.emit(message)
 
         return prompt_id
@@ -424,4 +425,5 @@ async def wait_for_messages_rendered(timeout: float = 0.5) -> bool:
     # This allows the sync condition variable wait to run in a thread pool
     # without blocking the event loop
     import asyncio
+
     return await asyncio.to_thread(queue.wait_for_empty, timeout)

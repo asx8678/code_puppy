@@ -6,7 +6,6 @@ Generative Language API. The Code Assist API supports OAuth authentication
 and has a different request/response format.
 """
 
-
 import json
 import logging
 import uuid
@@ -25,7 +24,8 @@ from pydantic_ai.messages import (
     TextPart,
     ToolCallPart,
     ToolReturnPart,
-    UserPromptPart)
+    UserPromptPart,
+)
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
@@ -47,7 +47,8 @@ class GeminiCodeAssistModel(Model):
         access_token: str,
         project_id: str,
         api_base_url: str = "https://cloudcode-pa.googleapis.com",
-        api_version: str = "v1internal"):
+        api_version: str = "v1internal",
+    ):
         self._model_name = model_name
         self.access_token = access_token
         self.project_id = project_id
@@ -66,7 +67,8 @@ class GeminiCodeAssistModel(Model):
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters) -> ModelResponse:
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
         """Make a non-streaming request to the Code Assist API."""
         request_body = self._build_request(
             messages, model_settings, model_request_parameters
@@ -93,7 +95,8 @@ class GeminiCodeAssistModel(Model):
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters) -> AsyncIterator[StreamedResponse]:
+        model_request_parameters: ModelRequestParameters,
+    ) -> AsyncIterator[StreamedResponse]:
         """Make a streaming request to the Code Assist API."""
         request_body = self._build_request(
             messages, model_settings, model_request_parameters
@@ -126,7 +129,8 @@ class GeminiCodeAssistModel(Model):
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters) -> dict[str, Any]:
+        model_request_parameters: ModelRequestParameters,
+    ) -> dict[str, Any]:
         """Build the Code Assist API request body."""
         contents = []
         system_instruction = None
@@ -289,14 +293,16 @@ class GeminiCodeAssistModel(Model):
                     ToolCallPart(
                         tool_name=func_call["name"],
                         args=func_call.get("args", {}),
-                        tool_call_id=str(uuid.uuid4()))
+                        tool_call_id=str(uuid.uuid4()),
+                    )
                 )
 
         # Extract usage metadata
         usage_meta = inner_response.get("usageMetadata", {})
         usage = RequestUsage(
             input_tokens=usage_meta.get("promptTokenCount", 0),
-            output_tokens=usage_meta.get("candidatesTokenCount", 0))
+            output_tokens=usage_meta.get("candidatesTokenCount", 0),
+        )
 
         return ModelResponse(
             parts=response_parts, model_name=self._model_name, usage=usage
@@ -338,7 +344,8 @@ class StreamedResponse:
                         meta = inner["usageMetadata"]
                         self._usage = RequestUsage(
                             input_tokens=meta.get("promptTokenCount", 0),
-                            output_tokens=meta.get("candidatesTokenCount", 0))
+                            output_tokens=meta.get("candidatesTokenCount", 0),
+                        )
 
                     # Extract parts from candidates (both text and function calls)
                     for candidate in inner.get("candidates", []):
@@ -353,7 +360,8 @@ class StreamedResponse:
                                 tool_call = ToolCallPart(
                                     tool_name=func_call["name"],
                                     args=func_call.get("args", {}),
-                                    tool_call_id=str(uuid.uuid4()))
+                                    tool_call_id=str(uuid.uuid4()),
+                                )
                                 self._tool_calls.append(tool_call)
 
                 except json.JSONDecodeError:

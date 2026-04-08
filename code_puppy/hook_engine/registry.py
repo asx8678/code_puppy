@@ -67,7 +67,8 @@ def build_registry_from_config(config: dict[str, Any]) -> HookRegistry:
                         timeout=hook_data.get("timeout", 5000),
                         once=hook_data.get("once", False),
                         enabled=hook_data.get("enabled", True),
-                        id=hook_data.get("id"))
+                        id=hook_data.get("id"),
+                    )
                     registry.add_hook(event_type, hook)
                 except (ValueError, KeyError) as e:
                     logger.warning(f"Skipping invalid hook in {event_type}: {e}")

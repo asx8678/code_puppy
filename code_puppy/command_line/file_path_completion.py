@@ -21,7 +21,7 @@ class FilePathCompleter(Completer):
         if self.symbol not in text_before_cursor:
             return
         symbol_pos = text_before_cursor.rfind(self.symbol)
-        text_after_symbol = text_before_cursor[symbol_pos + len(self.symbol):]
+        text_after_symbol = text_before_cursor[symbol_pos + len(self.symbol) :]
         start_position = -(len(text_after_symbol))
         try:
             pattern = text_after_symbol + "*"
@@ -41,9 +41,7 @@ class FilePathCompleter(Completer):
             else:
                 paths = glob.glob(pattern)
                 if not pattern.startswith(".") and not pattern.startswith("*/."):
-                    paths = [
-                        p for p in paths if not Path(p).name.startswith(".")
-                    ]
+                    paths = [p for p in paths if not Path(p).name.startswith(".")]
             paths.sort()
             for path in paths:
                 p = Path(path)
@@ -67,6 +65,7 @@ class FilePathCompleter(Completer):
                     display_path,
                     start_position=start_position,
                     display=display,
-                    display_meta=display_meta)
+                    display_meta=display_meta,
+                )
         except (PermissionError, FileNotFoundError, OSError):
             pass

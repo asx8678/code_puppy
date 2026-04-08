@@ -45,7 +45,13 @@ class TestCoreBridgeSerialization:
 
     def test_tool_call_serialization(self):
         msg = ModelResponse(
-            parts=[ToolCallPart(tool_name="read_file", args='{"path": "foo.py"}', tool_call_id="tc-1")]
+            parts=[
+                ToolCallPart(
+                    tool_name="read_file",
+                    args='{"path": "foo.py"}',
+                    tool_call_id="tc-1",
+                )
+            ]
         )
         result = serialize_message_for_rust(msg)
         p = result["parts"][0]
@@ -56,7 +62,13 @@ class TestCoreBridgeSerialization:
 
     def test_tool_return_serialization(self):
         msg = ModelRequest(
-            parts=[ToolReturnPart(tool_name="read_file", content="file contents here", tool_call_id="tc-1")]
+            parts=[
+                ToolReturnPart(
+                    tool_name="read_file",
+                    content="file contents here",
+                    tool_call_id="tc-1",
+                )
+            ]
         )
         result = serialize_message_for_rust(msg)
         p = result["parts"][0]
@@ -90,13 +102,16 @@ class TestTokenEstimationCorrectness:
 
     def test_simple_text_matches_python(self, agent):
         from code_puppy.token_utils import estimate_token_count
+
         text = "Hello, world! This is a test message."
         python_tokens = agent.estimate_token_count(text)
         expected = estimate_token_count(text)
         assert python_tokens == expected
 
     def test_message_token_estimation_matches(self, agent):
-        msg = ModelRequest(parts=[TextPart(content="Hello world, this is a longer test")])
+        msg = ModelRequest(
+            parts=[TextPart(content="Hello world, this is a longer test")]
+        )
         python_tokens = agent.estimate_tokens_for_message(msg)
         assert python_tokens >= 1
 
@@ -106,10 +121,12 @@ class TestTokenEstimationCorrectness:
         assert python_tokens >= 1
 
     def test_multi_part_message(self, agent):
-        msg = ModelRequest(parts=[
-            TextPart(content="part one"),
-            TextPart(content="part two with more text"),
-        ])
+        msg = ModelRequest(
+            parts=[
+                TextPart(content="part one"),
+                TextPart(content="part two with more text"),
+            ]
+        )
         tokens = agent.estimate_tokens_for_message(msg)
         # Should be sum of both parts
         assert tokens >= 2
@@ -148,8 +165,18 @@ class TestPruningCorrectness:
     def test_matched_tool_calls_preserved(self, agent):
         messages = [
             ModelRequest(parts=[TextPart(content="do something")]),
-            ModelResponse(parts=[ToolCallPart(tool_name="read_file", args='{}', tool_call_id="tc-1")]),
-            ModelRequest(parts=[ToolReturnPart(tool_name="read_file", content="result", tool_call_id="tc-1")]),
+            ModelResponse(
+                parts=[
+                    ToolCallPart(tool_name="read_file", args="{}", tool_call_id="tc-1")
+                ]
+            ),
+            ModelRequest(
+                parts=[
+                    ToolReturnPart(
+                        tool_name="read_file", content="result", tool_call_id="tc-1"
+                    )
+                ]
+            ),
         ]
         pruned = agent.prune_interrupted_tool_calls(messages)
         assert len(pruned) == 3  # All preserved
@@ -157,7 +184,11 @@ class TestPruningCorrectness:
     def test_mismatched_tool_calls_pruned(self, agent):
         messages = [
             ModelRequest(parts=[TextPart(content="do something")]),
-            ModelResponse(parts=[ToolCallPart(tool_name="read_file", args='{}', tool_call_id="tc-1")]),
+            ModelResponse(
+                parts=[
+                    ToolCallPart(tool_name="read_file", args="{}", tool_call_id="tc-1")
+                ]
+            ),
             # No matching tool return!
         ]
         pruned = agent.prune_interrupted_tool_calls(messages)
@@ -200,6 +231,7 @@ class TestFallbackBehavior:
     def test_bridge_import_works(self):
         """The bridge module should always import."""
         from code_puppy._core_bridge import RUST_AVAILABLE
+
         assert isinstance(RUST_AVAILABLE, bool)
 
     def test_serialization_helper_works_without_rust(self):
@@ -231,9 +263,15 @@ class TestEdgeCases:
         assert result["parts"] == []
 
     def test_dict_content(self):
-        msg = ModelRequest(parts=[ToolReturnPart(
-            tool_name="test", content={"key": "value", "nested": {"a": 1}}, tool_call_id="tc-1"
-        )])
+        msg = ModelRequest(
+            parts=[
+                ToolReturnPart(
+                    tool_name="test",
+                    content={"key": "value", "nested": {"a": 1}},
+                    tool_call_id="tc-1",
+                )
+            ]
+        )
         result = serialize_message_for_rust(msg)
         # Dict content should be serialized to content_json
         p = result["parts"][0]

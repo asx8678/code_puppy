@@ -33,7 +33,7 @@ def is_dbos_initialized() -> bool:
         if _dbos_global_instance is None:
             return False
 
-        return getattr(_dbos_global_instance, '_launched', False)
+        return getattr(_dbos_global_instance, "_launched", False)
     except ImportError:
         # DBOS not available
         return False
@@ -126,6 +126,7 @@ def reinitialize_dbos() -> bool:
     if _dbos_global_instance is not None:
         try:
             from dbos import DBOS
+
             DBOS.destroy()
             emit_info("Existing DBOS instance destroyed")
         except Exception as e:

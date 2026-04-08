@@ -32,7 +32,7 @@ class TestToolSchemaValidation:
                 "required": ["input"],
             },
         }
-        
+
         # Should not raise
         ToolContract.validate_tool_schema(schema, "test_tool")
 
@@ -42,10 +42,10 @@ class TestToolSchemaValidation:
             "description": "A test tool",
             "parameters": {},
         }
-        
+
         with pytest.raises(ContractViolation) as exc_info:
             ToolContract.validate_tool_schema(schema, "bad_tool")
-        
+
         assert "Missing required fields" in str(exc_info.value)
         assert "name" in str(exc_info.value)
 
@@ -55,10 +55,10 @@ class TestToolSchemaValidation:
             "name": "test_tool",
             "parameters": {},
         }
-        
+
         with pytest.raises(ContractViolation) as exc_info:
             ToolContract.validate_tool_schema(schema, "bad_tool")
-        
+
         assert "description" in str(exc_info.value)
 
     def test_missing_parameters_fails(self):
@@ -67,10 +67,10 @@ class TestToolSchemaValidation:
             "name": "test_tool",
             "description": "A test tool",
         }
-        
+
         with pytest.raises(ContractViolation) as exc_info:
             ToolContract.validate_tool_schema(schema, "bad_tool")
-        
+
         assert "parameters" in str(exc_info.value)
 
     def test_parameters_without_properties_fails(self):
@@ -83,10 +83,10 @@ class TestToolSchemaValidation:
                 # Missing properties
             },
         }
-        
+
         with pytest.raises(ContractViolation) as exc_info:
             ToolContract.validate_tool_schema(schema, "bad_tool")
-        
+
         assert "properties" in str(exc_info.value)
 
 
@@ -95,20 +95,22 @@ class TestToolSignatureValidation:
 
     def test_valid_function_signature(self):
         """Test valid tool function signature."""
+
         def good_tool(context, arg1: str) -> str:
             return "result"
-        
+
         info = ToolContract.validate_tool_signature(good_tool, "good_tool")
-        
+
         assert info["param_count"] == 2
 
     def test_tool_with_kwargs(self):
         """Test tool with **kwargs support."""
+
         def flexible_tool(context, **kwargs) -> str:
             return "result"
-        
+
         info = ToolContract.validate_tool_signature(flexible_tool, "flexible")
-        
+
         assert info["has_kwargs"]
 
 
@@ -122,17 +124,18 @@ class TestToolValidationHelpers:
 
     def test_validate_tool_contracts_with_valid_tools(self):
         """Test validation with valid tools."""
+
         def valid_tool_1():
             pass
-        
+
         def valid_tool_2():
             pass
-        
+
         tools = {
             "tool1": valid_tool_1,
             "tool2": valid_tool_2,
         }
-        
+
         errors = validate_tool_contracts(tools)
         assert errors == []
 
@@ -145,9 +148,9 @@ class TestBuiltinTools:
         # Create a mock agent to get the registered tool
         from unittest.mock import Mock
         from pydantic_ai import Agent
-        
+
         mock_agent = Mock(spec=Agent)
-        
+
         # The registration function should not raise
         try:
             register_list_agents(mock_agent)

@@ -29,7 +29,9 @@ pytestmark = pytest.mark.skip(
 # ---------------------------------------------------------------------------
 
 
-def _make_server(server_type: str = "sse", extra_config: dict | None = None) -> ManagedMCPServer:
+def _make_server(
+    server_type: str = "sse", extra_config: dict | None = None
+) -> ManagedMCPServer:
     """Create a ManagedMCPServer with a mocked underlying pydantic server."""
     cfg = {"url": "http://localhost:9999"}
     if extra_config:
@@ -219,7 +221,9 @@ class TestProtectedProcessToolCallCircuitBreaker:
                 )
 
         cb = server._get_circuit_breaker()
-        assert cb.is_open(), "Circuit breaker should be OPEN after 3 consecutive failures"
+        assert cb.is_open(), (
+            "Circuit breaker should be OPEN after 3 consecutive failures"
+        )
 
     @pytest.mark.asyncio
     async def test_raises_circuit_open_error_when_cb_open(self):

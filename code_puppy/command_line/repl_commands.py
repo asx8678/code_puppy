@@ -30,19 +30,19 @@ from code_puppy.messaging import emit_info, emit_warning, emit_success, emit_err
 def handle_repl_command(command: str) -> bool:
     """Handle the /repl command for REPL session management."""
     tokens = command.split()
-    
+
     # If no subcommand, show current session info
     if len(tokens) == 1:
         _show_repl_info()
         return True
-    
+
     subcommand = tokens[1].lower()
-    
+
     if subcommand == "reset":
         reset_session()
         emit_success("REPL session reset. All context cleared.")
         return True
-    
+
     if subcommand == "import":
         if len(tokens) < 3:
             emit_warning("Usage: /repl import <autosave_id>")
@@ -50,7 +50,7 @@ def handle_repl_command(command: str) -> bool:
         autosave_id = tokens[2]
         import_session_from_autosave(autosave_id)
         return True
-    
+
     if subcommand == "context":
         if len(tokens) > 2 and tokens[2].lower() == "clear":
             clear_loaded_files()
@@ -58,7 +58,7 @@ def handle_repl_command(command: str) -> bool:
             return True
         _show_context()
         return True
-    
+
     if subcommand == "history":
         limit = 20
         if len(tokens) > 2:
@@ -68,12 +68,12 @@ def handle_repl_command(command: str) -> bool:
                 pass
         _show_history(limit)
         return True
-    
+
     if subcommand == "save":
         save_session()
         emit_success("REPL session saved")
         return True
-    
+
     # Invalid usage
     emit_warning("Usage: /repl [reset|import <id>|context|context clear|history|save]")
     return True
@@ -82,9 +82,9 @@ def handle_repl_command(command: str) -> bool:
 def _show_repl_info() -> None:
     """Display current REPL session information."""
     from rich.text import Text
-    
+
     session = get_current_session()
-    
+
     # Build status message
     lines: list[str] = []
     lines.append("[bold magenta]REPL Session[/bold magenta]")
@@ -99,20 +99,24 @@ def _show_repl_info() -> None:
     lines.append(f"  Model:    [cyan]{session.current_model or 'default'}[/cyan]")
     lines.append(f"  Mode:     [cyan]{session.current_mode}[/cyan]")
     lines.append(f"  Pack:     [cyan]{session.current_pack}[/cyan]")
-    
+
     if session.loaded_files:
         lines.append("")
-        lines.append(f"[bold]Loaded Files:[/bold] [cyan]{len(session.loaded_files)}[/cyan] (use /repl context)")
-    
+        lines.append(
+            f"[bold]Loaded Files:[/bold] [cyan]{len(session.loaded_files)}[/cyan] (use /repl context)"
+        )
+
     if session.autosave_session_id:
         lines.append("")
-        lines.append(f"[bold]Linked Autosave:[/bold] [cyan]{session.autosave_session_id}[/cyan]")
-    
+        lines.append(
+            f"[bold]Linked Autosave:[/bold] [cyan]{session.autosave_session_id}[/cyan]"
+        )
+
     lines.append("")
     lines.append("[dim]Use /repl reset to start fresh[/dim]")
     lines.append("[dim]Use /repl context to view loaded files[/dim]")
     lines.append("[dim]Use /repl history to see command history[/dim]")
-    
+
     status_msg = "\n".join(lines)
     emit_info(Text.from_markup(status_msg))
 
@@ -120,15 +124,17 @@ def _show_repl_info() -> None:
 def _show_context() -> None:
     """Display loaded context files."""
     from rich.text import Text
-    
+
     session = get_current_session()
-    
+
     lines: list[str] = []
     lines.append("[bold magenta]REPL Context[/bold magenta]")
     lines.append("")
-    
+
     if session.loaded_files:
-        lines.append(f"[bold]Loaded Files:[/bold] [cyan]{len(session.loaded_files)}[/cyan]")
+        lines.append(
+            f"[bold]Loaded Files:[/bold] [cyan]{len(session.loaded_files)}[/cyan]"
+        )
         lines.append("")
         for i, file_path in enumerate(session.loaded_files, 1):
             # Truncate long paths
@@ -138,10 +144,10 @@ def _show_context() -> None:
             lines.append(f"  {i}. [dim]{display_path}[/dim]")
     else:
         lines.append("[dim]No files loaded in context[/dim]")
-    
+
     lines.append("")
     lines.append("[dim]Use /repl context clear to clear all files[/dim]")
-    
+
     status_msg = "\n".join(lines)
     emit_info(Text.from_markup(status_msg))
 
@@ -150,13 +156,15 @@ def _show_history(limit: int = 20) -> None:
     """Display command history."""
     from rich.text import Text
     from datetime import datetime
-    
+
     history = get_command_history(limit)
-    
+
     lines: list[str] = []
-    lines.append(f"[bold magenta]Command History[/bold magenta] (last {len(history)} commands)")
+    lines.append(
+        f"[bold magenta]Command History[/bold magenta] (last {len(history)} commands)"
+    )
     lines.append("")
-    
+
     if history:
         for entry in history:
             timestamp = entry.get("timestamp", 0)
@@ -169,6 +177,6 @@ def _show_history(limit: int = 20) -> None:
             lines.append(f"[dim]{time_str}[/dim]  {display_cmd}")
     else:
         lines.append("[dim]No command history yet[/dim]")
-    
+
     status_msg = "\n".join(lines)
     emit_info(Text.from_markup(status_msg))

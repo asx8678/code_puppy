@@ -1,6 +1,5 @@
 """Core OAuth flow implementation for Antigravity authentication."""
 
-
 import base64
 import hashlib
 import json
@@ -18,7 +17,8 @@ from .constants import (
     ANTIGRAVITY_ENDPOINT_FALLBACKS,
     ANTIGRAVITY_HEADERS,
     ANTIGRAVITY_LOAD_ENDPOINTS,
-    ANTIGRAVITY_SCOPES)
+    ANTIGRAVITY_SCOPES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -121,9 +121,8 @@ def prepare_oauth_context() -> OAuthContext:
     code_challenge = _compute_code_challenge(code_verifier)
 
     return OAuthContext(
-        state=state,
-        code_verifier=code_verifier,
-        code_challenge=code_challenge)
+        state=state, code_verifier=code_verifier, code_challenge=code_challenge
+    )
 
 
 def assign_redirect_uri(context: OAuthContext, port: int) -> str:
@@ -157,9 +156,8 @@ def build_authorization_url(context: OAuthContext, project_id: str = "") -> str:
 
 
 def _onboard_user(
-    access_token: str,
-    tier_id: str = "free-tier",
-    gcp_project_id: str = "") -> str:
+    access_token: str, tier_id: str = "free-tier", gcp_project_id: str = ""
+) -> str:
     """Onboard user to get a managed project ID.
 
     Args:
@@ -191,16 +189,15 @@ def _onboard_user(
             try:
                 url = f"{base_endpoint}/v1internal:onboardUser"
                 response = requests.post(
-                    url,
-                    headers=headers,
-                    json=request_body,
-                    timeout=30)
+                    url, headers=headers, json=request_body, timeout=30
+                )
 
                 if not response.ok:
                     logger.debug(
                         "onboardUser failed: %d %s",
                         response.status_code,
-                        response.text[:200])
+                        response.text[:200],
+                    )
                     break
 
                 data = response.json()
@@ -266,7 +263,8 @@ def fetch_antigravity_status(access_token: str) -> AntigravityStatus:
                         "pluginType": "GEMINI",
                     }
                 },
-                timeout=30)
+                timeout=30,
+            )
 
             if not response.ok:
                 continue
@@ -301,7 +299,8 @@ def fetch_antigravity_status(access_token: str) -> AntigravityStatus:
                 project_id=project_id,
                 current_tier=current_tier,
                 allowed_tiers=allowed_tier_ids,
-                is_onboarded=bool(project_id))
+                is_onboarded=bool(project_id),
+            )
 
         except Exception:
             continue
@@ -342,7 +341,8 @@ def _fetch_project_id(access_token: str) -> str:
                         "pluginType": "GEMINI",
                     }
                 },
-                timeout=30)
+                timeout=30,
+            )
 
             if not response.ok:
                 errors.append(
@@ -399,9 +399,8 @@ def _fetch_project_id(access_token: str) -> str:
 
 
 def exchange_code_for_tokens(
-    code: str,
-    state: str,
-    redirect_uri: str) -> TokenExchangeResult:
+    code: str, state: str, redirect_uri: str
+) -> TokenExchangeResult:
     """Exchange an authorization code for Antigravity OAuth tokens."""
     try:
         # Decode and verify state
@@ -419,7 +418,8 @@ def exchange_code_for_tokens(
                 "redirect_uri": redirect_uri,
                 "code_verifier": verifier,
             },
-            timeout=30)
+            timeout=30,
+        )
 
         if not response.ok:
             return TokenExchangeFailure(error=response.text)
@@ -438,7 +438,8 @@ def exchange_code_for_tokens(
             user_response = requests.get(
                 "https://www.googleapis.com/oauth2/v1/userinfo?alt=json",
                 headers={"Authorization": f"Bearer {access_token}"},
-                timeout=10)
+                timeout=10,
+            )
             if user_response.ok:
                 email = user_response.json().get("email")
         except Exception as e:
@@ -457,7 +458,8 @@ def exchange_code_for_tokens(
             access_token=access_token,
             expires_at=time.time() + expires_in,
             email=email,
-            project_id=effective_project_id or "")
+            project_id=effective_project_id or "",
+        )
 
     except Exception as e:
         logger.exception("Token exchange failed")

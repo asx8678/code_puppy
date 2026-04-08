@@ -160,7 +160,8 @@ def discover_json_agents() -> dict[str, str]:
     """
     from code_puppy.config import (
         get_project_agents_directory,
-        get_user_agents_directory)
+        get_user_agents_directory,
+    )
 
     agents: dict[str, str] = {}
 
@@ -176,7 +177,8 @@ def discover_json_agents() -> dict[str, str]:
                     "Skipping invalid user agent file: %s (reason: %s: %s)",
                     json_file,
                     type(e).__name__,
-                    str(e))
+                    str(e),
+                )
                 continue
 
     # 2. Discover project-level agents (overrides user agents on name collision)
@@ -192,7 +194,8 @@ def discover_json_agents() -> dict[str, str]:
                     "Skipping invalid project agent file: %s (reason: %s: %s)",
                     json_file,
                     type(e).__name__,
-                    str(e))
+                    str(e),
+                )
                 continue
 
     return agents

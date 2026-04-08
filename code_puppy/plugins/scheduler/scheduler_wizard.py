@@ -4,12 +4,12 @@ Provides interactive menus with arrow-key navigation for selecting
 schedule type, agent, model, and other task parameters.
 """
 
-
 try:
     from prompt_toolkit.application import Application
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.layout import Layout, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
+
     _HAS_PROMPT_TOOLKIT = True
 except ImportError:
     _HAS_PROMPT_TOOLKIT = False
@@ -230,7 +230,8 @@ def create_task_wizard() -> dict | None:
             "Run 4 times per day",
             "Run once per day",
             "Specify custom interval like 45m, 3h, 2d",
-        ])
+        ],
+    )
     schedule_choice = schedule_menu.run()
     if not schedule_choice:
         print("\n  ❌ Cancelled.")

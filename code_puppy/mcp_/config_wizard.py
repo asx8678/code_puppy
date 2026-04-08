@@ -26,7 +26,8 @@ from code_puppy.messaging import (
     emit_info,
     emit_prompt,
     emit_success,
-    emit_warning)
+    emit_warning,
+)
 
 
 def prompt_ask(
@@ -131,7 +132,8 @@ class MCPConfigWizard:
             name=name,
             type=server_type,
             enabled=True,
-            config=config)
+            config=config,
+        )
 
         # Step 5: Show summary and confirm
         if self.prompt_confirmation(server_config, group_id):
@@ -153,7 +155,8 @@ class MCPConfigWizard:
             if not self.validate_name(name):
                 emit_error(
                     "Name must be alphanumeric with hyphens/underscores only",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 continue
 
             # Check uniqueness
@@ -243,7 +246,8 @@ class MCPConfigWizard:
         emit_info("Examples:", message_group=group_id)
         emit_info(
             "  • npx -y @modelcontextprotocol/server-filesystem /path",
-            message_group=group_id)
+            message_group=group_id,
+        )
         emit_info("  • python mcp_server.py", message_group=group_id)
         emit_info("  • node server.js", message_group=group_id)
 
@@ -257,13 +261,16 @@ class MCPConfigWizard:
             # SECURITY: Check command against whitelist
             if not is_command_allowed(command):
                 from code_puppy.mcp_.mcp_security import get_allowed_commands
+
                 allowed = get_allowed_commands()
                 emit_error(
                     f"Command '{command}' is not in the allowed whitelist.",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 emit_info(
                     f"Allowed commands: {', '.join(sorted(allowed))}",
-                    message_group=group_id)
+                    message_group=group_id,
+                )
                 if not confirm_ask("Use this command anyway?", default=False):
                     continue
                 # User chose to continue - security will be enforced at server creation
@@ -300,9 +307,7 @@ class MCPConfigWizard:
                 validated_cwd = validate_working_directory(cwd)
                 config["cwd"] = validated_cwd
             except PathTraversalError as e:
-                emit_warning(
-                    f"Invalid working directory: {e}", message_group=group_id
-                )
+                emit_warning(f"Invalid working directory: {e}", message_group=group_id)
                 if not confirm_ask("Continue without working directory?", default=True):
                     return None
 
@@ -433,9 +438,7 @@ class MCPConfigWizard:
 
         except MCPSecurityError as e:
             # SECURITY: Handle security validation errors specially
-            emit_error(
-                f"✗ Security validation failed: {e}",
-                message_group=group_id)
+            emit_error(f"✗ Security validation failed: {e}", message_group=group_id)
             return False
         except Exception as e:
             emit_error(f"✗ Configuration error: {e}", message_group=group_id)
@@ -495,12 +498,14 @@ def run_add_wizard(group_id: str = None) -> bool:
 
             emit_success(
                 f"\n✅ Server '{config.name}' added successfully!",
-                message_group=group_id)
+                message_group=group_id,
+            )
             emit_info(f"Server ID: {server_id}", message_group=group_id)
             emit_info("Use '/mcp list' to see all servers", message_group=group_id)
             emit_info(
                 f"Use '/mcp start {config.name}' to start the server",
-                message_group=group_id)
+                message_group=group_id,
+            )
 
             # Also save to mcp_servers.json for persistence
             import json
@@ -531,7 +536,8 @@ def run_add_wizard(group_id: str = None) -> bool:
                 Text.from_markup(
                     f"[dim]Configuration saved to {MCP_SERVERS_FILE}[/dim]"
                 ),
-                message_group=group_id)
+                message_group=group_id,
+            )
             return True
 
         except Exception as e:

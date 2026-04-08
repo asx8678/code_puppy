@@ -73,6 +73,7 @@ def isolate_config_between_tests(tmp_path_factory):
     # built from the test's (isolated) config, not from a prior test's config.
     try:
         from code_puppy.policy_engine import reset_policy_engine
+
         reset_policy_engine()
     except Exception:
         pass  # Module may not be loaded in all test contexts
@@ -91,6 +92,7 @@ def isolate_config_between_tests(tmp_path_factory):
     # Reset policy engine after test too
     try:
         from code_puppy.policy_engine import reset_policy_engine
+
         reset_policy_engine()
     except Exception:
         pass

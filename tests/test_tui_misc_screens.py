@@ -276,10 +276,7 @@ class TestAppWiring:
         from pathlib import Path
 
         source = (
-            Path(__file__).parent.parent
-            / "code_puppy"
-            / "tui"
-            / "app.py"
+            Path(__file__).parent.parent / "code_puppy" / "tui" / "app.py"
         ).read_text()
         assert "AutosaveScreen" in source
         assert "/autosave_load" in source
@@ -289,10 +286,7 @@ class TestAppWiring:
         from pathlib import Path
 
         source = (
-            Path(__file__).parent.parent
-            / "code_puppy"
-            / "tui"
-            / "app.py"
+            Path(__file__).parent.parent / "code_puppy" / "tui" / "app.py"
         ).read_text()
         assert "OnboardingScreen" in source
         assert "/tutorial" in source
@@ -302,10 +296,7 @@ class TestAppWiring:
         from pathlib import Path
 
         source = (
-            Path(__file__).parent.parent
-            / "code_puppy"
-            / "tui"
-            / "app.py"
+            Path(__file__).parent.parent / "code_puppy" / "tui" / "app.py"
         ).read_text()
         assert "UCScreen" in source
         assert '"/uc"' in source

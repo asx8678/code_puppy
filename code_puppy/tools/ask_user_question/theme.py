@@ -5,7 +5,6 @@ color configuration system. It allows the TUI to inherit colors from
 the global configuration.
 """
 
-
 from typing import TYPE_CHECKING, Mapping, NamedTuple
 
 if TYPE_CHECKING:
@@ -30,7 +29,9 @@ def _get_config_value(key: str) -> str | None:
     return _config_getter(key)
 
 
-def _apply_config_overrides[T: NamedTuple](default: T, config_map: Mapping[str, str]) -> T:
+def _apply_config_overrides[T: NamedTuple](
+    default: T, config_map: Mapping[str, str]
+) -> T:
     """Apply config overrides to a color scheme.
 
     Args:

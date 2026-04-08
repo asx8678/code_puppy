@@ -4,7 +4,6 @@ Provides OAuth authentication for ChatGPT models and registers
 the 'chatgpt_oauth' model type handler.
 """
 
-
 import os
 from typing import Any, Dict
 
@@ -18,17 +17,20 @@ from .utils import (
     get_valid_access_token,
     load_chatgpt_models,
     load_stored_tokens,
-    remove_chatgpt_models)
+    remove_chatgpt_models,
+)
 
 
 def _custom_help() -> list[tuple[str, str]]:
     return [
         (
             "chatgpt-auth",
-            "Authenticate with ChatGPT via OAuth and import available models"),
+            "Authenticate with ChatGPT via OAuth and import available models",
+        ),
         (
             "chatgpt-status",
-            "Check ChatGPT OAuth authentication status and configured models"),
+            "Check ChatGPT OAuth authentication status and configured models",
+        ),
         ("chatgpt-logout", "Remove ChatGPT OAuth tokens and imported models"),
     ]
 
@@ -151,9 +153,8 @@ def _create_chatgpt_oauth_model(
     client = create_codex_async_client(headers=headers, verify=verify)
 
     provider = OpenAIProvider(
-        api_key=access_token,
-        base_url=base_url,
-        http_client=client)
+        api_key=access_token, base_url=base_url, http_client=client
+    )
 
     # ChatGPT Codex API only supports Responses format
     model = OpenAIResponsesModel(model_name=model_config["name"], provider=provider)

@@ -13,10 +13,7 @@ import tempfile
 import time
 from datetime import datetime, timedelta
 
-from code_puppy.scheduler.config import (
-    SCHEDULER_PID_FILE,
-    ScheduledTask,
-    load_tasks)
+from code_puppy.scheduler.config import SCHEDULER_PID_FILE, ScheduledTask, load_tasks
 from code_puppy.scheduler.executor import execute_task
 
 # Global flag for graceful shutdown
@@ -234,13 +231,15 @@ def start_daemon_background() -> bool:
             cmd,
             creationflags=subprocess.CREATE_NO_WINDOW,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL)
+            stderr=subprocess.DEVNULL,
+        )
     else:
         subprocess.Popen(
             cmd,
             start_new_session=True,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL)
+            stderr=subprocess.DEVNULL,
+        )
 
     time.sleep(1)
     # Re-check to confirm daemon actually started (also catches race where

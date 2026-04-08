@@ -10,7 +10,6 @@ Usage:
         await agent.run(...)
 """
 
-
 import asyncio
 import logging
 import time
@@ -40,7 +39,8 @@ class TokenRefreshHeartbeat:
     def __init__(
         self,
         interval: float = HEARTBEAT_INTERVAL_SECONDS,
-        min_refresh_interval: float = MIN_REFRESH_INTERVAL_SECONDS):
+        min_refresh_interval: float = MIN_REFRESH_INTERVAL_SECONDS,
+    ):
         self._interval = interval
         self._min_refresh_interval = min_refresh_interval
         self._task: asyncio.Task | None = None
@@ -73,8 +73,8 @@ class TokenRefreshHeartbeat:
 
         self._task = None
         logger.debug(
-            "Token refresh heartbeat stopped (refreshed %d times)",
-            self._refresh_count)
+            "Token refresh heartbeat stopped (refreshed %d times)", self._refresh_count
+        )
 
     async def _heartbeat_loop(self) -> None:
         """Main heartbeat loop that periodically checks token status."""
@@ -99,7 +99,8 @@ class TokenRefreshHeartbeat:
                     if now - _last_refresh_time < self._min_refresh_interval:
                         logger.debug(
                             "Skipping refresh - last refresh was %.1f seconds ago",
-                            now - _last_refresh_time)
+                            now - _last_refresh_time,
+                        )
                         continue
 
                     # Attempt the refresh
@@ -126,7 +127,8 @@ class TokenRefreshHeartbeat:
             from .utils import (
                 is_token_expired,
                 load_stored_tokens,
-                refresh_access_token)
+                refresh_access_token,
+            )
 
             tokens = await asyncio.to_thread(load_stored_tokens)
             if not tokens:
@@ -168,8 +170,7 @@ _current_heartbeat: TokenRefreshHeartbeat | None = None
 
 
 @asynccontextmanager
-async def token_refresh_heartbeat_context(
-    interval: float = HEARTBEAT_INTERVAL_SECONDS):
+async def token_refresh_heartbeat_context(interval: float = HEARTBEAT_INTERVAL_SECONDS):
     """Context manager that runs token refresh heartbeat during its scope.
 
     Use this around long-running agent operations to ensure tokens stay fresh.

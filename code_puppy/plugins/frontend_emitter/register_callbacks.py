@@ -31,7 +31,8 @@ async def on_pre_tool_call(
                 "tool_name": tool_name,
                 "tool_args": _sanitize_args(tool_args),
                 "start_time": time.time(),
-            })
+            },
+        )
         logger.debug(f"Emitted tool_call_start for {tool_name}")
     except Exception as e:
         logger.error(f"Failed to emit pre_tool_call event: {e}")
@@ -42,7 +43,8 @@ async def on_post_tool_call(
     tool_args: dict[str, Any],
     result: Any,
     duration_ms: float,
-    context: Any = None) -> None:
+    context: Any = None,
+) -> None:
     """Emit an event when a tool call completes.
 
     Args:
@@ -61,7 +63,8 @@ async def on_post_tool_call(
                 "duration_ms": duration_ms,
                 "success": _is_successful_result(result),
                 "result_summary": _summarize_result(result),
-            })
+            },
+        )
         logger.debug(
             f"Emitted tool_call_complete for {tool_name} ({duration_ms:.2f}ms)"
         )
@@ -86,7 +89,8 @@ async def on_stream_event(
                 "event_type": event_type,
                 "event_data": _sanitize_event_data(event_data),
                 "agent_session_id": agent_session_id,
-            })
+            },
+        )
         logger.debug(f"Emitted stream_event: {event_type}")
     except Exception as e:
         logger.error(f"Failed to emit stream_event: {e}")
@@ -106,7 +110,8 @@ async def on_invoke_agent(*args: Any, **kwargs: Any) -> None:
             "session_id": kwargs.get("session_id"),
             "prompt_preview": _truncate_string(
                 kwargs.get("prompt") or (args[1] if len(args) > 1 else None),
-                max_length=200),
+                max_length=200,
+            ),
         }
         emit_event("agent_invoked", agent_info)
         logger.debug(f"Emitted agent_invoked: {agent_info.get('agent_name')}")

@@ -10,9 +10,7 @@ from code_puppy.plugins.remember_last_agent.register_callbacks import (
 )
 
 # Module-level import path for storage functions
-_MOCK_STORAGE = (
-    "code_puppy.plugins.remember_last_agent.register_callbacks"
-)
+_MOCK_STORAGE = "code_puppy.plugins.remember_last_agent.register_callbacks"
 
 
 def _make_mock_agents_module(**attrs: object) -> ModuleType:
@@ -46,9 +44,7 @@ class TestRememberLastAgentStartup:
     @patch(f"{_MOCK_STORAGE}.clear_last_agent")
     @patch(f"{_MOCK_STORAGE}.set_last_agent")
     @patch(f"{_MOCK_STORAGE}.get_last_agent")
-    def test_clears_stale_agent(
-        self, mock_get_last, _mock_set_last, mock_clear
-    ):
+    def test_clears_stale_agent(self, mock_get_last, _mock_set_last, mock_clear):
         """Startup clears saved agent if it no longer exists."""
         mock_get_last.return_value = "deleted-agent"
         mock_agents = _make_mock_agents_module(
@@ -78,9 +74,7 @@ class TestRememberLastAgentStartup:
         """Startup catches exceptions without crashing."""
         mock_get_last.return_value = "husky"
         mock_agents = _make_mock_agents_module(
-            get_available_agents=MagicMock(
-                return_value={"husky": "Husky 🐺"}
-            ),
+            get_available_agents=MagicMock(return_value={"husky": "Husky 🐺"}),
             set_current_agent=MagicMock(
                 side_effect=RuntimeError("agent system not ready")
             ),
