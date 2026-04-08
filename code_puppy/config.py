@@ -4,7 +4,7 @@ import os
 import pathlib
 import threading
 import time
-from functools import lru_cache
+from functools import cache, lru_cache
 
 from code_puppy.session_storage import save_session_async
 from code_puppy import runtime_state
@@ -58,6 +58,35 @@ def _invalidate_config() -> None:
     # Clear model context length cache since config changes
     # may affect model resolution
     _model_context_length_cache.clear()
+    # Clear all cached config getter functions
+    get_use_dbos.cache_clear()
+    get_subagent_verbose.cache_clear()
+    get_pack_agents_enabled.cache_clear()
+    get_universal_constructor_enabled.cache_clear()
+    get_enable_streaming.cache_clear()
+    get_puppy_name.cache_clear()
+    get_owner_name.cache_clear()
+    get_allow_recursion.cache_clear()
+    get_puppy_token.cache_clear()
+    get_openai_reasoning_effort.cache_clear()
+    get_openai_reasoning_summary.cache_clear()
+    get_openai_verbosity.cache_clear()
+    get_temperature.cache_clear()
+    get_yolo_mode.cache_clear()
+    get_safety_permission_level.cache_clear()
+    get_mcp_disabled.cache_clear()
+    get_grep_output_verbose.cache_clear()
+    get_resume_message_count.cache_clear()
+    get_compaction_threshold.cache_clear()
+    get_compaction_strategy.cache_clear()
+    get_http2.cache_clear()
+    get_message_limit.cache_clear()
+    get_auto_save_session.cache_clear()
+    get_max_saved_sessions.cache_clear()
+    get_diff_addition_color.cache_clear()
+    get_diff_deletion_color.cache_clear()
+    get_diff_context_lines.cache_clear()
+    get_suppress_thinking_messages.cache_clear()
 
 
 # Truthy string values recognized by _is_truthy() — module-level to avoid
@@ -132,11 +161,13 @@ DBOS_DATABASE_URL = os.environ.get(
 # Default: True (DBOS enabled) unless explicitly disabled.
 
 
+@cache
 def get_use_dbos() -> bool:
     """Return True if DBOS should be used based on 'enable_dbos' (default True)."""
     return _is_truthy(get_value("enable_dbos"), default=True)
 
 
+@cache
 def get_subagent_verbose() -> bool:
     """Return True if sub-agent verbose output is enabled (default False).
 
@@ -164,6 +195,7 @@ PACK_AGENT_NAMES = frozenset(
 UC_AGENT_NAMES = frozenset(["helios"])
 
 
+@cache
 def get_pack_agents_enabled() -> bool:
     """Return True if pack agents are enabled (default False).
 
@@ -176,6 +208,7 @@ def get_pack_agents_enabled() -> bool:
     return _is_truthy(get_value("enable_pack_agents"), default=False)
 
 
+@cache
 def get_universal_constructor_enabled() -> bool:
     """Return True if the Universal Constructor is enabled (default True).
 
@@ -197,6 +230,7 @@ def set_universal_constructor_enabled(enabled: bool) -> None:
     set_value("enable_universal_constructor", "true" if enabled else "false")
 
 
+@cache
 def get_enable_streaming() -> bool:
     """
     Get the enable_streaming configuration value.
@@ -310,10 +344,12 @@ def get_value(key: str):
     return config.get(DEFAULT_SECTION, key, fallback=None)
 
 
+@cache
 def get_puppy_name():
     return get_value("puppy_name") or "Puppy"
 
 
+@cache
 def get_owner_name():
     return get_value("owner_name") or "Master"
 
@@ -323,6 +359,7 @@ def get_owner_name():
 # using get_protected_token_count() and get_summarization_threshold()
 
 
+@cache
 def get_allow_recursion() -> bool:
     """
     Get the allow_recursion configuration value.
@@ -684,6 +721,7 @@ def set_model_name(model: str):
     clear_model_cache()
 
 
+@cache
 def get_puppy_token():
     """Returns the puppy_token from config, or None if not set."""
     return get_value("puppy_token")
@@ -694,6 +732,7 @@ def set_puppy_token(token: str):
     set_config_value("puppy_token", token)
 
 
+@cache
 def get_openai_reasoning_effort() -> str:
     """Return the configured OpenAI reasoning effort (minimal, low, medium, high, xhigh)."""
     allowed_values = {"minimal", "low", "medium", "high", "xhigh"}
@@ -714,6 +753,7 @@ def set_openai_reasoning_effort(value: str) -> None:
     set_config_value("openai_reasoning_effort", normalized)
 
 
+@cache
 def get_openai_reasoning_summary() -> str:
     """Return the configured OpenAI reasoning summary mode.
 
@@ -740,6 +780,7 @@ def set_openai_reasoning_summary(value: str) -> None:
     set_config_value("openai_reasoning_summary", normalized)
 
 
+@cache
 def get_openai_verbosity() -> str:
     """Return the configured OpenAI verbosity (low, medium, high).
 
@@ -766,6 +807,7 @@ def set_openai_verbosity(value: str) -> None:
     set_config_value("openai_verbosity", normalized)
 
 
+@cache
 def get_temperature() -> float | None:
     """Return the configured model temperature (0.0 to 2.0).
 
@@ -1068,6 +1110,7 @@ def initialize_command_history_file():
             )
 
 
+@cache
 def get_yolo_mode():
     """
     Checks puppy.cfg for 'yolo_mode' (case-insensitive in value only).
@@ -1077,6 +1120,7 @@ def get_yolo_mode():
     return _is_truthy(get_value("yolo_mode"), default=True)
 
 
+@cache
 def get_safety_permission_level():
     """
     Checks puppy.cfg for 'safety_permission_level' (case-insensitive in value only).
@@ -1093,6 +1137,7 @@ def get_safety_permission_level():
     return "medium"  # Default to medium risk threshold
 
 
+@cache
 def get_mcp_disabled():
     """
     Checks puppy.cfg for 'disable_mcp' (case-insensitive in value only).
@@ -1103,6 +1148,7 @@ def get_mcp_disabled():
     return _is_truthy(get_value("disable_mcp"), default=False)
 
 
+@cache
 def get_grep_output_verbose():
     """
     Checks puppy.cfg for 'grep_output_verbose' (case-insensitive in value only).
@@ -1142,6 +1188,7 @@ def get_protected_token_count():
         return min(50000, max_protected_tokens)
 
 
+@cache
 def get_resume_message_count() -> int:
     """
     Returns the number of messages to display when resuming a session.
@@ -1159,6 +1206,7 @@ def get_resume_message_count() -> int:
         return 50
 
 
+@cache
 def get_compaction_threshold():
     """
     Returns the user-configured compaction threshold as a float between 0.0 and 1.0.
@@ -1175,6 +1223,7 @@ def get_compaction_threshold():
         return 0.85
 
 
+@cache
 def get_compaction_strategy() -> str:
     """
     Returns the user-configured compaction strategy.
@@ -1189,6 +1238,7 @@ def get_compaction_strategy() -> str:
     return "truncation"
 
 
+@cache
 def get_http2() -> bool:
     """
     Get the http2 configuration value.
@@ -1212,6 +1262,7 @@ def set_enable_dbos(enabled: bool) -> None:
     set_config_value("enable_dbos", "true" if enabled else "false")
 
 
+@cache
 def get_message_limit(default: int = 1000) -> int:
     """
     Returns the user-configured message/request limit for the agent.
@@ -1327,6 +1378,7 @@ def get_agents_pinned_to_model(model_name: str) -> list:
     return [agent for agent, model in all_pinnings.items() if model == model_name]
 
 
+@cache
 def get_auto_save_session() -> bool:
     """
     Checks puppy.cfg for 'auto_save_session' (case-insensitive in value only).
@@ -1345,6 +1397,7 @@ def set_auto_save_session(enabled: bool):
     set_config_value("auto_save_session", "true" if enabled else "false")
 
 
+@cache
 def get_max_saved_sessions() -> int:
     """
     Gets the maximum number of sessions to keep.
@@ -1382,6 +1435,7 @@ def set_diff_highlight_style(style: str):
     pass
 
 
+@cache
 def get_diff_addition_color() -> str:
     """
     Get the base color for diff additions.
@@ -1402,6 +1456,7 @@ def set_diff_addition_color(color: str):
     set_config_value("highlight_addition_color", color)
 
 
+@cache
 def get_diff_deletion_color() -> str:
     """
     Get the base color for diff deletions.
@@ -1607,6 +1662,7 @@ def auto_save_session_if_enabled() -> bool:
         return False
 
 
+@cache
 def get_diff_context_lines() -> int:
     """
     Returns the user-configured number of context lines for diff display.
@@ -1629,6 +1685,7 @@ def finalize_autosave_session() -> str:
     return rotate_autosave_id()
 
 
+@cache
 def get_suppress_thinking_messages() -> bool:
     """
     Checks puppy.cfg for 'suppress_thinking_messages' (case-insensitive in value only).
