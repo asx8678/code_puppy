@@ -6,7 +6,7 @@ import threading
 import time
 from functools import lru_cache
 
-from code_puppy.session_storage import save_session, save_session_async
+from code_puppy.session_storage import save_session_async
 from code_puppy import runtime_state
 
 
