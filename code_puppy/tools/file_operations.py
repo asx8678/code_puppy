@@ -855,14 +855,15 @@ async def _grep(
                         if data.get("lines", {}).get("text")
                         else ""
                     )
-                    if len(line_content.strip()) > 512:
-                        line_content = line_content.strip()[0:512]
+                    stripped = line_content.strip()
+                    if len(stripped) > 512:
+                        stripped = stripped[0:512]
                     if file_path and line_number:
                         # Sanitize content to handle any remaining encoding issues
                         match_info = MatchInfo(
                             file_path=_sanitize_string(file_path),
                             line_number=line_number,
-                            line_content=_sanitize_string(line_content.strip()),
+                            line_content=_sanitize_string(stripped),
                         )
                         matches.append(match_info)
                         # Limit to 50 matches total, same as original implementation
