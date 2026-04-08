@@ -195,6 +195,7 @@ def _emit_diff_message(
         old_content=old_content,
         new_content=new_content,
         diff_lines=diff_lines,
+        raw_diff_text=diff_text,
     )
     get_message_bus().emit(diff_msg)
 
