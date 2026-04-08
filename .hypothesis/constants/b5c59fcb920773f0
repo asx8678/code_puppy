@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/hook_engine/aliases.py
-# hypothesis_version: 6.151.11
-
-['AskUserQuestion', 'Bash', 'Delete', 'Edit', 'Glob', 'Grep', 'Read', 'Skill', 'Task', 'ToolSearch', 'Write', 'activate_skill', 'ask_user_question', 'claude', 'codex', 'create_file', 'delete_file', 'gemini', 'grep', 'invoke_agent', 'list_files', 'read_file', 'replace_in_file', 'swarm']

@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/policy_engine.py
-# hypothesis_version: 6.151.11
-
-[1.0, '*', '.code_puppy', 'allow', 'args_pattern', 'ask_user', 'command', 'command_pattern', 'cwd', 'decision', 'default', 'deny', 'policy.json', 'priority', 'project', 'rules', 'run_shell_command', 'tool_name', 'user', 'utf-8']

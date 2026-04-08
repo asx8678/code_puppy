@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/command_line/shell_passthrough.py
-# hypothesis_version: 6.151.11
-
-[8192, '!', '>\\s*/etc/', 'Empty command', '\\$\\s*\\([^)]+\\)', '\\$\\{[^}]*\\bexpr\\b', '\\beval(?![\\w])\\s*\\(', '`[^`]+`', 'rm\\s+-rf\\s+/', 'rm\\s+-rf\\s+~', 'shell_passthrough']

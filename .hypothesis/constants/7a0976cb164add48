@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-j4gp/code_puppy/messaging/message_queue.py
-# hypothesis_version: 6.151.11
-
-[0.1, 0.5, 1.0, 100, 1000, '>>> ', 'agent_reasoning', 'agent_response', 'agent_status', 'command', 'command_output', 'debug', 'divider', 'error', 'file_operation', 'human_input_request', 'info', 'planned_next_steps', 'prompt_id', 'success', 'system', 'tool_name', 'tool_output', 'warning', '─']

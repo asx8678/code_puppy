@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/chatgpt_oauth/config.py
-# hypothesis_version: 6.151.11
-
-[120, 448, 1455, 272000, '0.72.0', 'api_base_url', 'api_key_env_var', 'auth/callback', 'auth_url', 'callback_timeout', 'chatgpt-', 'chatgpt_models.json', 'chatgpt_oauth.json', 'client_id', 'client_version', 'codex_cli_rs', 'http://localhost', 'issuer', 'originator', 'prefix', 'redirect_host', 'redirect_path', 'required_port', 'scope', 'token_storage', 'token_url']

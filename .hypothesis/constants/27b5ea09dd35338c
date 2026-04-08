@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/scheduler/__init__.py
-# hypothesis_version: 6.151.11
-
-['SCHEDULER_LOG_DIR', 'SCHEDULER_PID_FILE', 'SCHEDULES_FILE', 'ScheduledTask', 'add_task', 'delete_task', 'get_task', 'load_tasks', 'save_tasks', 'toggle_task', 'update_task']

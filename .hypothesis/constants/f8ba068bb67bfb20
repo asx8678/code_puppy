@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tools/ask_user_question/theme.py
-# hypothesis_version: 6.151.11
-
-['RichColors', 'TUIColors', 'bold', 'bold cyan', 'bold yellow', 'cursor', 'cursor_active', 'cyan', 'dim', 'fg:ansicyan', 'fg:ansicyan dim', 'fg:ansigreen', 'fg:ansigreen bold', 'fg:ansired', 'fg:ansiwhite', 'fg:ansiwhite dim', 'fg:ansiyellow bold', 'get_rich_colors', 'get_tui_colors', 'green', 'green bold', 'header', 'header_bold', 'selected', 'tui_cursor_color', 'tui_header_color', 'tui_selected_color']

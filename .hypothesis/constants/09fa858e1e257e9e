@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/agents/agent_manager.py
-# hypothesis_version: 6.151.11
-
-[4096, ' 🤖', '-', '.tmp', '\\s*\\(Clone\\s+\\d+\\)$', '_', '__path__', 'agent_manager', 'base', 'base_agent', 'class', 'code-puppy', 'description', 'display_name', 'json_agent', 'json_path', 'model', 'name', 'nt', 'r', 'session_', 'system_prompt', 'tools', 'tools_config', 'user_prompt', 'utf-8', 'w']

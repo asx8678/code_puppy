@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/antigravity_oauth/constants.py
-# hypothesis_version: 6.151.11
-
-[8192, 16384, 32768, 64000, 65535, 65536, 200000, 1048576, '1.15.8', 'Client-Metadata', 'User-Agent', 'X-Goog-Api-Client', 'amd64', 'claude', 'context_length', 'effort', 'family', 'gemini', 'gemini-3-flash', 'gemini-3-pro-high', 'gemini-3-pro-low', 'gl-node/22.17.0', 'google', 'high', 'low', 'max', 'max_output', 'medium', 'name', 'rising-fact-p41fc', 'thinking_budget', 'x-goog-api-key', 'x86_64']

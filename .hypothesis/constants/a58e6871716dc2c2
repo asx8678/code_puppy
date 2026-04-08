@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/.venv/bin/pytest
-# hypothesis_version: 6.151.11
-
-['-script.pyw', '.exe', '__main__']

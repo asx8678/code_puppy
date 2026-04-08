@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/_core_bridge.py
-# hypothesis_version: 6.151.11
-
-['active', 'args', 'content', 'content_json', 'enabled', 'installed', 'instructions', 'kind', 'model_dump_json', 'part_kind', 'parts', 'request', 'response', 'role', 'tool_call_id', 'tool_name']

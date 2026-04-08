@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-k0cm/code_puppy/adaptive_rate_limiter.py
-# hypothesis_version: 6.151.11
-
-[0.0, 0.01, 0.1, 0.5, 1.0, 2.0, 10.0, 60.0, 64.0, 300.0, 100, 128, 3600, '_BackCompatModule', '_ModuleType', '_SKIP', '_STATE_ALIASES', '__file__', '__loader__', '__package__', '__spec__', '_cfg_initial_limit', '_cfg_max_limit', '_cfg_min_limit', '_cfg_queue_max_size', '_cfg_recovery_rate', '_cfg_release_rate', '_circuit_tasks', '_lock', '_model_states', '_new', '_old', '_recovery_started', '_recovery_task', '_sys', 'active_count', 'cfg_cooldown_seconds', 'cfg_initial_limit', 'cfg_max_limit', 'cfg_min_limit', 'cfg_queue_max_size', 'cfg_recovery_rate', 'cfg_release_rate', 'circuit_state', 'circuit_tasks', 'closed', 'current_limit', 'half_open', 'in_cooldown', 'last_429_time', 'lock', 'model_states', 'open', 'queue_depth', 'recovery_started', 'recovery_task', 'total_429_count']

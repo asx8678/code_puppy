@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tui/message_bridge.py
-# hypothesis_version: 6.151.11
-
-[2.0, 120, '#chat-log', 'CodePuppyApp', '\\x1b\\[[0-9;]*[mGKHF]', '__rich__', '__rich_console__', 'end']
