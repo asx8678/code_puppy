@@ -12,137 +12,38 @@ from code_puppy.session_storage import save_session_async
 from code_puppy import runtime_state
 
 
-# --- Module-level mutable state (for backward compatibility) ---
-# These are the primary storage locations. The ConfigState dataclass
-# references these same objects, providing a clean encapsulation API
-# while maintaining full backward compatibility with code that accesses
-# these variables directly.
-
-# Config caching (eliminates repeated disk reads)
-_config_cache: configparser.ConfigParser | None = None
-_config_mtime: float = 0.0
-
-# mtime check debouncing (reduces stat syscall cost)
-_last_mtime_check: float = 0.0
-_cached_mtime: float | None = None
-
-# Thread-safe lock for config cache access
-_CONFIG_LOCK: threading.Lock = threading.Lock()
-
-# Model validation and defaults caching
-_model_validation_cache: dict = {}
-_default_model_cache: str | None = None
-_default_vision_model_cache: str | None = None
-_supported_settings_cache: Callable | None = None
-
-# Model context length cache
-_model_context_length_cache: dict[str, int] = {}
-
-
 @dataclass
 class ConfigState:
     """Encapsulates all mutable module-level state for config.py.
 
-    This dataclass provides a single point of access for config caching,
-    model validation caches, and locks. It references the module-level
-    variables for backward compatibility.
+    Replaces the nine process-global variables that previously scattered
+    mutable state across the module, making the state easier to inspect,
+    reset in tests, and reason about.
     """
 
-    # Note: These reference the module-level globals for compatibility
-    # The module-level variables are the "source of truth"
+    # Config caching (eliminates repeated disk reads)
+    config_cache: configparser.ConfigParser | None = None
+    config_mtime: float = 0.0
 
-    @property
-    def config_cache(self) -> configparser.ConfigParser | None:
-        return _config_cache
+    # mtime check debouncing (reduces stat syscall cost)
+    last_mtime_check: float = 0.0
+    cached_mtime: float | None = None
 
-    @config_cache.setter
-    def config_cache(self, value: configparser.ConfigParser | None) -> None:
-        global _config_cache
-        _config_cache = value
+    # Thread-safe lock for config cache access
+    config_lock: threading.Lock = field(default_factory=threading.Lock)
 
-    @property
-    def config_mtime(self) -> float:
-        return _config_mtime
+    # Model validation and defaults caching
+    model_validation_cache: dict = field(default_factory=dict)
+    default_model_cache: str | None = None
+    default_vision_model_cache: str | None = None
+    supported_settings_cache: Callable | None = None
 
-    @config_mtime.setter
-    def config_mtime(self, value: float) -> None:
-        global _config_mtime
-        _config_mtime = value
-
-    @property
-    def last_mtime_check(self) -> float:
-        return _last_mtime_check
-
-    @last_mtime_check.setter
-    def last_mtime_check(self, value: float) -> None:
-        global _last_mtime_check
-        _last_mtime_check = value
-
-    @property
-    def cached_mtime(self) -> float | None:
-        return _cached_mtime
-
-    @cached_mtime.setter
-    def cached_mtime(self, value: float | None) -> None:
-        global _cached_mtime
-        _cached_mtime = value
-
-    @property
-    def config_lock(self) -> threading.Lock:
-        return _CONFIG_LOCK
-
-    @config_lock.setter
-    def config_lock(self, value: threading.Lock) -> None:
-        global _CONFIG_LOCK
-        _CONFIG_LOCK = value
-
-    @property
-    def model_validation_cache(self) -> dict:
-        return _model_validation_cache
-
-    @model_validation_cache.setter
-    def model_validation_cache(self, value: dict) -> None:
-        global _model_validation_cache
-        _model_validation_cache = value
-
-    @property
-    def default_model_cache(self) -> str | None:
-        return _default_model_cache
-
-    @default_model_cache.setter
-    def default_model_cache(self, value: str | None) -> None:
-        global _default_model_cache
-        _default_model_cache = value
-
-    @property
-    def default_vision_model_cache(self) -> str | None:
-        return _default_vision_model_cache
-
-    @default_vision_model_cache.setter
-    def default_vision_model_cache(self, value: str | None) -> None:
-        global _default_vision_model_cache
-        _default_vision_model_cache = value
-
-    @property
-    def supported_settings_cache(self) -> Callable | None:
-        return _supported_settings_cache
-
-    @supported_settings_cache.setter
-    def supported_settings_cache(self, value: Callable | None) -> None:
-        global _supported_settings_cache
-        _supported_settings_cache = value
-
-    @property
-    def model_context_length_cache(self) -> dict[str, int]:
-        return _model_context_length_cache
-
-    @model_context_length_cache.setter
-    def model_context_length_cache(self, value: dict[str, int]) -> None:
-        global _model_context_length_cache
-        _model_context_length_cache = value
+    # Model context length cache
+    model_context_length_cache: dict[str, int] = field(default_factory=dict)
 
 
-# Module-level state instance - provides clean API for accessing state
+# Module-level singleton – all functions reference _state.<field> instead of
+# bare module globals so the state is fully encapsulated.
 _state = ConfigState()
 
 
@@ -404,6 +305,7 @@ REQUIRED_KEYS = ["puppy_name", "owner_name"]
 # Note: Runtime-only state variables moved to runtime_state.py:
 # - _CURRENT_AUTOSAVE_ID -> runtime_state._CURRENT_AUTOSAVE_ID
 # - _SESSION_MODEL -> runtime_state._SESSION_MODEL
+
 
 def _get_supported_settings_cache():
     """Return the LRU cache function for supported settings, creating it if needed."""
