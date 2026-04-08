@@ -20,32 +20,37 @@ from code_puppy.tools.common import _find_best_window, get_user_approval
 # Lock for preventing multiple simultaneous permission prompts
 _FILE_CONFIRMATION_LOCK = threading.Lock()
 
-# Thread-local storage for user feedback from permission prompts
-_thread_local = threading.local()
+# Module-level variables for storing user feedback from permission prompts
+# These are safe to use because _FILE_CONFIRMATION_LOCK prevents concurrent access
+_last_user_feedback: str | None = None
+_diff_already_shown: bool = False
 
 
 def get_last_user_feedback() -> str | None:
-    """Get the last user feedback from a permission prompt in this thread.
+    """Get the last user feedback from a permission prompt.
 
     Returns:
         The user feedback string, or None if no feedback was provided.
     """
-    return getattr(_thread_local, "last_user_feedback", None)
+    return _last_user_feedback
 
 
 def _set_user_feedback(feedback: str | None) -> None:
-    """Store user feedback in thread-local storage."""
-    _thread_local.last_user_feedback = feedback
+    """Store user feedback in module-level storage."""
+    global _last_user_feedback
+    _last_user_feedback = feedback
 
 
 def clear_user_feedback() -> None:
     """Clear any stored user feedback."""
-    _thread_local.last_user_feedback = None
+    global _last_user_feedback
+    _last_user_feedback = None
 
 
 def set_diff_already_shown(shown: bool = True) -> None:
     """Mark that a diff preview was already shown during permission prompt."""
-    _thread_local.diff_already_shown = shown
+    global _diff_already_shown
+    _diff_already_shown = shown
 
 
 def was_diff_already_shown() -> bool:
@@ -54,12 +59,13 @@ def was_diff_already_shown() -> bool:
     Returns:
         True if diff was shown, False otherwise
     """
-    return getattr(_thread_local, "diff_already_shown", False)
+    return _diff_already_shown
 
 
 def clear_diff_shown_flag() -> None:
     """Clear the diff-already-shown flag."""
-    _thread_local.diff_already_shown = False
+    global _diff_already_shown
+    _diff_already_shown = False
 
 
 # Diff formatting is now handled by common.format_diff_with_colors()
@@ -487,7 +493,7 @@ def get_permission_handler_help() -> str:
     return """File Permission Handler Plugin:
 - Unified permission prompts for all file operations
 - YOLO mode support for automatic approval
-- Thread-safe confirmation system
+- Thread-safe confirmation system (lock-based)
 - Consistent user experience across file operations
 - Detailed preview support with diff highlighting
 - Automatic preview generation from operation data"""
