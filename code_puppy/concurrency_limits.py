@@ -1,12 +1,4 @@
-"""Concurrency limiters for file operations and API calls.
-
-This module provides configurable semaphores for controlling concurrent:
-- File operations (read/write/edit)
-- API calls (outbound model requests)
-- Tool executions
-
-Configuration is read from ~/.code_puppy/concurrency.toml with sensible defaults.
-"""
+from __future__ import annotations
 
 import asyncio
 import logging
@@ -16,6 +8,16 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+"""Concurrency limiters for file operations and API calls.
+
+This module provides configurable semaphores for controlling concurrent:
+- File operations (read/write/edit)
+- API calls (outbound model requests)
+- Tool executions
+
+Configuration is read from ~/.code_puppy/concurrency.toml with sensible defaults.
+"""
 
 # Default concurrency limits
 DEFAULT_FILE_OPS_LIMIT = 4  # Max concurrent file read/write operations
