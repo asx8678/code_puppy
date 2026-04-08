@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/hook_engine/matcher.py
-# hypothesis_version: 6.151.11
-
-['$', '&&', '(', ')', '*', '+', '.', '.*', '/', '?', '[', '\\', ']', '^', '__fspath__', 'dest', 'destination', 'file', 'file_path', 'filename', 'input_file', 'output_file', 'path', 'source', 'src', 'target', '{', '|', '||', '}']

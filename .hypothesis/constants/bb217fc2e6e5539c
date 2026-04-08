@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-cp6b/code_puppy/gemini_code_assist.py
-# hypothesis_version: 6.151.11
-
-[180, 200, 'Accept', 'Authorization', 'Content-Type', 'POST', '[DONE]', 'application/json', 'args', 'candidates', 'candidatesTokenCount', 'content', 'contents', 'data: ', 'description', 'functionCall', 'functionDeclarations', 'functionResponse', 'generationConfig', 'google', 'maxOutputTokens', 'max_tokens', 'model', 'name', 'parametersJsonSchema', 'parts', 'project', 'promptTokenCount', 'request', 'response', 'result', 'role', 'systemInstruction', 'temperature', 'text', 'thoughtSignature', 'tools', 'topP', 'top_p', 'usageMetadata', 'user', 'user_prompt_id', 'v1internal']

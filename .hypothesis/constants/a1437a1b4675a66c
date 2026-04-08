@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tui/widgets/searchable_list.py
-# hypothesis_version: 6.151.11
-
-['#search-list', '--disabled', 'SearchableListItem', 'down', 'end', 'enter', 'home', 'pagedown', 'pageup', 'search-input', 'search-list', 'up', '🔍 Search...']

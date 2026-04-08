@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/customizable_commands/register_callbacks.py
-# hypothesis_version: 6.151.11
-
-['#', '*.md', '*.prompt.md', '-', '...', '.agents/commands', '.claude/commands', '.github/prompts', '.prompt.md', '_', 'custom_command', 'custom_command_help', 'utf-8']

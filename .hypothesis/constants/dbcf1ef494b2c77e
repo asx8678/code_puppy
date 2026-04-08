@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-cp6b/code_puppy/tools/browser/terminal_tools.py
-# hypothesis_version: 6.151.11
-
-[5.0, 8765, 10000, '-m', '.xterm', 'TERMINAL CLOSE 🔒', 'TERMINAL OPEN 🖥️', 'Terminal closed', 'already_running', 'api_server.pid', 'code_puppy.api.main', 'default', 'error', 'healthy', 'localhost', 'message', 'page_title', 'pid', 'server_url', 'start_api_server', 'status', 'success', 'terminal_close', 'terminal_open', 'terminal_session', 'url']

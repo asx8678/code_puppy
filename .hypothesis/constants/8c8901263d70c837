@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/synthetic_status/register_callbacks.py
-# hypothesis_version: 6.151.11
-
-[0.0, 1e-09, '%Y-%m-%d %H:%M UTC', '.', '0', 'ANTHROPIC_API_KEY', 'AZURE_OPENAI_API_KEY', 'CEREBRAS_API_KEY', 'GEMINI_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'SYN_API_KEY', 'ZAI_API_KEY', 'anthropic', 'azure_openai', 'cerebras', 'custom_command', 'custom_command_help', 'cyan', 'gemini', 'openai', 'openrouter', 'provider', 'status', 'synthetic', 'synthetic-status', 'zai']

@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-cp6b/code_puppy/hook_engine/models.py
-# hypothesis_version: 6.151.11
-
-[0.0, 100, 5000, '(.)([A-Z][a-z]+)', '([a-z0-9])([A-Z])', '\\1_\\2', 'command', 'notification', 'post_tool_use', 'pre_compact', 'pre_tool_use', 'prompt', 'session_end', 'session_start', 'stop', 'subagent_stop', 'user_prompt_submit']

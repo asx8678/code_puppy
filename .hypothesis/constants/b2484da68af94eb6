@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-cp6b/code_puppy/plugins/universal_constructor/sandbox.py
-# hypothesis_version: 6.151.11
-
-['?', 'TOOL_META', '__import__', 'a', 'a+', 'ab', 'compile', 'ctypes', 'description', 'eval', 'exec', 'execl', 'execle', 'execlp', 'execv', 'execve', 'execvp', 'fork', 'globals', 'http.client', 'import_module', 'importlib', 'lineno', 'locals', 'marshal', 'mode', 'multiprocessing', 'name', 'open', 'os', 'os.system', 'pickle', 'platform', 'popen', 'r+', 'rb+', 'requests', 'shutil.rmtree', 'socket', 'spawn', 'subprocess', 'system', 'urllib', 'utf-8', 'w', 'w+', 'wb', 'wb+', 'x', 'xb']

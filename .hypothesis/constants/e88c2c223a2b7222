@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/chatgpt_codex_client.py
-# hypothesis_version: 6.151.11
-
-[0.0, 5.0, 30.0, 300.0, 128, 200, 300, 1000, 'Content-Length', 'POST', '[DONE]', '_content', 'arguments', 'assistant', 'auto', 'cache', 'call_id', 'content', 'data:', 'delta', 'effort', 'extensions', 'function_call', 'gpt-5', 'id', 'input', 'input_item_reference', 'item_reference', 'max_output_tokens', 'max_tokens', 'medium', 'message', 'model', 'name', 'o1', 'o3', 'o4', 'object', 'output', 'output_text', 'reasoning', 'reasoning_content', 'reconstructed', 'reference', 'requests_optimized', 'response', 'response.completed', 'role', 'rs_', 'rs_reasoning_content', 'store', 'stream', 'summary', 'text', 'type', 'utf-8', 'verbosity']

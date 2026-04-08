@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/tool_schema.py
-# hypothesis_version: 6.151.11
-
-['_is_tool', '_tool_schema', 'array', 'boolean', 'cls', 'description', 'enum', 'integer', 'items', 'name', 'number', 'object', 'parameters', 'properties', 'register_tool', 'required', 'self', 'string', 'tool', 'type']

@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-cp6b/code_puppy/plugins/antigravity_oauth/storage.py
-# hypothesis_version: 6.151.11
-
-[384, 1000, '.tmp', 'AccountMetadata', 'AccountStorage', 'RateLimitState', 'accounts', 'activeIndex', 'activeIndexByFamily', 'addedAt', 'antigravity', 'claude', 'email', 'gemini', 'gemini-antigravity', 'gemini-cli', 'initial', 'isRateLimited', 'lastSwitchReason', 'lastUsed', 'managedProjectId', 'projectId', 'rate-limit', 'rateLimitResetTime', 'rateLimitResetTimes', 'refreshToken', 'rotation', 'utf-8', 'version', 'w']

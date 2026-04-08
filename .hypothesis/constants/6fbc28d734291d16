@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/plugins/agent_skills/prompt_builder.py
-# hypothesis_version: 6.151.11
-
-['  </skill>', '  <skill>', '"', '&', '&#39;', '&amp;', '&gt;', '&lt;', '&quot;', "'", '<', '</available_skills>', '<available_skills>', '>', 'SkillMetadata']

@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/provider_identity.py
-# hypothesis_version: 6.151.11
-
-['-', 'anthropic', 'azure-openai-', 'azure_openai', 'chatgpt', 'chatgpt-', 'chatgpt_oauth', 'claude-code-', 'claude_code', 'custom', 'custom_anthropic', 'custom_openai', 'gemini', 'gemini_oauth', 'google', 'openai', 'openrouter', 'openrouter-', 'provider', 'type', 'unknown']

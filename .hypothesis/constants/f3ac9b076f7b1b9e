@@ -1,4 +1,0 @@
-# file: /Users/adam2/projects/code_puppy-fjat/code_puppy/command_line/model_picker_completion.py
-# hypothesis_version: 6.151.11
-
-['  Enter  ', '  Esc  ', '  PgUp/PgDn  ', '  ↑/↓  ', ' (active)', ' (current)', ' › ', '/m ', '/model', '/model ', '>>> ', 'Cancel\n', 'Change page\n', 'Exit\n', 'Model', 'Model (selected)', 'Navigate\n', 'Select Active Model', 'Select model\n', 'bold cyan', 'c-c', 'c-n', 'c-p', 'down', 'enter', 'escape', 'fg:ansibrightblack', 'fg:ansigreen', 'fg:ansiwhite bold', 'fg:ansiyellow', 'left', 'pagedown', 'pageup', 'right', 'up']
