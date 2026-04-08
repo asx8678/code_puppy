@@ -194,23 +194,27 @@ class CodePuppyApp(App):
         self._message_bridge = TUIMessageBridge(self)
         self._message_bridge.start()
 
-        chat = self.query_one("#chat-log", RichLog)
-        chat.write("[bold cyan]🐶 Welcome to Code Puppy![/]")
-        chat.write("")
-        chat.write("[dim]Type a message or /command to get started.[/dim]")
-        chat.write("[dim]Press F1 for help, Escape to quit.[/dim]")
+        # Cache DOM widget references to avoid repeated query_one calls (Issue APP-H1)
+        self._chat_log = self.query_one("#chat-log", RichLog)
+        self._input_widget = self.query_one("#input", PuppyInput)
+        self._info_bar = self.query_one("#info-bar", InfoBar)
+        self._completion_overlay = self.query_one("#completions", CompletionOverlay)
+
+        self._chat_log.write("[bold cyan]🐶 Welcome to Code Puppy![/]")
+        self._chat_log.write("")
+        self._chat_log.write("[dim]Type a message or /command to get started.[/dim]")
+        self._chat_log.write("[dim]Press F1 for help, Escape to quit.[/dim]")
 
         # Ensure slash commands are registered so completions work immediately
         try:
             import code_puppy.command_line.command_handler  # noqa: F401
         except Exception:
             pass
-        chat.write("")
-        self.query_one("#input", PuppyInput).focus()
+        self._chat_log.write("")
+        self._input_widget.focus()
 
         # Initialize info bar with current agent and model
-        info_bar = self.query_one("#info-bar", InfoBar)
-        info_bar.update_from_app_state()
+        self._info_bar.update_from_app_state()
 
         # Execute initial command if provided
         initial = getattr(self, "_initial_command", None)
@@ -226,7 +230,8 @@ class CodePuppyApp(App):
 
     async def _run_initial_command(self, command: str) -> None:
         """Execute the initial command passed at startup."""
-        chat = self.query_one("#chat-log", RichLog)
+        # Use cached widget reference (Issue APP-H1)
+        chat = self._chat_log
         chat.write(f"\n[bold]Initial:[/bold] {command}")
         if command.startswith("/"):
             await self._handle_slash_command(command)
@@ -237,7 +242,11 @@ class CodePuppyApp(App):
 
     def watch_is_working(self, working: bool) -> None:
         """Update UI state when working status changes."""
-        input_widget = self.query_one("#input", PuppyInput)
+        # Use cached widget reference (Issue APP-H1)
+        try:
+            input_widget = self._input_widget
+        except AttributeError:
+            input_widget = self.query_one("#input", PuppyInput)
         if working:
             input_widget.placeholder = ">>> (working... Ctrl+X to cancel)"
             input_widget.disabled = True
@@ -257,10 +266,14 @@ class CodePuppyApp(App):
 
     def _update_info_bar(self) -> None:
         """Refresh the info bar status and token rate."""
+        # Use cached widget reference (Issue APP-H1)
         try:
-            bar = self.query_one("#info-bar", InfoBar)
-        except Exception:
-            return
+            bar = self._info_bar
+        except AttributeError:
+            try:
+                bar = self.query_one("#info-bar", InfoBar)
+            except Exception:
+                return
 
         # Status text
         if self.is_working:
@@ -282,8 +295,14 @@ class CodePuppyApp(App):
 
     def _on_screen_dismissed(self, _result=None) -> None:
         """Universal callback for any screen dismiss — refreshes the info bar."""
+        # Use cached widget reference (Issue APP-H1)
         try:
-            self.query_one("#info-bar", InfoBar).update_from_app_state()
+            self._info_bar.update_from_app_state()
+        except AttributeError:
+            try:
+                self.query_one("#info-bar", InfoBar).update_from_app_state()
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -293,7 +312,8 @@ class CodePuppyApp(App):
         self, event: CompletionOverlay.CompletionSelected
     ) -> None:
         """Apply selected completion to input."""
-        input_widget = self.query_one("#input", PuppyInput)
+        # Use cached widget reference (Issue APP-H1)
+        input_widget = self._input_widget
         text = input_widget.value
 
         # For @ file completions, replace from the @ to cursor
@@ -316,7 +336,8 @@ class CodePuppyApp(App):
 
     def on_completion_overlay_completion_dismissed(self, event) -> None:
         """Refocus input when completions dismissed."""
-        self.query_one("#input", PuppyInput).focus()
+        # Use cached widget reference (Issue APP-H1)
+        self._input_widget.focus()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Auto-show slash command completions as the user types."""
@@ -324,10 +345,14 @@ class CodePuppyApp(App):
             return
 
         text = event.value.lstrip()
+        # Use cached widget reference (Issue APP-H1)
         try:
-            overlay = self.query_one("#completions", CompletionOverlay)
-        except Exception:
-            return
+            overlay = self._completion_overlay
+        except AttributeError:
+            try:
+                overlay = self.query_one("#completions", CompletionOverlay)
+            except Exception:
+                return
 
         if text.startswith("/") or "@" in text:
             from code_puppy.tui.completion import get_completions
@@ -347,9 +372,14 @@ class CodePuppyApp(App):
         if event.input.id != "input":
             return
 
-        # Hide completions overlay on submit
+        # Hide completions overlay on submit (Issue APP-H1: use cached reference)
         try:
-            self.query_one("#completions", CompletionOverlay).hide_overlay()
+            self._completion_overlay.hide_overlay()
+        except AttributeError:
+            try:
+                self.query_one("#completions", CompletionOverlay).hide_overlay()
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -357,11 +387,12 @@ class CodePuppyApp(App):
         if not text:
             return
 
-        input_widget = self.query_one("#input", PuppyInput)
+        # Use cached widget references (Issue APP-H1)
+        input_widget = self._input_widget
         input_widget.add_to_history(text)
         input_widget.value = ""
 
-        chat = self.query_one("#chat-log", RichLog)
+        chat = self._chat_log
         chat.write(f"\n[bold]You:[/bold] {text}")
 
         # Handle exit commands
@@ -399,7 +430,8 @@ class CodePuppyApp(App):
         Affected commands: /model, /m, /agent, /diff, /model_settings,
         /settings, /tutorial, /add_model, /colors, and several others.
         """
-        chat = self.query_one("#chat-log", RichLog)
+        # Use cached widget reference (Issue APP-H1)
+        chat = self._chat_log
         cmd_lower = command.strip().lower()
         cmd_parts = cmd_lower.split()
         cmd_name = cmd_parts[0] if cmd_parts else ""
@@ -433,7 +465,12 @@ class CodePuppyApp(App):
 
             def _on_agent_selected_cmd(_result=None) -> None:
                 try:
-                    self.query_one("#info-bar", InfoBar).update_from_app_state()
+                    self._info_bar.update_from_app_state()
+                except AttributeError:
+                    try:
+                        self.query_one("#info-bar", InfoBar).update_from_app_state()
+                    except Exception:
+                        pass
                 except Exception:
                     pass
 
@@ -536,7 +573,8 @@ class CodePuppyApp(App):
 
             def _on_mcp_form_done(server_name: str | None) -> None:
                 if server_name:
-                    _chat = self.query_one("#chat-log", RichLog)
+                    # Use cached widget reference (Issue APP-H1)
+                    _chat = self._chat_log
                     _chat.write(
                         f"[bold green]✅ Custom MCP server '[cyan]{server_name}[/cyan]' added![/bold green]"
                     )
@@ -553,13 +591,14 @@ class CodePuppyApp(App):
         try:
             from code_puppy.command_line.command_handler import handle_command
 
-            result = handle_command(command)
+            # Run sync handle_command in thread pool to avoid blocking event loop (Issue APP-H2)
+            result = await asyncio.to_thread(handle_command, command)
 
             if result is True:
                 # Command handled — output was emitted via messaging system
                 # The TUIMessageBridge will display it asynchronously
-                # Add a small delay to let the bridge process messages
-                await asyncio.sleep(0.1)
+                # Yield control briefly to let the bridge process messages
+                await asyncio.sleep(0)
             elif isinstance(result, str):
                 # Command returned text to process as agent prompt
                 await self._handle_agent_prompt(result)
@@ -571,7 +610,8 @@ class CodePuppyApp(App):
 
     async def _handle_agent_prompt(self, text: str) -> None:
         """Send text to the agent and stream the response."""
-        chat = self.query_one("#chat-log", RichLog)
+        # Use cached widget reference (Issue APP-H1)
+        chat = self._chat_log
         self.set_working(True, "Sending to agent...")
 
         try:
@@ -629,7 +669,8 @@ class CodePuppyApp(App):
 
     async def _handle_shell_passthrough(self, text: str) -> None:
         """Handle !command shell passthrough."""
-        chat = self.query_one("#chat-log", RichLog)
+        # Use cached widget reference (Issue APP-H1)
+        chat = self._chat_log
         try:
             from code_puppy.command_line.shell_passthrough import (
                 execute_shell_passthrough,
@@ -643,7 +684,8 @@ class CodePuppyApp(App):
 
     def action_show_help(self) -> None:
         """Show help information."""
-        chat = self.query_one("#chat-log", RichLog)
+        # Use cached widget reference (Issue APP-H1)
+        chat = self._chat_log
         chat.write("\n[bold cyan]━━━ Help ━━━[/bold cyan]")
         chat.write("[dim]F1[/dim] This help")
         chat.write("[dim]F2[/dim] Switch model")
@@ -663,13 +705,19 @@ class CodePuppyApp(App):
 
         def _on_model_selected(model_name: str | None) -> None:
             if model_name:
-                chat = self.query_one("#chat-log", RichLog)
+                # Use cached widget references (Issue APP-H1)
+                chat = self._chat_log
                 chat.write(
                     f"[green]✅ Active model set: [bold]{model_name}[/bold][/green]"
                 )
                 # Refresh info bar to show new model
                 try:
-                    self.query_one("#info-bar", InfoBar).update_from_app_state()
+                    self._info_bar.update_from_app_state()
+                except AttributeError:
+                    try:
+                        self.query_one("#info-bar", InfoBar).update_from_app_state()
+                    except Exception:
+                        pass
                 except Exception:
                     pass
 
@@ -680,8 +728,14 @@ class CodePuppyApp(App):
         from code_puppy.tui.screens.agent_screen import AgentScreen
 
         def _on_agent_selected(_result=None) -> None:
+            # Use cached widget reference (Issue APP-H1)
             try:
-                self.query_one("#info-bar", InfoBar).update_from_app_state()
+                self._info_bar.update_from_app_state()
+            except AttributeError:
+                try:
+                    self.query_one("#info-bar", InfoBar).update_from_app_state()
+                except Exception:
+                    pass
             except Exception:
                 pass
 
@@ -701,14 +755,16 @@ class CodePuppyApp(App):
                 self._current_agent_task.cancel()
             self.is_working = False
             self.status_message = ""
-            chat = self.query_one("#chat-log", RichLog)
+            # Use cached widget reference (Issue APP-H1)
+            chat = self._chat_log
             chat.write("[red]Task cancelled.[/red]")
 
     # --- MCP install helpers ---
 
     def _install_mcp_server(self, server_id: str) -> None:
         """Install a catalog MCP server with env-var defaults (no interactive prompt)."""
-        chat = self.query_one("#chat-log", RichLog)
+        # Use cached widget reference (Issue APP-H1)
+        chat = self._chat_log
         try:
             from code_puppy.mcp_.server_registry_catalog import catalog
 
@@ -758,7 +814,8 @@ class CodePuppyApp(App):
         self, display_name: str, success: bool, error: str | None = None
     ) -> None:
         """Report MCP install result to the chat log."""
-        chat = self.query_one("#chat-log", RichLog)
+        # Use cached widget reference (Issue APP-H1)
+        chat = self._chat_log
         if success:
             chat.write(
                 f"[bold green]✅ '{display_name}' installed successfully![/bold green]"
@@ -775,7 +832,8 @@ class CodePuppyApp(App):
         This is the primary API for other modules (stream renderer,
         command handler, etc.) to output to the chat.
         """
-        chat = self.query_one("#chat-log", RichLog)
+        # Use cached widget reference (Issue APP-H1)
+        chat = self._chat_log
         chat.write(content, **kwargs)
 
     def set_working(self, working: bool, message: str = "") -> None:

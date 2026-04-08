@@ -24,6 +24,32 @@ except Exception:  # pragma: no cover
         return "blue"
 
 
+# Hoist pydantic_ai imports to module top with guard (Issue SR-H2)
+_PYDANTIC_AI_OK = False
+try:
+    from pydantic_ai import PartDeltaEvent, PartEndEvent, PartStartEvent
+    from pydantic_ai.messages import (
+        TextPart,
+        TextPartDelta,
+        ThinkingPart,
+        ThinkingPartDelta,
+        ToolCallPart,
+        ToolCallPartDelta,
+    )
+
+    _PYDANTIC_AI_OK = True
+except ImportError:
+    PartDeltaEvent = None  # type: ignore[misc,assignment]
+    PartEndEvent = None  # type: ignore[misc,assignment]
+    PartStartEvent = None  # type: ignore[misc,assignment]
+    TextPart = None  # type: ignore[misc,assignment]
+    TextPartDelta = None  # type: ignore[misc,assignment]
+    ThinkingPart = None  # type: ignore[misc,assignment]
+    ThinkingPartDelta = None  # type: ignore[misc,assignment]
+    ToolCallPart = None  # type: ignore[misc,assignment]
+    ToolCallPartDelta = None  # type: ignore[misc,assignment]
+
+
 if TYPE_CHECKING:
     from code_puppy.tui.app import CodePuppyApp
 
@@ -66,6 +92,9 @@ LOADING_MESSAGES = [
     "Howling at the code...",
 ]
 
+# Rate update throttle interval (5 Hz max) (Issue SR-H1)
+_RATE_UPDATE_INTERVAL = 0.2
+
 
 class StreamRenderer:
     """Renders streaming LLM events into a Textual CodePuppyApp.
@@ -78,6 +107,22 @@ class StreamRenderer:
         renderer.finalize()
     """
 
+    # Add __slots__ for faster attribute access (Issue SR-M2)
+    __slots__ = (
+        "app",
+        "_streaming_parts",
+        "_thinking_parts",
+        "_text_parts",
+        "_tool_parts",
+        "_banner_printed",
+        "_token_count",
+        "_start_time",
+        "_message_index",
+        "_text_buffer",
+        "_last_rate_update",
+        "_last_spinner_update",
+    )
+
     def __init__(self, app: "CodePuppyApp | TUIHost") -> None:
         self.app = app
         self._streaming_parts: set[int] = set()
@@ -89,6 +134,9 @@ class StreamRenderer:
         self._start_time: float = time.monotonic()
         self._message_index: int = 0
         self._text_buffer: dict[int, str] = {}
+        # Throttling timestamps for rate updates and spinner rotation (Issue SR-H1)
+        self._last_rate_update: float = 0.0
+        self._last_spinner_update: float = 0.0
 
     # ------------------------------------------------------------------
     # Public API
@@ -99,9 +147,7 @@ class StreamRenderer:
 
         Dispatches to the appropriate handler based on event type.
         """
-        try:
-            from pydantic_ai import PartDeltaEvent, PartEndEvent, PartStartEvent
-        except ImportError:
+        if not _PYDANTIC_AI_OK:
             logger.debug("pydantic_ai not available; skipping event")
             return
 
@@ -147,6 +193,9 @@ class StreamRenderer:
         self._token_count = 0
         self._start_time = time.monotonic()
         self._message_index = 0
+        # Reset throttling timestamps (Issue SR-H1)
+        self._last_rate_update = 0.0
+        self._last_spinner_update = 0.0
 
     # ------------------------------------------------------------------
     # Private event handlers
@@ -154,9 +203,7 @@ class StreamRenderer:
 
     def _handle_part_start(self, event: Any) -> None:
         """Handle the start of a new part."""
-        try:
-            from pydantic_ai.messages import TextPart, ThinkingPart, ToolCallPart
-        except ImportError:
+        if not _PYDANTIC_AI_OK:
             logger.debug("pydantic_ai.messages not available")
             return
 
@@ -191,13 +238,7 @@ class StreamRenderer:
 
     def _handle_part_delta(self, event: Any) -> None:
         """Handle a streaming delta (incremental content)."""
-        try:
-            from pydantic_ai.messages import (
-                TextPartDelta,
-                ThinkingPartDelta,
-                ToolCallPartDelta,
-            )
-        except ImportError:
+        if not _PYDANTIC_AI_OK:
             logger.debug("pydantic_ai.messages not available")
             return
 
@@ -260,12 +301,23 @@ class StreamRenderer:
         self.app.write_to_chat(banner)
 
     def _update_rate(self) -> None:
-        """Update the token rate in the status bar."""
-        elapsed = time.monotonic() - self._start_time
-        if elapsed > 0:
-            rate = self._token_count / elapsed
-            self.app.update_token_rate(rate)
+        """Update the token rate in the status bar.
 
-        # Rotate loading message
-        self._message_index = (self._message_index + 1) % len(LOADING_MESSAGES)
-        self.app.set_working(True, LOADING_MESSAGES[self._message_index])
+        Throttled to 5 Hz for rate updates to avoid DOM query cascade.
+        Spinner rotation is decoupled to 2 Hz.
+        """
+        now = time.monotonic()
+
+        # Throttle rate updates to 5 Hz (Issue SR-H1)
+        if now - self._last_rate_update >= _RATE_UPDATE_INTERVAL:
+            self._last_rate_update = now
+            elapsed = now - self._start_time
+            if elapsed > 0:
+                rate = self._token_count / elapsed
+                self.app.update_token_rate(rate)
+
+        # Decouple spinner rotation to 2 Hz (every 0.5s)
+        if now - self._last_spinner_update >= 0.5:
+            self._last_spinner_update = now
+            self._message_index = (self._message_index + 1) % len(LOADING_MESSAGES)
+            self.app.set_working(True, LOADING_MESSAGES[self._message_index])
