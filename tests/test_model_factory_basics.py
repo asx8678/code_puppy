@@ -5,11 +5,16 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from code_puppy.model_factory import ModelFactory
+from code_puppy.model_factory import ModelFactory, invalidate_model_config_cache
 
 
 class TestModelFactoryBasics:
     """Test core functionality of ModelFactory."""
+
+    @pytest.fixture(autouse=True)
+    def invalidate_cache(self):
+        """Invalidate model config cache before each test to ensure isolation."""
+        invalidate_model_config_cache()
 
     @patch("code_puppy.model_factory.pathlib.Path.exists", return_value=False)
     @patch("code_puppy.model_factory.callbacks.get_callbacks", return_value=[])

@@ -18,6 +18,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from code_puppy.model_factory import invalidate_model_config_cache
+
+
+@pytest.fixture(autouse=True)
+def invalidate_cache():
+    """Invalidate model config cache before each test to ensure isolation."""
+    invalidate_model_config_cache()
+
 
 class TestGetApiKey:
     """Test the get_api_key() function."""
@@ -420,9 +428,7 @@ class TestLoadConfigExtended:
 
     def test_load_config_multiple_callbacks_warning(self):
         """Test warning is logged when multiple callbacks are registered."""
-        from code_puppy.model_factory import ModelFactory, invalidate_model_config_cache
-
-        invalidate_model_config_cache()
+        from code_puppy.model_factory import ModelFactory
 
         with patch(
             "code_puppy.model_factory.callbacks.get_callbacks",
