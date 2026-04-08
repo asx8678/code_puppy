@@ -101,6 +101,46 @@ register_callback("load_prompt", _prompt_addition)
 _COMMAND_NAMES = {"pack-parallel", "pack-par"}
 
 
+def _invalidate_agent_caches(previous_val: int | None, new_val: int) -> None:
+    """Invalidate agent caches to ensure new MAX_PARALLEL_AGENTS is reflected.
+
+    Busts both the Rust-path cached system prompt and rebuilds the PydanticAgent
+    instance with fresh instructions containing the updated value.
+    """
+    # Optimization: skip heavy reload if value hasn't actually changed
+    if previous_val is not None and previous_val == new_val:
+        return
+
+    # Lazy import to avoid circular dependencies
+    try:
+        from code_puppy.agents.agent_manager import get_current_agent
+    except ImportError:
+        return  # Agent manager not available, skip cache invalidation
+
+    try:
+        agent = get_current_agent()
+    except Exception:
+        # No active agent or other error - cache invalidation is best-effort
+        return
+
+    if agent is None:
+        return
+
+    try:
+        # Bust Rust-path cached system prompt (base_agent.py:1477-1483)
+        if hasattr(agent, "_state") and hasattr(agent._state, "cached_system_prompt"):
+            agent._state.cached_system_prompt = None
+
+        # Rebuild PydanticAgent with fresh instructions (base_agent.py:1846-1878)
+        if hasattr(agent, "reload_code_generation_agent"):
+            agent.reload_code_generation_agent()
+    except Exception:
+        # Best-effort: never crash the slash command due to cache invalidation
+        logger.debug(
+            "pack_parallelism: cache invalidation failed (non-critical)", exc_info=True
+        )
+
+
 def _handle_command(command: str, name: str):
     """Handle /pack-parallel [N] slash command."""
     global _session_max
@@ -146,7 +186,13 @@ def _handle_command(command: str, name: str):
         emit_info(f"⚠️ /pack-parallel: {new_val} is very high, capping at 32")
         new_val = 32
 
+    # Remember previous value for optimization
+    previous_val = _session_max
     _session_max = new_val
+
+    # Invalidate agent caches so the new value is reflected in prompts
+    _invalidate_agent_caches(previous_val, new_val)
+
     emit_info(
         f"🐺 Pack Leader max parallelism → **{new_val}** (session only)\n"
         f"   To make this permanent, edit {_CONFIG_PATH}:\n"
