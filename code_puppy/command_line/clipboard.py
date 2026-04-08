@@ -50,6 +50,9 @@ CLIPBOARD_RATE_LIMIT_SECONDS: float = 0.5  # SEC-CLIP-004: Max 2 captures per se
 # Rate limiting state
 _last_clipboard_capture: float = 0.0
 
+# Clipboard validation limits
+MAX_CLIPBOARD_CONTENT_BYTES = 1024 * 1024  # 1MB
+
 
 def _safe_open_image(image_bytes: bytes) -> "Image.Image" | None:
     """Safely open and verify an image from bytes.
@@ -85,6 +88,31 @@ def _safe_open_image(image_bytes: bytes) -> "Image.Image" | None:
     except Exception as e:
         logger.warning(f"Failed to open/verify image: {type(e).__name__}: {e}")
         return None
+
+
+def _validate_clipboard_content(content: bytes | None) -> bytes | None:
+    """Validate clipboard content before processing.
+
+    Rejects content that is excessively long (> 1MB) or contains null bytes,
+    which could indicate corrupted or malicious data.
+
+    Args:
+        content: Raw clipboard content bytes, or None.
+
+    Returns:
+        Content if valid, None if validation fails.
+    """
+    if content is None:
+        return None
+    if len(content) > MAX_CLIPBOARD_CONTENT_BYTES:
+        logger.warning(
+            f"Clipboard content too large ({len(content) / 1024 / 1024:.2f}MB), rejecting"
+        )
+        return None
+    if b"\x00" in content:
+        logger.warning("Clipboard content contains null bytes, rejecting")
+        return None
+    return content
 
 
 def _check_linux_clipboard_tool() -> str | None:
@@ -139,7 +167,7 @@ def _get_linux_clipboard_image() -> bytes | None:
                 capture_output=True,
                 timeout=10)
             if result.returncode == 0 and result.stdout:
-                return result.stdout
+                return _validate_clipboard_content(result.stdout)
         elif tool == "xclip":
             # xclip for X11
             result = subprocess.run(
@@ -147,7 +175,7 @@ def _get_linux_clipboard_image() -> bytes | None:
                 capture_output=True,
                 timeout=10)
             if result.returncode == 0 and result.stdout:
-                return result.stdout
+                return _validate_clipboard_content(result.stdout)
     except subprocess.TimeoutExpired:
         logger.warning(f"Timeout reading clipboard with {tool}")
     except Exception as e:
