@@ -424,11 +424,107 @@ class TestInitialCommandPassthrough:
             mock_run.assert_not_called()
 
 
+class TestShlexValidation:
+    """Test shlex validation behavior and its documented limitations.
+
+    These tests document exactly what shlex validation accepts/rejects.
+    IMPORTANT: shlex validates quoting/tokenization only - it does NOT
+    prevent shell injection. Commands like "echo hi; uname -a" pass
+    shlex validation fine. Injection prevention is handled by other
+    validation layers (dangerous patterns, policy engine, user confirmation).
+    """
+
+    def test_unbalanced_quotes_rejected(self):
+        """Unbalanced quotes should be rejected by shlex parsing."""
+        is_safe, reason = _validate_passthrough_command('echo "hello')
+        assert is_safe is False
+        assert "parsing failed" in reason.lower() or "malformed" in reason.lower()
+
+    def test_unbalanced_single_quotes_rejected(self):
+        """Unbalanced single quotes should be rejected by shlex parsing."""
+        is_safe, reason = _validate_passthrough_command("echo 'hello")
+        assert is_safe is False
+        assert "parsing failed" in reason.lower() or "malformed" in reason.lower()
+
+    def test_whitespace_only_command_rejected(self):
+        """Whitespace-only command should be rejected (no valid tokens)."""
+        is_safe, reason = _validate_passthrough_command("     ")
+        assert is_safe is False
+        assert "empty" in reason.lower() or "no valid" in reason.lower()
+
+    def test_empty_string_rejected(self):
+        """Empty string should be rejected at length check."""
+        is_safe, reason = _validate_passthrough_command("")
+        assert is_safe is False
+        assert "empty" in reason.lower()
+
+    def test_semicolon_chain_accepted_by_shlex(self):
+        """Commands with semicolons like 'echo hi; uname -a' ARE accepted by shlex.
+
+        This is INTENTIONAL - shlex is a tokenizer, not a security validator.
+        It checks if the command can be parsed, not if it's "safe".
+        Injection prevention is handled by dangerous-pattern validation,
+        policy engine, and user confirmation - NOT by shlex.
+        """
+        is_safe, reason = _validate_passthrough_command("echo hi; uname -a")
+        # shlex parses this just fine - semicolons are valid shell tokens
+        assert is_safe is True, f"shlex accepts semicolon chains; got: {reason}"
+        assert reason == ""
+
+    def test_and_operator_accepted_by_shlex(self):
+        """Commands with && like 'echo hi && uname -a' ARE accepted by shlex.
+
+        shlex validates tokenization, not shell semantics. The && operator
+        is valid shell syntax and passes shlex parsing.
+        """
+        is_safe, reason = _validate_passthrough_command("echo hi && uname -a")
+        assert is_safe is True, f"shlex accepts && operators; got: {reason}"
+        assert reason == ""
+
+    def test_pipe_accepted_by_shlex(self):
+        """Piped commands like 'cat file | grep foo' ARE accepted by shlex.
+
+        Pipes are valid shell tokens and pass shlex validation.
+        This is expected behavior - shell features require shell=True.
+        """
+        is_safe, reason = _validate_passthrough_command("cat file | grep foo")
+        assert is_safe is True, f"shlex accepts pipes; got: {reason}"
+        assert reason == ""
+
+    def test_redirect_accepted_by_shlex(self):
+        """Commands with redirects like 'echo hi > file.txt' ARE accepted by shlex.
+
+        Redirects are valid shell tokens and pass shlex validation.
+        """
+        is_safe, reason = _validate_passthrough_command("echo hi > file.txt")
+        assert is_safe is True, f"shlex accepts redirects; got: {reason}"
+        assert reason == ""
+
+    def test_variable_expansion_accepted_by_shlex(self):
+        """Commands with $VAR like 'echo $HOME' ARE accepted by shlex.
+
+        Variable references are valid shell tokens and pass shlex validation.
+        """
+        is_safe, reason = _validate_passthrough_command("echo $HOME")
+        assert is_safe is True, f"shlex accepts variable expansion; got: {reason}"
+        assert reason == ""
+
+    def test_glob_pattern_accepted_by_shlex(self):
+        """Commands with globs like 'ls *.py' ARE accepted by shlex.
+
+        Glob patterns are valid shell tokens and pass shlex validation.
+        """
+        is_safe, reason = _validate_passthrough_command("ls *.py")
+        assert is_safe is True, f"shlex accepts globs; got: {reason}"
+        assert reason == ""
+
+
 class TestValidatePassthroughCommand:
     """Test validation of dangerous command patterns.
 
     These tests verify that the shell_passthrough security validation
     correctly blocks dangerous patterns while allowing benign commands.
+    Note: These are additional layers BEYOND shlex validation.
     """
 
     def test_eval_with_quotes_blocked(self):

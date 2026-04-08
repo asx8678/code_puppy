@@ -71,12 +71,14 @@ def _validate_passthrough_command(command: str) -> tuple[bool, str]:
     if not command or not command.strip():
         return False, "Empty command"
     if len(command) > MAX_COMMAND_LENGTH:
-        return False, f"Command too long"
+        return False, "Command too long"
     for pattern in _COMPILED_DANGEROUS:
         if pattern.search(command):
-            return False, f"Dangerous pattern detected"
+            return False, "Dangerous pattern detected"
     # Additional layer: verify command can be properly parsed by shlex
-    # This catches malformed quoting and potential parsing edge cases
+    # NOTE: shlex validates the command can be tokenized (catches malformed
+    # quoting like unbalanced quotes). It does NOT validate shell semantics
+    # or prevent injection - "echo hi; rm -rf /" parses fine through shlex.
     try:
         tokens = shlex.split(command, posix=True)
         if not tokens or not any(token.strip() for token in tokens):
@@ -192,11 +194,12 @@ def execute_shell_passthrough(task: str) -> None:
     # has passed _validate_passthrough_command() which validates:
     # - Length limits, no empty commands
     # - No dangerous patterns (backticks, command substitution, etc.)
-    # - Proper shlex tokenization (catches malformed quoting/injection attempts)
+    # - Proper shlex tokenization (validates quoting only, NOT injection)
     # User confirms intent by prefixing with "!". For stricter control,
     # users should invoke tools via the agent instead.
     try:
-        # nosec B602 - validated through multiple defense-in-depth layers
+        # nosec B602 - required for shell features (user escape hatch with
+        # documented raw-shell semantics); risk managed by explicit user invocation
         result = subprocess.run(
             command,
             shell=True,  # nosec B602 - shell features required, validated above

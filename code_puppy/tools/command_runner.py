@@ -174,21 +174,23 @@ def _validate_dangerous_patterns(command: str) -> None:
 
 
 def _validate_shlex_parse(command: str) -> None:
-    """Validate command can be safely parsed by shlex.
+    """Validate command can be tokenized by shlex.
 
-    This adds an additional defense-in-depth layer by ensuring the command
-    string can be properly tokenized. Malformed commands that might be
-    attempting injection often fail to parse correctly.
+    This verifies the command string can be properly parsed (catches malformed
+    quoting like unbalanced quotes, empty commands). This is NOT injection
+    prevention - commands like "echo hi; uname -a" pass shlex validation fine.
 
     Args:
         command: The command string to validate.
 
     Raises:
-        CommandValidationError: If shlex parsing fails or detects issues.
+        CommandValidationError: If shlex parsing fails or detects issues
+            (unbalanced quotes, empty command, etc.).
     """
     try:
         # Attempt to parse the command with shlex
-        # This validates proper quoting and tokenization
+        # This validates proper quoting and tokenization ONLY
+        # Does NOT catch: ; && || | > < $VAR * globs etc.
         tokens = shlex.split(command, posix=True)
         # Verify the command isn't empty after parsing
         if not tokens or not any(token.strip() for token in tokens):
@@ -254,13 +256,14 @@ def safe_execute_subprocess(
     # - Length limits (_validate_command_length)
     # - No forbidden control characters (_validate_forbidden_chars)
     # - No dangerous patterns like command substitution (_validate_dangerous_patterns)
-    # - Proper tokenization with shlex (_validate_shlex_parse)
+    # - Proper tokenization with shlex (_validate_shlex_parse - validates quoting only, NOT injection)
     # Additional upstream validation: shell_safety plugin + PolicyEngine + user confirmation.
     # Removing shell=True would break shell features (pipes, redirects, etc.).
-    # nosec B602 - validated through multiple defense-in-depth layers
+    # nosec B602 - required for shell features (pipes, redirects); risk managed by
+    # upstream policy/user confirmation and dangerous-pattern blocking; shlex validates quoting only
     return subprocess.Popen(
         command,
-        shell=True,  # nosec B602 - multiple validation layers, shell features required
+        shell=True,  # nosec B602 - shell features required; validated via policy/dangerous-pattern checks; shlex validates quoting only
         cwd=cwd,
         **kwargs,
     )
@@ -1313,7 +1316,9 @@ async def run_shell_command(
                     creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
                     process = subprocess.Popen(
                         command,
-                        shell=True,  # noqa: S602 — validated above, required for pipes/redirects
+                        # nosec B602 - shell features required; risk managed by
+                        # policy/user confirmation, dangerous-pattern blocking; shlex validates quoting only
+                        shell=True,  # nosec B602
                         stdout=log_file,
                         stderr=subprocess.STDOUT,
                         stdin=subprocess.DEVNULL,
@@ -1323,7 +1328,9 @@ async def run_shell_command(
                 else:
                     process = subprocess.Popen(
                         command,
-                        shell=True,  # noqa: S602 — validated above, required for pipes/redirects
+                        # nosec B602 - shell features required; risk managed by
+                        # policy/user confirmation, dangerous-pattern blocking; shlex validates quoting only
+                        shell=True,  # nosec B602
                         stdout=log_file,
                         stderr=subprocess.STDOUT,
                         stdin=subprocess.DEVNULL,
@@ -1564,7 +1571,9 @@ def _run_command_sync(
 
     process = subprocess.Popen(
         command,
-        shell=True,  # noqa: S602 — validated above, required for pipes/redirects
+        # nosec B602 - shell features required; risk managed by
+        # policy/user confirmation, dangerous-pattern blocking; shlex validates quoting only
+        shell=True,  # nosec B602
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=cwd,
