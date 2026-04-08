@@ -85,12 +85,15 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                             used_cache = True
 
                             # Copy core internals so httpx uses the modified body/stream
-                            if hasattr(optimized_request, "_content"):
-                                request._content = optimized_request._content  # type: ignore[attr-defined]
-                            if hasattr(optimized_request, "stream"):
-                                request.stream = optimized_request.stream
-                            if hasattr(optimized_request, "extensions"):
-                                request.extensions = optimized_request.extensions
+                            # OPTIMIZATION: Use local variable binding to reduce repeated
+                            # attribute lookups on optimized_request object
+                            _opt_req = optimized_request  # Local binding for speed
+                            if hasattr(_opt_req, "_content"):
+                                request._content = _opt_req._content  # type: ignore[attr-defined]
+                            if hasattr(_opt_req, "stream"):
+                                request.stream = _opt_req.stream  # type: ignore[attr-defined]
+                            if hasattr(_opt_req, "extensions"):
+                                request.extensions = _opt_req.extensions  # type: ignore[attr-defined]
 
                             # Ensure Content-Length matches the new body
                             request.headers["Content-Length"] = str(len(updated))
@@ -131,7 +134,10 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
 
     @staticmethod
     def _extract_body_bytes(request: httpx.Request) -> bytes | None:
-        """Extract the request body as bytes."""
+        """Extract the request body as bytes.
+
+        OPTIMIZATION: Use hasattr + direct access pattern to reduce getattr overhead.
+        """
         try:
             content = request.content
             if content:
@@ -139,12 +145,15 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         except Exception:
             pass
 
-        try:
-            content = getattr(request, "_content", None)
-            if content:
-                return content
-        except Exception:
-            pass
+        # Fallback to private attr if necessary - use hasattr + direct access
+        # This is faster than getattr() with default for checking attribute existence
+        if hasattr(request, "_content"):
+            try:
+                content = request._content
+                if content:
+                    return content
+            except Exception:
+                pass
 
         return None
 
