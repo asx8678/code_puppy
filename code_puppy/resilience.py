@@ -90,6 +90,10 @@ class CircuitBreaker:
     
     Tracks failures and opens circuit when threshold is reached,
     preventing further calls until service recovers.
+    
+    Note: asyncio.Lock is non-reentrant. Do not use the same CircuitBreaker
+    instance in a call chain where one wrapped function calls another wrapped
+    function. Use separate CircuitBreaker instances for nested calls.
     """
     
     def __init__(self, name: str, config: CircuitBreakerConfig | None = None):
@@ -131,6 +135,8 @@ class CircuitBreaker:
                 self.half_open_calls += 1
             
             # Capture state for post-execution updates (still under lock)
+            # was_half_open is captured under lock, and _on_success/_on_failure
+            # re-acquire the same lock before reading it, so there's no race.
             was_half_open = self.state == CircuitState.HALF_OPEN
             failure_threshold = self.config.failure_threshold
         
