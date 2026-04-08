@@ -1198,7 +1198,7 @@ async def run_shell_command(
     from code_puppy.security import get_security_boundary
 
     security = get_security_boundary()
-    security_decision = security.check_shell_command(
+    security_decision = await security.check_shell_command(
         command=command,
         cwd=cwd,
         timeout=timeout,

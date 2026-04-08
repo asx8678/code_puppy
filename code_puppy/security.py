@@ -31,13 +31,11 @@ This is part of an epic to move security enforcement into the core (code_puppy-v
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from code_puppy.callbacks import on_file_permission, on_run_shell_command
-from code_puppy.config import get_yolo_mode
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +74,7 @@ class SecurityBoundary:
         self._check_count = 0
         self._block_count = 0
 
-    def check_shell_command(
+    async def check_shell_command(
         self,
         command: str,
         cwd: str | None = None,
@@ -138,23 +136,7 @@ class SecurityBoundary:
 
         # --- Plugin callback checks ------------------------------------------
         # Trigger run_shell_command callbacks for plugin validation
-        try:
-            # Run async callbacks (this may block in sync contexts)
-            loop = asyncio.get_running_loop()
-            # Already in async context - use ensure_future
-            future = asyncio.ensure_future(
-                on_run_shell_command(context, command, cwd, timeout)
-            )
-            # For sync contexts, we need to handle this differently
-            # For now, we'll run it through the sync trigger
-            callback_results = asyncio.run(
-                on_run_shell_command(context, command, cwd, timeout)
-            )
-        except RuntimeError:
-            # No running loop - we're in a sync context
-            callback_results = asyncio.run(
-                on_run_shell_command(context, command, cwd, timeout)
-            )
+        callback_results = await on_run_shell_command(context, command, cwd, timeout)
 
         # Check if any callback blocked the command
         for result in callback_results:
