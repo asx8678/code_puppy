@@ -42,6 +42,10 @@ try:
 except ImportError:
     _FILE_PERMISSION_HANDLER_AVAILABLE = False
 
+# Pre-compiled regex for parsing git diff hunk headers
+# Format: @@ -start,count +start,count @@
+_HUNK_HEADER_RE = re.compile(r"@@ -\d+(?:,\d+)? \+(\d+)")
+
 
 def _create_rejection_response(file_path: str) -> dict[str, Any]:
     """Create a standardized rejection response with user feedback if available.
@@ -129,8 +133,7 @@ def _parse_diff_lines(diff_text: str) -> list[DiffLine]:
             content = line[1:]  # Remove the - prefix
         elif line.startswith("@@"):
             # Parse hunk header to get line number
-            # Format: @@ -start,count +start,count @@
-            match = re.search(r"@@ -\d+(?:,\d+)? \+(\d+)", line)
+            match = _HUNK_HEADER_RE.search(line)
             if match:
                 line_number = (
                     int(match.group(1)) - 1
