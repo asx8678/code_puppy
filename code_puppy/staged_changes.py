@@ -237,14 +237,16 @@ class StagedChangesSandbox:
         """Check if no pending staged changes."""
         return self.count() == 0
 
-    def generate_diff(self, change: StagedChange) -> str:
+    def generate_diff(
+        self, change: StagedChange, file_cache: dict[str, str] | None = None
+    ) -> str:
         """Generate diff for a single change."""
         if change.change_type == ChangeType.CREATE:
             return self._diff_for_create(change)
         elif change.change_type == ChangeType.REPLACE:
-            return self._diff_for_replace(change)
+            return self._diff_for_replace(change, file_cache)
         elif change.change_type == ChangeType.DELETE_SNIPPET:
-            return self._diff_for_delete_snippet(change)
+            return self._diff_for_delete_snippet(change, file_cache)
         return ""
 
     def _diff_for_create(self, change: StagedChange) -> str:
@@ -260,17 +262,23 @@ class StagedChangesSandbox:
         )
         return "".join(diff)
 
-    def _diff_for_replace(self, change: StagedChange) -> str:
+    def _diff_for_replace(
+        self, change: StagedChange, file_cache: dict[str, str] | None = None
+    ) -> str:
         """Generate diff for text replacement."""
         old_str = change.old_str or ""
         new_str = change.new_str or ""
 
-        # Read current file content if it exists
-        if os.path.exists(change.file_path):
+        # Check cache first, then read current file content if it exists
+        if file_cache is not None and change.file_path in file_cache:
+            original_content = file_cache[change.file_path]
+        elif os.path.exists(change.file_path):
             with open(
                 change.file_path, "r", encoding="utf-8", errors="surrogateescape"
             ) as f:
                 original_content = f.read()
+                if file_cache is not None:
+                    file_cache[change.file_path] = original_content
         else:
             original_content = ""
 
@@ -292,15 +300,22 @@ class StagedChangesSandbox:
         )
         return "".join(diff)
 
-    def _diff_for_delete_snippet(self, change: StagedChange) -> str:
+    def _diff_for_delete_snippet(
+        self, change: StagedChange, file_cache: dict[str, str] | None = None
+    ) -> str:
         """Generate diff for snippet deletion."""
         snippet = change.snippet or ""
 
-        if os.path.exists(change.file_path):
+        # Check cache first, then read current file content if it exists
+        if file_cache is not None and change.file_path in file_cache:
+            original_content = file_cache[change.file_path]
+        elif os.path.exists(change.file_path):
             with open(
                 change.file_path, "r", encoding="utf-8", errors="surrogateescape"
             ) as f:
                 original_content = f.read()
+                if file_cache is not None:
+                    file_cache[change.file_path] = original_content
         else:
             original_content = ""
 
@@ -328,9 +343,12 @@ class StagedChangesSandbox:
         if not changes:
             return ""
 
+        # Cache file contents to avoid repeated I/O
+        file_cache: dict[str, str] = {}
+
         diffs = []
         for change in changes:
-            diff = self.generate_diff(change)
+            diff = self.generate_diff(change, file_cache)
             if diff:
                 diffs.append(f"# {change.description} ({change.change_id})\n{diff}")
 
@@ -348,7 +366,9 @@ class StagedChangesSandbox:
 
         result = {}
         for file_path, changes in file_changes.items():
-            diffs = [self.generate_diff(c) for c in changes]
+            # Cache file contents per file group to avoid repeated I/O
+            file_cache: dict[str, str] = {}
+            diffs = [self.generate_diff(c, file_cache) for c in changes]
             result[file_path] = "\n\n".join(diffs)
 
         return result
