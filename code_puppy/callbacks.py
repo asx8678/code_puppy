@@ -453,6 +453,12 @@ async def on_pre_tool_call(
         # Stash the parent so on_post_tool_call can restore it.
         child.metadata["_parent_ref"] = parent
         set_current_run_context(child)
+        try:
+            return await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
+        except Exception:
+            # Restore parent context on error to prevent context leaks
+            set_current_run_context(parent)
+            raise
 
     return await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
 
