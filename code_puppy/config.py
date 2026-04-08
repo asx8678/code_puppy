@@ -64,6 +64,16 @@ def _invalidate_config() -> None:
 # recreating the set on every call (used by 20+ config getter functions).
 _TRUTHY_VALUES = frozenset({"1", "true", "yes", "on"})
 
+# Module-level frozensets for validation sets — avoids recreating on every call
+_VALID_OPENAI_REASONING_EFFORT = frozenset({"minimal", "low", "medium", "high", "xhigh"})
+_VALID_OPENAI_REASONING_SUMMARY = frozenset({"auto", "concise", "detailed"})
+_VALID_OPENAI_VERBOSITY = frozenset({"low", "medium", "high"})
+_VALID_SAFETY_LEVELS = frozenset({"none", "low", "medium", "high", "critical"})
+_VALID_COMPACTION_STRATEGIES = frozenset({"summarization", "truncation"})
+_CLAUDE_BASE_SETTINGS = frozenset({"temperature", "extended_thinking", "budget_tokens"})
+_CLAUDE_OPUS_SETTINGS = frozenset({"temperature", "extended_thinking", "budget_tokens", "effort"})
+_DEFAULT_SETTINGS = frozenset({"temperature", "seed"})
+
 
 def _is_truthy(val: str | None, default: bool = False) -> bool:
     """Parse a config value as boolean. Recognizes 1/true/yes/on as True."""
@@ -243,13 +253,12 @@ def _get_supported_settings_cache():
                 if model_name.startswith("claude-") or model_name.startswith(
                     "anthropic-"
                 ):
-                    base = ["temperature", "extended_thinking", "budget_tokens"]
                     # Opus 4-6 models also support the effort setting
                     lower = model_name.lower()
                     if "opus-4-6" in lower or "4-6-opus" in lower:
-                        base.append("effort")
-                    return frozenset(base)
-                return frozenset(["temperature", "seed"])
+                        return _CLAUDE_OPUS_SETTINGS
+                    return _CLAUDE_BASE_SETTINGS
+                return _DEFAULT_SETTINGS
 
             return frozenset(supported_settings)
 
@@ -696,20 +705,18 @@ def set_puppy_token(token: str):
 
 def get_openai_reasoning_effort() -> str:
     """Return the configured OpenAI reasoning effort (minimal, low, medium, high, xhigh)."""
-    allowed_values = {"minimal", "low", "medium", "high", "xhigh"}
     configured = (get_value("openai_reasoning_effort") or "medium").strip().lower()
-    if configured not in allowed_values:
+    if configured not in _VALID_OPENAI_REASONING_EFFORT:
         return "medium"
     return configured
 
 
 def set_openai_reasoning_effort(value: str) -> None:
     """Persist the OpenAI reasoning effort ensuring it remains within allowed values."""
-    allowed_values = {"minimal", "low", "medium", "high", "xhigh"}
     normalized = (value or "").strip().lower()
-    if normalized not in allowed_values:
+    if normalized not in _VALID_OPENAI_REASONING_EFFORT:
         raise ValueError(
-            f"Invalid reasoning effort '{value}'. Allowed: {', '.join(sorted(allowed_values))}"
+            f"Invalid reasoning effort '{value}'. Allowed: {', '.join(sorted(_VALID_OPENAI_REASONING_EFFORT))}"
         )
     set_config_value("openai_reasoning_effort", normalized)
 
@@ -722,20 +729,18 @@ def get_openai_reasoning_summary() -> str:
     - concise: shorter reasoning summaries
     - detailed: fuller reasoning summaries
     """
-    allowed_values = {"auto", "concise", "detailed"}
     configured = (get_value("openai_reasoning_summary") or "auto").strip().lower()
-    if configured not in allowed_values:
+    if configured not in _VALID_OPENAI_REASONING_SUMMARY:
         return "auto"
     return configured
 
 
 def set_openai_reasoning_summary(value: str) -> None:
     """Persist the OpenAI reasoning summary mode ensuring it remains valid."""
-    allowed_values = {"auto", "concise", "detailed"}
     normalized = (value or "").strip().lower()
-    if normalized not in allowed_values:
+    if normalized not in _VALID_OPENAI_REASONING_SUMMARY:
         raise ValueError(
-            f"Invalid reasoning summary '{value}'. Allowed: {', '.join(sorted(allowed_values))}"
+            f"Invalid reasoning summary '{value}'. Allowed: {', '.join(sorted(_VALID_OPENAI_REASONING_SUMMARY))}"
         )
     set_config_value("openai_reasoning_summary", normalized)
 
@@ -748,20 +753,18 @@ def get_openai_verbosity() -> str:
     - medium: balanced (default)
     - high: more verbose responses
     """
-    allowed_values = {"low", "medium", "high"}
     configured = (get_value("openai_verbosity") or "medium").strip().lower()
-    if configured not in allowed_values:
+    if configured not in _VALID_OPENAI_VERBOSITY:
         return "medium"
     return configured
 
 
 def set_openai_verbosity(value: str) -> None:
     """Persist the OpenAI verbosity ensuring it remains within allowed values."""
-    allowed_values = {"low", "medium", "high"}
     normalized = (value or "").strip().lower()
-    if normalized not in allowed_values:
+    if normalized not in _VALID_OPENAI_VERBOSITY:
         raise ValueError(
-            f"Invalid verbosity '{value}'. Allowed: {', '.join(sorted(allowed_values))}"
+            f"Invalid verbosity '{value}'. Allowed: {', '.join(sorted(_VALID_OPENAI_VERBOSITY))}"
         )
     set_config_value("openai_verbosity", normalized)
 
@@ -1084,11 +1087,10 @@ def get_safety_permission_level():
     Allowed values: 'none', 'low', 'medium', 'high', 'critical' (all case-insensitive for value).
     Returns the normalized lowercase string.
     """
-    valid_levels = {"none", "low", "medium", "high", "critical"}
     cfg_val = get_value("safety_permission_level")
     if cfg_val is not None:
         normalized = str(cfg_val).strip().lower()
-        if normalized in valid_levels:
+        if normalized in _VALID_SAFETY_LEVELS:
             return normalized
     return "medium"  # Default to medium risk threshold
 
@@ -1183,7 +1185,7 @@ def get_compaction_strategy() -> str:
     Configurable by 'compaction_strategy' key.
     """
     val = get_value("compaction_strategy")
-    if val and val.lower() in ["summarization", "truncation"]:
+    if val and val.lower() in _VALID_COMPACTION_STRATEGIES:
         return val.lower()
     # Default to summarization
     return "truncation"
