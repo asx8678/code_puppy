@@ -1,6 +1,6 @@
 """Tests for code_puppy/api/main.py."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from fastapi import FastAPI
 

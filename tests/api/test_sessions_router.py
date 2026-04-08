@@ -1,7 +1,6 @@
 """Tests for code_puppy/api/routers/sessions.py."""
 
 import json
-import pickle
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -171,7 +170,6 @@ async def test_get_session_messages_pickle_error(
     client: AsyncClient, sessions_dir
 ) -> None:
     """Test error handling when session data file is corrupt."""
-    import msgpack
     # Create a corrupt msgpack file
     (sessions_dir / "corrupt.msgpack").write_bytes(b"corrupt data")
     (sessions_dir / "corrupt.pkl").write_bytes(b"not a pickle")  # Legacy file present
