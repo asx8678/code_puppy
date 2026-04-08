@@ -48,22 +48,7 @@ def _read_config_max() -> int:
         _cached_config = result
         return _cached_config
     try:
-        try:
-            import tomllib  # Python 3.11+
-        except ImportError:
-            try:
-                import tomli as tomllib  # type: ignore[no-redef]
-            except ImportError:
-                # Last-resort: manual parse of the one key we need
-                text = _CONFIG_PATH.read_text()
-                for raw in text.splitlines():
-                    line = raw.strip()
-                    key, _, value = line.partition("=")
-                    if key.strip() == "max_parallelism":
-                        result = int(value.strip().strip('"').strip("'"))
-                        break
-                _cached_config = result
-                return _cached_config
+        import tomllib  # Python 3.11+
 
         with open(_CONFIG_PATH, "rb") as fh:
             data = tomllib.load(fh)
