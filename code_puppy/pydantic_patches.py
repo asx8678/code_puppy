@@ -9,7 +9,10 @@ Usage:
 """
 
 import importlib.metadata
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def _get_code_puppy_version() -> str:
@@ -290,7 +293,9 @@ def patch_tool_call_callbacks() -> None:
 
                 for callback_result in callback_results:
                     # Handle Deny objects from permission_decision (fail-closed semantics)
-                    if callback_result is not None and type(callback_result).__name__ == "Deny":
+                    from code_puppy.permission_decision import Deny
+
+                    if isinstance(callback_result, Deny):
                         raw_reason = getattr(callback_result, "reason", "") or ""
                         user_feedback = getattr(callback_result, "user_feedback", "") or ""
                         if "[BLOCKED]" in raw_reason:
@@ -326,11 +331,12 @@ def patch_tool_call_callbacks() -> None:
                         block_msg = f"🚫 Hook blocked this tool call: {clean_reason}"
                         emit_warning(block_msg)
                         return f"ERROR: {block_msg}\n\nThe hook policy prevented this tool from running. Please inform the user and do not retry this specific command."
-            except Exception:
+            except Exception as e:
                 # SECURITY: Changed from pass to fail-closed behavior
                 # If the callback system itself fails, we should block the tool
                 # to prevent potential security bypass. If the callback fails,
                 # there's likely a serious problem that shouldn't be ignored.
+                logger.error("Pre-tool-call callback system error: %s", e, exc_info=True)
                 emit_warning("🚫 Security callback system error; blocking tool execution")
                 return "ERROR: Security callback system error. Tool execution blocked to maintain safety."
 

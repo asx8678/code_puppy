@@ -4,6 +4,9 @@ import traceback
 from typing import Any, Callable, Literal
 
 from code_puppy import _backlog
+
+# Sentinel value to distinguish callback failures from None returns
+_CALLBACK_FAILED = object()
 from code_puppy.run_context import (
     RunContext,
     get_current_run_context,
@@ -210,7 +213,7 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> list[Any]:
                 f"Callback {callback.__name__} failed in phase '{phase}': {e}\n"
                 f"{traceback.format_exc()}"
             )
-            results.append(None)
+            results.append(_CALLBACK_FAILED)
 
     return results
 
@@ -246,7 +249,7 @@ async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> list[Any]:
                 f"Async callback {callback.__name__} failed in phase '{phase}': {e}\n"
                 f"{traceback.format_exc()}"
             )
-            return None
+            return _CALLBACK_FAILED
 
     # Use TaskGroup (Python 3.11+) for structured concurrency.
     # Note: _run_one catches all exceptions and returns None, so TaskGroup
@@ -362,11 +365,11 @@ async def on_run_shell_command(*args, **kwargs) -> Any:
 
     results = await _trigger_callbacks("run_shell_command", *args, **kwargs)
 
-    # Replace None results (from failed callbacks) with Deny for fail-closed behavior
+    # Replace _CALLBACK_FAILED results with Deny for fail-closed behavior
     # This ensures that if a security plugin crashes, the command is blocked
     security_results = []
     for result in results:
-        if result is None and Deny is not None:
+        if result is _CALLBACK_FAILED and Deny is not None:
             # Callback failed with exception - deny the operation
             logger.warning(
                 "Security callback for run_shell_command failed with exception; "
@@ -464,11 +467,11 @@ def on_file_permission(
         operation_data,
     )
 
-    # Replace None results (from failed callbacks) with False for fail-closed behavior
+    # Replace _CALLBACK_FAILED results with False for fail-closed behavior
     # This ensures that if a security plugin crashes, the file operation is blocked
     security_results = []
     for result in results:
-        if result is None:
+        if result is _CALLBACK_FAILED:
             # Callback failed with exception - deny the operation
             logger.warning(
                 "Security callback for file_permission failed with exception; "
@@ -535,11 +538,11 @@ async def on_pre_tool_call(
     else:
         results = await _trigger_callbacks("pre_tool_call", tool_name, tool_args, context)
 
-    # Replace None results (from failed callbacks) with Deny for fail-closed behavior
+    # Replace _CALLBACK_FAILED results with Deny for fail-closed behavior
     # This ensures that if a security plugin crashes, the tool is blocked
     security_results = []
     for result in results:
-        if result is None and Deny is not None:
+        if result is _CALLBACK_FAILED and Deny is not None:
             # Callback failed with exception - deny the operation
             logger.warning(
                 "Security callback for pre_tool_call failed with exception; "
