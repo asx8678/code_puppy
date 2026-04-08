@@ -196,6 +196,34 @@ class TestPreToolCallTracking:
         assert not has_flag(WorkflowFlag.DID_CREATE_FILE)
         assert not has_flag(WorkflowFlag.DID_EDIT_FILE)
 
+    def test_delete_snippet_sets_flags(self):
+        """pre_tool_call with delete_snippet sets DID_EDIT_FILE and DID_GENERATE_CODE."""
+        from code_puppy.workflow_state import (
+            _on_pre_tool_call,
+            reset_workflow_state,
+            WorkflowFlag,
+            has_flag,
+        )
+
+        reset_workflow_state()
+        _on_pre_tool_call("delete_snippet", {})
+        assert has_flag(WorkflowFlag.DID_EDIT_FILE)
+        assert has_flag(WorkflowFlag.DID_GENERATE_CODE)
+
+    def test_legacy_edit_file_sets_flags(self):
+        """pre_tool_call with legacy edit_file tool sets DID_EDIT_FILE and DID_GENERATE_CODE."""
+        from code_puppy.workflow_state import (
+            _on_pre_tool_call,
+            reset_workflow_state,
+            WorkflowFlag,
+            has_flag,
+        )
+
+        reset_workflow_state()
+        _on_pre_tool_call("edit_file", {})
+        assert has_flag(WorkflowFlag.DID_EDIT_FILE)
+        assert has_flag(WorkflowFlag.DID_GENERATE_CODE)
+
 
 @pytest.mark.asyncio
 async def test_workflow_state_async_isolation():

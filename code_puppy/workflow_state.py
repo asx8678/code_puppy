@@ -294,11 +294,6 @@ def increment_counter(key: str, amount: int = 1) -> int:
 
 
 # Callback handler functions (defined at module level so they can be unregistered)
-def _on_edit_file(*args, **kwargs):
-    set_flag(WorkflowFlag.DID_EDIT_FILE)
-    set_flag(WorkflowFlag.DID_GENERATE_CODE)
-
-
 def _on_delete_file(*args, **kwargs):
     set_flag(WorkflowFlag.DID_DELETE_FILE)
 
@@ -333,12 +328,12 @@ def _on_pre_tool_call(tool_name, tool_args, context=None):
     # Track shell execution
     if tool_name == "agent_run_shell_command":
         set_flag(WorkflowFlag.DID_EXECUTE_SHELL)
-    # Track file creation (create_file hook never fires — see code_puppy-8e0)
+    # Track file creation (create_file tool)
     if tool_name == "create_file":
         set_flag(WorkflowFlag.DID_CREATE_FILE)
         set_flag(WorkflowFlag.DID_GENERATE_CODE)
-    # Track file editing (replace_in_file hook never fires — see code_puppy-8e0)
-    if tool_name == "replace_in_file":
+    # Track file editing (replace_in_file, delete_snippet, and legacy edit_file)
+    if tool_name in ("replace_in_file", "delete_snippet", "edit_file"):
         set_flag(WorkflowFlag.DID_EDIT_FILE)
         set_flag(WorkflowFlag.DID_GENERATE_CODE)
 
@@ -350,8 +345,8 @@ def register_callback_handlers():
     """
     from code_puppy import callbacks
 
-    # File operations (only edit_file and delete_file hooks actually fire)
-    callbacks.register_callback("edit_file", _on_edit_file)
+    # File operations (delete_file hook fires; create_file/replace_in_file
+    # set their flags via pre_tool_call below)
     callbacks.register_callback("delete_file", _on_delete_file)
 
     # Shell commands
@@ -371,7 +366,6 @@ def unregister_callback_handlers():
     """Unregister all workflow state callback handlers."""
     from code_puppy import callbacks
 
-    callbacks.unregister_callback("edit_file", _on_edit_file)
     callbacks.unregister_callback("delete_file", _on_delete_file)
     callbacks.unregister_callback("run_shell_command", _on_run_shell_command)
     callbacks.unregister_callback("agent_run_start", _on_agent_run_start)
