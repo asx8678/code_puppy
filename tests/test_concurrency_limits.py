@@ -2,6 +2,8 @@
 
 import asyncio
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,10 @@ from code_puppy.concurrency_limits import (
     reload_concurrency_config,
     create_default_config,
     ensure_config_file,
+    _read_config,
+    _get_file_ops_semaphore,
+    _get_api_calls_semaphore,
+    _get_tool_calls_semaphore,
 )
 
 
@@ -148,3 +154,84 @@ class TestConfigFile:
         # Just verify the function works
         result = ensure_config_file()
         assert isinstance(result, Path)
+
+
+class TestThreadSafeInitialization:
+    """Test thread-safe lazy initialization patterns."""
+
+    def test_config_read_thread_safety(self):
+        """Test that _read_config is thread-safe under concurrent access."""
+        # First, clear the cached config
+        import code_puppy.concurrency_limits as cl
+        cl._cached_config = None
+
+        results = []
+        errors = []
+
+        def read_config_worker():
+            try:
+                config = _read_config()
+                results.append(config)
+            except Exception as e:
+                errors.append(e)
+
+        # Launch many threads simultaneously to trigger race condition
+        threads = [threading.Thread(target=read_config_worker) for _ in range(50)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # All threads should have completed without errors
+        assert len(errors) == 0, f"Errors occurred during concurrent config read: {errors}"
+        assert len(results) == 50, "All threads should have returned a config"
+
+        # All should point to the same object (singleton pattern)
+        first_config = results[0]
+        for config in results:
+            assert config is first_config, "All threads should get the same config instance"
+
+    def test_semaphore_init_thread_safety(self):
+        """Test that semaphore initialization is thread-safe."""
+        import code_puppy.concurrency_limits as cl
+
+        # Clear semaphores
+        cl._file_ops_semaphore = None
+        cl._api_calls_semaphore = None
+        cl._tool_calls_semaphore = None
+
+        semaphores = []
+        errors = []
+
+        def semaphore_worker(getter_func):
+            try:
+                sem = getter_func()
+                semaphores.append((getter_func.__name__, sem))
+            except Exception as e:
+                errors.append(e)
+
+        # Launch threads for each semaphore getter
+        threads = []
+        for getter in [_get_file_ops_semaphore, _get_api_calls_semaphore, _get_tool_calls_semaphore]:
+            for _ in range(20):
+                t = threading.Thread(target=semaphore_worker, args=(getter,))
+                threads.append(t)
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # All threads should have completed without errors
+        assert len(errors) == 0, f"Errors occurred during concurrent semaphore init: {errors}"
+
+        # Group by type and verify singleton pattern
+        from collections import defaultdict
+        by_type = defaultdict(list)
+        for name, sem in semaphores:
+            by_type[name].append(sem)
+
+        for name, sem_list in by_type.items():
+            first = sem_list[0]
+            for sem in sem_list:
+                assert sem is first, f"All {name} calls should return the same instance"
