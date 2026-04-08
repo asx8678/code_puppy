@@ -658,9 +658,10 @@ async def acquire_model_slot(
 
     _ensure_recovery_task()
     lock = _ensure_lock()
+    cb_enabled = _state.cfg_circuit_breaker_enabled
 
     # ── Check circuit state (only when circuit breaker enabled) ──────
-    if _state.cfg_circuit_breaker_enabled:
+    if cb_enabled:
         need_wait_open = False
         need_wait_half_open = False
 
