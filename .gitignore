@@ -65,3 +65,4 @@ evals/logs/
 *.db
 .beads-credential-key
 .hypothesis/
+.hypothesis/
