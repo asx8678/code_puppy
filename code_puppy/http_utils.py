@@ -10,6 +10,7 @@ import os
 import socket
 import time
 from dataclasses import dataclass
+from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -219,8 +220,6 @@ class RetryingAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                             wait_time = float(retry_after)
                         except ValueError:
                             # Try parsing http-date
-                            from email.utils import parsedate_to_datetime
-
                             try:
                                 date = parsedate_to_datetime(retry_after)
                                 wait_time = date.timestamp() - time.time()

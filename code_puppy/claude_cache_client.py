@@ -17,6 +17,7 @@ import json
 import logging
 import random
 import time
+from email.utils import parsedate_to_datetime
 from functools import lru_cache
 from typing import Any, Callable, MutableMapping
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
@@ -589,8 +590,6 @@ class ClaudeCacheAsyncClient(RequestCacheMixin, httpx.AsyncClient):
                         except ValueError:
                             # Try parsing http-date format
                             try:
-                                from email.utils import parsedate_to_datetime
-
                                 date = parsedate_to_datetime(retry_after)
                                 wait_time = max(0, date.timestamp() - time.time())
                             except Exception:
