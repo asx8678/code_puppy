@@ -578,3 +578,97 @@ class TestFileModificationSafety:
         assert "error" in result or result.get("success") is False
         # Directory should still exist
         assert test_dir.exists()
+
+
+class TestCreateFilePathNormalization:
+    """Regression tests for create_file relative path normalization bug."""
+
+    @pytest.mark.asyncio
+    async def test_create_file_accepts_relative_path(self, tmp_path, monkeypatch):
+        """Test that create_file converts relative paths to absolute paths.
+
+        This is a regression test for a bug where create_file would fail with
+        AssertionError when given a relative path, while other file tools
+        (delete_file, replace_in_file) already handled this correctly.
+        """
+        from code_puppy.tools.file_modifications import register_create_file
+
+        # Change to tmp_path so relative paths resolve there
+        monkeypatch.chdir(tmp_path)
+
+        # Create a mock agent to capture the decorated tool function
+        captured_tools = {}
+        mock_agent = Mock()
+        mock_agent.tool = lambda func: captured_tools.update({func.__name__: func}) or func
+
+        # Register the tool
+        register_create_file(mock_agent)
+
+        # Verify the tool was captured
+        assert "create_file" in captured_tools
+        create_file_tool = captured_tools["create_file"]
+
+        # Create a subdirectory
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+
+        mock_context = Mock()
+
+        # Call with a RELATIVE path - this would previously fail with AssertionError
+        relative_path = "subdir/newfile.txt"
+        result = await create_file_tool(
+            mock_context,
+            file_path=relative_path,
+            content="Hello, World!",
+            overwrite=False,
+        )
+
+        # Should succeed, not raise AssertionError
+        assert result["success"] is True, f"Expected success, got: {result}"
+
+        # File should be created at the absolute path
+        expected_path = tmp_path / "subdir" / "newfile.txt"
+        assert expected_path.exists(), f"File not found at {expected_path}"
+        assert expected_path.read_text() == "Hello, World!"
+
+        # The result path should be absolute
+        assert os.path.isabs(result["path"]), f"Expected absolute path in result, got: {result['path']}"
+        assert result["path"] == str(expected_path)
+
+    @pytest.mark.asyncio
+    async def test_create_file_still_accepts_absolute_path(self, tmp_path):
+        """Test that create_file continues to work with absolute paths (no regression)."""
+        from code_puppy.tools.file_modifications import register_create_file
+
+        # Create a mock agent to capture the decorated tool function
+        captured_tools = {}
+        mock_agent = Mock()
+        mock_agent.tool = lambda func: captured_tools.update({func.__name__: func}) or func
+
+        # Register the tool
+        register_create_file(mock_agent)
+
+        assert "create_file" in captured_tools
+        create_file_tool = captured_tools["create_file"]
+
+        mock_context = Mock()
+
+        # Call with an ABSOLUTE path
+        absolute_path = str(tmp_path / "absfile.txt")
+        result = await create_file_tool(
+            mock_context,
+            file_path=absolute_path,
+            content="Absolute path content",
+            overwrite=False,
+        )
+
+        # Should succeed
+        assert result["success"] is True, f"Expected success, got: {result}"
+
+        # File should be created at the absolute path
+        expected_path = tmp_path / "absfile.txt"
+        assert expected_path.exists(), f"File not found at {expected_path}"
+        assert expected_path.read_text() == "Absolute path content"
+
+        # The result path should be absolute (and match what we passed in)
+        assert result["path"] == absolute_path

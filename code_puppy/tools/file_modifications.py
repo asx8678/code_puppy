@@ -820,6 +820,7 @@ def register_create_file(agent):
         overwrite: bool = False,
     ) -> dict[str, Any]:
         """Create a new file or overwrite an existing one with the provided content."""
+        file_path = os.path.abspath(file_path)
         group_id = generate_group_id("create_file", file_path)
         result = await _write_file(
             context, file_path, content, overwrite, message_group=group_id
