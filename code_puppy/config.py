@@ -151,6 +151,115 @@ def _is_truthy(val: str | None, default: bool = False) -> bool:
     return str(val).strip().lower() in _TRUTHY_VALUES
 
 
+def _make_bool_getter(key: str, default: bool = False, doc: str | None = None):
+    """Factory for simple boolean config getter functions.
+
+    Creates a cached getter that reads a config key and converts it to bool
+    using _is_truthy(). Generated getters are automatically registered
+    for cache invalidation in _invalidate_config().
+
+    Args:
+        key: The config key to read (section is always 'puppy')
+        default: Default value if key is not set
+        doc: Optional docstring for the generated function
+
+    Returns:
+        A cached getter function: () -> bool
+    """
+    getter_name = f"get_{key}"
+
+    def getter() -> bool:
+        return _is_truthy(get_value(key), default=default)
+
+    getter.__name__ = getter_name
+    getter.__doc__ = doc or f"Return True if '{key}' is enabled (default {default})."
+    return cache(getter)
+
+
+def _make_int_getter(
+    key: str,
+    default: int,
+    min_val: int | None = None,
+    max_val: int | None = None,
+    doc: str | None = None,
+):
+    """Factory for simple int config getter functions.
+
+    Creates a cached getter that reads a config key and converts it to int
+    with optional min/max bounds. Generated getters are automatically registered
+    for cache invalidation in _invalidate_config().
+
+    Args:
+        key: The config key to read (section is always 'puppy')
+        default: Default value if key is not set or invalid
+        min_val: Optional minimum value (inclusive)
+        max_val: Optional maximum value (inclusive)
+        doc: Optional docstring for the generated function
+
+    Returns:
+        A cached getter function: () -> int
+    """
+    getter_name = f"get_{key}"
+
+    def getter() -> int:
+        val = get_value(key)
+        try:
+            result = int(val) if val is not None else default
+            if min_val is not None:
+                result = max(min_val, result)
+            if max_val is not None:
+                result = min(max_val, result)
+            return result
+        except (ValueError, TypeError):
+            return default
+
+    getter.__name__ = getter_name
+    getter.__doc__ = doc or f"Return the configured value for '{key}' as int (default {default})."
+    return cache(getter)
+
+
+def _make_float_getter(
+    key: str,
+    default: float,
+    min_val: float | None = None,
+    max_val: float | None = None,
+    doc: str | None = None,
+):
+    """Factory for simple float config getter functions.
+
+    Creates a cached getter that reads a config key and converts it to float
+    with optional min/max bounds. Generated getters are automatically registered
+    for cache invalidation in _invalidate_config().
+
+    Args:
+        key: The config key to read (section is always 'puppy')
+        default: Default value if key is not set or invalid
+        min_val: Optional minimum value (inclusive)
+        max_val: Optional maximum value (inclusive)
+        doc: Optional docstring for the generated function
+
+    Returns:
+        A cached getter function: () -> float
+    """
+    getter_name = f"get_{key}"
+
+    def getter() -> float:
+        val = get_value(key)
+        try:
+            result = float(val) if val is not None else default
+            if min_val is not None:
+                result = max(min_val, result)
+            if max_val is not None:
+                result = min(max_val, result)
+            return result
+        except (ValueError, TypeError):
+            return default
+
+    getter.__name__ = getter_name
+    getter.__doc__ = doc or f"Return the configured value for '{key}' as float (default {default})."
+    return cache(getter)
+
+
 # --- Module-level path constants (eager, computed once at import time) ---
 # Previously these were lazy-evaluated via a module-level __getattr__ for a
 # microscopic startup perf win. That broke horribly: PEP 562 module __getattr__
@@ -197,21 +306,23 @@ DBOS_DATABASE_URL = os.environ.get(
 # Default: True (DBOS enabled) unless explicitly disabled.
 
 
-@cache
-def get_use_dbos() -> bool:
-    """Return True if DBOS should be used based on 'enable_dbos' (default True)."""
-    return _is_truthy(get_value("enable_dbos"), default=True)
+# Boolean config getters generated via factory
+get_use_dbos = _make_bool_getter(
+    "enable_dbos",
+    default=True,
+    doc="""Return True if DBOS should be used based on 'enable_dbos' (default True).""",
+)
 
-
-@cache
-def get_subagent_verbose() -> bool:
-    """Return True if sub-agent verbose output is enabled (default False).
+get_subagent_verbose = _make_bool_getter(
+    "subagent_verbose",
+    default=False,
+    doc="""Return True if sub-agent verbose output is enabled (default False).
 
     When False (default), sub-agents produce quiet, sparse output suitable
     for parallel execution. When True, sub-agents produce full verbose output
     like the main agent (useful for debugging).
-    """
-    return _is_truthy(get_value("subagent_verbose"), default=False)
+    """,
+)
 
 
 # Pack agents - the specialized sub-agents coordinated by Pack Leader
@@ -231,30 +342,31 @@ PACK_AGENT_NAMES = frozenset(
 UC_AGENT_NAMES = frozenset(["helios"])
 
 
-@cache
-def get_pack_agents_enabled() -> bool:
-    """Return True if pack agents are enabled (default False).
+get_pack_agents_enabled = _make_bool_getter(
+    "enable_pack_agents",
+    default=False,
+    doc="""Return True if pack agents are enabled (default False).
 
     When False (default), pack agents (pack-leader, bloodhound, husky, shepherd,
     terrier, watchdog, retriever) are hidden from `list_agents` tool and `/agents`
     command. They cannot be invoked by other agents or selected by users.
 
     When True, pack agents are available for use.
-    """
-    return _is_truthy(get_value("enable_pack_agents"), default=False)
+    """,
+)
 
-
-@cache
-def get_universal_constructor_enabled() -> bool:
-    """Return True if the Universal Constructor is enabled (default True).
+get_universal_constructor_enabled = _make_bool_getter(
+    "enable_universal_constructor",
+    default=True,
+    doc="""Return True if the Universal Constructor is enabled (default True).
 
     The Universal Constructor allows agents to dynamically create, manage,
     and execute custom tools at runtime. When enabled, agents can extend
     their capabilities by writing Python code that becomes callable tools.
 
     When False, the universal_constructor tool is not registered with agents.
-    """
-    return _is_truthy(get_value("enable_universal_constructor"), default=True)
+    """,
+)
 
 
 def set_universal_constructor_enabled(enabled: bool) -> None:
@@ -266,15 +378,15 @@ def set_universal_constructor_enabled(enabled: bool) -> None:
     set_value("enable_universal_constructor", "true" if enabled else "false")
 
 
-@cache
-def get_enable_streaming() -> bool:
-    """
-    Get the enable_streaming configuration value.
+get_enable_streaming = _make_bool_getter(
+    "enable_streaming",
+    default=True,
+    doc="""Get the enable_streaming configuration value.
     Controls whether streaming (SSE) is used for model responses.
     Returns True if streaming is enabled, False otherwise.
     Defaults to True.
-    """
-    return _is_truthy(get_value("enable_streaming"), default=True)
+    """,
+)
 
 
 DEFAULT_SECTION = "puppy"
@@ -395,13 +507,13 @@ def get_owner_name():
 # using get_protected_token_count() and get_summarization_threshold()
 
 
-@cache
-def get_allow_recursion() -> bool:
-    """
-    Get the allow_recursion configuration value.
+get_allow_recursion = _make_bool_getter(
+    "allow_recursion",
+    default=True,
+    doc="""Get the allow_recursion configuration value.
     Returns True if recursion is allowed, False otherwise.
-    """
-    return _is_truthy(get_value("allow_recursion"), default=True)
+    """,
+)
 
 
 # Cache for model context lengths - cleared when config is invalidated
@@ -1156,14 +1268,14 @@ def initialize_command_history_file():
             )
 
 
-@cache
-def get_yolo_mode():
-    """
-    Checks puppy.cfg for 'yolo_mode' (case-insensitive in value only).
+get_yolo_mode = _make_bool_getter(
+    "yolo_mode",
+    default=True,
+    doc="""Checks puppy.cfg for 'yolo_mode' (case-insensitive in value only).
     Defaults to True if not set.
     Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
-    """
-    return _is_truthy(get_value("yolo_mode"), default=True)
+    """,
+)
 
 
 @cache
@@ -1183,28 +1295,27 @@ def get_safety_permission_level():
     return "medium"  # Default to medium risk threshold
 
 
-@cache
-def get_mcp_disabled():
-    """
-    Checks puppy.cfg for 'disable_mcp' (case-insensitive in value only).
+get_mcp_disabled = _make_bool_getter(
+    "disable_mcp",
+    default=False,
+    doc="""Checks puppy.cfg for 'disable_mcp' (case-insensitive in value only).
     Defaults to False if not set.
     Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
     When enabled, Code Puppy will skip loading MCP servers entirely.
-    """
-    return _is_truthy(get_value("disable_mcp"), default=False)
+    """,
+)
 
-
-@cache
-def get_grep_output_verbose():
-    """
-    Checks puppy.cfg for 'grep_output_verbose' (case-insensitive in value only).
+get_grep_output_verbose = _make_bool_getter(
+    "grep_output_verbose",
+    default=False,
+    doc="""Checks puppy.cfg for 'grep_output_verbose' (case-insensitive in value only).
     Defaults to False (concise output) if not set.
     Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
 
     When False (default): Shows only file names with match counts
     When True: Shows full output with line numbers and content
-    """
-    return _is_truthy(get_value("grep_output_verbose"), default=False)
+    """,
+)
 
 
 @lru_cache(maxsize=256)
@@ -1234,39 +1345,31 @@ def get_protected_token_count():
         return min(50000, max_protected_tokens)
 
 
-@cache
-def get_resume_message_count() -> int:
-    """
-    Returns the number of messages to display when resuming a session.
+get_resume_message_count = _make_int_getter(
+    "resume_message_count",
+    default=50,
+    min_val=1,
+    max_val=100,
+    doc="""Returns the number of messages to display when resuming a session.
     Defaults to 50 if unset or misconfigured.
     Configurable by 'resume_message_count' key via /set command.
 
     Example: /set resume_message_count=30
-    """
-    val = get_value("resume_message_count")
-    try:
-        configured_value = int(val) if val else 50
-        # Enforce reasonable bounds: minimum 1, maximum 100
-        return max(1, min(configured_value, 100))
-    except (ValueError, TypeError):
-        return 50
+    """,
+)
 
 
-@cache
-def get_compaction_threshold():
-    """
-    Returns the user-configured compaction threshold as a float between 0.0 and 1.0.
+get_compaction_threshold = _make_float_getter(
+    "compaction_threshold",
+    default=0.85,
+    min_val=0.5,
+    max_val=0.95,
+    doc="""Returns the user-configured compaction threshold as a float between 0.0 and 1.0.
     This is the proportion of model context that triggers compaction.
     Defaults to 0.85 (85%) if unset or misconfigured.
     Configurable by 'compaction_threshold' key.
-    """
-    val = get_value("compaction_threshold")
-    try:
-        threshold = float(val) if val else 0.85
-        # Clamp between reasonable bounds
-        return max(0.5, min(0.95, threshold))
-    except (ValueError, TypeError):
-        return 0.85
+    """,
+)
 
 
 @cache
@@ -1284,13 +1387,13 @@ def get_compaction_strategy() -> str:
     return "truncation"
 
 
-@cache
-def get_http2() -> bool:
-    """
-    Get the http2 configuration value.
+get_http2 = _make_bool_getter(
+    "http2",
+    default=False,
+    doc="""Get the http2 configuration value.
     Returns False if not set (default).
-    """
-    return _is_truthy(get_value("http2"), default=False)
+    """,
+)
 
 
 def set_http2(enabled: bool) -> None:
@@ -1424,14 +1527,14 @@ def get_agents_pinned_to_model(model_name: str) -> list:
     return [agent for agent, model in all_pinnings.items() if model == model_name]
 
 
-@cache
-def get_auto_save_session() -> bool:
-    """
-    Checks puppy.cfg for 'auto_save_session' (case-insensitive in value only).
+get_auto_save_session = _make_bool_getter(
+    "auto_save_session",
+    default=True,
+    doc="""Checks puppy.cfg for 'auto_save_session' (case-insensitive in value only).
     Defaults to True if not set.
     Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
-    """
-    return _is_truthy(get_value("auto_save_session"), default=True)
+    """,
+)
 
 
 def set_auto_save_session(enabled: bool):
@@ -1443,20 +1546,14 @@ def set_auto_save_session(enabled: bool):
     set_config_value("auto_save_session", "true" if enabled else "false")
 
 
-@cache
-def get_max_saved_sessions() -> int:
-    """
-    Gets the maximum number of sessions to keep.
+get_max_saved_sessions = _make_int_getter(
+    "max_saved_sessions",
+    default=20,
+    min_val=0,
+    doc="""Gets the maximum number of sessions to keep.
     Defaults to 20 if not set.
-    """
-    cfg_val = get_value("max_saved_sessions")
-    if cfg_val is not None:
-        try:
-            val = int(cfg_val)
-            return max(0, val)  # Ensure non-negative
-        except (ValueError, TypeError):
-            pass
-    return 20
+    """,
+)
 
 
 def set_max_saved_sessions(max_sessions: int):
@@ -1708,21 +1805,17 @@ def auto_save_session_if_enabled() -> bool:
         return False
 
 
-@cache
-def get_diff_context_lines() -> int:
-    """
-    Returns the user-configured number of context lines for diff display.
+get_diff_context_lines = _make_int_getter(
+    "diff_context_lines",
+    default=6,
+    min_val=0,
+    max_val=50,
+    doc="""Returns the user-configured number of context lines for diff display.
     This controls how many lines of surrounding context are shown in diffs.
     Defaults to 6 if unset or misconfigured.
     Configurable by 'diff_context_lines' key.
-    """
-    val = get_value("diff_context_lines")
-    try:
-        context_lines = int(val) if val else 6
-        # Apply reasonable bounds: minimum 0, maximum 50
-        return max(0, min(context_lines, 50))
-    except (ValueError, TypeError):
-        return 6
+    """,
+)
 
 
 def finalize_autosave_session() -> str:
@@ -1731,15 +1824,15 @@ def finalize_autosave_session() -> str:
     return rotate_autosave_id()
 
 
-@cache
-def get_suppress_thinking_messages() -> bool:
-    """
-    Checks puppy.cfg for 'suppress_thinking_messages' (case-insensitive in value only).
+get_suppress_thinking_messages = _make_bool_getter(
+    "suppress_thinking_messages",
+    default=False,
+    doc="""Checks puppy.cfg for 'suppress_thinking_messages' (case-insensitive in value only).
     Defaults to False if not set.
     Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
     When enabled, thinking messages (agent_reasoning, planned_next_steps) will be hidden.
-    """
-    return _is_truthy(get_value("suppress_thinking_messages"), default=False)
+    """,
+)
 
 
 def set_suppress_thinking_messages(enabled: bool):
