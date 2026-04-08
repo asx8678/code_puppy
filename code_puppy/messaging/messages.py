@@ -183,6 +183,9 @@ class DiffMessage(BaseMessage):
     diff_lines: list[DiffLine] = Field(
         default_factory=list, description="Individual diff lines for rendering"
     )
+    raw_diff_text: str = Field(
+        default="", description="Raw diff text without processing"
+    )
 
 
 # =============================================================================
