@@ -324,8 +324,9 @@ _CONFIRMATION_LOCK = threading.Lock()
 _RUNNING_PROCESSES: set[subprocess.Popen] = set()
 _RUNNING_PROCESSES_LOCK = threading.Lock()
 
-# Bounded set of PIDs killed by user (dict as ordered set)
+# Bounded set of PIDs killed by user (dict as ordered set) - protected by _USER_KILLED_PROCESSES_LOCK
 _USER_KILLED_PROCESSES: dict[int, None] = {}
+_USER_KILLED_PROCESSES_LOCK = threading.Lock()
 _USER_KILLED_PROCESSES_MAX = 1024
 
 # Keyboard handling state (protected by _KEYBOARD_CONTEXT_LOCK where needed)
@@ -368,6 +369,19 @@ def _register_process(proc: subprocess.Popen) -> None:
 def _unregister_process(proc: subprocess.Popen) -> None:
     with _RUNNING_PROCESSES_LOCK:
         _RUNNING_PROCESSES.discard(proc)
+
+
+def _is_pid_in_killed_set(pid: int) -> bool:
+    """Thread-safe check if a PID is in the killed processes set.
+
+    Args:
+        pid: Process ID to check.
+
+    Returns:
+        True if the PID was killed by user, False otherwise.
+    """
+    with _USER_KILLED_PROCESSES_LOCK:
+        return pid in _USER_KILLED_PROCESSES
 
 
 def _monitor_background_process(proc: subprocess.Popen) -> None:
@@ -475,12 +489,13 @@ def kill_all_running_shell_processes() -> int:
             if p.poll() is None:
                 _kill_process_group(p)
                 count += 1
-                # Evict oldest PIDs if at capacity to prevent unbounded growth
-                if len(_USER_KILLED_PROCESSES) >= _USER_KILLED_PROCESSES_MAX:
-                    # Remove oldest entry (first key in insertion-ordered dict)
-                    oldest_pid = next(iter(_USER_KILLED_PROCESSES))
-                    del _USER_KILLED_PROCESSES[oldest_pid]
-                _USER_KILLED_PROCESSES[p.pid] = None  # Use dict as ordered set
+                # Thread-safe bounded add to prevent unbounded growth
+                with _USER_KILLED_PROCESSES_LOCK:
+                    if len(_USER_KILLED_PROCESSES) >= _USER_KILLED_PROCESSES_MAX:
+                        # Remove oldest entry (first key in insertion-ordered dict)
+                        oldest_pid = next(iter(_USER_KILLED_PROCESSES))
+                        del _USER_KILLED_PROCESSES[oldest_pid]
+                    _USER_KILLED_PROCESSES[p.pid] = None  # Use dict as ordered set
         finally:
             _unregister_process(p)
     return count
@@ -1183,7 +1198,7 @@ def run_shell_command_streaming(
                 exit_code=exit_code,
                 execution_time=execution_time,
                 timeout=False,
-                user_interrupted=process.pid in _USER_KILLED_PROCESSES,
+                user_interrupted=_is_pid_in_killed_set(process.pid),
             )
 
         return ShellCommandOutput(
