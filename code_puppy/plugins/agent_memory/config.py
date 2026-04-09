@@ -4,7 +4,8 @@ This module provides convenient access to memory-related configuration
 from puppy.cfg, with proper defaults and validation.
 
 Config keys (in puppy.cfg):
-    enable_agent_memory = false         # OPT-IN, default off
+    memory_enabled = false              # OPT-IN, default off (canonical key)
+    enable_agent_memory = false         # DEPRECATED: use memory_enabled instead
     memory_debounce_seconds = 30        # Write debounce window (1-300)
     memory_max_facts = 50               # Max facts per agent (1-1000)
     memory_token_budget = 500           # Token budget for injection (100-2000)
@@ -20,6 +21,7 @@ Example usage:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -94,6 +96,23 @@ def _get_bool(key: str, default: bool) -> bool:
     return value and value not in {"0", "false", "no", "off", "disabled", "none", "null"}
 
 
+# Deprecation warning tracking to avoid spam
+_deprecated_warning_shown: bool = False
+
+
+def _warn_deprecated_config() -> None:
+    """Warn about deprecated enable_agent_memory config key."""
+    global _deprecated_warning_shown
+    if _deprecated_warning_shown:
+        return
+    _deprecated_warning_shown = True
+    logger = logging.getLogger(__name__)
+    logger.warning(
+        "Config key 'enable_agent_memory' is deprecated. "
+        "Use 'memory_enabled' instead."
+    )
+
+
 def _get_float(key: str, default: float) -> float:
     """Get float config value with fallback."""
     # Import inside function to avoid caching reference at module load time
@@ -118,8 +137,15 @@ def load_config() -> MemoryConfig:
     # Import inside function to avoid caching reference at module load time
     from code_puppy.config import get_value
 
-    # Support both old and new config keys
-    enabled = _get_bool("enable_agent_memory", False) or _get_bool("memory_enabled", False)
+    # Check for deprecated key first
+    enabled_via_deprecated = _get_bool("enable_agent_memory", False)
+    enabled_via_canonical = _get_bool("memory_enabled", False)
+
+    if enabled_via_deprecated:
+        _warn_deprecated_config()
+
+    # Canonical key takes precedence if both are set
+    enabled = enabled_via_canonical or enabled_via_deprecated
     debounce_seconds = _get_int("memory_debounce_seconds", 30)
 
     return MemoryConfig(
@@ -135,11 +161,14 @@ def load_config() -> MemoryConfig:
 
 
 def get_config() -> MemoryConfig:
-    """Load and return the current memory configuration (Phase 6 style).
+    """Load and return the current memory configuration (canonical entrypoint).
 
     Reads all memory-related config keys from puppy.cfg with
     appropriate defaults. This function is lightweight and can
     be called frequently - underlying config reads are cached.
+
+    This is the canonical configuration entrypoint. Use this instead
+    of load_config(), which is kept for backward compatibility.
 
     Returns:
         MemoryConfig with current settings
@@ -159,13 +188,19 @@ def is_memory_enabled() -> bool:
     the full configuration object.
 
     Returns:
-        True if enable_agent_memory is set to a truthy value
+        True if memory_enabled (or deprecated enable_agent_memory) is truthy
 
     Example:
         >>> if is_memory_enabled():
         ...     initialize_memory_system()
     """
-    return _get_bool("enable_agent_memory", False)
+    enabled_via_deprecated = _get_bool("enable_agent_memory", False)
+    enabled_via_canonical = _get_bool("memory_enabled", False)
+
+    if enabled_via_deprecated:
+        _warn_deprecated_config()
+
+    return enabled_via_canonical or enabled_via_deprecated
 
 
 __all__ = [

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import threading
 from datetime import datetime, timezone
@@ -135,6 +136,8 @@ class FileMemoryStorage:
             with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(facts, f, indent=2, ensure_ascii=False)
                 f.flush()
+                # Ensure data is written to disk before renaming
+                os.fsync(f.fileno())
             temp_file.replace(self._file_path)
         except (IOError, OSError) as e:
             logger.error(

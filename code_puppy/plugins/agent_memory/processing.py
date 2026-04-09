@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -158,12 +159,13 @@ def _apply_signal_confidence_updates(
             # Simple approach: check if any fact text appears in the message
             for fact_text, fact in fact_texts.items():
                 if fact_text and len(fact_text) > 10:
-                    # Check for semantic similarity (simple substring for now)
+                    # Use word-boundary matching to avoid substring false positives
+                    # e.g., "the cat" should not match "the category"
                     fact_lower = fact_text.lower()
                     msg_lower = text.lower()
 
-                    # If fact appears in message and signal is relevant
-                    if fact_lower in msg_lower or msg_lower in fact_lower:
+                    # Check for word-level overlap instead of simple substring
+                    if _has_word_overlap(fact_lower, msg_lower):
                         # Apply signal safeguards for preference signals
                         if signal.signal_type == SignalType.PREFERENCE:
                             allowed, reason = safeguard_manager.can_apply_signal(
@@ -267,6 +269,37 @@ async def _async_extract_and_store_facts(
         f"Queued {len(extracted)} facts for extraction from {agent_name} session"
     )
     return len(extracted)
+
+
+def _has_word_overlap(text1: str, text2: str, min_words: int = 2) -> bool:
+    """Check if two texts share significant word-level overlap.
+
+    Uses token-based matching to avoid substring false positives
+    (e.g., "the cat" vs "the category").
+
+    Args:
+        text1: First text to compare
+        text2: Second text to compare
+        min_words: Minimum number of words that must overlap
+
+    Returns:
+        True if significant word overlap detected
+    """
+    # Extract words (alphanumeric sequences of 3+ chars)
+    words1 = set(w.lower() for w in re.findall(r'\b[a-zA-Z0-9]{3,}\b', text1))
+    words2 = set(w.lower() for w in re.findall(r'\b[a-zA-Z0-9]{3,}\b', text2))
+
+    if not words1 or not words2:
+        # Fallback: check for substring if no words found
+        return text1 in text2 or text2 in text1
+
+    # Check for significant word overlap
+    overlap = words1 & words2
+
+    # Also check if one text contains the other as a phrase
+    contains_phrase = text1 in text2 or text2 in text1
+
+    return len(overlap) >= min_words or contains_phrase
 
 
 def cleanup_async_tasks() -> int:

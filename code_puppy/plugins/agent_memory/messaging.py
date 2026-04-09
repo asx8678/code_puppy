@@ -67,7 +67,7 @@ def _get_current_agent_name() -> str | None:
         return None
 
 
-def _get_storage_for_current_agent():
+def _get_storage_for_current_agent() -> "FileMemoryStorage | None":
     """Get FileMemoryStorage for the current agent.
 
     Returns:

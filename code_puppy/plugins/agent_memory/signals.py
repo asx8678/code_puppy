@@ -11,7 +11,7 @@ Supports English and Chinese language patterns.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace as dataclass_replace
 from enum import Enum, auto
 from typing import Any
 
@@ -263,12 +263,16 @@ class SignalDetector:
 
         # Enrich signals with recent fact context
         if signals and self._recent_facts:
+            enriched_signals = []
             for signal in signals:
-                # Create a mutable copy of context to add fact references
-                object.__setattr__(signal, "context", {**(signal.context or {})})
-                signal.context["recent_facts"] = [
+                # Use dataclasses.replace() for frozen dataclass mutation
+                new_context = {**(signal.context or {})}
+                new_context["recent_facts"] = [
                     f.get("text", "") for f in self._recent_facts
                 ]
+                enriched_signal = dataclass_replace(signal, context=new_context)
+                enriched_signals.append(enriched_signal)
+            signals = enriched_signals
 
         return signals
 

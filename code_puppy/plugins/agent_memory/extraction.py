@@ -6,8 +6,10 @@ Designed for async, non-blocking operation with proper error handling.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -152,8 +154,11 @@ class FactExtractor:
                 if confidence < self._min_confidence:
                     continue
 
+                # Clamp confidence to valid range [0.0, 1.0]
+                confidence = max(0.0, min(1.0, float(confidence)))
+
                 # Create ExtractedFact using the constructor
-                fact = ExtractedFact(text=text, confidence=float(confidence))
+                fact = ExtractedFact(text=text, confidence=confidence)
                 facts.append(fact)
 
             return facts
@@ -166,12 +171,13 @@ class FactExtractor:
             return []
 
     async def extract_facts(
-        self, messages: list[dict[str, Any]]
+        self, messages: list[dict[str, Any]], timeout: float = 30.0
     ) -> list[ExtractedFact]:
         """Extract facts from conversation messages.
 
         Args:
             messages: List of message dicts with 'role' and 'content' keys
+            timeout: Maximum time to wait for LLM response in seconds (default: 30)
 
         Returns:
             List of extracted facts meeting the confidence threshold
@@ -187,7 +193,11 @@ class FactExtractor:
             conversation = self._format_conversation(messages)
             prompt = self._prompt_template.format(conversation=conversation)
 
-            response = await self._llm_client.complete(prompt)
+            # Wrap LLM call with timeout to prevent hanging
+            response = await asyncio.wait_for(
+                self._llm_client.complete(prompt),
+                timeout=timeout
+            )
             return self._parse_response(response)
 
         except Exception as e:
@@ -206,7 +216,7 @@ class FactExtractor:
         Returns:
             List of basic extracted facts
         """
-        import re
+        # Note: 're' is imported at module level
 
         facts: list[ExtractedFact] = []
 

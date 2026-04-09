@@ -162,7 +162,7 @@ def _clear_memories() -> None:
 
     storage.clear()
     emit_success(
-        f"🗑️  Cleared {count} memory{'ies' if count != 1 else 'y'} "
+        f"🗑️  Cleared {count} memor{'ies' if count != 1 else 'y'} "
         f"for [bold]{agent_name}[/bold]"
     )
 
