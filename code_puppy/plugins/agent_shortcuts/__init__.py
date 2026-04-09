@@ -1,1 +1,1 @@
-"""Agent shortcut slash commands: /plan and /leader."""
+"""Agent shortcut slash commands: /plan and /lead."""

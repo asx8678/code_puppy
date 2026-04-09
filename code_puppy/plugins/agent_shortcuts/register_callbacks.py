@@ -1,4 +1,4 @@
-"""Plugin that adds /plan and /leader shortcuts for quick agent switching."""
+"""Plugin that adds /plan and /lead shortcuts for quick agent switching."""
 
 from __future__ import annotations
 
@@ -11,14 +11,14 @@ from code_puppy.callbacks import register_callback
 _SHORTCUTS: dict[str, str] = {
     "plan": "planning-agent",
     "planning": "planning-agent",  # hidden alias
-    "leader": "pack-leader",
+    "lead": "pack-leader",
     "pack": "pack-leader",         # hidden alias
 }
 
 # Only these appear in /help. Aliases stay hidden.
 _HELP_ENTRIES: List[Tuple[str, str]] = [
     ("plan",   "Switch to the Planning Agent 📋"),
-    ("leader", "Switch to the Pack Leader 🐺"),
+    ("lead", "Switch to the Pack Leader 🐺"),
 ]
 
 
