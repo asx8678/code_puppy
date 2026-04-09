@@ -18,8 +18,21 @@ Phase 4: Signal detection
 - Correction/reinforcement/preference pattern detection
 - Regex-based analysis of user messages
 - Configurable confidence deltas per signal type
+
+Phase 5: Full plugin integration
+- Callback-based fact extraction on agent_run_end
+- Signal-based confidence updates
+- Memory injection into system prompts via get_model_system_prompt
+- Non-blocking async extraction with debounced storage
 """
 
+from .config import MemoryConfig, load_config
+from .extraction import (
+    DEFAULT_EXTRACTION_PROMPT,
+    ExtractedFact,
+    FactExtractor,
+    MockLLMClient,
+)
 from .signals import (
     CORRECTION_DELTA,
     PREFERENCE_DELTA,
@@ -38,9 +51,14 @@ from .updater import MemoryUpdater, DEFAULT_DEBOUNCE_MS
 __all__ = [
     "CORRECTION_DELTA",
     "DEFAULT_DEBOUNCE_MS",
+    "DEFAULT_EXTRACTION_PROMPT",
+    "ExtractedFact",
     "Fact",
+    "FactExtractor",
     "FileMemoryStorage",
+    "MemoryConfig",
     "MemoryUpdater",
+    "MockLLMClient",
     "PREFERENCE_DELTA",
     "REINFORCEMENT_DELTA",
     "Signal",
@@ -50,4 +68,5 @@ __all__ = [
     "has_correction",
     "has_preference",
     "has_reinforcement",
+    "load_config",
 ]
