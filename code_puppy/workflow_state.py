@@ -373,3 +373,16 @@ def unregister_callback_handlers():
     callbacks.unregister_callback("pre_tool_call", _on_pre_tool_call)
 
     logger.debug("Workflow state callback handlers unregistered")
+
+
+def detect_and_mark_plan_from_response(response_text: str, min_tasks: int = 2) -> bool:
+    """Parse the given response; if it contains a plan, flip DID_CREATE_PLAN.
+
+    Returns True iff DID_CREATE_PLAN was set as a result of this call.
+    Helper provided; auto-wiring intentionally deferred to a future ticket.
+    """
+    from code_puppy.utils.subtask_parser import has_plan
+    if has_plan(response_text, min_tasks=min_tasks):
+        set_flag(WorkflowFlag.DID_CREATE_PLAN, True)
+        return True
+    return False
