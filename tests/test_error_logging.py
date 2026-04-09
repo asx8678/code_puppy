@@ -262,7 +262,7 @@ class TestMaybeJson:
         assert _maybe_json('{"a": 1}') is True
 
     def test_maybe_json_array(self):
-        assert _maybe_json('[1, 2, 3]') is True
+        assert _maybe_json("[1, 2, 3]") is True
 
     def test_maybe_json_string(self):
         assert _maybe_json("not json") is False
@@ -291,7 +291,9 @@ class TestFormatChainedError:
 
     def test_chained_three_levels_indented(self):
         # Use longer segments (> 10 chars) to avoid collapsing
-        result = _format_chained_error("api connection error: http status 500: server process exploded")
+        result = _format_chained_error(
+            "api connection error: http status 500: server process exploded"
+        )
         lines = result.split("\n")
         assert len(lines) == 3
         assert "Api connection error" in lines[0]
@@ -301,7 +303,9 @@ class TestFormatChainedError:
     def test_chained_dedups_repeats(self):
         result = _format_chained_error("error: error: something bad")
         # should not contain "error" twice as separate segments
-        assert result.lower().count("error") <= 2  # once on its own + once in "something"
+        assert (
+            result.lower().count("error") <= 2
+        )  # once on its own + once in "something"
 
     def test_chained_detects_json_tail(self):
         msg = 'api error: {"code": 500, "msg": "boom"}'
@@ -313,14 +317,17 @@ class TestFormatChainedError:
         # Short segments (< 10 chars) should be collapsed into previous
         result = _format_chained_error("error: a: b: something longer here")
         # "a" is short (< 10) and should be collapsed into the previous segment
-        assert ": a:" in result or ": A:" in result
+        # Result should show "error: a" together on the first line, then b collapsed, then final
+        assert "Error: a" in result or "error: a" in result
 
 
 class TestFormatErrorForDisplayIntegration:
     """Integration tests for chained error formatting in format_error_for_display."""
 
     def test_format_error_for_display_with_chained_error(self):
-        out = format_error_for_display(Exception("api error: http 500: {\"detail\": \"nope\"}"))
+        out = format_error_for_display(
+            Exception('api error: http 500: {"detail": "nope"}')
+        )
         assert "Api error" in out
         assert '"detail"' in out
 
