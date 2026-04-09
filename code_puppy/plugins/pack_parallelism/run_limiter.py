@@ -351,7 +351,6 @@ class RunLimiter:
         except RuntimeError:
             in_async = False
 
-        slot_released = False
         try:
             with self._state_lock:
                 if in_async:
@@ -359,7 +358,6 @@ class RunLimiter:
                     if self._release_slot(
                         "_async_active", "_async_deficit", self._async_sem, "async"
                     ):
-                        slot_released = True
                         return
                     # Fallback: async context but no async active, try sync
                     logger.debug(
@@ -368,14 +366,12 @@ class RunLimiter:
                     if self._release_slot(
                         "_sync_active", "_sync_deficit", self._sync_sem, "sync"
                     ):
-                        slot_released = True
                         return
                 else:
                     # Try to release from sync side first
                     if self._release_slot(
                         "_sync_active", "_sync_deficit", self._sync_sem, "sync"
                     ):
-                        slot_released = True
                         return
                     # Fallback: sync context but no sync active, try async
                     logger.debug(
@@ -384,7 +380,6 @@ class RunLimiter:
                     if self._release_slot(
                         "_async_active", "_async_deficit", self._async_sem, "async"
                     ):
-                        slot_released = True
                         return
 
                 # No active runs found on either side
