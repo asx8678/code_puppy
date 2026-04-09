@@ -456,9 +456,26 @@ class RichConsoleRenderer:
             style = "dim"
 
         prefix = self._get_level_prefix(msg.level)
-        # Escape Rich markup to prevent crashes from malformed tags
-        safe_text = escape_rich_markup(msg.text)
-        self._console.print(f"{prefix}{safe_text}", style=style)
+
+        if msg.is_markdown:
+            # Render as markdown (prefix printed separately to preserve level icon)
+            try:
+                if prefix:
+                    self._console.print(prefix, style=style, end="")
+                md = Markdown(msg.text, code_theme=_get_code_theme())
+                self._console.print(md)
+            except Exception as exc:  # noqa: BLE001
+                import logging
+
+                logging.getLogger(__name__).debug(
+                    "Markdown render failed, falling back to plain text: %s", exc
+                )
+                safe_text = escape_rich_markup(msg.text)
+                self._console.print(f"{prefix}{safe_text}", style=style)
+        else:
+            # Plain-text path with Rich markup escaping
+            safe_text = escape_rich_markup(msg.text)
+            self._console.print(f"{prefix}{safe_text}", style=style)
 
     def _get_level_prefix(self, level: MessageLevel) -> str:
         """Get a prefix icon for the message level."""
@@ -518,7 +535,7 @@ class RichConsoleRenderer:
 
         def compute_recursive_stats(dir_path: str) -> tuple[int, int]:
             """Compute size and file count for a directory and all subdirectories.
-            
+
             Uses post-order traversal (bottom-up) to ensure children are computed
             before parents. Results are memoized in size_cache and file_count_cache.
             """
@@ -567,9 +584,7 @@ class RichConsoleRenderer:
                     icon = self._get_file_icon(f.path)
                     name = os.path.basename(f.path)
                     size_str = (
-                        f" [dim]({format_size(f.size)})[/dim]"
-                        if f.size > 0
-                        else ""
+                        f" [dim]({format_size(f.size)})[/dim]" if f.size > 0 else ""
                     )
                     self._console.print(
                         f"{indent}{icon} [green]{name}[/green]{size_str}"

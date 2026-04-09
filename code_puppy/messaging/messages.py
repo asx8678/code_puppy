@@ -70,11 +70,20 @@ class BaseMessage(BaseModel):
 
 
 class TextMessage(BaseMessage):
-    """Simple text message with a severity level. Text must be plain, no markup!"""
+    """Simple text message with a severity level.
+
+    Set ``is_markdown=True`` to render content through Rich's Markdown renderer.
+    """
 
     category: MessageCategory = MessageCategory.SYSTEM
     level: MessageLevel = Field(description="Severity level of this message")
-    text: str = Field(description="Plain text content - NO Rich markup allowed")
+    text: str = Field(
+        description="Text content (plain by default, or markdown if is_markdown=True)"
+    )
+    is_markdown: bool = Field(
+        default=False,
+        description="Whether text should be rendered as markdown",
+    )
 
 
 # =============================================================================

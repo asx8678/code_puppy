@@ -145,6 +145,71 @@ def test_render_text_version_dim(renderer, console):
     )
 
 
+def test_render_text_markdown(renderer, console):
+    """TextMessage with is_markdown=True renders markdown, not literal markup."""
+    msg = TextMessage(
+        level=MessageLevel.INFO,
+        text="**bold** and `code`",
+        is_markdown=True,
+    )
+    renderer._render_text(msg)
+    out = output(console)
+    # Markdown was rendered - literal markup should not appear
+    assert "**bold**" not in out
+    assert "`code`" not in out
+    # But the content words should still be present
+    assert "bold" in out
+    assert "code" in out
+
+
+def test_render_text_plain_default(renderer, console):
+    """TextMessage without is_markdown preserves literal markdown markup (backwards compat)."""
+    msg = TextMessage(
+        level=MessageLevel.INFO,
+        text="**not bold**",
+    )
+    renderer._render_text(msg)
+    out = output(console)
+    # Plain path preserves the literal asterisks
+    assert "**not bold**" in out
+
+
+def test_render_text_markdown_falls_back_on_exception(renderer, console, monkeypatch):
+    """If Markdown() rendering raises, fall back to escape_rich_markup plain text."""
+    from code_puppy.messaging import rich_renderer
+
+    class BrokenMarkdown:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(rich_renderer, "Markdown", BrokenMarkdown)
+    msg = TextMessage(
+        level=MessageLevel.INFO,
+        text="**bold**",
+        is_markdown=True,
+    )
+    renderer._render_text(msg)
+    out = output(console)
+    # Fallback path escaped plain-text should contain the literal
+    assert "**bold**" in out
+
+
+def test_render_text_markdown_preserves_level_prefix(renderer, console):
+    """Markdown-rendered text should still show the level icon prefix."""
+    msg = TextMessage(
+        level=MessageLevel.SUCCESS,
+        text="**done**",
+        is_markdown=True,
+    )
+    renderer._render_text(msg)
+    out = output(console)
+    # The SUCCESS prefix icon is "✓ " per _get_level_prefix
+    assert "✓" in out
+    # And markdown was rendered
+    assert "**done**" not in out
+    assert "done" in out
+
+
 def test_get_level_prefix(renderer):
     assert renderer._get_level_prefix(MessageLevel.ERROR) == "✗ "
     assert renderer._get_level_prefix(MessageLevel.WARNING) == "⚠ "

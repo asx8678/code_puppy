@@ -211,15 +211,20 @@ class MessageBus:
         level: MessageLevel,
         text: str,
         category: MessageCategory = MessageCategory.SYSTEM,
+        is_markdown: bool = False,
     ) -> None:
         """Emit a text message with the specified level.
 
         Args:
             level: Severity level (DEBUG, INFO, WARNING, ERROR, SUCCESS).
-            text: Plain text content (no Rich markup!).
+            text: Text content. Plain (Rich-markup-escaped) unless is_markdown=True,
+                in which case it is rendered as CommonMark markdown.
             category: Message category for routing.
+            is_markdown: Whether to render text as markdown (default False).
         """
-        message = TextMessage(level=level, text=text, category=category)
+        message = TextMessage(
+            level=level, text=text, category=category, is_markdown=is_markdown
+        )
 
         # Lock-free fast path: check if renderer is active without acquiring lock
         if not self._renderer_event.is_set():
@@ -240,25 +245,25 @@ class MessageBus:
             except Exception:
                 pass
 
-    def emit_info(self, text: str) -> None:
-        """Emit an INFO level text message."""
-        self.emit_text(MessageLevel.INFO, text)
+    def emit_info(self, text: str, is_markdown: bool = False) -> None:
+        """Emit an INFO level text message. Pass is_markdown=True to render as markdown."""
+        self.emit_text(MessageLevel.INFO, text, is_markdown=is_markdown)
 
-    def emit_warning(self, text: str) -> None:
-        """Emit a WARNING level text message."""
-        self.emit_text(MessageLevel.WARNING, text)
+    def emit_warning(self, text: str, is_markdown: bool = False) -> None:
+        """Emit a WARNING level text message. Pass is_markdown=True to render as markdown."""
+        self.emit_text(MessageLevel.WARNING, text, is_markdown=is_markdown)
 
-    def emit_error(self, text: str) -> None:
-        """Emit an ERROR level text message."""
-        self.emit_text(MessageLevel.ERROR, text)
+    def emit_error(self, text: str, is_markdown: bool = False) -> None:
+        """Emit an ERROR level text message. Pass is_markdown=True to render as markdown."""
+        self.emit_text(MessageLevel.ERROR, text, is_markdown=is_markdown)
 
-    def emit_success(self, text: str) -> None:
-        """Emit a SUCCESS level text message."""
-        self.emit_text(MessageLevel.SUCCESS, text)
+    def emit_success(self, text: str, is_markdown: bool = False) -> None:
+        """Emit a SUCCESS level text message. Pass is_markdown=True to render as markdown."""
+        self.emit_text(MessageLevel.SUCCESS, text, is_markdown=is_markdown)
 
-    def emit_debug(self, text: str) -> None:
-        """Emit a DEBUG level text message."""
-        self.emit_text(MessageLevel.DEBUG, text)
+    def emit_debug(self, text: str, is_markdown: bool = False) -> None:
+        """Emit a DEBUG level text message. Pass is_markdown=True to render as markdown."""
+        self.emit_text(MessageLevel.DEBUG, text, is_markdown=is_markdown)
 
     def emit_shell_line(self, line: str, stream: str = "stdout") -> None:
         """Emit a shell output line with ANSI preservation.
@@ -730,29 +735,29 @@ def emit(message: AnyMessage) -> None:
     get_message_bus().emit(message)
 
 
-def emit_info(text: str) -> None:
+def emit_info(text: str, is_markdown: bool = False) -> None:
     """Emit an INFO message via the global bus."""
-    get_message_bus().emit_info(text)
+    get_message_bus().emit_info(text, is_markdown=is_markdown)
 
 
-def emit_warning(text: str) -> None:
+def emit_warning(text: str, is_markdown: bool = False) -> None:
     """Emit a WARNING message via the global bus."""
-    get_message_bus().emit_warning(text)
+    get_message_bus().emit_warning(text, is_markdown=is_markdown)
 
 
-def emit_error(text: str) -> None:
+def emit_error(text: str, is_markdown: bool = False) -> None:
     """Emit an ERROR message via the global bus."""
-    get_message_bus().emit_error(text)
+    get_message_bus().emit_error(text, is_markdown=is_markdown)
 
 
-def emit_success(text: str) -> None:
+def emit_success(text: str, is_markdown: bool = False) -> None:
     """Emit a SUCCESS message via the global bus."""
-    get_message_bus().emit_success(text)
+    get_message_bus().emit_success(text, is_markdown=is_markdown)
 
 
-def emit_debug(text: str) -> None:
+def emit_debug(text: str, is_markdown: bool = False) -> None:
     """Emit a DEBUG message via the global bus."""
-    get_message_bus().emit_debug(text)
+    get_message_bus().emit_debug(text, is_markdown=is_markdown)
 
 
 def emit_shell_line(line: str, stream: str = "stdout") -> None:
