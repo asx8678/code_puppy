@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from code_puppy.command_line.command_handler import handle_command
 from code_puppy.command_line.command_registry import get_command
@@ -421,6 +421,59 @@ def test_agent_switch_triggers_autosave_rotation():
     finally:
         mocks["emit_info"].stop()
         mocks["emit_success"].stop()
+
+
+def test_agent_switch_reload_failure_is_nonfatal():
+    """A reload failure after /agent must not abort the agent switch."""
+    mocks = setup_messaging_mocks()
+    mock_emit_success = mocks["emit_success"].start()
+    mock_emit_warning = mocks["emit_warning"].start()
+
+    try:
+        current_agent = SimpleNamespace(name="code-puppy", display_name="Code Puppy")
+        new_agent = SimpleNamespace(
+            name="reviewer",
+            display_name="Reviewer",
+            description="Checks code",
+        )
+        new_agent.reload_code_generation_agent = MagicMock(
+            side_effect=Exception("boom")
+        )
+
+        with (
+            patch(
+                "code_puppy.agents.get_current_agent",
+                side_effect=[current_agent, new_agent],
+            ),
+            patch(
+                "code_puppy.agents.get_available_agents",
+                return_value={"code-puppy": "Code Puppy", "reviewer": "Reviewer"},
+            ),
+            patch(
+                "code_puppy.command_line.core_commands.finalize_autosave_session",
+                return_value="fresh_id",
+            ),
+            patch(
+                "code_puppy.agents.set_current_agent",
+                return_value=True,
+            ),
+        ):
+            # Should not raise even though reload raises.
+            result = handle_command("/agent reviewer")
+            assert result is True
+            new_agent.reload_code_generation_agent.assert_called_once()
+            # Reload failure should emit a warning with the correct message
+            mock_emit_warning.assert_called_once()
+            warning_msg = str(mock_emit_warning.call_args)
+            assert "Agent reload failed" in warning_msg
+            assert "boom" in warning_msg
+            # Agent switch should still succeed
+            mock_emit_success.assert_called_once_with(
+                "Switched to agent: Reviewer", message_group=ANY
+            )
+    finally:
+        mocks["emit_success"].stop()
+        mocks["emit_warning"].stop()
 
 
 def test_agent_switch_same_agent_skips_rotation():

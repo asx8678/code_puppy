@@ -33,6 +33,47 @@ _session_max: int | None = None
 _cached_config: int | None = None
 
 
+def _parse_toml_manual(content: str) -> dict:
+    """Minimal TOML parser for pack_leader.max_parallelism only.
+
+    Handles the simple case of extracting values from [pack_leader] section
+    without requiring external TOML libraries.
+    """
+    result: dict = {}
+    current_section: str | None = None
+
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        # Section header: [section_name]
+        if stripped.startswith("[") and stripped.endswith("]"):
+            current_section = stripped[1:-1].strip()
+            if current_section not in result:
+                result[current_section] = {}
+            continue
+
+        # Key-value pair: key = value
+        if "=" in stripped and current_section is not None:
+            key, _, value = stripped.partition("=")
+            key = key.strip()
+            value = value.strip()
+            # Remove quotes if present
+            if (value.startswith('"') and value.endswith('"')) or (
+                value.startswith("'") and value.endswith("'")
+            ):
+                value = value[1:-1]
+            # Try to convert to int if possible
+            try:
+                value = int(value)
+            except ValueError:
+                pass
+            result[current_section][key] = value
+
+    return result
+
+
 def _read_config_max() -> int:
     """Read max_parallelism from the TOML config, with graceful fallback.
 
@@ -47,6 +88,8 @@ def _read_config_max() -> int:
     if not _CONFIG_PATH.exists():
         _cached_config = result
         return _cached_config
+
+    # Try TOML libraries first, fall back to manual parser
     try:
         import tomllib  # Python 3.11+
 
@@ -55,6 +98,34 @@ def _read_config_max() -> int:
         result = int(
             data.get("pack_leader", {}).get("max_parallelism", _BUILTIN_DEFAULT)
         )
+    except ImportError:
+        # tomllib not available (Python < 3.11), try tomli
+        try:
+            import tomli
+
+            with open(_CONFIG_PATH, "rb") as fh:
+                data = tomli.load(fh)
+            result = int(
+                data.get("pack_leader", {}).get("max_parallelism", _BUILTIN_DEFAULT)
+            )
+        except ImportError:
+            # No TOML library available, use manual parser
+            try:
+                with open(_CONFIG_PATH, "r", encoding="utf-8") as fh:
+                    content = fh.read()
+                data = _parse_toml_manual(content)
+                result = int(
+                    data.get("pack_leader", {}).get(
+                        "max_parallelism", _BUILTIN_DEFAULT
+                    )
+                )
+            except Exception as exc:
+                logger.warning(
+                    "pack_parallelism: manual parser failed for %s: %s",
+                    _CONFIG_PATH,
+                    exc,
+                )
+                result = _BUILTIN_DEFAULT
     except Exception as exc:
         logger.warning(
             "pack_parallelism: could not read config %s: %s", _CONFIG_PATH, exc

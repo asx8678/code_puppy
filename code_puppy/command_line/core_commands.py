@@ -90,11 +90,8 @@ def handle_cd_command(command: str) -> bool:
                 from code_puppy.agents.agent_manager import get_current_agent
 
                 get_current_agent().reload_code_generation_agent()
-            except Exception as e:
-                emit_warning(
-                    f"Directory changed, but agent reload failed: {e}. "
-                    "You may need to run /agent or /model to force a refresh."
-                )
+            except Exception as reload_error:
+                emit_warning(f"Agent reload failed: {reload_error}")
         else:
             emit_error(f"Not a directory: {dirname}")
         return True
@@ -300,7 +297,12 @@ def handle_agent_command(command: str) -> bool:
                     return True
 
                 new_agent = get_current_agent()
-                new_agent.reload_code_generation_agent()
+                try:
+                    new_agent.reload_code_generation_agent()
+                except Exception as reload_error:
+                    emit_warning(
+                        f"Agent reload failed: {reload_error}", message_group=group_id
+                    )
                 emit_success(
                     f"Switched to agent: {new_agent.display_name}",
                     message_group=group_id,
@@ -401,8 +403,8 @@ def handle_agent_command(command: str) -> bool:
         new_agent = get_current_agent()
         try:
             new_agent.reload_code_generation_agent()
-        except Exception as exc:
-            emit_warning(f"Agent reloaded with warnings: {exc}", message_group=group_id)
+        except Exception as reload_error:
+            emit_warning(f"Agent reload failed: {reload_error}", message_group=group_id)
         emit_success(
             f"Switched to agent: {new_agent.display_name}", message_group=group_id
         )
