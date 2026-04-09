@@ -356,6 +356,100 @@ class TestCompoundCommands:
 
 
 # =============================================================================
+# Security regression tests - negative tests for safe heuristics
+# =============================================================================
+
+
+class TestSafeHeuristicsNegative:
+    """Negative tests for safe heuristics - these commands should NOT be allowed."""
+
+    def test_rm_rf_tmp_not_blocked(self):
+        """rm -rf /tmp/build should NOT be blocked (not root)."""
+        result = classify_command("rm -rf /tmp/build")
+        # Should NOT be blocked (not deleting root)
+        assert result.blocked is False
+        # May be ambiguous or medium risk, but NOT critical
+        assert result.risk != "critical"
+
+    def test_rm_rf_var_not_blocked(self):
+        """rm -rf /var/cache should NOT be blocked (not root)."""
+        result = classify_command("rm -rf /var/cache")
+        # Should NOT be blocked
+        assert result.blocked is False
+        # May be ambiguous or medium risk, but NOT critical
+        assert result.risk != "critical"
+
+    def test_cat_etc_shadow_not_allowed(self):
+        """cat /etc/shadow should NOT be allowed by safe heuristics."""
+        result = classify_command("cat /etc/shadow")
+        # Should NOT be classified as safe (none) - sensitive file
+        assert result.risk != "none", "cat /etc/shadow should not be classified as safe"
+
+    def test_cat_ssh_key_not_allowed(self):
+        """cat ~/.ssh/id_rsa should NOT be allowed by safe heuristics."""
+        result = classify_command("cat ~/.ssh/id_rsa")
+        # Should NOT be classified as safe - sensitive file
+        assert result.risk != "none", "cat ~/.ssh/id_rsa should not be classified as safe"
+
+    def test_find_with_delete_not_allowed(self):
+        """find / -type f -delete should NOT be allowed by safe heuristics."""
+        result = classify_command("find / -type f -delete")
+        # Should NOT be classified as safe - has -delete
+        assert result.risk != "none", "find with -delete should not be classified as safe"
+
+    def test_find_with_exec_not_allowed(self):
+        """find . -name '*.txt' -exec rm {} \; should NOT be allowed."""
+        result = classify_command(r"find . -name '*.txt' -exec rm {} \;")
+        # Should NOT be classified as safe - has -exec
+        assert result.risk != "none", "find with -exec should not be classified as safe"
+
+    def test_echo_redirect_not_allowed(self):
+        """echo 'evil' > /etc/passwd should NOT be allowed by safe heuristics."""
+        result = classify_command('echo "evil" > /etc/passwd')
+        # Should NOT be classified as safe - has redirect
+        assert result.risk != "none", "echo with redirect should not be classified as safe"
+
+    def test_echo_append_not_allowed(self):
+        """echo 'evil' >> /etc/passwd should NOT be allowed by safe heuristics."""
+        result = classify_command('echo "evil" >> /etc/passwd')
+        # Should NOT be classified as safe - has append redirect
+        assert result.risk != "none", "echo with append redirect should not be classified as safe"
+
+    def test_echo_pipe_not_allowed(self):
+        """echo 'data' | sh should NOT be allowed by safe heuristics."""
+        result = classify_command("echo 'data' | sh")
+        # Should NOT be classified as safe - has pipe
+        assert result.risk != "none", "echo with pipe should not be classified as safe"
+
+    def test_echo_backtick_not_allowed(self):
+        """echo `rm -rf /` should NOT be allowed by safe heuristics."""
+        result = classify_command("echo `rm -rf /`")
+        # Should NOT be classified as safe - has backticks
+        assert result.risk != "none", "echo with backticks should not be classified as safe"
+
+    def test_echo_dollar_paren_not_allowed(self):
+        """echo $(rm -rf /) should NOT be allowed by safe heuristics."""
+        result = classify_command("echo $(rm -rf /)")
+        # Should NOT be classified as safe - has command substitution
+        assert result.risk != "none", "echo with $() should not be classified as safe"
+
+    def test_grep_etc_passwd_not_blanket_allowed(self):
+        """grep /etc/passwd should fall through to LLM (not blanket allowed)."""
+        result = classify_command("grep root /etc/passwd")
+        # grep with absolute paths should NOT be classified as safe
+        # (should be ambiguous to let LLM decide)
+        assert result.risk in ("ambiguous", "low", "medium"), \
+            "grep on absolute system paths should not be blanket-allowed"
+
+    def test_rg_etc_hosts_not_blanket_allowed(self):
+        """rg /etc/hosts should fall through to LLM (not blanket allowed)."""
+        result = classify_command("rg localhost /etc/hosts")
+        # rg with absolute paths should NOT be classified as safe
+        assert result.risk in ("ambiguous", "low", "medium"), \
+            "rg on absolute system paths should not be blanket-allowed"
+
+
+# =============================================================================
 # Ambiguous command tests - should fall through to LLM
 # =============================================================================
 

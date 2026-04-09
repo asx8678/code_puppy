@@ -43,20 +43,37 @@ class RegexClassificationResult:
 # High-risk patterns that warrant immediate blocking
 # =============================================================================
 
+# Pre-compiled patterns for whole-command scan (fork bombs, download-pipe)
+# These are defined at module level to avoid recompilation on every call
+_WHOLE_COMMAND_DANGEROUS: list[tuple[re.Pattern, str]] = [
+    # Fork bombs - various forms (dangerous even quoted)
+    (re.compile(r":\s*\(\s*\)\s*\{[^}]*:\s*\|[^}]*&[^}]*\}"), "fork bomb (bash function form)"),
+    (re.compile(r"\bbash\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via bash -c"),
+    (re.compile(r"\bsh\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via sh -c"),
+    # Download and execute patterns (highly dangerous even quoted)
+    (re.compile(r"\b(?:curl|wget|fetch|lynx|aria2c)\s+[^|]*[|&;]\s*(?:\bsh\b|\bbash\b|\bzsh\b|\bksh\b|\bpython\d*\b|\bperl\b|\bruby\b|\bnode\b|\bcat\s*\|?\s*sh)"), "download piped to shell interpreter"),
+    (re.compile(r"\b(?:curl|wget)\s+.*\|\s*(?:eval|exec|source|\.)\b"), "download piped to eval/exec/source"),
+]
+
 _HIGH_RISK_PATTERNS: list[tuple[re.Pattern, str]] = [
-    # Fork bombs - various forms
+    # Fork bombs - various forms (additional patterns beyond whole-command scan)
     (re.compile(r":\s*\(\s*\)\s*\{[^}]*:\s*\|[^}]*&[^}]*\}"), "fork bomb (bash function form)"),
     (re.compile(r"\bbash\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via bash -c"),
     (re.compile(r"\bsh\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via sh -c"),
     # Classic fork bomb in variable form
     (re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*\(\s*\)\s*\{[^}]*\|\s*\$[a-zA-Z_][a-zA-Z0-9_]*"), "fork bomb (variable assignment form)"),
     
-    # rm -rf / and variants
-    # Matches: rm -rf /, rm -fr /, rm -r -f /, rm --force --recursive /
-    (re.compile(r"\brm\b(?:\s+(?:-[a-zA-Z]*[rf][a-zA-Z]*|(?:--force|--recursive|--preserve-root)))+\s+(?:[/\\]|--no-preserve-root)"), "rm recursive force delete of root"),
+    # rm -rf / and variants - ONLY matches root "/" or "/*" or "/" at end
+    # The pattern requires standalone "/" (end of string, whitespace, or another /)
+    # This does NOT match "/tmp/build" because the "/" is followed by a word char
+    (re.compile(
+        r"\brm\b"
+        r"(?:\s+(?:-[a-zA-Z]*[rf][a-zA-Z]*|--force|--recursive|--preserve-root))+"
+        r"\s+(?:--no-preserve-root|/\*?/?(?:\s|$))"
+    ), "rm recursive force delete of root"),
     (re.compile(r"\brm\b(?:\s+(?:-[a-zA-Z]*[rf][a-zA-Z]*|(?:--force|--recursive)))+\s+--no-preserve-root"), "rm force delete with no-preserve-root"),
-    # Also match explicit rm -r / or rm -f / followed by additional flags
-    (re.compile(r"\brm\s+(?:-[a-zA-Z]*r[a-zA-Z]*\s+)+(?:-[a-zA-Z]*f[a-zA-Z]*\s+)*[/\\]"), "rm recursive delete of root"),
+    # Also match explicit rm -r / or rm -f / followed by additional flags (at root only)
+    (re.compile(r"\brm\s+(?:-[a-zA-Z]*r[a-zA-Z]*\s+)+(?:-[a-zA-Z]*f[a-zA-Z]*\s+)*/(?:\s|$)"), "rm recursive delete of root"),
     
     # Disk destruction
     (re.compile(r"\bdd\s+.*\bif\s*=\s*[^\s]*(?:/dev/zero|/dev/urandom|/dev/random)\b.*\bof\s*=\s*[^\s]*(?:/dev/[sh]d[a-z]|/dev/nvme\d+n\d+|/dev/disk\d+)"), "disk overwrite with random/zero data"),
@@ -103,7 +120,9 @@ _HIGH_RISK_PATTERNS: list[tuple[re.Pattern, str]] = [
 
 _MEDIUM_RISK_PATTERNS: list[tuple[re.Pattern, str]] = [
     # rm without -rf but targeting system paths
-    (re.compile(r"\brm\s+.*\b(?:/etc|/bin|/sbin|/lib|/usr|/var|/home)\b"), "deletion in system directory"),
+    # Note: \b before /etc is dead code (word boundary doesn't match before /)
+    # We use negative lookbehind to ensure it's a start of path
+    (re.compile(r"\brm\s+.*(?:^|\s)(?:/etc|/bin|/sbin|/lib|/usr|/var|/home)/"), "deletion in system directory"),
     (re.compile(r"\brm\s+.*\b\.\./.*\.\."), "deletion with parent directory traversal"),
     
     # chmod/chown with dangerous permissions
@@ -146,19 +165,8 @@ _SAFE_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"^\s*pwd\s*$"), "print working directory"),
     (re.compile(r"^\s*cd\s+[~\./\w-]*\s*$"), "change directory"),
     
-    # Safe reading operations
-    (re.compile(r"^\s*cat\s+(?:-[a-zA-Z]+\s*)*(?:[~/\.\w-]+)\s*$"), "file display"),
-    (re.compile(r"^\s*head\s+(?:-[a-zA-Z0-9]+\s*)*(?:[~/\.\w-]+)\s*$"), "file head display"),
-    (re.compile(r"^\s*tail\s+(?:-[a-zA-Z0-9]+\s*)*(?:[~/\.\w-]+)\s*$"), "file tail display"),
-    (re.compile(r"^\s*less\s+(?:[+\-]?[a-zA-Z]*\s*)*(?:[~/\.\w-]+)\s*$"), "file pager"),
-    (re.compile(r"^\s*more\s+(?:[~/\.\w-]+)\s*$"), "file pager"),
-    
     # Git operations (read-only)
     (re.compile(r"^\s*git\s+(?:status|log|show|diff|branch|remote|config\s+--list)\b"), "git read operation"),
-    
-    # Basic text operations
-    (re.compile(r"^\s*echo\s+['\"].*['\"]\s*$"), "safe echo with quotes"),
-    (re.compile(r"^\s*echo\s+[^;|&`$]*\s*$"), "safe echo without special chars"),
     
     # Process listing
     (re.compile(r"^\s*(?:ps|top|htop|pgrep)\b"), "process listing"),
@@ -296,6 +304,15 @@ def _extract_unquoted_text(command: str) -> str:
     return ''.join(result)
 
 
+# Pre-compiled patterns for checking sensitive paths in file operations
+_SENSITIVE_PATH_PATTERN = re.compile(
+    r"(?:^|\s)(?:/etc|/root|/proc|~/.ssh|~/.aws|/var/log|/home/root)(?:/|$|\s)"
+)
+
+# Pre-compiled patterns for checking redirects and command substitution
+_REDIRECT_PATTERN = re.compile(r">\s|>>\s|\||\x60.*\x60|\$\(")
+
+
 def _classify_single_command(command: str) -> RegexClassificationResult:
     """Classify a single (non-compound) command using regex patterns.
     
@@ -370,20 +387,109 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
             )
     
     # Additional heuristics for safe commands that didn't match exact patterns
-    # These are common read-only operations
-    _SAFE_HEURISTICS: list[tuple[re.Pattern, str]] = [
-        (re.compile(r"^\s*git\s+(?:status|log|show|diff|branch|remote|config|stash\s+list|tag)\b"), "git read operation"),
-        (re.compile(r"^\s*(?:ls|ll|la|dir)\b"), "file listing"),
-        (re.compile(r"^\s*(?:cat|head|tail|less|more)\s+(?:-[a-zA-Z0-9]+\s+)*[^|;\&\`\$]*$"), "file reading"),
-        (re.compile(r"^\s*(?:pwd|whoami|hostname|date|uptime|uname|env|printenv)\b"), "system info"),
-        (re.compile(r"^\s*echo\b"), "echo command"),
-        (re.compile(r"^\s*(?:ps|pgrep|pgrep)\b"), "process listing"),
-        (re.compile(r"^\s*(?:which|whereis|type|file)\s+\w+\s*$"), "command lookup"),
-        (re.compile(r"^\s*(?:find)\s+.*\s+(?:-name|-type|-iname)\b"), "find with safe options"),
-        (re.compile(r"^\s*(?:grep|rg|ag|ack)\s+.*$"), "text search"),
-    ]
+    # SECURITY FIX: Heuristics are now stricter to avoid false negatives
+    # These are common read-only operations with restrictions on sensitive paths
     
-    for pattern, description in _SAFE_HEURISTICS:
+    # Check git operations (always safe)
+    if re.match(r"^\s*git\s+(?:status|log|show|diff|branch|remote|config|stash\s+list|tag)\b", command):
+        return RegexClassificationResult(
+            risk="none",
+            reasoning="Safe pattern detected: git read operation",
+            blocked=False,
+            is_ambiguous=False,
+        )
+    
+    # Check file listing (always safe)
+    if re.match(r"^\s*(?:ls|ll|la|dir)\b", command):
+        return RegexClassificationResult(
+            risk="none",
+            reasoning="Safe pattern detected: file listing",
+            blocked=False,
+            is_ambiguous=False,
+        )
+    
+    # Check file reading (EXCLUDES sensitive paths)
+    # First check if it matches the pattern, then verify no sensitive paths
+    file_read_match = re.match(
+        r"^\s*(?:cat|head|tail|less|more)\s+(?:-[a-zA-Z0-9]+\s+)*[^|;\&\`\$>]*$",
+        command
+    )
+    if file_read_match:
+        # Check for sensitive paths in the command
+        if not _SENSITIVE_PATH_PATTERN.search(command):
+            return RegexClassificationResult(
+                risk="none",
+                reasoning="Safe pattern detected: file reading (non-sensitive path)",
+                blocked=False,
+                is_ambiguous=False,
+            )
+    
+    # Check system info commands (always safe)
+    if re.match(r"^\s*(?:pwd|whoami|hostname|date|uptime|uname|env|printenv)\b", command):
+        return RegexClassificationResult(
+            risk="none",
+            reasoning="Safe pattern detected: system info",
+            blocked=False,
+            is_ambiguous=False,
+        )
+    
+    # Check echo (EXCLUDES redirects and command substitution)
+    if re.match(r"^\s*echo\b", command):
+        # Check for dangerous characters
+        if not _REDIRECT_PATTERN.search(command):
+            return RegexClassificationResult(
+                risk="none",
+                reasoning="Safe pattern detected: safe echo (no redirects or command substitution)",
+                blocked=False,
+                is_ambiguous=False,
+            )
+    
+    # Check process listing (always safe)
+    if re.match(r"^\s*(?:ps|pgrep)\b", command):
+        return RegexClassificationResult(
+            risk="none",
+            reasoning="Safe pattern detected: process listing",
+            blocked=False,
+            is_ambiguous=False,
+        )
+    
+    # Check command lookup (always safe)
+    if re.match(r"^\s*(?:which|whereis|type|file)\s+\w+\s*$", command):
+        return RegexClassificationResult(
+            risk="none",
+            reasoning="Safe pattern detected: command lookup",
+            blocked=False,
+            is_ambiguous=False,
+        )
+    
+    # Check find (EXCLUDES -delete, -exec, -execdir)
+    find_match = re.match(r"^\s*find\s+.*\s(?:-name|-type|-iname)\b", command)
+    if find_match:
+        # Check for destructive operations
+        if not re.search(r"\s-(?:delete|exec|execdir)\b", command):
+            return RegexClassificationResult(
+                risk="none",
+                reasoning="Safe pattern detected: find with safe options (no -delete/-exec)",
+                blocked=False,
+                is_ambiguous=False,
+            )
+    
+    # grep/rg - NOT blanket allowed if they have absolute paths
+    # Check if grep/rg with absolute system paths -> fall through to LLM
+    grep_match = re.match(r"^\s*(?:grep|rg|ag|ack)\s+(?:-[a-zA-Z0-9-]+\s+)*", command)
+    if grep_match:
+        # If it has absolute system paths, don't mark as safe - let LLM decide
+        if _SENSITIVE_PATH_PATTERN.search(command):
+            # Has sensitive paths - fall through to ambiguous
+            pass  # Fall through to the ambiguous return below
+        else:
+            # No sensitive paths - can be safe
+            return RegexClassificationResult(
+                risk="none",
+                reasoning="Safe pattern detected: text search in project-local paths",
+                blocked=False,
+                is_ambiguous=False,
+            )
         if pattern.match(command):
             return RegexClassificationResult(
                 risk="none",
@@ -430,15 +536,7 @@ def classify_command(command: str) -> RegexClassificationResult:
     """
     # First, do a whole-command scan for fork bombs and download-pipe patterns
     # These are dangerous even when quoted (e.g., `bash -c ":(){:|:&};:"`)
-    _WHOLE_COMMAND_DANGEROUS: list[tuple[re.Pattern, str]] = [
-        # Fork bombs - various forms (dangerous even quoted)
-        (re.compile(r":\s*\(\s*\)\s*\{[^}]*:\s*\|[^}]*&[^}]*\}"), "fork bomb (bash function form)"),
-        (re.compile(r"\bbash\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via bash -c"),
-        (re.compile(r"\bsh\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via sh -c"),
-        # Download and execute patterns (highly dangerous even quoted)
-        (re.compile(r"\b(?:curl|wget|fetch|lynx|aria2c)\s+[^|]*[|&;]\s*(?:\bsh\b|\bbash\b|\bzsh\b|\bksh\b|\bpython\d*\b|\bperl\b|\bruby\b|\bnode\b|\bcat\s*\|?\s*sh)"), "download piped to shell interpreter"),
-        (re.compile(r"\b(?:curl|wget)\s+.*\|\s*(?:eval|exec|source|\.)\b"), "download piped to eval/exec/source"),
-    ]
+    # _WHOLE_COMMAND_DANGEROUS is defined at module level to avoid recompilation
     
     for pattern, description in _WHOLE_COMMAND_DANGEROUS:
         if pattern.search(command):

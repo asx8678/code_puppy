@@ -288,8 +288,8 @@ async def shell_safety_callback(
                     risk_display = cached.risk or "unknown"
                     concise_reason = cached.reasoning or "No reasoning provided"
                     error_msg = (
-                        f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\\n"
-                        f"Reason: {concise_reason}\\n"
+                        f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\n"
+                        f"Reason: {concise_reason}\n"
                         f"Override: /set yolo_mode true or /set safety_permission_level {risk_display}"
                     )
                     emit_info(error_msg)
@@ -308,8 +308,8 @@ async def shell_safety_callback(
                 risk_display = regex_result.risk
                 concise_reason = regex_result.reasoning
                 error_msg = (
-                    f"🛑 Command blocked by security filter (risk {risk_display.upper()} > permission {threshold.upper()}).\\n"
-                    f"Reason: {concise_reason}\\n"
+                    f"🛑 Command blocked by security filter (risk {risk_display.upper()} > permission {threshold.upper()}).\n"
+                    f"Reason: {concise_reason}\n"
                     f"Override: /set yolo_mode true or /set safety_permission_level {risk_display}"
                 )
                 emit_info(error_msg)
@@ -328,8 +328,8 @@ async def shell_safety_callback(
                         risk_display = regex_result.risk
                         concise_reason = regex_result.reasoning
                         error_msg = (
-                            f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\\n"
-                            f"Reason: {concise_reason}\\n"
+                            f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\n"
+                            f"Reason: {concise_reason}\n"
                             f"Override: /set yolo_mode true or /set safety_permission_level {risk_display}"
                         )
                         emit_info(error_msg)
@@ -350,9 +350,9 @@ async def shell_safety_callback(
             )
 
             agent = ShellSafetyAgent()
-            prompt = f"Assess this shell command:\\n\\nCommand: {command}"
+            prompt = f"Assess this shell command:\n\nCommand: {command}"
             if cwd:
-                prompt += f"\\nWorking directory: {cwd}"
+                prompt += f"\nWorking directory: {cwd}"
 
             result = await agent.run_with_mcp(prompt, output_type=ShellSafetyAssessment)
             assessment = result.output
@@ -364,8 +364,8 @@ async def shell_safety_callback(
                 risk_display = assessment.risk or "unknown"
                 concise_reason = assessment.reasoning or "No reasoning provided"
                 error_msg = (
-                    f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\\n"
-                    f"Reason: {concise_reason}\\n"
+                    f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\n"
+                    f"Reason: {concise_reason}\n"
                     f"Override: /set yolo_mode true or /set safety_permission_level {risk_display}"
                 )
                 emit_info(error_msg)
@@ -387,7 +387,6 @@ async def shell_safety_callback(
         triggering_cmd: str | None = None
         triggering_reasoning: str | None = None
         regex_blocked = False
-        regex_reasoning = ""
 
         for sub_cmd in sub_commands:
             # First try regex for fast classification
@@ -396,7 +395,6 @@ async def shell_safety_callback(
             if regex_result.blocked:
                 # High-risk pattern detected - immediate block
                 regex_blocked = True
-                regex_reasoning = regex_result.reasoning
                 max_risk_str = regex_result.risk
                 triggering_cmd = sub_cmd
                 triggering_reasoning = regex_result.reasoning
@@ -425,9 +423,9 @@ async def shell_safety_callback(
             risk_display = max_risk_str or "unknown"
             concise_reason = triggering_reasoning or "No reasoning provided"
             error_msg = (
-                f"🛑 Command blocked by {block_type} (risk {risk_display.upper()} > permission {threshold.upper()}).\\n"
-                f"Triggered by sub-command: {triggering_cmd}\\n"
-                f"Reason: {concise_reason}\\n"
+                f"🛑 Command blocked by {block_type} (risk {risk_display.upper()} > permission {threshold.upper()}).\n"
+                f"Triggered by sub-command: {triggering_cmd}\n"
+                f"Reason: {concise_reason}\n"
                 f"Override: /set yolo_mode true or /set safety_permission_level {risk_display}"
             )
             emit_info(error_msg)

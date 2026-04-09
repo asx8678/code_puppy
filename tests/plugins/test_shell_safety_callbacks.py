@@ -687,3 +687,79 @@ class TestRegisterCallback:
             module.register()
 
             mock_register.assert_called_with("run_shell_command", shell_safety_callback)
+
+
+class TestNewlineRegression:
+    """Regression tests for newline formatting in error messages.
+    
+    Issue: PR replaced \n with \\n in f-strings, causing literal backslash-n
+    in error messages instead of actual newlines.
+    """
+
+    @pytest.mark.anyio
+    async def test_error_message_contains_real_newlines_not_literal(self):
+        """Error messages must contain actual newlines, not literal \\n."""
+        cached = CachedAssessment(risk="high", reasoning="Test reasoning")
+
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-opus-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="low",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=cached,
+            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
+        ):
+            result = await shell_safety_callback(
+                context=None, command="rm -rf /tmp/test", cwd=None, timeout=60
+            )
+
+            error_msg = result["error_message"]
+            # Must contain actual newlines (ASCII 10)
+            assert "\n" in error_msg, "Error message should contain actual newlines"
+            # Must NOT contain literal backslash-n
+            assert "\\n" not in error_msg, "Error message should NOT contain literal \\n"
+
+    @pytest.mark.anyio
+    async def test_regex_blocked_error_message_has_real_newlines(self):
+        """Regex-blocked commands must have error messages with real newlines."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-opus-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="low",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=None,
+            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
+        ):
+            result = await shell_safety_callback(
+                context=None, command="rm -rf /", cwd=None, timeout=60
+            )
+
+            assert result is not None
+            assert result["blocked"] is True
+            error_msg = result["error_message"]
+            # Must contain actual newlines (ASCII 10)
+            assert "\n" in error_msg, "Error message should contain actual newlines"
+            # Must NOT contain literal backslash-n
+            assert "\\n" not in error_msg, "Error message should NOT contain literal \\n"

@@ -1,0 +1,23 @@
+Fix shell_safety regex pre-filter issues (code_puppy-slq review feedback)
+
+BLOCKERS fixed:
+1. rm -rf /<path> false positive: Changed regex to only match root '/' or '/*',
+   not '/anything'. Added NEGATIVE tests: rm -rf /tmp/build, rm -rf /var/cache
+   should NOT be blocked.
+
+2. Security regression with safe heuristics: Fixed overly broad patterns:
+   - cat/head/tail: Now exclude paths with /etc, /root, /proc, ~/.ssh, ~/.aws
+   - find: Now exclude commands with -delete, -exec, -execdir
+   - echo: Now exclude if command contains >, >>, |, backticks, or $(
+   - grep/rg: Not blanket-allowed, falls through to LLM for absolute system paths
+   Added negative tests for all these cases.
+
+3. Literal \\n instead of newlines: Reverted all \\n -> \n in error messages and
+   LLM prompts. Added regression test asserting error messages contain real
+   newlines.
+
+WARNINGS fixed:
+- Removed dead \b before /etc in medium-risk patterns
+- Moved _SAFE_HEURISTICS and _WHOLE_COMMAND_DANGEROUS to module scope
+- Deleted dead regex_reasoning variable
+- Unified file reading patterns (removed unsafe patterns from _SAFE_PATTERNS)
