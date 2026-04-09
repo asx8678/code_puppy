@@ -80,7 +80,9 @@ class GitignoreMatcher:
             if gitignore.exists():
                 try:
                     lines.extend(
-                        gitignore.read_text(encoding="utf-8", errors="ignore").splitlines()
+                        gitignore.read_text(
+                            encoding="utf-8", errors="ignore"
+                        ).splitlines()
                     )
                 except OSError:
                     pass

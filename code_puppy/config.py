@@ -446,6 +446,7 @@ get_enable_streaming = _make_bool_getter(
     """,
 )
 
+
 # bd code_puppy-31a.10: Post-edit syntax validation
 def get_post_edit_validation_enabled() -> bool:
     """Return True if post-edit syntax validation is enabled (default: True).

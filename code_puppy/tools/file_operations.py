@@ -27,7 +27,10 @@ from code_puppy.messaging import (  # New structured messaging types
     get_message_bus,
 )
 from code_puppy.token_utils import estimate_token_count as _etc
-from code_puppy.utils.file_display import format_content_with_line_numbers, truncate_with_guidance
+from code_puppy.utils.file_display import (
+    format_content_with_line_numbers,
+    truncate_with_guidance,
+)
 from code_puppy.utils.gitignore import is_gitignored
 from code_puppy.utils.install_hints import format_missing_tool_message
 
@@ -77,56 +80,64 @@ def _cleanup_ignore_file():
 
 
 # Common home directory subdirectories - hoisted to module level for efficiency
-_COMMON_HOME_SUBDIRS = frozenset({
-    "Documents",
-    "Desktop",
-    "Downloads",
-    "Pictures",
-    "Music",
-    "Videos",
-    "Movies",
-    "Public",
-    "Library",
-    "Applications",  # Cover macOS/Linux
-})
+_COMMON_HOME_SUBDIRS = frozenset(
+    {
+        "Documents",
+        "Desktop",
+        "Downloads",
+        "Pictures",
+        "Music",
+        "Videos",
+        "Movies",
+        "Public",
+        "Library",
+        "Applications",  # Cover macOS/Linux
+    }
+)
 
 # SECURITY FIX 8c0/egh: Sensitive path data - module-level frozensets for O(1) lookup
 # (was being rebuilt on every validate_file_path call)
-_SENSITIVE_DIR_PREFIXES = frozenset({
-    os.path.join(os.path.expanduser("~"), ".ssh") + os.sep,
-    os.path.join(os.path.expanduser("~"), ".aws") + os.sep,
-    os.path.join(os.path.expanduser("~"), ".gnupg") + os.sep,
-    os.path.join(os.path.expanduser("~"), ".gcp") + os.sep,
-    os.path.join(os.path.expanduser("~"), ".config", "gcloud") + os.sep,
-    os.path.join(os.path.expanduser("~"), ".azure") + os.sep,
-    os.path.join(os.path.expanduser("~"), ".kube") + os.sep,
-    os.path.join(os.path.expanduser("~"), ".docker") + os.sep,
-})
+_SENSITIVE_DIR_PREFIXES = frozenset(
+    {
+        os.path.join(os.path.expanduser("~"), ".ssh") + os.sep,
+        os.path.join(os.path.expanduser("~"), ".aws") + os.sep,
+        os.path.join(os.path.expanduser("~"), ".gnupg") + os.sep,
+        os.path.join(os.path.expanduser("~"), ".gcp") + os.sep,
+        os.path.join(os.path.expanduser("~"), ".config", "gcloud") + os.sep,
+        os.path.join(os.path.expanduser("~"), ".azure") + os.sep,
+        os.path.join(os.path.expanduser("~"), ".kube") + os.sep,
+        os.path.join(os.path.expanduser("~"), ".docker") + os.sep,
+    }
+)
 
-_SENSITIVE_EXACT_FILES = frozenset({
-    os.path.join(os.path.expanduser("~"), ".netrc"),
-    os.path.join(os.path.expanduser("~"), ".pgpass"),
-    os.path.join(os.path.expanduser("~"), ".my.cnf"),
-    os.path.join(os.path.expanduser("~"), ".env"),
-    os.path.join(os.path.expanduser("~"), ".bash_history"),
-    os.path.join(os.path.expanduser("~"), ".npmrc"),
-    os.path.join(os.path.expanduser("~"), ".pypirc"),
-    os.path.join(os.path.expanduser("~"), ".gitconfig"),
-    "/etc/shadow",
-    "/etc/sudoers",
-    "/etc/master.passwd",  # BSD/macOS
-    "/etc/passwd",
-    # macOS /private/etc symlinks (realpath resolves /etc -> /private/etc)
-    "/private/etc/shadow",
-    "/private/etc/sudoers",
-    "/private/etc/master.passwd",
-    "/private/etc/passwd",
-})
+_SENSITIVE_EXACT_FILES = frozenset(
+    {
+        os.path.join(os.path.expanduser("~"), ".netrc"),
+        os.path.join(os.path.expanduser("~"), ".pgpass"),
+        os.path.join(os.path.expanduser("~"), ".my.cnf"),
+        os.path.join(os.path.expanduser("~"), ".env"),
+        os.path.join(os.path.expanduser("~"), ".bash_history"),
+        os.path.join(os.path.expanduser("~"), ".npmrc"),
+        os.path.join(os.path.expanduser("~"), ".pypirc"),
+        os.path.join(os.path.expanduser("~"), ".gitconfig"),
+        "/etc/shadow",
+        "/etc/sudoers",
+        "/etc/master.passwd",  # BSD/macOS
+        "/etc/passwd",
+        # macOS /private/etc symlinks (realpath resolves /etc -> /private/etc)
+        "/private/etc/shadow",
+        "/private/etc/sudoers",
+        "/private/etc/master.passwd",
+        "/private/etc/passwd",
+    }
+)
 
 # SECURITY FIX b26: Also block project-local .env files anywhere
 # Block .env and .env.* variants (.env.local, .env.production, etc.)
 _SENSITIVE_FILENAMES = frozenset({".env"})
-_SENSITIVE_FILENAME_PREFIXES = frozenset({".env."})  # Catches .env.local, .env.production, etc.
+_SENSITIVE_FILENAME_PREFIXES = frozenset(
+    {".env."}
+)  # Catches .env.local, .env.production, etc.
 
 _SENSITIVE_EXTENSIONS = frozenset({".pem", ".key", ".p12", ".pfx", ".keystore"})
 
@@ -393,9 +404,7 @@ async def _list_files(
                                         path=partial_path,
                                         type="directory",
                                         size=0,
-                                        full_path=os.path.join(
-                                            directory, partial_path
-                                        ),
+                                        full_path=os.path.join(directory, partial_path),
                                         depth=i,  # depth is just the index
                                     )
                                 )
@@ -466,7 +475,9 @@ async def _list_files(
     from code_puppy.config import get_enable_gitignore_filtering
 
     if get_enable_gitignore_filtering():
-        results = [f for f in results if not is_gitignored(f.full_path, base_dir=directory)]
+        results = [
+            f for f in results if not is_gitignored(f.full_path, base_dir=directory)
+        ]
 
     # Count items in results - single pass for performance
     dir_count = 0
@@ -588,7 +599,9 @@ def _is_sensitive_path(file_path: str) -> bool:
         return True
     # Block .env.* variants (lowercase comparison for case-insensitive match)
     basename_lower = basename.lower()
-    if any(basename_lower.startswith(prefix) for prefix in _SENSITIVE_FILENAME_PREFIXES):
+    if any(
+        basename_lower.startswith(prefix) for prefix in _SENSITIVE_FILENAME_PREFIXES
+    ):
         return True
 
     # Check for private key files by extension anywhere (SECURITY FIX b26)
@@ -961,9 +974,7 @@ def register_list_files(agent):
         # ADOPT #6: Truncate with helpful guidance message
         if len(result.content) > 200000:
             result.content = truncate_with_guidance(
-                result.content,
-                limit_chars=200000,
-                tool_name="list_files"
+                result.content, limit_chars=200000, tool_name="list_files"
             )
             result.error = "Results truncated. This is a massive directory tree, recommend non-recursive calls to list_files"
         return result
