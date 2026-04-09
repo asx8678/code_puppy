@@ -2,6 +2,10 @@
 
 This module registers a callback that intercepts shell commands in yolo_mode
 and assesses their safety risk before execution.
+
+Performance note: Uses regex pre-filter for fast classification of obvious
+attacks (fork bombs, rm -rf, curl | sh patterns). Only ambiguous commands
+reach the LLM assessment path.
 """
 
 from typing import Any
@@ -16,6 +20,10 @@ from code_puppy.messaging import emit_info
 from code_puppy.plugins.shell_safety.command_cache import (
     cache_assessment,
     get_cached_assessment,
+)
+from code_puppy.plugins.shell_safety.regex_classifier import (
+    RegexClassificationResult,
+    classify_command,
 )
 from code_puppy.tools.command_runner import ShellSafetyAssessment
 
@@ -116,17 +124,46 @@ def compare_risk_levels(assessed_risk: str | None, threshold: str) -> bool:
     return assessed_level > threshold_level
 
 
+def _regex_classify_to_risk_levels(
+    result: RegexClassificationResult,
+) -> tuple[str | None, str | None, bool]:
+    """Convert regex classification result to risk level tuple.
+    
+    Args:
+        result: The regex classification result.
+        
+    Returns:
+        Tuple of (risk_level, reasoning, needs_llm).
+        - If blocked by regex: returns (risk, reasoning, False) - no LLM needed
+        - If ambiguous: returns (None, None, True) - needs LLM
+        - If safe: returns (risk, reasoning, False) - no LLM needed
+    """
+    if result.blocked:
+        # Regex determined this should be blocked - no LLM needed
+        return result.risk, result.reasoning, False
+    
+    if result.is_ambiguous:
+        # Regex couldn't determine - needs LLM assessment
+        return None, None, True
+    
+    # Regex determined safe - no LLM needed
+    return result.risk, result.reasoning, False
+
+
 async def _assess_single_command(
     command: str,
     cwd: str | None,
+    use_regex: bool = True,
 ) -> tuple[str | None, str | None, bool]:
     """Assess a single (non-compound) shell command.
 
-    Checks the LRU cache first; falls back to LLM assessment on a cache miss.
+    Checks the LRU cache first, then regex pre-filter, then falls back to 
+    LLM assessment on a cache miss or ambiguous regex result.
 
     Args:
         command: The shell command string to assess.
         cwd: Optional working directory for context.
+        use_regex: Whether to use regex pre-filter (default True).
 
     Returns:
         A 3-tuple ``(risk, reasoning, is_fallback)`` where *risk* is the
@@ -134,11 +171,27 @@ async def _assess_single_command(
         explanation text, and *is_fallback* indicates whether the result
         came from an LLM fallback path (and should not be cached).
     """
+    # Check cache first
     cached = get_cached_assessment(command, cwd)
     if cached:
         return cached.risk, cached.reasoning, False
 
-    # Cache miss — call the LLM.
+    # Try regex pre-filter for fast classification
+    if use_regex:
+        regex_result = classify_command(command)
+        risk, reasoning, needs_llm = _regex_classify_to_risk_levels(regex_result)
+        
+        if not needs_llm:
+            # Regex gave us a definitive answer (blocked or safe)
+            # Cache the result for safe commands, but not blocked ones
+            # (blocked commands shouldn't be cached as they might be overridden)
+            if regex_result.risk in ("none", "low"):
+                cache_assessment(command, cwd, risk or "low", reasoning or "Regex classification")
+            return risk, reasoning, False
+        
+        # needs_llm is True - fall through to LLM assessment
+
+    # Cache miss / ambiguous regex result — call the LLM.
     from code_puppy.plugins.shell_safety.agent_shell_safety import ShellSafetyAgent
 
     agent = ShellSafetyAgent()
@@ -226,7 +279,7 @@ async def shell_safety_callback(
 
         if len(sub_commands) == 1:
             # ----------------------------------------------------------------
-            # Single command — original behaviour (unchanged)
+            # Single command — with regex pre-filter
             # ----------------------------------------------------------------
             cached = get_cached_assessment(command, cwd)
 
@@ -235,8 +288,8 @@ async def shell_safety_callback(
                     risk_display = cached.risk or "unknown"
                     concise_reason = cached.reasoning or "No reasoning provided"
                     error_msg = (
-                        f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\n"
-                        f"Reason: {concise_reason}\n"
+                        f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\\n"
+                        f"Reason: {concise_reason}\\n"
                         f"Override: /set yolo_mode true or /set safety_permission_level {risk_display}"
                     )
                     emit_info(error_msg)
@@ -248,15 +301,58 @@ async def shell_safety_callback(
                     }
                 return None
 
-            # Cache miss — LLM assessment
+            # Try regex pre-filter first for fast classification
+            regex_result = classify_command(command)
+            if regex_result.blocked:
+                # Regex caught a high-risk pattern - block immediately, no LLM
+                risk_display = regex_result.risk
+                concise_reason = regex_result.reasoning
+                error_msg = (
+                    f"🛑 Command blocked by security filter (risk {risk_display.upper()} > permission {threshold.upper()}).\\n"
+                    f"Reason: {concise_reason}\\n"
+                    f"Override: /set yolo_mode true or /set safety_permission_level {risk_display}"
+                )
+                emit_info(error_msg)
+                return {
+                    "blocked": True,
+                    "risk": regex_result.risk,
+                    "reasoning": regex_result.reasoning,
+                    "error_message": error_msg,
+                }
+            
+            if not regex_result.is_ambiguous:
+                # Regex determined this is safe (no ambiguity) - allow without LLM
+                # Only check threshold if risk is non-zero
+                if regex_result.risk != "none":
+                    if compare_risk_levels(regex_result.risk, threshold):
+                        risk_display = regex_result.risk
+                        concise_reason = regex_result.reasoning
+                        error_msg = (
+                            f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\\n"
+                            f"Reason: {concise_reason}\\n"
+                            f"Override: /set yolo_mode true or /set safety_permission_level {risk_display}"
+                        )
+                        emit_info(error_msg)
+                        return {
+                            "blocked": True,
+                            "risk": regex_result.risk,
+                            "reasoning": regex_result.reasoning,
+                            "error_message": error_msg,
+                        }
+                
+                # Safe command - cache and allow
+                cache_assessment(command, cwd, regex_result.risk, regex_result.reasoning)
+                return None
+
+            # Regex ambiguous - fall through to LLM assessment
             from code_puppy.plugins.shell_safety.agent_shell_safety import (
                 ShellSafetyAgent,
             )
 
             agent = ShellSafetyAgent()
-            prompt = f"Assess this shell command:\n\nCommand: {command}"
+            prompt = f"Assess this shell command:\\n\\nCommand: {command}"
             if cwd:
-                prompt += f"\nWorking directory: {cwd}"
+                prompt += f"\\nWorking directory: {cwd}"
 
             result = await agent.run_with_mcp(prompt, output_type=ShellSafetyAssessment)
             assessment = result.output
@@ -268,8 +364,8 @@ async def shell_safety_callback(
                 risk_display = assessment.risk or "unknown"
                 concise_reason = assessment.reasoning or "No reasoning provided"
                 error_msg = (
-                    f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\n"
-                    f"Reason: {concise_reason}\n"
+                    f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\\n"
+                    f"Reason: {concise_reason}\\n"
                     f"Override: /set yolo_mode true or /set safety_permission_level {risk_display}"
                 )
                 emit_info(error_msg)
@@ -290,9 +386,29 @@ async def shell_safety_callback(
         max_risk_str: str | None = "none"
         triggering_cmd: str | None = None
         triggering_reasoning: str | None = None
+        regex_blocked = False
+        regex_reasoning = ""
 
         for sub_cmd in sub_commands:
-            risk, reasoning, _ = await _assess_single_command(sub_cmd, cwd)
+            # First try regex for fast classification
+            regex_result = classify_command(sub_cmd)
+            
+            if regex_result.blocked:
+                # High-risk pattern detected - immediate block
+                regex_blocked = True
+                regex_reasoning = regex_result.reasoning
+                max_risk_str = regex_result.risk
+                triggering_cmd = sub_cmd
+                triggering_reasoning = regex_result.reasoning
+                break
+            
+            if not regex_result.is_ambiguous:
+                # Regex gave definitive result - use it
+                risk = regex_result.risk
+                reasoning = regex_result.reasoning
+            else:
+                # Ambiguous - use LLM
+                risk, reasoning, _ = await _assess_single_command(sub_cmd, cwd, use_regex=False)
 
             # Normalise: unknown/None → high (fail-safe)
             effective_risk = risk if risk else "high"
@@ -304,13 +420,14 @@ async def shell_safety_callback(
                 triggering_cmd = sub_cmd
                 triggering_reasoning = reasoning
 
-        if compare_risk_levels(max_risk_str, threshold):
+        if regex_blocked or compare_risk_levels(max_risk_str, threshold):
+            block_type = "security filter" if regex_blocked else "risk"
             risk_display = max_risk_str or "unknown"
             concise_reason = triggering_reasoning or "No reasoning provided"
             error_msg = (
-                f"🛑 Command blocked (risk {risk_display.upper()} > permission {threshold.upper()}).\n"
-                f"Triggered by sub-command: {triggering_cmd}\n"
-                f"Reason: {concise_reason}\n"
+                f"🛑 Command blocked by {block_type} (risk {risk_display.upper()} > permission {threshold.upper()}).\\n"
+                f"Triggered by sub-command: {triggering_cmd}\\n"
+                f"Reason: {concise_reason}\\n"
                 f"Override: /set yolo_mode true or /set safety_permission_level {risk_display}"
             )
             emit_info(error_msg)

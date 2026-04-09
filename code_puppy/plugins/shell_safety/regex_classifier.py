@@ -1,0 +1,506 @@
+"""Regex-based pre-filter for shell command safety classification.
+
+This module provides fast, deterministic command classification using regex
+patterns to catch obvious attacks instantly. It implements a two-pass
+classification strategy:
+
+1. Whole-command scan for high-risk patterns (fork bombs, rm -rf /, etc.)
+2. Per-subcommand scan after splitting compound commands
+
+Design principles:
+- Fail-closed: Unclosed quotes or parse errors result in blocking
+- Quote-aware: Patterns inside quotes don't trigger false positives
+- Fast path: Returns immediately for safe commands without LLM roundtrip
+- Defense in depth: Regex blocks obvious attacks; LLM handles edge cases
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import Literal
+
+
+@dataclass
+class RegexClassificationResult:
+    """Result of regex-based command classification.
+
+    Attributes:
+        risk: Classification result - 'critical', 'high', 'medium', 'low', 'none',
+              or 'ambiguous' when regex can't determine (needs LLM)
+        reasoning: Explanation for the classification
+        blocked: True if command should be blocked immediately
+        is_ambiguous: True if LLM assessment is needed
+    """
+
+    risk: Literal["critical", "high", "medium", "low", "none", "ambiguous"]
+    reasoning: str
+    blocked: bool = False
+    is_ambiguous: bool = False
+
+
+# =============================================================================
+# High-risk patterns that warrant immediate blocking
+# =============================================================================
+
+_HIGH_RISK_PATTERNS: list[tuple[re.Pattern, str]] = [
+    # Fork bombs - various forms
+    (re.compile(r":\s*\(\s*\)\s*\{[^}]*:\s*\|[^}]*&[^}]*\}"), "fork bomb (bash function form)"),
+    (re.compile(r"\bbash\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via bash -c"),
+    (re.compile(r"\bsh\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via sh -c"),
+    # Classic fork bomb in variable form
+    (re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*\(\s*\)\s*\{[^}]*\|\s*\$[a-zA-Z_][a-zA-Z0-9_]*"), "fork bomb (variable assignment form)"),
+    
+    # rm -rf / and variants
+    # Matches: rm -rf /, rm -fr /, rm -r -f /, rm --force --recursive /
+    (re.compile(r"\brm\b(?:\s+(?:-[a-zA-Z]*[rf][a-zA-Z]*|(?:--force|--recursive|--preserve-root)))+\s+(?:[/\\]|--no-preserve-root)"), "rm recursive force delete of root"),
+    (re.compile(r"\brm\b(?:\s+(?:-[a-zA-Z]*[rf][a-zA-Z]*|(?:--force|--recursive)))+\s+--no-preserve-root"), "rm force delete with no-preserve-root"),
+    # Also match explicit rm -r / or rm -f / followed by additional flags
+    (re.compile(r"\brm\s+(?:-[a-zA-Z]*r[a-zA-Z]*\s+)+(?:-[a-zA-Z]*f[a-zA-Z]*\s+)*[/\\]"), "rm recursive delete of root"),
+    
+    # Disk destruction
+    (re.compile(r"\bdd\s+.*\bif\s*=\s*[^\s]*(?:/dev/zero|/dev/urandom|/dev/random)\b.*\bof\s*=\s*[^\s]*(?:/dev/[sh]d[a-z]|/dev/nvme\d+n\d+|/dev/disk\d+)"), "disk overwrite with random/zero data"),
+    (re.compile(r"\bdd\s+.*\bof\s*=\s*[^\s]*(?:/dev/[sh]d[a-z]|/dev/nvme\d+n\d+|/dev/disk\d+|/dev/mmcblk\d+)"), "direct disk write"),
+    (re.compile(r"\bmkfs\.?(?:ext[234]|xfs|btrfs|zfs|fat|ntfs|vfat|exfat)\s+.*(?:/dev/[sh]d[a-z]\d*|/dev/nvme\d+n\d+(p\d+)?|/dev/mmcblk\d+p?\d*)"), "filesystem creation on raw device"),
+    (re.compile(r"\bformat\s+.*(?:/dev/[sh]d|\\\\.*PhysicalDrive)"), "disk format operation"),
+    
+    # Download and execute patterns (highly dangerous)
+    (re.compile(r"\b(?:curl|wget|fetch|lynx|aria2c)\s+[^|]*[|&;]\s*(?:\bsh\b|\bbash\b|\bzsh\b|\bksh\b|\bpython\d*\b|\bperl\b|\bruby\b|\bnode\b|\bcat\s*\|?\s*sh)"), "download piped to shell interpreter"),
+    (re.compile(r"\b(?:curl|wget)\s+.*\|\s*(?:eval|exec|source|\.)\b"), "download piped to eval/exec/source"),
+    
+    # Command substitution attacks
+    (re.compile(r"\$\([^)]*(?:rm|mkfs|dd|format|del|erase)[^)]*\)"), "dangerous command substitution"),
+    (re.compile(r"`[^`]*(?:rm|mkfs|dd|format|del|erase)[^`]*`"), "dangerous backtick substitution"),
+    
+    # Privilege escalation with dangerous ops
+    (re.compile(r"\bsudo\s+.*\brm\s+-rf\b"), "sudo recursive force delete"),
+    (re.compile(r"\bsudo\s+.*\bdd\s+.*of=/dev"), "sudo direct disk write"),
+    
+    # Database destruction
+    (re.compile(r"\bmysql\s+.*(?:--execute|-e)\s+['\"]?(?:DROP\s+DATABASE|DROP\s+TABLE|TRUNCATE\s+TABLE)"), "MySQL destructive operation"),
+    (re.compile(r"\bpsql\s+.*(?:-c\s+['\"]?)?(?:DROP\s+DATABASE|DROP\s+TABLE|TRUNCATE\s+TABLE)"), "PostgreSQL destructive operation"),
+    (re.compile(r"\bsqlite3?\s+.*(?:;\s*)?(?:DROP\s+TABLE|DELETE\s+FROM\s+\w+\s*(?!WHERE))"), "SQLite destructive operation without WHERE clause"),
+    
+    # Windows-specific dangerous commands
+    (re.compile(r"\brd\s+/[sq]\s+.*\\\\|\\", re.IGNORECASE), "Windows recursive directory delete"),
+    (re.compile(r"\bdel\s+/[fq]\s+.*\\\*\.", re.IGNORECASE), "Windows mass file delete"),
+    (re.compile(r"\bformat\s+[a-z]:\s+/[fqy]", re.IGNORECASE), "Windows drive format"),
+    (re.compile(r"\bdiskpart\s+.*clean\b", re.IGNORECASE), "Windows diskpart clean"),
+    
+    # Malicious encodings/obfuscation
+    (re.compile(r"\b(?:eval|exec)\s*\$?\([^)]*base64[^)]*\)", re.IGNORECASE), "eval of base64 decoded content"),
+    (re.compile(r"\becho\s+['\"]?[A-Za-z0-9+/]{50,}={0,2}['\"]?\s*\|\s*(?:base64|openssl)\s+-d"), "base64 decode of suspicious payload"),
+    
+    # Kernel/module manipulation
+    (re.compile(r"\binsmod\s+.*\.ko\b"), "kernel module insertion"),
+    (re.compile(r"\brmmod\s+.*\b"), "kernel module removal"),
+    (re.compile(r"\bmodprobe\s+-r\b"), "kernel module removal"),
+]
+
+# =============================================================================
+# Medium-risk patterns that warrant caution but not immediate blocking
+# =============================================================================
+
+_MEDIUM_RISK_PATTERNS: list[tuple[re.Pattern, str]] = [
+    # rm without -rf but targeting system paths
+    (re.compile(r"\brm\s+.*\b(?:/etc|/bin|/sbin|/lib|/usr|/var|/home)\b"), "deletion in system directory"),
+    (re.compile(r"\brm\s+.*\b\.\./.*\.\."), "deletion with parent directory traversal"),
+    
+    # chmod/chown with dangerous permissions
+    (re.compile(r"\bchmod\s+(?:777|666|755)\s+.*\b(?:/etc|/bin|/usr|/var)"), "broad permissions on system files"),
+    (re.compile(r"\bchown\s+-R\s+root:root\s+.*\b(?:/home|/tmp|/var)"), "recursive root ownership change"),
+    
+    # Network operations to suspicious destinations
+    (re.compile(r"\b(?:curl|wget|fetch)\s+.*\b(?:pastebin|hastebin|ghostbin|termbin)\b"), "download from text sharing service"),
+    (re.compile(r"\b(?:curl|wget|fetch)\s+.*\b(?:0x[0-9a-f]{8,}|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b"), "download from hex-encoded or raw IP"),
+    
+    # Sudo operations (not already covered by high-risk)
+    (re.compile(r"\bsudo\s+.*\b(?:chmod|chown|chgrp)\s+-R\b"), "recursive permission change with sudo"),
+    
+    # Environment manipulation
+    (re.compile(r"\bexport\s+PATH=[^:]*:?(?:/tmp|/var/tmp|/dev/shm)\b"), "PATH manipulation with temp directories"),
+]
+
+# =============================================================================
+# Low-risk patterns that are generally safe but worth noting
+# =============================================================================
+
+_LOW_RISK_PATTERNS: list[tuple[re.Pattern, str]] = [
+    # Package managers (moderate concern)
+    (re.compile(r"\b(?:apt|yum|dnf|pacman|brew|pip|npm|gem)\s+(?:install|remove|uninstall|purge)\b"), "package installation/removal"),
+    
+    # Service operations
+    (re.compile(r"\b(?:systemctl|service)\s+(?:stop|restart|disable|kill)\b"), "service control operation"),
+    
+    # User management
+    (re.compile(r"\b(?:useradd|userdel|groupadd|groupdel|usermod)\b"), "user/group modification"),
+]
+
+# =============================================================================
+# Safe patterns - commands that are obviously harmless
+# =============================================================================
+
+_SAFE_PATTERNS: list[tuple[re.Pattern, str]] = [
+    # Basic file listing and navigation
+    (re.compile(r"^\s*(?:ls|ll|la|dir)\s*(?:-[a-zA-Z]+\s*)*(?:[~/\.\w-]*)\s*$"), "file listing"),
+    (re.compile(r"^\s*pwd\s*$"), "print working directory"),
+    (re.compile(r"^\s*cd\s+[~\./\w-]*\s*$"), "change directory"),
+    
+    # Safe reading operations
+    (re.compile(r"^\s*cat\s+(?:-[a-zA-Z]+\s*)*(?:[~/\.\w-]+)\s*$"), "file display"),
+    (re.compile(r"^\s*head\s+(?:-[a-zA-Z0-9]+\s*)*(?:[~/\.\w-]+)\s*$"), "file head display"),
+    (re.compile(r"^\s*tail\s+(?:-[a-zA-Z0-9]+\s*)*(?:[~/\.\w-]+)\s*$"), "file tail display"),
+    (re.compile(r"^\s*less\s+(?:[+\-]?[a-zA-Z]*\s*)*(?:[~/\.\w-]+)\s*$"), "file pager"),
+    (re.compile(r"^\s*more\s+(?:[~/\.\w-]+)\s*$"), "file pager"),
+    
+    # Git operations (read-only)
+    (re.compile(r"^\s*git\s+(?:status|log|show|diff|branch|remote|config\s+--list)\b"), "git read operation"),
+    
+    # Basic text operations
+    (re.compile(r"^\s*echo\s+['\"].*['\"]\s*$"), "safe echo with quotes"),
+    (re.compile(r"^\s*echo\s+[^;|&`$]*\s*$"), "safe echo without special chars"),
+    
+    # Process listing
+    (re.compile(r"^\s*(?:ps|top|htop|pgrep)\b"), "process listing"),
+    
+    # Help and version
+    (re.compile(r"^\s*(?:\w+)\s+(?:--help|--version|-h|-v)\s*$"), "help/version display"),
+]
+
+
+def _split_compound_command(command: str) -> tuple[list[str], bool]:
+    """Split compound shell command into individual sub-commands.
+    
+    Uses quote-aware tokenization. Returns (sub_commands, parse_ok).
+    If parse_ok is False, the command had unclosed quotes and should be blocked.
+    
+    Args:
+        command: Shell command string to split.
+        
+    Returns:
+        Tuple of (list of sub-commands, bool indicating if parsing succeeded).
+    """
+    parts: list[str] = []
+    current: list[str] = []
+    i = 0
+    in_single_quote = False
+    in_double_quote = False
+    
+    while i < len(command):
+        c = command[i]
+        
+        if in_single_quote:
+            if c == "'":
+                in_single_quote = False
+            current.append(c)
+            
+        elif in_double_quote:
+            if c == "\\" and i + 1 < len(command):
+                # Escaped char in double quotes
+                current.append(c)
+                current.append(command[i + 1])
+                i += 2
+                continue
+            if c == '"':
+                in_double_quote = False
+            current.append(c)
+            
+        else:
+            if c == "'":
+                in_single_quote = True
+                current.append(c)
+            elif c == '"':
+                in_double_quote = True
+                current.append(c)
+            elif c in ("&", "|") and i + 1 < len(command) and command[i + 1] == c:
+                # Compound operator && or ||
+                part = "".join(current).strip()
+                if part:
+                    parts.append(part)
+                current = []
+                i += 2
+                continue
+            elif c == ";":
+                # Command separator
+                part = "".join(current).strip()
+                if part:
+                    parts.append(part)
+                current = []
+            else:
+                current.append(c)
+                
+        i += 1
+    
+    # Check for unclosed quotes - fail closed
+    if in_single_quote or in_double_quote:
+        return parts, False
+    
+    # Add final part
+    last = "".join(current).strip()
+    if last:
+        parts.append(last)
+    
+    return parts if parts else [command.strip()], True
+
+
+def _extract_unquoted_text(command: str) -> str:
+    """Extract text that is outside of quoted strings.
+    
+    This helps avoid false positives when dangerous patterns appear
+    inside quoted arguments to safe commands like echo.
+    
+    Args:
+        command: Shell command string.
+        
+    Returns:
+        Text with quoted portions removed (replaced with spaces).
+    """
+    result: list[str] = []
+    i = 0
+    in_single_quote = False
+    in_double_quote = False
+    
+    while i < len(command):
+        c = command[i]
+        
+        if in_single_quote:
+            if c == "'":
+                in_single_quote = False
+                result.append(' ')  # Replace quote content with space
+            # Skip everything inside single quotes
+            pass
+            
+        elif in_double_quote:
+            if c == "\\" and i + 1 < len(command):
+                # Skip escaped char
+                i += 2
+                continue
+            if c == '"':
+                in_double_quote = False
+                result.append(' ')  # Replace quote content with space
+            # Skip everything inside double quotes
+            pass
+            
+        else:
+            if c == "'":
+                in_single_quote = True
+                result.append(' ')
+            elif c == '"':
+                in_double_quote = True
+                result.append(' ')
+            else:
+                result.append(c)
+                
+        i += 1
+    
+    return ''.join(result)
+
+
+def _classify_single_command(command: str) -> RegexClassificationResult:
+    """Classify a single (non-compound) command using regex patterns.
+    
+    Checks patterns in order of severity: high-risk first, then medium,
+    then low, then safe. Returns at first match.
+    
+    For high-risk patterns, we check both the raw command and the
+    unquoted version (to avoid false positives from quoted strings).
+    
+    Args:
+        command: Single shell command (no &&, ||, or ; operators).
+        
+    Returns:
+        RegexClassificationResult with risk level and reasoning.
+    """
+    # Get unquoted version for safer pattern matching
+    unquoted = _extract_unquoted_text(command)
+    
+    # Check high-risk patterns first (immediate blocking)
+    # We check both raw and unquoted - some patterns (fork bombs, pipes) 
+    # are dangerous even quoted, others we check only unquoted
+    for pattern, description in _HIGH_RISK_PATTERNS:
+        # For destructive filesystem patterns, check unquoted to avoid false positives
+        # in strings like: echo "rm -rf / is dangerous"
+        if any(x in description for x in ["delete", "disk", "filesystem", "format", "recursive"]):
+            if pattern.search(unquoted):
+                return RegexClassificationResult(
+                    risk="critical",
+                    reasoning=f"High-risk pattern detected: {description}",
+                    blocked=True,
+                    is_ambiguous=False,
+                )
+        else:
+            # For other patterns (fork bombs, pipes), check raw command
+            if pattern.search(command):
+                return RegexClassificationResult(
+                    risk="critical",
+                    reasoning=f"High-risk pattern detected: {description}",
+                    blocked=True,
+                    is_ambiguous=False,
+                )
+    
+    # Check medium-risk patterns
+    for pattern, description in _MEDIUM_RISK_PATTERNS:
+        if pattern.search(command):
+            return RegexClassificationResult(
+                risk="medium",
+                reasoning=f"Medium-risk pattern detected: {description}",
+                blocked=False,
+                is_ambiguous=True,  # Needs LLM for final decision
+            )
+    
+    # Check low-risk patterns
+    for pattern, description in _LOW_RISK_PATTERNS:
+        if pattern.search(command):
+            return RegexClassificationResult(
+                risk="low",
+                reasoning=f"Low-risk pattern detected: {description}",
+                blocked=False,
+                is_ambiguous=True,  # Needs LLM for final decision
+            )
+    
+    # Check safe patterns (return quickly) - be more permissive for safe commands
+    # First check exact patterns
+    for pattern, description in _SAFE_PATTERNS:
+        if pattern.match(command):
+            return RegexClassificationResult(
+                risk="none",
+                reasoning=f"Safe pattern detected: {description}",
+                blocked=False,
+                is_ambiguous=False,
+            )
+    
+    # Additional heuristics for safe commands that didn't match exact patterns
+    # These are common read-only operations
+    _SAFE_HEURISTICS: list[tuple[re.Pattern, str]] = [
+        (re.compile(r"^\s*git\s+(?:status|log|show|diff|branch|remote|config|stash\s+list|tag)\b"), "git read operation"),
+        (re.compile(r"^\s*(?:ls|ll|la|dir)\b"), "file listing"),
+        (re.compile(r"^\s*(?:cat|head|tail|less|more)\s+(?:-[a-zA-Z0-9]+\s+)*[^|;\&\`\$]*$"), "file reading"),
+        (re.compile(r"^\s*(?:pwd|whoami|hostname|date|uptime|uname|env|printenv)\b"), "system info"),
+        (re.compile(r"^\s*echo\b"), "echo command"),
+        (re.compile(r"^\s*(?:ps|pgrep|pgrep)\b"), "process listing"),
+        (re.compile(r"^\s*(?:which|whereis|type|file)\s+\w+\s*$"), "command lookup"),
+        (re.compile(r"^\s*(?:find)\s+.*\s+(?:-name|-type|-iname)\b"), "find with safe options"),
+        (re.compile(r"^\s*(?:grep|rg|ag|ack)\s+.*$"), "text search"),
+    ]
+    
+    for pattern, description in _SAFE_HEURISTICS:
+        if pattern.match(command):
+            return RegexClassificationResult(
+                risk="none",
+                reasoning=f"Safe pattern detected: {description}",
+                blocked=False,
+                is_ambiguous=False,
+            )
+    
+    # No pattern matched - needs LLM assessment
+    return RegexClassificationResult(
+        risk="ambiguous",
+        reasoning="No regex pattern matched; requires LLM assessment",
+        blocked=False,
+        is_ambiguous=True,
+    )
+
+
+def classify_command(command: str) -> RegexClassificationResult:
+    """Classify a shell command using regex patterns.
+    
+    Implements two-pass classification:
+    1. Whole-command scan for fork bombs and download-pipe patterns
+       (these are dangerous even in quoted strings)
+    2. Per-subcommand scan after splitting compound commands
+    
+    Fail-closed: Parse errors (unclosed quotes) result in blocking.
+    
+    Args:
+        command: Shell command string to classify.
+        
+    Returns:
+        RegexClassificationResult with classification details.
+        
+    Examples:
+        >>> result = classify_command("rm -rf /")
+        >>> result.blocked
+        True
+        >>> result = classify_command("ls -la")
+        >>> result.risk
+        'none'
+        >>> result = classify_command("echo 'hello; rm foo'")
+        >>> result.risk  # Safe because ; is inside quotes
+        'none'
+    """
+    # First, do a whole-command scan for fork bombs and download-pipe patterns
+    # These are dangerous even when quoted (e.g., `bash -c ":(){:|:&};:"`)
+    _WHOLE_COMMAND_DANGEROUS: list[tuple[re.Pattern, str]] = [
+        # Fork bombs - various forms (dangerous even quoted)
+        (re.compile(r":\s*\(\s*\)\s*\{[^}]*:\s*\|[^}]*&[^}]*\}"), "fork bomb (bash function form)"),
+        (re.compile(r"\bbash\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via bash -c"),
+        (re.compile(r"\bsh\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via sh -c"),
+        # Download and execute patterns (highly dangerous even quoted)
+        (re.compile(r"\b(?:curl|wget|fetch|lynx|aria2c)\s+[^|]*[|&;]\s*(?:\bsh\b|\bbash\b|\bzsh\b|\bksh\b|\bpython\d*\b|\bperl\b|\bruby\b|\bnode\b|\bcat\s*\|?\s*sh)"), "download piped to shell interpreter"),
+        (re.compile(r"\b(?:curl|wget)\s+.*\|\s*(?:eval|exec|source|\.)\b"), "download piped to eval/exec/source"),
+    ]
+    
+    for pattern, description in _WHOLE_COMMAND_DANGEROUS:
+        if pattern.search(command):
+            return RegexClassificationResult(
+                risk="critical",
+                reasoning=f"High-risk pattern detected: {description}",
+                blocked=True,
+                is_ambiguous=False,
+            )
+    
+    # Split compound commands for per-subcommand analysis
+    sub_commands, parse_ok = _split_compound_command(command)
+    
+    # Fail closed on parse errors
+    if not parse_ok:
+        return RegexClassificationResult(
+            risk="high",
+            reasoning="Parse error: unclosed quotes detected",
+            blocked=True,
+            is_ambiguous=False,
+        )
+    
+    # Single command - classify directly
+    if len(sub_commands) == 1:
+        return _classify_single_command(sub_commands[0])
+    
+    # Compound command - classify each subcommand and take max risk
+    max_risk_level = -1
+    max_risk_result: RegexClassificationResult | None = None
+    
+    for sub_cmd in sub_commands:
+        result = _classify_single_command(sub_cmd)
+        
+        # Map risk to numeric level
+        risk_numeric = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4, "ambiguous": 2}.get(result.risk, 2)
+        
+        if risk_numeric > max_risk_level:
+            max_risk_level = risk_numeric
+            max_risk_result = result
+            
+        # Early exit if we find a critical risk
+        if max_risk_level >= 4:
+            break
+    
+    if max_risk_result is None:
+        # Shouldn't happen, but fail safely
+        return RegexClassificationResult(
+            risk="ambiguous",
+            reasoning="Compound command analysis failed",
+            blocked=False,
+            is_ambiguous=True,
+        )
+    
+    # For compound commands, adjust reasoning to mention compound nature
+    if max_risk_result.risk not in ("none", "ambiguous"):
+        reasoning = f"Compound command: sub-command triggered - {max_risk_result.reasoning}"
+    else:
+        reasoning = max_risk_result.reasoning
+    
+    return RegexClassificationResult(
+        risk=max_risk_result.risk,
+        reasoning=reasoning,
+        blocked=max_risk_result.blocked,
+        is_ambiguous=max_risk_result.is_ambiguous,
+    )

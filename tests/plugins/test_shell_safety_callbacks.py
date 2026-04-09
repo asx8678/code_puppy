@@ -17,43 +17,96 @@ from code_puppy.tools.command_runner import ShellSafetyAssessment
 
 
 class TestShellSafetyCallbackOAuthBypass:
-    """Test OAuth model bypass in shell_safety_callback."""
+    """Test OAuth model handling in shell_safety_callback.
+    
+    NOTE: OAuth bypass was removed for security. All models now go through
+    the same safety pipeline. These tests verify that OAuth models are
+    NOT bypassed (they get blocked for dangerous commands).
+    """
 
     @pytest.mark.anyio
-    async def test_callback_skips_for_oauth_model_anthropic(self):
-        """Test callback returns None for Anthropic OAuth models."""
-        with patch(
-            "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
-            return_value="claude-code-123",
+    async def test_callback_blocks_for_oauth_model_anthropic(self):
+        """OAuth bypass removed: callback should BLOCK dangerous commands even for OAuth models."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-code-123",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="medium",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.emit_info"
+            ) as mock_emit,
         ):
             result = await shell_safety_callback(
                 context=None, command="rm -rf /", cwd=None, timeout=60
             )
-            assert result is None
+            # OAuth bypass removed - should block dangerous command
+            assert result is not None
+            assert result["blocked"] is True
+            mock_emit.assert_called_once()
 
     @pytest.mark.anyio
-    async def test_callback_skips_for_oauth_model_openai(self):
-        """Test callback returns None for OpenAI OAuth models."""
-        with patch(
-            "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
-            return_value="chatgpt-4",
+    async def test_callback_blocks_for_oauth_model_openai(self):
+        """OAuth bypass removed: callback should BLOCK dangerous commands even for OpenAI OAuth models."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="chatgpt-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="medium",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.emit_info"
+            ) as mock_emit,
         ):
             result = await shell_safety_callback(
                 context=None, command="rm -rf /", cwd=None, timeout=60
             )
-            assert result is None
+            # OAuth bypass removed - should block dangerous command
+            assert result is not None
+            assert result["blocked"] is True
+            mock_emit.assert_called_once()
 
     @pytest.mark.anyio
-    async def test_callback_skips_for_oauth_model_google(self):
-        """Test callback returns None for Google OAuth models."""
-        with patch(
-            "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
-            return_value="gemini-oauth-pro",
+    async def test_callback_blocks_for_oauth_model_google(self):
+        """OAuth bypass removed: callback should BLOCK dangerous commands even for Google OAuth models."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="gemini-oauth-pro",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="medium",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.emit_info"
+            ) as mock_emit,
         ):
             result = await shell_safety_callback(
                 context=None, command="rm -rf /", cwd=None, timeout=60
             )
-            assert result is None
+            # OAuth bypass removed - should block dangerous command
+            assert result is not None
+            assert result["blocked"] is True
+            mock_emit.assert_called_once()
 
 
 class TestShellSafetyCallbackYoloModeBypass:
@@ -215,7 +268,11 @@ class TestShellSafetyCallbackCacheMiss:
 
     @pytest.mark.anyio
     async def test_llm_assessment_blocked_high_risk(self):
-        """Test LLM assessment blocks high-risk command."""
+        """Test LLM assessment blocks high-risk command.
+        
+        Uses an ambiguous command that bypasses regex pre-filter but
+        would be classified as high-risk by the LLM.
+        """
         mock_assessment = ShellSafetyAssessment(
             risk="critical", reasoning="Deletes entire filesystem"
         )
@@ -226,6 +283,10 @@ class TestShellSafetyCallbackCacheMiss:
         mock_agent_instance = MagicMock()
         mock_agent_instance.run_with_mcp = AsyncMock(return_value=mock_result)
         mock_agent_class.return_value = mock_agent_instance
+
+        # Use a command that regex pre-filter won't catch (ambiguous)
+        # but LLM would classify as critical
+        ambiguous_command = "custom_cleanup_tool --target=all --aggressive"
 
         with (
             patch(
@@ -260,7 +321,7 @@ class TestShellSafetyCallbackCacheMiss:
             ) as mock_emit,
         ):
             result = await shell_safety_callback(
-                context=None, command="rm -rf /", cwd=None, timeout=60
+                context=None, command=ambiguous_command, cwd=None, timeout=60
             )
 
             assert result is not None
@@ -268,15 +329,19 @@ class TestShellSafetyCallbackCacheMiss:
             assert result["risk"] == "critical"
             assert result["reasoning"] == "Deletes entire filesystem"
             mock_cache.assert_called_once_with(
-                "rm -rf /", None, "critical", "Deletes entire filesystem"
+                ambiguous_command, None, "critical", "Deletes entire filesystem"
             )
             mock_emit.assert_called_once()
 
     @pytest.mark.anyio
     async def test_llm_assessment_allowed_low_risk(self):
-        """Test LLM assessment allows low-risk command."""
+        """Test LLM assessment allows low-risk command.
+        
+        Uses an ambiguous command that bypasses regex pre-filter but
+        would be classified as low-risk by the LLM.
+        """
         mock_assessment = ShellSafetyAssessment(
-            risk="low", reasoning="Lists directory contents"
+            risk="low", reasoning="Safe information display"
         )
         mock_result = MagicMock()
         mock_result.output = mock_assessment
@@ -285,6 +350,10 @@ class TestShellSafetyCallbackCacheMiss:
         mock_agent_instance = MagicMock()
         mock_agent_instance.run_with_mcp = AsyncMock(return_value=mock_result)
         mock_agent_class.return_value = mock_agent_instance
+
+        # Use a command that regex pre-filter won't catch (ambiguous)
+        # but LLM would classify as low risk
+        ambiguous_command = "show_system_info --basic"
 
         with (
             patch(
@@ -316,12 +385,12 @@ class TestShellSafetyCallbackCacheMiss:
             ),
         ):
             result = await shell_safety_callback(
-                context=None, command="ls -la", cwd=None, timeout=60
+                context=None, command=ambiguous_command, cwd=None, timeout=60
             )
 
             assert result is None  # Allowed
             mock_cache.assert_called_once_with(
-                "ls -la", None, "low", "Lists directory contents"
+                ambiguous_command, None, "low", "Safe information display"
             )
 
     @pytest.mark.anyio

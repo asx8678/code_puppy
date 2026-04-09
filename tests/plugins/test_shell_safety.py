@@ -22,31 +22,21 @@ from code_puppy.plugins.shell_safety.register_callbacks import (
 
 
 class TestOAuthModelDetection:
-    """Test OAuth model detection."""
+    """Test OAuth model detection.
+    
+    NOTE: OAuth bypass was removed for security (issues ydcv, d1li, e6c5).
+    All models now go through the same safety pipeline. The is_oauth_model()
+    function always returns False.
+    """
 
-    def test_is_oauth_model_anthropic(self):
-        """Test detection of Anthropic OAuth models."""
-        assert is_oauth_model("claude-code-123")
-        assert is_oauth_model("claude-code-v1.0")
-        assert is_oauth_model("claude-code-latest")
-
-    def test_is_oauth_model_openai(self):
-        """Test detection of OpenAI OAuth models."""
-        assert is_oauth_model("chatgpt-4")
-        assert is_oauth_model("chatgpt-gpt4")
-        assert is_oauth_model("chatgpt-pro")
-
-    def test_is_oauth_model_google(self):
-        """Test detection of Google OAuth models."""
-        assert is_oauth_model("gemini-oauth")
-        assert is_oauth_model("gemini-oauth-pro")
-
-    def test_is_not_oauth_model(self):
-        """Test detection of non-OAuth models."""
+    def test_is_oauth_model_always_returns_false(self):
+        """OAuth bypass removed: is_oauth_model always returns False."""
+        # All these should return False - OAuth bypass removed
+        assert not is_oauth_model("claude-code-123")
+        assert not is_oauth_model("chatgpt-4")
+        assert not is_oauth_model("gemini-oauth")
         assert not is_oauth_model("claude-opus-4")
         assert not is_oauth_model("gpt-4")
-        assert not is_oauth_model("gemini-pro")
-        assert not is_oauth_model("local-llm")
 
     def test_is_oauth_model_none(self):
         """Test with None model name."""
@@ -55,12 +45,6 @@ class TestOAuthModelDetection:
     def test_is_oauth_model_empty_string(self):
         """Test with empty string model name."""
         assert not is_oauth_model("")
-
-    def test_is_oauth_model_case_sensitive(self):
-        """Test that model name is case-sensitive."""
-        assert is_oauth_model("claude-code-123")
-        assert not is_oauth_model("CLAUDE-CODE-123")
-        assert not is_oauth_model("Claude-Code-123")
 
 
 class TestRiskLevelComparison:
