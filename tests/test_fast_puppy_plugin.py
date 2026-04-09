@@ -14,9 +14,12 @@ from unittest.mock import MagicMock, patch
 # scope and doesn't trigger builds unless startup fires.
 from code_puppy.plugins.fast_puppy.register_callbacks import (
     _handle_fast_puppy,
-    _has_maturin,
     _on_startup,
+)
+from code_puppy.plugins.fast_puppy.builder import (
+    _has_maturin,
     _try_auto_build,
+    _build_crate,
 )
 
 
@@ -28,16 +31,16 @@ from code_puppy.plugins.fast_puppy.register_callbacks import (
 class TestHasMaturin:
     """_has_maturin should return True only when maturin is genuinely available."""
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.shutil.which")
+    @patch("code_puppy.plugins.fast_puppy.builder.shutil.which")
     def test_returns_true_when_in_path(self, mock_which: MagicMock) -> None:
         mock_which.return_value = "/usr/bin/maturin"
         assert _has_maturin() is True
 
     @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks.shutil.which",
+        "code_puppy.plugins.fast_puppy.builder.shutil.which",
         return_value=None,
     )
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.subprocess.run")
+    @patch("code_puppy.plugins.fast_puppy.builder.subprocess.run")
     def test_returns_true_on_zero_rc(
         self, mock_run: MagicMock, _mock_which: MagicMock
     ) -> None:
@@ -50,10 +53,10 @@ class TestHasMaturin:
         )
 
     @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks.shutil.which",
+        "code_puppy.plugins.fast_puppy.builder.shutil.which",
         return_value=None,
     )
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.subprocess.run")
+    @patch("code_puppy.plugins.fast_puppy.builder.subprocess.run")
     def test_returns_false_on_nonzero_rc(
         self, mock_run: MagicMock, _mock_which: MagicMock
     ) -> None:
@@ -62,11 +65,11 @@ class TestHasMaturin:
         assert _has_maturin() is False
 
     @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks.shutil.which",
+        "code_puppy.plugins.fast_puppy.builder.shutil.which",
         return_value=None,
     )
     @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks.subprocess.run",
+        "code_puppy.plugins.fast_puppy.builder.subprocess.run",
         side_effect=FileNotFoundError,
     )
     def test_returns_false_on_exception(
@@ -83,18 +86,18 @@ class TestHasMaturin:
 class TestTryAutoBuild:
     """_try_auto_build must not proceed to build when maturin install fails."""
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._build_rust_module")
+    @patch("code_puppy.plugins.fast_puppy.builder.emit_info")
+    @patch("code_puppy.plugins.fast_puppy.builder._build_crate")
     @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._has_rust_toolchain",
+        "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain",
         return_value=True,
     )
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._find_crate_dir")
+    @patch("code_puppy.plugins.fast_puppy.builder._find_crate_dir")
     @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._has_maturin",
+        "code_puppy.plugins.fast_puppy.builder._has_maturin",
         return_value=False,
     )
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.subprocess.run")
+    @patch("code_puppy.plugins.fast_puppy.builder.subprocess.run")
     def test_bails_on_failed_pip_install(
         self,
         mock_run: MagicMock,
@@ -105,7 +108,7 @@ class TestTryAutoBuild:
         mock_emit: MagicMock,
     ) -> None:
         """When pip install maturin fails, _try_auto_build returns False and
-        never calls _build_rust_module."""
+        never calls _build_crate."""
         with patch("code_puppy._core_bridge.RUST_AVAILABLE", False):
             # Simulate pip install failure
             mock_run.return_value = MagicMock(
@@ -118,21 +121,21 @@ class TestTryAutoBuild:
             assert result is False
             mock_build.assert_not_called()
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
+    @patch("code_puppy.plugins.fast_puppy.builder.emit_info")
     @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._build_rust_module",
-        return_value=True,
+        "code_puppy.plugins.fast_puppy.builder._build_crate",
+        return_value=(True, ""),
     )
     @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._has_rust_toolchain",
+        "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain",
         return_value=True,
     )
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._find_crate_dir")
+    @patch("code_puppy.plugins.fast_puppy.builder._find_crate_dir")
     @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._has_maturin",
+        "code_puppy.plugins.fast_puppy.builder._has_maturin",
         return_value=False,
     )
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.subprocess.run")
+    @patch("code_puppy.plugins.fast_puppy.builder.subprocess.run")
     def test_proceeds_on_successful_pip_install(
         self,
         mock_run: MagicMock,
@@ -142,14 +145,17 @@ class TestTryAutoBuild:
         mock_build: MagicMock,
         mock_emit: MagicMock,
     ) -> None:
-        """When pip install succeeds, _build_rust_module should be called."""
+        """When pip install succeeds, _build_crate should be called for code_puppy_core."""
         with patch("code_puppy._core_bridge.RUST_AVAILABLE", False):
             mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+            # All crate dirs return the same path in this mock setup
             mock_find_crate.return_value = Path("/fake/code_puppy_core")
 
             _try_auto_build()
 
-            mock_build.assert_called_once_with(Path("/fake/code_puppy_core"))
+            # Legacy _try_auto_build calls _try_auto_build_all which builds all crates
+            # Check that code_puppy_core was among the calls
+            mock_build.assert_any_call(Path("/fake/code_puppy_core"), "code_puppy_core")
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +239,7 @@ class TestHandleFastPuppy:
 class TestOnStartup:
     """_on_startup applies persisted preferences and optionally auto-builds."""
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build")
+    @patch("code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all")
     @patch("code_puppy._core_bridge.set_rust_enabled")
     @patch("code_puppy._core_bridge.is_rust_enabled", return_value=False)
     @patch("code_puppy._core_bridge.RUST_AVAILABLE", False)
@@ -250,11 +256,11 @@ class TestOnStartup:
         mock_set_rust: MagicMock,
         mock_auto_build: MagicMock,
     ) -> None:
-        """When persisted preference is False, _try_auto_build should STILL be called."""
+        """When persisted preference is False, _try_auto_build_all should STILL be called."""
         _on_startup()
         mock_auto_build.assert_called_once()
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build")
+    @patch("code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all")
     @patch("code_puppy._core_bridge.set_rust_enabled")
     @patch("code_puppy._core_bridge.is_rust_enabled", return_value=True)
     @patch("code_puppy._core_bridge.RUST_AVAILABLE", True)
@@ -280,7 +286,7 @@ class TestOnStartup:
         mock_set_rust.assert_called_once_with(True)
         mock_write_pref.assert_called_once_with(True)
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build")
+    @patch("code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all")
     @patch("code_puppy._core_bridge.set_rust_enabled")
     @patch("code_puppy._core_bridge.is_rust_enabled", return_value=True)
     @patch("code_puppy._core_bridge.RUST_AVAILABLE", True)

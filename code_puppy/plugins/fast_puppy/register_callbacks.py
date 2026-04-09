@@ -1,6 +1,7 @@
 """Fast Puppy — toggle Rust acceleration on/off at runtime.
 
-Auto-builds the Rust module on first startup if toolchain is available.
+Auto-builds all Rust modules (code_puppy_core, turbo_ops, turbo_parse)
+on first startup if toolchain is available.
 Persists the setting to puppy.cfg so it survives restarts.
 
 Usage:
@@ -11,175 +12,44 @@ Usage:
     /fast_puppy build     → force rebuild the Rust module
 """
 
+from __future__ import annotations
+
+import importlib
 import logging
-import shutil
-import subprocess
-import sys
-from pathlib import Path
+import shutil  # Re-export for test compatibility
+import subprocess  # Re-export for test compatibility
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info
 
+# Import builder module (may be split into builder.py for line count)
+from code_puppy.plugins.fast_puppy.builder import (
+    _find_crate_dir,
+    _find_repo_root,
+    _has_maturin,
+    _has_rust_toolchain,
+    _try_auto_build,
+    _try_auto_build_all,
+    CRATES,
+)
+
+# Re-export for backward compatibility (tests)
+__all__ = [
+    "_find_crate_dir",
+    "_find_repo_root",
+    "_has_maturin",
+    "_has_rust_toolchain",
+    "_try_auto_build",
+    "_try_auto_build_all",
+    "_handle_fast_puppy",
+    "_on_startup",
+    "_read_persisted_preference",
+    "_write_persisted_preference",
+]
+
 logger = logging.getLogger(__name__)
 
 CONFIG_KEY = "enable_fast_puppy"
-
-
-def _find_crate_dir() -> Path | None:
-    """Find the code_puppy_core crate directory."""
-    # Check relative to the code_puppy package
-    pkg_dir = Path(__file__).resolve().parent.parent.parent
-    candidates = [
-        pkg_dir.parent / "code_puppy_core",  # repo root / code_puppy_core
-        pkg_dir / "code_puppy_core",  # inside package (unlikely)
-    ]
-    for candidate in candidates:
-        if (candidate / "Cargo.toml").exists():
-            return candidate
-    return None
-
-
-def _has_rust_toolchain() -> bool:
-    """Check if Rust compiler is available."""
-    return shutil.which("rustc") is not None
-
-
-def _has_maturin() -> bool:
-    """Check if maturin is available (in PATH or as Python module)."""
-    if shutil.which("maturin") is not None:
-        return True
-    # Try as Python module
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "maturin", "--version"],
-            capture_output=True,
-            timeout=10,
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
-
-
-def _build_rust_module(crate_dir: Path) -> bool:
-    """Build and install the Rust module into the current environment."""
-    try:
-        # Try maturin from PATH first, then as Python module
-        if shutil.which("maturin"):
-            cmd = [
-                "maturin",
-                "develop",
-                "--release",
-                "--manifest-path",
-                str(crate_dir / "Cargo.toml"),
-            ]
-        else:
-            cmd = [
-                sys.executable,
-                "-m",
-                "maturin",
-                "develop",
-                "--release",
-                "--manifest-path",
-                str(crate_dir / "Cargo.toml"),
-            ]
-
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5 min max for compilation
-            cwd=str(crate_dir),
-        )
-        if result.returncode == 0:
-            return True
-        logger.debug("Rust build failed: %s", result.stderr)
-        return False
-    except subprocess.TimeoutExpired:
-        logger.debug("Rust build timed out")
-        return False
-    except Exception as e:
-        logger.debug("Rust build error: %s", e)
-        return False
-
-
-def _try_auto_build() -> bool:
-    """Attempt to auto-build the Rust module if not installed."""
-    from code_puppy._core_bridge import RUST_AVAILABLE
-
-    if RUST_AVAILABLE:
-        return True  # Already installed
-
-    crate_dir = _find_crate_dir()
-    if crate_dir is None:
-        logger.debug("Rust crate directory not found")
-        return False
-
-    if not _has_rust_toolchain():
-        logger.debug("Rust toolchain not found")
-        return False
-
-    if not _has_maturin():
-        # Try to install maturin
-        try:
-            install_result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "maturin"],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-            if install_result.returncode != 0:
-                stderr = install_result.stderr.strip() if install_result.stderr else ""
-                logger.debug(
-                    "pip install maturin failed (rc=%d): %s",
-                    install_result.returncode,
-                    stderr,
-                )
-                return False
-        except Exception as exc:
-            logger.debug("Could not install maturin: %s", exc)
-            return False
-
-    emit_info("🐕⚡ Fast Puppy: Building Rust acceleration module (first time only)...")
-    success = _build_rust_module(crate_dir)
-
-    if success:
-        # Reload the bridge module to pick up the newly built extension
-        import importlib
-        import code_puppy._core_bridge as bridge
-
-        importlib.reload(bridge)
-
-        # Also patch the module-level RUST_AVAILABLE that other modules
-        # already copied at import time (e.g., base_agent.py line 43)
-        import code_puppy.agents.base_agent as _ba
-
-        if hasattr(_ba, "RUST_AVAILABLE"):
-            _ba.RUST_AVAILABLE = bridge.RUST_AVAILABLE
-        # Re-import the Rust functions into base_agent's namespace
-        if bridge.RUST_AVAILABLE:
-            try:
-                _ba.process_messages_batch = bridge.process_messages_batch
-                _ba.prune_and_filter = bridge.prune_and_filter
-                _ba.rust_truncation_indices = bridge.truncation_indices
-                _ba.serialize_messages_for_rust = bridge.serialize_messages_for_rust
-                _ba.is_rust_enabled = bridge.is_rust_enabled
-            except Exception as exc:
-                logger.warning(
-                    "Failed to re-export Rust symbols into base_agent: %s", exc
-                )
-
-        if bridge.RUST_AVAILABLE:
-            emit_info("🐕⚡ Fast Puppy: Rust module compiled and ready — Zoom! Zoom!")
-            return True
-        else:
-            emit_info("🐕 Fast Puppy: Build succeeded but module not loadable")
-            return False
-    else:
-        emit_info(
-            "🐕 Fast Puppy: Could not build Rust module — running in pure Python mode\n"
-            "   To build manually: cd code_puppy_core && maturin develop --release"
-        )
-        return False
 
 
 def _read_persisted_preference() -> bool | None:
@@ -206,30 +76,51 @@ def _write_persisted_preference(enabled: bool) -> None:
 
 
 def _on_startup():
-    """Auto-build Rust module if needed, then force Rust enabled."""
-    _ = _read_persisted_preference()  # Read but don't use (force enable regardless)
+    """Auto-build Rust modules if needed, then force Rust enabled."""
+    try:
+        _ = _read_persisted_preference()  # Read but don't use (force enable)
 
-    # Always try to auto-build (removed guard)
-    _try_auto_build()
+        # Build all crates
+        results = _try_auto_build_all()
 
-    # Now apply the persisted preference
-    from code_puppy._core_bridge import (
-        RUST_AVAILABLE,
-        is_rust_enabled,
-        set_rust_enabled,
-    )
-
-    # Force Rust enabled after successful build
-    set_rust_enabled(True)
-    _write_persisted_preference(True)  # Persist True back to puppy.cfg
-
-    # Always announce Rust status on startup
-    if is_rust_enabled():
-        emit_info("🐕⚡ Fast Puppy: Rust acceleration active — Zoom! Zoom!")
-    elif RUST_AVAILABLE and not is_rust_enabled():
-        emit_info(
-            "🐕💤 Fast Puppy: Rust installed but disabled (/fast_puppy enable to activate)"
+        # Import bridge after potential builds
+        from code_puppy._core_bridge import (
+            RUST_AVAILABLE,
+            is_rust_enabled,
+            set_rust_enabled,
         )
+
+        # Force Rust enabled after successful build
+        set_rust_enabled(True)
+        _write_persisted_preference(True)
+
+        # Emit summary banner
+        if len(results) == 3 and all(results.values()):
+            emit_info("🐕⚡ Fast Puppy: All Rust accelerators active — zoom! zoom! 🚀")
+        elif results:
+            active_count = sum(1 for v in results.values() if v)
+            total_count = len(CRATES)
+            emit_info(f"🐕⚡ Fast Puppy: {active_count}/{total_count} Rust accelerators active")
+            for crate_spec in CRATES:
+                name = crate_spec["name"]
+                status = "✅" if results.get(name, False) else "❌"
+                emit_info(f"   {status} {name}")
+        else:
+            # No results = no toolchain or disabled
+            if not _has_rust_toolchain():
+                emit_info("🐕 Fast Puppy: Pure Python mode (Rust toolchain unavailable)")
+            else:
+                emit_info("🐕 Fast Puppy: Rust toolchain found but no crates built yet")
+
+        # Additional status if code_puppy_core specifically is available
+        if RUST_AVAILABLE and not is_rust_enabled():
+            emit_info(
+                "🐕💤 Fast Puppy: Rust installed but disabled (/fast_puppy enable to activate)"
+            )
+
+    except Exception as e:
+        logger.warning("Fast Puppy startup error: %s", e)
+        # Never let build failures crash the REPL
 
 
 def _custom_help():
@@ -262,25 +153,36 @@ def _handle_fast_puppy(command: str, name: str):
                 "   Install: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
             )
             return True
-        emit_info("🐕⚡ Fast Puppy: Building Rust module...")
-        if _try_auto_build():
-            # Reload status
-            import importlib
+        emit_info("🐕⚡ Fast Puppy: Building all Rust modules...")
+
+        results = _try_auto_build_all()
+        active_count = sum(1 for v in results.values() if v)
+        total_count = len(CRATES)
+
+        if active_count == total_count:
+            emit_info(f"🐕⚡ Fast Puppy: All {total_count} modules built successfully!")
+        else:
+            emit_info(f"🐕 Fast Puppy: {active_count}/{total_count} modules built:")
+            for crate_spec in CRATES:
+                name = crate_spec["name"]
+                status = "✅" if results.get(name, False) else "❌"
+                emit_info(f"   {status} {name}")
+
+        # Reload status and enable
+        if results.get("code_puppy_core", False):
             import code_puppy._core_bridge as bridge
 
             importlib.reload(bridge)
             set_rust_enabled(True)
             _write_persisted_preference(True)
-            emit_info("🐕⚡ Fast Puppy: Build complete! Rust acceleration is ON.")
-        else:
-            emit_info("🐕 Fast Puppy: Build failed. Check logs for details.")
+            emit_info("🐕⚡ Fast Puppy: Rust acceleration is ON.")
         return True
 
     if subcommand == "enable":
         if not RUST_AVAILABLE:
             # Try to build first
-            if _try_auto_build():
-                import importlib
+            results = _try_auto_build_all()
+            if results.get("code_puppy_core", False):
                 import code_puppy._core_bridge as bridge
 
                 importlib.reload(bridge)
@@ -321,6 +223,17 @@ def _handle_fast_puppy(command: str, name: str):
     saved = _read_persisted_preference()
     crate_dir = _find_crate_dir()
 
+    # Check all crates
+    repo_root = _find_repo_root()
+    crate_statuses = []
+    for crate_spec in CRATES:
+        from code_puppy.plugins.fast_puppy.builder import _is_crate_installed
+
+        crate_name = crate_spec["name"]
+        probe = crate_spec["probe"]
+        is_installed = _is_crate_installed(probe)
+        crate_statuses.append((crate_name, is_installed))
+
     if status["active"]:
         emoji = "⚡"
         state = "ACTIVE — Rust acceleration is speeding things up!"
@@ -348,6 +261,14 @@ def _handle_fast_puppy(command: str, name: str):
     emit_info(f"   Currently active:      {'✅' if status['active'] else '❌'}")
     emit_info(f"   puppy.cfg setting:     {saved_str}")
     emit_info(f"   → {state}")
+
+    # Show per-crate status
+    emit_info("")
+    emit_info("   Rust Crate Status:")
+    for name, installed in crate_statuses:
+        status_icon = "✅" if installed else "❌"
+        emit_info(f"     {status_icon} {name}")
+
     return True
 
 
