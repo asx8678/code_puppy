@@ -596,6 +596,195 @@ class TestZeroOverhead:
 
 
 # =============================================================================
+# Test: Client Exception Handling
+# =============================================================================
+
+
+class TestClientExceptionHandling:
+    """Test handling when LangFuse client throws exceptions."""
+
+    def test_exception_during_trace_start(self, mock_langfuse_client):
+        """Exception during trace start should be caught gracefully."""
+        # Make trace throw exception
+        mock_langfuse_client.trace.side_effect = Exception("API unavailable")
+
+        for key in ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST", "LANGFUSE_PROJECT"]:
+            os.environ.pop(key, None)
+
+        reg_module = _get_fresh_module_with_mock_client(
+            mock_langfuse_client,
+            env_vars={
+                "LANGFUSE_PUBLIC_KEY": "test-public",
+                "LANGFUSE_SECRET_KEY": "test-secret",
+            }
+        )
+
+        # Should not raise exception
+        asyncio.run(reg_module._on_agent_run_start("test-agent", "gpt-4", session_id="sess-123"))
+
+        # trace was called but exception was caught
+        assert mock_langfuse_client.trace.called
+
+    def test_exception_during_trace_end(self, mock_langfuse_client):
+        """Exception during trace end should be caught gracefully."""
+        mock_trace = MagicMock()
+        mock_trace.generation = MagicMock(return_value=MagicMock())
+        mock_trace.span = MagicMock(return_value=MagicMock())
+        mock_trace.event = MagicMock()
+        # Make update throw
+        mock_trace.update.side_effect = Exception("Connection timeout")
+
+        mock_langfuse_client.trace.return_value = mock_trace
+
+        for key in ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST", "LANGFUSE_PROJECT"]:
+            os.environ.pop(key, None)
+
+        reg_module = _get_fresh_module_with_mock_client(
+            mock_langfuse_client,
+            env_vars={
+                "LANGFUSE_PUBLIC_KEY": "test-public",
+                "LANGFUSE_SECRET_KEY": "test-secret",
+            }
+        )
+
+        # Start trace
+        asyncio.run(reg_module._on_agent_run_start("test-agent", "gpt-4", session_id="sess-123"))
+
+        # End trace - should not raise even though update fails
+        asyncio.run(reg_module._on_agent_run_end("test-agent", "gpt-4", session_id="sess-123", success=True))
+
+        # update was called but exception was caught
+        assert mock_trace.update.called
+
+    def test_exception_during_tool_span(self, mock_langfuse_client):
+        """Exception during tool span creation should be caught."""
+        mock_trace = MagicMock()
+        mock_trace.generation = MagicMock(return_value=MagicMock())
+        # Make span throw
+        mock_trace.span.side_effect = Exception("Span creation failed")
+        mock_trace.event = MagicMock()
+        mock_trace.update = MagicMock()
+
+        mock_langfuse_client.trace.return_value = mock_trace
+
+        for key in ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST", "LANGFUSE_PROJECT"]:
+            os.environ.pop(key, None)
+
+        reg_module = _get_fresh_module_with_mock_client(
+            mock_langfuse_client,
+            env_vars={
+                "LANGFUSE_PUBLIC_KEY": "test-public",
+                "LANGFUSE_SECRET_KEY": "test-secret",
+            }
+        )
+
+        mock_run_ctx = MagicMock()
+        mock_run_ctx.run_id = "parent-run-123"
+        mock_run_ctx.session_id = "sess-123"
+
+        with patch("code_puppy.run_context.get_current_run_context", return_value=mock_run_ctx):
+            # Start agent run
+            asyncio.run(reg_module._on_agent_run_start("test-agent", "gpt-4", session_id="sess-123"))
+
+            # Tool call - should not raise
+            asyncio.run(reg_module._on_pre_tool_call("list_files", {"directory": "/tmp"}))
+
+    def test_exception_during_flush(self, mock_langfuse_client):
+        """Exception during flush should be caught gracefully."""
+        mock_langfuse_client.flush.side_effect = Exception("Flush failed")
+
+        for key in ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST", "LANGFUSE_PROJECT"]:
+            os.environ.pop(key, None)
+
+        reg_module = _get_fresh_module_with_mock_client(
+            mock_langfuse_client,
+            env_vars={
+                "LANGFUSE_PUBLIC_KEY": "test-public",
+                "LANGFUSE_SECRET_KEY": "test-secret",
+            }
+        )
+
+        # Start trace
+        asyncio.run(reg_module._on_agent_run_start("test-agent", "gpt-4", session_id="sess-123"))
+
+        # End trace - should not raise even though flush fails
+        asyncio.run(reg_module._on_agent_run_end("test-agent", "gpt-4", session_id="sess-123", success=True))
+
+        # flush was called but exception was caught
+        assert mock_langfuse_client.flush.called
+
+
+# =============================================================================
+# Test: Concurrent Session Handling
+# =============================================================================
+
+
+class TestConcurrentSessions:
+    """Test handling of multiple concurrent sessions."""
+
+    def test_multiple_concurrent_sessions(self, mock_langfuse_client):
+        """Multiple concurrent sessions should be tracked independently."""
+        for key in ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST", "LANGFUSE_PROJECT"]:
+            os.environ.pop(key, None)
+
+        reg_module = _get_fresh_module_with_mock_client(
+            mock_langfuse_client,
+            env_vars={
+                "LANGFUSE_PUBLIC_KEY": "test-public",
+                "LANGFUSE_SECRET_KEY": "test-secret",
+            }
+        )
+
+        sessions = [f"concurrent-session-{i}" for i in range(5)]
+
+        # Start all sessions
+        for session_id in sessions:
+            asyncio.run(reg_module._on_agent_run_start("agent", "model", session_id=session_id))
+
+        # Verify all tracked
+        assert len(reg_module._active_traces) == 5
+
+        # End all sessions
+        for session_id in sessions:
+            asyncio.run(reg_module._on_agent_run_end("agent", "model", session_id=session_id, success=True))
+
+        # Verify all cleaned up
+        assert len(reg_module._active_traces) == 0
+
+    def test_same_session_id_reuse(self, mock_langfuse_client):
+        """Reusing same session_id should replace previous trace."""
+        for key in ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST", "LANGFUSE_PROJECT"]:
+            os.environ.pop(key, None)
+
+        reg_module = _get_fresh_module_with_mock_client(
+            mock_langfuse_client,
+            env_vars={
+                "LANGFUSE_PUBLIC_KEY": "test-public",
+                "LANGFUSE_SECRET_KEY": "test-secret",
+            }
+        )
+
+        session_id = "reused-session"
+
+        # Start first trace
+        asyncio.run(reg_module._on_agent_run_start("agent-1", "model", session_id=session_id))
+
+        # Verify trace is tracked
+        assert session_id in reg_module._active_traces
+        assert reg_module._active_traces[session_id]["agent_name"] == "agent-1"
+
+        # Start second trace with same session_id - should replace
+        asyncio.run(reg_module._on_agent_run_start("agent-2", "model", session_id=session_id))
+
+        # New trace should replace old one
+        assert len(reg_module._active_traces) == 1
+        assert reg_module._active_traces[session_id]["agent_name"] == "agent-2"
+
+        # Verify trace was called twice (once for each agent start)
+        assert mock_langfuse_client.trace.call_count == 2
+
+
+# =============================================================================
 # Test: Environment variable handling
 # =============================================================================
 

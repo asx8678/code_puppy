@@ -481,6 +481,151 @@ class TestZeroOverhead:
 
 
 # =============================================================================
+# Test: Client Exception Handling
+# =============================================================================
+
+
+class TestClientExceptionHandling:
+    """Test handling when LangSmith client throws exceptions."""
+
+    def test_exception_during_trace_start(self, mock_langsmith_client):
+        """Exception during trace start should be caught gracefully."""
+        # Make create_run throw exception
+        mock_langsmith_client.create_run.side_effect = Exception("API unavailable")
+
+        # Clear and set env vars
+        for key in ["LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_BASE_URL"]:
+            os.environ.pop(key, None)
+
+        reg_module = _get_fresh_module_with_mock_client(
+            mock_langsmith_client,
+            env_vars={"LANGSMITH_API_KEY": "test-key"}
+        )
+
+        # Should not raise exception
+        asyncio.run(reg_module._on_agent_run_start("test-agent", "gpt-4", session_id="sess-123"))
+
+        # create_run was called but exception was caught
+        assert mock_langsmith_client.create_run.called
+
+    def test_exception_during_trace_end(self, mock_langsmith_client):
+        """Exception during trace end should be caught gracefully."""
+        # Make update_run throw exception
+        mock_langsmith_client.update_run.side_effect = Exception("Connection timeout")
+
+        for key in ["LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_BASE_URL"]:
+            os.environ.pop(key, None)
+
+        reg_module = _get_fresh_module_with_mock_client(
+            mock_langsmith_client,
+            env_vars={"LANGSMITH_API_KEY": "test-key"}
+        )
+
+        # Start trace
+        asyncio.run(reg_module._on_agent_run_start("test-agent", "gpt-4", session_id="sess-123"))
+
+        # End trace - should not raise even though update_run fails
+        asyncio.run(reg_module._on_agent_run_end("test-agent", "gpt-4", session_id="sess-123", success=True))
+
+        # update_run was called but exception was caught
+        assert mock_langsmith_client.update_run.called
+
+    def test_exception_during_tool_span(self, mock_langsmith_client):
+        """Exception during tool span creation should be caught."""
+        # Make second create_run (for tool) throw
+        mock_langsmith_client.create_run.side_effect = [
+            MagicMock(),  # First call (agent run) succeeds
+            Exception("Tool span creation failed"),  # Second call (tool) fails
+        ]
+
+        for key in ["LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_BASE_URL"]:
+            os.environ.pop(key, None)
+
+        reg_module = _get_fresh_module_with_mock_client(
+            mock_langsmith_client,
+            env_vars={"LANGSMITH_API_KEY": "test-key"}
+        )
+
+        mock_run_ctx = MagicMock()
+        mock_run_ctx.run_id = "parent-run-123"
+
+        with patch("code_puppy.run_context.get_current_run_context", return_value=mock_run_ctx):
+            # Start agent run
+            asyncio.run(reg_module._on_agent_run_start("test-agent", "gpt-4", session_id="sess-123"))
+
+            # Tool call - should not raise
+            asyncio.run(reg_module._on_pre_tool_call("list_files", {"directory": "/tmp"}))
+
+
+# =============================================================================
+# Test: Concurrent Session Handling
+# =============================================================================
+
+
+class TestConcurrentSessions:
+    """Test handling of multiple concurrent sessions."""
+
+    def test_multiple_concurrent_sessions(self, mock_langsmith_client):
+        """Multiple concurrent sessions should be tracked independently."""
+        for key in ["LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_BASE_URL"]:
+            os.environ.pop(key, None)
+
+        reg_module = _get_fresh_module_with_mock_client(
+            mock_langsmith_client,
+            env_vars={"LANGSMITH_API_KEY": "test-key"}
+        )
+
+        sessions = [f"concurrent-session-{i}" for i in range(5)]
+
+        # Start all sessions
+        for session_id in sessions:
+            asyncio.run(reg_module._on_agent_run_start("agent", "model", session_id=session_id))
+
+        # Verify all tracked
+        assert len(reg_module._active_traces) == 5
+
+        # End all sessions
+        for session_id in sessions:
+            asyncio.run(reg_module._on_agent_run_end("agent", "model", session_id=session_id, success=True))
+
+        # Verify all cleaned up
+        assert len(reg_module._active_traces) == 0
+
+    def test_same_session_id_reuse(self, mock_langsmith_client):
+        """Reusing same session_id should replace previous trace."""
+        for key in ["LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_BASE_URL"]:
+            os.environ.pop(key, None)
+
+        reg_module = _get_fresh_module_with_mock_client(
+            mock_langsmith_client,
+            env_vars={"LANGSMITH_API_KEY": "test-key"}
+        )
+
+        session_id = "reused-session"
+
+        # Start first trace
+        asyncio.run(reg_module._on_agent_run_start("agent-1", "model", session_id=session_id))
+
+        # Verify first trace tracked
+        assert session_id in reg_module._active_traces
+        first_run_id = reg_module._active_traces[session_id]["run_id"]
+
+        # Start second trace with same session_id
+        asyncio.run(reg_module._on_agent_run_start("agent-2", "model", session_id=session_id))
+        second_run_id = reg_module._active_traces[session_id]["run_id"]
+
+        # New trace should replace old one
+        assert len(reg_module._active_traces) == 1
+        # Run IDs should be different since each start creates a new UUID
+        assert first_run_id != second_run_id
+        # The active trace should have the second agent name
+        assert reg_module._active_traces[session_id]["agent_name"] == "agent-2"
+
+        # Verify create_run was called twice
+        assert mock_langsmith_client.create_run.call_count == 2
+
+
+# =============================================================================
 # Test: Environment variable handling
 # =============================================================================
 
