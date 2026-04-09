@@ -103,6 +103,11 @@ class RunLimiter:
         # until it reaches 0, then releases resume normal behavior.
         self._shrink_deficit = 0
 
+        # Track how many slots were drained from each semaphore during shrink.
+        # This ensures we only release back to semaphores we actually drained from.
+        self._async_slots_drained = 0
+        self._sync_slots_drained = 0
+
     def _validate_and_fix_config(self) -> None:
         """Validate config and replace invalid values with defaults."""
         if self._config.max_concurrent_runs < 1:
@@ -312,6 +317,9 @@ class RunLimiter:
                     if self._shrink_deficit > 0:
                         self._shrink_deficit -= 1
                         logger.debug("RunLimiter: release absorbed by shrink deficit")
+                        # If deficit just reached 0, restore drained slots to semaphores
+                        if self._shrink_deficit == 0:
+                            self._restore_drained_slots()
                     else:
                         self._async_sem.release()
                     if depth == 1:
@@ -325,6 +333,8 @@ class RunLimiter:
                     if self._shrink_deficit > 0:
                         self._shrink_deficit -= 1
                         logger.debug("RunLimiter: sync release absorbed by shrink deficit")
+                        if self._shrink_deficit == 0:
+                            self._restore_drained_slots()
                     else:
                         self._sync_sem.release()
                 else:
@@ -336,6 +346,8 @@ class RunLimiter:
                     if self._shrink_deficit > 0:
                         self._shrink_deficit -= 1
                         logger.debug("RunLimiter: sync release absorbed by shrink deficit")
+                        if self._shrink_deficit == 0:
+                            self._restore_drained_slots()
                     else:
                         self._sync_sem.release()
                 elif self._async_active > 0:
@@ -346,6 +358,8 @@ class RunLimiter:
                     if self._shrink_deficit > 0:
                         self._shrink_deficit -= 1
                         logger.debug("RunLimiter: async release absorbed by shrink deficit")
+                        if self._shrink_deficit == 0:
+                            self._restore_drained_slots()
                     else:
                         self._async_sem.release()
                 else:
@@ -392,6 +406,24 @@ class RunLimiter:
         finally:
             self.release()
 
+    def _restore_drained_slots(self) -> None:
+        """Restore all drained slots to their respective semaphores.
+
+        Called when deficit reaches 0 to release previously-drained capacity
+        back to both semaphores. Must be called with _state_lock held.
+        """
+        # Restore all drained sync slots
+        while self._sync_slots_drained > 0:
+            self._sync_sem.release()
+            self._sync_slots_drained -= 1
+
+        # Restore all drained async slots
+        while self._async_slots_drained > 0:
+            self._async_sem.release()
+            self._async_slots_drained -= 1
+
+        logger.debug("RunLimiter: restored all drained slots to semaphores")
+
     def update_config(self, new_config: RunLimiterConfig) -> None:
         """Atomically swap config with coherent state-machine transitions.
 
@@ -403,6 +435,7 @@ class RunLimiter:
 
         Shrink (new < old):
             - Increase deficit to track excess capacity
+            - Immediately drain free slots from both semaphores to enforce new cap
             - Deficit absorbs next N releases, effectively lowering capacity
 
         Config mutation happens inside the state lock to prevent races.
@@ -441,6 +474,9 @@ class RunLimiter:
                         "RunLimiter: growth absorbed %d into existing deficit",
                         deficit_absorbed,
                     )
+                    # If deficit is now fully absorbed, restore drained slots
+                    if self._shrink_deficit == 0:
+                        self._restore_drained_slots()
 
                 # Release only the net-new capacity
                 for _ in range(growth):
@@ -448,13 +484,43 @@ class RunLimiter:
                     self._sync_sem.release()
 
             elif new_limit < old_limit:
-                # Shrinking: increase deficit to absorb future releases
+                # Shrinking: increase deficit to track excess capacity
                 excess = old_limit - new_limit
                 self._shrink_deficit += excess
+
+                # Immediately drain free slots from semaphores to enforce new cap.
+                # We drain at most 'excess' slots (the amount we're shrinking).
+                # This prevents new acquires from using stale free capacity.
+                #
+                # For threading.Semaphore, we use acquire(blocking=False).
+                # For asyncio.Semaphore, we directly adjust _value since we may
+                # not have a running event loop.
+                #
+                # Track how many slots we drain so we can restore them when
+                # the deficit is fully absorbed.
+                self._sync_slots_drained = 0
+                while self._sync_slots_drained < excess:
+                    if self._sync_sem.acquire(blocking=False):
+                        self._sync_slots_drained += 1
+                    else:
+                        break
+
+                self._async_slots_drained = 0
+                try:
+                    while (self._async_slots_drained < excess and
+                           self._async_sem._value > 0):
+                        self._async_sem._value -= 1
+                        self._async_slots_drained += 1
+                except AttributeError:
+                    pass
+
                 logger.debug(
-                    "RunLimiter: shrink deficit increased by %d to %d",
+                    "RunLimiter: shrink deficit increased by %d to %d "
+                    "(drained %d sync, %d async free slots)",
                     excess,
                     self._shrink_deficit,
+                    self._sync_slots_drained,
+                    self._async_slots_drained,
                 )
 
 
@@ -602,6 +668,9 @@ def force_reset_limiter_state() -> dict:
         limiter._async_waiters = 0
         limiter._sync_active = 0
         limiter._sync_waiters = 0
+        limiter._shrink_deficit = 0
+        limiter._async_slots_drained = 0
+        limiter._sync_slots_drained = 0
         # Recreate semaphores from scratch
         limiter._async_sem = asyncio.Semaphore(limit)
         limiter._sync_sem = threading.Semaphore(limit)

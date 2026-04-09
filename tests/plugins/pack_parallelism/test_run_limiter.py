@@ -522,6 +522,95 @@ class TestConfigReload:
         assert acquired, "Release after deficit=0 creates capacity"
         limiter.release()
 
+    def test_shrink_with_slack_enforces_new_cap_immediately(self, limiter):
+        """Shrink with free capacity (slack) must enforce new lower cap immediately.
+
+        Regression test for: shrink-with-slack allowed acquires past the new cap
+        because free semaphore slots were not drained immediately.
+        When shrinking from 4 to 2 with only 1 active run (3 slots free),
+        the new cap of 2 must be enforced immediately - only 1 more acquire
+        should be allowed, not 3.
+        """
+        # Start with limit 4, but only acquire 1 slot (leaving 3 slots slack)
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=4))
+        limiter.acquire_sync(blocking=False)
+        assert limiter.active_count == 1
+
+        # Shrink to 2 - should immediately drain the 2 excess free slots
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=2))
+        assert limiter.effective_limit == 2
+
+        # Should only be able to acquire 1 more slot (2 - 1 active = 1 available)
+        second_acquire = limiter.acquire_sync(blocking=False)
+        assert second_acquire, "Should acquire second slot up to new limit"
+
+        # Third acquire should fail - new cap is 2
+        third_acquire = limiter.acquire_sync(blocking=False)
+        assert not third_acquire, (
+            "Should NOT acquire third slot - new limit is 2 and "
+            "shrink should have drained excess free capacity immediately"
+        )
+
+        assert limiter.active_count == 2, f"Expected 2 active, got {limiter.active_count}"
+
+        # Clean up
+        limiter.release()
+        limiter.release()
+
+    def test_shrink_then_grow_does_not_over_release_ghost_slots(self, limiter):
+        """Shrink-then-grow must not over-release ghost slots.
+
+        Regression test for: shrink-then-grow could over-release slots if
+        deficit tracking and slot draining were inconsistent.
+        When we shrink (draining free slots + tracking deficit), then grow,
+        the growth should only restore net-new capacity after absorbing deficit.
+        """
+        # Start with limit 5, acquire 2 slots (leaving 3 slots slack)
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=5))
+        limiter.acquire_sync(blocking=False)
+        limiter.acquire_sync(blocking=False)
+        assert limiter.active_count == 2
+
+        # Shrink to 3 - should drain 2 free slots (3 excess - 1 kept = 2 drained)
+        # Deficit = 2 (5-3=2)
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=3))
+        assert limiter.effective_limit == 3
+
+        # Can only acquire 1 more (3 limit - 2 active = 1 available)
+        third_acquire = limiter.acquire_sync(blocking=False)
+        assert third_acquire, "Should acquire third slot up to new limit"
+
+        fourth_acquire = limiter.acquire_sync(blocking=False)
+        assert not fourth_acquire, "Should NOT acquire fourth - limit is 3"
+
+        assert limiter.active_count == 3
+
+        # Grow to 4 - growth is 1, deficit is 2
+        # Growth absorbs 1 from deficit (deficit now 1), no slots released
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=4))
+        assert limiter.effective_limit == 4
+
+        # Release one slot - absorbed by deficit (deficit now 0)
+        limiter.release()
+        assert limiter.active_count == 2
+
+        # Now we should be able to acquire up to 4 total
+        # Current: 2 active, can acquire 2 more
+        acquired_count = limiter.active_count
+        while limiter.acquire_sync(blocking=False):
+            acquired_count += 1
+            if acquired_count > 10:  # Safety break
+                break
+
+        assert acquired_count == 4, (
+            f"Expected 4 slots after shrink-then-grow, got {acquired_count}. "
+            "Ghost slots were likely over-released or deficit tracking failed."
+        )
+
+        # Clean up
+        while limiter.active_count > 0:
+            limiter.release()
+
 
 @pytest.mark.asyncio
 class TestAsyncConfigUpdates:
