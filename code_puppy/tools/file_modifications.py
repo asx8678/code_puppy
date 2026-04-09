@@ -32,6 +32,7 @@ from code_puppy.messaging import (  # Structured messaging types
 )
 from code_puppy.config import get_diff_context_lines
 from code_puppy.tools.common import _find_best_window, generate_group_id
+from code_puppy.utils.file_display import safe_write_file
 
 # Hoisted import for file_permission_handler with optional dependency guard
 try:
@@ -261,8 +262,8 @@ def _delete_snippet_from_file(
                 n=get_diff_context_lines(),
             )
         )
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(modified)
+        # SECURITY FIX (deepagents ADOPT #3): Use O_NOFOLLOW to prevent symlink attacks
+        safe_write_file(file_path, modified, encoding="utf-8")
         return {
             "success": True,
             "path": file_path,
@@ -380,8 +381,8 @@ def _replace_in_file(
                 n=get_diff_context_lines(),
             )
         )
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(modified)
+        # SECURITY FIX (deepagents ADOPT #3): Use O_NOFOLLOW to prevent symlink attacks
+        safe_write_file(file_path, modified, encoding="utf-8")
         return {
             "success": True,
             "path": file_path,
@@ -393,7 +394,7 @@ def _replace_in_file(
         return {"error": str(exc), "diff": diff_text}
 
 
-def _write_to_file(
+async def delete_snippet_from_file(
     context: RunContext | None,
     path: str,
     content: str,
@@ -434,8 +435,8 @@ def _write_to_file(
         diff_text = "".join(diff_lines)
 
         os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(content)
+        # SECURITY FIX (deepagents ADOPT #3): Use O_NOFOLLOW to prevent symlink attacks
+        safe_write_file(file_path, content, encoding="utf-8")
 
         action = "overwritten" if exists else "created"
         return {

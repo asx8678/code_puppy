@@ -11,6 +11,12 @@ from .dag import build_dependency_graph, detect_cycles, build_execution_waves
 from .shell_split import split_compound_command
 from .stream_parser import StreamLineParser, SSEParser, parse_jsonl_lenient
 from .llm_parsing import extract_json_from_text
+from .file_display import (
+    format_content_with_line_numbers,
+    truncate_with_guidance,
+    open_nofollow,
+    safe_write_file,
+)
 
 __all__ = [
     # Agent helpers
@@ -34,4 +40,9 @@ __all__ = [
     "parse_jsonl_lenient",
     # LLM parsing utilities
     "extract_json_from_text",
+    # File display utilities (ported from deepagents)
+    "format_content_with_line_numbers",
+    "truncate_with_guidance",
+    "open_nofollow",
+    "safe_write_file",
 ]

@@ -49,6 +49,7 @@ from code_puppy.messaging import (  # Structured messaging types
 from code_puppy.tools.common import generate_group_id, get_user_approval_async
 from code_puppy.tools.subagent_context import is_subagent
 from code_puppy.concurrency_limits import ToolCallsLimiter
+from code_puppy.utils.file_display import truncate_with_guidance
 
 # Hoisted imports - imported at module top for performance (CR-M4)
 from code_puppy.security import get_security_boundary
@@ -96,7 +97,12 @@ SHELL_BATCH_SIZE = 10
 def _truncate_line(line: str) -> str:
     """Truncate a line to MAX_LINE_LENGTH if it exceeds the limit."""
     if len(line) > MAX_LINE_LENGTH:
-        return line[:MAX_LINE_LENGTH] + "... [truncated]"
+        # ADOPT #6: Better truncation guidance for shell output
+        return truncate_with_guidance(
+            line,
+            limit_chars=MAX_LINE_LENGTH,
+            hint="... [line truncated, command output too long, try filtering with grep]"
+        )
     return line
 
 

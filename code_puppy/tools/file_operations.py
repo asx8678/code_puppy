@@ -27,6 +27,7 @@ from code_puppy.messaging import (  # New structured messaging types
     get_message_bus,
 )
 from code_puppy.token_utils import estimate_token_count as _etc
+from code_puppy.utils.file_display import format_content_with_line_numbers, truncate_with_guidance
 
 
 # Pydantic models for tool return types
@@ -925,8 +926,13 @@ def register_list_files(agent):
         # No need to emit again here
         if warning:
             result.error = warning
-        if (len(result.content)) > 200000:
-            result.content = result.content[0:200000]
+        # ADOPT #6: Truncate with helpful guidance message
+        if len(result.content) > 200000:
+            result.content = truncate_with_guidance(
+                result.content,
+                limit_chars=200000,
+                tool_name="list_files"
+            )
             result.error = "Results truncated. This is a massive directory tree, recommend non-recursive calls to list_files"
         return result
 
@@ -940,12 +946,24 @@ def register_read_file(agent):
         file_path: str = "",
         start_line: int | None = None,
         num_lines: int | None = None,
+        format_line_numbers: bool = False,
     ) -> ReadFileOutput:
         """Read file contents with optional line-range selection and token safety.
 
         Use start_line/num_lines for large files to avoid overwhelming context.
+        Set format_line_numbers=True to get cat -n style line numbering with
+        continuation markers for very long lines (>5000 chars).
         """
-        return await _read_file(context, file_path, start_line, num_lines)
+        result = await _read_file(context, file_path, start_line, num_lines)
+
+        # ADOPT #4: Optional line number formatting with continuation for long lines
+        if format_line_numbers and result.content and not result.error:
+            effective_start = start_line if start_line is not None else 1
+            result.content = format_content_with_line_numbers(
+                result.content, start_line=effective_start
+            )
+
+        return result
 
 
 def register_grep(agent):
