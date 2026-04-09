@@ -321,7 +321,17 @@ class TestSummarizeMessages:
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
     @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
-    def test_successful_summarization(self, mock_info, mock_tokens, mock_sync, agent):
+    @patch(
+        "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
+        return_value=False,
+    )
+    @patch(
+        "code_puppy.agents.base_agent.get_summarization_history_offload_enabled",
+        return_value=False,
+    )
+    def test_successful_summarization(
+        self, mock_offload, mock_pretrunc, mock_info, mock_tokens, mock_sync, agent
+    ):
         summary = [_make_msg("conversation summary")]
         mock_sync.return_value = summary
 
@@ -340,8 +350,23 @@ class TestSummarizeMessages:
     @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch("code_puppy.agents.base_agent.emit_error")
+    @patch(
+        "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
+        return_value=False,
+    )
+    @patch(
+        "code_puppy.agents.base_agent.get_summarization_history_offload_enabled",
+        return_value=False,
+    )
     def test_summarization_error_returns_original(
-        self, mock_error, mock_info, mock_tokens, mock_sync, agent
+        self,
+        mock_offload,
+        mock_pretrunc,
+        mock_error,
+        mock_info,
+        mock_tokens,
+        mock_sync,
+        agent,
     ):
         from code_puppy.summarization_agent import SummarizationError
 
@@ -363,8 +388,23 @@ class TestSummarizeMessages:
     @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch("code_puppy.agents.base_agent.emit_error")
+    @patch(
+        "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
+        return_value=False,
+    )
+    @patch(
+        "code_puppy.agents.base_agent.get_summarization_history_offload_enabled",
+        return_value=False,
+    )
     def test_unexpected_error_returns_original(
-        self, mock_error, mock_info, mock_tokens, mock_sync, agent
+        self,
+        mock_offload,
+        mock_pretrunc,
+        mock_error,
+        mock_info,
+        mock_tokens,
+        mock_sync,
+        agent,
     ):
         mock_sync.side_effect = Exception("unexpected boom")
 
@@ -380,7 +420,17 @@ class TestSummarizeMessages:
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
     @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
-    def test_without_protection(self, mock_info, mock_tokens, mock_sync, agent):
+    @patch(
+        "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
+        return_value=False,
+    )
+    @patch(
+        "code_puppy.agents.base_agent.get_summarization_history_offload_enabled",
+        return_value=False,
+    )
+    def test_without_protection(
+        self, mock_offload, mock_pretrunc, mock_info, mock_tokens, mock_sync, agent
+):
         summary = [_make_msg("summary")]
         mock_sync.return_value = summary
 
@@ -393,8 +443,16 @@ class TestSummarizeMessages:
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
     @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
+    @patch(
+        "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
+        return_value=False,
+    )
+    @patch(
+        "code_puppy.agents.base_agent.get_summarization_history_offload_enabled",
+        return_value=False,
+    )
     def test_empty_summarization_result_returns_original(
-        self, mock_info, mock_tokens, mock_sync, agent
+        self, mock_offload, mock_pretrunc, mock_info, mock_tokens, mock_sync, agent
     ):
         """When _binary_split_summarize returns empty, should return original."""
         with patch.object(agent, "_binary_split_summarize", return_value=[]):
@@ -410,8 +468,16 @@ class TestSummarizeMessages:
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
     @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
+    @patch(
+        "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
+        return_value=False,
+    )
+    @patch(
+        "code_puppy.agents.base_agent.get_summarization_history_offload_enabled",
+        return_value=False,
+    )
     def test_binary_split_called_for_large_history(
-        self, mock_info, mock_tokens, mock_sync, agent
+        self, mock_offload, mock_pretrunc, mock_info, mock_tokens, mock_sync, agent
     ):
         """Verify that _binary_split_summarize is called (not direct sync)."""
         with patch.object(

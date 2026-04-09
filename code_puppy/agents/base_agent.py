@@ -60,6 +60,13 @@ from code_puppy.callbacks import (
     on_message_history_processor_start,
 )
 
+# Compaction module for enhanced summarization (deepagents port)
+from code_puppy.compaction import (
+    compute_summarization_thresholds,
+    offload_evicted_messages,
+    pretruncate_messages,
+)
+
 # Consolidated relative imports
 from code_puppy.config import (
     get_agent_pinned_model,
@@ -68,6 +75,12 @@ from code_puppy.config import (
     get_global_model_name,
     get_message_limit,
     get_protected_token_count,
+    get_summarization_arg_max_length,
+    get_summarization_history_dir,
+    get_summarization_history_offload_enabled,
+    get_summarization_keep_fraction,
+    get_summarization_pretruncate_enabled,
+    get_summarization_trigger_fraction,
     get_use_dbos,
     get_value,
 )
@@ -855,8 +868,18 @@ class BaseAgent(ABC, AgentPromptMixin):
         if len(messages) == 1:
             return [], messages
 
-        # Get the configured protected token count
-        protected_tokens_limit = get_protected_token_count()
+        # Get the configured protected token count using model-aware fraction thresholds
+        model_name = self.get_model_name()
+        model_max = self.get_model_context_length()
+        thresholds = compute_summarization_thresholds(
+            model_name,
+            trigger_fraction=get_summarization_trigger_fraction(),
+            keep_fraction=get_summarization_keep_fraction(),
+            absolute_trigger=int(get_compaction_threshold() * model_max),  # Convert proportion to tokens
+            absolute_protected=get_protected_token_count(),
+        )
+        # Use the keep_tokens (protected zone) from computed thresholds
+        protected_tokens_limit = thresholds.keep_tokens
 
         # --- Rust fast path ------------------------------------------------
         if _rust_enabled():
@@ -1137,6 +1160,11 @@ class BaseAgent(ABC, AgentPromptMixin):
         half, each half summarized independently, and the results combined.
         This guarantees convergence for arbitrarily large histories.
 
+        Enhanced with:
+        - Pre-truncation of tool call arguments (cheap token reclamation)
+        - History offload to file (opt-in debugging)
+        - Model-aware fraction thresholds
+
         Args:
             messages: Messages to summarize
             with_protection: Whether to protect recent messages
@@ -1147,6 +1175,27 @@ class BaseAgent(ABC, AgentPromptMixin):
             where compacted_messages always preserves the original system message
             as the first entry.
         """
+        if not messages:
+            return [], []
+
+        # --- Phase 1: Pre-truncation of tool call args (cheap token reclamation) ---
+        if get_summarization_pretruncate_enabled():
+            try:
+                max_arg_len = get_summarization_arg_max_length()
+                truncated_msgs, trunc_count = pretruncate_messages(
+                    messages,
+                    keep_recent=10,
+                    max_length=max_arg_len,
+                )
+                if trunc_count > 0:
+                    emit_info(
+                        f"✂️ Pre-truncated {trunc_count} messages (tool args > {max_arg_len} chars)"
+                    )
+                messages = truncated_msgs
+            except Exception as e:
+                # Don't fail summarization if pre-truncation errors
+                logger.debug("Pre-truncation failed, continuing: %s", e)
+
         messages_to_summarize: list[ModelMessage]
         protected_messages: list[ModelMessage]
 
@@ -1160,17 +1209,31 @@ class BaseAgent(ABC, AgentPromptMixin):
             messages_to_summarize = messages[1:] if messages else []
             protected_messages = messages[:1]
 
-        if not messages:
-            return [], []
-
-        system_message = messages[0]
-
         if not messages_to_summarize:
             # Nothing to summarize, so just return the original sequence
             # Pass serialized_messages to avoid re-serialization
             return self.prune_interrupted_tool_calls(
                 messages, serialized_messages=serialized_messages
             ), []
+
+        system_message = messages[0]
+
+        # --- Phase 2: History offload (opt-in debugging) ---
+        if get_summarization_history_offload_enabled():
+            try:
+                session_id = getattr(self, "session_id", "unknown")
+                history_dir = get_summarization_history_dir()
+                offload_path = offload_evicted_messages(
+                    messages_to_summarize,
+                    session_id=session_id,
+                    archive_dir=history_dir,
+                    compact_reason="summarization",
+                )
+                if offload_path:
+                    emit_info(f"📦 Offloaded {len(messages_to_summarize)} messages to {offload_path}")
+            except Exception as e:
+                # Don't fail summarization if offload errors
+                logger.debug("History offload failed, continuing: %s", e)
 
         try:
             new_messages = self._binary_split_summarize(messages_to_summarize)

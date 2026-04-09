@@ -1493,6 +1493,88 @@ def get_compaction_strategy() -> str:
     return "truncation"
 
 
+# --- Enhanced Summarization Config (deepagents port) ---
+
+
+@_registered_cache
+def get_summarization_trigger_fraction() -> float:
+    """
+    Returns the fraction of model context window that triggers summarization.
+    Defaults to 0.85 (85%) if unset or misconfigured.
+    Configurable by 'summarization_trigger_fraction' key.
+    Clamped to [0.5, 0.95] for safety.
+    """
+    val = get_value("summarization_trigger_fraction")
+    try:
+        result = float(val) if val else 0.85
+        return max(0.5, min(0.95, result))
+    except (ValueError, TypeError):
+        return 0.85
+
+
+@_registered_cache
+def get_summarization_keep_fraction() -> float:
+    """
+    Returns the fraction of model context window to keep as protected messages.
+    Defaults to 0.10 (10%) if unset or misconfigured.
+    Configurable by 'summarization_keep_fraction' key.
+    Clamped to [0.05, 0.50] for safety.
+    """
+    val = get_value("summarization_keep_fraction")
+    try:
+        result = float(val) if val else 0.10
+        return max(0.05, min(0.50, result))
+    except (ValueError, TypeError):
+        return 0.10
+
+
+get_summarization_pretruncate_enabled = _make_bool_getter(
+    "summarization_pretruncate_enabled",
+    default=True,
+    doc="""Enable pre-truncation of tool call arguments before full summarization.
+    This is a cheap pass that reclaims tokens without an LLM call.
+    Defaults to True (enabled). Configurable by 'summarization_pretruncate_enabled' key.
+    """,
+)
+
+
+get_summarization_arg_max_length = _make_int_getter(
+    "summarization_arg_max_length",
+    default=500,
+    min_val=100,
+    max_val=10000,
+    doc="""Max characters for tool call arguments before pre-truncation.
+    Arguments longer than this will be truncated with a marker.
+    Defaults to 500. Configurable by 'summarization_arg_max_length' key.
+    """,
+)
+
+
+get_summarization_history_offload_enabled = _make_bool_getter(
+    "summarization_history_offload_enabled",
+    default=False,
+    doc="""Enable history offload to file when summarization evicts messages.
+    When enabled, evicted messages are appended to a per-session log file.
+    Defaults to False (disabled for privacy). Configurable by 'summarization_history_offload_enabled' key.
+    """,
+)
+
+
+def get_summarization_history_dir() -> Path:
+    """
+    Returns the directory for history offload files.
+    Defaults to ~/.code_puppy/history/
+    Configurable by 'summarization_history_dir' key.
+    """
+    val = get_value("summarization_history_dir")
+    if val:
+        return Path(val).expanduser()
+    return Path.home() / ".code_puppy" / "history"
+
+
+# --- End Enhanced Summarization Config ---
+
+
 get_http2 = _make_bool_getter(
     "http2",
     default=False,
