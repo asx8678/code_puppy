@@ -780,12 +780,15 @@ def on_register_model_types() -> list[dict[str, Any]]:
 
 def on_get_model_system_prompt(
     model_name: str, default_system_prompt: str, user_prompt: str
-) -> list[dict[str, Any]]:
+) -> list[Any]:
     """Allow plugins to provide custom system prompts for specific model types.
 
-    This hook allows plugins to override the system prompt handling for custom
-    model types (like claude_code or antigravity models). Each callback receives
-    the model name and should return a dict if it handles that model type, or None.
+    This hook allows plugins to override or extend system prompt handling for
+    custom model types (like claude_code or antigravity models). Callbacks are
+    executed sequentially, and each callback receives the current effective
+    prompt values produced by earlier callbacks. That chaining behavior lets
+    additive prompt plugins cooperate instead of each recomputing from the
+    original prompt independently.
 
     Args:
         model_name: The name of the model being used (e.g., "claude-code-sonnet")
@@ -795,26 +798,55 @@ def on_get_model_system_prompt(
     Each callback should return a dict with:
     - "instructions": str - the system prompt/instructions to use
     - "user_prompt": str - the (possibly modified) user prompt
-    - "handled": bool - True if this callback handled the model
+    - "handled": bool - True if this callback fully handled the model
 
     Or return None if the callback doesn't handle this model type.
 
-    Example callback:
-        def get_my_model_system_prompt(model_name, default_system_prompt, user_prompt):
-            if model_name.startswith("my-custom-"):
-                return {
-                    "instructions": "You are MyCustomBot.",
-                    "user_prompt": f"{default_system_prompt}\n\n{user_prompt}",
-                    "handled": True,
-                }
-            return None  # Not handled by this callback
-
     Returns:
-        List of results from registered callbacks (dicts or None values).
+        List of results from registered callbacks in execution order.
     """
-    return _trigger_callbacks_sync(
-        "get_model_system_prompt", model_name, default_system_prompt, user_prompt
-    )
+    phase: PhaseType = "get_model_system_prompt"
+    if not count_callbacks(phase):
+        _backlog.buffer_event(phase, (model_name, default_system_prompt, user_prompt), {})
+        return []
+
+    _ensure_plugins_loaded_for_phase(phase)
+    callbacks = get_callbacks(phase)
+    if not callbacks:
+        _backlog.buffer_event(phase, (model_name, default_system_prompt, user_prompt), {})
+        return []
+
+    results: list[Any] = []
+    current_system_prompt = default_system_prompt
+    current_user_prompt = user_prompt
+
+    for callback in callbacks:
+        try:
+            result = callback(model_name, current_system_prompt, current_user_prompt)
+            if asyncio.iscoroutine(result):
+                try:
+                    _ = asyncio.get_running_loop()
+                    task = asyncio.ensure_future(result)
+                    results.append(task)
+                    continue
+                except RuntimeError:
+                    result = asyncio.run(result)
+
+            results.append(result)
+            if isinstance(result, dict):
+                current_system_prompt = result.get(
+                    "instructions", current_system_prompt
+                )
+                current_user_prompt = result.get("user_prompt", current_user_prompt)
+            logger.debug(f"Successfully executed callback {callback.__name__}")
+        except Exception as e:
+            logger.error(
+                f"Callback {callback.__name__} failed in phase '{phase}': {e}\n"
+                f"{traceback.format_exc()}"
+            )
+            results.append(_CALLBACK_FAILED)
+
+    return results
 
 
 async def on_agent_run_start(

@@ -44,10 +44,10 @@ def _strip_editor_comments(content: str) -> str:
     """Strip editor-added comments from content.
 
     Uses sentinel-style approach: only lines starting with '# // ' are stripped.
-    This preserves ALL other content including:
-#   - Markdown headers (e.g., '# Heading', '## Subheader')
-    - Code comments (e.g., '# TODO: fix this')
-    - Any other lines starting with '#'
+    This preserves all other content, including:
+        - Markdown headers (for example: '# Heading', '## Subheader')
+        - Code comments (for example: '# TODO: fix this')
+        - Any other lines starting with '#'
 
     Args:
         content: Raw content from editor
@@ -228,12 +228,13 @@ def _handle_create(args: list[str]) -> None:
 
     store = _get_store()
 
-    # Open editor with starter content
-    # IMPORTANT: Editor comments must use '# // ' prefix to be stripped
-    starter = f"""# // Enter your custom system prompt for {agent_name}
+    # Open editor with starter content.
+    # IMPORTANT: Editor comments must use '# // ' prefix to be stripped.
+    starter = f"""# // Add extra instructions for {agent_name}
+# // These lines are appended to the built-in agent prompt.
 # // Lines starting with '# // ' are ignored (all other lines preserved)
 
-You are a helpful AI assistant.
+Prefer concise, actionable responses.
 """
     content = _open_editor(starter)
 
@@ -241,7 +242,7 @@ You are a helpful AI assistant.
         emit_warning("Creation cancelled")
         return
 
-    # Strip editor comments (sentinel-style: only lines starting with '# ')
+    # Strip editor comments (sentinel-style: only lines starting with '# // ')
     content = _strip_editor_comments(content)
 
     if not content:
@@ -277,10 +278,11 @@ def _handle_edit(args: list[str]) -> None:
         emit_info("Use '/prompts duplicate' to create an editable copy")
         return
 
-    # Open editor with current content
-    # IMPORTANT: Editor comments must use '# // ' prefix to be stripped
+    # Open editor with current content.
+    # IMPORTANT: Editor comments must use '# // ' prefix to be stripped.
     header = (
-        f"# // Editing: {tmpl.name} ({tmpl.id})\n"
+        f"# // Editing instructions for: {tmpl.name} ({tmpl.id})\n"
+        "# // These instructions are appended to the built-in agent prompt.\n"
         f"# // Lines starting with '# // ' are ignored (all other lines preserved)\n\n"
     )
     content = _open_editor(header + tmpl.content)
@@ -289,7 +291,7 @@ def _handle_edit(args: list[str]) -> None:
         emit_warning("Edit cancelled")
         return
 
-    # Strip editor comments (sentinel-style: only lines starting with '# ')
+    # Strip editor comments (sentinel-style: only lines starting with '# // ')
     content = _strip_editor_comments(content)
 
     if not content:
@@ -382,7 +384,7 @@ def _handle_activate(args: list[str]) -> None:
         emit_success(f"✅ Activated template for {agent_name}: {tmpl.name}")
         emit_info(f"   ID: {template_id}")
         emit_info(
-            "\nThe next time you use this agent, it will use this custom prompt."
+            "\nThe next time you use this agent, it will append these custom instructions."
         )
     except ValueError as e:
         emit_error(f"Failed to activate template: {e}")
@@ -399,7 +401,7 @@ def _handle_reset(args: list[str]) -> None:
 
     store.clear_active_for_agent(agent_name)
     emit_success(f"✅ Reset prompt for {agent_name}")
-    emit_info("Next run will use the default system prompt.")
+    emit_info("Next run will use the default built-in prompt without this addition.")
 
 
 def _handle_help() -> None:
@@ -409,14 +411,14 @@ def _handle_help() -> None:
         "  /prompts list [agent]        - List all templates (optionally filter by agent)"
     )
     emit_info("  /prompts show <id>           - Show full content of a template")
-    emit_info("  /prompts create <agent> <name> - Create new template (opens $EDITOR)")
+    emit_info("  /prompts create <agent> <name> - Create prompt instructions (opens $EDITOR)")
     emit_info("  /prompts edit <id>           - Edit existing template")
     emit_info(
         "  /prompts duplicate <id> <new-name> - Create editable copy of any template"
     )
     emit_info("  /prompts delete <id>          - Delete a user template")
     emit_info("  /prompts activate <agent> <id> - Activate template for an agent")
-    emit_info("  /prompts reset <agent>        - Revert to default prompt for agent")
+    emit_info("  /prompts reset <agent>        - Remove the custom prompt addition for an agent")
     emit_info("  /prompts help                 - Show this help\n")
     emit_info("Workflow: create → edit → activate")
     emit_info("Storage: ~/.code_puppy/prompt_store.json")
@@ -480,7 +482,7 @@ def get_prompts_help() -> list[tuple[str, str]]:
     return [
         ("/prompts list [agent]", "List prompt templates (all or for one agent)"),
         ("/prompts show <id>", "Show full content of a template"),
-        ("/prompts create <agent> <name>", "Create new user prompt (opens editor)"),
+        ("/prompts create <agent> <name>", "Create prompt instructions (opens editor)"),
         ("/prompts edit <id>", "Edit an existing user template"),
         (
             "/prompts duplicate <id> <new-name>",
@@ -488,7 +490,7 @@ def get_prompts_help() -> list[tuple[str, str]]:
         ),
         ("/prompts delete <id>", "Delete a user template"),
         ("/prompts activate <agent> <id>", "Activate a template for an agent"),
-        ("/prompts reset <agent>", "Revert to default prompt for agent"),
+        ("/prompts reset <agent>", "Remove the custom prompt addition for an agent"),
         ("/prompts help", "Show this help"),
     ]
 
@@ -496,14 +498,15 @@ def get_prompts_help() -> list[tuple[str, str]]:
 def load_custom_prompt() -> str | None:
     """Callback for load_prompt hook.
 
-    If the user has set an active custom prompt for the current agent,
-    return it as a base system prompt addition.
+    If the user has set active prompt instructions for the current agent,
+    return them so they can be appended to the built-in prompt.
 
-    This runs BEFORE get_model_system_prompt hooks, allowing other plugins
-    (like agent_skills and repo_compass) to enhance the prompt we provide.
+    This runs BEFORE get_model_system_prompt hooks, so later prompt plugins
+    can further enhance the combined prompt without losing these user
+    instructions.
 
     Returns:
-        Custom prompt content if active template exists, None otherwise
+        Prompt instructions if an active template exists, None otherwise
     """
     try:
         agent_name = get_current_agent_name()
@@ -519,5 +522,5 @@ def load_custom_prompt() -> str | None:
     if template is None:
         return None  # Let other handlers process
 
-    # Return the custom template content as a string for load_prompt hook
+    # Return the active template content so it is appended via load_prompt.
     return template.content

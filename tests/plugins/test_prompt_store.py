@@ -477,80 +477,43 @@ class TestLoadCustomPrompt:
 
 
 # =============================================================================
-# Integration Tests: Plugin Coexistence
+# Prompt Hook Contract Tests
 # =============================================================================
 
 
-class TestPluginCoexistence:
-    """Integration tests verifying prompt_store works with other prompt-injecting plugins.
-    
-    These tests verify that prompt_store (using load_prompt hook), agent_skills,
-    and repo_compass (using get_model_system_prompt hook) can all contribute to
-    the final system prompt without overwriting each other.
-    """
+class TestPromptHookContract:
+    """Tests for the prompt_store load_prompt hook contract."""
 
     @patch("code_puppy.plugins.prompt_store.commands.get_current_agent_name")
     @patch("code_puppy.plugins.prompt_store.commands._get_store")
     def test_prompt_store_contributes_via_load_prompt(self, mock_get_store, mock_get_agent):
-        """prompt_store returns string via load_prompt hook (not dict via get_model_system_prompt)."""
+        """prompt_store returns a string via load_prompt, not a dict."""
         from code_puppy.plugins.prompt_store.commands import load_custom_prompt
 
         mock_get_agent.return_value = "code-puppy"
 
         mock_template = MagicMock()
-        mock_template.content = "Custom base prompt from prompt_store"
+        mock_template.content = "Custom prompt instructions"
         mock_store = MagicMock()
         mock_store.get_active_for_agent.return_value = mock_template
         mock_get_store.return_value = mock_store
 
         result = load_custom_prompt()
 
-        # Should return a string, not a dict (this is the key architectural change)
         assert isinstance(result, str)
-        assert result == "Custom base prompt from prompt_store"
+        assert result == "Custom prompt instructions"
 
     def test_load_prompt_hook_signature_matches(self):
-        """load_custom_prompt has correct signature for load_prompt hook (no args, returns str|None)."""
-        from code_puppy.plugins.prompt_store.commands import load_custom_prompt
+        """load_custom_prompt has the load_prompt signature: () -> str | None."""
         import inspect
+
+        from code_puppy.plugins.prompt_store.commands import load_custom_prompt
 
         sig = inspect.signature(load_custom_prompt)
         params = list(sig.parameters.keys())
 
-        # load_prompt hook expects () -> str | None
         assert params == [], f"load_custom_prompt should take no args, got {params}"
-
-        # Check return annotation
-        assert sig.return_annotation == "str | None" or sig.return_annotation == str(sig.return_annotation)
-
-    @patch("code_puppy.plugins.prompt_store.commands.load_custom_prompt")
-    def test_prompt_store_runs_before_model_specific_hooks(self, mock_load_custom):
-        """prompt_store's load_prompt runs early, allowing other plugins to enhance.
-        
-        This simulates the hook execution order:
-        1. load_prompt (prompt_store provides base template)
-        2. get_model_system_prompt (agent_skills, repo_compass add enhancements)
-        """
-        mock_load_custom.return_value = "Base template from prompt_store"
-
-        # Simulate what agents do: collect load_prompt results
-        from code_puppy import callbacks
-        
-        # Mock the callback system to simulate multiple plugins
-        with patch.object(callbacks, 'on_load_prompt', return_value=[
-            "Base template from prompt_store",  # prompt_store contribution
-            "\n\n## Pack Leader Parallelism\nMAX_PARALLEL_AGENTS = 2",  # pack_parallelism
-        ]):
-            prompt_additions = callbacks.on_load_prompt()
-            
-            # Filter and combine like agents do
-            valid_additions = [p for p in prompt_additions if p is not None]
-            combined = "\n".join(valid_additions)
-            
-            # Should contain prompt_store's contribution
-            assert "Base template from prompt_store" in combined
-            # Should also contain other plugins' contributions
-            assert "Pack Leader Parallelism" in combined
+        assert sig.return_annotation == "str | None"
 
 
 # =============================================================================

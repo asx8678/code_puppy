@@ -1,19 +1,20 @@
 """Callback registration for prompt_store plugin.
 
 Registers callbacks for:
-- load_prompt: Injects user's custom prompts into system prompts (early hook for base prompt)
+- load_prompt: Injects user prompt instructions into the built-in system prompt
 - custom_command: Handles /prompts slash commands
 - custom_command_help: Advertises /prompts commands in /help menu
 
 Storage: ~/.code_puppy/prompt_store.json (configurable via PUPPY_PROMPT_STORE env var)
 
 Note on hook architecture:
-    - load_prompt: Used for base system prompt contributions (returns str | None)
-    - get_model_system_prompt: Used for model-specific overrides (returns dict | None)
-    
-    prompt_store uses load_prompt to provide the base template, which then gets
-    enhanced by other plugins (agent_skills, repo_compass) via get_model_system_prompt.
-    This prevents collisions where prompt_store would overwrite other plugins' content.
+    - load_prompt: Used for additive prompt instructions (returns str | None)
+    - get_model_system_prompt: Used for chained model-specific overrides (returns dict | None)
+
+    prompt_store uses load_prompt to append user instructions to the built-in
+    agent prompt. Those instructions are then preserved when later
+    get_model_system_prompt callbacks (such as agent_skills or repo_compass)
+    further enhance the prompt.
 """
 
 from __future__ import annotations
@@ -30,8 +31,8 @@ logger = logging.getLogger(__name__)
 def _register() -> None:
     """Register all prompt_store callbacks."""
     # Hook into system prompt generation at the load_prompt phase.
-    # This runs BEFORE get_model_system_prompt hooks, allowing other plugins
-    # (like agent_skills and repo_compass) to enhance our base template.
+    # This appends user instructions to the built-in agent prompt before
+    # later chained get_model_system_prompt hooks further enhance it.
     register_callback("load_prompt", load_custom_prompt)
 
     # Register slash command handlers
