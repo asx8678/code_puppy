@@ -416,6 +416,44 @@ def test_render_agent_response_plain(renderer, console):
     renderer._render_agent_response(msg)
 
 
+def test_do_render_dispatches_agent_response(renderer, console):
+    """Regression: _do_render must dispatch AgentResponseMessage to _render_agent_response.
+
+    This was broken in the wmq3 fix (bd issue code_puppy-nv4) where the
+    dispatcher had `pass` for AgentResponseMessage, causing all CLI markdown
+    to render as literal text (**bold**, ## headers, | tables |).
+    """
+    msg = AgentResponseMessage(
+        content="# Header\n\n**bold** text and `code`",
+        is_markdown=True,
+    )
+    renderer._do_render(msg)
+    out = output(console)
+    # Banner should appear
+    assert "AGENT RESPONSE" in out
+    # The literal markdown syntax should NOT appear (it should be rendered)
+    # Rich's Markdown renderer converts **bold** to styled text without asterisks
+    assert "**bold**" not in out  # If this fails, markdown isn't being rendered
+    # The actual text content should still be present
+    assert "bold" in out
+    assert "Header" in out
+
+
+def test_do_render_dispatches_subagent_response(renderer, console):
+    """Regression: _do_render must dispatch SubAgentResponseMessage to _render_subagent_response."""
+    msg = SubAgentResponseMessage(
+        agent_name="qa-expert",
+        session_id="test-session",
+        response="# Report\n\n**Critical** finding",
+        message_count=3,
+    )
+    renderer._do_render(msg)
+    out = output(console)
+    assert "qa-expert" in out
+    assert "**Critical**" not in out  # Should be rendered, not literal
+    assert "Critical" in out
+
+
 @patch("code_puppy.messaging.rich_renderer.is_subagent", return_value=False)
 def test_render_subagent_invocation(mock_sub, renderer, console):
     msg = SubAgentInvocationMessage(

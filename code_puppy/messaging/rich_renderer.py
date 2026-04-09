@@ -385,13 +385,19 @@ class RichConsoleRenderer:
         elif isinstance(message, AgentReasoningMessage):
             self._render_agent_reasoning(message)
         elif isinstance(message, AgentResponseMessage):
-            # Skip rendering - we now stream agent responses via event_stream_handler
-            pass
+            # TODO(bd:code_puppy-nv4): Streaming prints plain text chunks; this re-renders
+            # as markdown after completion. Causes visible duplication but restores
+            # markdown rendering broken by wmq3 fix. Follow-up: suppress streamed
+            # lines before re-rendering, OR implement inline markup streaming.
+            self._render_agent_response(message)
         elif isinstance(message, SubAgentInvocationMessage):
             self._render_subagent_invocation(message)
         elif isinstance(message, SubAgentResponseMessage):
-            # Skip rendering - we now display sub-agent responses via display_non_streamed_result
-            pass
+            # TODO(bd:code_puppy-nv4): Streaming prints plain text chunks; this re-renders
+            # as markdown after completion. Causes visible duplication but restores
+            # markdown rendering broken by wmq3 fix. Follow-up: suppress streamed
+            # lines before re-rendering, OR implement inline markup streaming.
+            self._render_subagent_response(message)
         elif isinstance(message, UniversalConstructorMessage):
             self._render_universal_constructor(message)
         elif isinstance(message, UserInputRequest):
