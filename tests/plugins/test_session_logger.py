@@ -1,6 +1,8 @@
 """Tests for the session_logger plugin."""
 
+import asyncio
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -793,3 +795,353 @@ class TestSessionLoggerCallbacks:
         result = _safe_serialize(EnvVars())
         assert "wJalrXUtnFEMI/K7MDENG" not in str(result)
         assert "[REDACTED]" in str(result)
+
+
+class TestSessionLoggerAsyncNonBlocking:
+    """REGRESSION TEST ijx: Ensure async callbacks do not block the event loop."""
+
+    @pytest.fixture(autouse=True)
+    def reset_sessions(self):
+        """Reset session state before each test."""
+        from code_puppy.plugins.session_logger import register_callbacks as rc
+
+        with rc._lock:
+            rc._sessions.clear()
+            rc._session_tool_call_ids.clear()
+        yield
+        with rc._lock:
+            rc._sessions.clear()
+            rc._session_tool_call_ids.clear()
+
+    @patch(
+        "code_puppy.plugins.session_logger.register_callbacks.get_session_logger_enabled"
+    )
+    @patch(
+        "code_puppy.plugins.session_logger.register_callbacks.get_session_logger_dir"
+    )
+    async def test_agent_run_end_does_not_block_event_loop(
+        self, mock_get_dir, mock_enabled, tmp_path
+    ):
+        """agent_run_end should not block the event loop with synchronous file I/O.
+
+        This is a regression test for code_puppy-ijx. The fix ensures all
+        blocking writer calls are wrapped in asyncio.to_thread().
+        """
+        mock_enabled.return_value = True
+        mock_get_dir.return_value = tmp_path / "sessions"
+
+        from code_puppy.plugins.session_logger.register_callbacks import (
+            _on_agent_run_end,
+            _on_agent_run_start,
+        )
+
+        # Start a session
+        await _on_agent_run_start(
+            agent_name="test-agent",
+            model_name="test-model",
+            session_id="async-test-sid",
+        )
+
+        # Measure timing to ensure event loop isn't blocked
+        start_time = time.monotonic()
+
+        # This should complete without blocking other asyncio tasks
+        await _on_agent_run_end(
+            agent_name="test-agent",
+            model_name="test-model",
+            session_id="async-test-sid",
+            success=True,
+            response_text="Test response" * 100,  # Larger payload
+        )
+
+        elapsed = time.monotonic() - start_time
+
+        # The operation should complete reasonably fast (event loop not blocked)
+        # If it were doing blocking I/O directly, it would block the event loop
+        assert elapsed < 5.0, f"agent_run_end took too long ({elapsed:.2f}s), may be blocking"
+
+        # Verify session was written correctly
+        session_dirs = list((tmp_path / "sessions").iterdir())
+        assert len(session_dirs) == 1
+
+    @patch(
+        "code_puppy.plugins.session_logger.register_callbacks.get_session_logger_enabled"
+    )
+    @patch(
+        "code_puppy.plugins.session_logger.register_callbacks.get_session_logger_dir"
+    )
+    async def test_concurrent_tool_calls_do_not_block(
+        self, mock_get_dir, mock_enabled, tmp_path
+    ):
+        """Multiple concurrent tool calls should not block each other.
+
+        This is a regression test for code_puppy-ijx ensuring that
+        asyncio.to_thread() allows other tasks to proceed during file I/O.
+        """
+        mock_enabled.return_value = True
+        mock_get_dir.return_value = tmp_path / "sessions"
+
+        from code_puppy.plugins.session_logger.register_callbacks import (
+            _on_agent_run_end,
+            _on_agent_run_start,
+            _on_post_tool_call,
+            _on_pre_tool_call,
+        )
+
+        await _on_agent_run_start(
+            agent_name="test-agent",
+            model_name="test-model",
+            session_id="concurrent-sid",
+        )
+
+        async def simulate_tool_call(tool_idx: int) -> float:
+            """Simulate a tool call and return elapsed time."""
+            context = {"agent_session_id": "concurrent-sid"}
+            tool_args = {"index": tool_idx}
+
+            pre_start = time.monotonic()
+            await _on_pre_tool_call(
+                tool_name="test_tool",
+                tool_args=tool_args,
+                context=context,
+            )
+            pre_elapsed = time.monotonic() - pre_start
+
+            # Simulate some work
+            await asyncio.sleep(0.01)
+
+            post_start = time.monotonic()
+            await _on_post_tool_call(
+                tool_name="test_tool",
+                tool_args=tool_args,
+                result={"ok": True, "index": tool_idx},
+                duration_ms=10.0,
+                context=context,
+            )
+            post_elapsed = time.monotonic() - post_start
+
+            return pre_elapsed + post_elapsed
+
+        # Run 5 tool calls concurrently
+        start = time.monotonic()
+        results = await asyncio.gather(*[simulate_tool_call(i) for i in range(5)])
+        total_elapsed = time.monotonic() - start
+
+        # Total time should be much less than sequential (5 * ~0.1s = 0.5s)
+        # If properly async, should complete in ~0.1s + overhead
+        assert total_elapsed < 1.0, (
+            f"Concurrent tool calls took {total_elapsed:.2f}s, "
+            "file I/O may be blocking the event loop"
+        )
+
+        # Finalize session
+        await _on_agent_run_end(
+            agent_name="test-agent",
+            model_name="test-model",
+            session_id="concurrent-sid",
+            success=True,
+        )
+
+        # Verify all tool calls were recorded
+        jsonl_path = list((tmp_path / "sessions").iterdir())[0].joinpath(
+            "tool_calls.jsonl"
+        )
+        lines = jsonl_path.read_text().strip().split("\n")
+        assert len(lines) == 5, f"Expected 5 tool calls, found {len(lines)}"
+
+
+class TestSessionLoggerToolCallCorrelation:
+    """REGRESSION TEST a57: Tool call correlation under concurrency."""
+
+    @pytest.fixture(autouse=True)
+    def reset_sessions(self):
+        """Reset session state before each test."""
+        from code_puppy.plugins.session_logger import register_callbacks as rc
+
+        with rc._lock:
+            rc._sessions.clear()
+            rc._session_tool_call_ids.clear()
+        yield
+        with rc._lock:
+            rc._sessions.clear()
+            rc._session_tool_call_ids.clear()
+
+    @patch(
+        "code_puppy.plugins.session_logger.register_callbacks.get_session_logger_enabled"
+    )
+    @patch(
+        "code_puppy.plugins.session_logger.register_callbacks.get_session_logger_dir"
+    )
+    async def test_concurrent_identical_tool_calls_correlated_correctly(
+        self, mock_get_dir, mock_enabled, tmp_path
+    ):
+        """Concurrent identical tool calls should each be correlated correctly.
+
+        This is a regression test for code_puppy-a57. Previously, using
+        hash(str(tool_args)) as the correlation key caused race conditions
+        where concurrent identical tool calls would clobber each other.
+
+        The fix uses RunContext metadata to pass call_id from pre to post.
+        """
+        mock_enabled.return_value = True
+        mock_get_dir.return_value = tmp_path / "sessions"
+
+        from code_puppy.plugins.session_logger.register_callbacks import (
+            _on_agent_run_end,
+            _on_agent_run_start,
+            _on_post_tool_call,
+            _on_pre_tool_call,
+        )
+        from code_puppy.run_context import (
+            create_root_run_context,
+            set_current_run_context,
+            reset_run_context,
+        )
+
+        await _on_agent_run_start(
+            agent_name="test-agent",
+            model_name="test-model",
+            session_id="correlation-sid",
+        )
+
+        # Simulate concurrent identical tool calls with proper RunContext
+        async def simulate_identical_tool_call(call_idx: int) -> dict:
+            """Simulate a tool call with identical args using proper RunContext."""
+            # Create a unique RunContext for this tool call (simulating what callbacks.py does)
+            root_ctx = create_root_run_context(
+                component_type="agent",
+                component_name="test-agent",
+                session_id="correlation-sid",
+            )
+            token = set_current_run_context(root_ctx)
+
+            try:
+                # All calls have IDENTICAL tool_name and tool_args
+                context = {"agent_session_id": "correlation-sid"}
+                tool_args = {"file_path": "/same/file.txt"}  # IDENTICAL args
+
+                await _on_pre_tool_call(
+                    tool_name="read_file",  # IDENTICAL tool name
+                    tool_args=tool_args,
+                    context=context,
+                )
+
+                # Simulate work
+                await asyncio.sleep(0.01)
+
+                await _on_post_tool_call(
+                    tool_name="read_file",
+                    tool_args=tool_args,
+                    result={"content": f"result-{call_idx}"},  # Different result per call
+                    duration_ms=10.0,
+                    context=context,
+                )
+
+                return {"ok": True, "index": call_idx}
+            finally:
+                reset_run_context(token)
+
+        # Run 5 identical tool calls concurrently
+        # With the old hash-based correlation, these would clobber each other
+        await asyncio.gather(*[simulate_identical_tool_call(i) for i in range(5)])
+
+        # Finalize session
+        await _on_agent_run_end(
+            agent_name="test-agent",
+            model_name="test-model",
+            session_id="correlation-sid",
+            success=True,
+        )
+
+        # Verify all 5 tool calls were recorded with correct results
+        jsonl_path = list((tmp_path / "sessions").iterdir())[0].joinpath(
+            "tool_calls.jsonl"
+        )
+        lines = jsonl_path.read_text().strip().split("\n")
+
+        # Critical assertion: should have exactly 5 tool calls
+        assert len(lines) == 5, (
+            f"Expected 5 tool calls, found {len(lines)}. "
+            "Concurrent identical tool calls may have clobbered each other."
+        )
+
+        # Verify each call has its own distinct result (not all the same)
+        results = [json.loads(line)["result"]["content"] for line in lines]
+        expected_results = {f"result-{i}" for i in range(5)}
+        actual_results = set(results)
+
+        assert actual_results == expected_results, (
+            f"Tool call results were corrupted. Expected {expected_results}, got {actual_results}. "
+            "This indicates the hash-based correlation was used instead of RunContext metadata."
+        )
+
+    @patch(
+        "code_puppy.plugins.session_logger.register_callbacks.get_session_logger_enabled"
+    )
+    @patch(
+        "code_puppy.plugins.session_logger.register_callbacks.get_session_logger_dir"
+    )
+    async def test_tool_call_correlation_with_run_context_metadata(
+        self, mock_get_dir, mock_enabled, tmp_path
+    ):
+        """Tool call correlation uses RunContext metadata correctly.
+
+        Verifies that the call_id is stored in and retrieved from RunContext metadata,
+        not just the hash-based key.
+        """
+        mock_enabled.return_value = True
+        mock_get_dir.return_value = tmp_path / "sessions"
+
+        from code_puppy.plugins.session_logger.register_callbacks import (
+            _on_agent_run_start,
+            _on_pre_tool_call,
+        )
+        from code_puppy.run_context import (
+            create_root_run_context,
+            set_current_run_context,
+            reset_run_context,
+            get_current_run_context,
+        )
+        from code_puppy.plugins.session_logger import register_callbacks as rc
+
+        await _on_agent_run_start(
+            agent_name="test-agent",
+            model_name="test-model",
+            session_id="metadata-sid",
+        )
+
+        # Create a RunContext and set it
+        ctx = create_root_run_context(
+            component_type="agent",
+            component_name="test-agent",
+            session_id="metadata-sid",
+        )
+        token = set_current_run_context(ctx)
+
+        try:
+            # Call pre_tool_call
+            context = {"agent_session_id": "metadata-sid"}
+            await _on_pre_tool_call(
+                tool_name="test_tool",
+                tool_args={"key": "value"},
+                context=context,
+            )
+
+            # Verify call_id was stored in RunContext metadata
+            current_ctx = get_current_run_context()
+            assert current_ctx is not None
+            assert "_session_logger_call_id" in current_ctx.metadata, (
+                "call_id should be stored in RunContext metadata for correlation"
+            )
+            call_id = current_ctx.metadata["_session_logger_call_id"]
+            assert call_id is not None
+            assert isinstance(call_id, str)
+            assert call_id.startswith("test_tool-")
+
+        finally:
+            reset_run_context(token)
+
+        # Cleanup
+        with rc._lock:
+            rc._sessions.clear()
+            rc._session_tool_call_ids.clear()

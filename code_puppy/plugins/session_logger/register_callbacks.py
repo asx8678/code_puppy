@@ -14,6 +14,7 @@ Session logs are written to the canonical sessions_dir (typically
 ~/.code_puppy/sessions). There is no separate session_logger_dir setting.
 """
 
+import asyncio
 import logging
 import threading
 import uuid
@@ -100,7 +101,10 @@ async def _on_agent_run_start(
             _sessions[sid] = writer
             _session_tool_call_ids[sid] = {}
 
-        writer.append_log(f"Agent '{agent_name}' started with model '{model_name}'")
+        # FIX ijx: Wrap blocking I/O in asyncio.to_thread()
+        await asyncio.to_thread(
+            writer.append_log, f"Agent '{agent_name}' started with model '{model_name}'"
+        )
         logger.debug(f"Session logging started for session {sid}")
 
     except Exception as e:
@@ -147,20 +151,21 @@ async def _on_agent_run_end(
             logger.debug(f"No session writer found for session {sid}")
             return
 
-        # Log completion
+        # Log completion - FIX ijx: Wrap blocking I/O in asyncio.to_thread()
         status = "completed successfully" if success else "failed"
-        writer.append_log(f"Agent run {status}")
+        await asyncio.to_thread(writer.append_log, f"Agent run {status}")
         if response_text:
             preview = (
                 response_text[:200] + "..."
                 if len(response_text) > 200
                 else response_text
             )
-            writer.append_log(f"Response: {preview}")
+            await asyncio.to_thread(writer.append_log, f"Response: {preview}")
 
         # Convert exception to string for manifest
         error_str = str(error) if error else None
-        writer.finalize(success=success, error=error_str)
+        # FIX ijx: Wrap blocking I/O in asyncio.to_thread()
+        await asyncio.to_thread(writer.finalize, success=success, error=error_str)
 
         logger.debug(f"Session logging finalized for session {sid}")
 
@@ -199,10 +204,24 @@ async def _on_pre_tool_call(
         if writer is None or call_ids is None:
             return
 
-        # Record the pre-tool-call and store the call_id
-        call_id = writer.record_pre_tool_call(tool_name, tool_args, context)
+        # FIX ijx: Wrap blocking I/O in asyncio.to_thread()
+        call_id = await asyncio.to_thread(
+            writer.record_pre_tool_call, tool_name, tool_args, context
+        )
 
-        # Create a key to match with post_tool_call
+        # FIX a57: Use RunContext metadata instead of hash-based key for correlation
+        # This prevents race conditions when concurrent identical tool calls occur
+        try:
+            from code_puppy.run_context import get_current_run_context
+
+            run_ctx = get_current_run_context()
+            if run_ctx is not None:
+                # Store call_id in RunContext metadata for correlation with post_tool_call
+                run_ctx.metadata["_session_logger_call_id"] = call_id
+        except Exception:
+            pass  # Fall through to legacy hash-based correlation
+
+        # Legacy hash-based correlation as fallback (may have race conditions)
         tool_key = f"{tool_name}:{hash(str(tool_args))}"
 
         with _lock:
@@ -240,18 +259,32 @@ async def _on_post_tool_call(
         if sid is None:
             return  # Not part of a tracked session
 
-        # Get the matching call_id from pre_tool_call if available
-        tool_key = f"{tool_name}:{hash(str(tool_args))}"
+        # FIX a57: Try RunContext metadata first for race-safe correlation
+        call_id = None
+        try:
+            from code_puppy.run_context import get_current_run_context
+
+            run_ctx = get_current_run_context()
+            if run_ctx is not None:
+                call_id = run_ctx.metadata.pop("_session_logger_call_id", None)
+        except Exception:
+            pass
+
+        # Fallback to hash-based correlation if RunContext method failed
+        if call_id is None:
+            tool_key = f"{tool_name}:{hash(str(tool_args))}"
+            with _lock:
+                call_id = _session_tool_call_ids.get(sid, {}).pop(tool_key, None)
 
         with _lock:
-            call_id = _session_tool_call_ids.get(sid, {}).pop(tool_key, None)
             writer = _sessions.get(sid)
 
         if writer is None:
             return
 
-        # Log the completed tool call
-        writer.append_tool_call(
+        # FIX ijx: Wrap blocking I/O in asyncio.to_thread()
+        await asyncio.to_thread(
+            writer.append_tool_call,
             tool_name=tool_name,
             tool_args=tool_args,
             result=result,
@@ -261,7 +294,10 @@ async def _on_post_tool_call(
 
         # Also append to main log for human readability
         status = "completed" if result is not None else "returned None"
-        writer.append_log(f"Tool '{tool_name}' {status} ({duration_ms:.1f}ms)")
+        await asyncio.to_thread(
+            writer.append_log,
+            f"Tool '{tool_name}' {status} ({duration_ms:.1f}ms)",
+        )
 
     except Exception as e:
         logger.debug(f"Failed to record post_tool_call: {e}")
