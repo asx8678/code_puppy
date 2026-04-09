@@ -612,6 +612,326 @@ class TestConfigReload:
             limiter.release()
 
 
+# ============================================================================
+# Regression tests for per-side growth (no shared growth counter)
+# ============================================================================
+
+
+class TestPerSideGrowthRegression:
+    """Regression tests for per-side independent growth calculation.
+
+    These tests verify that the fix for the shared growth counter bug is working:
+    - Growth must be computed independently per side (async vs sync)
+    - Deficit on one side must NOT steal capacity from the other side
+    - Each semaphore receives only its net-new capacity after absorbing its own deficit
+    """
+
+    def test_sync_only_deficit_does_not_shortchange_async_on_grow(self):
+        """Sync-only deficit must NOT steal growth budget from async side.
+
+        Regression test for: The old shared-growth model would subtract sync deficit
+        from the shared growth counter, leaving less (or nothing) for async.
+        With per-side growth calculation, each side starts with full growth amount.
+
+        The KEY VERIFICATION: After grow, we can acquire up to the new limit.
+        With the old bug, async would get 0 growth (stolen by sync deficit),
+        limiting total capacity to 1 instead of 3.
+        """
+        # Start with limit 3
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=3))
+
+        # Acquire all 3 slots via sync (creates sync-only deficit on shrink)
+        for _ in range(3):
+            limiter.acquire_sync(blocking=False)
+        assert limiter.active_count == 3
+        assert limiter._sync_active == 3
+        assert limiter._async_active == 0
+
+        # Shrink to 1 - creates sync_deficit of 2 (3-1=2), async_deficit = 0
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=1))
+        assert limiter.effective_limit == 1
+        assert limiter._sync_deficit == 2
+        assert limiter._async_deficit == 0
+
+        # Record async semaphore value before grow (should be 3 - full capacity)
+        async_value_before = limiter._async_sem._value
+        sync_value_before = limiter._sync_sem._value
+
+        # Grow back to 3 - total_growth = 2
+        # Old (buggy) behavior: growth=2, sync_absorbs=min(2,2)=2, growth=0, async gets 0
+        #   - Result: async_sem stays at 3, sync_sem goes to 0+2=2? No wait...
+        #   - With old code, remaining growth (0) released to BOTH, so async gets 0
+        # New (fixed) behavior:
+        #   - async_growth=2, async_deficit=0, releases 2 to async_sem (3+2=5? No, max is 3)
+        #   - sync_growth=2, sync_absorbs=min(2,2)=2, sync_growth=0, sync gets 0
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=3))
+        assert limiter.effective_limit == 3
+        assert limiter._sync_deficit == 0  # Fully absorbed
+        assert limiter._async_deficit == 0  # No deficit to absorb
+
+        # With per-side growth, async semaphore should have gained 2 slots
+        # (but capped at 3 max since that's the limit)
+        async_value_after = limiter._async_sem._value
+        sync_value_after = limiter._sync_sem._value
+
+        # Async should have full capacity (3) - it was never depleted
+        assert async_value_after == 3, (
+            f"Expected async_sem._value=3 (full capacity), got {async_value_after}"
+        )
+
+        # Sync should have 0 (all 3 slots in use, no free slots)
+        assert sync_value_after == 0, (
+            f"Expected sync_sem._value=0 (all slots in use), got {sync_value_after}"
+        )
+
+        # The key test: Release all slots and verify we can acquire up to limit 3
+        for _ in range(3):
+            limiter.release()
+        assert limiter.active_count == 0
+
+        # After releases and grow, we should be able to acquire exactly 3 slots
+        # With the bug, we'd only be able to acquire 1 (async's growth stolen)
+        acquired_count = 0
+        while limiter.acquire_sync(blocking=False):
+            acquired_count += 1
+            if acquired_count > 10:  # Safety break
+                break
+
+        assert acquired_count == 3, (
+            f"Expected 3 slots after grow with sync-only deficit, got {acquired_count}. "
+            "Async side was shortchanged by sync deficit absorbing shared growth."
+        )
+
+        # Clean up
+        while limiter.active_count > 0:
+            limiter.release()
+
+    def test_async_only_deficit_does_not_shortchange_sync_on_grow(self):
+        """Async-only deficit must NOT steal growth budget from sync side.
+
+        Regression test for: The old shared-growth model would subtract async deficit
+        from the shared growth counter, leaving less (or nothing) for sync.
+        With per-side growth calculation, each side starts with full growth amount.
+
+        We simulate async deficit by using actual async acquires then shrinking.
+        """
+        # Start with limit 3
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=3))
+
+        # Use an async function to fill the limiter via async path
+        async def fill_async():
+            await limiter.acquire_async()
+
+        # Run 3 async acquires concurrently to fill the limiter
+        async def fill_all():
+            tasks = [asyncio.create_task(fill_async()) for _ in range(3)]
+            await asyncio.sleep(0.05)  # Let tasks acquire slots
+            return tasks
+
+        # Run in new event loop to avoid test isolation issues
+        loop = asyncio.new_event_loop()
+        try:
+            tasks = loop.run_until_complete(fill_all())
+            assert limiter._async_active == 3
+            assert limiter._sync_active == 0
+
+            # Shrink to 1 - creates async_deficit of 2 (3-1=2), sync_deficit = 0
+            # Note: the drain will try to drain from async_sem but all 3 slots are "in use"
+            # Actually with threading.Semaphore for sync drain, it drains independently
+            # So sync_sem can drain 2 slots (none in use), async_sem can't drain (all in use)
+            limiter.update_config(RunLimiterConfig(max_concurrent_runs=1))
+            assert limiter.effective_limit == 1
+            # After shrink, async has deficit 2 (couldn't drain), sync has deficit 0 (drained 2)
+            assert limiter._async_deficit == 2
+            assert limiter._sync_deficit == 0
+
+            # Record sync semaphore value before grow (should have 1 slot, limit 1 - active 0)
+            sync_value_before = limiter._sync_sem._value
+
+            # Grow back to 3 - total_growth = 2
+            # Old (buggy) behavior: growth=2, async_absorbs=min(2,2)=2, growth=0, sync gets 0
+            # New (fixed) behavior:
+            #   - sync_growth=2, sync_deficit=0, releases 2 to sync_sem
+            #   - async_growth=2, async_absorbs=min(2,2)=2, async_growth=0, async gets 0
+            limiter.update_config(RunLimiterConfig(max_concurrent_runs=3))
+            assert limiter.effective_limit == 3
+            assert limiter._async_deficit == 0  # Fully absorbed
+            assert limiter._sync_deficit == 0  # No deficit to absorb
+
+            # Sync semaphore should have gained 2 slots from growth
+            sync_value_after = limiter._sync_sem._value
+            expected_sync_increase = 2
+            actual_sync_increase = sync_value_after - sync_value_before
+
+            assert actual_sync_increase == expected_sync_increase, (
+                f"Expected sync_sem to gain {expected_sync_increase} slots from growth, "
+                f"got {actual_sync_increase}. Async-only deficit stole sync's growth budget!"
+            )
+
+            # Release all async slots
+            for _ in range(3):
+                limiter.release()
+            assert limiter.active_count == 0
+
+            # We should be able to acquire up to 3 slots via sync (full capacity restored)
+            acquired_count = 0
+            while limiter.acquire_sync(blocking=False):
+                acquired_count += 1
+                if acquired_count > 10:  # Safety break
+                    break
+
+            assert acquired_count == 3, (
+                f"Expected 3 slots after grow with async-only deficit, got {acquired_count}. "
+                "Sync side was shortchanged by async deficit absorbing shared growth."
+            )
+
+            # Clean up tasks
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+                    try:
+                        loop.run_until_complete(t)
+                    except asyncio.CancelledError:
+                        pass
+
+        finally:
+            loop.close()
+
+        # Final cleanup
+        while limiter.active_count > 0:
+            limiter.release()
+
+    def test_both_sides_deficit_and_grow_restores_both_correctly(self):
+        """Both-sides deficit must absorb growth independently, then restore both.
+
+        Verifies that when both async and sync have deficits, each side absorbs
+        its own deficit from its own growth budget, then releases net-new capacity.
+
+        This test manually sets up deficits to verify the growth calculation is independent.
+        """
+        # Start with limit 4
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=4))
+
+        # Manually set up both sides having deficits
+        # This simulates a scenario where both sides were shrunk while fully active
+        limiter._sync_deficit = 2
+        limiter._async_deficit = 2
+
+        # Verify initial state: both semaphores have full capacity (4 slots each)
+        # since we haven't actually acquired anything
+        assert limiter._sync_sem._value == 4
+        assert limiter._async_sem._value == 4
+
+        # Grow to 6 - total_growth = 2 for each side
+        # Sync: growth=2, absorbs 2 deficit, releases 0 net-new to sync_sem (stays at 4)
+        # Async: growth=2, absorbs 2 deficit, releases 0 net-new to async_sem (stays at 4)
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=6))
+        assert limiter.effective_limit == 6
+        assert limiter._sync_deficit == 0  # Fully absorbed
+        assert limiter._async_deficit == 0  # Fully absorbed
+
+        # Both semaphores should still have 4 slots (no net-new released since
+        # growth was fully absorbed by deficits on both sides)
+        assert limiter._sync_sem._value == 4, (
+            f"Expected sync_sem._value=4 (no net-new released), got {limiter._sync_sem._value}"
+        )
+        assert limiter._async_sem._value == 4, (
+            f"Expected async_sem._value=4 (no net-new released), got {limiter._async_sem._value}"
+        )
+
+        # Now grow again to 8 - total_growth = 2 for each side
+        # This time no deficits, so each side gets 2 net-new slots
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=8))
+        assert limiter.effective_limit == 8
+        assert limiter._sync_deficit == 0
+        assert limiter._async_deficit == 0
+
+        # Now both semaphores should have 6 slots each (4 + 2 net-new)
+        assert limiter._sync_sem._value == 6, (
+            f"Expected sync_sem._value=6 (4+2 net-new), got {limiter._sync_sem._value}"
+        )
+        assert limiter._async_sem._value == 6, (
+            f"Expected async_sem._value=6 (4+2 net-new), got {limiter._async_sem._value}"
+        )
+
+        # Should be able to acquire 6 sync slots (limited by effective_limit=8 but
+        # sync_sem only has 6 slots - this is expected with independent semaphores)
+        acquired_count = 0
+        while limiter.acquire_sync(blocking=False):
+            acquired_count += 1
+            if acquired_count > 10:  # Safety break
+                break
+
+        # We should get 6 slots (the sync semaphore capacity)
+        assert acquired_count == 6, (
+            f"Expected 6 sync slots after growth, got {acquired_count}. "
+            "Per-side growth restoration failed."
+        )
+
+        # Clean up
+        while limiter.active_count > 0:
+            limiter.release()
+
+    def test_growth_independence_with_different_deficits(self):
+        """Different deficits per side must not interfere with each other's growth.
+
+        Verifies that when async has large deficit and sync has small deficit,
+        each side gets its full growth budget independently.
+        """
+        # Start with limit 5
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=5))
+
+        # Create scenario: sync uses 5 slots, async uses 0
+        # After shrink 5->3, sync_deficit=2, async_deficit=0
+        for _ in range(5):
+            limiter.acquire_sync(blocking=False)
+        assert limiter._sync_active == 5
+        assert limiter._async_active == 0
+
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=3))
+        assert limiter.effective_limit == 3
+        assert limiter._sync_deficit == 2
+        assert limiter._async_deficit == 0
+
+        # Now simulate async usage and deficit by manually setting state
+        # This represents async having been shrunk from 5->4 while active
+        limiter._async_deficit = 3  # Async had 3 deficit from separate shrink
+
+        # Grow to 6 - total_growth = 3 for each side
+        # Sync: growth=3, absorbs 2 deficit, releases 1 to sync_sem
+        # Async: growth=3, absorbs 3 deficit, releases 0 to async_sem
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=6))
+        assert limiter.effective_limit == 6
+        assert limiter._sync_deficit == 0  # 2 - 3? No, min(3,2)=2 absorbed, remaining 0
+        assert limiter._async_deficit == 0  # 3 - 3 = 0 absorbed
+
+        # Verify sync deficit was fully absorbed (got 1 net-new, but all used)
+        # Actually: sync had deficit 2, growth 3, absorbed 2, net-new 1
+        # But we have 5 sync active, so the 1 net-new is already "used" by existing
+        # The key point is both deficits were reduced correctly
+
+        # Release all 5 sync slots
+        for _ in range(5):
+            limiter.release()
+        assert limiter.active_count == 0
+
+        # After grow to 6, we should be able to acquire 6 slots
+        acquired_count = 0
+        while limiter.acquire_sync(blocking=False):
+            acquired_count += 1
+            if acquired_count > 10:  # Safety break
+                break
+
+        assert acquired_count == 6, (
+            f"Expected 6 slots after grow with different deficits, got {acquired_count}. "
+            "Growth budget was incorrectly shared between sides."
+        )
+
+        # Clean up
+        while limiter.active_count > 0:
+            limiter.release()
+
+
 @pytest.mark.asyncio
 class TestAsyncConfigUpdates:
     """Test update_config with async waiters."""
