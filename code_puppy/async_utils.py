@@ -10,12 +10,57 @@ from __future__ import annotations
 import asyncio
 import atexit
 import functools
+import logging
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Generic, TypeVar
 
 T = TypeVar("T")
+
+
+# Module-level logger for warn_once
+_logger = logging.getLogger(__name__)
+
+# Thread-safe storage for warn_once tracking
+_warn_once_keys: set[str] = set()
+_warn_once_lock = threading.Lock()
+
+
+def warn_once(key: str, message: str, logger: logging.Logger | None = None) -> None:
+    """Log a warning message only once per unique key.
+    
+    This prevents log spam from repeated warnings (e.g., missing OAuth tokens,
+    MCP server failures) by tracking which keys have already been logged.
+    
+    Thread-safe for concurrent calls.
+    
+    Args:
+        key: Unique identifier for this warning. Duplicate keys are suppressed.
+        message: The warning message to log on first occurrence.
+        logger: Optional logger to use. Falls back to module logger if None.
+    
+    Example:
+        >>> warn_once("oauth_token_missing", "OAuth token not configured")
+        >>> warn_once("oauth_token_missing", "OAuth token not configured")  # Silently ignored
+    """
+    with _warn_once_lock:
+        if key in _warn_once_keys:
+            return
+        _warn_once_keys.add(key)
+    
+    log = logger or _logger
+    log.warning(message)
+
+
+def clear_warn_once_history() -> None:
+    """Clear all warn_once tracking state.
+    
+    Useful for testing to reset state between test cases.
+    """
+    with _warn_once_lock:
+        _warn_once_keys.clear()
+
 
 
 @functools.lru_cache(maxsize=512)
