@@ -14,40 +14,23 @@ Phase 2: Debounced batch updater
 - Immediate operations for reinforce/remove (bypass debounce)
 - Graceful flush on shutdown
 
-Phase 4: Signal detection
-- Correction/reinforcement/preference pattern detection
-- Regex-based analysis of user messages
-- Configurable confidence deltas per signal type
+Phase 6: Configuration and CLI
+- Config-based opt-in activation
+- /memory slash command with subcommands
+- Rich formatted memory display
+- JSON export for transparency
 """
 
-from .signals import (
-    CORRECTION_DELTA,
-    PREFERENCE_DELTA,
-    REINFORCEMENT_DELTA,
-    Signal,
-    SignalDetector,
-    SignalType,
-    detect_signals,
-    has_correction,
-    has_preference,
-    has_reinforcement,
-)
+from .config import MemoryConfig, get_config, is_memory_enabled
 from .storage import FileMemoryStorage, Fact
 from .updater import MemoryUpdater, DEFAULT_DEBOUNCE_MS
 
 __all__ = [
-    "CORRECTION_DELTA",
     "DEFAULT_DEBOUNCE_MS",
     "Fact",
     "FileMemoryStorage",
+    "MemoryConfig",
     "MemoryUpdater",
-    "PREFERENCE_DELTA",
-    "REINFORCEMENT_DELTA",
-    "Signal",
-    "SignalDetector",
-    "SignalType",
-    "detect_signals",
-    "has_correction",
-    "has_preference",
-    "has_reinforcement",
+    "get_config",
+    "is_memory_enabled",
 ]
