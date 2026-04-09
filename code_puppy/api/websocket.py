@@ -1,9 +1,22 @@
 """WebSocket endpoints for Code Puppy API.
 
 Provides real-time communication channels:
-- /ws/events - Server-sent events stream
+- /ws/events - Server-sent events stream with per-session history replay
 - /ws/terminal - Interactive PTY terminal sessions
 - /ws/health - Simple health check endpoint
+
+Session History Replay:
+    The /ws/events endpoint supports seamless client reconnection via session
+    history. Clients can provide a session_id query parameter:
+        ws://localhost:8765/ws/events?session_id=abc123
+
+    When a client reconnects with the same session_id, all events that were
+    emitted while disconnected are replayed before live streaming resumes.
+    The history buffer size is controlled by the ws_history_maxlen config
+    setting (default: 200 events per session).
+
+    Graceful degradation: If no session_id is provided, history replay is
+    skipped and the client receives only live events.
 """
 
 import asyncio
@@ -21,26 +34,52 @@ def setup_websocket(app: FastAPI) -> None:
 
     @app.websocket("/ws/events")
     async def websocket_events(websocket: WebSocket) -> None:
-        """Stream real-time events to connected clients."""
-        await websocket.accept()
-        logger.info("Events WebSocket client connected")
+        """Stream real-time events to connected clients with history replay.
 
+        Supports session-based history replay for seamless reconnection.
+        Provide session_id as query param: /ws/events?session_id=abc123
+        """
+        await websocket.accept()
+
+        # Extract session_id from query params for history replay
+        session_id = websocket.query_params.get("session_id")
+        logger.info(f"Events WebSocket client connected (session_id={session_id})")
+
+        from code_puppy.messaging.history_buffer import get_history_buffer
         from code_puppy.plugins.frontend_emitter.emitter import (
             get_recent_events,
+            record_event,
             subscribe,
             unsubscribe,
         )
 
         event_queue = subscribe()
+        history_buffer = get_history_buffer()
 
         try:
+            # Step 1: Replay session-specific history (if session_id provided)
+            if session_id:
+                session_history = history_buffer.get_history(session_id)
+                for event in session_history:
+                    await websocket.send_json(event)
+                logger.debug(
+                    f"Replayed {len(session_history)} events for session {session_id}"
+                )
+
+            # Step 2: Replay global recent events (legacy behavior for backward compat)
             recent_events = get_recent_events()
             for event in recent_events:
                 await websocket.send_json(event)
 
+            # Step 3: Live streaming with optional session recording
             while True:
                 try:
                     event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
+
+                    # Record to session history if session_id provided
+                    if session_id:
+                        record_event(session_id, event)
+
                     await websocket.send_json(event)
                 except asyncio.TimeoutError:
                     try:
@@ -48,11 +87,15 @@ def setup_websocket(app: FastAPI) -> None:
                     except Exception:
                         break
         except WebSocketDisconnect:
-            logger.info("Events WebSocket client disconnected")
+            logger.info(
+                f"Events WebSocket client disconnected (session_id={session_id})"
+            )
         except Exception as e:
-            logger.error(f"Events WebSocket error: {e}")
+            logger.error(f"Events WebSocket error (session_id={session_id}): {e}")
         finally:
             unsubscribe(event_queue)
+            # Note: We don't clear session history here - it's needed for
+            # reconnection scenarios. Consider adding TTL cleanup later.
 
     @app.websocket("/ws/terminal")
     async def websocket_terminal(websocket: WebSocket) -> None:

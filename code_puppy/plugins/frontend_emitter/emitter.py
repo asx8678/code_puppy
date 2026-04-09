@@ -2,6 +2,8 @@
 
 Provides a global event queue that WebSocket handlers can subscribe to.
 Events are JSON-serializable dicts with type, timestamp, and data.
+
+Also records events to the session history buffer for replay on reconnect.
 """
 
 import asyncio
@@ -15,6 +17,7 @@ from code_puppy.config import (
     get_frontend_emitter_max_recent_events,
     get_frontend_emitter_queue_size,
 )
+from code_puppy.messaging.history_buffer import get_history_buffer
 
 logger = logging.getLogger(__name__)
 
@@ -119,3 +122,29 @@ def clear_recent_events() -> None:
     """
     _recent_events.clear()
     logger.debug("Recent events cleared")
+
+
+def record_event(session_id: str, event: dict[str, Any]) -> None:
+    """Record an event to the session history buffer for replay.
+
+    Thread-safe. Can be called from any thread.
+
+    Args:
+        session_id: The session identifier.
+        event: The event dict to record (must be JSON-serializable).
+    """
+    buffer = get_history_buffer()
+    buffer.record(session_id, event)
+
+
+def get_session_history(session_id: str) -> list[dict[str, Any]]:
+    """Get buffered history for a specific session.
+
+    Args:
+        session_id: The session identifier.
+
+    Returns:
+        List of events for the session, or empty list if unknown.
+    """
+    buffer = get_history_buffer()
+    return buffer.get_history(session_id)

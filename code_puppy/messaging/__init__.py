@@ -147,10 +147,23 @@ from .subagent_console import (
 
 
 # =============================================================================
+# Session History Buffer (WebSocket replay)
+# =============================================================================
+from .history_buffer import (
+    SessionHistoryBuffer,
+    get_history_buffer,
+    reset_history_buffer,
+)
+
+# =============================================================================
 # Export all public symbols
 # =============================================================================
 
 __all__ = [
+    # Session History Buffer
+    "SessionHistoryBuffer",
+    "get_history_buffer",
+    "reset_history_buffer",
     # -------------------------------------------------------------------------
     # Legacy API (backward compatible)
     # -------------------------------------------------------------------------

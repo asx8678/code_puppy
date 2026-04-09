@@ -2084,6 +2084,23 @@ def get_frontend_emitter_queue_size() -> int:
         return 100
 
 
+def get_ws_history_maxlen() -> int:
+    """Get max number of events to buffer per WebSocket session for replay.
+
+    When a WebSocket client reconnects with a session_id, this many recent
+    events are replayed before live streaming begins.
+
+    Default: 200 (matches Orion EventStreamBroker)
+    """
+    val = get_value("ws_history_maxlen")
+    if val is None:
+        return 200
+    try:
+        return int(val)
+    except ValueError:
+        return 200
+
+
 # --- AGENT MEMORY CONFIGURATION ---
 def get_enable_agent_memory() -> bool:
     """Return True if agent memory is enabled (default False).
