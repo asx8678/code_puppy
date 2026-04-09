@@ -23,8 +23,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from code_puppy.config import get_value
-
 if TYPE_CHECKING:
     from typing import Optional
 
@@ -56,6 +54,9 @@ class MemoryConfig:
 
 def _get_int(key: str, default: int) -> int:
     """Get integer config value with fallback."""
+    # Import inside function to avoid caching reference at module load time
+    from code_puppy.config import get_value
+
     raw = get_value(key)
     if raw is None:
         return default
@@ -68,6 +69,9 @@ def _get_int(key: str, default: int) -> int:
 
 def _get_bool(key: str, default: bool) -> bool:
     """Get boolean config value with fallback."""
+    # Import inside function to avoid caching reference at module load time
+    from code_puppy.config import get_value
+
     raw = get_value(key)
     if raw is None:
         return default
@@ -84,6 +88,9 @@ def _get_bool(key: str, default: bool) -> bool:
 
 def _get_float(key: str, default: float) -> float:
     """Get float config value with fallback."""
+    # Import inside function to avoid caching reference at module load time
+    from code_puppy.config import get_value
+
     raw = get_value(key)
     if raw is None:
         return default
@@ -100,6 +107,9 @@ def load_config() -> MemoryConfig:
     Returns:
         MemoryConfig with loaded values or defaults
     """
+    # Import inside function to avoid caching reference at module load time
+    from code_puppy.config import get_value
+
     # Support both old and new config keys
     enabled = _get_bool("enable_agent_memory", False) or _get_bool("memory_enabled", False)
     debounce_seconds = _get_int("memory_debounce_seconds", 30)

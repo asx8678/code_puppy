@@ -104,7 +104,7 @@ def _on_startup() -> None:
     _detector = SignalDetector()
 
     logger.debug(
-        "Agent Memory plugin initialized (Phases 5 & 6: Full Integration + Config/CLI) - "
+        "Agent Memory plugin activated (Phases 5 & 6: Full Integration + Config/CLI) - "
         f"max_facts={_config.max_facts}, token_budget={_config.token_budget}, "
         f"extraction_enabled={_config.extraction_enabled}"
     )
@@ -529,7 +529,10 @@ def _on_load_prompt(
     Returns:
         Dict with enhanced prompt if memories found, None otherwise
     """
-    if not _memory_enabled or (_config and not _config.enabled):
+    # Always call load_config() to support mocking in tests
+    config = load_config()
+
+    if not _memory_enabled or not config.enabled:
         return None
 
     try:
@@ -552,9 +555,6 @@ def _on_load_prompt(
 
         if not agent_name:
             return None
-
-        # Load configuration
-        config = _config or load_config()
 
         # Get facts for this agent
         storage = _get_storage(agent_name)

@@ -314,13 +314,18 @@ class TestMemoryConfig:
     """Tests for memory configuration."""
 
     def test_default_config_values(self) -> None:
-        """Test default configuration values."""
+        """Test default configuration values (Phase 6 OPT-IN defaults)."""
         config = MemoryConfig()
 
-        assert config.enabled is True
-        assert config.max_facts == 10
-        assert config.token_budget == 800
+        # Phase 6: OPT-IN, disabled by default for privacy
+        assert config.enabled is False
+        # Phase 6: Increased max_facts from 10 to 50
+        assert config.max_facts == 50
+        # Phase 6: Reduced token_budget from 800 to 500
+        assert config.token_budget == 500
         assert config.min_confidence == 0.5
+        # Phase 6: Changed from debounce_ms (30000) to debounce_seconds (30)
+        assert config.debounce_seconds == 30
         assert config.debounce_ms == 30000
         assert config.extraction_enabled is True
 
