@@ -47,6 +47,9 @@ _RUNNING_PROCESSES = command_runner_module._RUNNING_PROCESSES
 _RUNNING_PROCESSES_LOCK = command_runner_module._RUNNING_PROCESSES_LOCK
 _USER_KILLED_PROCESSES = command_runner_module._USER_KILLED_PROCESSES
 
+# Import truncation hint constant for assertions
+LINE_TRUNCATION_HINT = command_runner_module.LINE_TRUNCATION_HINT
+
 
 class TestTimeoutHandling:
     """Test timeout behavior in command execution."""
@@ -195,9 +198,9 @@ class TestOutputCapture:
         very_long_line = "x" * 1000
         result = _truncate_line(very_long_line)
 
-        # Should be truncated to MAX_LINE_LENGTH + "... [truncated]"
-        assert len(result) == 256 + len("... [truncated]")
-        assert "... [truncated]" in result
+        # Should be truncated to MAX_LINE_LENGTH + newline + LINE_TRUNCATION_HINT
+        assert len(result) == 256 + len("\n") + len(LINE_TRUNCATION_HINT)
+        assert LINE_TRUNCATION_HINT in result
 
     def test_truncate_line_edge_cases(self):
         """Test edge cases for line truncation."""
@@ -207,17 +210,17 @@ class TestOutputCapture:
         # Line just under limit
         short_line = "x" * 255
         assert _truncate_line(short_line) == short_line
-        assert "truncated" not in _truncate_line(short_line)
+        assert LINE_TRUNCATION_HINT not in _truncate_line(short_line)
 
         # Line at limit
         exact_line = "x" * 256
         assert _truncate_line(exact_line) == exact_line
-        assert "truncated" not in _truncate_line(exact_line)
+        assert LINE_TRUNCATION_HINT not in _truncate_line(exact_line)
 
         # Line just over limit
         over_line = "x" * 257
         result = _truncate_line(over_line)
-        assert "truncated" in result
+        assert LINE_TRUNCATION_HINT in result
         assert result.startswith("x" * 256)
 
     def test_output_model_stores_output_correctly(self):
