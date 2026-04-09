@@ -12,9 +12,12 @@ Submodules:
 - paths: Path resolution and directory helpers
 - feature_flags: Feature toggles and flags
 - settings: Model settings and configuration values
+- env_helpers: Typed environment variable helpers with multi-name fallback
 """
 
 # This module is intentionally minimal - it's a placeholder for future migration.
 # The original config.py (1773 lines) should be gradually refactored here.
 
-__all__ = []
+from .env_helpers import env_bool, env_int, env_path, get_first_env
+
+__all__ = ["get_first_env", "env_bool", "env_int", "env_path"]
