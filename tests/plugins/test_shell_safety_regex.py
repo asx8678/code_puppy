@@ -415,6 +415,31 @@ class TestSafeHeuristicsNegative:
         # Should NOT be classified as safe - has append redirect
         assert result.risk != "none", "echo with append redirect should not be classified as safe"
 
+    def test_echo_redirect_no_space_not_allowed(self):
+        """echo foo >file (no space before >) should NOT bypass safety - regression test for 8pu."""
+        # This was a bug where 'echo foo >file' bypassed the filter but 'echo foo > file' was caught
+        result = classify_command('echo foo >file')
+        assert result.risk != "none", "echo with redirect (no space) should not be classified as safe"
+
+    def test_echo_append_no_space_not_allowed(self):
+        """echo foo >>file (no space before >>) should NOT bypass safety - regression test for 8pu."""
+        result = classify_command('echo foo >>file')
+        assert result.risk != "none", "echo with append redirect (no space) should not be classified as safe"
+
+    def test_echo_redirect_various_whitespace(self):
+        """echo with redirect should be caught regardless of whitespace variations."""
+        variants = [
+            'echo foo > file',    # space before and after
+            'echo foo >file',     # no space before
+            'echo foo> file',     # no space after command
+            'echo foo>file',      # no spaces at all
+            'echo foo >> file',   # append with space
+            'echo foo >>file',    # append no space
+        ]
+        for variant in variants:
+            result = classify_command(variant)
+            assert result.risk != "none", f"Redirect should be detected: {variant}"
+
     def test_echo_pipe_not_allowed(self):
         """echo 'data' | sh should NOT be allowed by safe heuristics."""
         result = classify_command("echo 'data' | sh")

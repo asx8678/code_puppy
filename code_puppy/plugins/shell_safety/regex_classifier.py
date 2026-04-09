@@ -369,7 +369,7 @@ _SENSITIVE_PATH_PATTERN = re.compile(
 )
 
 # Pre-compiled patterns for checking redirects and command substitution
-_REDIRECT_PATTERN = re.compile(r">\s|>>\s|\||\x60.*\x60|\$\(")
+_REDIRECT_PATTERN = re.compile(r">\s?|>>\s?|\||\x60.*\x60|\$\(")
 
 
 def _classify_single_command(command: str) -> RegexClassificationResult:
