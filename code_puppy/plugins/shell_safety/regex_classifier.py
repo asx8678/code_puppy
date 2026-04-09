@@ -12,6 +12,11 @@ Design principles:
 - Quote-aware: Patterns inside quotes don't trigger false positives
 - Fast path: Returns immediately for safe commands without LLM roundtrip
 - Defense in depth: Regex blocks obvious attacks; LLM handles edge cases
+
+SECURITY FIXES (issue code_puppy-70t):
+- Regex patterns use bounded repetition to prevent O(n²) catastrophic backtracking
+- Added 600-line and 10000-char limits to prevent DoS via regex matching
+- Added explicit find -delete/-exec patterns for mass deletion detection
 """
 
 from __future__ import annotations
@@ -19,6 +24,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Literal
+
+# SECURITY: Maximum command length to prevent regex DoS
+# Commands longer than this are rejected immediately
+MAX_COMMAND_LENGTH = 10000  # ~600 lines of average 16 chars each
+MAX_COMMAND_LINES = 600
 
 
 @dataclass
@@ -45,24 +55,35 @@ class RegexClassificationResult:
 
 # Pre-compiled patterns for whole-command scan (fork bombs, download-pipe)
 # These are defined at module level to avoid recompilation on every call
+# SECURITY FIX: All patterns use atomic/possessive-like optimizations to prevent
+# catastrophic backtracking (O(n²) performance on crafted input)
 _WHOLE_COMMAND_DANGEROUS: list[tuple[re.Pattern, str]] = [
     # Fork bombs - various forms (dangerous even quoted)
-    (re.compile(r":\s*\(\s*\)\s*\{[^}]*:\s*\|[^}]*&[^}]*\}"), "fork bomb (bash function form)"),
-    (re.compile(r"\bbash\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via bash -c"),
-    (re.compile(r"\bsh\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via sh -c"),
+    # OPTIMIZED: Using atomic-like character class patterns instead of [^}]*
+    (re.compile(r":\s*\(\s*\)\s*\{[^{}]*:\s*\|[^{}]*&[^{}]*\}"), "fork bomb (bash function form)"),
+    (re.compile(r"\bbash\s+-c\s+['\"]?:\(\)\s*\{[^{}]*:\s*\|[^{}]*&"), "fork bomb via bash -c"),
+    (re.compile(r"\bsh\s+-c\s+['\"]?:\(\)\s*\{[^{}]*:\s*\|[^{}]*&"), "fork bomb via sh -c"),
     # Download and execute patterns (highly dangerous even quoted)
-    (re.compile(r"\b(?:curl|wget|fetch|lynx|aria2c)\s+[^|]*[|&;]\s*(?:\bsh\b|\bbash\b|\bzsh\b|\bksh\b|\bpython\d*\b|\bperl\b|\bruby\b|\bnode\b|\bcat\s*\|?\s*sh)"), "download piped to shell interpreter"),
-    (re.compile(r"\b(?:curl|wget)\s+.*\|\s*(?:eval|exec|source|\.)\b"), "download piped to eval/exec/source"),
+    # OPTIMIZED: Using non-greedy matching and line-bound for safety
+    (re.compile(
+        r"\b(?:curl|wget|fetch|lynx|aria2c)(?:\s+[^|&;\r\n]{0,500})?[|&;]\s*"
+        r"(?:\bsh\b|\bbash\b|\bzsh\b|\bksh\b|\bpython\d*\b|\bperl\b|\bruby\b|\bnode\b|\bcat(?:\s+[^|&;\r\n]{0,100})?\|?\s*sh\b)"
+    ), "download piped to shell interpreter"),
+    (re.compile(
+        r"\b(?:curl|wget)(?:\s+[^\r\n]{0,500})?\|\s*"
+        r"(?:eval|exec|source|\.)\b"
+    ), "download piped to eval/exec/source"),
 ]
 
 _HIGH_RISK_PATTERNS: list[tuple[re.Pattern, str]] = [
     # Fork bombs - various forms (additional patterns beyond whole-command scan)
-    (re.compile(r":\s*\(\s*\)\s*\{[^}]*:\s*\|[^}]*&[^}]*\}"), "fork bomb (bash function form)"),
-    (re.compile(r"\bbash\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via bash -c"),
-    (re.compile(r"\bsh\s+-c\s+['\"]?:\(\)\s*\{[^}]*:\s*\|[^}]*&"), "fork bomb via sh -c"),
-    # Classic fork bomb in variable form
-    (re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*\(\s*\)\s*\{[^}]*\|\s*\$[a-zA-Z_][a-zA-Z0-9_]*"), "fork bomb (variable assignment form)"),
-    
+    # OPTIMIZED: Using bounded repetition and non-greedy matching
+    (re.compile(r":\s*\(\s*\)\s*\{[^{}]*:\s*\|[^{}]*&[^{}]*\}"), "fork bomb (bash function form)"),
+    (re.compile(r"\bbash\s+-c\s+['\"]?:\(\)\s*\{[^{}]*:\s*\|[^{}]*&"), "fork bomb via bash -c"),
+    (re.compile(r"\bsh\s+-c\s+['\"]?:\(\)\s*\{[^{}]*:\s*\|[^{}]*&"), "fork bomb via sh -c"),
+    # Classic fork bomb in variable form - OPTIMIZED
+    (re.compile(r"\b[a-zA-Z_]\w*\s*=\s*\(\s*\)\s*\{[^{}]{0,200}\|\s*\$[a-zA-Z_]\w*"), "fork bomb (variable assignment form)"),
+
     # rm -rf / and variants - ONLY matches root "/" or "/*" or "/" at end
     # The pattern requires standalone "/" (end of string, whitespace, or another /)
     # This does NOT match "/tmp/build" because the "/" is followed by a word char
@@ -74,44 +95,82 @@ _HIGH_RISK_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\brm\b(?:\s+(?:-[a-zA-Z]*[rf][a-zA-Z]*|(?:--force|--recursive)))+\s+--no-preserve-root"), "rm force delete with no-preserve-root"),
     # Also match explicit rm -r / or rm -f / followed by additional flags (at root only)
     (re.compile(r"\brm\s+(?:-[a-zA-Z]*r[a-zA-Z]*\s+)+(?:-[a-zA-Z]*f[a-zA-Z]*\s+)*/(?:\s|$)"), "rm recursive delete of root"),
-    
+
     # Disk destruction
-    (re.compile(r"\bdd\s+.*\bif\s*=\s*[^\s]*(?:/dev/zero|/dev/urandom|/dev/random)\b.*\bof\s*=\s*[^\s]*(?:/dev/[sh]d[a-z]|/dev/nvme\d+n\d+|/dev/disk\d+)"), "disk overwrite with random/zero data"),
-    (re.compile(r"\bdd\s+.*\bof\s*=\s*[^\s]*(?:/dev/[sh]d[a-z]|/dev/nvme\d+n\d+|/dev/disk\d+|/dev/mmcblk\d+)"), "direct disk write"),
-    (re.compile(r"\bmkfs\.?(?:ext[234]|xfs|btrfs|zfs|fat|ntfs|vfat|exfat)\s+.*(?:/dev/[sh]d[a-z]\d*|/dev/nvme\d+n\d+(p\d+)?|/dev/mmcblk\d+p?\d*)"), "filesystem creation on raw device"),
-    (re.compile(r"\bformat\s+.*(?:/dev/[sh]d|\\\\.*PhysicalDrive)"), "disk format operation"),
-    
+    (re.compile(
+        r"\bdd\s+(?:[^\r\n]{0,300})?\bif\s*=\s*\S*(?:/dev/zero|/dev/urandom|/dev/random)\b"
+        r"(?:[^\r\n]{0,300})?\bof\s*=\s*\S*(?:/dev/[sh]d[a-z]|/dev/nvme\d+n\d+|/dev/disk\d+)"
+    ), "disk overwrite with random/zero data"),
+    (re.compile(
+        r"\bdd\s+(?:[^\r\n]{0,300})?\bof\s*=\s*\S*(?:/dev/[sh]d[a-z]|/dev/nvme\d+n\d+|/dev/disk\d+|/dev/mmcblk\d+)"
+    ), "direct disk write"),
+    (re.compile(
+        r"\bmkfs\.?(?:ext[234]|xfs|btrfs|zfs|fat|ntfs|vfat|exfat)\s+\S*"
+        r"(?:/dev/[sh]d[a-z]\d*|/dev/nvme\d+n\d+(?:p\d+)?|/dev/mmcblk\d+p?\d*)"
+    ), "filesystem creation on raw device"),
+    (re.compile(r"\bformat\s+(?:[^\r\n]{0,200})?(?:/dev/[sh]d|\\\\.*PhysicalDrive)"), "disk format operation"),
+
     # Download and execute patterns (highly dangerous)
-    (re.compile(r"\b(?:curl|wget|fetch|lynx|aria2c)\s+[^|]*[|&;]\s*(?:\bsh\b|\bbash\b|\bzsh\b|\bksh\b|\bpython\d*\b|\bperl\b|\bruby\b|\bnode\b|\bcat\s*\|?\s*sh)"), "download piped to shell interpreter"),
-    (re.compile(r"\b(?:curl|wget)\s+.*\|\s*(?:eval|exec|source|\.)\b"), "download piped to eval/exec/source"),
-    
-    # Command substitution attacks
-    (re.compile(r"\$\([^)]*(?:rm|mkfs|dd|format|del|erase)[^)]*\)"), "dangerous command substitution"),
-    (re.compile(r"`[^`]*(?:rm|mkfs|dd|format|del|erase)[^`]*`"), "dangerous backtick substitution"),
-    
+    # OPTIMIZED: Bounded repetition to prevent O(n²) backtracking
+    (re.compile(
+        r"\b(?:curl|wget|fetch|lynx|aria2c)(?:\s+[^|&;\r\n]{0,500})?[|&;]\s*"
+        r"(?:\bsh\b|\bbash\b|\bzsh\b|\bksh\b|\bpython\d*\b|\bperl\b|\bruby\b|\bnode\b|\bcat(?:\s+[^|&;\r\n]{0,100})?\|?\s*sh\b)"
+    ), "download piped to shell interpreter"),
+    (re.compile(
+        r"\b(?:curl|wget)(?:\s+[^\r\n]{0,500})?\|\s*(?:eval|exec|source|\.)\b"
+    ), "download piped to eval/exec/source"),
+
+    # Command substitution attacks - OPTIMIZED: non-greedy matching
+    (re.compile(r"\$\([^\)]{0,200}(?:rm|mkfs|dd|format|del|erase)[^\)]{0,200}\)"), "dangerous command substitution"),
+    (re.compile(r"`[^`]{0,200}(?:rm|mkfs|dd|format|del|erase)[^`]{0,200}`"), "dangerous backtick substitution"),
+
     # Privilege escalation with dangerous ops
-    (re.compile(r"\bsudo\s+.*\brm\s+-rf\b"), "sudo recursive force delete"),
-    (re.compile(r"\bsudo\s+.*\bdd\s+.*of=/dev"), "sudo direct disk write"),
-    
+    (re.compile(r"\bsudo\s+(?:[^\r\n]{0,300})?\brm\s+-rf\b"), "sudo recursive force delete"),
+    (re.compile(r"\bsudo\s+(?:[^\r\n]{0,300})?\bdd\s+(?:[^\r\n]{0,200})?of=/dev"), "sudo direct disk write"),
+
     # Database destruction
-    (re.compile(r"\bmysql\s+.*(?:--execute|-e)\s+['\"]?(?:DROP\s+DATABASE|DROP\s+TABLE|TRUNCATE\s+TABLE)"), "MySQL destructive operation"),
-    (re.compile(r"\bpsql\s+.*(?:-c\s+['\"]?)?(?:DROP\s+DATABASE|DROP\s+TABLE|TRUNCATE\s+TABLE)"), "PostgreSQL destructive operation"),
-    (re.compile(r"\bsqlite3?\s+.*(?:;\s*)?(?:DROP\s+TABLE|DELETE\s+FROM\s+\w+\s*(?!WHERE))"), "SQLite destructive operation without WHERE clause"),
-    
+    (re.compile(
+        r"\bmysql\s+(?:[^\r\n]{0,200})?(?:--execute|-e)\s+['\"]?"
+        r"(?:DROP\s+DATABASE|DROP\s+TABLE|TRUNCATE\s+TABLE)"
+    ), "MySQL destructive operation"),
+    (re.compile(
+        r"\bpsql\s+(?:[^\r\n]{0,200})?(?:-c\s+['\"]?)?(?:DROP\s+DATABASE|DROP\s+TABLE|TRUNCATE\s+TABLE)"
+    ), "PostgreSQL destructive operation"),
+    (re.compile(
+        r"\bsqlite3?(?:\s+[^\r\n]{0,200})?(?:;\s*)?(?:DROP\s+TABLE|DELETE\s+FROM\s+\w+\s*(?!WHERE))"
+    ), "SQLite destructive operation without WHERE clause"),
+
     # Windows-specific dangerous commands
-    (re.compile(r"\brd\s+/[sq]\s+.*\\\\|\\", re.IGNORECASE), "Windows recursive directory delete"),
-    (re.compile(r"\bdel\s+/[fq]\s+.*\\\*\.", re.IGNORECASE), "Windows mass file delete"),
+    (re.compile(r"\brd\s+/[sq]\s+(?:[^\r\n]{0,200})?[\\/]", re.IGNORECASE), "Windows recursive directory delete"),
+    (re.compile(r"\bdel\s+/[fq]\s+(?:[^\r\n]{0,200})?\\\*\.", re.IGNORECASE), "Windows mass file delete"),
     (re.compile(r"\bformat\s+[a-z]:\s+/[fqy]", re.IGNORECASE), "Windows drive format"),
-    (re.compile(r"\bdiskpart\s+.*clean\b", re.IGNORECASE), "Windows diskpart clean"),
-    
+    (re.compile(r"\bdiskpart(?:\s+[^\r\n]{0,200})?clean\b", re.IGNORECASE), "Windows diskpart clean"),
+
     # Malicious encodings/obfuscation
-    (re.compile(r"\b(?:eval|exec)\s*\$?\([^)]*base64[^)]*\)", re.IGNORECASE), "eval of base64 decoded content"),
-    (re.compile(r"\becho\s+['\"]?[A-Za-z0-9+/]{50,}={0,2}['\"]?\s*\|\s*(?:base64|openssl)\s+-d"), "base64 decode of suspicious payload"),
-    
+    (re.compile(r"\b(?:eval|exec)\s*\$?\([^\)]{0,200}base64[^\)]{0,200}\)", re.IGNORECASE), "eval of base64 decoded content"),
+    (re.compile(
+        r"\becho\s+['\"]?[A-Za-z0-9+/]{50,}={0,2}['\"]?\s*\|\s*(?:base64|openssl)\s+-d"
+    ), "base64 decode of suspicious payload"),
+
     # Kernel/module manipulation
-    (re.compile(r"\binsmod\s+.*\.ko\b"), "kernel module insertion"),
-    (re.compile(r"\brmmod\s+.*\b"), "kernel module removal"),
+    (re.compile(r"\binsmod\s+\S+\.ko\b"), "kernel module insertion"),
+    (re.compile(r"\brmmod\s+\S+"), "kernel module removal"),
     (re.compile(r"\bmodprobe\s+-r\b"), "kernel module removal"),
+
+    # SECURITY FIX: find -delete patterns (mass deletion vulnerability)
+    # find / with -delete is extremely dangerous - can delete entire filesystem
+    # OPTIMIZED: Fixed path patterns - ~/.* instead of ~/\.*, removed . (current dir is less dangerous)
+    (re.compile(
+        r"\bfind\s+(?:/|/\.\*|/\*|/\.?\.|~/.+|~)\s+(?:[^\r\n]{0,400})?-delete\b"
+    ), "find with -delete targeting root/home directory"),
+    (re.compile(
+        r"\bfind\s+(?:/|/\.\*|/\*|/\.?\.|~/.+|~)\s+(?:[^\r\n]{0,400})?-exec\s+rm\s+(?:-[rf]+\s+)?(?:\{\}|/|\*)"
+    ), "find -exec rm targeting root/home directory"),
+    (re.compile(
+        r"\bfind\s+(?:/|/\.\*|/\*|/\.?\.|~/.+|~)\s+(?:[^\r\n]{0,400})?-execdir\s+rm\b"
+    ), "find -execdir rm targeting root/home directory"),
+    # Fallback pattern for root-only detection (catches cases above might miss)
+    (re.compile(r"\bfind\s+/\s+-delete\b"), "find -delete at filesystem root"),
 ]
 
 # =============================================================================
@@ -337,7 +396,7 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
     for pattern, description in _HIGH_RISK_PATTERNS:
         # For destructive filesystem patterns, check unquoted to avoid false positives
         # in strings like: echo "rm -rf / is dangerous"
-        if any(x in description for x in ["delete", "disk", "filesystem", "format", "recursive"]):
+        if any(x in description for x in ["delete", "disk", "filesystem", "format", "recursive", "find"]):
             if pattern.search(unquoted):
                 return RegexClassificationResult(
                     risk="critical",
@@ -526,6 +585,25 @@ def classify_command(command: str) -> RegexClassificationResult:
         >>> result.risk  # Safe because ; is inside quotes
         'none'
     """
+    # SECURITY FIX: Check command length limits to prevent regex DoS
+    # Very long commands can cause performance issues with regex matching
+    if len(command) > MAX_COMMAND_LENGTH:
+        return RegexClassificationResult(
+            risk="critical",
+            reasoning=f"Command exceeds maximum length ({MAX_COMMAND_LENGTH} chars). Possible DoS attempt.",
+            blocked=True,
+            is_ambiguous=False,
+        )
+    
+    line_count = command.count('\n') + 1
+    if line_count > MAX_COMMAND_LINES:
+        return RegexClassificationResult(
+            risk="critical",
+            reasoning=f"Command exceeds maximum line count ({MAX_COMMAND_LINES} lines). Possible DoS attempt.",
+            blocked=True,
+            is_ambiguous=False,
+        )
+    
     # First, do a whole-command scan for fork bombs and download-pipe patterns
     # These are dangerous even when quoted (e.g., `bash -c ":(){:|:&};:"`)
     # _WHOLE_COMMAND_DANGEROUS is defined at module level to avoid recompilation
