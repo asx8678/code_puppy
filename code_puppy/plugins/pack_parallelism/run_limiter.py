@@ -393,13 +393,19 @@ class RunLimiter:
             self.release()
 
     def update_config(self, new_config: RunLimiterConfig) -> None:
-        """Atomically swap config.
+        """Atomically swap config with coherent state-machine transitions.
 
-        If the new limit is higher, grow both semaphores.
-        If lower, active runs are unaffected; subsequent acquires respect the new limit.
-        For shrinking, a deficit counter tracks how many releases should NOT create
-        new capacity. When a release happens while deficit > 0, the slot is absorbed
-        and the semaphore is not released, effectively reducing capacity over time.
+        Preserves the invariant: semaphore_capacity + deficit = effective_limit.
+
+        Grow (new > old):
+            - Absorb growth into existing deficit first (undoing prior shrink)
+            - Only release net-new slots (growth - deficit_reduction)
+
+        Shrink (new < old):
+            - Increase deficit to track excess capacity
+            - Deficit absorbs next N releases, effectively lowering capacity
+
+        Config mutation happens inside the state lock to prevent races.
         """
         # Validate before applying
         if new_config.max_concurrent_runs < 1:
@@ -409,30 +415,47 @@ class RunLimiter:
             )
             return
 
-        old_limit = self.effective_limit
-        self._config = new_config
-        new_limit = self.effective_limit
+        with self._state_lock:
+            old_limit = self.effective_limit
+            self._config = new_config
+            new_limit = self.effective_limit
 
-        logger.info(
-            "RunLimiter config updated: limit %d -> %d", old_limit, new_limit
-        )
+            if new_limit == old_limit:
+                return
 
-        if new_limit > old_limit:
-            # Grow both semaphores by releasing extra slots
-            diff = new_limit - old_limit
-            for _ in range(diff):
-                self._async_sem.release()
-                self._sync_sem.release()
-            # Clear any shrink deficit since we're growing
-            with self._state_lock:
-                self._shrink_deficit = 0
-        elif new_limit < old_limit:
-            # Shrink: Track deficit - next N releases won't create capacity.
-            # The _shrink_deficit counter handles shrink semantics: when slots
-            # are released, they don't call _async_sem.release() if deficit > 0,
-            # effectively reducing the semaphore capacity over time.
-            with self._state_lock:
-                self._shrink_deficit = old_limit - new_limit
+            logger.info(
+                "RunLimiter config updated: limit %d -> %d", old_limit, new_limit
+            )
+
+            if new_limit > old_limit:
+                # Growing: release slots, but absorb into existing deficit first
+                growth = new_limit - old_limit
+
+                # If we had unabsorbed deficit from a prior shrink,
+                # consume the growth to reduce the deficit before releasing
+                if self._shrink_deficit > 0:
+                    deficit_absorbed = min(growth, self._shrink_deficit)
+                    self._shrink_deficit -= deficit_absorbed
+                    growth -= deficit_absorbed
+                    logger.debug(
+                        "RunLimiter: growth absorbed %d into existing deficit",
+                        deficit_absorbed,
+                    )
+
+                # Release only the net-new capacity
+                for _ in range(growth):
+                    self._async_sem.release()
+                    self._sync_sem.release()
+
+            elif new_limit < old_limit:
+                # Shrinking: increase deficit to absorb future releases
+                excess = old_limit - new_limit
+                self._shrink_deficit += excess
+                logger.debug(
+                    "RunLimiter: shrink deficit increased by %d to %d",
+                    excess,
+                    self._shrink_deficit,
+                )
 
 
 # ============================================================================

@@ -413,6 +413,115 @@ class TestConfigReload:
 
         assert limiter.active_count == 3
 
+    def test_grow_with_unabsorbed_deficit_does_not_over_release(self, limiter):
+        """Grow with unabsorbed shrink deficit must not over-release ghost slots.
+
+        Regression test for: Zeroing _shrink_deficit on grow caused over-release.
+        When growing after a shrink, any unabsorbed deficit must first be
+        consumed before releasing new capacity to the semaphore.
+        """
+        # Start with limit 3
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=3))
+
+        # Acquire all 3 slots
+        for _ in range(3):
+            limiter.acquire_sync(blocking=False)
+        assert limiter.active_count == 3
+
+        # Shrink to 1 - creates deficit of 2 (3-1=2)
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=1))
+        assert limiter.effective_limit == 1
+
+        # Grow to 2 - growth is 1, but deficit is 2
+        # The growth should absorb 1 from deficit, not release any slots
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=2))
+        assert limiter.effective_limit == 2
+
+        # Release one slot - absorbed by remaining deficit (now 1)
+        limiter.release()
+        assert limiter.active_count == 2
+
+        # Release second slot - absorbed by remaining deficit (now 0)
+        limiter.release()
+        assert limiter.active_count == 1
+
+        # Release third slot - now creates capacity since deficit is 0
+        limiter.release()
+        assert limiter.active_count == 0
+
+        # Should be able to acquire exactly 2 slots (the new limit)
+        acquired_count = 0
+        while limiter.acquire_sync(blocking=False):
+            acquired_count += 1
+            if acquired_count > 3:  # Safety break
+                break
+
+        assert acquired_count == 2, (
+            f"Expected 2 slots after shrink/grow with deficit, got {acquired_count}. "
+            "Ghost slots were likely over-released."
+        )
+
+    def test_shrink_deficit_absorbs_releases_to_enforce_lower_cap(self, limiter):
+        """Shrink deficit must absorb releases until deficit is cleared.
+
+        Regression test for: Shrink with semaphore slack never enforced new lower cap.
+        The deficit counter ensures that releases don't create capacity until
+        the deficit is fully absorbed, effectively lowering the cap over time.
+        """
+        # Start with limit 4, acquire all slots (no slack)
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=4))
+
+        # Acquire all 4 slots
+        for _ in range(4):
+            limiter.acquire_sync(blocking=False)
+        assert limiter.active_count == 4
+
+        # Shrink to 1 - creates deficit of 3 (4-1=3)
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=1))
+        assert limiter.effective_limit == 1
+
+        # Release first slot - absorbed by deficit (now 2)
+        # No capacity is released to semaphore
+        limiter.release()
+        assert limiter.active_count == 3
+
+        # Try to acquire - should fail because release was absorbed by deficit
+        acquired = limiter.acquire_sync(blocking=False)
+        assert not acquired, (
+            "Should not acquire immediately after release during shrink deficit - "
+            "release was absorbed, not converted to capacity"
+        )
+
+        # Release second slot - absorbed by deficit (now 1)
+        limiter.release()
+        assert limiter.active_count == 2
+        acquired = limiter.acquire_sync(blocking=False)
+        assert not acquired, "Second release also absorbed - still no capacity"
+
+        # Release third slot - absorbed by deficit (now 0)
+        limiter.release()
+        assert limiter.active_count == 1
+        acquired = limiter.acquire_sync(blocking=False)
+        assert not acquired, "Third release also absorbed - still no capacity"
+
+        # Release fourth slot - now capacity is released (deficit is 0)
+        limiter.release()
+        assert limiter.active_count == 0
+
+        # NOW we can acquire up to the limit (1)
+        acquired = limiter.acquire_sync(blocking=False)
+        assert acquired, "After deficit cleared, should acquire the slot"
+
+        # Can't acquire second because limit is 1
+        second_acquire = limiter.acquire_sync(blocking=False)
+        assert not second_acquire, "Should not exceed new limit of 1"
+
+        # This release creates capacity for next acquire
+        limiter.release()
+        acquired = limiter.acquire_sync(blocking=False)
+        assert acquired, "Release after deficit=0 creates capacity"
+        limiter.release()
+
 
 @pytest.mark.asyncio
 class TestAsyncConfigUpdates:
