@@ -214,3 +214,124 @@ class TestOffloadEvictedMessages:
         assert "worker0" in content
         assert "worker1" in content
         assert "worker2" in content
+
+
+class TestArchiveSizeManagement:
+    """Tests for archive size management and rotation (code_puppy-74k)."""
+
+    def test_archive_rotation_when_size_limit_exceeded(self, tmp_path):
+        """Archive is rotated when size exceeds max_archive_size_mb.
+
+        Regression test for code_puppy-74k: Archives should not grow unbounded.
+        When the archive exceeds the configured size limit, it should be rotated
+        (renamed with timestamp) and a new archive started.
+        """
+        from code_puppy.compaction.history_offload import (
+            _get_archive_size_mb,
+            _enforce_archive_size_limit,
+        )
+
+        archive_dir = tmp_path / "history"
+        archive_path = archive_dir / "test-session.history.md"
+
+        # Create an existing archive with content
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        archive_path.write_text("Existing content\n" * 1000)
+
+        original_size = _get_archive_size_mb(archive_path)
+        assert original_size > 0
+
+        # Set a very small limit to force rotation
+        _enforce_archive_size_limit(archive_path, max_size_mb=0.001)  # 1 KB limit
+
+        # Archive should be rotated (renamed with timestamp)
+        assert not archive_path.exists(), "Original archive should be rotated away"
+
+        # Find the rotated archive
+        rotated_files = list(archive_dir.glob("test-session_*.history.md"))
+        assert len(rotated_files) == 1, "Should have one rotated archive file"
+
+        # Rotated file should contain the original content
+        assert "Existing content" in rotated_files[0].read_text()
+
+    def test_archive_not_rotated_when_under_limit(self, tmp_path):
+        """Archive is not rotated when size is under max_archive_size_mb."""
+        from code_puppy.compaction.history_offload import _enforce_archive_size_limit
+
+        archive_dir = tmp_path / "history"
+        archive_path = archive_dir / "test-session.history.md"
+
+        # Create a small archive
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        archive_path.write_text("Small content\n")
+
+        # Set a large limit - should not trigger rotation
+        _enforce_archive_size_limit(archive_path, max_size_mb=100.0)
+
+        # Archive should still exist unchanged
+        assert archive_path.exists(), "Archive should not be rotated"
+        assert "Small content" in archive_path.read_text()
+
+    def test_archive_size_mb_calculation(self, tmp_path):
+        """Archive size calculation is accurate."""
+        from code_puppy.compaction.history_offload import _get_archive_size_mb
+
+        archive_path = tmp_path / "test.history.md"
+
+        # Non-existent file returns 0.0
+        assert _get_archive_size_mb(archive_path) == 0.0
+
+        # Create file with known content
+        content = "x" * 1024 * 1024  # 1 MB of content
+        archive_path.write_text(content)
+
+        size_mb = _get_archive_size_mb(archive_path)
+        assert 0.9 < size_mb < 1.1, f"Expected ~1 MB, got {size_mb} MB"
+
+    def test_offload_respects_max_archive_size_config(self, tmp_path):
+        """Offload respects the max_archive_size_mb parameter.
+
+        Regression test for code_puppy-74k: The max_archive_size_mb parameter
+        should be passed through and honored during offload operations.
+        """
+        archive_dir = tmp_path / "history"
+
+        # Create a pre-existing large archive
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = archive_dir / "test-session.history.md"
+        archive_path.write_text("x" * 1024 * 1024)  # ~1 MB
+
+        # Offload with a very small limit to force rotation
+        result = offload_evicted_messages(
+            [{"role": "user", "content": "new message"}],
+            session_id="test-session",
+            archive_dir=archive_dir,
+            max_archive_size_mb=0.001,  # 1 KB limit - forces rotation
+        )
+
+        # Should return a valid path
+        assert result is not None
+
+        # The new archive should only contain the new message
+        content = result.read_text()
+        assert "new message" in content
+        assert "x" * 100 not in content, "Old large content should be in rotated file"
+
+    def test_sanitize_session_id_handles_none(self):
+        """_sanitize_session_id handles None safely.
+
+        Regression test for code_puppy-lof: Explicit None session_id should be
+        handled safely, returning 'unknown' instead of crashing.
+        """
+        from code_puppy.compaction.history_offload import _sanitize_session_id
+
+        result = _sanitize_session_id(None)
+        assert result == "unknown", "None session_id should return 'unknown'"
+
+    def test_sanitize_session_id_handles_valid_strings(self):
+        """_sanitize_session_id handles valid strings correctly."""
+        from code_puppy.compaction.history_offload import _sanitize_session_id
+
+        assert _sanitize_session_id("valid-session") == "valid-session"
+        assert _sanitize_session_id("session_123") == "session_123"
+        assert _sanitize_session_id("test.id") == "test.id"

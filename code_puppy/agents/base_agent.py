@@ -1221,7 +1221,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         # --- Phase 2: History offload (opt-in debugging) ---
         if get_summarization_history_offload_enabled():
             try:
-                session_id = getattr(self, "session_id", "unknown")
+                # Handle explicit session_id=None using `or 'unknown'` before sanitization
+                session_id = getattr(self, "session_id", None) or "unknown"
                 history_dir = get_summarization_history_dir()
                 offload_path = offload_evicted_messages(
                     messages_to_summarize,

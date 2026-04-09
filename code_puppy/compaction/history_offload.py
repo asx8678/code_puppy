@@ -9,6 +9,7 @@ Opt-in via config key `summarization_history_offload_enabled` (default: False).
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,16 +23,88 @@ logger = logging.getLogger(__name__)
 _offload_lock = threading.Lock()
 
 DEFAULT_ARCHIVE_DIR = Path.home() / ".code_puppy" / "history"
+DEFAULT_MAX_ARCHIVE_SIZE_MB = 100  # Default max archive size before rotation
 
 
-def _sanitize_session_id(session_id: str) -> str:
+def _sanitize_session_id(session_id: str | None) -> str:
     """Sanitize session ID for use as a filename.
 
-    Replaces unsafe characters with underscores.
+    Replaces unsafe characters with underscores. Handles None safely
+    by returning 'unknown'.
+
+    Args:
+        session_id: Session ID string, or None.
+
+    Returns:
+        Sanitized session ID safe for use as a filename.
     """
+    # Handle None safely
+    if session_id is None:
+        return "unknown"
+
     # Characters that are safe in filenames (cross-platform)
     safe_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
     return "".join(c if c in safe_chars else "_" for c in session_id)
+
+
+def _get_archive_size_mb(archive_path: Path) -> float:
+    """Get the size of an archive file in megabytes.
+
+    Args:
+        archive_path: Path to the archive file.
+
+    Returns:
+        Size in megabytes, or 0.0 if file doesn't exist.
+    """
+    if not archive_path.exists():
+        return 0.0
+    return archive_path.stat().st_size / (1024 * 1024)
+
+
+def _rotate_archive(archive_path: Path) -> None:
+    """Rotate an archive file by renaming it with a timestamp suffix.
+
+    The existing archive is renamed to {name}.{timestamp}.history.md,
+    effectively starting a new archive file.
+
+    Args:
+        archive_path: Path to the archive file to rotate.
+    """
+    if not archive_path.exists():
+        return
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    rotated_name = archive_path.stem.replace(".history", f"_{timestamp}.history") + archive_path.suffix
+    rotated_path = archive_path.parent / rotated_name
+
+    try:
+        archive_path.rename(rotated_path)
+        logger.debug("Rotated archive %s to %s", archive_path, rotated_path)
+    except OSError as e:
+        logger.warning("Failed to rotate archive %s: %s", archive_path, e)
+
+
+def _enforce_archive_size_limit(
+    archive_path: Path,
+    max_size_mb: float,
+) -> None:
+    """Enforce archive size limit by rotating if necessary.
+
+    If the archive exceeds the size limit, it is rotated to make room.
+
+    Args:
+        archive_path: Path to the archive file.
+        max_size_mb: Maximum size in megabytes before rotation.
+    """
+    current_size = _get_archive_size_mb(archive_path)
+    if current_size > max_size_mb:
+        logger.debug(
+            "Archive %s size (%.2f MB) exceeds limit (%.2f MB), rotating",
+            archive_path,
+            current_size,
+            max_size_mb,
+        )
+        _rotate_archive(archive_path)
 
 
 def _serialize_message(msg: Any) -> str:
@@ -92,6 +165,7 @@ def offload_evicted_messages(
     session_id: str,
     archive_dir: Path | None = None,
     compact_reason: str = "summarization",
+    max_archive_size_mb: float = DEFAULT_MAX_ARCHIVE_SIZE_MB,
 ) -> Path | None:
     """Append evicted messages to the session's history archive.
 
@@ -100,6 +174,7 @@ def offload_evicted_messages(
         session_id: Unique ID for this session (used as the filename stem).
         archive_dir: Directory for history archives. Defaults to ~/.code_puppy/history/
         compact_reason: Reason for this compaction (appears in the header).
+        max_archive_size_mb: Maximum archive size in MB before rotation (default: 100).
 
     Returns:
         Path to the archive file that was appended to, or None on failure.
@@ -125,6 +200,9 @@ def offload_evicted_messages(
         body = "\n".join(body_lines)
 
         with _offload_lock:
+            # Enforce size limit before writing (rotate if necessary)
+            _enforce_archive_size_limit(archive_path, max_archive_size_mb)
+
             with archive_path.open("a", encoding="utf-8") as f:
                 f.write(header)
                 f.write(body)

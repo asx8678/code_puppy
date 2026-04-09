@@ -300,3 +300,111 @@ class TestPretruncateMessages:
         ]
         result, count = pretruncate_messages(msgs, keep_recent=0, max_length=100)
         assert count == 2  # Two messages were modified
+
+    def test_tool_call_part_all_fields_preserved_after_truncation(self):
+        """All ToolCallPart fields (id, provider_name, provider_details) are preserved after truncation.
+
+        Regression test for code_puppy-lg9: Truncation should use model_copy/update
+        to preserve all fields, not just tool_name, args, and tool_call_id.
+        """
+        long_content = "a" * 1000
+        original_part = ToolCallPart(
+            tool_name="write_file",
+            args={"content": long_content},
+            tool_call_id="call_12345",
+            id="unique-part-id",
+            provider_name="test_provider",
+            provider_details={"key": "value"},
+        )
+        msg = ModelResponse(parts=[original_part])
+
+        result = _truncate_message_tool_calls(msg, max_length=100)
+
+        assert isinstance(result, ModelResponse)
+        assert len(result.parts) == 1
+        truncated_part = result.parts[0]
+
+        # Args should be truncated
+        assert truncated_part.args["content"].endswith(DEFAULT_TRUNCATION_TEXT)
+
+        # All other fields should be preserved (code_puppy-lg9)
+        assert truncated_part.tool_name == "write_file"
+        assert truncated_part.tool_call_id == "call_12345"
+        assert truncated_part.id == "unique-part-id"
+        assert truncated_part.provider_name == "test_provider"
+        assert truncated_part.provider_details == {"key": "value"}
+        assert truncated_part.part_kind == "tool-call"
+
+    def test_tool_call_return_pair_integrity_maintained(self):
+        """Tool call/return pairs maintain integrity when older messages are compacted.
+
+        Regression test for code_puppy-4eu: When messages are truncated/compacted,
+        the keep_recent window should ensure that tool calls and their corresponding
+        returns are either both in the 'old' section (to be compacted) or both in
+        the 'recent' section (to be preserved).
+
+        The invariant: tool_call_id values appearing in the compacted section will
+        not have matching tool_return parts in the preserved section, and vice versa.
+        """
+        from pydantic_ai.messages import ToolReturnPart
+
+        long_content = "a" * 1000
+
+        # Create a sequence: tool call -> tool return -> tool call (recent, protected)
+        msgs = [
+            ModelResponse(  # Oldest: tool call (to be compacted)
+                parts=[
+                    ToolCallPart(
+                        tool_name="write_file",
+                        args={"content": long_content},
+                        tool_call_id="call_001",
+                    )
+                ]
+            ),
+            ModelRequest(  # Middle: tool return (to be compacted)
+                parts=[
+                    ToolReturnPart(
+                        tool_name="write_file",
+                        content="success",
+                        tool_call_id="call_001",
+                    )
+                ]
+            ),
+            ModelResponse(  # Recent: new tool call (protected)
+                parts=[
+                    ToolCallPart(
+                        tool_name="read_file",
+                        args={"path": "/tmp/file"},
+                        tool_call_id="call_002",
+                    )
+                ]
+            ),
+        ]
+
+        # With keep_recent=1, only the last message should be protected
+        result, count = pretruncate_messages(msgs, keep_recent=1, max_length=100)
+
+        # The first two messages (call_001 and its return) should be in the old section
+        # and the first message should be truncated
+        assert count == 1  # First message (write_file call) was truncated
+
+        # Verify pair integrity: call_001 and its return are both in result
+        # (they weren't split across the boundary in a way that causes issues)
+        old_section = result[:-1]  # All but the last (protected) message
+
+        # Collect all tool_call_ids in the old section
+        old_call_ids = set()
+        old_return_ids = set()
+        for msg in old_section:
+            for part in msg.parts:
+                if isinstance(part, ToolCallPart):
+                    old_call_ids.add(part.tool_call_id)
+                elif isinstance(part, ToolReturnPart):
+                    old_return_ids.add(part.tool_call_id)
+
+        # Verify the pair is intact: call_001 has both a call and return in old section
+        assert "call_001" in old_call_ids, "Tool call should be in old section"
+        assert "call_001" in old_return_ids, "Tool return should be in old section"
+
+        # Verify the recent message is protected and unchanged
+        assert result[-1] is msgs[2], "Recent message should be the original object"

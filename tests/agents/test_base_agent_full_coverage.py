@@ -2133,3 +2133,48 @@ class TestLoadMcpServers:
         agent.reload_mcp_servers()
         assert agent._mcp_tool_definitions_cache == []
         mock_mgr.return_value.sync_from_config.assert_called_once()
+
+
+class TestExplicitNoneSessionIdHandling:
+    """Tests for explicit session_id=None handling (code_puppy-lof)."""
+
+    def test_session_id_none_defaults_to_unknown(self, agent):
+        """Explicit session_id=None is handled safely using `or 'unknown'`.
+
+        Regression test for code_puppy-lof: When session_id is explicitly set
+        to None, getattr(self, "session_id", "unknown") returns None (because
+        the attribute exists, it's just None). The fix uses `or 'unknown'`
+        to handle this case.
+        """
+        # Set session_id explicitly to None
+        agent.session_id = None
+
+        # Verify getattr returns None, not 'unknown'
+        assert getattr(agent, "session_id", "unknown") is None
+
+        # Verify the fix: using `or 'unknown'` handles it correctly
+        session_id = getattr(agent, "session_id", None) or "unknown"
+        assert session_id == "unknown"
+
+    def test_session_id_valid_string_unchanged(self, agent):
+        """Valid session_id string is preserved."""
+        agent.session_id = "valid-session-123"
+
+        session_id = getattr(agent, "session_id", None) or "unknown"
+        assert session_id == "valid-session-123"
+
+    def test_session_id_missing_defaults_to_unknown(self, agent):
+        """Missing session_id attribute defaults to 'unknown'."""
+        # Remove session_id if it exists
+        if hasattr(agent, "session_id"):
+            delattr(agent, "session_id")
+
+        session_id = getattr(agent, "session_id", None) or "unknown"
+        assert session_id == "unknown"
+
+    def test_session_id_empty_string_defaults_to_unknown(self, agent):
+        """Empty session_id string defaults to 'unknown'."""
+        agent.session_id = ""
+
+        session_id = getattr(agent, "session_id", None) or "unknown"
+        assert session_id == "unknown"

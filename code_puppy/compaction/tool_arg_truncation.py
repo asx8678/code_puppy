@@ -7,6 +7,7 @@ the 'content' arg can be huge.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from typing import Any, Sequence
 
@@ -139,12 +140,9 @@ def _truncate_message_tool_calls(
             )
 
             if modified:
-                # Create new ToolCallPart with truncated args
-                new_part = ToolCallPart(
-                    tool_name=tool_name,
-                    args=new_args,
-                    tool_call_id=getattr(part, "tool_call_id", None),
-                )
+                # Create new ToolCallPart with truncated args, preserving all fields
+                # Use dataclasses.replace to ensure all fields are preserved (code_puppy-lg9)
+                new_part = dataclasses.replace(part, args=new_args)
                 new_parts.append(new_part)
                 any_modified = True
             else:
