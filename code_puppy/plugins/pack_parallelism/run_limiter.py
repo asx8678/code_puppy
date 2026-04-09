@@ -469,18 +469,29 @@ class RunLimiter:
             getattr(self, deficit_attr),
         )
 
-    def _release_net_new_slots(self, count: int) -> None:
-        """Release net-new capacity to both semaphores.
+    def _release_net_new_slots_to_async(self, count: int) -> None:
+        """Release net-new capacity to async semaphore only.
 
         Must be called with _state_lock held.
 
         Args:
-            count: Number of slots to release to each semaphore
+            count: Number of slots to release to async semaphore
         """
         for _ in range(count):
             self._async_sem.release()
+        logger.debug("RunLimiter: released %d net-new slots to async semaphore", count)
+
+    def _release_net_new_slots_to_sync(self, count: int) -> None:
+        """Release net-new capacity to sync semaphore only.
+
+        Must be called with _state_lock held.
+
+        Args:
+            count: Number of slots to release to sync semaphore
+        """
+        for _ in range(count):
             self._sync_sem.release()
-        logger.debug("RunLimiter: released %d net-new slots to both semaphores", count)
+        logger.debug("RunLimiter: released %d net-new slots to sync semaphore", count)
 
     def update_config(self, new_config: RunLimiterConfig) -> None:
         """Atomically swap config with coherent state-machine transitions.
@@ -519,34 +530,39 @@ class RunLimiter:
             )
 
             if new_limit > old_limit:
-                # Growing: release slots, but absorb into per-semaphore deficits first
-                growth = new_limit - old_limit
+                # Growing: compute growth PER SIDE independently
+                # Each side starts with total growth and absorbs its own deficit only
+                total_growth = new_limit - old_limit
 
-                # Async side: absorb into async deficit first
+                # Async side: absorb only async_deficit, release remainder to async_sem only
+                async_growth = total_growth
                 if self._async_deficit > 0:
-                    async_absorbed = min(growth, self._async_deficit)
+                    async_absorbed = min(async_growth, self._async_deficit)
                     self._async_deficit -= async_absorbed
-                    growth -= async_absorbed
+                    async_growth -= async_absorbed
                     logger.debug(
-                        "RunLimiter: growth absorbed %d into async deficit (now %d)",
+                        "RunLimiter: async growth absorbed %d into async deficit (now %d)",
                         async_absorbed,
                         self._async_deficit,
                     )
+                # Release net-new async capacity (only to async semaphore)
+                if async_growth > 0:
+                    self._release_net_new_slots_to_async(async_growth)
 
-                # Sync side: absorb into sync deficit first
+                # Sync side: absorb only sync_deficit, release remainder to sync_sem only
+                sync_growth = total_growth
                 if self._sync_deficit > 0:
-                    sync_absorbed = min(growth, self._sync_deficit)
+                    sync_absorbed = min(sync_growth, self._sync_deficit)
                     self._sync_deficit -= sync_absorbed
-                    growth -= sync_absorbed
+                    sync_growth -= sync_absorbed
                     logger.debug(
-                        "RunLimiter: growth absorbed %d into sync deficit (now %d)",
+                        "RunLimiter: sync growth absorbed %d into sync deficit (now %d)",
                         sync_absorbed,
                         self._sync_deficit,
                     )
-
-                # Release only the net-new capacity (remaining growth after deficit absorption)
-                if growth > 0:
-                    self._release_net_new_slots(growth)
+                # Release net-new sync capacity (only to sync semaphore)
+                if sync_growth > 0:
+                    self._release_net_new_slots_to_sync(sync_growth)
 
             elif new_limit < old_limit:
                 # Shrinking: drain free slots from each semaphore
