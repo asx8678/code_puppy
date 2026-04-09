@@ -97,9 +97,6 @@ class TestSyncAcquire:
 # ============================================================================
 
 
-
-
-
 @pytest.mark.asyncio
 class TestAsyncAcquire:
     """Test async acquire operations with reliable asyncio.Event patterns."""
@@ -409,7 +406,7 @@ class TestConfigReload:
         # Should be able to acquire all 3 slots
         for i in range(3):
             acquired = limiter.acquire_sync(blocking=False)
-            assert acquired, f"Failed to acquire slot {i+1} after shrink/grow cycle"
+            assert acquired, f"Failed to acquire slot {i + 1} after shrink/grow cycle"
 
         assert limiter.active_count == 3
 
@@ -551,7 +548,9 @@ class TestConfigReload:
             "shrink should have drained excess free capacity immediately"
         )
 
-        assert limiter.active_count == 2, f"Expected 2 active, got {limiter.active_count}"
+        assert limiter.active_count == 2, (
+            f"Expected 2 active, got {limiter.active_count}"
+        )
 
         # Clean up
         limiter.release()
@@ -652,10 +651,6 @@ class TestPerSideGrowthRegression:
         assert limiter.effective_limit == 1
         assert limiter._sync_deficit == 2
         assert limiter._async_deficit == 0
-
-        # Record async semaphore value before grow (should be 3 - full capacity)
-        async_value_before = limiter._async_sem._value
-        sync_value_before = limiter._sync_sem._value
 
         # Grow back to 3 - total_growth = 2
         # Old (buggy) behavior: growth=2, sync_absorbs=min(2,2)=2, growth=0, async gets 0
@@ -938,6 +933,7 @@ class TestAsyncConfigUpdates:
 
     async def test_update_config_higher_limit_adds_slots(self, limiter):
         """Increasing limit adds new slots for future acquires."""
+
         # Fill using separate tasks created BEFORE any acquire (independent contexts)
         async def acquire_slot():
             await limiter.acquire_async()
@@ -1062,7 +1058,7 @@ class TestCancellation:
 
         waiter_task = asyncio.create_task(waiter())
         await asyncio.wait_for(ready_to_wait.wait(), timeout=1.0)
-        
+
         # Signal waiter to start acquiring (will block since holder has slot)
         should_acquire.set()
         await asyncio.sleep(0.05)
@@ -1271,9 +1267,7 @@ class TestReentrancy:
         assert child_observed_active == 1, (
             f"Child's nested acquire did not bypass! observed active={child_observed_active}"
         )
-        assert child_observed_limit_reached == 1, (
-            "Deeper nesting did not bypass!"
-        )
+        assert child_observed_limit_reached == 1, "Deeper nesting did not bypass!"
 
         # Parent still holds its slot
         assert limiter.active_count == 1
@@ -1658,7 +1652,9 @@ class TestSuccessiveShrinksRegression:
         # Should be able to acquire all 5 slots
         for i in range(5):
             acquired = limiter.acquire_sync(blocking=False)
-            assert acquired, f"Failed to acquire slot {i+1} after successive shrinks/grow"
+            assert acquired, (
+                f"Failed to acquire slot {i + 1} after successive shrinks/grow"
+            )
 
         assert limiter.active_count == 5
 
@@ -1693,8 +1689,12 @@ class TestSuccessiveShrinksRegression:
         # Verify per-semaphore state:
         # - Sync: started with 4, drained 2 free slots, deficit = 0 (1 active < 2 new limit)
         # - Async: started with 4, drained 2 free slots, deficit = 0 (1 active < 2 new limit)
-        assert limiter._sync_deficit == 0, "Sync semaphore should have no deficit (1 active < 2 limit)"
-        assert limiter._async_deficit == 0, "Async semaphore should have no deficit (1 active < 2 limit)"
+        assert limiter._sync_deficit == 0, (
+            "Sync semaphore should have no deficit (1 active < 2 limit)"
+        )
+        assert limiter._async_deficit == 0, (
+            "Async semaphore should have no deficit (1 active < 2 limit)"
+        )
 
         # Release sync slot - should go directly to semaphore (no deficit)
         limiter.release()  # sync active goes 1 -> 0

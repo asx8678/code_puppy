@@ -316,7 +316,11 @@ class RunLimiter:
             if deficit > 0:
                 # Absorb release into deficit (enforcing lower cap)
                 setattr(self, deficit_attr, deficit - 1)
-                logger.debug("RunLimiter: %s release absorbed by deficit (now %d)", side, deficit - 1)
+                logger.debug(
+                    "RunLimiter: %s release absorbed by deficit (now %d)",
+                    side,
+                    deficit - 1,
+                )
             else:
                 # Normal release to semaphore
                 semaphore.release()
@@ -356,7 +360,9 @@ class RunLimiter:
                 ):
                     return
                 # Fallback: async context but no async active, try sync
-                logger.debug("RunLimiter.release() from async context, trying sync slot")
+                logger.debug(
+                    "RunLimiter.release() from async context, trying sync slot"
+                )
                 if self._release_slot(
                     "_sync_active", "_sync_deficit", self._sync_sem, "sync", depth
                 ):
@@ -368,7 +374,9 @@ class RunLimiter:
                 ):
                     return
                 # Fallback: sync context but no sync active, try async
-                logger.debug("RunLimiter.release() from sync context, trying async slot")
+                logger.debug(
+                    "RunLimiter.release() from sync context, trying async slot"
+                )
                 if self._release_slot(
                     "_async_active", "_async_deficit", self._async_sem, "async", depth
                 ):
