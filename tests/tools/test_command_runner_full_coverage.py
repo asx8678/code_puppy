@@ -32,11 +32,17 @@ class TestTruncateLine:
         assert _truncate_line(line) == line
 
     def test_over_limit(self):
-        from code_puppy.tools.command_runner import MAX_LINE_LENGTH, _truncate_line
+        from code_puppy.tools.command_runner import (
+            LINE_TRUNCATION_HINT,
+            MAX_LINE_LENGTH,
+            _truncate_line,
+        )
 
         line = "a" * (MAX_LINE_LENGTH + 10)
         result = _truncate_line(line)
-        assert result.endswith("... [truncated]")
+        # truncate_with_guidance adds newline + modern hint
+        expected = "a" * MAX_LINE_LENGTH + "\n" + LINE_TRUNCATION_HINT
+        assert result == expected
 
 
 # ---------------------------------------------------------------------------

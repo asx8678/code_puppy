@@ -36,6 +36,9 @@ _AWAITING_USER_INPUT = command_runner_module._AWAITING_USER_INPUT
 _RUNNING_PROCESSES = command_runner_module._RUNNING_PROCESSES
 _RUNNING_PROCESSES_LOCK = command_runner_module._RUNNING_PROCESSES_LOCK
 
+# Import the truncation hint constant for assertions
+LINE_TRUNCATION_HINT = command_runner_module.LINE_TRUNCATION_HINT
+
 
 class TestTruncateLine:
     """Test the _truncate_line function."""
@@ -60,9 +63,10 @@ class TestTruncateLine:
         long_string = "x" * 300
         result = _truncate_line(long_string)
 
-        expected = "x" * max_length + "... [truncated]"
+        # truncate_with_guidance adds newline + hint
+        expected = "x" * max_length + "\n" + LINE_TRUNCATION_HINT
         assert result == expected
-        assert len(result) == max_length + len("... [truncated]")
+        assert len(result) == max_length + len("\n") + len(LINE_TRUNCATION_HINT)
 
     def test_truncate_line_just_over_max(self):
         """Test truncation when string is just over the limit."""
@@ -70,7 +74,8 @@ class TestTruncateLine:
         just_over_string = "x" * (max_length + 1)
         result = _truncate_line(just_over_string)
 
-        expected = "x" * max_length + "... [truncated]"
+        # truncate_with_guidance adds newline + hint
+        expected = "x" * max_length + "\n" + LINE_TRUNCATION_HINT
         assert result == expected
 
     def test_truncate_line_empty_string(self):
