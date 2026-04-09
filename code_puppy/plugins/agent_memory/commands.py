@@ -67,6 +67,7 @@ def _show_memories() -> None:
 
     facts = storage.load()
 
+    # Handle None or empty facts
     if not facts:
         emit_info(f"📭 No memories stored for [bold]{agent_name}[/bold]")
         return
@@ -83,9 +84,20 @@ def _show_memories() -> None:
     table.add_column("Created", style="dim", width=16)
 
     for idx, fact in enumerate(facts, 1):
-        text = fact.get("text", "[invalid fact]")
-        confidence = fact.get("confidence", 1.0)
-        created_at = fact.get("created_at", "unknown")
+        # Safely get fact data with defaults
+        text = fact.get("text", "[invalid fact]") if isinstance(fact, dict) else str(fact)
+        confidence = fact.get("confidence", 1.0) if isinstance(fact, dict) else 1.0
+        created_at = fact.get("created_at", "unknown") if isinstance(fact, dict) else "unknown"
+
+        # Normalize confidence to float
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = 1.0
+
+        # Normalize created_at to string
+        if not isinstance(created_at, str):
+            created_at = str(created_at)
 
         # Format confidence as percentage with color
         conf_str = f"{confidence * 100:.0f}%"
@@ -108,7 +120,13 @@ def _show_memories() -> None:
 
     # Create summary panel
     total_facts = len(facts)
-    avg_confidence = sum(f.get("confidence", 1.0) for f in facts) / total_facts
+    def _get_confidence(f):
+        c = f.get("confidence", 1.0) if isinstance(f, dict) else 1.0
+        try:
+            return float(c)
+        except (TypeError, ValueError):
+            return 1.0
+    avg_confidence = sum(_get_confidence(f) for f in facts) / total_facts
 
     summary = Text()
     summary.append(f"Total: {total_facts} facts\n", style="bold")
@@ -165,18 +183,45 @@ def _export_memories() -> None:
 
     facts = storage.load()
 
+    # Handle None facts
+    if facts is None:
+        facts = []
+
+    # Ensure all facts are JSON-serializable
+    sanitized_facts = []
+    for fact in facts:
+        if not isinstance(fact, dict):
+            fact = {"text": str(fact), "confidence": 1.0, "created_at": "unknown"}
+        # Ensure all values are JSON-serializable
+        sanitized_fact = {}
+        for key, value in fact.items():
+            if isinstance(value, (str, int, float, bool, type(None))):
+                sanitized_fact[key] = value
+            elif isinstance(value, (list, tuple)):
+                sanitized_fact[key] = list(value)
+            elif isinstance(value, dict):
+                sanitized_fact[key] = dict(value)
+            else:
+                sanitized_fact[key] = str(value)
+        sanitized_facts.append(sanitized_fact)
+
     export_data = {
         "agent_name": agent_name,
         "export_timestamp": None,  # Will be filled in
-        "fact_count": len(facts),
-        "facts": facts,
+        "fact_count": len(sanitized_facts),
+        "facts": sanitized_facts,
     }
 
     # Add timestamp
     export_data["export_timestamp"] = datetime.now(timezone.utc).isoformat()
 
     # Pretty print as JSON with syntax highlighting
-    json_str = json.dumps(export_data, indent=2, ensure_ascii=False)
+    try:
+        json_str = json.dumps(export_data, indent=2, ensure_ascii=False)
+    except (TypeError, ValueError) as e:
+        emit_error(f"Failed to serialize memories: {e}")
+        return
+
     syntax = Syntax(json_str, "json", theme="monokai", line_numbers=True)
 
     emit_info(syntax, message_group=str(uuid.uuid4()))

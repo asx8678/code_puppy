@@ -292,6 +292,89 @@ class TestMemoryShowCommand:
                 assert panel.__class__.__name__ == "Panel"
 
 
+    def test_show_memories_handles_malformed_facts(self) -> None:
+        """Should handle facts with string confidence (not crash)."""
+        from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
+
+        # Fact with string confidence instead of float
+        mock_facts = [
+            {
+                "text": "Test fact",
+                "confidence": "0.95",  # String instead of float!
+                "created_at": "2026-04-09T10:00:00+00:00",
+            },
+        ]
+
+        with patch(
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
+            return_value="test-agent",
+        ), patch(
+            "code_puppy.plugins.agent_memory.commands._get_agent_storage"
+        ) as mock_get_storage:
+            mock_storage = MagicMock()
+            mock_storage.load.return_value = mock_facts
+            mock_get_storage.return_value = mock_storage
+
+            # Should not crash even with string confidence
+            with patch("rich.console.Console.print") as mock_print:
+                _show_memories()
+                mock_print.assert_called_once()
+
+    def test_show_memories_handles_non_string_created_at(self) -> None:
+        """Should handle facts with non-string created_at (not crash)."""
+        from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
+
+        # Fact with int created_at instead of string
+        mock_facts = [
+            {
+                "text": "Test fact",
+                "confidence": 0.95,
+                "created_at": 1234567890,  # Int instead of string!
+            },
+        ]
+
+        with patch(
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
+            return_value="test-agent",
+        ), patch(
+            "code_puppy.plugins.agent_memory.commands._get_agent_storage"
+        ) as mock_get_storage:
+            mock_storage = MagicMock()
+            mock_storage.load.return_value = mock_facts
+            mock_get_storage.return_value = mock_storage
+
+            # Should not crash even with int created_at
+            with patch("rich.console.Console.print") as mock_print:
+                _show_memories()
+                mock_print.assert_called_once()
+
+    def test_show_memories_handles_non_dict_facts(self) -> None:
+        """Should handle facts that are not dicts (not crash)."""
+        from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
+
+        # Facts that are not dicts
+        mock_facts = [
+            "Just a string fact",
+            12345,
+            None,
+        ]
+
+        with patch(
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
+            return_value="test-agent",
+        ), patch(
+            "code_puppy.plugins.agent_memory.commands._get_agent_storage"
+        ) as mock_get_storage:
+            mock_storage = MagicMock()
+            mock_storage.load.return_value = mock_facts
+            mock_get_storage.return_value = mock_storage
+
+            # Should not crash even with non-dict facts
+            with patch("rich.console.Console.print") as mock_print:
+                _show_memories()
+                mock_print.assert_called_once()
+
+
 class TestMemoryClearCommand:
     """Tests for /memory clear subcommand."""
 
@@ -409,6 +492,58 @@ class TestMemoryExportCommand:
             mock_storage.load.return_value = mock_facts
             mock_get_storage.return_value = mock_storage
 
+            with patch("code_puppy.plugins.agent_memory.commands.emit_info") as mock_emit:
+                _export_memories()
+                mock_emit.assert_called_once()
+                syntax = mock_emit.call_args[0][0]
+                assert syntax.__class__.__name__ == "Syntax"
+
+    def test_export_handles_none_facts(self) -> None:
+        """Should handle storage.load() returning None (not crash)."""
+        from code_puppy.plugins.agent_memory.register_callbacks import _export_memories
+
+        with patch(
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
+            return_value="test-agent",
+        ), patch(
+            "code_puppy.plugins.agent_memory.commands._get_agent_storage"
+        ) as mock_get_storage:
+            mock_storage = MagicMock()
+            mock_storage.load.return_value = None  # None instead of list!
+            mock_get_storage.return_value = mock_storage
+
+            # Should not crash even with None
+            with patch("code_puppy.plugins.agent_memory.commands.emit_info") as mock_emit:
+                _export_memories()
+                mock_emit.assert_called_once()
+                syntax = mock_emit.call_args[0][0]
+                assert syntax.__class__.__name__ == "Syntax"
+
+    def test_export_handles_non_serializable_data(self) -> None:
+        """Should handle facts with non-JSON-serializable data (not crash)."""
+        from code_puppy.plugins.agent_memory.register_callbacks import _export_memories
+
+        # Fact with non-serializable data
+        mock_facts = [
+            {
+                "text": "Test fact",
+                "confidence": 0.9,
+                "created_at": "2026-04-09T10:00:00+00:00",
+                "extra": {1, 2, 3},  # Set is not JSON serializable!
+            }
+        ]
+
+        with patch(
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
+            return_value="test-agent",
+        ), patch(
+            "code_puppy.plugins.agent_memory.commands._get_agent_storage"
+        ) as mock_get_storage:
+            mock_storage = MagicMock()
+            mock_storage.load.return_value = mock_facts
+            mock_get_storage.return_value = mock_storage
+
+            # Should not crash even with non-serializable data
             with patch("code_puppy.plugins.agent_memory.commands.emit_info") as mock_emit:
                 _export_memories()
                 mock_emit.assert_called_once()
