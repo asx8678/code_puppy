@@ -118,7 +118,7 @@ class TestEnvVarNotSet:
         )
 
         # Verify API key is not set at module level
-        assert reg_module.LANGSMITH_API_KEY is None
+        assert reg_module._get_langsmith_api_key() is None
 
         # Callbacks should exist but not be registered (tested by _is_plugin_active)
         assert not reg_module._is_plugin_active()
@@ -142,23 +142,27 @@ class TestLangsmithNotInstalled:
 
         clear_warn_once_history()
 
-        reg_module = _get_fresh_module_with_mock_client(
-            env_vars={"LANGSMITH_API_KEY": "test-key"}
-        )
+        # Patch resolve_variable to simulate missing langsmith package
+        with patch("code_puppy.plugins.tracing_langsmith.register_callbacks.resolve_variable") as mock_resolve:
+            mock_resolve.side_effect = ImportError("No module named 'langsmith'")
+            
+            with patch("code_puppy.plugins.tracing_langsmith.register_callbacks.warn_once") as mock_warn_once:
+                reg_module = _get_fresh_module_with_mock_client(
+                    env_vars={"LANGSMITH_API_KEY": "test-key"}
+                )
 
-        # Reset the warned flag to ensure warning fires
-        reg_module._warned_missing = False
+                # Reset the warned flag to ensure warning fires on first client access
+                reg_module._warned_missing = False
+                
+                # Try to get client to trigger warning
+                client = reg_module._get_langsmith_client()
+                assert client is None
 
-        with patch("code_puppy.async_utils.warn_once") as mock_warn_once:
-            # Try to get client to trigger warning
-            client = reg_module._get_langsmith_client()
-            assert client is None
-
-            # warn_once should have been called with the hint
-            mock_warn_once.assert_called_once()
-            call_args = mock_warn_once.call_args
-            assert call_args[0][0] == "langsmith_missing"  # key
-            assert "pip install langsmith" in call_args[0][1]  # message
+                # warn_once should have been called with the hint
+                mock_warn_once.assert_called_once()
+                call_args = mock_warn_once.call_args
+                assert call_args[0][0] == "langsmith_missing"  # key
+                assert "pip install langsmith" in call_args[0][1]  # message
 
     def test_returns_none_when_package_missing(self):
         """_get_langsmith_client should return None when package missing."""
@@ -170,7 +174,7 @@ class TestLangsmithNotInstalled:
             env_vars={"LANGSMITH_API_KEY": "test-key"}
         )
 
-        with patch("code_puppy.async_utils.warn_once"):
+        with patch("code_puppy.plugins.tracing_langsmith.register_callbacks.warn_once"):
             client = reg_module._get_langsmith_client()
             assert client is None
 
@@ -447,7 +451,7 @@ class TestZeroOverhead:
         )
 
         # Ensure no API key at module level
-        assert reg_module.LANGSMITH_API_KEY is None
+        assert reg_module._get_langsmith_api_key() is None
 
         # All callbacks should return None quickly (no client init)
         start = time.time()
@@ -546,4 +550,4 @@ class TestEnvironmentVariables:
         )
 
         # Verify default project
-        assert reg_module.LANGSMITH_PROJECT == "default"
+        assert reg_module._get_langsmith_project() == "default"

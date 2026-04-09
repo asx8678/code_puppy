@@ -28,10 +28,16 @@ logger = logging.getLogger(__name__)
 # Feature Detection & Auto-Enable Logic
 # =============================================================================
 
-# Read environment variables at module load time
-LANGSMITH_API_KEY = os.environ.get("LANGSMITH_API_KEY")
-LANGSMITH_PROJECT = os.environ.get("LANGSMITH_PROJECT", "default")
-LANGSMITH_BASE_URL = os.environ.get("LANGSMITH_BASE_URL")
+def _get_langsmith_api_key() -> str | None:
+    return os.environ.get("LANGSMITH_API_KEY")
+
+
+def _get_langsmith_project() -> str:
+    return os.environ.get("LANGSMITH_PROJECT", "default")
+
+
+def _get_langsmith_base_url() -> str | None:
+    return os.environ.get("LANGSMITH_BASE_URL")
 
 # Module-level state for the LangSmith client and active traces
 _langsmith_client: Any = None
@@ -73,7 +79,8 @@ def _get_langsmith_client() -> Any | None:
         return _langsmith_client
 
     # Only try to load if API key is set
-    if not LANGSMITH_API_KEY:
+    api_key = _get_langsmith_api_key()
+    if not api_key:
         return None
 
     try:
@@ -82,10 +89,11 @@ def _get_langsmith_client() -> Any | None:
 
         # Build client kwargs
         client_kwargs: dict[str, Any] = {
-            "api_key": LANGSMITH_API_KEY,
+            "api_key": api_key,
         }
-        if LANGSMITH_BASE_URL:
-            client_kwargs["api_url"] = LANGSMITH_BASE_URL
+        base_url = _get_langsmith_base_url()
+        if base_url:
+            client_kwargs["api_url"] = base_url
 
         _langsmith_client = Client(**client_kwargs)
         logger.debug("LangSmith client initialized successfully")
@@ -110,7 +118,7 @@ def _is_plugin_active() -> bool:
     """Check if plugin should be active (env var set and client available)."""
     global _test_client
 
-    if not LANGSMITH_API_KEY:
+    if not _get_langsmith_api_key():
         # Allow test override even without API key
         if _test_client is not None:
             return True
@@ -159,7 +167,7 @@ async def _on_agent_run_start(
             "run_type": "chain",  # LangSmith convention for agent runs
             "id": run_id,
             "session_id": trace_id,
-            "project_name": LANGSMITH_PROJECT,
+            "project_name": _get_langsmith_project(),
             "inputs": {"model": model_name},
             "start_time": time.time(),
         }
@@ -195,7 +203,7 @@ async def _on_agent_run_end(
 
     Updates the run with outputs, end time, and error information.
     """
-    if not LANGSMITH_API_KEY:  # Quick check without client init
+    if not _get_langsmith_api_key():  # Quick check without client init
         return
 
     trace_id = session_id
@@ -258,7 +266,7 @@ async def _on_pre_tool_call(
 
     Nests the tool call under the current agent run trace.
     """
-    if not LANGSMITH_API_KEY:
+    if not _get_langsmith_api_key():
         return
 
     try:
@@ -288,7 +296,7 @@ async def _on_pre_tool_call(
             "run_type": "tool",
             "id": tool_run_id,
             "parent_run_id": parent_run_id,
-            "project_name": LANGSMITH_PROJECT,
+            "project_name": _get_langsmith_project(),
             "inputs": tool_args,
             "start_time": time.time(),
         }
@@ -319,7 +327,7 @@ async def _on_post_tool_call(
 
     Updates the tool run with outputs and timing.
     """
-    if not LANGSMITH_API_KEY:
+    if not _get_langsmith_api_key():
         return
 
     try:
@@ -377,7 +385,7 @@ async def _on_stream_event(
 
     Adds events to the current run for observability.
     """
-    if not LANGSMITH_API_KEY:
+    if not _get_langsmith_api_key():
         return
 
     try:
@@ -442,7 +450,7 @@ async def _on_stream_event(
 
 # Only register callbacks if LANGSMITH_API_KEY is set
 # This ensures zero overhead when disabled
-if LANGSMITH_API_KEY:
+if _get_langsmith_api_key():
     logger.debug("LANGSMITH_API_KEY detected, registering LangSmith tracing callbacks")
 
     register_callback("agent_run_start", _on_agent_run_start)
