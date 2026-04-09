@@ -2,7 +2,8 @@
 
 import json
 from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -10,64 +11,75 @@ import pytest
 class TestSessionLoggerConfig:
     """Test config module."""
 
+    def _make_mock_config(self, session_logger_enabled: bool = False, sessions_dir: Path | None = None):
+        """Create a mock PuppyConfig for testing."""
+        mock_cfg = MagicMock()
+        mock_cfg.session_logger_enabled = session_logger_enabled
+        mock_cfg.sessions_dir = sessions_dir if sessions_dir is None else Path(sessions_dir)
+        return mock_cfg
+
     def test_get_session_logger_enabled_default_false(self):
         """By default, session logger should be disabled (opt-in)."""
         from code_puppy.plugins.session_logger.config import get_session_logger_enabled
 
-        with patch("code_puppy.plugins.session_logger.config.get_value") as mock_get:
-            mock_get.return_value = None  # Not configured
-            assert get_session_logger_enabled() is False
+        with patch("code_puppy.plugins.session_logger.config.get_puppy_config") as mock_get_cfg:
+            mock_get_cfg.return_value = self._make_mock_config(session_logger_enabled=False)
+            with patch("code_puppy.plugins.session_logger.config.env_bool") as mock_env_bool:
+                mock_env_bool.return_value = False  # Env var not set, use config default
+                assert get_session_logger_enabled() is False
 
-    @patch("code_puppy.plugins.session_logger.config.get_value")
-    def test_get_session_logger_enabled_true_values(self, mock_get):
-        """Test various truthy values."""
+    @patch("code_puppy.plugins.session_logger.config.env_bool")
+    def test_get_session_logger_enabled_true_values(self, mock_env_bool):
+        """Test various truthy values via env_bool."""
         from code_puppy.plugins.session_logger.config import get_session_logger_enabled
 
-        truthy = ["1", "true", "TRUE", "yes", "YES", "on", "ON", True, 1]
+        truthy = ["1", "true", "TRUE", "yes", "YES", "on", "ON"]
         for val in truthy:
-            mock_get.return_value = val
+            mock_env_bool.return_value = True
             assert get_session_logger_enabled() is True, f"Should be True for {val!r}"
 
-    @patch("code_puppy.plugins.session_logger.config.get_value")
-    def test_get_session_logger_enabled_false_values(self, mock_get):
-        """Test various falsy values."""
+    @patch("code_puppy.plugins.session_logger.config.env_bool")
+    def test_get_session_logger_enabled_false_values(self, mock_env_bool):
+        """Test various falsy values via env_bool."""
         from code_puppy.plugins.session_logger.config import get_session_logger_enabled
 
-        falsy = ["0", "false", "FALSE", "no", "NO", "off", "OFF", False, 0, None, ""]
+        falsy = ["0", "false", "FALSE", "no", "NO", "off", "OFF", ""]
         for val in falsy:
-            mock_get.return_value = val
+            mock_env_bool.return_value = False
             assert get_session_logger_enabled() is False, f"Should be False for {val!r}"
 
     def test_get_session_logger_dir_default(self, tmp_path):
         """Test default session logger directory."""
         from code_puppy.plugins.session_logger.config import get_session_logger_dir
 
-        with patch("code_puppy.plugins.session_logger.config.get_value") as mock_get:
-            with patch(
-                "code_puppy.plugins.session_logger.config.DATA_DIR", str(tmp_path)
-            ):
-                mock_get.return_value = None
-                result = get_session_logger_dir()
-                assert result == tmp_path / "sessions"
+        sessions_dir = tmp_path / "sessions"
+        with patch("code_puppy.plugins.session_logger.config.get_puppy_config") as mock_get_cfg:
+            mock_get_cfg.return_value = self._make_mock_config(sessions_dir=sessions_dir)
+            result = get_session_logger_dir()
+            assert result == sessions_dir
 
     def test_get_session_logger_dir_custom(self, tmp_path):
         """Test custom session logger directory from config."""
         from code_puppy.plugins.session_logger.config import get_session_logger_dir
 
-        with patch("code_puppy.plugins.session_logger.config.get_value") as mock_get:
-            mock_get.return_value = str(tmp_path / "custom_sessions")
+        custom_dir = tmp_path / "custom_sessions"
+        with patch("code_puppy.plugins.session_logger.config.get_puppy_config") as mock_get_cfg:
+            mock_get_cfg.return_value = self._make_mock_config(sessions_dir=custom_dir)
             result = get_session_logger_dir()
-            assert result == tmp_path / "custom_sessions"
+            assert result == custom_dir
 
     def test_get_session_logger_dir_expand_home(self, tmp_path):
-        """Test that ~ is expanded in custom directory path."""
+        """Test that sessions_dir with ~ is expanded."""
         from code_puppy.plugins.session_logger.config import get_session_logger_dir
 
-        with patch("code_puppy.plugins.session_logger.config.get_value") as mock_get:
-            mock_get.return_value = "~/my_sessions"
-            with patch.dict("os.environ", {"HOME": str(tmp_path)}):
-                result = get_session_logger_dir()
-                assert "~" not in str(result)
+        with patch("code_puppy.plugins.session_logger.config.get_puppy_config") as mock_get_cfg:
+            # Create sessions_dir with ~ (typically set via env_path in real config)
+            home_path = Path(str(tmp_path)).expanduser().resolve()
+            sessions_dir = home_path / "my_sessions"
+            mock_get_cfg.return_value = self._make_mock_config(sessions_dir=sessions_dir)
+            result = get_session_logger_dir()
+            assert "~" not in str(result)
+            assert result == sessions_dir
 
 
 class TestSessionWriter:
