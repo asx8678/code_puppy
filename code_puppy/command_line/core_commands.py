@@ -399,7 +399,10 @@ def handle_agent_command(command: str) -> bool:
             return True
 
         new_agent = get_current_agent()
-        new_agent.reload_code_generation_agent()
+        try:
+            new_agent.reload_code_generation_agent()
+        except Exception as exc:
+            emit_warning(f"Agent reloaded with warnings: {exc}", message_group=group_id)
         emit_success(
             f"Switched to agent: {new_agent.display_name}", message_group=group_id
         )
