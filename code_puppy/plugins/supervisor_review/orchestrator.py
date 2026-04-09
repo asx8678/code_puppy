@@ -15,9 +15,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
+
+# Regex for safe filename components: rejects path traversal and separators
+# Allows alphanumeric, underscore, hyphen, dot (but not leading/trailing dots)
+_SAFE_NAME_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 from code_puppy.plugins.supervisor_review.models import (
     FeedbackEntry,
@@ -321,6 +326,31 @@ async def run_supervisor_review_loop(
 # ---------------------------------------------------------------------------
 
 
+def _sanitize_agent_name(agent_name: str) -> str:
+    """Sanitize agent name for use in file paths and session IDs.
+
+    Rejects names containing path traversal or separator characters.
+    Only allows alphanumeric, underscore, and hyphen.
+
+    Raises:
+        ValueError: If the agent name contains unsafe characters.
+    """
+    if not agent_name:
+        raise ValueError("agent_name must not be empty")
+    # Check for forbidden characters: path separators, backslashes, dots, NUL
+    if any(c in agent_name for c in ("/", "\\", ":", "\x00", ".")):
+        raise ValueError(
+            f"agent_name contains forbidden characters; "
+            f"only alphanumeric, underscore, and hyphen are allowed: {agent_name!r}"
+        )
+    # Validate against allowlist regex
+    if not _SAFE_NAME_REGEX.match(agent_name):
+        raise ValueError(
+            f"agent_name must match pattern '^[a-zA-Z0-9_-]+$'; got {agent_name!r}"
+        )
+    return agent_name
+
+
 def _build_session_id(
     prefix: str | None, agent_name: str, iteration: int
 ) -> str | None:
@@ -328,10 +358,13 @@ def _build_session_id(
 
     Returns None when no prefix is supplied so the caller can use whatever
     default session the underlying invoke_agent picks.
+
+    Raises:
+        ValueError: If the agent_name contains unsafe characters.
     """
     if not prefix:
         return None
-    safe_agent = agent_name.replace("/", "_").replace(":", "_")
+    safe_agent = _sanitize_agent_name(agent_name)
     return f"{prefix}_{safe_agent}_iter{iteration}"
 
 
@@ -341,17 +374,59 @@ def _write_artifacts(
     iterations: list[IterationResult],
     feedback_history: list[FeedbackEntry],
 ) -> Path:
-    """Write per-iteration transcripts to disk. Returns the artifacts directory."""
+    """Write per-iteration transcripts to disk. Returns the artifacts directory.
+
+    Raises:
+        ValueError: If the resolved artifacts path escapes the root directory,
+            or if session_prefix contains unsafe characters.
+    """
     import json
 
     session_name = config.session_prefix or f"review_{int(time.time())}"
+
+    # Defense-in-depth: validate session_prefix even though ReviewLoopConfig
+    # should have already validated it. This catches bypass attempts.
+    if config.session_prefix is not None:
+        # Reject any session_prefix with path separators or traversal patterns
+        if any(c in session_name for c in ("/", "\\", "\x00", ".")):
+            raise ValueError(
+                f"session_prefix contains unsafe characters; "
+                f"possible path traversal attempt: {session_name!r}"
+            )
+        if not _SAFE_NAME_REGEX.match(session_name):
+            raise ValueError(
+                f"session_prefix must match pattern '^[a-zA-Z0-9_-]+$'; "
+                f"got {session_name!r}"
+            )
+
     artifacts_dir = root / "supervisor_review" / session_name
+
+    # Path traversal defense: ensure resolved path is within root
+    try:
+        resolved_artifacts = artifacts_dir.resolve()
+        resolved_root = root.resolve()
+        # relative_to raises ValueError if not a subpath
+        resolved_artifacts.relative_to(resolved_root)
+    except (ValueError, OSError) as exc:
+        raise ValueError(
+            f"artifacts_dir resolves outside root; possible path traversal: "
+            f"{artifacts_dir!r} not under {root!r}"
+        ) from exc
+
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     for iter_result in iterations:
         for agent_name, output in iter_result.worker_outputs.items():
-            safe_agent = agent_name.replace("/", "_").replace(":", "_")
+            safe_agent = _sanitize_agent_name(agent_name)
             path = artifacts_dir / f"iter{iter_result.iteration}_{safe_agent}.log"
+            # Double-check file path is still within artifacts_dir (paranoid)
+            try:
+                path.resolve().relative_to(artifacts_dir.resolve())
+            except (ValueError, OSError) as exc:
+                raise ValueError(
+                    f"file path escapes artifacts_dir; possible path traversal: "
+                    f"{path!r}"
+                ) from exc
             path.write_text(output, encoding="utf-8")
 
         if iter_result.supervisor_output:

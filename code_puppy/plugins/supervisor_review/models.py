@@ -9,6 +9,7 @@ orion-multistep-analysis supervisor/orchestrator.py with improvements:
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -63,6 +64,10 @@ class IterationResult:
         return self.satisfaction is not None and self.satisfaction.satisfied
 
 
+# Allowlist regex for session_prefix: alphanumeric, underscore, hyphen; 1-64 chars
+_SESSION_PREFIX_REGEX = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+
 @dataclass(slots=True)
 class ReviewLoopConfig:
     """Configuration for a supervisor-review loop run."""
@@ -85,6 +90,13 @@ class ReviewLoopConfig:
             raise ValueError(
                 f"satisfaction_mode must be one of 'structured', 'keyword', 'llm_judge'; "
                 f"got {self.satisfaction_mode!r}"
+            )
+        if self.session_prefix is not None and not _SESSION_PREFIX_REGEX.match(
+            self.session_prefix
+        ):
+            raise ValueError(
+                f"session_prefix must match allowlist pattern '^[a-zA-Z0-9_-]{{1,64}}$'; "
+                f"got {self.session_prefix!r}"
             )
 
 

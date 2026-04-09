@@ -9,6 +9,8 @@ import pytest
 
 from code_puppy.plugins.supervisor_review.models import ReviewLoopConfig
 from code_puppy.plugins.supervisor_review.orchestrator import (
+    _sanitize_agent_name,
+    _write_artifacts,
     build_iteration_prompt,
     build_supervisor_prompt,
     format_feedback_history,
@@ -354,3 +356,242 @@ class TestRunSupervisorReviewLoop:
         d = result.to_dict()
         # Must be JSON-serializable
         json.dumps(d)
+
+    @pytest.mark.asyncio
+    async def test_session_prefix_path_traversal_rejected(self):
+        """SECURITY: session_prefix with path traversal characters must be rejected."""
+        traversal_prefixes = [
+            "../etc/passwd",
+            "..\\windows\\system32",
+            "..",
+            "a/../b",
+            "a/b/c/../../../d",
+            "prefix/../../../etc",
+        ]
+        for bad_prefix in traversal_prefixes:
+            with pytest.raises(ValueError, match="session_prefix"):
+                ReviewLoopConfig(
+                    worker_agents=["worker"],
+                    supervisor_agent="sup",
+                    task_prompt="task",
+                    session_prefix=bad_prefix,
+                )
+
+    @pytest.mark.asyncio
+    async def test_agent_name_backslash_rejected(self):
+        """SECURITY: agent names with backslashes must be rejected."""
+        fake = FakeAgentScript(
+            {
+                "worker": ["out"],
+                "sup": [json.dumps({"verdict": "approved"})],
+            }
+        )
+        # Backslash in agent name should be rejected
+        cfg = ReviewLoopConfig(
+            worker_agents=["evil\\..\\..\\agent"],
+            supervisor_agent="sup",
+            task_prompt="task",
+            session_prefix="safe-prefix",
+        )
+        with pytest.raises(ValueError, match="agent_name"):
+            await run_supervisor_review_loop(cfg, invoke_agent_fn=fake)
+
+    @pytest.mark.asyncio
+    async def test_agent_name_dotdot_rejected(self):
+        """SECURITY: agent names containing '..' must be rejected."""
+        fake = FakeAgentScript(
+            {
+                "worker": ["out"],
+                "sup": [json.dumps({"verdict": "approved"})],
+            }
+        )
+        cfg = ReviewLoopConfig(
+            worker_agents=["agent..with..dots"],
+            supervisor_agent="sup",
+            task_prompt="task",
+            session_prefix="safe-prefix",
+        )
+        with pytest.raises(ValueError, match="agent_name"):
+            await run_supervisor_review_loop(cfg, invoke_agent_fn=fake)
+
+    @pytest.mark.asyncio
+    async def test_agent_name_path_separator_rejected(self):
+        """SECURITY: agent names with forward slashes must be rejected."""
+        fake = FakeAgentScript(
+            {
+                "worker": ["out"],
+                "sup": [json.dumps({"verdict": "approved"})],
+            }
+        )
+        cfg = ReviewLoopConfig(
+            worker_agents=["evil/path"],
+            supervisor_agent="sup",
+            task_prompt="task",
+            session_prefix="safe-prefix",
+        )
+        with pytest.raises(ValueError, match="agent_name"):
+            await run_supervisor_review_loop(cfg, invoke_agent_fn=fake)
+
+    @pytest.mark.asyncio
+    async def test_agent_name_nul_rejected(self):
+        """SECURITY: agent names with NUL bytes must be rejected."""
+        fake = FakeAgentScript(
+            {
+                "worker": ["out"],
+                "sup": [json.dumps({"verdict": "approved"})],
+            }
+        )
+        cfg = ReviewLoopConfig(
+            worker_agents=["agent\x00name"],
+            supervisor_agent="sup",
+            task_prompt="task",
+            session_prefix="safe-prefix",
+        )
+        with pytest.raises(ValueError, match="agent_name"):
+            await run_supervisor_review_loop(cfg, invoke_agent_fn=fake)
+
+
+class TestSanitizeAgentName:
+    """Direct tests for _sanitize_agent_name function."""
+
+    def test_valid_names_pass(self):
+        """Alphanumeric, underscore, and hyphen are allowed."""
+        assert _sanitize_agent_name("agent1") == "agent1"
+        assert _sanitize_agent_name("my_agent") == "my_agent"
+        assert _sanitize_agent_name("my-agent") == "my-agent"
+        assert _sanitize_agent_name("Agent123") == "Agent123"
+
+    def test_empty_name_raises(self):
+        """Empty string should raise ValueError."""
+        with pytest.raises(ValueError, match="agent_name"):
+            _sanitize_agent_name("")
+
+    def test_dot_raises(self):
+        """Dot character should raise ValueError."""
+        with pytest.raises(ValueError, match="forbidden"):
+            _sanitize_agent_name("agent.name")
+
+    def test_backslash_raises(self):
+        """Backslash should raise ValueError."""
+        with pytest.raises(ValueError, match="forbidden"):
+            _sanitize_agent_name("agent\\name")
+
+    def test_forward_slash_raises(self):
+        """Forward slash should raise ValueError."""
+        with pytest.raises(ValueError, match="forbidden"):
+            _sanitize_agent_name("agent/name")
+
+    def test_colon_raises(self):
+        """Colon should raise ValueError."""
+        with pytest.raises(ValueError, match="forbidden"):
+            _sanitize_agent_name("agent:name")
+
+    def test_nul_byte_raises(self):
+        """NUL byte should raise ValueError."""
+        with pytest.raises(ValueError, match="forbidden"):
+            _sanitize_agent_name("agent\x00name")
+
+    def test_dotdot_raises(self):
+        """Dotdot sequence should raise ValueError."""
+        with pytest.raises(ValueError, match="forbidden"):
+            _sanitize_agent_name("..")
+
+
+class TestWriteArtifactsPathTraversal:
+    """Tests for path traversal defense in _write_artifacts."""
+
+    def test_session_prefix_dot_blocked(self, tmp_path: Path):
+        """SECURITY: session_prefix with dots should be rejected by defense-in-depth check."""
+        from code_puppy.plugins.supervisor_review.models import IterationResult
+
+        # Create a config with a clean session_prefix (validated in ReviewLoopConfig)
+        # but simulate a bypass attempt in _write_artifacts by mutating the config
+        cfg = ReviewLoopConfig(
+            worker_agents=["worker"],
+            supervisor_agent="sup",
+            task_prompt="task",
+            session_prefix="safe-prefix",
+        )
+
+        # Manually corrupt the session_prefix to bypass model validation
+        # This simulates what would happen if validation was bypassed
+        object.__setattr__(cfg, "session_prefix", "../outside")
+
+        iteration = IterationResult(
+            iteration=1,
+            worker_outputs={"worker": "output"},
+            supervisor_output="supervisor response",
+        )
+
+        # The defense-in-depth check in _write_artifacts should catch this
+        with pytest.raises(ValueError, match="unsafe characters|path traversal"):
+            _write_artifacts(tmp_path, cfg, [iteration], [])
+
+    def test_session_prefix_absolute_path_blocked(self, tmp_path: Path):
+        """SECURITY: Absolute path in session_prefix should be blocked."""
+        from code_puppy.plugins.supervisor_review.models import IterationResult
+
+        cfg = ReviewLoopConfig(
+            worker_agents=["worker"],
+            supervisor_agent="sup",
+            task_prompt="task",
+            session_prefix="safe-prefix",
+        )
+
+        # Try an absolute path escape (this actually escapes containment)
+        object.__setattr__(cfg, "session_prefix", "/etc")
+
+        iteration = IterationResult(
+            iteration=1,
+            worker_outputs={"worker": "output"},
+            supervisor_output="supervisor response",
+        )
+
+        # The absolute path check should catch this
+        with pytest.raises(ValueError, match="unsafe characters|path traversal|outside root"):
+            _write_artifacts(tmp_path, cfg, [iteration], [])
+
+    def test_agent_name_traversal_in_output_blocked(self, tmp_path: Path):
+        """SECURITY: Agent name with path traversal should be rejected."""
+        from code_puppy.plugins.supervisor_review.models import IterationResult
+
+        cfg = ReviewLoopConfig(
+            worker_agents=["worker"],
+            supervisor_agent="sup",
+            task_prompt="task",
+            session_prefix="safe",
+        )
+
+        iteration = IterationResult(
+            iteration=1,
+            worker_outputs={"evil../..agent": "output"},  # Bad agent name
+            supervisor_output="supervisor response",
+        )
+
+        # _sanitize_agent_name should reject the bad agent name
+        with pytest.raises(ValueError, match="agent_name|forbidden"):
+            _write_artifacts(tmp_path, cfg, [iteration], [])
+
+    def test_valid_session_prefix_allowed(self, tmp_path: Path):
+        """Valid session_prefix should work normally."""
+        from code_puppy.plugins.supervisor_review.models import IterationResult
+
+        cfg = ReviewLoopConfig(
+            worker_agents=["worker"],
+            supervisor_agent="sup",
+            task_prompt="task",
+            session_prefix="safe-prefix",
+        )
+
+        iteration = IterationResult(
+            iteration=1,
+            worker_outputs={"worker": "output"},
+            supervisor_output="supervisor response",
+        )
+
+        artifacts_dir = _write_artifacts(tmp_path, cfg, [iteration], [])
+
+        assert artifacts_dir.exists()
+        assert (artifacts_dir / "iter1_worker.log").exists()
+        assert (artifacts_dir / "iter1_supervisor.log").exists()
+        assert (artifacts_dir / "summary.json").exists()

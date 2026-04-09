@@ -108,6 +108,126 @@ class TestReviewLoopConfig:
             )
             assert cfg.satisfaction_mode == mode
 
+    # SECURITY: session_prefix validation tests
+    def test_session_prefix_valid_alphanumeric(self):
+        """Alphanumeric, underscore, and hyphen are allowed."""
+        cfg = ReviewLoopConfig(
+            worker_agents=["a"],
+            supervisor_agent="sup",
+            task_prompt="x",
+            session_prefix="my_session-123",
+        )
+        assert cfg.session_prefix == "my_session-123"
+
+    def test_session_prefix_path_traversal_rejected(self):
+        """SECURITY: session_prefix with path traversal must be rejected."""
+        traversal_attempts = [
+            "../etc/passwd",
+            "..\\windows\\system32",
+            "..",
+            "a/../b",
+            "../../../etc",
+            "prefix/../../../d",
+        ]
+        for bad_prefix in traversal_attempts:
+            with pytest.raises(ValueError, match="session_prefix"):
+                ReviewLoopConfig(
+                    worker_agents=["a"],
+                    supervisor_agent="sup",
+                    task_prompt="x",
+                    session_prefix=bad_prefix,
+                )
+
+    def test_session_prefix_forward_slash_rejected(self):
+        """SECURITY: Forward slash in session_prefix must be rejected."""
+        with pytest.raises(ValueError, match="session_prefix"):
+            ReviewLoopConfig(
+                worker_agents=["a"],
+                supervisor_agent="sup",
+                task_prompt="x",
+                session_prefix="path/to/file",
+            )
+
+    def test_session_prefix_backslash_rejected(self):
+        """SECURITY: Backslash in session_prefix must be rejected."""
+        with pytest.raises(ValueError, match="session_prefix"):
+            ReviewLoopConfig(
+                worker_agents=["a"],
+                supervisor_agent="sup",
+                task_prompt="x",
+                session_prefix="path\\to\\file",
+            )
+
+    def test_session_prefix_dot_rejected(self):
+        """SECURITY: Dot in session_prefix must be rejected."""
+        with pytest.raises(ValueError, match="session_prefix"):
+            ReviewLoopConfig(
+                worker_agents=["a"],
+                supervisor_agent="sup",
+                task_prompt="x",
+                session_prefix="my.prefix",
+            )
+
+    def test_session_prefix_colon_rejected(self):
+        """SECURITY: Colon in session_prefix must be rejected."""
+        with pytest.raises(ValueError, match="session_prefix"):
+            ReviewLoopConfig(
+                worker_agents=["a"],
+                supervisor_agent="sup",
+                task_prompt="x",
+                session_prefix="c:windows",
+            )
+
+    def test_session_prefix_nul_rejected(self):
+        """SECURITY: NUL byte in session_prefix must be rejected."""
+        with pytest.raises(ValueError, match="session_prefix"):
+            ReviewLoopConfig(
+                worker_agents=["a"],
+                supervisor_agent="sup",
+                task_prompt="x",
+                session_prefix="prefix\x00name",
+            )
+
+    def test_session_prefix_too_long_rejected(self):
+        """SECURITY: session_prefix over 64 chars must be rejected."""
+        with pytest.raises(ValueError, match="session_prefix"):
+            ReviewLoopConfig(
+                worker_agents=["a"],
+                supervisor_agent="sup",
+                task_prompt="x",
+                session_prefix="a" * 65,
+            )
+
+    def test_session_prefix_64_chars_allowed(self):
+        """SECURITY: session_prefix of exactly 64 chars is allowed."""
+        cfg = ReviewLoopConfig(
+            worker_agents=["a"],
+            supervisor_agent="sup",
+            task_prompt="x",
+            session_prefix="a" * 64,
+        )
+        assert cfg.session_prefix == "a" * 64
+
+    def test_session_prefix_empty_rejected(self):
+        """SECURITY: Empty session_prefix must be rejected."""
+        with pytest.raises(ValueError, match="session_prefix"):
+            ReviewLoopConfig(
+                worker_agents=["a"],
+                supervisor_agent="sup",
+                task_prompt="x",
+                session_prefix="",
+            )
+
+    def test_session_prefix_none_allowed(self):
+        """None (no prefix) is allowed."""
+        cfg = ReviewLoopConfig(
+            worker_agents=["a"],
+            supervisor_agent="sup",
+            task_prompt="x",
+            session_prefix=None,
+        )
+        assert cfg.session_prefix is None
+
 
 class TestSupervisorReviewResult:
     def test_to_dict_empty(self):
