@@ -172,3 +172,32 @@ def set_skill_disabled(skill_name: str, disabled: bool) -> None:
 
     # Save back to config as JSON
     set_value("disabled_skills", json.dumps(list(disabled_skills)))
+
+
+def get_progressive_skill_disclosure() -> bool:
+    """Check if progressive skill disclosure is enabled.
+
+    Progressive disclosure injects only metadata (name, description, path)
+    into system prompts, allowing agents to pull full SKILL.md content
+    on-demand using the read_file tool. This prevents context explosion
+    when many skills are installed.
+
+    Returns:
+        True if progressive disclosure is enabled (default), False otherwise.
+        Reads from 'progressive_skill_disclosure' config key.
+    """
+    cfg_val = get_value("progressive_skill_disclosure")
+    if cfg_val is None:
+        return True  # Enabled by default
+    return str(cfg_val).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def set_progressive_skill_disclosure(enabled: bool) -> None:
+    """Enable or disable progressive skill disclosure.
+
+    Args:
+        enabled: True to enable (metadata-only injection), False to disable
+                 (legacy full-content injection).
+    """
+    set_value("progressive_skill_disclosure", "true" if enabled else "false")
+    logger.info(f"Progressive skill disclosure {'enabled' if enabled else 'disabled'}")

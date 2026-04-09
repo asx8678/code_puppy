@@ -1,9 +1,18 @@
 """Agent Skills plugin - registers callbacks for skill integration.
 
 This plugin:
-1. Injects available skills into system prompts
+1. Injects available skills into system prompts (with progressive disclosure)
 2. Registers skill-related tools
 3. Provides /skills slash command (and alias /skill)
+
+Progressive Disclosure (default):
+    - Only metadata (name, description, path) is injected into prompts
+    - Agents use `read_file(file_path="<path>")` to load full SKILL.md on demand
+    - Prevents context explosion with many skills installed
+
+Legacy Mode (deprecated):
+    - Full SKILL.md content injected into prompts
+    - Can be enabled via `progressive_skill_disclosure = false` in config
 """
 
 import logging
@@ -18,19 +27,35 @@ logger = logging.getLogger(__name__)
 def _get_skills_prompt_section() -> str | None:
     """Build the skills section to inject into system prompts.
 
+    Uses progressive disclosure (metadata-only) by default. Falls back to
+    legacy full-content injection for skills without YAML frontmatter.
+
     Returns None if skills are disabled or no skills found.
     """
-    from .config import get_disabled_skills, get_skill_directories, get_skills_enabled
+    from .config import (
+        get_disabled_skills,
+        get_progressive_skill_disclosure,
+        get_skill_directories,
+        get_skills_enabled,
+    )
     from .discovery import discover_skills
-    from .metadata import SkillMetadata, parse_skill_metadata
-    from .prompt_builder import build_available_skills_xml, build_skills_guidance
+    from .metadata import MAX_SKILL_FILE_SIZE, SkillMetadata, parse_skill_metadata
+    from .prompt_builder import (
+        build_available_skills_markdown,
+        build_available_skills_xml,
+        build_progressive_disclosure_guidance,
+        build_skills_guidance,
+    )
 
     # 1. Check if enabled
     if not get_skills_enabled():
         logger.debug("Skills integration is disabled, skipping prompt injection")
         return None
 
-    # 2. Discover skills
+    # 2. Check if progressive disclosure is enabled
+    use_progressive = get_progressive_skill_disclosure()
+
+    # 3. Discover skills
     skill_dirs = [Path(d) for d in get_skill_directories()]
     discovered = discover_skills(skill_dirs)
 
@@ -38,9 +63,10 @@ def _get_skills_prompt_section() -> str | None:
         logger.debug("No skills discovered, skipping prompt injection")
         return None
 
-    # 3. Parse metadata for each and filter out disabled skills
+    # 4. Parse metadata for each and filter out disabled skills
     disabled_skills = get_disabled_skills()
     skills_metadata: list[SkillMetadata] = []
+    legacy_skills: list[tuple[Path, str]] = []  # (skill_path, full_content)
 
     for skill_info in discovered:
         # Skip disabled skills
@@ -53,24 +79,83 @@ def _get_skills_prompt_section() -> str | None:
             logger.debug(f"Skipping skill without SKILL.md: {skill_info.name}")
             continue
 
-        # Parse metadata
+        # Try to parse metadata (requires YAML frontmatter)
         metadata = parse_skill_metadata(skill_info.path)
         if metadata:
             skills_metadata.append(metadata)
         else:
-            logger.warning(f"Failed to parse metadata for skill: {skill_info.name}")
+            # No valid frontmatter - treat as legacy skill
+            # In legacy mode, we inject the full content
+            skill_md_path = skill_info.path / "SKILL.md"
+            try:
+                # Check size for DoS prevention
+                file_size = skill_md_path.stat().st_size
+                if file_size > MAX_SKILL_FILE_SIZE:
+                    logger.warning(
+                        f"Legacy skill file too large ({file_size} bytes), skipping: {skill_info.name}"
+                    )
+                    continue
+                full_content = skill_md_path.read_text(encoding="utf-8")
+                legacy_skills.append((skill_info.path, full_content))
+                logger.warning(
+                    f"Legacy skill '{skill_info.name}' has no YAML frontmatter. "
+                    "Add frontmatter to enable progressive disclosure. "
+                    "Full content will be injected (deprecated)."
+                )
+            except Exception as e:
+                logger.warning(f"Failed to read legacy skill {skill_info.name}: {e}")
 
-    # 4. Build XML + guidance
-    if not skills_metadata:
-        logger.debug("No valid skills with metadata found, skipping prompt injection")
+    # 5. Build the skills section based on mode
+    sections: list[str] = []
+
+    # Progressive disclosure mode (default)
+    if use_progressive and skills_metadata:
+        skills_block = build_available_skills_markdown(skills_metadata)
+        if skills_block:
+            sections.append(skills_block)
+            logger.debug(f"Injecting progressive disclosure for {len(skills_metadata)} skills")
+
+    # Legacy XML mode (or progressive disabled)
+    elif not use_progressive and skills_metadata:
+        xml_section = build_available_skills_xml(skills_metadata)
+        sections.append(xml_section)
+        sections.append(build_skills_guidance())
+        logger.debug(f"Injecting legacy XML for {len(skills_metadata)} skills")
+
+    # Legacy skills without frontmatter (deprecation warning)
+    if legacy_skills:
+        deprecation_notice = """
+## ⚠️ Legacy Skills (Deprecation Warning)
+
+The following skills do not have YAML frontmatter and use the deprecated
+full-content injection method. Please update these skills to use the new format:
+
+```yaml
+---
+name: skill-name
+description: What this skill does
+---
+```
+
+**Legacy skill content:**
+"""
+        sections.append(deprecation_notice)
+        for skill_path, content in legacy_skills:
+            sections.append(f"### Skill at {skill_path}")
+            sections.append("```markdown")
+            sections.append(content[:50000])  # Limit to 50KB per legacy skill
+            if len(content) > 50000:
+                sections.append("... (content truncated, 50KB limit)")
+            sections.append("```")
+            sections.append("")
+        logger.warning(f"Injected {len(legacy_skills)} legacy skills with full content (deprecated)")
+
+    # 6. Return combined string if we have any sections
+    if not sections:
+        logger.debug("No valid skills to inject, skipping prompt injection")
         return None
 
-    xml_section = build_available_skills_xml(skills_metadata)
-    guidance = build_skills_guidance()
-
-    # 5. Return combined string
-    combined = f"{xml_section}\n\n{guidance}"
-    logger.debug(f"Injecting skills section with {len(skills_metadata)} skills")
+    combined = "\n\n".join(sections)
     return combined
 
 
@@ -136,11 +221,14 @@ def _handle_skills_command(command: str, name: str) -> Any | None:
     """Handle /skills and /skill slash commands.
 
     Sub-commands:
-        /skills          – Launch interactive TUI menu
-        /skills list     – Quick text list of all skills
-        /skills install  – Browse & install from remote catalog
-        /skills enable   – Enable skills integration globally
-        /skills disable  – Disable skills integration globally
+        /skills                     – Launch interactive TUI menu
+        /skills list                – Quick text list of all skills
+        /skills install             – Browse & install from remote catalog
+        /skills enable              – Enable skills integration globally
+        /skills disable             – Disable skills integration globally
+        /skills progressive         – Show progressive disclosure status
+        /skills progressive enable  – Enable progressive disclosure
+        /skills progressive disable – Disable progressive disclosure (legacy mode)
     """
     if name not in (_COMMAND_NAME, *_ALIASES):
         return None
@@ -148,7 +236,10 @@ def _handle_skills_command(command: str, name: str) -> Any | None:
     from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
     from code_puppy.plugins.agent_skills.config import (
         get_disabled_skills,
+        get_progressive_skill_disclosure,
+        get_skill_directories,
         get_skills_enabled,
+        set_progressive_skill_disclosure,
         set_skills_enabled,
     )
     from code_puppy.plugins.agent_skills.discovery import discover_skills
@@ -164,16 +255,18 @@ def _handle_skills_command(command: str, name: str) -> Any | None:
             disabled_skills = get_disabled_skills()
             skills = discover_skills()
             enabled = get_skills_enabled()
+            progressive = get_progressive_skill_disclosure()
 
             if not skills:
                 emit_info("No skills found.")
                 emit_info("Create skills in:")
-                emit_info("  - ~/.code_puppy/skills/")
-                emit_info("  - ./skills/")
+                for d in get_skill_directories():
+                    emit_info(f"  - {d}/")
                 return True
 
             emit_info(
-                f"\U0001f6e0\ufe0f Skills (integration: {'enabled' if enabled else 'disabled'})"
+                f"\U0001f6e0\ufe0f Skills (integration: {'enabled' if enabled else 'disabled'}"
+                f", progressive: {'on' if progressive else 'off'})"
             )
             emit_info(f"Found {len(skills)} skill(s):\n")
 
@@ -198,7 +291,7 @@ def _handle_skills_command(command: str, name: str) -> Any | None:
                         else "\U0001f7e2 enabled"
                     )
                     emit_info(f"  {status} {skill.name}")
-                    emit_info("      (no SKILL.md metadata found)")
+                    emit_info("      (legacy - no SKILL.md metadata)")
                 emit_info("")
             return True
 
@@ -220,9 +313,50 @@ def _handle_skills_command(command: str, name: str) -> Any | None:
             emit_warning("\U0001f534 Skills integration disabled globally")
             return True
 
+        elif subcommand == "progressive":
+            # Progressive disclosure subcommands
+            if len(tokens) > 2:
+                progressive_subcmd = tokens[2].lower()
+                if progressive_subcmd == "enable":
+                    set_progressive_skill_disclosure(True)
+                    emit_success(
+                        "\u2705 Progressive disclosure enabled. "
+                        "Only metadata will be injected; use `read_file` to load skills."
+                    )
+                    return True
+                elif progressive_subcmd == "disable":
+                    set_progressive_skill_disclosure(False)
+                    emit_warning(
+                        "\U0001f534 Progressive disclosure disabled (legacy mode). "
+                        "Full skill content may be injected into prompts."
+                    )
+                    return True
+                else:
+                    emit_error(f"Unknown progressive subcommand: {progressive_subcmd}")
+                    emit_info("Usage: /skills progressive [enable|disable]")
+                    return True
+            else:
+                # Show current status
+                progressive = get_progressive_skill_disclosure()
+                if progressive:
+                    emit_info(
+                        "Progressive disclosure: ENABLED (default)\n"
+                        "Only skill metadata is injected into prompts. "
+                        "Agents use `read_file` to load full SKILL.md on demand.\n"
+                        "This prevents context explosion with many skills."
+                    )
+                else:
+                    emit_warning(
+                        "Progressive disclosure: DISABLED (legacy mode)\n"
+                        "Full skill content may be injected into prompts. "
+                        "Not recommended for many skills.\n"
+                        "Run `/skills progressive enable` to switch."
+                    )
+                return True
+
         else:
             emit_error(f"Unknown subcommand: {subcommand}")
-            emit_info("Usage: /skills [list|install|enable|disable]")
+            emit_info("Usage: /skills [list|install|enable|disable|progressive]")
             return True
 
     # No subcommand – launch TUI menu

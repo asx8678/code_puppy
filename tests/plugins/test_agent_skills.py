@@ -498,6 +498,7 @@ class TestPromptBuilder:
             name="test-skill",
             description="A test skill",
             path=Path("/path/to/skill"),
+            skill_md_path=Path("/path/to/skill/SKILL.md"),
         )
         xml = build_available_skills_xml([skill])
         assert "<available_skills>" in xml
@@ -513,11 +514,13 @@ class TestPromptBuilder:
                 name="skill1",
                 description="First skill",
                 path=Path("/path/to/skill1"),
+                skill_md_path=Path("/path/to/skill1/SKILL.md"),
             ),
             SkillMetadata(
                 name="skill2",
                 description="Second skill",
                 path=Path("/path/to/skill2"),
+                skill_md_path=Path("/path/to/skill2/SKILL.md"),
             ),
         ]
         xml = build_available_skills_xml(skills)
@@ -531,6 +534,7 @@ class TestPromptBuilder:
             name="test",
             description="Tom & Jerry",
             path=Path("/path"),
+            skill_md_path=Path("/path/SKILL.md"),
         )
         xml = build_available_skills_xml([skill])
         assert "Tom &amp; Jerry" in xml
@@ -541,6 +545,7 @@ class TestPromptBuilder:
             name="test",
             description="Use < for comparison",
             path=Path("/path"),
+            skill_md_path=Path("/path/SKILL.md"),
         )
         xml = build_available_skills_xml([skill])
         assert "Use &lt; for comparison" in xml
@@ -551,6 +556,7 @@ class TestPromptBuilder:
             name="test",
             description="Use > for comparison",
             path=Path("/path"),
+            skill_md_path=Path("/path/SKILL.md"),
         )
         xml = build_available_skills_xml([skill])
         assert "Use &gt; for comparison" in xml
@@ -561,6 +567,7 @@ class TestPromptBuilder:
             name="test",
             description='She said "Hello"',
             path=Path("/path"),
+            skill_md_path=Path("/path/SKILL.md"),
         )
         xml = build_available_skills_xml([skill])
         assert "She said &quot;Hello&quot;" in xml
@@ -571,6 +578,7 @@ class TestPromptBuilder:
             name="test",
             description="It's a test",
             path=Path("/path"),
+            skill_md_path=Path("/path/SKILL.md"),
         )
         xml = build_available_skills_xml([skill])
         assert "It&#39;s a test" in xml
@@ -581,6 +589,7 @@ class TestPromptBuilder:
             name="test",
             description="Tom & Jerry say: 'Use < & >'",
             path=Path("/path"),
+            skill_md_path=Path("/path/SKILL.md"),
         )
         xml = build_available_skills_xml([skill])
         assert "Tom &amp; Jerry say: &#39;Use &lt; &amp; &gt;&#39;" in xml
@@ -1078,3 +1087,375 @@ class TestSkillIntegration:
         xml = build_available_skills_xml(metadatas)
         assert "<available_skills>" in xml
         assert "<name>test-skill</name>" in xml
+
+
+# Tests for Progressive Disclosure
+
+
+class TestProgressiveDisclosure:
+    """Tests for progressive skill disclosure feature."""
+
+    # --- Tests for build_available_skills_markdown ---
+
+    def test_build_available_skills_markdown_empty(self):
+        """Test building markdown for empty skills list returns None."""
+        from code_puppy.plugins.agent_skills.prompt_builder import (
+            build_available_skills_markdown,
+        )
+
+        result = build_available_skills_markdown([])
+        assert result is None
+
+    def test_build_available_skills_markdown_single_skill(self):
+        """Test building markdown for single skill."""
+        from code_puppy.plugins.agent_skills.prompt_builder import (
+            build_available_skills_markdown,
+        )
+
+        skill = SkillMetadata(
+            name="test-skill",
+            description="A test skill for progressive disclosure",
+            path=Path("/path/to/skill"),
+            skill_md_path=Path("/path/to/skill/SKILL.md"),
+            version="1.0.0",
+            author="Test Author",
+            tags=["testing", "python"],
+        )
+        result = build_available_skills_markdown([skill])
+        assert result is not None
+        assert "## Available Skills (Progressive Disclosure)" in result
+        assert "### test-skill" in result
+        assert "**When to use**: A test skill for progressive disclosure" in result
+        assert "**Full instructions**: `/path/to/skill/SKILL.md`" in result
+        assert "**Version**: 1.0.0" in result
+        assert "**Author**: Test Author" in result
+        assert "**Tags**: testing, python" in result
+
+    def test_build_available_skills_markdown_multiple_skills(self):
+        """Test building markdown for multiple skills."""
+        from code_puppy.plugins.agent_skills.prompt_builder import (
+            build_available_skills_markdown,
+        )
+
+        skills = [
+            SkillMetadata(
+                name="python-skill",
+                description="Python development skill",
+                path=Path("/skills/python"),
+                skill_md_path=Path("/skills/python/SKILL.md"),
+            ),
+            SkillMetadata(
+                name="js-skill",
+                description="JavaScript development skill",
+                path=Path("/skills/js"),
+                skill_md_path=Path("/skills/js/SKILL.md"),
+            ),
+        ]
+        result = build_available_skills_markdown(skills)
+        assert result is not None
+        assert "### python-skill" in result
+        assert "### js-skill" in result
+        assert "**When to use**: Python development skill" in result
+        assert "**When to use**: JavaScript development skill" in result
+
+    def test_build_available_skills_markdown_no_optional_fields(self):
+        """Test markdown when optional fields are not set."""
+        from code_puppy.plugins.agent_skills.prompt_builder import (
+            build_available_skills_markdown,
+        )
+
+        skill = SkillMetadata(
+            name="minimal-skill",
+            description="Minimal skill",
+            path=Path("/path/to/minimal"),
+            skill_md_path=Path("/path/to/minimal/SKILL.md"),
+        )
+        result = build_available_skills_markdown([skill])
+        assert result is not None
+        assert "### minimal-skill" in result
+        assert "**When to use**: Minimal skill" in result
+        # Optional fields should not appear when None
+        assert "**Version**:" not in result
+        assert "**Author**:" not in result
+        assert "**Tags**:" not in result
+
+    def test_build_available_skills_markdown_has_usage_instructions(self):
+        """Test markdown includes usage instructions."""
+        from code_puppy.plugins.agent_skills.prompt_builder import (
+            build_available_skills_markdown,
+        )
+
+        skill = SkillMetadata(
+            name="test",
+            description="Test skill",
+            path=Path("/path"),
+            skill_md_path=Path("/path/SKILL.md"),
+        )
+        result = build_available_skills_markdown([skill])
+        assert result is not None
+        assert "**How to use a skill:**" in result
+        assert "read_file" in result
+        assert "SKILL.md" in result
+
+    # --- Tests for build_progressive_disclosure_guidance ---
+
+    def test_build_progressive_disclosure_guidance(self):
+        """Test progressive disclosure guidance text."""
+        from code_puppy.plugins.agent_skills.prompt_builder import (
+            build_progressive_disclosure_guidance,
+        )
+
+        guidance = build_progressive_disclosure_guidance()
+        assert "## Using Skills (Progressive Disclosure)" in guidance
+        assert "read_file" in guidance
+        assert "metadata" in guidance
+
+    # --- Tests for config progressive disclosure ---
+
+    def test_get_progressive_skill_disclosure_default(self, monkeypatch):
+        """Test progressive disclosure defaults to enabled."""
+
+        def mock_get_value(key):
+            return None
+
+        monkeypatch.setattr(
+            "code_puppy.plugins.agent_skills.config.get_value", mock_get_value
+        )
+
+        from code_puppy.plugins.agent_skills.config import get_progressive_skill_disclosure
+
+        assert get_progressive_skill_disclosure() is True
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("true", True),
+            ("True", True),
+            ("1", True),
+            ("yes", True),
+            ("on", True),
+            ("false", False),
+            ("False", False),
+            ("0", False),
+            ("no", False),
+            ("off", False),
+        ],
+    )
+    def test_get_progressive_skill_disclosure_various_values(self, value, expected, monkeypatch):
+        """Test progressive disclosure with various config values."""
+
+        def mock_get_value(key):
+            return value
+
+        monkeypatch.setattr(
+            "code_puppy.plugins.agent_skills.config.get_value", mock_get_value
+        )
+
+        from code_puppy.plugins.agent_skills.config import get_progressive_skill_disclosure
+
+        assert get_progressive_skill_disclosure() == expected
+
+    def test_set_progressive_skill_disclosure_enable(self, monkeypatch):
+        """Test enabling progressive disclosure."""
+        calls = []
+
+        def mock_set_value(key, value):
+            calls.append((key, value))
+
+        monkeypatch.setattr(
+            "code_puppy.plugins.agent_skills.config.set_value", mock_set_value
+        )
+
+        from code_puppy.plugins.agent_skills.config import set_progressive_skill_disclosure
+
+        set_progressive_skill_disclosure(True)
+        assert calls == [("progressive_skill_disclosure", "true")]
+
+    def test_set_progressive_skill_disclosure_disable(self, monkeypatch):
+        """Test disabling progressive disclosure."""
+        calls = []
+
+        def mock_set_value(key, value):
+            calls.append((key, value))
+
+        monkeypatch.setattr(
+            "code_puppy.plugins.agent_skills.config.set_value", mock_set_value
+        )
+
+        from code_puppy.plugins.agent_skills.config import set_progressive_skill_disclosure
+
+        set_progressive_skill_disclosure(False)
+        assert calls == [("progressive_skill_disclosure", "false")]
+
+    # --- Tests for 10MB file size limit ---
+
+    def test_parse_skill_metadata_file_size_limit(self, tmp_path, caplog):
+        """Test that skills larger than 10MB are rejected."""
+        from code_puppy.plugins.agent_skills.metadata import (
+            MAX_SKILL_FILE_SIZE,
+            parse_skill_metadata,
+        )
+
+        skill_dir = tmp_path / "huge-skill"
+        skill_dir.mkdir()
+        skill_md = skill_dir / "SKILL.md"
+
+        # Write valid frontmatter + huge content to exceed limit
+        frontmatter = "---\nname: huge-skill\ndescription: A huge skill\n---\n"
+        content = "x" * (MAX_SKILL_FILE_SIZE - len(frontmatter) + 1)
+        skill_md.write_text(frontmatter + content)
+
+        with caplog.at_level(logging.WARNING):
+            result = parse_skill_metadata(skill_dir)
+
+        assert result is None
+        assert "too large" in caplog.text
+        assert str(MAX_SKILL_FILE_SIZE) in caplog.text
+
+    def test_parse_skill_metadata_just_under_size_limit(self, tmp_path):
+        """Test that skills just under 10MB are accepted."""
+        from code_puppy.plugins.agent_skills.metadata import (
+            MAX_SKILL_FILE_SIZE,
+            parse_skill_metadata,
+        )
+
+        skill_dir = tmp_path / "large-skill"
+        skill_dir.mkdir()
+        skill_md = skill_dir / "SKILL.md"
+
+        # Write valid frontmatter + content that's just under the limit
+        frontmatter = "---\nname: large-skill\ndescription: A large skill\n---\n"
+        # Leave room for frontmatter
+        content = "x" * (MAX_SKILL_FILE_SIZE - len(frontmatter) - 1)
+        skill_md.write_text(frontmatter + content)
+
+        result = parse_skill_metadata(skill_dir)
+        assert result is not None
+        assert result.name == "large-skill"
+
+    # --- Tests for allowed_tools field ---
+
+    def test_parse_skill_metadata_allowed_tools_list(self, tmp_path):
+        """Test parsing skill with allowed_tools as list."""
+        skill_dir = tmp_path / "tools-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\n"
+            "name: tools-skill\n"
+            "description: A skill with tool restrictions\n"
+            "allowed_tools:\n"
+            "  - read_file\n"
+            "  - grep\n"
+            "---\n"
+        )
+
+        result = parse_skill_metadata(skill_dir)
+        assert result is not None
+        assert result.allowed_tools == ["read_file", "grep"]
+
+    def test_parse_skill_metadata_allowed_tools_string(self, tmp_path):
+        """Test parsing skill with allowed_tools as comma-separated string."""
+        skill_dir = tmp_path / "tools-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\n"
+            "name: tools-skill\n"
+            "description: A skill with tool restrictions\n"
+            "allowed_tools: read_file, grep, replace_in_file\n"
+            "---\n"
+        )
+
+        result = parse_skill_metadata(skill_dir)
+        assert result is not None
+        assert result.allowed_tools == ["read_file", "grep", "replace_in_file"]
+
+    def test_parse_skill_metadata_no_allowed_tools(self, tmp_path):
+        """Test parsing skill without allowed_tools field."""
+        skill_dir = tmp_path / "no-tools-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: no-tools-skill\ndescription: A skill without tools\n---\n"
+        )
+
+        result = parse_skill_metadata(skill_dir)
+        assert result is not None
+        assert result.allowed_tools is None
+
+    # --- Tests for license field ---
+
+    def test_parse_skill_metadata_with_license(self, tmp_path):
+        """Test parsing skill with license field."""
+        skill_dir = tmp_path / "licensed-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\n"
+            "name: licensed-skill\n"
+            "description: A licensed skill\n"
+            "license: MIT\n"
+            "---\n"
+        )
+
+        result = parse_skill_metadata(skill_dir)
+        assert result is not None
+        assert result.license == "MIT"
+
+    # --- Tests for skill_md_path ---
+
+    def test_skill_metadata_has_skill_md_path(self, tmp_path):
+        """Test that parsed metadata includes absolute path to SKILL.md."""
+        skill_dir = tmp_path / "path-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: path-skill\ndescription: Tests paths\n---\n"
+        )
+
+        result = parse_skill_metadata(skill_dir)
+        assert result is not None
+        assert result.skill_md_path is not None
+        assert result.skill_md_path.name == "SKILL.md"
+        assert result.skill_md_path.parent == skill_dir.resolve()
+
+    # --- Tests for frozen dataclass ---
+
+    def test_skill_metadata_is_frozen(self, tmp_path):
+        """Test that SkillMetadata is immutable."""
+        skill_dir = tmp_path / "frozen-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: frozen-skill\ndescription: Tests immutability\n---\n"
+        )
+
+        result = parse_skill_metadata(skill_dir)
+        assert result is not None
+
+        # Attempting to modify should raise FrozenInstanceError
+        with pytest.raises(Exception):  # dataclasses.FrozenInstanceError
+            result.name = "modified"
+
+    # --- Integration tests ---
+
+    def test_integration_full_metadata_in_prompt(self, tmp_path):
+        """Test full metadata appears in progressive disclosure prompt."""
+        from code_puppy.plugins.agent_skills.prompt_builder import (
+            build_available_skills_markdown,
+        )
+
+        skill = SkillMetadata(
+            name="integration-skill",
+            description="Integration test skill",
+            path=tmp_path / "skill",
+            skill_md_path=tmp_path / "skill" / "SKILL.md",
+            version="2.0.0",
+            author="Integration Tester",
+            license="Apache-2.0",
+            tags=["integration", "testing", "python"],
+            allowed_tools=["read_file", "grep"],
+        )
+        result = build_available_skills_markdown([skill])
+        assert result is not None
+        # All metadata should be present
+        assert "### integration-skill" in result
+        assert "**Version**: 2.0.0" in result
+        assert "**Author**: Integration Tester" in result
+        assert "**License**: Apache-2.0" in result
+        assert "**Tags**: integration, testing, python" in result

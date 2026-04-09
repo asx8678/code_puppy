@@ -7,6 +7,9 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Maximum file size for SKILL.md to prevent DoS (10MB)
+MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024
+
 # Regex pattern to match YAML frontmatter between --- delimiters
 FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
@@ -15,16 +18,31 @@ KEY_VALUE_PATTERN = re.compile(r"^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$", re.MULTILI
 LIST_PATTERN = re.compile(r"^\s+-\s+(.+)$", re.MULTILINE)
 
 
-@dataclass
+@dataclass(frozen=True)
 class SkillMetadata:
-    """Parsed skill metadata from SKILL.md frontmatter."""
+    """Parsed skill metadata from SKILL.md frontmatter.
+
+    Attributes:
+        name: Skill name (from frontmatter)
+        description: Skill description (from frontmatter)
+        path: Absolute path to the skill directory
+        skill_md_path: Absolute path to the SKILL.md file
+        version: Optional version string
+        author: Optional author name
+        tags: List of skill tags
+        license: Optional license string
+        allowed_tools: Optional list of tool names this skill is allowed to use
+    """
 
     name: str
     description: str
     path: Path
+    skill_md_path: Path
     version: str | None = None
     author: str | None = None
     tags: list[str] = field(default_factory=list)
+    license: str | None = None
+    allowed_tools: list[str] | None = None
 
 
 def _unquote(value: str) -> str:
@@ -118,6 +136,18 @@ def parse_skill_metadata(skill_path: Path) -> SkillMetadata | None:
         logger.warning(f"SKILL.md not found in skill directory: {skill_path}")
         return None
 
+    # Check file size for DoS prevention
+    try:
+        file_size = skill_md_path.stat().st_size
+        if file_size > MAX_SKILL_FILE_SIZE:
+            logger.warning(
+                f"Skill file too large ({file_size} bytes, max {MAX_SKILL_FILE_SIZE}): {skill_md_path}"
+            )
+            return None
+    except OSError as e:
+        logger.warning(f"Cannot stat skill file {skill_md_path}: {e}")
+        return None
+
     try:
         content = skill_md_path.read_text(encoding="utf-8")
     except Exception as e:
@@ -152,13 +182,25 @@ def parse_skill_metadata(skill_path: Path) -> SkillMetadata | None:
     elif isinstance(raw_tags, str):
         tags = [tag.strip() for tag in raw_tags.split(",") if tag.strip()]
 
+    # Handle allowed_tools - could be a list or a comma-separated string
+    allowed_tools: list[str] | None = None
+    raw_tools = frontmatter.get("allowed_tools")
+    if raw_tools is not None:
+        if isinstance(raw_tools, list):
+            allowed_tools = raw_tools
+        elif isinstance(raw_tools, str):
+            allowed_tools = [t.strip() for t in raw_tools.split(",") if t.strip()]
+
     return SkillMetadata(
         name=name,
         description=description,
-        path=skill_path,
+        path=skill_path.resolve(),
+        skill_md_path=skill_md_path.resolve(),
         version=frontmatter.get("version"),
         author=frontmatter.get("author"),
         tags=tags,
+        license=frontmatter.get("license"),
+        allowed_tools=allowed_tools,
     )
 
 
