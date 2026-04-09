@@ -410,3 +410,86 @@ def _try_auto_build() -> bool:
     """
     results = _try_auto_build_all()
     return results.get("code_puppy_core", False)
+
+
+def get_all_crate_status() -> list[dict]:
+    """Return status dict for each crate in CRATES registry.
+
+    Each dict has: name, installed, fresh, active, crate_dir_found.
+    """
+    statuses = []
+    for crate_spec in CRATES:
+        crate_name = crate_spec["name"]
+        probe = crate_spec["probe"]
+        crate_dir = _find_crate_dir(crate_spec["dir"])
+
+        installed = _is_crate_installed(probe)
+        fresh = False
+        if installed and crate_dir is not None:
+            fresh = _is_crate_fresh(crate_dir, probe)
+
+        # Check if active (importable now)
+        active = False
+        try:
+            importlib.import_module(probe)
+            active = True
+        except ImportError:
+            pass
+
+        statuses.append({
+            "name": crate_name,
+            "installed": installed,
+            "fresh": fresh,
+            "active": active,
+            "crate_dir_found": crate_dir is not None,
+        })
+
+    return statuses
+
+
+def build_single_crate(crate_name: str) -> bool:
+    """Build one specific crate by name from the CRATES registry.
+
+    Returns True on success, False otherwise.
+    """
+    # Find the crate spec
+    crate_spec = None
+    for spec in CRATES:
+        if spec["name"] == crate_name:
+            crate_spec = spec
+            break
+
+    if crate_spec is None:
+        logger.debug("Unknown crate name: %s", crate_name)
+        return False
+
+    # Check prerequisites
+    if not _has_rust_toolchain():
+        logger.debug("Rust toolchain not available for building %s", crate_name)
+        return False
+
+    if not _has_maturin():
+        if not _install_maturin():
+            logger.debug("Could not install maturin for building %s", crate_name)
+            return False
+
+    crate_dir = _find_crate_dir(crate_spec["dir"])
+    if crate_dir is None:
+        logger.debug("Crate directory not found for %s", crate_name)
+        return False
+
+    # Build it
+    success, error_msg = _build_crate(crate_dir, crate_name)
+
+    if success:
+        # Reload and patch
+        is_available = _reload_and_patch_crate(crate_spec)
+        if is_available:
+            logger.debug("Crate %s built and is now available", crate_name)
+            return True
+        else:
+            logger.debug("Crate %s build succeeded but module not loadable", crate_name)
+            return False
+    else:
+        logger.debug("Build error for %s: %s", crate_name, error_msg)
+        return False
