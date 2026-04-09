@@ -393,7 +393,8 @@ class TestRunSupervisorReviewLoop:
             task_prompt="task",
             session_prefix="safe-prefix",
         )
-        with pytest.raises(ValueError, match="agent_name"):
+        # PathSafetyError inherits from ValueError - uses shared path_safety utility
+        with pytest.raises(ValueError, match="forbidden"):
             await run_supervisor_review_loop(cfg, invoke_agent_fn=fake)
 
     @pytest.mark.asyncio
@@ -411,7 +412,8 @@ class TestRunSupervisorReviewLoop:
             task_prompt="task",
             session_prefix="safe-prefix",
         )
-        with pytest.raises(ValueError, match="agent_name"):
+        # PathSafetyError inherits from ValueError - uses shared path_safety utility
+        with pytest.raises(ValueError, match="forbidden"):
             await run_supervisor_review_loop(cfg, invoke_agent_fn=fake)
 
     @pytest.mark.asyncio
@@ -429,7 +431,8 @@ class TestRunSupervisorReviewLoop:
             task_prompt="task",
             session_prefix="safe-prefix",
         )
-        with pytest.raises(ValueError, match="agent_name"):
+        # PathSafetyError inherits from ValueError - uses shared path_safety utility
+        with pytest.raises(ValueError, match="forbidden"):
             await run_supervisor_review_loop(cfg, invoke_agent_fn=fake)
 
     @pytest.mark.asyncio
@@ -447,7 +450,8 @@ class TestRunSupervisorReviewLoop:
             task_prompt="task",
             session_prefix="safe-prefix",
         )
-        with pytest.raises(ValueError, match="agent_name"):
+        # PathSafetyError inherits from ValueError - uses shared path_safety utility
+        with pytest.raises(ValueError, match="forbidden"):
             await run_supervisor_review_loop(cfg, invoke_agent_fn=fake)
 
 
@@ -463,7 +467,8 @@ class TestSanitizeAgentName:
 
     def test_empty_name_raises(self):
         """Empty string should raise ValueError."""
-        with pytest.raises(ValueError, match="agent_name"):
+        # PathSafetyError inherits from ValueError - uses shared path_safety utility
+        with pytest.raises(ValueError, match="must not be empty"):
             _sanitize_agent_name("")
 
     def test_dot_raises(self):

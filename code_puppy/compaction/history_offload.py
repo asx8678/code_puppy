@@ -15,6 +15,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
+from code_puppy.utils.path_safety import (
+    PathSafetyError,
+    safe_path_component,
+    verify_contained,
+)
+
 if TYPE_CHECKING:
     pass
 
@@ -29,8 +35,12 @@ DEFAULT_MAX_ARCHIVE_SIZE_MB = 100  # Default max archive size before rotation
 def _sanitize_session_id(session_id: str | None) -> str:
     """Sanitize session ID for use as a filename.
 
-    Replaces unsafe characters with underscores. Handles None safely
-    by returning 'unknown'.
+    Uses the shared path_safety.safe_path_component() utility when possible
+    for consistent strict validation. Falls back to character replacement
+    for backwards compatibility with existing archives that may contain dots.
+
+    Note: Dots are preserved in the fallback for backwards compatibility,
+    but the final path is still verified with verify_contained() before use.
 
     Args:
         session_id: Session ID string, or None.
@@ -42,9 +52,40 @@ def _sanitize_session_id(session_id: str | None) -> str:
     if session_id is None:
         return "unknown"
 
-    # Characters that are safe in filenames (cross-platform)
-    safe_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
-    return "".join(c if c in safe_chars else "_" for c in session_id)
+    # Try using the strict allowlist validation first (no dots allowed)
+    try:
+        return safe_path_component(session_id)
+    except PathSafetyError:
+        # Fallback: replace unsafe chars with underscores for backwards compat
+        # Allow dots in this fallback for backwards compatibility with archives
+        # that use version strings like "my-session_test.v1"
+        safe_chars = set(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+        )
+        result = ""
+        for c in session_id:
+            if c in safe_chars:
+                result += c
+            elif c == ".":
+                # Preserve dots for backwards compatibility (e.g., version strings)
+                result += c
+            else:
+                result += "_"
+
+        # Handle edge case: result is empty after replacement
+        if not result:
+            return "unknown"
+
+        # Handle edge case: result contains traversal patterns (e.g., "..")
+        # These should be sanitized to prevent path traversal
+        if ".." in result:
+            result = result.replace("..", "__")
+
+        # Enforce max length
+        if len(result) > 64:
+            result = result[:64]
+
+        return result
 
 
 def _get_archive_size_mb(archive_path: Path) -> float:
@@ -169,6 +210,9 @@ def offload_evicted_messages(
 ) -> Path | None:
     """Append evicted messages to the session's history archive.
 
+    Uses shared path_safety utilities for defense-in-depth against path
+    traversal attacks when constructing archive paths from user/LLM input.
+
     Args:
         messages: The messages being evicted (soon-to-be-replaced by a summary).
         session_id: Unique ID for this session (used as the filename stem).
@@ -185,9 +229,20 @@ def offload_evicted_messages(
     archive_dir = archive_dir or DEFAULT_ARCHIVE_DIR
 
     try:
+        # Sanitize session_id to prevent path traversal via filename
         safe_session_id = _sanitize_session_id(session_id)
+
+        # Ensure archive_dir is a Path and create if needed
+        archive_dir = Path(archive_dir)
         archive_dir.mkdir(parents=True, exist_ok=True)
+
+        # Build archive path and verify containment using shared utility
         archive_path = archive_dir / f"{safe_session_id}.history.md"
+        try:
+            archive_path = verify_contained(archive_path, archive_dir)
+        except PathSafetyError as exc:
+            logger.warning("Archive path escapes archive_dir; possible traversal: %s", exc)
+            return None
 
         timestamp = datetime.now(timezone.utc).isoformat()
         header = f"\n\n## Compacted at {timestamp} (reason: {compact_reason})\n\n"

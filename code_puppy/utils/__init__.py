@@ -18,6 +18,14 @@ from .file_display import (
     safe_write_file,
 )
 from .install_hints import install_hint, format_missing_tool_message
+from .path_safety import (
+    PathSafetyError,
+    PathTraversalError,
+    UnsafeComponentError,
+    safe_path_component,
+    safe_join,
+    verify_contained,
+)
 
 __all__ = [
     # Agent helpers
@@ -49,4 +57,11 @@ __all__ = [
     # Install hints (ported from deepagents)
     "install_hint",
     "format_missing_tool_message",
+    # Path safety utilities (security)
+    "PathSafetyError",
+    "PathTraversalError",
+    "UnsafeComponentError",
+    "safe_path_component",
+    "safe_join",
+    "verify_contained",
 ]

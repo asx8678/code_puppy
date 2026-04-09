@@ -15,14 +15,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
-
-# Regex for safe filename components: rejects path traversal and separators
-# Allows alphanumeric, underscore, hyphen, dot (but not leading/trailing dots)
-_SAFE_NAME_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 from code_puppy.plugins.supervisor_review.models import (
     FeedbackEntry,
@@ -32,6 +27,11 @@ from code_puppy.plugins.supervisor_review.models import (
 )
 from code_puppy.plugins.supervisor_review.satisfaction import (
     get_satisfaction_checker,
+)
+from code_puppy.utils.path_safety import (
+    PathSafetyError,
+    safe_path_component,
+    verify_contained,
 )
 
 logger = logging.getLogger(__name__)
@@ -421,23 +421,17 @@ def _sanitize_agent_name(agent_name: str) -> str:
     Rejects names containing path traversal or separator characters.
     Only allows alphanumeric, underscore, and hyphen.
 
+    Uses the shared path_safety.safe_path_component() utility for consistent
+    validation across the codebase.
+
     Raises:
-        ValueError: If the agent name contains unsafe characters.
+        PathSafetyError: If the agent name contains unsafe characters.
     """
-    if not agent_name:
-        raise ValueError("agent_name must not be empty")
-    # Check for forbidden characters: path separators, backslashes, dots, NUL
-    if any(c in agent_name for c in ("/", "\\", ":", "\x00", ".")):
-        raise ValueError(
-            f"agent_name contains forbidden characters; "
-            f"only alphanumeric, underscore, and hyphen are allowed: {agent_name!r}"
-        )
-    # Validate against allowlist regex
-    if not _SAFE_NAME_REGEX.match(agent_name):
-        raise ValueError(
-            f"agent_name must match pattern '^[a-zA-Z0-9_-]+$'; got {agent_name!r}"
-        )
-    return agent_name
+    try:
+        return safe_path_component(agent_name)
+    except PathSafetyError:
+        # Re-raise with context about it being an agent name
+        raise
 
 
 def _build_session_id(
@@ -465,39 +459,34 @@ def _write_artifacts(
 ) -> Path:
     """Write per-iteration transcripts to disk. Returns the artifacts directory.
 
+    Uses shared path_safety utilities for defense-in-depth against
+    path traversal and unsafe filename injection.
+
     Raises:
-        ValueError: If the resolved artifacts path escapes the root directory,
+        PathSafetyError: If the resolved artifacts path escapes the root directory,
             or if session_prefix contains unsafe characters.
     """
     import json
 
     session_name = config.session_prefix or f"review_{int(time.time())}"
 
-    # Defense-in-depth: validate session_prefix even though ReviewLoopConfig
-    # should have already validated it. This catches bypass attempts.
+    # Defense-in-depth: validate session_prefix using shared utility.
+    # This catches bypass attempts even if ReviewLoopConfig was tampered with.
     if config.session_prefix is not None:
-        # Reject any session_prefix with path separators or traversal patterns
-        if any(c in session_name for c in ("/", "\\", "\x00", ".")):
-            raise ValueError(
+        try:
+            session_name = safe_path_component(config.session_prefix)
+        except PathSafetyError as exc:
+            raise PathSafetyError(
                 f"session_prefix contains unsafe characters; "
-                f"possible path traversal attempt: {session_name!r}"
-            )
-        if not _SAFE_NAME_REGEX.match(session_name):
-            raise ValueError(
-                f"session_prefix must match pattern '^[a-zA-Z0-9_-]+$'; "
-                f"got {session_name!r}"
-            )
+                f"possible path traversal attempt: {config.session_prefix!r}"
+            ) from exc
 
+    # Build artifacts path and verify containment using shared utility
     artifacts_dir = root / "supervisor_review" / session_name
-
-    # Path traversal defense: ensure resolved path is within root
     try:
-        resolved_artifacts = artifacts_dir.resolve()
-        resolved_root = root.resolve()
-        # relative_to raises ValueError if not a subpath
-        resolved_artifacts.relative_to(resolved_root)
-    except (ValueError, OSError) as exc:
-        raise ValueError(
+        artifacts_dir = verify_contained(artifacts_dir, root)
+    except PathSafetyError as exc:
+        raise PathSafetyError(
             f"artifacts_dir resolves outside root; possible path traversal: "
             f"{artifacts_dir!r} not under {root!r}"
         ) from exc
@@ -510,9 +499,9 @@ def _write_artifacts(
             path = artifacts_dir / f"iter{iter_result.iteration}_{safe_agent}.log"
             # Double-check file path is still within artifacts_dir (paranoid)
             try:
-                path.resolve().relative_to(artifacts_dir.resolve())
-            except (ValueError, OSError) as exc:
-                raise ValueError(
+                verify_contained(path, artifacts_dir)
+            except PathSafetyError as exc:
+                raise PathSafetyError(
                     f"file path escapes artifacts_dir; possible path traversal: "
                     f"{path!r}"
                 ) from exc

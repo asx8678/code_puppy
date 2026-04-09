@@ -23,6 +23,11 @@ from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_warning
+from code_puppy.utils.path_safety import (
+    PathSafetyError,
+    safe_path_component,
+    verify_contained,
+)
 
 from .config import get_session_logger_dir, get_session_logger_enabled
 from .writer import SessionWriter
@@ -57,18 +62,51 @@ def _get_session_dir(base_dir: Path, session_id: str) -> Path:
     Creates a timestamped subdirectory for better organization.
     Format: {base_dir}/{timestamp}_{short_id}
 
+    Uses shared path_safety utilities to sanitize the session identifier
+    component to prevent path traversal attacks.
+
     Args:
         base_dir: Base sessions directory
-        session_id: Session identifier
+        session_id: Session identifier (will be sanitized)
 
     Returns:
-        Path to session-specific directory
+        Path to session-specific directory (verified contained within base_dir)
+
+    Raises:
+        PathSafetyError: If session_id contains unsafe characters that could
+            lead to path traversal.
     """
     from datetime import datetime, timezone
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    # Sanitize the timestamp component (should be safe, but defense-in-depth)
+    safe_timestamp = safe_path_component(timestamp, max_len=15)
+
+    # Sanitize the session ID component - this is user/LLM-provided input
     short_id = session_id[:8] if len(session_id) > 8 else session_id
-    return base_dir / f"{timestamp}_{short_id}"
+    try:
+        safe_id = safe_path_component(short_id, max_len=8)
+    except PathSafetyError as exc:
+        # If session_id is unsafe, hash it to create a safe identifier
+        import hashlib
+
+        safe_id = hashlib.md5(short_id.encode()).hexdigest()[:8]
+        logger.warning(
+            f"Session ID contained unsafe characters, using hash: {exc}"
+        )
+
+    dir_name = f"{safe_timestamp}_{safe_id}"
+    session_dir = base_dir / dir_name
+
+    # Verify the constructed path stays within base_dir (defense-in-depth)
+    try:
+        return verify_contained(session_dir, base_dir)
+    except PathSafetyError as exc:
+        logger.error(f"Session directory path verification failed: {exc}")
+        # Fallback: use a hash-based name that is guaranteed safe
+        safe_name = f"session_{uuid.uuid4().hex[:8]}"
+        fallback_dir = base_dir / safe_name
+        return verify_contained(fallback_dir, base_dir)
 
 
 async def _on_agent_run_start(
