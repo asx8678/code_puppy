@@ -15,6 +15,25 @@ import pytest
 
 from code_puppy import config as cp_config
 
+
+def pytest_addoption(parser):
+    """Add custom CLI options for snapshot testing.
+
+    --update-snapshots: Refresh snapshot files on disk (for intentional changes).
+    """
+    parser.addoption(
+        "--update-snapshots",
+        action="store_true",
+        default=False,
+        help="Update snapshot files on disk (for intentional system prompt changes).",
+    )
+
+
+@pytest.fixture
+def update_snapshots(request) -> bool:
+    """Fixture providing the --update-snapshots flag value."""
+    return bool(request.config.getoption("--update-snapshots"))
+
 # Integration test fixtures - only import if pexpect.spawn is available (Unix)
 # On Windows, pexpect doesn't have spawn attribute, so skip these imports
 try:
