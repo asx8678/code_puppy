@@ -159,23 +159,57 @@ Please review this code for security issues." > .claude/commands/review.md
 /review with focus on authentication
 ```
 
-## Rust Acceleration (Optional)
+## Rust Acceleration
 
-Code Puppy ships as a pure-Python package and works perfectly without Rust.
-If you want extra speed, an optional `code_puppy_core` Rust extension can accelerate message serialization and other hot paths.
-The default hatchling-based install does **not** build the Rust crate — you must compile it manually as shown below.
+Code Puppy ships as a pure-Python package and works perfectly without Rust. If you want extra speed, three optional Rust extensions accelerate key hot paths:
 
-**Building from source:**
+| Crate | Purpose | Speedup |
+|-------|---------|---------|
+| `code_puppy_core` | Message serialization, hashing, pruning | 10-30x per LLM turn |
+| `turbo_ops` | Batch file operations (`list_files`, `grep`, `read_file`) | 5-20x on large repos |
+| `turbo_parse` | Tree-sitter parsing (symbols, folds, highlights, diagnostics) | 10-50x on source analysis |
+
+### Automatic Build (Zero Config)
+
+On first startup, if a Rust toolchain is present, the `fast_puppy` plugin will automatically build all three crates:
+
+- **Cached builds**: Subsequent startups skip rebuild unless `.rs` sources changed (mtime check)
+- **First build**: ~2-5 minutes (`turbo_parse` pulls in ~5 tree-sitter grammars)
+- **No Rust? No problem**: Gracefully degrades to pure Python — no errors, no fuss
+
+### Manual Build (For Developers)
 
 ```bash
-# Prerequisites: Rust toolchain (https://rustup.rs) and maturin
-pip install maturin
-cd code_puppy_core
-maturin develop --release
+# Prereq: Rust toolchain (https://rustup.rs)
+# (uv will install maturin automatically if needed)
+
+# Build all 3 crates via cargo workspace + maturin (recommended)
+cargo build --release --workspace
+uv run maturin develop --release --manifest-path code_puppy_core/Cargo.toml
+uv run maturin develop --release --manifest-path turbo_ops/Cargo.toml
+uv run maturin develop --release --manifest-path turbo_parse/Cargo.toml
+
+# OR: just start code-puppy and let fast_puppy auto-build on startup
 ```
 
-Once built, the extension is detected automatically at startup.
-Use `/fast_puppy enable|disable` to toggle, or just ignore it — pure-Python mode is the default.
+### `/fast_puppy` Commands
+
+```
+/fast_puppy              → show status for all 3 crates
+/fast_puppy status       → detailed per-crate status
+/fast_puppy build        → rebuild all crates
+/fast_puppy build turbo_ops → rebuild just turbo_ops
+/fast_puppy enable       → enable message-processing Rust acceleration
+/fast_puppy disable      → disable message-processing Rust acceleration
+```
+
+### Opt-Out (Air-Gapped CI, etc.)
+
+To disable auto-build, set in `~/.code_puppy/puppy.cfg`:
+
+```ini
+disable_rust_autobuild=true
+```
 
 ## Requirements
 

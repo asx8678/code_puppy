@@ -22,6 +22,22 @@ That's it. The plugin loader auto-discovers `register_callbacks.py` in subdirs.
 > They are imported and executed during plugin discovery with the same local privileges as Code Puppy itself.
 > There is currently no isolated safe mode for user plugins, so do not install untrusted plugins.
 
+## Rust Acceleration Stack
+
+Code Puppy has 3 Rust crates providing acceleration. The `fast_puppy` plugin auto-builds them on startup (see `builder.py` `CRATES` registry):
+
+| Crate | Bridge | Use When... |
+|-------|--------|-------------|
+| `code_puppy_core` | `_core_bridge` | Message serialization, pruning, hashing |
+| `turbo_ops` | Direct import | Batch file ops (`list_files`, `grep`, `read_file`) |
+| `turbo_parse` | `turbo_parse_bridge` | Tree-sitter parsing, symbols, diagnostics |
+
+**Agent Guidelines:**
+- Prefer Rust versions when available (check bridge availability flags)
+- All bridges provide Python stubs — fall back gracefully
+- Don't manually edit `fast_puppy/` — add new crates to `CRATES` in `builder.py`
+- To test without Rust: set `disable_rust_autobuild=true` in `puppy.cfg`
+
 ## Available Hooks
 
 `register_callback("<hook>", func)` — deduplicated, async hooks accept sync or async functions.
