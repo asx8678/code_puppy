@@ -72,13 +72,16 @@ def _get_storage_for_current_agent():
 
     Returns:
         FileMemoryStorage instance, or None if no agent
+
+    Thread-safe: Yes. Uses cached storage instance to ensure
+    all accesses share the same lock, preventing race conditions.
     """
-    from .storage import FileMemoryStorage
+    from .core import _get_storage
 
     agent_name = _get_current_agent_name()
     if not agent_name:
         return None
-    return FileMemoryStorage(agent_name)
+    return _get_storage(agent_name)
 
 
 def _normalize_messages(messages: list[Any]) -> list[dict[str, Any]]:

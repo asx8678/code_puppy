@@ -875,6 +875,78 @@ class TestEdgeCasesAndRegression:
         # Each thread adds 1 fact, so 20 total
         assert len(facts) == 20, f"Expected 20 facts, got {len(facts)}: {facts}"
 
+    def test_cache_bypass_race_condition_fixed(self, temp_memory_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that _get_storage_for_current_agent uses cache, preventing race conditions.
+        
+        Regression test for code-puppy-ley: The bug was that _get_storage_for_current_agent
+        created a new FileMemoryStorage instance each time, bypassing the cache. This meant
+        each thread got a different lock object for the same file, causing data races.
+        """
+        import os
+        import threading
+        from code_puppy.plugins.agent_memory.messaging import _get_storage_for_current_agent
+        from code_puppy.plugins.agent_memory import core as core_module
+
+        # Use unique agent name
+        agent_name = f"race-test-{os.getpid()}"
+
+        # Patch _get_current_agent_name to return our test agent
+        from code_puppy.plugins.agent_memory import messaging as messaging_module
+        original_get_agent = messaging_module._get_current_agent_name
+        messaging_module._get_current_agent_name = lambda: agent_name
+
+        # Patch storage directory
+        import code_puppy.plugins.agent_memory.storage as storage_module
+        original_dir = storage_module._MEMORY_DIR
+        storage_module._MEMORY_DIR = temp_memory_dir
+
+        # Reset caches to start fresh
+        core_module._storage_cache.clear()
+
+        try:
+            # Get storage multiple times
+            storage1 = _get_storage_for_current_agent()
+            storage2 = _get_storage_for_current_agent()
+            storage3 = _get_storage_for_current_agent()
+
+            # All should be the SAME instance (same lock object)
+            assert storage1 is storage2, "Cache bypass: _get_storage_for_current_agent returned different instances!"
+            assert storage1 is storage3, "Cache bypass: _get_storage_for_current_agent returned different instances!"
+
+            # Verify it's actually in the cache
+            assert agent_name in core_module._storage_cache, "Storage not added to cache"
+            assert core_module._storage_cache[agent_name] is storage1, "Cached instance mismatch"
+
+            # Now test thread safety with the fixed function
+            errors = []
+            successes = []
+
+            def get_storage_and_verify(i: int):
+                try:
+                    s = _get_storage_for_current_agent()
+                    # All threads should get the same instance
+                    if s is storage1:
+                        successes.append(i)
+                    else:
+                        errors.append(f"Thread {i} got different storage instance: {s}")
+                except Exception as e:
+                    errors.append(f"Thread {i} raised {e}")
+
+            threads = [threading.Thread(target=get_storage_and_verify, args=(i,)) for i in range(10)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            assert len(errors) == 0, f"Race condition detected: {errors}"
+            assert len(successes) == 10, "All threads should get same instance"
+
+        finally:
+            # Cleanup
+            messaging_module._get_current_agent_name = original_get_agent
+            storage_module._MEMORY_DIR = original_dir
+            core_module._storage_cache.clear()
+
 
 # ============================================================================
 # Public API Tests
