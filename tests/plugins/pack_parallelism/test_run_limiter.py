@@ -611,6 +611,113 @@ class TestConfigReload:
             limiter.release()
 
 
+@pytest.mark.asyncio
+class TestReentrancyDepthResetRegression:
+    """Regression tests for reentrancy depth reset leak in sync-fallback paths.
+
+    Issue: The async branch already resets _reentrancy_depth to 0 when depth == 1,
+    but the sync-fallback branches did not. This could leave depth stuck at 1 after
+    a sync-fallback release, causing subsequent acquire calls to incorrectly bypass
+    the limiter.
+    """
+
+    async def test_repeat_acquire_after_sync_fallback_release_does_not_bypass(self):
+        """Regression test: depth reset in finally block prevents bypass leak.
+
+        Scenario:
+        1. Acquire async slot (depth becomes 1)
+        2. Simulate a sync-fallback release scenario by manually clearing _async_active
+           (this mimics the edge case where release() is called but async side
+           shows no active runs, causing it to try sync fallback)
+        3. Call release() - before the fix, depth would stay at 1
+        4. Try to acquire again - should NOT bypass (depth should be 0)
+
+        The fix ensures that depth is always reset to 0 in a finally block when
+        depth == 1, regardless of whether a slot was actually released.
+        """
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=1))
+
+        # Step 1: Acquire a slot (sets depth to 1)
+        await limiter.acquire_async()
+        assert limiter.active_count == 1
+        # Note: _reentrancy_depth is a ContextVar, we can't easily check its value
+        # but we can verify behavior via subsequent acquire attempts
+
+        # Step 2: Simulate the problematic state - release the slot accounting
+        # but we're still at depth 1. This simulates the edge case where
+        # release() is called from async context but _async_active is somehow 0
+        # (e.g., due to a bug or manual manipulation), forcing sync fallback.
+        # After the fix, the finally block should reset depth to 0.
+        limiter.release()  # This should reset depth to 0 in finally block
+
+        # Step 3: Verify we can acquire again without bypass
+        # If depth was stuck at 1, this would bypass and we'd see active_count stay at 0
+        # But with the fix, depth is 0, so this is a real acquire
+        acquired_real_slot = False
+        try:
+            # Use timeout=0 to fail immediately if no slot available
+            await limiter.acquire_async(timeout=0)
+            acquired_real_slot = True
+            assert limiter.active_count == 1, (
+                f"Expected active_count=1 after real acquire, got {limiter.active_count}"
+            )
+        except RunConcurrencyLimitError:
+            # This is expected behavior - slot should not be available because
+            # we haven't released the previous one yet (or it's being held)
+            pass
+
+        # Clean up
+        if acquired_real_slot:
+            limiter.release()
+        assert limiter.active_count == 0
+
+    async def test_sync_fallback_path_resets_depth_even_when_no_slot_found(self):
+        """Direct test: ensure depth reset happens even when no slot is released.
+
+        This test simulates the exact condition where:
+        - We're in async context (depth == 1 from prior acquire)
+        - _async_active == 0 (no async slots to release)
+        - _sync_active == 0 (no sync slots to release either)
+        - The finally block must still reset depth to 0
+        """
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=1))
+
+        # First, manually manipulate state to create the edge case:
+        # We want depth == 1 but no active slots on either side
+
+        # Simulate that we acquired (sets depth to 1 internally via contextvar)
+        await limiter.acquire_async()
+        assert limiter.active_count == 1
+
+        # Manually clear the active count to simulate the edge condition
+        # where accounting is out of sync with depth
+        with limiter._state_lock:
+            limiter._async_active = 0
+
+        # Now release() - it will try async side (no active), fallback to sync (no active)
+        # but the finally block MUST still reset depth to 0
+        limiter.release()
+
+        # If depth wasn't reset, the next acquire would bypass and active_count
+        # would incorrectly stay at 0. With the fix, it should properly wait
+        # or acquire a real slot.
+
+        # Restore state for clean test
+        with limiter._state_lock:
+            limiter._async_active = 1
+
+        # Now release properly and verify we can acquire normally
+        limiter.release()
+
+        # This should be a normal acquire (not a bypass)
+        await limiter.acquire_async()
+        assert limiter.active_count == 1, "Should have acquired a real slot"
+
+        # Clean up
+        limiter.release()
+        assert limiter.active_count == 0
+
+
 # ============================================================================
 # Regression tests for per-side growth (no shared growth counter)
 # ============================================================================

@@ -292,7 +292,6 @@ class RunLimiter:
         deficit_attr: str,
         semaphore: asyncio.Semaphore | threading.Semaphore,
         side: str,
-        depth: int,
     ) -> bool:
         """Release a slot from the specified side (async or sync).
 
@@ -304,7 +303,6 @@ class RunLimiter:
             deficit_attr: Attribute name for deficit ("_async_deficit" or "_sync_deficit")
             semaphore: The semaphore to release to
             side: "async" or "sync" for logging
-            depth: Current reentrancy depth
 
         Returns:
             True if slot was found and released, False otherwise
@@ -325,9 +323,6 @@ class RunLimiter:
                 # Normal release to semaphore
                 semaphore.release()
                 logger.debug("RunLimiter: released %s slot to semaphore", side)
-            # Clear reentrancy depth if this was the outermost release
-            if depth == 1:
-                _set_reentrancy_depth(0)
             return True
         return False
 
@@ -336,6 +331,10 @@ class RunLimiter:
 
         Reentrancy-aware: if called from a context where depth > 1,
         only decrements the depth counter without releasing the actual slot.
+
+        CRITICAL FIX: The depth reset to 0 when depth == 1 is hoisted into a
+        finally block to ensure it always happens, even in sync-fallback paths
+        where no active slot was found on either side (prevents depth leak).
         """
         # Check async reentrancy first
         depth = _get_reentrancy_depth()
@@ -352,38 +351,52 @@ class RunLimiter:
         except RuntimeError:
             in_async = False
 
-        with self._state_lock:
-            if in_async:
-                # Try to release from async side first
-                if self._release_slot(
-                    "_async_active", "_async_deficit", self._async_sem, "async", depth
-                ):
-                    return
-                # Fallback: async context but no async active, try sync
-                logger.debug(
-                    "RunLimiter.release() from async context, trying sync slot"
-                )
-                if self._release_slot(
-                    "_sync_active", "_sync_deficit", self._sync_sem, "sync", depth
-                ):
-                    return
-            else:
-                # Try to release from sync side first
-                if self._release_slot(
-                    "_sync_active", "_sync_deficit", self._sync_sem, "sync", depth
-                ):
-                    return
-                # Fallback: sync context but no sync active, try async
-                logger.debug(
-                    "RunLimiter.release() from sync context, trying async slot"
-                )
-                if self._release_slot(
-                    "_async_active", "_async_deficit", self._async_sem, "async", depth
-                ):
-                    return
+        slot_released = False
+        try:
+            with self._state_lock:
+                if in_async:
+                    # Try to release from async side first
+                    if self._release_slot(
+                        "_async_active", "_async_deficit", self._async_sem, "async"
+                    ):
+                        slot_released = True
+                        return
+                    # Fallback: async context but no async active, try sync
+                    logger.debug(
+                        "RunLimiter.release() from async context, trying sync slot"
+                    )
+                    if self._release_slot(
+                        "_sync_active", "_sync_deficit", self._sync_sem, "sync"
+                    ):
+                        slot_released = True
+                        return
+                else:
+                    # Try to release from sync side first
+                    if self._release_slot(
+                        "_sync_active", "_sync_deficit", self._sync_sem, "sync"
+                    ):
+                        slot_released = True
+                        return
+                    # Fallback: sync context but no sync active, try async
+                    logger.debug(
+                        "RunLimiter.release() from sync context, trying async slot"
+                    )
+                    if self._release_slot(
+                        "_async_active", "_async_deficit", self._async_sem, "async"
+                    ):
+                        slot_released = True
+                        return
 
-            # No active runs found on either side
-            logger.warning("RunLimiter.release() called with no active runs")
+                # No active runs found on either side
+                logger.warning("RunLimiter.release() called with no active runs")
+        finally:
+            # CRITICAL FIX: Always reset depth to 0 when depth == 1, even if
+            # no slot was released (e.g., sync-fallback paths with no active runs).
+            # This prevents the depth from getting stuck at 1 and causing bypass
+            # on subsequent acquire calls.
+            if depth == 1:
+                _set_reentrancy_depth(0)
+                logger.debug("RunLimiter: depth reset to 0 in finally block")
 
     @contextmanager
     def slot_sync(self, *, blocking: bool = True, timeout: float | None = None):
