@@ -22,10 +22,14 @@ import json
 import logging
 import threading
 from collections import defaultdict, deque
+from functools import lru_cache
 from typing import Any
 
 from code_puppy.callbacks import register_callback
+from code_puppy.config import get_value
+from code_puppy.messaging import emit_warning
 from code_puppy.permission_decision import Deny
+from code_puppy.run_context import get_current_run_context
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +45,7 @@ _session_history: dict[str, deque[str]] = defaultdict(lambda: deque(maxlen=_DEFA
 _session_warned: dict[str, set[str]] = defaultdict(set)
 
 
+@lru_cache(maxsize=1)
 def _get_exempt_tools() -> frozenset[str]:
     """Read exempt tools from puppy.cfg.
 
@@ -48,8 +53,6 @@ def _get_exempt_tools() -> frozenset[str]:
         Set of tool names that are allowed to repeat without triggering loop detection.
     """
     try:
-        from code_puppy.config import get_value
-
         exempt_str = get_value("loop_detection_exempt_tools")
         if exempt_str:
             tools = {t.strip() for t in exempt_str.split(",") if t.strip()}
@@ -59,6 +62,7 @@ def _get_exempt_tools() -> frozenset[str]:
     return _DEFAULT_EXEMPT_TOOLS
 
 
+@lru_cache(maxsize=1)
 def _get_warn_threshold() -> int:
     """Read warn threshold from puppy.cfg.
 
@@ -66,8 +70,6 @@ def _get_warn_threshold() -> int:
         Number of identical tool calls before injecting a warning.
     """
     try:
-        from code_puppy.config import get_value
-
         val = get_value("loop_detection_warn")
         if val:
             return max(1, int(val))
@@ -76,6 +78,7 @@ def _get_warn_threshold() -> int:
     return _DEFAULT_WARN_THRESHOLD
 
 
+@lru_cache(maxsize=1)
 def _get_hard_threshold() -> int:
     """Read hard/stop threshold from puppy.cfg.
 
@@ -83,8 +86,6 @@ def _get_hard_threshold() -> int:
         Number of identical tool calls before blocking the tool.
     """
     try:
-        from code_puppy.config import get_value
-
         val = get_value("loop_detection_stop")
         if val:
             return max(1, int(val))
@@ -191,8 +192,8 @@ def _hash_tool_calls(tool_name: str, tool_args: Any) -> str:
     normalized = f"{tool_name}:{key}"
     blob = json.dumps([normalized], sort_keys=True, default=str)
 
-    # MD5 truncated to 12 chars is sufficient for loop detection
-    return hashlib.md5(blob.encode()).hexdigest()[:12]
+    # MD5 truncated to 12 chars is sufficient for loop detection (not for security)
+    return hashlib.md5(blob.encode(), usedforsecurity=False).hexdigest()[:12]
 
 
 def _get_session_id(context: Any) -> str:
@@ -204,6 +205,11 @@ def _get_session_id(context: Any) -> str:
     Returns:
         Session ID string, or "default" if not found.
     """
+    if context is not None and hasattr(context, "session_id"):
+        sid = getattr(context, "session_id", None)
+        if sid:
+            return str(sid)
+
     if isinstance(context, dict):
         session_id = context.get("agent_session_id")
         if session_id:
@@ -211,8 +217,6 @@ def _get_session_id(context: Any) -> str:
 
     # Try to get from run_context if available
     try:
-        from code_puppy.run_context import get_current_run_context
-
         ctx = get_current_run_context()
         if ctx and ctx.session_id:
             return str(ctx.session_id)
@@ -285,6 +289,14 @@ async def _on_pre_tool_call(
                 },
             )
 
+            # Calculate remaining calls to block
+            calls_until_block = hard_threshold - (count + 1)
+            block_msg = (
+                f"After {calls_until_block} more identical call(s), tools will be blocked."
+                if calls_until_block > 0
+                else "Tools will be blocked after this call."
+            )
+
             # Return Deny to block the tool call
             return Deny(
                 reason=f"Loop detected: repeated {tool_name} calls exceeded safety limit ({hard_threshold})",
@@ -294,7 +306,8 @@ async def _on_pre_tool_call(
                     f"Please stop calling tools and produce your final answer now. "
                     f"If you cannot complete the task, summarize what you accomplished so far.\n\n"
                     f"To override: add '{tool_name}' to loop_detection_exempt_tools in puppy.cfg "
-                    f"or increase loop_detection_stop threshold."
+                    f"or increase loop_detection_stop threshold.\n\n"
+                    f"{block_msg}"
                 ),
             )
 
@@ -334,6 +347,12 @@ async def _on_post_tool_call(
     session_id = _get_session_id(context)
     call_hash = _hash_tool_calls(tool_name, tool_args)
 
+    # Variables to capture state for warning emission outside the lock
+    should_warn = False
+    warning_text = None
+    count = 0
+    warn_threshold = _get_warn_threshold()
+
     with _lock:
         # Check if we've already warned for this hash
         warned_hashes = _session_warned[session_id]
@@ -346,7 +365,6 @@ async def _on_post_tool_call(
             return
 
         count = history.count(call_hash)
-        warn_threshold = _get_warn_threshold()
 
         if count >= warn_threshold:
             # Mark as warned so we don't repeat the warning
@@ -363,21 +381,26 @@ async def _on_post_tool_call(
                 },
             )
 
-            # Emit warning message to the agent
-            try:
-                from code_puppy.messaging import emit_warning
+            # Prepare warning text for emission outside the lock
+            hard_threshold = _get_hard_threshold()
+            calls_until_block = max(0, hard_threshold - count)
+            should_warn = True
+            warning_text = (
+                f"⚠️ LOOP WARNING: Tool '{tool_name}' has been called {count} times "
+                f"with similar arguments. You may be stuck in a loop.\n\n"
+                f"Please consider:\n"
+                f"  1. Check if you're making progress\n"
+                f"  2. Stop calling tools and summarize findings\n"
+                f"  3. Ask the user for guidance if blocked\n\n"
+                f"After {calls_until_block} more identical call(s), tools will be blocked."
+            )
 
-                emit_warning(
-                    f"⚠️ LOOP WARNING: Tool '{tool_name}' has been called {count} times "
-                    f"with similar arguments. You may be stuck in a loop.\n\n"
-                    f"Please consider:\n"
-                    f"  1. Check if you're making progress\n"
-                    f"  2. Stop calling tools and summarize findings\n"
-                    f"  3. Ask the user for guidance if blocked\n\n"
-                    f"After {warn_threshold} more identical calls, tools will be blocked."
-                )
-            except Exception as exc:
-                logger.debug(f"Failed to emit loop warning: {exc}")
+    # Emit warning message to the agent OUTSIDE the lock
+    if should_warn and warning_text:
+        try:
+            emit_warning(warning_text)
+        except Exception as exc:
+            logger.debug(f"Failed to emit loop warning: {exc}")
 
 
 def reset_loop_detection(session_id: str | None = None) -> None:
@@ -427,9 +450,17 @@ def get_loop_stats(session_id: str | None = None) -> dict[str, Any]:
         }
 
 
+def _on_agent_run_end(agent_name, model_name, session_id=None, **kwargs):
+    """Clean up loop detection state when an agent run ends."""
+    if session_id:
+        reset_loop_detection(str(session_id))
+
+
 # Register the callbacks
 register_callback("pre_tool_call", _on_pre_tool_call)
 register_callback("post_tool_call", _on_post_tool_call)
+register_callback("agent_run_end", _on_agent_run_end)
+register_callback("shutdown", lambda: reset_loop_detection())
 
 logger.info(
     "Loop detection plugin loaded (warn=%d, stop=%d, exempt=%s)",

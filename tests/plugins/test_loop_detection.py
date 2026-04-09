@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import sys
 from types import ModuleType
 from unittest.mock import MagicMock, patch
@@ -35,6 +36,7 @@ def _get_plugin_module(fresh: bool = False) -> ModuleType:
         mock_config = MagicMock()
         mock_messaging = MagicMock()
         mock_run_context = MagicMock()
+        mock_run_context.get_current_run_context = MagicMock(return_value=None)
 
         sys.modules["code_puppy.callbacks"] = mock_callbacks
         sys.modules["code_puppy.permission_decision"] = mock_permission
@@ -52,6 +54,13 @@ def _get_plugin_module(fresh: bool = False) -> ModuleType:
         return mod
 
     return sys.modules[module_name]
+
+
+def _clear_config_cache(module):
+    """Clear the lru_cache on config functions."""
+    module._get_exempt_tools.cache_clear()
+    module._get_warn_threshold.cache_clear()
+    module._get_hard_threshold.cache_clear()
 
 
 class TestHashToolCalls:
@@ -233,12 +242,12 @@ class TestGetSessionId:
 
     def test_default_when_no_context(self):
         """Should return 'default' when no context available."""
-        module = _get_plugin_module()
-        with patch.dict(
-            sys.modules, {"code_puppy.run_context": MagicMock(get_current_run_context=lambda: None)}
-        ):
-            result = module._get_session_id(None)
-            assert result == "default"
+        module = _get_plugin_module(fresh=True)
+        # Mock get_current_run_context to return None
+        module._mock_run_context.get_current_run_context.return_value = None
+
+        result = module._get_session_id(None)
+        assert result == "default"
 
 
 class TestConfigReading:
@@ -247,6 +256,7 @@ class TestConfigReading:
     def test_get_exempt_tools_default(self):
         """Should return default exempt tools when config not set."""
         module = _get_plugin_module(fresh=True)
+        _clear_config_cache(module)
         module._mock_config.get_value.return_value = None
 
         result = module._get_exempt_tools()
@@ -256,6 +266,7 @@ class TestConfigReading:
     def test_get_exempt_tools_from_config(self):
         """Should parse comma-separated tools from config."""
         module = _get_plugin_module(fresh=True)
+        _clear_config_cache(module)
         module._mock_config.get_value.return_value = "wait, sleep, my_tool"
 
         result = module._get_exempt_tools()
@@ -266,6 +277,7 @@ class TestConfigReading:
     def test_get_warn_threshold_default(self):
         """Should return default warn threshold when config not set."""
         module = _get_plugin_module(fresh=True)
+        _clear_config_cache(module)
         module._mock_config.get_value.return_value = None
 
         result = module._get_warn_threshold()
@@ -274,6 +286,7 @@ class TestConfigReading:
     def test_get_warn_threshold_from_config(self):
         """Should parse warn threshold from config."""
         module = _get_plugin_module(fresh=True)
+        _clear_config_cache(module)
         module._mock_config.get_value.return_value = "5"
 
         result = module._get_warn_threshold()
@@ -282,6 +295,7 @@ class TestConfigReading:
     def test_get_hard_threshold_default(self):
         """Should return default hard threshold when config not set."""
         module = _get_plugin_module(fresh=True)
+        _clear_config_cache(module)
         module._mock_config.get_value.return_value = None
 
         result = module._get_hard_threshold()
@@ -290,6 +304,7 @@ class TestConfigReading:
     def test_get_hard_threshold_from_config(self):
         """Should parse hard threshold from config."""
         module = _get_plugin_module(fresh=True)
+        _clear_config_cache(module)
         module._mock_config.get_value.return_value = "10"
 
         result = module._get_hard_threshold()
@@ -298,6 +313,7 @@ class TestConfigReading:
     def test_invalid_threshold_returns_default(self):
         """Should return default on invalid threshold value."""
         module = _get_plugin_module(fresh=True)
+        _clear_config_cache(module)
         module._mock_config.get_value.return_value = "not_a_number"
 
         result = module._get_warn_threshold()
