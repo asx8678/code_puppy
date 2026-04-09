@@ -33,6 +33,7 @@ from code_puppy.messaging import (  # Structured messaging types
 from code_puppy.config import get_diff_context_lines
 from code_puppy.tools.common import _find_best_window, generate_group_id
 from code_puppy.utils.file_display import safe_write_file
+from code_puppy.utils.whitespace import strip_added_blank_lines
 
 # Hoisted import for file_permission_handler with optional dependency guard
 try:
@@ -356,6 +357,9 @@ def _replace_in_file(
             if original.endswith("\n"):
                 modified += "\n"
 
+        # Strip surplus blank lines that the LLM may have hallucinated
+        modified = strip_added_blank_lines(original, modified)
+
         if modified == original:
             emit_warning(
                 "No changes to apply – proposed content is identical.",
@@ -419,6 +423,8 @@ def _write_to_file(
             with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
                 old_content = f.read()
             old_content = _sanitize_surrogates(old_content)
+            # Strip surplus blank lines that the LLM may have hallucinated
+            content = strip_added_blank_lines(old_content, content)
             old_lines = old_content.splitlines(keepends=True)
         else:
             old_lines = []

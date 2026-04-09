@@ -30,6 +30,7 @@ apply_all_patches()
 
 from code_puppy import plugins
 from code_puppy.config import get_use_dbos
+from code_puppy.errors import FatalError
 from code_puppy.terminal_utils import reset_unix_terminal
 
 plugins.load_plugin_callbacks()
@@ -98,6 +99,9 @@ def main_entry() -> None:
         from code_puppy.app_runner import main
 
         asyncio.run(main())
+    except FatalError as exc:
+        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        sys.exit(exc.exit_code)
     except KeyboardInterrupt:
         # Note: Using sys.stderr for crash output - messaging system may not be available
         sys.stderr.write(traceback.format_exc())

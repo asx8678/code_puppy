@@ -26,8 +26,40 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 
-# Cache for coroutine function checks (avoids repeated introspection)
-@functools.lru_cache(maxsize=256)
+def walk_causes(
+    exc: BaseException,
+    max_depth: int = 5,
+) -> list[BaseException]:
+    """Walk an exception's ``__cause__``/``__context__`` chain up to ``max_depth``.
+
+    Returns a list starting with ``exc`` itself, followed by each nested cause
+    (preferring ``__cause__`` over ``__context__``). Cycle-safe via identity tracking.
+
+    Useful for finding wrapped errors — e.g., SSL errors hidden inside
+    ``httpx.ConnectError``. Ported from gemini-cli retry.ts:93-122
+    (``getNetworkErrorCode``) which walks JavaScript ``.cause`` chains.
+
+    Args:
+        exc: The top-level exception.
+        max_depth: Maximum chain depth to walk (default 5). Guards against
+            pathological or cyclic chains.
+
+    Returns:
+        List of exceptions in chain order (shallowest first).
+    """
+    chain: list[BaseException] = [exc]
+    seen: set[int] = {id(exc)}
+    current: BaseException = exc
+    for _ in range(max_depth):
+        nxt = current.__cause__ or current.__context__
+        if nxt is None or id(nxt) in seen:
+            break
+        chain.append(nxt)
+        seen.add(id(nxt))
+        current = nxt
+    return chain
+
+
 def _is_coro_func(func: Callable) -> bool:
     """Cached check if a function is a coroutine function.
 
@@ -36,6 +68,59 @@ def _is_coro_func(func: Callable) -> bool:
     retry/circuit breaker decorator application on hot paths.
     """
     return inspect.iscoroutinefunction(func)
+
+
+def _is_terminal_quota_error(exc: BaseException) -> bool:
+    """Classify whether an exception represents a *terminal* (not transient) quota.
+
+    Returns True if the exception chain contains any of:
+    - ``httpx.HTTPStatusError`` with status 429 AND a Retry-After > 300 seconds
+    - Message substring indicating daily/monthly quota exhaustion:
+      "daily", "per day", "monthly", "per month", "quota_exhausted",
+      "quota exceeded for quota metric"
+
+    Otherwise returns False (error is transient, normal retry applies).
+
+    Inspired by gemini-cli retry.ts:268-295 ``TerminalQuotaError`` classification.
+    """
+    # Walk the cause chain
+    for err in walk_causes(exc):
+        # Check for httpx status errors with long retry-after
+        status_err = None
+        # Try to find httpx.HTTPStatusError without hard-importing httpx at module load
+        try:
+            import httpx
+
+            if isinstance(err, httpx.HTTPStatusError):
+                status_err = err
+        except ImportError:
+            pass
+
+        if status_err is not None and status_err.response.status_code == 429:
+            retry_after = status_err.response.headers.get("retry-after")
+            if retry_after:
+                try:
+                    # Retry-After can be seconds (int) or HTTP-date (skip the latter)
+                    retry_after_secs = float(retry_after)
+                    if retry_after_secs > 300:
+                        return True
+                except ValueError:
+                    pass
+
+        # String match on message
+        msg = str(err).lower()
+        terminal_markers = (
+            "daily",
+            "per day",
+            "monthly",
+            "per month",
+            "quota_exhausted",
+            "quota exceeded for quota metric",
+        )
+        if any(marker in msg for marker in terminal_markers):
+            return True
+
+    return False
 
 
 class CircuitState(Enum):
@@ -213,12 +298,17 @@ class CircuitOpenError(Exception):
 async def with_retry(
     func: Callable[[], T],
     config: RetryConfig | None = None,
+    on_terminal_quota: Callable[[Exception], Any] | None = None,
 ) -> T:
     """Execute function with retry logic.
 
     Args:
         func: Function to execute (sync or async)
         config: Retry configuration
+        on_terminal_quota: Optional callback for terminal quota errors. Called
+            when a terminal (non-transient) quota error is detected. If the
+            callback returns a truthy value, the retry attempt counter is
+            reset and the loop continues (e.g., to try a fallback model).
 
     Returns:
         Result from successful execution
@@ -235,8 +325,36 @@ async def with_retry(
             if inspect.isawaitable(result):
                 result = await result
             return result
-        except cfg.retryable_exceptions as e:
+        except Exception as e:
             last_error = e
+
+            # Check for terminal quota errors before deciding to retry
+            if _is_terminal_quota_error(e):
+                if on_terminal_quota is not None:
+                    callback_result = on_terminal_quota(e)
+                    # Handle both sync and async callbacks
+                    if inspect.isawaitable(callback_result):
+                        callback_result = await callback_result  # type: ignore
+                    if callback_result:
+                        # Callback wants us to reset and retry (e.g., new model)
+                        logger.info(
+                            "Terminal quota detected; on_terminal_quota returned "
+                            "truthy — resetting retry attempt counter"
+                        )
+                        attempt = 0  # Reset attempt counter
+                        continue
+                    # Callback returned falsy - treat as terminal, don't retry
+                    raise
+                # No callback - terminal errors don't retry
+                raise
+
+            # Check if any exception in the cause chain is retryable
+            exc_chain = walk_causes(e)
+            if not any(isinstance(err, cfg.retryable_exceptions) for err in exc_chain):
+                # Not a retryable exception - re-raise immediately
+                raise
+
+            # Retryable exception - proceed with retry logic
             if attempt < cfg.max_attempts - 1:
                 delay = min(
                     cfg.base_delay * (cfg.exponential_base**attempt),
@@ -258,6 +376,7 @@ async def with_retry(
 def with_retry_sync(
     func: Callable[[], T],
     config: RetryConfig | None = None,
+    on_terminal_quota: Callable[[Exception], Any] | None = None,
 ) -> T:
     """Synchronous version of with_retry.
 
@@ -267,6 +386,8 @@ def with_retry_sync(
     Args:
         func: Synchronous function to execute
         config: Retry configuration
+        on_terminal_quota: Optional callback for terminal quota errors.
+            In the sync version, this callback must be synchronous.
 
     Returns:
         Result from successful execution
@@ -279,7 +400,7 @@ def with_retry_sync(
         )
     except RuntimeError:
         pass  # No running loop, safe to use
-    return run_async_sync(with_retry(func, config))
+    return run_async_sync(with_retry(func, config, on_terminal_quota))
 
 
 async def with_fallback(
@@ -328,6 +449,7 @@ def retry(
         OSError,  # File/network OS errors
         ValueError,  # Parse errors
     ),
+    on_terminal_quota: Callable[[Exception], Any] | None = None,
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Decorator to add retry logic to a function.
 
@@ -335,6 +457,14 @@ def retry(
         @retry(max_attempts=3)
         async def fetch_data():
             ...
+
+    Args:
+        max_attempts: Maximum number of retry attempts
+        base_delay: Initial delay between retries
+        max_delay: Maximum delay between retries
+        exponential_base: Base for exponential backoff
+        retryable_exceptions: Tuple of exception types to retry
+        on_terminal_quota: Optional callback for terminal quota errors
     """
     config = RetryConfig(
         max_attempts=max_attempts,
@@ -347,11 +477,15 @@ def retry(
     def decorator(func: Callable[P, T]) -> Callable[P, T]:
         @functools.wraps(func)
         async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-            return await with_retry(lambda: func(*args, **kwargs), config)
+            return await with_retry(
+                lambda: func(*args, **kwargs), config, on_terminal_quota
+            )
 
         @functools.wraps(func)
         def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-            return with_retry_sync(lambda: func(*args, **kwargs), config)
+            return with_retry_sync(
+                lambda: func(*args, **kwargs), config, on_terminal_quota
+            )
 
         # Return async wrapper if function is async, sync otherwise
         if _is_coro_func(func):

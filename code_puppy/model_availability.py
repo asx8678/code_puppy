@@ -115,3 +115,39 @@ class ModelAvailabilityService:
 # Module-level singleton
 availability_service = ModelAvailabilityService()
 model_availability_service = availability_service  # alias for round_robin_model.py
+
+# Last-resort fallback tracking (simple set for backward compatibility)
+_last_resort_models: set[str] = set()
+_lock = threading.Lock()
+
+
+def get_last_resort_models() -> list[str]:
+    """Return names of all models marked ``is_last_resort=True``.
+
+    Ported from gemini-cli/packages/core/src/fallback/handler.ts:43-56
+    (``lastResortPolicy`` fallback). Used by ``LastResortStrategy``
+    to provide a guaranteed fallback when primary routing fails.
+    """
+    with _lock:
+        return list(_last_resort_models)
+
+
+def mark_as_last_resort(model_name: str, value: bool = True) -> None:
+    """Mark (or unmark) a model as a last-resort fallback.
+
+    Last-resort models are tried when all preferred routing strategies
+    return ``None``, preventing "no model available" fatal errors.
+    """
+    with _lock:
+        if value:
+            _last_resort_models.add(model_name)
+            logger.debug("Model '%s' marked as last-resort", model_name)
+        else:
+            _last_resort_models.discard(model_name)
+            logger.debug("Model '%s' unmarked as last-resort", model_name)
+
+
+def is_last_resort(model_name: str) -> bool:
+    """Return whether ``model_name`` is marked as a last-resort fallback."""
+    with _lock:
+        return model_name in _last_resort_models

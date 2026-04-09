@@ -6,6 +6,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from code_puppy.error_logging import (
+    _format_chained_error,
+    _maybe_json,
+    _pretty_json,
     format_error_for_display,
     get_log_file_path,
     get_logs_dir,
@@ -250,3 +253,96 @@ class TestFormatErrorForDisplay:
         except ValueError as exc:
             log_error(exc, context="regression test")
         # If we got here without raising, test passes
+
+
+class TestMaybeJson:
+    """Tests for _maybe_json helper."""
+
+    def test_maybe_json_object(self):
+        assert _maybe_json('{"a": 1}') is True
+
+    def test_maybe_json_array(self):
+        assert _maybe_json('[1, 2, 3]') is True
+
+    def test_maybe_json_string(self):
+        assert _maybe_json("not json") is False
+
+    def test_maybe_json_incomplete(self):
+        assert _maybe_json("{incomplete") is False
+
+
+class TestPrettyJson:
+    """Tests for _pretty_json helper."""
+
+    def test_pretty_json_valid(self):
+        result = _pretty_json('{"a":1,"b":2}')
+        assert '"a": 1' in result
+        assert "\n" in result  # indented
+
+    def test_pretty_json_invalid_passes_through(self):
+        assert _pretty_json("not json {}") == "not json {}"
+
+
+class TestFormatChainedError:
+    """Tests for _format_chained_error helper."""
+
+    def test_chained_single_segment_unchanged(self):
+        assert _format_chained_error("simple error") == "simple error"
+
+    def test_chained_three_levels_indented(self):
+        # Use longer segments (> 10 chars) to avoid collapsing
+        result = _format_chained_error("api connection error: http status 500: server process exploded")
+        lines = result.split("\n")
+        assert len(lines) == 3
+        assert "Api connection error" in lines[0]
+        assert "→ Http status 500" in lines[1]
+        assert "Server process exploded" in lines[2]
+
+    def test_chained_dedups_repeats(self):
+        result = _format_chained_error("error: error: something bad")
+        # should not contain "error" twice as separate segments
+        assert result.lower().count("error") <= 2  # once on its own + once in "something"
+
+    def test_chained_detects_json_tail(self):
+        msg = 'api error: {"code": 500, "msg": "boom"}'
+        result = _format_chained_error(msg)
+        assert '"code": 500' in result
+        assert "\n" in result  # pretty-printed
+
+    def test_chained_collapses_short_segments(self):
+        # Short segments (< 10 chars) should be collapsed into previous
+        result = _format_chained_error("error: a: b: something longer here")
+        # "a" is short (< 10) and should be collapsed into the previous segment
+        assert ": a:" in result or ": A:" in result
+
+
+class TestFormatErrorForDisplayIntegration:
+    """Integration tests for chained error formatting in format_error_for_display."""
+
+    def test_format_error_for_display_with_chained_error(self):
+        out = format_error_for_display(Exception("api error: http 500: {\"detail\": \"nope\"}"))
+        assert "Api error" in out
+        assert '"detail"' in out
+
+    def test_format_error_from_exception_with_json(self):
+        # Test with a real exception that has a chained message with JSON
+        out = format_error_for_display(ValueError('api error: {"code": 123}'))
+        assert "Api error" in out
+        assert '"code": 123' in out
+
+    def test_format_error_still_truncates_long_single_line(self):
+        huge = "a" * 1000
+        out = format_error_for_display(ValueError(huge))
+        assert len(out) <= 500
+        assert "..." in out
+
+    def test_format_error_with_chained_long_message(self):
+        # Multi-line chained messages truncate gracefully
+        msg = "error: " + "a" * 1000
+        out = format_error_for_display(Exception(msg))
+        # Should contain Error or → and ...
+        assert "Error" in out or "→" in out
+
+    def test_format_error_from_exception_with_message(self):
+        out = format_error_for_display(ValueError("bad input"))
+        assert "bad input" in out.lower()

@@ -5,6 +5,7 @@ Per XDG spec, logs are "state data" (actions history), not configuration.
 Because even good puppies make mistakes sometimes! 🐶
 """
 
+import json as _json_for_display
 import re as _re_for_display
 import sys
 import traceback
@@ -149,6 +150,86 @@ def get_logs_dir() -> Path:
     return LOGS_DIR
 
 
+def _maybe_json(s: str) -> bool:
+    """Return True if s looks like a JSON object or array."""
+    s = s.strip()
+    if s.startswith("{") and s.endswith("}"):
+        return True
+    if s.startswith("[") and s.endswith("]"):
+        return True
+    return False
+
+
+def _pretty_json(s: str) -> str:
+    """Pretty-print a JSON string; return s unchanged on parse failure."""
+    try:
+        parsed = _json_for_display.loads(s)
+    except (ValueError, _json_for_display.JSONDecodeError):
+        return s
+    return _json_for_display.dumps(parsed, indent=2)
+
+
+def _format_chained_error(msg: str) -> str:
+    """Split a `: `-chained error message into an indented tree.
+
+    Mirrors plandex's app/cli/term/errors.go OutputErrorAndExit segment walker:
+    - Splits by ': '
+    - Dedupes repeated segments (case-insensitive)
+    - Collapses very short segments (< 10 chars) into the previous one
+    - Detects JSON tails and pretty-prints them
+    - Indents successive segments with '  → ' prefix
+    """
+    # Normalize common noise patterns
+    msg = msg.replace("status code:", "status code")
+    msg = msg.replace(", body:", ":")
+
+    parts = msg.split(": ")
+    if len(parts) <= 1:
+        return msg
+
+    seen: set[str] = set()
+    out_lines: list[str] = []
+    indent_level = 0
+    last_part = ""
+
+    for idx, part in enumerate(parts):
+        key = part.lower()
+        if key in seen:
+            continue
+
+        # Check if the remaining tail is JSON — if so, pretty-print it and stop
+        tail = ": ".join(parts[idx:])
+        if _maybe_json(tail):
+            pretty = _pretty_json(tail)
+            indent = "  " * indent_level
+            # Prepend indent to each line of the pretty JSON
+            indented_pretty = pretty.replace("\n", "\n" + indent + "  ")
+            out_lines.append("\n" + indent + "→ " + indented_pretty)
+            break
+
+        # Collapse short segments (< 10 chars) into the previous one
+        if len(last_part) < 10 and indent_level > 0 and out_lines:
+            last_part = last_part + ": " + part
+            out_lines[-1] = out_lines[-1] + ": " + part
+            seen.add(last_part.lower())
+            seen.add(key)
+            continue
+
+        # Normal segment — add with indent
+        prefix = ""
+        if indent_level > 0:
+            prefix = "\n" + ("  " * indent_level) + "→ "
+        # Capitalize first letter of segment (plandex uses shared.Capitalize)
+        display = part[:1].upper() + part[1:] if part else part
+        out_lines.append(prefix + display)
+
+        seen.add(key)
+        last_part = part
+        indent_level += 1
+
+    return "".join(out_lines)
+
+
 def format_error_for_display(
     exc: BaseException,
     *,
@@ -202,16 +283,35 @@ def format_error_for_display(
         if not changed:
             break
 
-    # Collapse whitespace runs (including newlines) to single spaces
-    cleaned = _WHITESPACE_RUN.sub(" ", cleaned).strip()
+    # NEW: Apply chained-error formatting for messages with ": " segments.
+    # This re-introduces newlines for readability, so we skip the aggressive
+    # whitespace collapse for chained errors (they have structure we want to keep).
+    if ": " in cleaned:
+        cleaned = _format_chained_error(cleaned)
+    else:
+        # Collapse whitespace runs (including newlines) to single spaces
+        cleaned = _WHITESPACE_RUN.sub(" ", cleaned).strip()
 
     if not cleaned:
         cleaned = type(exc).__name__
 
-    # Truncate if needed
+    # Truncate if needed (line-by-line for multi-line output)
     if len(cleaned) > max_length:
-        # Leave room for ellipsis
-        cleaned = cleaned[: max_length - 3].rstrip() + "..."
+        # For multi-line output, try to truncate gracefully
+        if "\n" in cleaned:
+            lines = cleaned.split("\n")
+            truncated_lines = []
+            current_len = 0
+            for line in lines:
+                if current_len + len(line) + 1 > max_length - 3:
+                    truncated_lines.append("...")
+                    break
+                truncated_lines.append(line)
+                current_len += len(line) + 1
+            cleaned = "\n".join(truncated_lines)
+        else:
+            # Leave room for ellipsis
+            cleaned = cleaned[: max_length - 3].rstrip() + "..."
 
     if include_type:
         cleaned = f"[{type(exc).__name__}] {cleaned}"

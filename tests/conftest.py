@@ -34,6 +34,7 @@ def update_snapshots(request) -> bool:
     """Fixture providing the --update-snapshots flag value."""
     return bool(request.config.getoption("--update-snapshots"))
 
+
 # Integration test fixtures - only import if pexpect.spawn is available (Unix)
 # On Windows, pexpect doesn't have spawn attribute, so skip these imports
 try:
@@ -128,6 +129,11 @@ def isolate_config_between_tests(tmp_path_factory):
         shutil.rmtree(config_temp_dir)
     except Exception:
         pass  # Best effort cleanup
+
+
+# Re-export polling helpers for convenient `from tests._helpers.polling import poll` style
+# These are not fixtures — they are plain async/sync utilities.
+from tests._helpers.polling import poll, poll_sync  # noqa: E402, F401
 
 
 @pytest.fixture
