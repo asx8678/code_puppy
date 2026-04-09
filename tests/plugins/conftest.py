@@ -15,12 +15,12 @@ from pydantic_ai.models import ModelRequestParameters
 
 
 # Workaround for pydantic/MCP compatibility issue during pytest collection:
-# Skip antigravity tests if pydantic/MCP conflict is detected
+# Only mock mcp if it's genuinely unavailable (not installed)
 def pytest_configure(config):
     """Configure pytest with compatibility workarounds."""
-    # Pre-patch sys.modules to provide a mock mcp.types during collection
-    # This prevents the ValueError in pydantic's RootModel metaclass
-    if "mcp" not in sys.modules:
+    # Only install mock mcp modules if mcp is genuinely unavailable
+    # This allows tests to use the real mcp package when installed
+    if importlib.util.find_spec("mcp") is None:
         mcp_mock = MagicMock()
         mcp_mock.types = MagicMock()
         sys.modules["mcp"] = mcp_mock
