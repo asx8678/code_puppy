@@ -394,7 +394,7 @@ def _replace_in_file(
         return {"error": str(exc), "diff": diff_text}
 
 
-async def delete_snippet_from_file(
+def _write_to_file(
     context: RunContext | None,
     path: str,
     content: str,
