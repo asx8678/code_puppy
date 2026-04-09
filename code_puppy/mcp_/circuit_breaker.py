@@ -9,6 +9,7 @@ failures when MCP servers become unhealthy. The circuit breaker has three states
 """
 
 import asyncio
+import functools
 import inspect
 import logging
 import time
@@ -16,6 +17,13 @@ from enum import Enum
 from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
+
+
+# Cache for coroutine function checks (avoids repeated introspection on hot paths)
+@functools.lru_cache(maxsize=128)
+def _is_coro_func(func: Callable) -> bool:
+    """Cached check if a function is a coroutine function."""
+    return inspect.iscoroutinefunction(func)
 
 
 class CircuitState(Enum):
@@ -121,7 +129,7 @@ class CircuitBreaker:
         try:
             result = (
                 await func(*args, **kwargs)
-                if inspect.iscoroutinefunction(func)
+                if _is_coro_func(func)
                 else func(*args, **kwargs)
             )
             await self._on_success(checked_state=checked_state)

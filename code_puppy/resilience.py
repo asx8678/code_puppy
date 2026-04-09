@@ -26,6 +26,18 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 
+# Cache for coroutine function checks (avoids repeated introspection)
+@functools.lru_cache(maxsize=256)
+def _is_coro_func(func: Callable) -> bool:
+    """Cached check if a function is a coroutine function.
+
+    inspect.iscoroutinefunction is moderately expensive and called
+    repeatedly during decorator application. This cache speeds up
+    retry/circuit breaker decorator application on hot paths.
+    """
+    return inspect.iscoroutinefunction(func)
+
+
 class CircuitState(Enum):
     """Circuit breaker states."""
 
@@ -261,7 +273,10 @@ def with_retry_sync(
     """
     try:
         asyncio.get_running_loop()
-        warnings.warn("with_retry_sync called from async context - this will block the event loop", stacklevel=2)
+        warnings.warn(
+            "with_retry_sync called from async context - this will block the event loop",
+            stacklevel=2,
+        )
     except RuntimeError:
         pass  # No running loop, safe to use
     return run_async_sync(with_retry(func, config))
@@ -339,7 +354,7 @@ def retry(
             return with_retry_sync(lambda: func(*args, **kwargs), config)
 
         # Return async wrapper if function is async, sync otherwise
-        if inspect.iscoroutinefunction(func):
+        if _is_coro_func(func):
             return async_wrapper  # type: ignore
         return sync_wrapper  # type: ignore
 

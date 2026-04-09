@@ -28,6 +28,7 @@ from code_puppy.messaging import (  # New structured messaging types
 )
 from code_puppy.token_utils import estimate_token_count as _etc
 from code_puppy.utils.file_display import format_content_with_line_numbers, truncate_with_guidance
+from code_puppy.utils.install_hints import format_missing_tool_message
 
 
 # Pydantic models for tool return types
@@ -295,7 +296,9 @@ async def _list_files(
 
         if not rg_path and recursive:
             # Only need ripgrep for recursive listings
-            error_msg = "Error: ripgrep (rg) not found. Please install ripgrep to use this tool."
+            error_msg = format_missing_tool_message(
+                "ripgrep", context="needed for recursive file listing"
+            )
             return ListFileOutput(content=error_msg, error=error_msg)
 
         # Only use ripgrep for recursive listings
@@ -791,8 +794,8 @@ async def _grep(
                     break
 
         if not rg_path:
-            error_message = (
-                "ripgrep (rg) not found. Please install ripgrep to use this tool."
+            error_message = format_missing_tool_message(
+                "ripgrep", context="needed for grep searches"
             )
             return GrepOutput(matches=[], error=error_message)
 

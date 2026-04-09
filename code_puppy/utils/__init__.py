@@ -17,6 +17,7 @@ from .file_display import (
     open_nofollow,
     safe_write_file,
 )
+from .install_hints import install_hint, format_missing_tool_message
 
 __all__ = [
     # Agent helpers
@@ -45,4 +46,7 @@ __all__ = [
     "truncate_with_guidance",
     "open_nofollow",
     "safe_write_file",
+    # Install hints (ported from deepagents)
+    "install_hint",
+    "format_missing_tool_message",
 ]

@@ -1,7 +1,6 @@
 # agent_tools.py
 import asyncio
 import itertools
-import json
 import logging
 import msgpack
 import re
@@ -80,6 +79,54 @@ _dbos_workflow_counter = itertools.count()
 
 # Cache for subagent sessions directory to avoid repeated mkdir/stat calls
 _sessions_dir_cache: Path | None = None
+
+# Keys that should NOT propagate from parent agent to sub-agent
+# These are either session-specific, parent-private, or would confuse the sub-agent
+# Based on deepagents' _EXCLUDED_STATE_KEYS pattern
+_EXCLUDED_STATE_KEYS: frozenset[str] = frozenset({
+    # Session-specific keys that only make sense for the parent
+    "parent_session_id",
+    "agent_session_id",
+    "session_history",
+    # Previous tool results that would clutter the sub-agent's view
+    "previous_tool_results",
+    "tool_call_history",
+    "tool_outputs",
+    # Internal state keys
+    "_private_state",
+    "_internal_metadata",
+    # Callback/plugin state that shouldn't leak
+    "callback_registry",
+    "hook_state",
+    # UI/rendering state
+    "render_context",
+    "console_state",
+})
+
+
+def filter_context_for_subagent(context: dict | None) -> dict:
+    """Remove parent-specific state keys before passing context to a sub-agent.
+
+    Based on deepagents' _EXCLUDED_STATE_KEYS pattern. Prevents accidental
+    state leakage from parent to sub-agent.
+
+    Args:
+        context: The parent agent context dict, or None.
+
+    Returns:
+        A new dict with excluded keys removed. Returns empty dict if context is None.
+
+    Example:
+        >>> parent_context = {"session_id": "abc", "tool_outputs": [...], "user_prompt": "hi"}
+        >>> child_context = filter_context_for_subagent(parent_context)
+        >>> "tool_outputs" in child_context
+        False
+        >>> "user_prompt" in child_context
+        True
+    """
+    if context is None:
+        return {}
+    return {k: v for k, v in context.items() if k not in _EXCLUDED_STATE_KEYS}
 
 
 def _generate_dbos_workflow_id(base_id: str) -> str:

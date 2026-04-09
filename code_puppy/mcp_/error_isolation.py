@@ -7,6 +7,8 @@ logic with exponential backoff for failed servers.
 """
 
 import asyncio
+import functools
+import inspect
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -14,6 +16,13 @@ from enum import Enum
 from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
+
+
+# Cache for coroutine function checks (avoids repeated introspection on hot paths)
+@functools.lru_cache(maxsize=128)
+def _is_coro_func(func: Callable) -> bool:
+    """Cached check if a function is a coroutine function."""
+    return inspect.iscoroutinefunction(func)
 
 
 @dataclass
@@ -96,7 +105,7 @@ class MCPErrorIsolator:
 
         try:
             # Execute the function
-            if asyncio.iscoroutinefunction(func):
+            if _is_coro_func(func):
                 result = await func(*args, **kwargs)
             else:
                 result = func(*args, **kwargs)
