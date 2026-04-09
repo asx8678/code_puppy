@@ -1,4 +1,5 @@
 """Tests for StatusDisplay spinner min-display-time behavior."""
+
 import time
 from unittest.mock import MagicMock, patch
 
