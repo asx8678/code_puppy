@@ -212,6 +212,9 @@ def load_puppy_config() -> PuppyConfig:
         max_val: float | None = None,
     ) -> float:
         """Get float value from env, legacy config, or default."""
+        # Check if env vars are explicitly set (for sentinel check)
+        raw_env_val = get_first_env(*env_names)
+
         # Check env vars first
         env_result = _env_optional_float(*env_names, default=hardcoded_default)
 
@@ -228,8 +231,12 @@ def load_puppy_config() -> PuppyConfig:
                 else hardcoded_default
             )
 
-        # Try legacy config
-        if legacy_ok and env_result == hardcoded_default:
+        # If env var was explicitly set, use that value (even if it equals hardcoded_default)
+        if raw_env_val is not None:
+            return env_result if env_result is not None else hardcoded_default
+
+        # Try legacy config only if env var was not explicitly set
+        if legacy_ok:
             legacy_val = _get_legacy_value(legacy_config, legacy_key)
             if legacy_val is not None:
                 try:
@@ -331,7 +338,7 @@ def load_puppy_config() -> PuppyConfig:
         run_wait_timeout=_env_optional_float(
             "PUPPY_RUN_WAIT_TIMEOUT",
             "CODE_PUPPY_RUN_WAIT_TIMEOUT",
-            default=None,
+            default=600.0,
         ),
         # Messaging / UI
         ws_history_maxlen=_get_int(

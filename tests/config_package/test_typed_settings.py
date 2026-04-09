@@ -284,8 +284,8 @@ class TestInvalidEnvVarHandling:
         """Invalid float value should fall back to default."""
         monkeypatch.setenv("PUPPY_RUN_WAIT_TIMEOUT", "notafloat")
         cfg = load_puppy_config()
-        # Should use default (None) since parsing failed
-        assert cfg.run_wait_timeout is None
+        # Should use default (600.0) since parsing failed
+        assert cfg.run_wait_timeout == 600.0
 
 
 # ─────────────────────────────────────────────────────────────
@@ -433,6 +433,21 @@ class TestRepr:
         assert "default_model=" in repr_str
         assert "debug=" in repr_str
 
+    def test_protected_token_count_not_redacted(self):
+        """protected_token_count should NOT be redacted in repr (exact field name matching)."""
+        cfg = load_puppy_config()
+        repr_str = repr(cfg)
+
+        # Should show actual value, not ***REDACTED***
+        assert "protected_token_count=***REDACTED***" not in repr_str
+        # Check that protected_token_count shows its actual numeric value
+        assert "protected_token_count=" in repr_str
+        # The value should be visible (not redacted)
+        import re
+        match = re.search(r"protected_token_count=(\d+)", repr_str)
+        assert match is not None, f"protected_token_count value should be visible in repr: {repr_str}"
+        assert int(match.group(1)) == cfg.protected_token_count
+
 
 # ─────────────────────────────────────────────────────────────
 # Resilience Tests
@@ -494,16 +509,48 @@ class TestConcurrencyFields:
         # Default is True based on typical usage
         assert cfg.allow_parallel_runs is True
 
-    def test_run_wait_timeout_optional(self):
-        """run_wait_timeout should be optional (None by default)."""
+    def test_run_wait_timeout_default_matches_run_limiter_config(self):
+        """run_wait_timeout default should match RunLimiterConfig.wait_timeout (600.0)."""
+        from code_puppy.plugins.pack_parallelism.run_limiter import RunLimiterConfig
+
         cfg = load_puppy_config()
-        assert cfg.run_wait_timeout is None or isinstance(cfg.run_wait_timeout, float)
+        # Default should be 600.0 (not None) to match RunLimiterConfig
+        assert cfg.run_wait_timeout == 600.0, (
+            f"run_wait_timeout default should be 600.0 to match RunLimiterConfig, "
+            f"got {cfg.run_wait_timeout}"
+        )
+
+        # Verify it matches RunLimiterConfig default
+        rl_cfg = RunLimiterConfig()
+        assert cfg.run_wait_timeout == rl_cfg.wait_timeout, (
+            f"PuppyConfig.run_wait_timeout ({cfg.run_wait_timeout}) must match "
+            f"RunLimiterConfig.wait_timeout ({rl_cfg.wait_timeout})"
+        )
 
     def test_run_wait_timeout_can_be_set(self, monkeypatch):
         """run_wait_timeout should accept float values."""
         monkeypatch.setenv("PUPPY_RUN_WAIT_TIMEOUT", "30.5")
         cfg = load_puppy_config()
         assert cfg.run_wait_timeout == 30.5
+
+    def test_explicit_env_value_matching_default_not_overridden(self, monkeypatch):
+        """Explicit env value equal to hardcoded default should be respected, not overridden.
+
+        Regression test for code_puppy-629: When a user explicitly sets an env value
+        that happens to equal the hardcoded default, it should still be respected
+        and not fall through to legacy config.
+        """
+        # Import the legacy config to monkeypatch it
+        from code_puppy.config_package.loader import _get_legacy_config
+
+        # Set explicit env value that equals the hardcoded default (600.0)
+        monkeypatch.setenv("PUPPY_RUN_WAIT_TIMEOUT", "600.0")
+
+        # The env value should be respected even though it equals the hardcoded default
+        cfg = load_puppy_config()
+        assert cfg.run_wait_timeout == 600.0, (
+            "Explicit env value of 600.0 should be respected, not overridden by legacy config"
+        )
 
 
 # ─────────────────────────────────────────────────────────────

@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 
-# Fields that should be redacted in __repr__
+# Fields that should be redacted in __repr__ (exact field name matching)
 _SENSITIVE_FIELDS: frozenset[str] = frozenset(
     {
         "puppy_token",
@@ -31,6 +31,17 @@ _SENSITIVE_FIELDS: frozenset[str] = frozenset(
         "secret",
         "password",
         "token",
+    }
+)
+
+
+# Suffixes that indicate a field should be redacted (for exact suffix matching)
+_SENSITIVE_SUFFIXES: frozenset[str] = frozenset(
+    {
+        "_token",
+        "_api_key",
+        "_secret",
+        "_password",
     }
 )
 
@@ -152,8 +163,13 @@ class PuppyConfig:
         fields = []
         for field_name in self.__slots__:
             value = getattr(self, field_name)
-            # Check if this field name contains any sensitive keyword
-            if any(sensitive in field_name.lower() for sensitive in _SENSITIVE_FIELDS):
+            # Check for exact field name match or sensitive suffix match
+            field_lower = field_name.lower()
+            is_sensitive = (
+                field_lower in _SENSITIVE_FIELDS
+                or any(field_lower.endswith(suffix) for suffix in _SENSITIVE_SUFFIXES)
+            )
+            if is_sensitive:
                 display_value = "***REDACTED***"
             elif isinstance(value, Path):
                 display_value = repr(str(value))
