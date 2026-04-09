@@ -19,6 +19,11 @@ class StatusDisplay:
     including token per second rate and rotating loading messages.
     """
 
+    # Minimum display time to prevent spinner flicker on fast operations.
+    # Ported from plandex app/cli/term/spinner.go:13-15.
+    MIN_DURATION_WITH_MSG_S: float = 0.70  # 700ms
+    MIN_DURATION_WITHOUT_MSG_S: float = 0.35  # 350ms
+
     def __init__(self, console: Console):
         self.console = console
         self.token_count = 0
@@ -219,11 +224,40 @@ class StatusDisplay:
             self.task = asyncio.create_task(self._update_display())
 
     def stop(self) -> None:
-        """Stop the status display"""
+        """Stop the status display.
+
+        This method enforces a minimum display time to prevent spinner flicker
+        on fast operations:
+        - 700ms if there's a loading message displayed
+        - 350ms if no message (or very fast operations)
+
+        Note: This is a synchronous method using time.sleep(). If called from
+        async contexts, consider running in a thread or tolerating the brief block.
+        """
         # Lazy import to avoid circular dependency during module initialization
         from code_puppy.messaging import emit_info
 
         if self.is_active:
+            # Enforce minimum display time to prevent spinner flicker.
+            # See MIN_DURATION_WITH_MSG_S and MIN_DURATION_WITHOUT_MSG_S.
+            has_message = bool(self.loading_messages)
+            required_min = (
+                self.MIN_DURATION_WITH_MSG_S
+                if has_message
+                else self.MIN_DURATION_WITHOUT_MSG_S
+            )
+
+            if self.start_time is not None:
+                try:
+                    elapsed = time.time() - self.start_time
+                    if elapsed < required_min:
+                        # Sleep the residual time synchronously.
+                        # Max sleep is bounded by constants (< 700ms).
+                        time.sleep(required_min - elapsed)
+                except Exception:
+                    # Defensive: don't let timing issues crash the stop
+                    pass
+
             self.is_active = False
             if self.task:
                 self.task.cancel()
