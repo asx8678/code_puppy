@@ -24,9 +24,15 @@ Phase 5: Full plugin integration
 - Signal-based confidence updates
 - Memory injection into system prompts via get_model_system_prompt
 - Non-blocking async extraction with debounced storage
+
+Phase 6: Configuration and CLI
+- Config-based opt-in activation
+- /memory slash command with subcommands
+- Rich formatted memory display
+- JSON export for transparency
 """
 
-from .config import MemoryConfig, load_config
+from .config import MemoryConfig, get_config, is_memory_enabled, load_config
 from .extraction import (
     DEFAULT_EXTRACTION_PROMPT,
     ExtractedFact,
@@ -49,7 +55,6 @@ from .storage import FileMemoryStorage, Fact
 from .updater import MemoryUpdater, DEFAULT_DEBOUNCE_MS
 
 __all__ = [
-    "CORRECTION_DELTA",
     "DEFAULT_DEBOUNCE_MS",
     "DEFAULT_EXTRACTION_PROMPT",
     "ExtractedFact",
@@ -69,4 +74,6 @@ __all__ = [
     "has_preference",
     "has_reinforcement",
     "load_config",
+    "get_config",
+    "is_memory_enabled",
 ]

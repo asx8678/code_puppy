@@ -2082,3 +2082,60 @@ def get_frontend_emitter_queue_size() -> int:
         return int(val)
     except ValueError:
         return 100
+
+
+# --- AGENT MEMORY CONFIGURATION ---
+def get_enable_agent_memory() -> bool:
+    """Return True if agent memory is enabled (default False).
+
+    Agent memory allows agents to remember facts across sessions.
+    This is OPT-IN and disabled by default for privacy.
+    """
+    return _is_truthy(get_value("enable_agent_memory"), default=False)
+
+
+get_memory_debounce_seconds = _make_int_getter(
+    "memory_debounce_seconds",
+    default=30,
+    min_val=1,
+    max_val=300,
+    doc="""Return the memory write debounce window in seconds (default 30).
+
+    Lower values mean more frequent disk writes but fresher data.
+    Higher values reduce I/O but increase risk of data loss on crash.
+    Range: 1-300 seconds.
+    """,
+)
+
+get_memory_max_facts = _make_int_getter(
+    "memory_max_facts",
+    default=50,
+    min_val=1,
+    max_val=1000,
+    doc="""Return the maximum number of facts to store per agent (default 50).
+
+    When the limit is reached, older facts are pruned.
+    Range: 1-1000 facts.
+    """,
+)
+
+get_memory_token_budget = _make_int_getter(
+    "memory_token_budget",
+    default=500,
+    min_val=100,
+    max_val=2000,
+    doc="""Return the token budget for memory injection (default 500).
+
+    Maximum tokens to use when injecting memories into prompts.
+    Range: 100-2000 tokens.
+    """,
+)
+
+
+def get_memory_extraction_model() -> str | None:
+    """Return the optional model override for memory extraction.
+
+    If set, this model will be used for fact extraction instead of
+    the default model. None means use the current active model.
+    """
+    return get_value("memory_extraction_model")
