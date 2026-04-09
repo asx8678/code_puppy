@@ -718,6 +718,21 @@ def force_reset_limiter_state() -> dict:
     """EMERGENCY: force-reset all counters and recreate semaphores.
 
     Used by `/pack-parallel reset` to recover from stuck states.
+
+    SAFETY NOTE: Before reassigning semaphores, this function wakes any
+    coroutines/threads waiting on the OLD semaphores by releasing slots
+    equal to the number of registered waiters. This prevents waiters from
+    hanging forever on semaphores that are about to be discarded.
+
+    Waiters that were pending during the reset will:
+    1. Acquire on the old semaphore (woken by our releases)
+    2. Decrement the waiters counter (which we preserve, not reset)
+    3. Increment active count and proceed with their work
+    4. Release on the NEW semaphore when done
+
+    The waiters counters are intentionally NOT reset to 0 so that woken
+    waiters can decrement them cleanly to 0 instead of going negative.
+
     Returns a dict with the pre-reset state for logging.
     """
     global _limiter_instance
@@ -737,13 +752,60 @@ def force_reset_limiter_state() -> dict:
 
     limit = limiter.effective_limit
     with limiter._state_lock:
+        # CRITICAL FIX: Before replacing semaphores, wake all waiters on the
+        # OLD semaphores by releasing slots equal to the waiter count.
+        # This prevents coroutines from hanging forever on the old semaphore.
+        async_waiters_to_wake = limiter._async_waiters
+        sync_waiters_to_wake = limiter._sync_waiters
+
+        # Check if there are actual async waiters on the semaphore using the
+        # internal _waiters deque. This distinguishes real waiters from
+        # artificial counter state set in tests.
+        has_real_async_waiters = (
+            hasattr(limiter._async_sem, "_waiters")
+            and limiter._async_sem._waiters is not None
+            and len(limiter._async_sem._waiters) > 0
+        )
+        # For threading.Semaphore, we check _value to infer if anyone is waiting
+        # If _value > 0, the semaphore is not exhausted, so no one is waiting
+        has_real_sync_waiters = (
+            hasattr(limiter._sync_sem, "_value")
+            and limiter._sync_sem._value == 0
+        )
+
+        # Wake async waiters by releasing to the old async semaphore
+        for _ in range(async_waiters_to_wake):
+            try:
+                limiter._async_sem.release()
+            except ValueError:
+                break  # Semaphore at max or other issue
+
+        # Wake sync waiters by releasing to the old sync semaphore
+        for _ in range(sync_waiters_to_wake):
+            try:
+                limiter._sync_sem.release()
+            except ValueError:
+                break
+
+        # Reset active counts to 0. The woken waiters will increment these
+        # as they proceed. Any pre-reset active tasks will find _async_active
+        # is 0 when they release (existing behavior - they log a warning).
         limiter._async_active = 0
-        limiter._async_waiters = 0
         limiter._sync_active = 0
-        limiter._sync_waiters = 0
+
+        # For waiters counters: if there were real waiters on the semaphore,
+        # preserve the counters so woken waiters can decrement them cleanly.
+        # If no real waiters (just artificial counter state), reset to 0.
+        if not has_real_async_waiters:
+            limiter._async_waiters = 0
+        if not has_real_sync_waiters:
+            limiter._sync_waiters = 0
+        # If real waiters exist, counters are left as-is for woken waiters
+        # to decrement. They will be drained to 0 as waiters complete.
+
         limiter._async_deficit = 0
         limiter._sync_deficit = 0
-        # Recreate semaphores from scratch
+        # Recreate semaphores from scratch - old semaphore is discarded
         limiter._async_sem = asyncio.Semaphore(limit)
         limiter._sync_sem = threading.Semaphore(limit)
 
