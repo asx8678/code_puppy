@@ -4,7 +4,7 @@ Tests the robust JSON extraction from LLM text outputs.
 """
 
 import pytest
-from code_puppy.utils.llm_parsing import extract_json_from_text
+from code_puppy.utils.llm_parsing import coerce_llm_dict, extract_json_from_text
 
 
 class TestExtractJsonFromText:
@@ -34,13 +34,13 @@ class TestExtractJsonFromText:
 
     def test_fenced_array_with_json_annotation(self):
         """Test parsing array inside markdown fences with 'json' annotation."""
-        text = '```json\n[1, 2, 3]\n```'
+        text = "```json\n[1, 2, 3]\n```"
         result = extract_json_from_text(text)
         assert result == [1, 2, 3]
 
     def test_fenced_array_without_annotation(self):
         """Test parsing array inside plain markdown fences."""
-        text = '```\n[1, 2, 3]\n```'
+        text = "```\n[1, 2, 3]\n```"
         result = extract_json_from_text(text)
         assert result == [1, 2, 3]
 
@@ -71,16 +71,16 @@ class TestExtractJsonFromText:
 
     def test_multiple_arrays_returns_first_valid(self):
         """Test that when multiple array candidates exist, first valid one is returned."""
-        text = '[1, 2, 3] some text [4, 5, 6]'
+        text = "[1, 2, 3] some text [4, 5, 6]"
         result = extract_json_from_text(text)
         assert result == [1, 2, 3]
 
     def test_malformed_json_returns_none(self):
         """Test that malformed JSON returns None, never raises."""
-        assert extract_json_from_text('{invalid json}') is None
+        assert extract_json_from_text("{invalid json}") is None
         assert extract_json_from_text('{"unclosed": "string') is None
-        assert extract_json_from_text('{trailing,}') is None
-        assert extract_json_from_text('not json at all') is None
+        assert extract_json_from_text("{trailing,}") is None
+        assert extract_json_from_text("not json at all") is None
 
     def test_none_input_returns_none(self):
         """Test that None input returns None safely."""
@@ -88,14 +88,14 @@ class TestExtractJsonFromText:
 
     def test_empty_string_returns_none(self):
         """Test that empty string input returns None."""
-        assert extract_json_from_text('') is None
-        assert extract_json_from_text('   ') is None
-        assert extract_json_from_text('\n\t  ') is None
+        assert extract_json_from_text("") is None
+        assert extract_json_from_text("   ") is None
+        assert extract_json_from_text("\n\t  ") is None
 
     def test_whitespace_only_fenced_returns_none(self):
         """Test that fenced but empty/whitespace content returns None."""
-        assert extract_json_from_text('```json\n   \n```') is None
-        assert extract_json_from_text('```\n\n```') is None
+        assert extract_json_from_text("```json\n   \n```") is None
+        assert extract_json_from_text("```\n\n```") is None
 
     def test_nested_objects(self):
         """Test parsing nested JSON objects."""
@@ -105,7 +105,7 @@ class TestExtractJsonFromText:
 
     def test_nested_arrays(self):
         """Test parsing nested JSON arrays."""
-        text = '[[1, 2], [3, 4], [5, 6]]'
+        text = "[[1, 2], [3, 4], [5, 6]]"
         result = extract_json_from_text(text)
         assert result == [[1, 2], [3, 4], [5, 6]]
 
@@ -140,7 +140,7 @@ class TestExtractJsonFromText:
 
     def test_partial_json_in_prose(self):
         """Test handling prose that looks like JSON but isn't."""
-        text = 'The config file uses {key: value} syntax which is not valid JSON.'
+        text = "The config file uses {key: value} syntax which is not valid JSON."
         # This shouldn't match because the regex expects proper JSON structure
         result = extract_json_from_text(text)
         # The inner part isn't valid JSON, so it should fail
@@ -148,12 +148,12 @@ class TestExtractJsonFromText:
 
     def test_json_with_newlines_in_fences(self):
         """Test parsing JSON with internal newlines inside code fences."""
-        text = '''```json
+        text = """```json
 {
     "key": "value",
     "array": [1, 2, 3]
 }
-```'''
+```"""
         result = extract_json_from_text(text)
         assert result == {"key": "value", "array": [1, 2, 3]}
 
@@ -167,11 +167,11 @@ class TestExtractJsonFromText:
     def test_scalars(self):
         """Test parsing scalar JSON values."""
         assert extract_json_from_text('"just a string"') == "just a string"
-        assert extract_json_from_text('42') == 42
-        assert extract_json_from_text('3.14') == 3.14
-        assert extract_json_from_text('true') is True
-        assert extract_json_from_text('false') is False
-        assert extract_json_from_text('null') is None
+        assert extract_json_from_text("42") == 42
+        assert extract_json_from_text("3.14") == 3.14
+        assert extract_json_from_text("true") is True
+        assert extract_json_from_text("false") is False
+        assert extract_json_from_text("null") is None
 
     def test_scalar_in_fences(self):
         """Test parsing scalar values inside fences."""
@@ -180,10 +180,10 @@ class TestExtractJsonFromText:
 
     def test_empty_object_and_array(self):
         """Test parsing empty JSON structures."""
-        assert extract_json_from_text('{}') == {}
-        assert extract_json_from_text('[]') == []
-        assert extract_json_from_text('```json\n{}\n```') == {}
-        assert extract_json_from_text('```json\n[]\n```') == []
+        assert extract_json_from_text("{}") == {}
+        assert extract_json_from_text("[]") == []
+        assert extract_json_from_text("```json\n{}\n```") == {}
+        assert extract_json_from_text("```json\n[]\n```") == []
 
     def test_large_numbers(self):
         """Test parsing JSON with large numbers."""
@@ -199,7 +199,7 @@ class TestExtractJsonFromText:
 
     def test_prose_with_braces_but_no_valid_json(self):
         """Test prose containing braces that aren't valid JSON."""
-        text = 'The function foo() { return bar; } is defined here.'
+        text = "The function foo() { return bar; } is defined here."
         result = extract_json_from_text(text)
         # The regex will capture { return bar; } which isn't valid JSON
         assert result is None
@@ -245,6 +245,131 @@ class TestExtractJsonFromTextEdgeCases:
         result = extract_json_from_text(text)
         # Strategy 3 should find the second object
         assert result == {"valid": "json"}
+
+
+class TestCoerceLlmDict:
+    """Test suite for coerce_llm_dict function."""
+
+    def test_none_returns_empty_dict(self):
+        assert coerce_llm_dict(None) == {}
+
+    def test_none_returns_default(self):
+        default = {"status": "unknown"}
+        result = coerce_llm_dict(None, default=default)
+        assert result == default
+        # Must be a copy, not the same object
+        result["status"] = "changed"
+        assert default["status"] == "unknown"
+
+    def test_empty_string_returns_default(self):
+        assert coerce_llm_dict("") == {}
+        assert coerce_llm_dict("   ") == {}
+
+    def test_string_input_wraps_as_summary(self):
+        assert coerce_llm_dict("hello") == {"summary": "hello"}
+
+    def test_string_custom_key(self):
+        assert coerce_llm_dict("hi", string_to_key="text") == {"text": "hi"}
+
+    def test_string_is_stripped(self):
+        assert coerce_llm_dict("  hi  ") == {"summary": "hi"}
+
+    def test_list_of_strings(self):
+        result = coerce_llm_dict(["a", "b", "c"])
+        assert result == {
+            "items": [{"summary": "a"}, {"summary": "b"}, {"summary": "c"}]
+        }
+
+    def test_list_of_dicts(self):
+        result = coerce_llm_dict([{"title": "t1"}, {"title": "t2"}])
+        assert result == {"items": [{"title": "t1"}, {"title": "t2"}]}
+
+    def test_list_mixed_drops_non_dict_non_str(self):
+        result = coerce_llm_dict([{"a": 1}, "b", 42, None, {"c": 3}])
+        assert result == {"items": [{"a": 1}, {"summary": "b"}, {"c": 3}]}
+
+    def test_dict_passthrough_no_aliases(self):
+        payload = {"foo": 1, "bar": 2}
+        result = coerce_llm_dict(payload)
+        assert result == payload
+        # Must be a shallow copy
+        result["foo"] = 999
+        assert payload["foo"] == 1
+
+    def test_dict_with_exact_canonical_keys(self):
+        payload = {"sources": [{"url": "x"}], "plan": "do x"}
+        result = coerce_llm_dict(
+            payload,
+            aliases={"sources": ["findings", "evidence"], "plan": ["search_plan"]},
+        )
+        assert result["sources"] == [{"url": "x"}]
+        assert result["plan"] == "do x"
+
+    def test_dict_with_alias_resolution(self):
+        payload = {"findings": [{"t": 1}]}
+        result = coerce_llm_dict(
+            payload,
+            aliases={"sources": ["findings", "evidence", "references"]},
+            list_keys={"sources"},
+        )
+        assert result == {"sources": [{"t": 1}]}
+
+    def test_dict_alias_priority_canonical_wins(self):
+        payload = {"sources": "canonical", "findings": "alias"}
+        result = coerce_llm_dict(
+            payload,
+            aliases={"sources": ["findings"]},
+        )
+        assert result["sources"] == "canonical"
+
+    def test_dict_alias_first_alt_wins(self):
+        payload = {"findings": "first", "evidence": "second"}
+        result = coerce_llm_dict(
+            payload,
+            aliases={"sources": ["findings", "evidence"]},
+        )
+        assert result["sources"] == "first"
+
+    def test_dict_list_keys_normalizes_string_to_list(self):
+        payload = {"sources": "just a string"}
+        result = coerce_llm_dict(
+            payload,
+            aliases={"sources": []},
+            list_keys={"sources"},
+        )
+        assert result == {"sources": [{"summary": "just a string"}]}
+
+    def test_dict_list_keys_normalizes_single_dict(self):
+        payload = {"sources": {"url": "x"}}
+        result = coerce_llm_dict(
+            payload,
+            aliases={"sources": []},
+            list_keys={"sources"},
+        )
+        assert result == {"sources": [{"url": "x"}]}
+
+    def test_dict_extra_keys_preserved(self):
+        payload = {"sources": [{"a": 1}], "extra_field": "keep me"}
+        result = coerce_llm_dict(
+            payload,
+            aliases={"sources": ["findings"]},
+        )
+        assert "extra_field" in result
+        assert result["extra_field"] == "keep me"
+
+    def test_unknown_type_returns_default(self):
+        assert coerce_llm_dict(42) == {}
+        assert coerce_llm_dict(3.14, default={"fallback": True}) == {"fallback": True}
+
+    def test_never_raises_on_bad_input(self):
+        # Should not raise even on pathological input
+        class Weird:
+            def __str__(self):
+                raise ValueError("nope")
+
+        # Should not raise
+        result = coerce_llm_dict(Weird())
+        assert isinstance(result, dict)
 
 
 if __name__ == "__main__":

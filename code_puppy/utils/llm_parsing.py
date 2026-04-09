@@ -24,6 +24,150 @@ import re
 from typing import Any
 
 
+def _ensure_dict_list(value: Any) -> list[dict]:
+    """Normalize a value into a list of dicts.
+
+    - dict → [dict]
+    - list → filter to dicts and strings; strings become {"summary": s}
+    - str (non-empty) → [{"summary": s}]
+    - anything else → []
+
+    Args:
+        value: The value to normalize.
+
+    Returns:
+        A list of dicts, never None.
+    """
+    if isinstance(value, dict):
+        return [dict(value)]
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            return [{"summary": stripped}]
+        return []
+    if isinstance(value, list):
+        result: list[dict] = []
+        for item in value:
+            if isinstance(item, dict):
+                result.append(dict(item))
+            elif isinstance(item, str):
+                stripped = item.strip()
+                if stripped:
+                    result.append({"summary": stripped})
+            # Non-dict, non-str items are filtered out
+        return result
+    return []
+
+
+def coerce_llm_dict(
+    payload: Any,
+    *,
+    aliases: dict[str, list[str]] | None = None,
+    list_keys: set[str] | None = None,
+    string_to_key: str = "summary",
+    default: dict | None = None,
+) -> dict:
+    """Tolerantly coerce an LLM-produced value into a canonical dict.
+
+    LLMs often return responses in inconsistent shapes: sometimes a JSON object
+    with the expected keys, sometimes a list, sometimes a bare string, sometimes
+    None. This helper normalizes all of those into a predictable dict while
+    handling key aliases (e.g. sources/findings/evidence all mapping to "sources").
+
+    Args:
+        payload: The raw value returned by the LLM. May be None, str, list, dict,
+            or anything else (unknown types become {}).
+        aliases: Optional mapping of canonical_key -> list_of_alternate_names.
+            When the input is a dict, the first non-empty value found among the
+            alternate names is copied to the canonical key. The canonical key
+            itself is tried first.
+        list_keys: Optional set of canonical keys whose values should be
+            normalized to a list of dicts. Strings become {"summary": str},
+            dicts pass through, lists of mixed types are filtered.
+        string_to_key: When the input is a bare string, it is wrapped as
+            {string_to_key: value}. Defaults to "summary".
+        default: Fallback returned when the input yields nothing useful.
+            Defaults to an empty dict.
+
+    Returns:
+        A dict (never None, never raises). Empty dict if the input carries no
+        usable information.
+
+    Examples:
+        >>> coerce_llm_dict(None)
+        {}
+        >>> coerce_llm_dict("hello world")
+        {'summary': 'hello world'}
+        >>> coerce_llm_dict(["a", "b"])
+        {'items': [{'summary': 'a'}, {'summary': 'b'}]}
+        >>> coerce_llm_dict(
+        ...     {"findings": [{"title": "t"}]},
+        ...     aliases={"sources": ["findings", "evidence", "references"]},
+        ...     list_keys={"sources"},
+        ... )
+        {'sources': [{'title': 't'}]}
+    """
+    # Handle None
+    if payload is None:
+        return default.copy() if default else {}
+
+    # Handle string
+    if isinstance(payload, str):
+        stripped = payload.strip()
+        if not stripped:
+            return default.copy() if default else {}
+        return {string_to_key: stripped}
+
+    # Handle list
+    if isinstance(payload, list):
+        return {"items": _ensure_dict_list(payload)}
+
+    # Handle dict
+    if isinstance(payload, dict):
+        if aliases is None:
+            # No aliases, just return a shallow copy
+            return dict(payload)
+
+        result: dict[str, Any] = {}
+        list_keys_set = list_keys or set()
+
+        for canonical, alts in aliases.items():
+            # Try canonical first, then each alt in order
+            found_value: Any = None
+            if canonical in payload:
+                found_value = payload[canonical]
+            else:
+                for alt in alts:
+                    if alt in payload:
+                        found_value = payload[alt]
+                        break
+
+            if found_value is not None:
+                # Normalize if this key is in list_keys
+                if canonical in list_keys_set:
+                    result[canonical] = _ensure_dict_list(found_value)
+                else:
+                    result[canonical] = found_value
+
+        # Copy over any extra keys not covered by aliases
+        alias_targets = set(aliases.keys())
+        for alt_list in aliases.values():
+            alias_targets.update(alt_list)
+
+        for key, value in payload.items():
+            if key not in alias_targets:
+                result[key] = value
+
+        # If result is empty but payload was non-empty, return payload copy as fallback
+        if not result and payload:
+            return dict(payload)
+
+        return result
+
+    # Unknown type - return default or empty dict
+    return default.copy() if default else {}
+
+
 # Regex to strip markdown code fences (```json or just ```)
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 

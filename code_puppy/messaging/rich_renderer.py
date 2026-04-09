@@ -27,6 +27,21 @@ from rich.table import Table
 from code_puppy.async_utils import format_size
 from code_puppy.config import get_subagent_verbose
 from code_puppy.tools.common import format_diff_with_colors
+
+# Adaptive rendering support (bd code_puppy-6ig)
+try:
+    from code_puppy.utils.adaptive_render import (
+        PayloadKind,
+        classify_payload,
+        collect_record_columns,
+        detect_delimited_table,
+        normalize_escaped_whitespace,
+        python_repr_to_json,
+    )
+
+    _ADAPTIVE_RENDER_AVAILABLE = True
+except ImportError:
+    _ADAPTIVE_RENDER_AVAILABLE = False
 from code_puppy.tools.subagent_context import is_subagent
 
 from .bus import MessageBus
@@ -271,6 +286,190 @@ class RichConsoleRenderer:
         return is_subagent() and not get_subagent_verbose()
 
     # =========================================================================
+    # Adaptive Rendering Helpers (bd code_puppy-6ig)
+    # =========================================================================
+
+    # Collapsible long-text thresholds
+    _COLLAPSE_THRESHOLD_CHARS = 2000
+    _COLLAPSE_PREVIEW_LINES = 40
+    _COLLAPSE_PREVIEW_CHARS = 1500
+
+    def _adaptive_render_enabled(self) -> bool:
+        """Return True if adaptive rendering should be used for this message."""
+        if not _ADAPTIVE_RENDER_AVAILABLE:
+            return False
+        try:
+            from code_puppy.config import get_adaptive_rendering_enabled
+
+            return get_adaptive_rendering_enabled()
+        except Exception:
+            return True  # fail-open to the new behavior
+
+    def _render_structured_payload(self, value) -> bool:
+        """Try to render a structured payload adaptively.
+
+        Returns True if the payload was rendered (caller should skip default path),
+        False if the payload should fall through to default rendering.
+        """
+        if not self._adaptive_render_enabled():
+            return False
+        try:
+            kind = classify_payload(value)
+            if kind == PayloadKind.KV_DICT:
+                self._render_kv_table(value)
+                return True
+            if kind == PayloadKind.RECORD_LIST:
+                self._render_record_table(value)
+                return True
+            # For NESTED/MIXED_LIST/SCALAR/EMPTY/STRING — fall through to default
+            return False
+        except Exception:
+            # Never crash the renderer on adaptive-rendering bugs
+            return False
+
+    def _render_kv_table(self, payload: dict) -> None:
+        """Render a flat key/value dict as a two-column Rich Table."""
+        table = Table(
+            show_header=True, header_style="bold cyan", box=None, padding=(0, 1)
+        )
+        table.add_column("Key", style="cyan", no_wrap=True)
+        table.add_column("Value", style="white")
+        for key, value in payload.items():
+            table.add_row(str(key), "" if value is None else str(value))
+        self._console.print(table)
+
+    def _render_record_table(self, payload: list) -> None:
+        """Render a list of dicts as a Rich Table with auto-detected columns."""
+        columns = collect_record_columns(payload)
+        if not columns:
+            return
+        table = Table(
+            show_header=True, header_style="bold cyan", box=None, padding=(0, 1)
+        )
+        for col in columns:
+            table.add_column(str(col), style="white")
+        for row in payload:
+            table.add_row(
+                *[
+                    "" if row.get(col) is None else str(row.get(col, ""))
+                    for col in columns
+                ]
+            )
+        self._console.print(table)
+
+    def _adaptive_preprocess_text(self, text: str) -> str:
+        """Pre-process text payloads: normalize escaped whitespace, etc."""
+        if not self._adaptive_render_enabled():
+            return text
+        try:
+            return normalize_escaped_whitespace(text)
+        except Exception:
+            return text
+
+    def _try_render_embedded_table(self, text: str) -> bool:
+        """Detect a delimited table embedded in the text and render it if found.
+
+        Returns True if a table was detected and rendered, in which case the
+        caller should also render any surrounding prose. Returns False if no
+        table was found.
+        """
+        if not self._adaptive_render_enabled():
+            return False
+        try:
+            table_info = detect_delimited_table(text)
+            if table_info is None:
+                return False
+            table = Table(
+                show_header=True,
+                header_style="bold magenta",
+                box=None,
+                padding=(0, 1),
+            )
+            for col in table_info.header:
+                table.add_column(col or "", style="white")
+            for row in table_info.rows:
+                # Pad short rows, truncate long rows
+                padded = row + [""] * (len(table_info.header) - len(row))
+                table.add_row(*padded[: len(table_info.header)])
+            self._console.print(table)
+            return True
+        except Exception:
+            return False
+
+    def _try_render_python_repr(self, text: str) -> bool:
+        """If text is a Python-repr dict/list, render it as pretty JSON.
+
+        Returns True if handled.
+        """
+        if not self._adaptive_render_enabled():
+            return False
+        try:
+            stripped = text.strip()
+            if not stripped or stripped[0] not in "{[(":
+                return False
+            json_str = python_repr_to_json(stripped)
+            if json_str is None:
+                return False
+            from rich.json import JSON
+
+            self._console.print(JSON(json_str))
+            return True
+        except Exception:
+            return False
+
+    def _maybe_collapse_long_text(
+        self, text: str, *, session_id: str | None = None, msg_id: str | None = None
+    ) -> tuple[str, bool]:
+        """Return (display_text, was_collapsed).
+
+        If was_collapsed, display_text is a preview with a "more lines" suffix.
+        """
+        if not self._adaptive_render_enabled():
+            return text, False
+        if not isinstance(text, str) or len(text) <= self._COLLAPSE_THRESHOLD_CHARS:
+            return text, False
+
+        lines = text.splitlines()
+        preview_lines = lines[: self._COLLAPSE_PREVIEW_LINES]
+        preview = "\n".join(preview_lines)
+        if len(preview) > self._COLLAPSE_PREVIEW_CHARS:
+            preview = preview[: self._COLLAPSE_PREVIEW_CHARS]
+
+        # Optionally write full text to session log
+        log_path = self._write_collapse_log(text, session_id=session_id, msg_id=msg_id)
+        remaining_lines = max(0, len(lines) - len(preview_lines))
+        remaining_chars = max(0, len(text) - len(preview))
+        if log_path:
+            suffix = f"\n[dim]... ({remaining_lines} more lines, {remaining_chars} more chars — full output at {log_path})[/dim]"
+        else:
+            suffix = f"\n[dim]... ({remaining_lines} more lines, {remaining_chars} more chars — truncated)[/dim]"
+        return preview + suffix, True
+
+    def _write_collapse_log(
+        self, full_text: str, *, session_id: str | None, msg_id: str | None
+    ) -> str | None:
+        """Atomically write full text to a per-session log file.
+
+        Returns path or None on failure.
+        """
+        try:
+            from datetime import datetime
+            from pathlib import Path
+
+            from code_puppy.config import DATA_DIR
+
+            base = Path(DATA_DIR) / "logs" / (session_id or "default")
+            base.mkdir(parents=True, exist_ok=True)
+            fname = f"tool-{msg_id or datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.log"
+            path = base / fname
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_text(full_text, encoding="utf-8")
+            tmp.replace(path)
+            return str(path)
+        except Exception:
+            return None
+
+    # =========================================================================
     # Lifecycle (Synchronous - for compatibility with main.py)
     # =========================================================================
 
@@ -459,12 +658,30 @@ class RichConsoleRenderer:
 
         prefix = self._get_level_prefix(msg.level)
 
+        # Adaptive rendering integration (bd code_puppy-6ig)
+        # Only for non-markdown text; markdown content is already structured
+        if not msg.is_markdown and isinstance(msg.text, str):
+            # Pre-process: normalize escaped whitespace
+            text = self._adaptive_preprocess_text(msg.text)
+
+            # Try structured detection for Python repr content
+            if self._try_render_python_repr(text):
+                return
+
+            # Try embedded table detection (renders alongside prose)
+            self._try_render_embedded_table(text)
+
+            # Check for long text and collapse if needed
+            text, was_collapsed = self._maybe_collapse_long_text(text)
+        else:
+            text = msg.text
+
         if msg.is_markdown:
             # Render as markdown (prefix printed separately to preserve level icon)
             try:
                 if prefix:
                     self._console.print(prefix, style=style, end="")
-                md = Markdown(msg.text, code_theme=_get_code_theme())
+                md = Markdown(text, code_theme=_get_code_theme())
                 self._console.print(md)
             except Exception as exc:  # noqa: BLE001
                 import logging
@@ -472,11 +689,11 @@ class RichConsoleRenderer:
                 logging.getLogger(__name__).debug(
                     "Markdown render failed, falling back to plain text: %s", exc
                 )
-                safe_text = escape_rich_markup(msg.text)
+                safe_text = escape_rich_markup(text)
                 self._console.print(f"{prefix}{safe_text}", style=style)
         else:
             # Plain-text path with Rich markup escaping
-            safe_text = escape_rich_markup(msg.text)
+            safe_text = escape_rich_markup(text)
             self._console.print(f"{prefix}{safe_text}", style=style)
 
     def _get_level_prefix(self, level: MessageLevel) -> str:
@@ -970,8 +1187,19 @@ class RichConsoleRenderer:
 
         # Show details if present
         if msg.details:
-            safe_details = escape_rich_markup(msg.details)
-            self._console.print(f"[dim]{safe_details}[/dim]")
+            # Adaptive rendering for details (bd code_puppy-6ig)
+            # Try structured detection before falling back to plain text
+            details = self._adaptive_preprocess_text(msg.details)
+            if self._try_render_python_repr(details):
+                pass  # Handled by adaptive renderer
+            elif self._try_render_embedded_table(details):
+                # Table rendered; still show surrounding text if any
+                safe_details = escape_rich_markup(details)
+                self._console.print(f"[dim]{safe_details}[/dim]")
+            else:
+                # Default: plain escaped text
+                safe_details = escape_rich_markup(details)
+                self._console.print(f"[dim]{safe_details}[/dim]")
 
         # Trailing newline for spinner separation
         self._console.print()

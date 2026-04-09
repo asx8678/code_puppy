@@ -73,6 +73,15 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 uvx code-puppy
 ```
 
+### Local Development
+
+For local development with graceful multi-service shutdown:
+
+```bash
+./scripts/run_dev.sh           # start dev services (placeholder - see issue code_puppy-ac5)
+./scripts/run_dev.sh --help    # see options
+```
+
 ## Changelog (By Kittylog!)
 
 [📋 View the full changelog on Kittylog](https://kittylog.app/c/mpfaffenberger/code_puppy)

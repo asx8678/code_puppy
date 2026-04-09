@@ -9,11 +9,11 @@ from dataclasses import dataclass, field
 from functools import cache, lru_cache
 from typing import Callable
 
-# Compiled regex for _sanitize_model_name_for_key - single pass replacement
-_SANITIZE_MODEL_NAME_RE = re.compile(r'[.\-/]')
-
 from code_puppy.session_storage import save_session_async
 from code_puppy import runtime_state
+
+# Compiled regex for _sanitize_model_name_for_key - single pass replacement
+_SANITIZE_MODEL_NAME_RE = re.compile(r"[.\-/]")
 
 
 @dataclass
@@ -412,6 +412,30 @@ def set_universal_constructor_enabled(enabled: bool) -> None:
     set_value("enable_universal_constructor", "true" if enabled else "false")
 
 
+# bd code_puppy-6ig: Adaptive rendering support
+@_registered_cache
+def get_adaptive_rendering_enabled() -> bool:
+    """Return True if adaptive payload rendering is enabled (default: True).
+
+    Can be disabled via the `adaptive_rendering_enabled` key in puppy.cfg
+    or the `PUPPY_ADAPTIVE_RENDERING` env var (set to 0/false/no to disable).
+
+    When enabled, the rich renderer will:
+    - Detect and render Python repr dicts/lists as structured tables
+    - Detect embedded CSV/TSV tables in text
+    - Normalize escaped whitespace in output
+    - Collapse very long text with expand/collapse affordances
+    """
+    from code_puppy.config_package.env_helpers import env_bool
+
+    # Check env var first, fall back to config key, default to True
+    env_val = env_bool("PUPPY_ADAPTIVE_RENDERING", default=True)
+    if not env_val:
+        return False
+    # If env var is True/default, check config
+    return _is_truthy(get_value("adaptive_rendering_enabled"), default=True)
+
+
 get_enable_streaming = _make_bool_getter(
     "enable_streaming",
     default=True,
@@ -599,7 +623,7 @@ def get_default_config_keys():
     global _DEFAULT_CONFIG_KEYS_CACHE
     if _DEFAULT_CONFIG_KEYS_CACHE is not None:
         return _DEFAULT_CONFIG_KEYS_CACHE
-    
+
     default_keys = [
         "yolo_mode",
         "model",
@@ -639,8 +663,10 @@ def get_default_config_keys():
         "allowed_user_plugins",
     ]
     # Add banner color keys from DEFAULT_BANNER_COLORS dict keys
-    default_keys.extend(f"banner_color_{banner_name}" for banner_name in DEFAULT_BANNER_COLORS)
-    
+    default_keys.extend(
+        f"banner_color_{banner_name}" for banner_name in DEFAULT_BANNER_COLORS
+    )
+
     _DEFAULT_CONFIG_KEYS_CACHE = default_keys
     return default_keys
 
@@ -666,17 +692,17 @@ def set_config_value(key: str, value: str):
     from io import StringIO
     from pathlib import Path
     from code_puppy.persistence import atomic_write_text
-    
+
     config = _get_config()  # Use cached version for reading
     if DEFAULT_SECTION not in config:
         config[DEFAULT_SECTION] = {}
     config[DEFAULT_SECTION][key] = value
-    
+
     # Serialize config to string using StringIO
     buffer = StringIO()
     config.write(buffer)
     content = buffer.getvalue()
-    
+
     # Write atomically without re-reading (cache already invalidated)
     atomic_write_text(Path(CONFIG_FILE), content)
     _invalidate_config()  # Invalidate cache after write - no re-read needed
@@ -693,7 +719,7 @@ def reset_value(key: str) -> None:
     from io import StringIO
     from pathlib import Path
     from code_puppy.persistence import atomic_write_text
-    
+
     config = _get_config()  # Use cached version
     if DEFAULT_SECTION in config and key in config[DEFAULT_SECTION]:
         del config[DEFAULT_SECTION][key]
