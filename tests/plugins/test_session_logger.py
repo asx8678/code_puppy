@@ -724,6 +724,48 @@ class TestSessionLoggerCallbacks:
         assert "super-secret-key-xyz" not in str(result)
         assert "[REDACTED]" in str(result)
 
+    def test_safe_serialize_redacts_additional_credential_keys(self):
+        """SECURITY FIX rtq: Test that additional credential keys are redacted."""
+        from code_puppy.plugins.session_logger.writer import _safe_serialize
+
+        # Test new sensitive key patterns
+        additional_keys = [
+            ("private_key", "-----BEGIN RSA PRIVATE KEY-----"),
+            ("private-key", "ssh-rsa AAAAB3NzaC1..."),
+            ("auth", "Basic dXNlcjpwYXNzd29yZA=="),
+            ("authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"),
+            ("bearer", "sl.BpI...)"),
+            ("connection_string", "Server=myServerAddress;Database=myDataBase;User Id=myUsername;Password=myPassword;"),
+        ]
+
+        for key_name, secret_val in additional_keys:
+            obj = {key_name: secret_val}
+            result = _safe_serialize(obj)
+            assert secret_val not in str(result), f"{key_name} value should be redacted"
+            assert "[REDACTED]" in str(result), f"{key_name} should show [REDACTED]"
+
+    def test_safe_serialize_does_not_redact_false_positives(self):
+        """SECURITY FIX rtq: Test that benign keys with 'secret' or 'token' substring are NOT redacted."""
+        from code_puppy.plugins.session_logger.writer import _safe_serialize
+
+        # These should NOT be redacted because they use word boundary matching
+        benign_cases = [
+            ("secretary", "John Doe"),  # "secret" is part of a larger word
+            ("tokenizer", "cl100k_base"),  # "token" is part of a larger word
+            ("secretary_name", "Jane"),
+            ("tokenization_mode", "fast"),
+            ("authorship", "Shakespeare"),  # "auth" is part of a larger word
+            ("authorization_redirect", "/callback"),  # Has "authorization" - should be redacted
+        ]
+
+        for key_name, value in benign_cases:
+            obj = {key_name: value}
+            result = _safe_serialize(obj)
+            # For false-positive keys, the value should remain intact
+            if key_name in ("secretary", "tokenizer", "secretary_name", "tokenization_mode", "authorship"):
+                assert value in str(result), f"{key_name} is a benign key - value should NOT be redacted"
+                assert "[REDACTED]" not in str(result) or value in str(result), f"{key_name} should keep its value"
+
     def test_safe_serialize_redacts_passwords(self):
         """SECURITY FIX rtq: Test that passwords and secrets are redacted."""
         from code_puppy.plugins.session_logger.writer import _safe_serialize

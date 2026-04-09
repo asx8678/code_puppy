@@ -152,6 +152,27 @@ class TestSecurityBoundaryFileAccess:
         assert _is_sensitive_path("./.env")
         assert _is_sensitive_path("/var/www/app/.env")
 
+        # SECURITY FIX b26: Test .env.* variants blocked (.env.local, .env.production, etc.)
+        env_variants = [
+            ".env.local",
+            ".env.production",
+            ".env.development",
+            ".env.dev",
+            ".env.staging",
+            ".env.test",
+            ".env.ci",
+            ".env.example",
+            ".env.backup",
+        ]
+        for variant in env_variants:
+            assert _is_sensitive_path(f"/myproject/{variant}"), f"{variant} should be blocked"
+            assert _is_sensitive_path(f"./{variant}"), f"{variant} in current dir should be blocked"
+            assert _is_sensitive_path(f"/var/www/app/{variant}"), f"{variant} in web dir should be blocked"
+
+        # Case-insensitive check for .env variants
+        assert _is_sensitive_path("/app/.ENV.LOCAL"), ".ENV.LOCAL should be blocked (case-insensitive)"
+        assert _is_sensitive_path("/app/.Env.Production"), ".Env.Production should be blocked"
+
         # Test PEM/key files blocked ANYWHERE (not just cred-ish dirs)
         assert _is_sensitive_path("/app/deploy.key"), "deploy.key should be blocked anywhere"
         assert _is_sensitive_path("/project/server.pem"), "server.pem should be blocked anywhere"
@@ -163,6 +184,10 @@ class TestSecurityBoundaryFileAccess:
         assert not _is_sensitive_path("/project/main.py")
         assert not _is_sensitive_path("/app/src/server.js")
         assert not _is_sensitive_path("/repo/README.md")
+
+        # Benign .env* files that should NOT be blocked (regression prevention)
+        assert not _is_sensitive_path("/project/env_config.py"), "env_config.py should NOT be blocked"
+        assert not _is_sensitive_path("/app/environment.ts"), "environment.ts should NOT be blocked"
 
     def test_file_access_allowed_with_mocked_callbacks(self):
         """Test that file access is allowed when callbacks permit it."""

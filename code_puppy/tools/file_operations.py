@@ -123,7 +123,9 @@ _SENSITIVE_EXACT_FILES = frozenset({
 })
 
 # SECURITY FIX b26: Also block project-local .env files anywhere
+# Block .env and .env.* variants (.env.local, .env.production, etc.)
 _SENSITIVE_FILENAMES = frozenset({".env"})
+_SENSITIVE_FILENAME_PREFIXES = frozenset({".env."})  # Catches .env.local, .env.production, etc.
 
 _SENSITIVE_EXTENSIONS = frozenset({".pem", ".key", ".p12", ".pfx", ".keystore"})
 
@@ -573,7 +575,12 @@ def _is_sensitive_path(file_path: str) -> bool:
         return True
 
     # SECURITY FIX b26: Block sensitive filenames anywhere (e.g., .env)
-    if os.path.basename(resolved) in _SENSITIVE_FILENAMES:
+    basename = os.path.basename(resolved)
+    if basename in _SENSITIVE_FILENAMES:
+        return True
+    # Block .env.* variants (lowercase comparison for case-insensitive match)
+    basename_lower = basename.lower()
+    if any(basename_lower.startswith(prefix) for prefix in _SENSITIVE_FILENAME_PREFIXES):
         return True
 
     # Check for private key files by extension anywhere (SECURITY FIX b26)

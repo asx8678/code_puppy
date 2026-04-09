@@ -2,12 +2,30 @@
 
 import json
 import logging
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Module-level compiled regexes for sensitive key detection (SECURITY FIX rtq)
+# Uses word boundaries to avoid false positives like "secretary" or "tokenizer"
+# Also handles underscore-delimited keys like AWS_SECRET_ACCESS_KEY
+_SENSITIVE_KEY_PATTERN = re.compile(
+    r'(?:^|[\b_\-])(password|secret|token|api[_-]?key|credential|access[_-]?key|'
+    r'private[_-]?key|auth|authorization|bearer|connection[_-]?string)(?:$|[\b_\-])',
+    re.IGNORECASE
+)
+
+# Pattern for repr() redaction (key=value style patterns)
+# Matches keys in quotes followed by colon, or key=value patterns
+_REPR_SENSITIVE_KEY_PATTERN = re.compile(
+    r'(?:^|[\b_\-])(password|secret|token|api[_-]?key|credential|access[_-]?key|'
+    r'private[_-]?key|auth|authorization|bearer|connection[_-]?string)(?:$|[\b_\-])',
+    re.IGNORECASE
+)
 
 
 class SessionWriter:
@@ -219,17 +237,12 @@ def _redact_secrets_from_dict(obj: dict) -> dict:
     """Return a copy of dict with sensitive values redacted.
 
     SECURITY FIX rtq: Recursively redact values under sensitive-looking keys.
+    Uses word boundaries to avoid false positives (e.g., "secretary" won't match "secret").
     """
-    import re
-
-    sensitive_key_pattern = re.compile(
-        r'password|secret|token|api[_-]?key|credential|access[_-]?key',
-        re.IGNORECASE
-    )
-
     result = {}
     for key, value in obj.items():
-        if sensitive_key_pattern.search(str(key)):
+        # Use word boundary matching to avoid false positives like "secretary", "tokenizer"
+        if _SENSITIVE_KEY_PATTERN.search(str(key)):
             # Redact values for sensitive keys (but keep small ints/bools for context)
             if isinstance(value, (str, bytes)) and len(str(value)) > 0:
                 result[key] = "[REDACTED]"
@@ -268,8 +281,6 @@ def _safe_serialize(obj: Any) -> Any:
     Returns:
         JSON-serializable representation, or truncated repr string with secrets redacted
     """
-    import re
-
     if obj is None:
         return None
 
@@ -299,16 +310,25 @@ def _safe_serialize(obj: Any) -> Any:
     _repr = repr(obj)[:1000]
 
     # SECURITY FIX rtq: Redact password/secret/token/api-key/credential patterns
+    # Uses word boundaries to avoid false positives like "secretary", "tokenizer"
+    # Handles underscore-delimited keys like AWS_SECRET_ACCESS_KEY
     # Redact key=value style patterns where key looks sensitive
+    # Pattern 1: key=value or key:value (including function call style like Config(api_key='xxx'))
     _repr = re.sub(
-        r'(password|secret|token|api[_-]?key|credential|access[_-]?key)["\'\s]*[=:]+["\'\s]*([^"\'\s,}\]]{3,})',
+        r'([\w\-]*?(?:password|secret|token|api[_-]?key|credential|access[_-]?key|'
+        r'private[_-]?key|auth|authorization|bearer|connection[_-]?string)[\w\-]*)'
+        r'["\'\s]*[=:]+["\'\s]*([^"\'\s,}\]]{3,})',
         r'\1=[REDACTED]',
         _repr,
         flags=re.IGNORECASE,
     )
     # Redact values in dict-looking structures under sensitive keys
+    # Matches 'key': 'value' or "key": "value" or Config(key='value') patterns
     _repr = re.sub(
-        r"(['\"])(password|secret|token|api[_-]?key|credential|access[_-]?key)\1\s*:\s*['\"]?([^'\"},\]]{3,})['\"]?",
+        r"(['\"])"
+        r'([\w\-]*?(?:password|secret|token|api[_-]?key|credential|access[_-]?key|'
+        r'private[_-]?key|auth|authorization|bearer|connection[_-]?string)[\w\-]*?)'
+        r"\1\s*:\s*['\"]?([^'\"},\]]{3,})['\"]?",
         r"'\2': '[REDACTED]'",
         _repr,
         flags=re.IGNORECASE,
