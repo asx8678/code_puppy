@@ -9,6 +9,7 @@ from .parallel import map_with_concurrency, Semaphore, ParallelResult
 from .dag import build_dependency_graph, detect_cycles, build_execution_waves
 from .shell_split import split_compound_command
 from .stream_parser import StreamLineParser, SSEParser, parse_jsonl_lenient
+from .llm_parsing import extract_json_from_text
 
 __all__ = [
     # Emit utilities
@@ -28,4 +29,6 @@ __all__ = [
     "StreamLineParser",
     "SSEParser",
     "parse_jsonl_lenient",
+    # LLM parsing utilities
+    "extract_json_from_text",
 ]
