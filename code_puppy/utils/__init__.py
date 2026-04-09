@@ -3,6 +3,7 @@
 Inspired by patterns from oh-my-pi (omp) project.
 """
 
+from .agent_helpers import invert_conversation_roles
 from .emit import emit_error, emit_info, emit_success, emit_warning
 from .ring_buffer import RingBuffer
 from .parallel import map_with_concurrency, Semaphore, ParallelResult
@@ -12,6 +13,8 @@ from .stream_parser import StreamLineParser, SSEParser, parse_jsonl_lenient
 from .llm_parsing import extract_json_from_text
 
 __all__ = [
+    # Agent helpers
+    "invert_conversation_roles",
     # Emit utilities
     "emit_error",
     "emit_info",
