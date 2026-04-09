@@ -215,15 +215,61 @@ class SessionWriter:
                 json.dump(self._manifest_data, f, indent=2, default=str)
 
 
+def _redact_secrets_from_dict(obj: dict) -> dict:
+    """Return a copy of dict with sensitive values redacted.
+
+    SECURITY FIX rtq: Recursively redact values under sensitive-looking keys.
+    """
+    import re
+
+    sensitive_key_pattern = re.compile(
+        r'password|secret|token|api[_-]?key|credential|access[_-]?key',
+        re.IGNORECASE
+    )
+
+    result = {}
+    for key, value in obj.items():
+        if sensitive_key_pattern.search(str(key)):
+            # Redact values for sensitive keys (but keep small ints/bools for context)
+            if isinstance(value, (str, bytes)) and len(str(value)) > 0:
+                result[key] = "[REDACTED]"
+            elif isinstance(value, dict):
+                result[key] = _redact_secrets_from_dict(value)
+            elif isinstance(value, list):
+                result[key] = [_redact_if_dict(v) for v in value]
+            else:
+                result[key] = value  # Keep numbers/bools as-is
+        elif isinstance(value, dict):
+            result[key] = _redact_secrets_from_dict(value)
+        elif isinstance(value, list):
+            result[key] = [_redact_if_dict(v) for v in value]
+        else:
+            result[key] = value
+    return result
+
+
+def _redact_if_dict(v: Any) -> Any:
+    """Helper to recursively redact dicts inside lists."""
+    if isinstance(v, dict):
+        return _redact_secrets_from_dict(v)
+    elif isinstance(v, list):
+        return [_redact_if_dict(item) for item in v]
+    return v
+
+
 def _safe_serialize(obj: Any) -> Any:
     """Convert obj to JSON-serializable form, falling back to repr for unsupported types.
+
+    SECURITY FIX rtq: Scrubs secrets from repr() fallback before writing to logs.
 
     Args:
         obj: Object to serialize
 
     Returns:
-        JSON-serializable representation, or truncated repr string
+        JSON-serializable representation, or truncated repr string with secrets redacted
     """
+    import re
+
     if obj is None:
         return None
 
@@ -234,6 +280,9 @@ def _safe_serialize(obj: Any) -> Any:
     # Try standard JSON serialization
     try:
         json.dumps(obj)
+        # SECURITY FIX rtq: For dicts/mappings, redact sensitive values before returning
+        if isinstance(obj, dict):
+            return _redact_secrets_from_dict(obj)
         return obj
     except (TypeError, ValueError):
         pass
@@ -247,5 +296,22 @@ def _safe_serialize(obj: Any) -> Any:
         return f"<bytes:{len(obj)}>"
 
     # For other types, use repr with length cap
-    repr_str = repr(obj)[:1000]
-    return f"<non-serializable:{repr_str}>"
+    _repr = repr(obj)[:1000]
+
+    # SECURITY FIX rtq: Redact password/secret/token/api-key/credential patterns
+    # Redact key=value style patterns where key looks sensitive
+    _repr = re.sub(
+        r'(password|secret|token|api[_-]?key|credential|access[_-]?key)["\'\s]*[=:]+["\'\s]*([^"\'\s,}\]]{3,})',
+        r'\1=[REDACTED]',
+        _repr,
+        flags=re.IGNORECASE,
+    )
+    # Redact values in dict-looking structures under sensitive keys
+    _repr = re.sub(
+        r"(['\"])(password|secret|token|api[_-]?key|credential|access[_-]?key)\1\s*:\s*['\"]?([^'\"},\]]{3,})['\"]?",
+        r"'\2': '[REDACTED]'",
+        _repr,
+        flags=re.IGNORECASE,
+    )
+
+    return f"<non-serializable:{_repr}>"

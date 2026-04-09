@@ -106,10 +106,24 @@ _SENSITIVE_EXACT_FILES = frozenset({
     os.path.join(os.path.expanduser("~"), ".netrc"),
     os.path.join(os.path.expanduser("~"), ".pgpass"),
     os.path.join(os.path.expanduser("~"), ".my.cnf"),
+    os.path.join(os.path.expanduser("~"), ".env"),
+    os.path.join(os.path.expanduser("~"), ".bash_history"),
+    os.path.join(os.path.expanduser("~"), ".npmrc"),
+    os.path.join(os.path.expanduser("~"), ".pypirc"),
+    os.path.join(os.path.expanduser("~"), ".gitconfig"),
     "/etc/shadow",
     "/etc/sudoers",
     "/etc/master.passwd",  # BSD/macOS
+    "/etc/passwd",
+    # macOS /private/etc symlinks (realpath resolves /etc -> /private/etc)
+    "/private/etc/shadow",
+    "/private/etc/sudoers",
+    "/private/etc/master.passwd",
+    "/private/etc/passwd",
 })
+
+# SECURITY FIX b26: Also block project-local .env files anywhere
+_SENSITIVE_FILENAMES = frozenset({".env"})
 
 _SENSITIVE_EXTENSIONS = frozenset({".pem", ".key", ".p12", ".pfx", ".keystore"})
 
@@ -558,16 +572,16 @@ def _is_sensitive_path(file_path: str) -> bool:
     if resolved in _SENSITIVE_EXACT_FILES:
         return True
 
-    # Check for private key files by extension anywhere
+    # SECURITY FIX b26: Block sensitive filenames anywhere (e.g., .env)
+    if os.path.basename(resolved) in _SENSITIVE_FILENAMES:
+        return True
+
+    # Check for private key files by extension anywhere (SECURITY FIX b26)
+    # Previously only blocked if parent directory had credential-ish names,
+    # but deploy.key, server.pem, etc. anywhere can contain secrets.
     _, ext = os.path.splitext(resolved)
     if ext.lower() in _SENSITIVE_EXTENSIONS:
-        # Only block .pem/.key if they live in a directory that sounds
-        # credential-ish — otherwise legitimate project files would be blocked.
-        parent_lower = os.path.dirname(resolved).lower()
-        if any(
-            tok in parent_lower for tok in ("secret", "cred", "key", "cert", "private")
-        ):
-            return True
+        return True
 
     return False
 

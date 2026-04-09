@@ -125,6 +125,45 @@ class TestSecurityBoundaryFileAccess:
         assert result.allowed is False
         assert "sensitive" in result.reason.lower()
 
+    def test_sensitive_files_blocked_list(self):
+        """SECURITY FIX b26: Test that all sensitive file paths are blocked."""
+        from code_puppy.tools.file_operations import _is_sensitive_path
+
+        # Test expanded exact file list
+        sensitive_files = [
+            "~/.netrc",
+            "~/.pgpass",
+            "~/.my.cnf",
+            "~/.env",
+            "~/.bash_history",
+            "~/.npmrc",
+            "~/.pypirc",
+            "~/.gitconfig",
+            "/etc/shadow",
+            "/etc/sudoers",
+            "/etc/master.passwd",
+            "/etc/passwd",
+        ]
+        for f in sensitive_files:
+            assert _is_sensitive_path(f), f"{f} should be blocked"
+
+        # Test .env files blocked anywhere (project-local)
+        assert _is_sensitive_path("/myproject/.env")
+        assert _is_sensitive_path("./.env")
+        assert _is_sensitive_path("/var/www/app/.env")
+
+        # Test PEM/key files blocked ANYWHERE (not just cred-ish dirs)
+        assert _is_sensitive_path("/app/deploy.key"), "deploy.key should be blocked anywhere"
+        assert _is_sensitive_path("/project/server.pem"), "server.pem should be blocked anywhere"
+        assert _is_sensitive_path("/tmp/test.pem"), "test.pem should be blocked anywhere"
+        assert _is_sensitive_path("/home/user/creds.p12"), "creds.p12 should be blocked"
+        assert _is_sensitive_path("/data/app.pfx"), "app.pfx should be blocked"
+
+        # Legitimate project files should still work
+        assert not _is_sensitive_path("/project/main.py")
+        assert not _is_sensitive_path("/app/src/server.js")
+        assert not _is_sensitive_path("/repo/README.md")
+
     def test_file_access_allowed_with_mocked_callbacks(self):
         """Test that file access is allowed when callbacks permit it."""
         boundary = SecurityBoundary()

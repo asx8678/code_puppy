@@ -698,3 +698,56 @@ class TestSessionLoggerCallbacks:
         result = _safe_serialize(b"test data")
         assert isinstance(result, str)
         assert "bytes" in result.lower() or len(result) < 50
+
+    def test_safe_serialize_redacts_api_keys(self):
+        """SECURITY FIX rtq: Test that API keys are redacted from repr() fallback."""
+        from code_puppy.plugins.session_logger.writer import _safe_serialize
+
+        # Test dict with API key
+        obj = {"api_key": "sk-1234567890abcdef", "normal": "data"}
+        result = _safe_serialize(obj)
+        assert "sk-1234567890abcdef" not in str(result)
+        assert "[REDACTED]" in str(result)
+
+        # Test with different API key patterns
+        for key_name in ["api-key", "api_key", "API_KEY", "ApiKey"]:
+            obj = {key_name: "secret_value_123"}
+            result = _safe_serialize(obj)
+            assert "secret_value_123" not in str(result)
+
+        # Test object with custom repr containing API key
+        class FakeObj:
+            def __repr__(self):
+                return "Config(api_key='super-secret-key-xyz')"
+
+        result = _safe_serialize(FakeObj())
+        assert "super-secret-key-xyz" not in str(result)
+        assert "[REDACTED]" in str(result)
+
+    def test_safe_serialize_redacts_passwords(self):
+        """SECURITY FIX rtq: Test that passwords and secrets are redacted."""
+        from code_puppy.plugins.session_logger.writer import _safe_serialize
+
+        # Test password patterns
+        test_cases = [
+            {"password": "mypassword123"},
+            {"secret": "shh-dont-tell"},
+            {"token": "bearer_token_value"},
+            {"credential": "aws_access_key"},
+            {"access_key": "AKIAIOSFODNN7EXAMPLE"},
+        ]
+
+        for case in test_cases:
+            for key, secret_val in case.items():
+                result = _safe_serialize(case)
+                assert secret_val not in str(result), f"{key} value should be redacted"
+                assert "[REDACTED]" in str(result)
+
+        # Test key=value style string repr (like environment variables)
+        class EnvVars:
+            def __repr__(self):
+                return "env={'AWS_SECRET_ACCESS_KEY': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'}"
+
+        result = _safe_serialize(EnvVars())
+        assert "wJalrXUtnFEMI/K7MDENG" not in str(result)
+        assert "[REDACTED]" in str(result)
