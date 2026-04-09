@@ -39,19 +39,25 @@ from code_puppy.plugins.agent_memory import (
 )
 from code_puppy.plugins.agent_memory.config import _get_bool, _get_float, _get_int
 from code_puppy.plugins.agent_memory.extraction import DEFAULT_EXTRACTION_PROMPT
-from code_puppy.plugins.agent_memory.register_callbacks import (
-    _apply_signal_confidence_updates,
-    _format_memory_section,
-    _get_conversation_messages,
+from code_puppy.plugins.agent_memory.core import (
     _get_storage,
     _get_updater,
-    _normalize_messages,
-    _on_agent_run_end,
-    _on_load_prompt,
     _on_shutdown,
     _on_startup,
+)
+from code_puppy.plugins.agent_memory.messaging import (
+    _get_conversation_messages,
+    _normalize_messages,
+)
+from code_puppy.plugins.agent_memory.processing import (
+    _apply_signal_confidence_updates,
     _schedule_fact_extraction,
 )
+from code_puppy.plugins.agent_memory.prompts import (
+    _format_memory_section,
+    _on_load_prompt,
+)
+from code_puppy.plugins.agent_memory.agent_run_end import _on_agent_run_end
 from code_puppy.plugins.agent_memory.signals import (
     PREFERENCE_DELTA,
     _COMPILED_CORRECTION,
@@ -202,6 +208,92 @@ class TestSignalDetection:
         signals = detector.analyze_message("Yes!")
         assert not signals[0].context or not signals[0].context.get("recent_facts")
 
+    # Chinese Signal Detection Tests (code-puppy-4uw)
+    def test_chinese_correction_patterns(self) -> None:
+        """Test Chinese correction pattern detection (code-puppy-4uw)."""
+        # Basic correction patterns
+        assert has_correction("不对")
+        assert has_correction("错了")
+        assert has_correction("不正确")
+        assert has_correction("有误")
+        assert has_correction("纠正一下")
+        assert has_correction("更正")
+        assert has_correction("应该是Python")
+        assert has_correction("其实")
+        # Contextual corrections
+        assert has_correction("这不是对的")
+        assert has_correction("这不对")
+        assert has_correction("这不是正确的")
+        assert has_correction("它错了")
+        assert has_correction("你错了")
+        assert has_correction("我不喜欢用这个")
+        assert has_correction("我不是这个意思")
+        # Negative tests - should NOT match
+        assert not has_correction("你好")  # "hello"
+        assert not has_correction("对的")  # "that's right" - reinforcement
+        assert not has_correction("正确")  # "correct" - reinforcement
+
+    def test_chinese_reinforcement_patterns(self) -> None:
+        """Test Chinese reinforcement pattern detection (code-puppy-4uw)."""
+        # Basic reinforcement patterns
+        assert has_reinforcement("对的")
+        assert has_reinforcement("没错")
+        assert has_reinforcement("正确")
+        assert has_reinforcement("是这样")
+        assert has_reinforcement("一点都没错")
+        assert has_reinforcement("完全正确")
+        assert has_reinforcement("准确")
+        assert has_reinforcement("很准确")
+        assert has_reinforcement("说到点子")
+        assert has_reinforcement("同意")
+        assert has_reinforcement("说得对")
+        assert has_reinforcement("你说得对")
+        assert has_reinforcement("这样对")
+        # Negative tests - should NOT match
+        assert not has_reinforcement("你好")  # "hello"
+        assert not has_reinforcement("错了")  # "wrong" - correction
+        assert not has_reinforcement("不对")  # "not right" - correction
+
+    def test_chinese_preference_patterns(self) -> None:
+        """Test Chinese preference pattern detection (code-puppy-4uw)."""
+        # Basic preference patterns
+        assert has_preference("我喜欢Python")
+        assert has_preference("我偏好暗色模式")
+        assert has_preference("我想要这个")
+        assert has_preference("我需要帮助")
+        assert has_preference("我更喜欢JavaScript")
+        assert has_preference("我的偏好是VS Code")
+        assert has_preference("我的最爱是Python")
+        assert has_preference("我不喜欢Java")
+        assert has_preference("我不想用这个")
+        assert has_preference("我从来不用Java")
+        assert has_preference("我通常用Python")
+        assert has_preference("对我来说")
+        assert has_preference("我个人觉得")
+        assert has_preference("我希望用Python")
+        assert has_preference("我讨厌Java")
+        assert has_preference("记得用Python")
+        assert has_preference("一定要用")
+        assert has_preference("总是用Python")
+        # Negative tests - should NOT match
+        assert not has_preference("你好")  # "hello"
+
+    def test_detect_signals_with_chinese(self) -> None:
+        """Test that detect_signals finds all signal types in Chinese text (code-puppy-4uw)."""
+        # Mixed Chinese text with correction + preference + reinforcement
+        text = "不对，应该是Python。我喜欢Python。你说得对！"
+        signals = detect_signals(text)
+
+        signal_types = [s.signal_type for s in signals]
+        assert SignalType.CORRECTION in signal_types
+        assert SignalType.PREFERENCE in signal_types
+        assert SignalType.REINFORCEMENT in signal_types
+
+        # Verify matched text is Chinese
+        for signal in signals:
+            assert any('\u4e00' <= char <= '\u9fff' for char in signal.matched_text), \
+                f"Expected Chinese text in matched_text, got: {signal.matched_text}"
+
 
 # ============================================================================
 # Fact Extraction Tests
@@ -349,7 +441,7 @@ class TestMemoryConfig:
 
     def test_get_int_helper(self) -> None:
         """Test _get_int configuration helper."""
-        with patch("code_puppy.plugins.agent_memory.config.get_value") as mock_get:
+        with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = "42"
             assert _get_int("test_key", 10) == 42
 
@@ -364,7 +456,7 @@ class TestMemoryConfig:
 
     def test_get_bool_helper(self) -> None:
         """Test _get_bool configuration helper."""
-        with patch("code_puppy.plugins.agent_memory.config.get_value") as mock_get:
+        with patch("code_puppy.config.get_value") as mock_get:
             # Truthy values
             for val in ["1", "true", "True", "yes", "on", "enabled"]:
                 mock_get.return_value = val
@@ -383,7 +475,7 @@ class TestMemoryConfig:
 
     def test_get_float_helper(self) -> None:
         """Test _get_float configuration helper."""
-        with patch("code_puppy.plugins.agent_memory.config.get_value") as mock_get:
+        with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = "0.75"
             assert _get_float("test_key", 0.5) == 0.75
 
@@ -502,31 +594,31 @@ class TestEndToEndIntegration:
         """Setup isolated storage for each test."""
         # Patch storage module's MEMORY_DIR
         import code_puppy.plugins.agent_memory.storage as storage_module
-        import code_puppy.plugins.agent_memory.register_callbacks as register_callbacks_module
+        import code_puppy.plugins.agent_memory.core as core_module
 
         original_dir = storage_module._MEMORY_DIR
         storage_module._MEMORY_DIR = temp_memory_dir
 
         # Reset caches
-        register_callbacks_module._storage_cache.clear()
-        register_callbacks_module._updater_cache.clear()
-        register_callbacks_module._config = None
-        register_callbacks_module._extractor = None
-        register_callbacks_module._detector = None
+        core_module._storage_cache.clear()
+        core_module._updater_cache.clear()
+        core_module._config = None
+        core_module._extractor = None
+        core_module._detector = None
 
         yield
 
         # Cleanup
         storage_module._MEMORY_DIR = original_dir
-        register_callbacks_module._storage_cache.clear()
-        register_callbacks_module._updater_cache.clear()
+        core_module._storage_cache.clear()
+        core_module._updater_cache.clear()
 
     def test_full_conversation_to_memory_flow(
         self, temp_memory_dir: Path
     ) -> None:
         """End-to-end: simulate conversation, extract facts, verify storage."""
         # Initialize with mock config
-        with patch("code_puppy.plugins.agent_memory.register_callbacks.load_config") as mock_load:
+        with patch("code_puppy.plugins.agent_memory.core.load_config") as mock_load:
             config = MemoryConfig(
                 enabled=True,
                 max_facts=5,
@@ -550,7 +642,7 @@ class TestEndToEndIntegration:
             ]
 
             # Simulate agent run end with run_context containing messages
-            with patch("code_puppy.plugins.agent_memory.register_callbacks.get_current_run_context") as mock_ctx:
+            with patch("code_puppy.plugins.agent_memory.messaging.get_current_run_context") as mock_ctx:
                 mock_context = MagicMock()
                 mock_context.metadata = {"message_history": messages}
                 mock_ctx.return_value = mock_context
@@ -578,7 +670,7 @@ class TestEndToEndIntegration:
         self, temp_memory_dir: Path
     ) -> None:
         """End-to-end: test signal detection updates fact confidence."""
-        with patch("code_puppy.plugins.agent_memory.register_callbacks.load_config") as mock_load:
+        with patch("code_puppy.plugins.agent_memory.core.load_config") as mock_load:
             config = MemoryConfig(
                 enabled=True,
                 max_facts=5,
@@ -621,7 +713,7 @@ class TestEndToEndIntegration:
         self, temp_memory_dir: Path
     ) -> None:
         """End-to-end: test prompt injection respects token budget."""
-        with patch("code_puppy.plugins.agent_memory.register_callbacks.load_config") as mock_load:
+        with patch("code_puppy.plugins.agent_memory.core.load_config") as mock_load:
             # Create custom config with specific values (dataclass is frozen)
             custom_config = MemoryConfig(
                 enabled=True,
@@ -647,7 +739,7 @@ class TestEndToEndIntegration:
                 })
 
             # Try to load prompt with mock context
-            with patch("code_puppy.plugins.agent_memory.register_callbacks.get_current_run_context") as mock_ctx:
+            with patch("code_puppy.plugins.agent_memory.prompts.get_current_run_context") as mock_ctx:
                 mock_context = MagicMock()
                 mock_context.component_name = agent_name
                 mock_ctx.return_value = mock_context
@@ -676,7 +768,7 @@ class TestEndToEndIntegration:
         """Test that disabled plugin skips all processing."""
         disabled_config = MemoryConfig(enabled=False)
 
-        with patch("code_puppy.plugins.agent_memory.register_callbacks.load_config") as mock_load:
+        with patch("code_puppy.plugins.agent_memory.core.load_config") as mock_load:
             mock_load.return_value = disabled_config
 
             _on_startup()

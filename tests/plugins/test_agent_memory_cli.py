@@ -230,7 +230,7 @@ class TestMemoryShowCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_current_agent_name",
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
             return_value=None,
         ), patch(
             "code_puppy.messaging.emit_error"
@@ -244,10 +244,10 @@ class TestMemoryShowCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_current_agent_name",
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
             return_value="test-agent",
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_storage_for_current_agent"
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_storage"
         ) as mock_get_storage:
             mock_storage = MagicMock()
             mock_storage.load.return_value = []
@@ -276,10 +276,10 @@ class TestMemoryShowCommand:
         ]
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_current_agent_name",
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
             return_value="test-agent",
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_storage_for_current_agent"
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_storage"
         ) as mock_get_storage:
             mock_storage = MagicMock()
             mock_storage.load.return_value = mock_facts
@@ -301,7 +301,7 @@ class TestMemoryClearCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _clear_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_current_agent_name",
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
             return_value=None,
         ), patch(
             "code_puppy.messaging.emit_warning"
@@ -315,10 +315,10 @@ class TestMemoryClearCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _clear_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_current_agent_name",
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
             return_value="test-agent",
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_storage_for_current_agent"
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_storage"
         ) as mock_get_storage:
             mock_storage = MagicMock()
             mock_storage.fact_count.return_value = 0
@@ -334,10 +334,10 @@ class TestMemoryClearCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _clear_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_current_agent_name",
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
             return_value="test-agent",
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_storage_for_current_agent"
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_storage"
         ) as mock_get_storage:
             mock_storage = MagicMock()
             mock_storage.fact_count.return_value = 5
@@ -358,7 +358,7 @@ class TestMemoryExportCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _export_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_current_agent_name",
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
             return_value=None,
         ), patch(
             "code_puppy.messaging.emit_error"
@@ -372,10 +372,10 @@ class TestMemoryExportCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _export_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_current_agent_name",
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
             return_value="test-agent",
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_storage_for_current_agent"
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_storage"
         ) as mock_get_storage:
             mock_storage = MagicMock()
             mock_storage.load.return_value = []
@@ -401,10 +401,10 @@ class TestMemoryExportCommand:
         ]
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_current_agent_name",
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
             return_value="test-agent",
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_storage_for_current_agent"
+            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_storage"
         ) as mock_get_storage:
             mock_storage = MagicMock()
             mock_storage.load.return_value = mock_facts

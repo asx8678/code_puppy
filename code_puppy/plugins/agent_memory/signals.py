@@ -4,6 +4,8 @@ Detects user feedback patterns in messages to adjust fact confidence:
 - Corrections ("Actually, that's wrong...") → decrease confidence
 - Reinforcements ("Yes, exactly!", "That's right") → increase confidence  
 - Preferences ("I prefer...", "I like...") → mark as preference
+
+Supports English and Chinese language patterns.
 """
 
 from __future__ import annotations
@@ -46,6 +48,7 @@ class Signal:
 
 # Correction patterns - user indicating something is wrong
 _CORRECTION_PATTERNS = [
+    # English patterns
     r"\bactually[,;]?\s+(that'?s|is)\b",
     r"\bwait[,;]?\s+.*\b(wrong|incorrect|not right)\b",
     r"\bno[,;]?\s+(that|it|you|this)\b",
@@ -57,10 +60,26 @@ _CORRECTION_PATTERNS = [
     r"\b(that|it)\s+(should be|is actually|was actually)\s+\w+",
     r"\bplease correct\b",
     r"\bi\s+(don'?t|do not)\s+(like|prefer|use|want)\b",
+    # Chinese patterns - 中文纠正模式
+    r"不对",  # "not right"
+    r"错了",  # "wrong"
+    r"不正确",  # "incorrect"
+    r"有误",  # "has error"
+    r"纠正一下",  # "let me correct"
+    r"更正",  # "correct/update"
+    r"应该?是",  # "should be"
+    r"其实",  # "actually"
+    r"不[是对].*[你它这这]",  # "no, that's/it/you/this..."
+    r"[你它这这].*错了",  # "you/it/this is wrong"
+    r"不[是要对].*[是对好]",  # "this/it is not right/correct"
+    r"不是正确",  # "not correct"
+    r"不[要喜欢].*用",  # "don't like/use"
+    r"我不是.*意思",  # "I didn't mean"
 ]
 
 # Reinforcement patterns - user confirming/agreeing
 _REINFORCEMENT_PATTERNS = [
+    # English patterns
     r"\b(yes|yeah|yep|exactly|correct|right|precisely)[,.]?\s+(that|it|you|this)\b",
     r"\bthat'?s\s+(right|correct|true|accurate|good|perfect|exactly right)\b",
     r"\bis\s+(right|correct|true|accurate|good|perfect|exactly right)\b",
@@ -68,16 +87,48 @@ _REINFORCEMENT_PATTERNS = [
     r"\b(i agree|agreed|makes sense|good point|well said)\b",
     r"\b(thanks|thank you)\s+.*\b(right|correct|helpful|useful)\b",
     r"\b(perfect|excellent|great|awesome|nice)\b",
+    # Chinese patterns - 中文确认模式
+    r"对的",  # "that's right"
+    r"没错",  # "correct/no mistake"
+    r"正确",  # "correct"
+    r"是[这样滴的]",  # "yes/that's right"
+    r"[一]?点[儿]?都没错",  # "absolutely correct"
+    r"完全正确",  # "completely correct"
+    r"[很]?准确",  # "accurate"
+    r"[正好]?说到点子[上]?",  # "well said"
+    r"同意",  # "agree"
+    r"说[得]?对",  # "said it right"
+    r"你[说做讲提]?[得]?[对没错]",  # "you said/did right/correct"
+    r"这样[很]?[对好]",  # "this is right/good"
 ]
 
 # Preference patterns - user stating likes/dislikes
 _PREFERENCE_PATTERNS = [
+    # English patterns
     r"\b(i (really )?(prefer|like|love|enjoy|want|need))\b",
     r"\b(my preference is|my favorite|my preferred)\b",
     r"\b(i (don't|do not|never|always|usually|typically)\s+(like|prefer|use|want|need))\b",
     r"\b(for me|in my case|personally)\s+(i |prefer|like|want|need)\b",
     r"\bi\s+(wish|hate|dislike)\b",
     r"\b(make sure to|remember to|always use)\b",
+    # Chinese patterns - 中文偏好模式
+    r"我.*喜欢",  # "I like"
+    r"我.*偏好",  # "I prefer"
+    r"我.*[想需要][要]?",  # "I want/need"
+    r"我[更]?喜欢",  # "I prefer/like more"
+    r"[我的]?偏好是",  # "my preference is"
+    r"[我的]?最爱是",  # "my favorite is"
+    r"我.*不[想喜欢].*",  # "I don't like/want"
+    r"我.*从来.*",  # "I never..."
+    r"我.*通常.*",  # "I usually..."
+    r"对我来说",  # "for me"
+    r"我个人.*",  # "personally I..."
+    r"我希望",  # "I wish"
+    r"我讨厌",  # "I hate"
+    r"我不喜欢",  # "I don't like"
+    r"记得.*用",  # "remember to use"
+    r"一定.*要",  # "make sure to"
+    r"总是.*用",  # "always use"
 ]
 
 # Pre-compile all patterns for performance

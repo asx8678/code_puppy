@@ -40,6 +40,10 @@ class MemoryConfig:
         min_confidence: Minimum confidence threshold for facts (default: 0.5)
         debounce_ms: Debounce window in milliseconds (default: 30000)
         extraction_enabled: Whether LLM fact extraction is enabled (default: True)
+        # Signal safeguard settings (code-puppy-eed: memory poisoning fix)
+        max_preference_signals_per_fact: int = 10  # Max preference signals per fact
+        preference_signal_decay_hours: float = 168.0  # 7 days default decay
+        preference_rate_limit_seconds: int = 60  # Min seconds between signals from same session
     """
 
     enabled: bool = False
@@ -50,6 +54,10 @@ class MemoryConfig:
     min_confidence: float = 0.5
     debounce_ms: int = 30000
     extraction_enabled: bool = True
+    # Signal safeguard defaults (code-puppy-eed)
+    max_preference_signals_per_fact: int = 10
+    preference_signal_decay_hours: float = 168.0  # 7 days
+    preference_rate_limit_seconds: int = 60
 
 
 def _get_int(key: str, default: int) -> int:

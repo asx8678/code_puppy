@@ -39,6 +39,15 @@ from .extraction import (
     FactExtractor,
     MockLLMClient,
 )
+from .signal_safeguards import (
+    DEFAULT_DECAY_HOURS,
+    DEFAULT_MAX_PREFERENCE_SIGNALS,
+    DEFAULT_RATE_LIMIT_SECONDS,
+    SafeguardManager,
+    SignalApplication,
+    SignalTracker,
+    get_safeguard_manager,
+)
 from .signals import (
     CORRECTION_DELTA,
     PREFERENCE_DELTA,
@@ -55,6 +64,7 @@ from .storage import FileMemoryStorage, Fact
 from .updater import MemoryUpdater, DEFAULT_DEBOUNCE_MS
 
 __all__ = [
+    # Core components
     "DEFAULT_DEBOUNCE_MS",
     "DEFAULT_EXTRACTION_PROMPT",
     "ExtractedFact",
@@ -64,6 +74,7 @@ __all__ = [
     "MemoryConfig",
     "MemoryUpdater",
     "MockLLMClient",
+    # Signal components
     "PREFERENCE_DELTA",
     "REINFORCEMENT_DELTA",
     "Signal",
@@ -73,6 +84,15 @@ __all__ = [
     "has_correction",
     "has_preference",
     "has_reinforcement",
+    # Signal safeguards (code-puppy-eed)
+    "DEFAULT_DECAY_HOURS",
+    "DEFAULT_MAX_PREFERENCE_SIGNALS",
+    "DEFAULT_RATE_LIMIT_SECONDS",
+    "SafeguardManager",
+    "SignalApplication",
+    "SignalTracker",
+    "get_safeguard_manager",
+    # Config
     "load_config",
     "get_config",
     "is_memory_enabled",
