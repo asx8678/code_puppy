@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from rich.markup import escape
 
@@ -54,8 +54,6 @@ except ImportError:
 
 if TYPE_CHECKING:
     from code_puppy.tui.app import CodePuppyApp
-
-from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable

@@ -369,8 +369,6 @@ def _replace_in_file(
             if modified_lines is None:
                 modified_lines = modified.splitlines()
 
-            had_trailing_newline = modified.endswith("\n")
-
             # Pre-compute needle lines and length for cache
             needle_stripped = old_snippet.rstrip("\n")
             needle_lines = needle_stripped.splitlines()
