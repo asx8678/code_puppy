@@ -26,11 +26,11 @@ def get_session_logger_dir() -> Path:
     """Get the session log directory.
 
     Returns:
-        Path to write session directories. Uses session_logger_dir config
-        if set, otherwise defaults to cfg.sessions_dir (DATA_DIR / "sessions").
+        Path to write session directories. Always uses the canonical
+        cfg.sessions_dir (defaults to DATA_DIR / "sessions", typically
+        ~/.code_puppy/sessions).
     """
     cfg = get_puppy_config()
-    # session_logger_dir in config is legacy - prefer cfg.sessions_dir
-    # But if a custom session_logger_dir was set, we should respect it
-    # For now, use the typed config's sessions_dir which is the canonical location
+    # Always use the canonical sessions_dir from PuppyConfig.
+    # There is no separate session_logger_dir config option.
     return cfg.sessions_dir

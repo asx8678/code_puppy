@@ -17,10 +17,14 @@ Add to `~/.code_puppy/puppy.cfg`:
 ```ini
 [puppy]
 session_logger_enabled = true
-# session_logger_dir = ~/.code_puppy/sessions  # optional: defaults to DATA_DIR/sessions
 ```
 
 **Note:** Disabled by default (opt-in) to respect user privacy.
+
+Sessions are written to the canonical `sessions_dir` location (typically
+`~/.code_puppy/sessions`). There is no separate `session_logger_dir` setting;
+the plugin uses the standard sessions directory like all other session-aware
+components.
 
 ## Dogfooding Mode (For Code Puppy Developers)
 

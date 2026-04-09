@@ -9,7 +9,9 @@ Registers callbacks to track agent runs and write structured session archives:
 
 Configuration (puppy.cfg [puppy] section):
     session_logger_enabled = false   # Enable/disable (default: false - opt-in)
-    session_logger_dir = ~/.code_puppy/sessions  # Base directory (default: DATA_DIR/sessions)
+
+Session logs are written to the canonical sessions_dir (typically
+~/.code_puppy/sessions). There is no separate session_logger_dir setting.
 """
 
 import logging
