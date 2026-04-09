@@ -13,6 +13,8 @@ from collections import defaultdict
 from functools import cache, lru_cache
 from typing import Protocol, runtime_checkable
 
+from code_puppy.config_package import get_first_env
+
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.markup import escape as escape_rich_markup
@@ -66,7 +68,7 @@ def _get_code_theme() -> str:
     This is a function (not a module-level constant) so the /theme command
     can switch themes at runtime without requiring a restart.
     """
-    return os.environ.get("CODE_PUPPY_CODE_THEME", "monokai")
+    return get_first_env("CODE_PUPPY_CODE_THEME") or "monokai"
 
 
 # =============================================================================

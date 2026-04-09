@@ -6,9 +6,10 @@ duplication of Console construction patterns throughout the codebase.
 
 from __future__ import annotations
 
-import os
 import sys
 from typing import TYPE_CHECKING
+
+from code_puppy.config_package import env_bool
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -62,10 +63,10 @@ def build_console(
 
     # Determine color settings from environment if not explicitly provided
     if no_color is None:
-        no_color = os.environ.get("CODE_PUPPY_NO_COLOR", "0") == "1"
+        no_color = env_bool("CODE_PUPPY_NO_COLOR", default=False)
 
     if force_terminal is None:
-        force_color = os.environ.get("CODE_PUPPY_FORCE_COLOR", "0") == "1"
+        force_color = env_bool("CODE_PUPPY_FORCE_COLOR", default=False)
         force_terminal = force_color or sys.stdout.isatty()
 
     # Adjust color_system when no_color is enabled

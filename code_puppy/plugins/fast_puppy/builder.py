@@ -16,6 +16,7 @@ import threading
 import time
 from pathlib import Path
 
+from code_puppy.config_package import get_puppy_config
 from code_puppy.messaging import emit_info
 
 logger = logging.getLogger(__name__)
@@ -453,10 +454,8 @@ def _reload_and_patch_crate(crate_spec: dict) -> bool:
 def _check_disable_autobuild() -> bool:
     """Check if rust autobuild is disabled in config."""
     try:
-        from code_puppy.config import get_value
-
-        val = get_value("disable_rust_autobuild")
-        return str(val).strip().lower() in {"1", "true", "yes", "on"}
+        cfg = get_puppy_config()
+        return cfg.rust_autobuild_disabled
     except Exception:
         return False
 

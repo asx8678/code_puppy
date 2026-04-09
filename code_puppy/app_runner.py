@@ -20,6 +20,7 @@ from code_puppy.config import (
     get_use_dbos,
     initialize_command_history_file,
 )
+from code_puppy.config_package import env_bool
 from code_puppy.console import build_console
 from code_puppy.http_utils import find_available_port
 from code_puppy.keymap import KeymapError, validate_cancel_agent_key
@@ -312,12 +313,7 @@ class AppRunner:
         self.configure_agent(args)
 
         current_version = __version__
-        no_version_update = os.getenv("NO_VERSION_UPDATE", "").lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
-        )
+        no_version_update = env_bool("NO_VERSION_UPDATE", default=False)
         if no_version_update:
             emit_system_message(f"Current version: {current_version}")
             emit_system_message(

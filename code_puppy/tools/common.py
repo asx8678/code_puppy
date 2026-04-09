@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable
 
 from code_puppy.async_utils import run_async_sync
+from code_puppy.config_package import env_bool
 
 
 try:
@@ -69,8 +70,8 @@ except ImportError as _messaging_import_err:
         "Messaging system import failed, falling back to direct Console: %s",
         _messaging_import_err,
     )
-    NO_COLOR = os.environ.get("CODE_PUPPY_NO_COLOR", "0") == "1"
-    _force_color = os.environ.get("CODE_PUPPY_FORCE_COLOR", "0") == "1"
+    NO_COLOR = env_bool("CODE_PUPPY_NO_COLOR", default=False)
+    _force_color = env_bool("CODE_PUPPY_FORCE_COLOR", default=False)
     console = Console(
         force_terminal=_force_color or sys.stdout.isatty(),
         color_system=None if NO_COLOR else "auto",
@@ -105,15 +106,15 @@ def should_suppress_browser() -> bool:
     - PYTEST_CURRENT_TEST environment variable (running under pytest)
     """
     # Explicit headless mode
-    if os.getenv("HEADLESS", "").lower() == "true":
+    if env_bool("HEADLESS", default=False):
         return True
 
     # Browser-specific headless mode
-    if os.getenv("BROWSER_HEADLESS", "").lower() == "true":
+    if env_bool("BROWSER_HEADLESS", default=False):
         return True
 
     # Continuous integration environments
-    if os.getenv("CI", "").lower() == "true":
+    if env_bool("CI", default=False):
         return True
 
     # Running under pytest
@@ -488,6 +489,7 @@ def _matches_compiled(path: str, compiled_re: _re.Pattern) -> bool:
             return True
     return False
 
+
 @functools.lru_cache(maxsize=8192)
 def should_ignore_path(path: str) -> bool:
     """Return True if *path* matches any pattern in IGNORE_PATTERNS.
@@ -851,11 +853,7 @@ async def arrow_select_async(
 
     # Pre-compute static preview borders
     box_width = 60
-    border_top = (
-        "<ansiyellow>┌─ Preview "
-        + "─" * (box_width - 10)
-        + "┐</ansiyellow>"
-    )
+    border_top = "<ansiyellow>┌─ Preview " + "─" * (box_width - 10) + "┐</ansiyellow>"
     border_bottom = "<ansiyellow>└" + "─" * box_width + "┘</ansiyellow>"
 
     def get_formatted_text():

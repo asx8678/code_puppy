@@ -6,11 +6,11 @@ terminal QA agents to run simultaneously without profile conflicts.
 """
 
 import logging
-import os
 import uuid
 
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
+from code_puppy.config_package import env_bool
 from code_puppy.messaging import emit_info, emit_success
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ class ChromiumTerminalManager:
 
         # Default to headless=False - we want to see the terminal browser!
         # Can override with CHROMIUM_HEADLESS=true if needed
-        self.headless = os.getenv("CHROMIUM_HEADLESS", "false").lower() == "true"
+        self.headless = env_bool("CHROMIUM_HEADLESS", default=False)
 
         logger.debug(
             f"ChromiumTerminalManager created: session={self.session_id}, "

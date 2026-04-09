@@ -18,6 +18,7 @@ import importlib
 import logging
 
 from code_puppy.callbacks import register_callback
+from code_puppy.config_package import get_puppy_config
 from code_puppy.messaging import emit_info
 
 # Import builder module (may be split into builder.py for line count)
@@ -173,7 +174,9 @@ def _handle_fast_puppy(command: str, name: str):
             total_count = len(CRATES)
 
             if active_count == total_count:
-                emit_info(f"🐕⚡ Fast Puppy: All {total_count} modules built successfully!")
+                emit_info(
+                    f"🐕⚡ Fast Puppy: All {total_count} modules built successfully!"
+                )
             else:
                 emit_info(f"🐕 Fast Puppy: {active_count}/{total_count} modules built:")
                 for crate_spec in CRATES:
@@ -272,13 +275,11 @@ def _handle_fast_puppy(command: str, name: str):
     saved = _read_persisted_preference()
 
     # Check config values for status display
-    disable_autobuild = False
     try:
-        from code_puppy.config import get_value
-        val = get_value("disable_rust_autobuild")
-        disable_autobuild = str(val).strip().lower() in {"1", "true", "yes", "on"} if val else False
+        cfg = get_puppy_config()
+        disable_autobuild = cfg.rust_autobuild_disabled
     except Exception:
-        pass
+        disable_autobuild = False
 
     repo_root = _find_repo_root()
 
@@ -293,7 +294,10 @@ def _handle_fast_puppy(command: str, name: str):
         elif status["installed"] and status["fresh"]:
             state = "✅ installed, fresh"
         elif status["installed"] and not status["fresh"]:
-            state = "⚠️  installed, STALE (src newer than binary) → run /fast_puppy build " + name
+            state = (
+                "⚠️  installed, STALE (src newer than binary) → run /fast_puppy build "
+                + name
+            )
         elif status["crate_dir_found"]:
             state = "❌ not installed (run /fast_puppy build " + name + ")"
         else:
@@ -304,17 +308,25 @@ def _handle_fast_puppy(command: str, name: str):
         emit_info(f"   {name_padded:16} {state}")
 
     # Toolchain and infrastructure
-    emit_info(f"   {'Rust toolchain:':16} {'✅ rustc found' if _has_rust_toolchain() else '❌ not found'}")
+    emit_info(
+        f"   {'Rust toolchain:':16} {'✅ rustc found' if _has_rust_toolchain() else '❌ not found'}"
+    )
     emit_info(f"   {'maturin:':16} {'✅ found' if _has_maturin() else '❌ not found'}")
-    emit_info(f"   {'Crate source:':16} {'✅ workspace found at ' + str(repo_root) if repo_root else '❌ not found'}")
+    emit_info(
+        f"   {'Crate source:':16} {'✅ workspace found at ' + str(repo_root) if repo_root else '❌ not found'}"
+    )
 
     # Runtime status for code_puppy_core (message processing)
-    emit_info(f"   {'User enabled:':16} {'✅ (code_puppy_core toggle)' if rust_status['enabled'] else '❌ disabled'}")
+    emit_info(
+        f"   {'User enabled:':16} {'✅ (code_puppy_core toggle)' if rust_status['enabled'] else '❌ disabled'}"
+    )
 
     # Config file values
     saved_str = str(saved).lower() if saved is not None else "<not set>"
     disable_str = "true" if disable_autobuild else "<not set>"
-    emit_info(f"   {'puppy.cfg:':16} enable_fast_puppy={saved_str}, disable_rust_autobuild={disable_str}")
+    emit_info(
+        f"   {'puppy.cfg:':16} enable_fast_puppy={saved_str}, disable_rust_autobuild={disable_str}"
+    )
 
     # Summary line
     if all(s["active"] for s in crate_statuses):
@@ -324,9 +336,13 @@ def _handle_fast_puppy(command: str, name: str):
         emit_info(f"   → {active_count}/3 Rust accelerators active (see details above)")
     else:
         if not _has_rust_toolchain():
-            emit_info("   → Pure Python mode — install Rust toolchain to enable acceleration")
+            emit_info(
+                "   → Pure Python mode — install Rust toolchain to enable acceleration"
+            )
         else:
-            emit_info("   → Rust toolchain found but no accelerators active — run /fast_puppy build")
+            emit_info(
+                "   → Rust toolchain found but no accelerators active — run /fast_puppy build"
+            )
 
     return True
 

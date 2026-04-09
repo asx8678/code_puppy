@@ -5,7 +5,7 @@ interactive_mode() from interactive_loop.py. Called by AppRunner when
 TUI mode is enabled.
 """
 
-import os
+from code_puppy.config_package import env_bool
 
 
 def is_tui_enabled() -> bool:
@@ -15,8 +15,7 @@ def is_tui_enabled() -> bool:
     Set CODE_PUPPY_TUI=1 to enable it. Otherwise the classic
     prompt_toolkit UI is used.
     """
-    tui = os.getenv("CODE_PUPPY_TUI", "").lower()
-    return tui in ("1", "true", "yes", "on")
+    return env_bool("CODE_PUPPY_TUI", default=False)
 
 
 async def textual_interactive_mode(

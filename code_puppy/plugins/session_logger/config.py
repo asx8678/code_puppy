@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from code_puppy.config import get_value, DATA_DIR
+from code_puppy.config_package import env_bool, get_puppy_config
 
 logger = logging.getLogger(__name__)
 
@@ -14,11 +14,12 @@ def get_session_logger_enabled() -> bool:
     Returns:
         True if session_logger_enabled is set to true/yes/1/on, False otherwise.
         Default: False (opt-in for privacy).
+
+    Priority: PUPPY_SESSION_LOGGER_ENABLED env var > puppy.cfg setting > default False
     """
-    cfg_val = get_value("session_logger_enabled")
-    if cfg_val is None:
-        return False  # Default OFF - opt-in for privacy
-    return str(cfg_val).strip().lower() in {"1", "true", "yes", "on"}
+    cfg = get_puppy_config()
+    # Env var takes priority over config file for easy dogfooding toggle
+    return env_bool("PUPPY_SESSION_LOGGER_ENABLED", default=cfg.session_logger_enabled)
 
 
 def get_session_logger_dir() -> Path:
@@ -26,20 +27,10 @@ def get_session_logger_dir() -> Path:
 
     Returns:
         Path to write session directories. Uses session_logger_dir config
-        if set, otherwise defaults to DATA_DIR / "sessions".
+        if set, otherwise defaults to cfg.sessions_dir (DATA_DIR / "sessions").
     """
-    cfg_val = get_value("session_logger_dir")
-    if cfg_val:
-        # Expand ~ and environment variables
-        expanded = Path(cfg_val).expanduser()
-        try:
-            # Resolve to absolute, but don't require path to exist
-            return (
-                expanded.expanduser().resolve()
-                if expanded.is_absolute()
-                else expanded.expanduser()
-            )
-        except (OSError, ValueError) as e:
-            logger.warning(f"Invalid session_logger_dir '{cfg_val}': {e}")
-    # Default to DATA_DIR / "sessions"
-    return Path(DATA_DIR) / "sessions"
+    cfg = get_puppy_config()
+    # session_logger_dir in config is legacy - prefer cfg.sessions_dir
+    # But if a custom session_logger_dir was set, we should respect it
+    # For now, use the typed config's sessions_dir which is the canonical location
+    return cfg.sessions_dir

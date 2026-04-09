@@ -14,11 +14,13 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from code_puppy.config import get_http2
+from code_puppy.config_package import env_bool, get_first_env
+
 from .request_cache import RequestCacheMixin
 
 if TYPE_CHECKING:
     import requests
-from code_puppy.config import get_http2
 
 
 @dataclass
@@ -43,16 +45,13 @@ def _resolve_proxy_config(verify: bool | str | None = None) -> ProxyConfig:
 
     http2_enabled = get_http2()
 
-    disable_retry = os.environ.get(
-        "CODE_PUPPY_DISABLE_RETRY_TRANSPORT", ""
-    ).lower() in ("1", "true", "yes")
+    disable_retry = env_bool("CODE_PUPPY_DISABLE_RETRY_TRANSPORT", default=False)
 
-    has_proxy = bool(
-        os.environ.get("HTTP_PROXY")
-        or os.environ.get("HTTPS_PROXY")
-        or os.environ.get("http_proxy")
-        or os.environ.get("https_proxy")
+    # Check for any proxy env var using multi-name fallback
+    proxy_value = get_first_env(
+        "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"
     )
+    has_proxy = bool(proxy_value)
 
     # Determine trust_env and verify based on proxy/retry settings
     if disable_retry:
@@ -65,15 +64,8 @@ def _resolve_proxy_config(verify: bool | str | None = None) -> ProxyConfig:
     else:
         trust_env = False
 
-    # Extract proxy URL
-    proxy_url = None
-    if has_proxy:
-        proxy_url = (
-            os.environ.get("HTTPS_PROXY")
-            or os.environ.get("https_proxy")
-            or os.environ.get("HTTP_PROXY")
-            or os.environ.get("http_proxy")
-        )
+    # Extract proxy URL (re-use the already-resolved proxy value)
+    proxy_url = proxy_value if has_proxy else None
 
     return ProxyConfig(
         verify=verify,

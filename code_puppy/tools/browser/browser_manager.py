@@ -6,13 +6,13 @@ Supports multiple simultaneous instances with unique profile directories.
 import asyncio
 import atexit
 import contextvars
-import os
 from pathlib import Path
 from typing import Callable
 
 from playwright.async_api import Browser, BrowserContext, Page
 
 from code_puppy import config
+from code_puppy.config_package import env_bool
 from code_puppy.messaging import emit_info, emit_success, emit_warning
 
 # Registry for custom browser types from plugins (e.g., Camoufox for stealth browsing)
@@ -121,7 +121,8 @@ class BrowserManager:
 
         # Default to headless=True (no browser spam during tests)
         # Override with BROWSER_HEADLESS=false to see the browser
-        self.headless = os.getenv("BROWSER_HEADLESS", "true").lower() != "false"
+        # Note: BROWSER_HEADLESS=false means headless=False, so we invert the bool
+        self.headless = not env_bool("BROWSER_HEADLESS", default=True)
         self.homepage = "https://www.google.com"
 
         # Unique profile directory per session for browser state

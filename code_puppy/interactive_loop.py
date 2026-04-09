@@ -1,11 +1,11 @@
 """Interactive REPL loop for Code Puppy — houses interactive_mode() and helpers."""
 
 import asyncio
-import os
 import sys
 from pathlib import Path
 
 from code_puppy.command_line.attachments import parse_prompt_attachments
+from code_puppy.config_package import env_bool
 from code_puppy.prompt_runner import run_prompt_with_attachments
 from code_puppy.config import (
     AUTOSAVE_DIR,
@@ -15,7 +15,6 @@ from code_puppy.config import (
 )
 from code_puppy.keymap import get_cancel_agent_display_name
 from code_puppy.repl_session import (
-    load_session,
     record_command,
     save_session,
 )
@@ -369,7 +368,7 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                         )
 
                         # Allow environment variable override for tests
-                        if os.getenv("CODE_PUPPY_NO_TUI") == "1":
+                        if env_bool("CODE_PUPPY_NO_TUI", default=False):
                             use_interactive_picker = False
 
                         if use_interactive_picker:

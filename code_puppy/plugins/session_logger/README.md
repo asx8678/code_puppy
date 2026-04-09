@@ -22,6 +22,33 @@ session_logger_enabled = true
 
 **Note:** Disabled by default (opt-in) to respect user privacy.
 
+## Dogfooding Mode (For Code Puppy Developers)
+
+Want to capture your own agent runs while developing Code Puppy? The quickest way is via environment variable (no config file edit needed):
+
+```bash
+# Set before running code_puppy
+export PUPPY_SESSION_LOGGER_ENABLED=true
+code_puppy
+```
+
+Or copy `.env.example` to `.env` and uncomment:
+```bash
+PUPPY_SESSION_LOGGER_ENABLED=true
+```
+
+**What it captures:**
+- Every agent run with timestamps
+- All tool invocations with args/results
+- Session manifest with success/failure status
+
+**Output location:** `~/.code_puppy/sessions/YYYYmmDD_HHMMSS_session-<id>/`
+
+Useful for:
+- Debugging agent behavior during feature development
+- QA validation of tool call sequences
+- Creating replay scenarios from captured sessions
+
 ## Output Location
 
 Sessions are written to timestamped subdirectories:

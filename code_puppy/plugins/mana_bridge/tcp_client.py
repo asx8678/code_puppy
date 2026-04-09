@@ -8,7 +8,6 @@ exponential backoff and a background sender thread for non-blocking writes.
 from __future__ import annotations
 
 import logging
-import os
 import queue
 import socket
 import struct
@@ -17,10 +16,12 @@ import time
 from typing import Any
 from uuid import uuid4
 
+from code_puppy.config_package import env_int, get_first_env
+
 logger = logging.getLogger(__name__)
 
-_BRIDGE_HOST = os.environ.get("CODE_PUPPY_BRIDGE_HOST", "127.0.0.1")
-_BRIDGE_PORT = int(os.environ.get("CODE_PUPPY_BRIDGE_PORT", "9847"))
+_BRIDGE_HOST = get_first_env("CODE_PUPPY_BRIDGE_HOST") or "127.0.0.1"
+_BRIDGE_PORT = env_int("CODE_PUPPY_BRIDGE_PORT", default=9847)
 _DEFAULT_TIMEOUT = 5.0  # seconds for socket connect/send
 
 # Reconnect backoff constants
