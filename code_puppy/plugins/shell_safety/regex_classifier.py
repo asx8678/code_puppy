@@ -490,14 +490,6 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
                 blocked=False,
                 is_ambiguous=False,
             )
-        if pattern.match(command):
-            return RegexClassificationResult(
-                risk="none",
-                reasoning=f"Safe pattern detected: {description}",
-                blocked=False,
-                is_ambiguous=False,
-            )
-    
     # No pattern matched - needs LLM assessment
     return RegexClassificationResult(
         risk="ambiguous",
