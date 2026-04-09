@@ -397,9 +397,9 @@ class RunLimiter:
 
         If the new limit is higher, grow both semaphores.
         If lower, active runs are unaffected; subsequent acquires respect the new limit.
-        For shrinking with in-flight runs, we create fresh semaphores with the new
-        capacity while preserving active counts. Existing releases will drain to
-        the old semaphore; new acquires get the new capacity.
+        For shrinking, a deficit counter tracks how many releases should NOT create
+        new capacity. When a release happens while deficit > 0, the slot is absorbed
+        and the semaphore is not released, effectively reducing capacity over time.
         """
         # Validate before applying
         if new_config.max_concurrent_runs < 1:
@@ -427,31 +427,12 @@ class RunLimiter:
             with self._state_lock:
                 self._shrink_deficit = 0
         elif new_limit < old_limit:
-            # Shrink: Track deficit - next N releases won't create capacity
+            # Shrink: Track deficit - next N releases won't create capacity.
+            # The _shrink_deficit counter handles shrink semantics: when slots
+            # are released, they don't call _async_sem.release() if deficit > 0,
+            # effectively reducing the semaphore capacity over time.
             with self._state_lock:
                 self._shrink_deficit = old_limit - new_limit
-            # Also try to drain existing semaphore capacity if any
-            # This prevents new waiters from acquiring during shrink
-            excess_capacity = old_limit - self.active_count
-            for _ in range(excess_capacity):
-                # Create a task to acquire and hold this slot temporarily
-                # to drain the semaphore capacity
-                asyncio.create_task(self._drain_slot())
-
-    async def _drain_slot(self):
-        """Helper to drain a slot from the semaphore during shrink."""
-        try:
-            await self._async_sem.acquire()
-            # Hold briefly then release - this drains and restores without
-            # incrementing active_count (we don't call our acquire)
-            await asyncio.sleep(0.001)
-            with self._state_lock:
-                if self._shrink_deficit > 0:
-                    self._shrink_deficit -= 1
-                else:
-                    self._async_sem.release()
-        except Exception:
-            pass
 
 
 # ============================================================================

@@ -356,6 +356,63 @@ class TestConfigReload:
 
         assert limiter.effective_limit == original_limit
 
+    def test_update_config_from_sync_context_no_crash(self, limiter):
+        """update_config() called from sync context must not crash.
+
+        Regression test for: asyncio.create_task() called with no running loop.
+        The shrink path in update_config() must work from sync contexts.
+        """
+        # Start with a higher limit
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=5))
+
+        # Fill up with some active runs (but not all)
+        limiter.acquire_sync(blocking=False)
+        limiter.acquire_sync(blocking=False)
+        assert limiter.active_count == 2
+
+        # Shrink from sync context - this must NOT crash
+        shrink_config = RunLimiterConfig(max_concurrent_runs=2)
+        limiter.update_config(shrink_config)  # Should not raise RuntimeError
+
+        assert limiter.effective_limit == 2
+
+    def test_shrink_then_grow_no_slot_leak(self, limiter):
+        """Shrink followed by grow must not leak slots.
+
+        Regression test for: _drain_slot over-draining causing permanent slot loss.
+        After shrinking and growing back, the full capacity should be available.
+        """
+        # Start with limit 3
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=3))
+
+        # Acquire 2 slots
+        limiter.acquire_sync(blocking=False)
+        limiter.acquire_sync(blocking=False)
+        assert limiter.active_count == 2
+
+        # Shrink to 1 - active runs continue, deficit = 1
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=1))
+        assert limiter.effective_limit == 1
+
+        # Release one slot - deficit absorbs it, no semaphore release
+        limiter.release()
+        assert limiter.active_count == 1
+
+        # Release second slot - now active == 0
+        limiter.release()
+        assert limiter.active_count == 0
+
+        # Grow back to 3
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=3))
+        assert limiter.effective_limit == 3
+
+        # Should be able to acquire all 3 slots
+        for i in range(3):
+            acquired = limiter.acquire_sync(blocking=False)
+            assert acquired, f"Failed to acquire slot {i+1} after shrink/grow cycle"
+
+        assert limiter.active_count == 3
+
 
 @pytest.mark.asyncio
 class TestAsyncConfigUpdates:
@@ -393,48 +450,69 @@ class TestAsyncConfigUpdates:
             await t
 
     async def test_update_config_lower_limit_respects_in_flight(self):
-        """Lowering limit keeps existing acquisitions active."""
+        """Lowering limit keeps existing acquisitions active.
+
+        With deficit-based shrinking, the deficit counter ensures that
+        releases don't restore capacity until the deficit is cleared.
+        """
         limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=3))
 
         # Use separate tasks created BEFORE any acquire (independent contexts)
         async def acquire_slot():
             await limiter.acquire_async()
 
+        # Fill the limiter completely first (3 slots)
         task1 = asyncio.create_task(acquire_slot())
         task2 = asyncio.create_task(acquire_slot())
+        task3 = asyncio.create_task(acquire_slot())
         await asyncio.sleep(0.05)
-        assert limiter.active_count == 2
+        assert limiter.active_count == 3
 
+        # Shrink to 1 - this sets deficit=2 while 3 are still active
         new_config = RunLimiterConfig(max_concurrent_runs=1)
         limiter.update_config(new_config)
 
-        assert limiter.active_count == 2
+        # Note: active_count stays 3 because we haven't released anything yet
+        # After shrink, releases will absorb the deficit first
         assert limiter.effective_limit == 1
 
-        # New waiter should block because active==limit
+        # New waiter should block because semaphore is empty (3 slots in use)
         new_acquired = asyncio.Event()
 
         async def new_waiter():
             await limiter.acquire_async()
             new_acquired.set()
 
-        task3 = asyncio.create_task(new_waiter())
+        task4 = asyncio.create_task(new_waiter())
         await asyncio.sleep(0.05)
         assert not new_acquired.is_set()
 
-        # Must release BOTH slots since limit is now 1
-        limiter.release()  # active=1
+        # Release first slot - deficit absorbs it, no capacity restored
+        # active goes to 2, deficit goes to 1, semaphore stays at 0
+        limiter.release()
         await asyncio.sleep(0.05)
-        # Still blocked because active==limit
         assert not new_acquired.is_set()
 
-        limiter.release()  # active=0, waiter can acquire
+        # Release second slot - deficit absorbs it, still no capacity
+        # active goes to 1, deficit goes to 0, semaphore stays at 0
+        limiter.release()
+        await asyncio.sleep(0.05)
+        assert not new_acquired.is_set()
+
+        # Release third slot - now capacity is restored
+        # active goes to 0, deficit stays at 0, semaphore releases 1 slot
+        limiter.release()
         await asyncio.wait_for(new_acquired.wait(), timeout=1.0)
 
-        limiter.release()
-        await task3
+        # Clean up: release remaining slots
+        limiter.release()  # from task4
+        await task4
+        limiter.release()  # from task1
+        limiter.release()  # from task2
+        limiter.release()  # from task3
         await task1
         await task2
+        await task3
 
 
 # ============================================================================
