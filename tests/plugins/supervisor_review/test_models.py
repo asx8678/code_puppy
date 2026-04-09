@@ -228,6 +228,86 @@ class TestReviewLoopConfig:
         )
         assert cfg.session_prefix is None
 
+    # Timeout configuration tests (code_puppy-pyi)
+    def test_timeout_default_is_none(self):
+        """Default per_invocation_timeout_seconds is None (no timeout)."""
+        cfg = ReviewLoopConfig(
+            worker_agents=["a"],
+            supervisor_agent="sup",
+            task_prompt="x",
+        )
+        assert cfg.per_invocation_timeout_seconds is None
+
+    def test_timeout_positive_allowed(self):
+        """Positive timeout values are allowed."""
+        cfg = ReviewLoopConfig(
+            worker_agents=["a"],
+            supervisor_agent="sup",
+            task_prompt="x",
+            per_invocation_timeout_seconds=30.0,
+        )
+        assert cfg.per_invocation_timeout_seconds == 30.0
+
+    def test_timeout_zero_raises(self):
+        """Zero timeout must be rejected."""
+        with pytest.raises(ValueError, match="per_invocation_timeout_seconds"):
+            ReviewLoopConfig(
+                worker_agents=["a"],
+                supervisor_agent="sup",
+                task_prompt="x",
+                per_invocation_timeout_seconds=0,
+            )
+
+    def test_timeout_negative_raises(self):
+        """Negative timeout must be rejected."""
+        with pytest.raises(ValueError, match="per_invocation_timeout_seconds"):
+            ReviewLoopConfig(
+                worker_agents=["a"],
+                supervisor_agent="sup",
+                task_prompt="x",
+                per_invocation_timeout_seconds=-1.0,
+            )
+
+    # Feedback history budget tests (code_puppy-evn)
+    def test_feedback_budget_default(self):
+        """Default feedback_history_budget_chars is 8000."""
+        cfg = ReviewLoopConfig(
+            worker_agents=["a"],
+            supervisor_agent="sup",
+            task_prompt="x",
+        )
+        assert cfg.feedback_history_budget_chars == 8000
+
+    def test_feedback_budget_custom_allowed(self):
+        """Custom feedback budget is allowed."""
+        cfg = ReviewLoopConfig(
+            worker_agents=["a"],
+            supervisor_agent="sup",
+            task_prompt="x",
+            feedback_history_budget_chars=4000,
+        )
+        assert cfg.feedback_history_budget_chars == 4000
+
+    def test_feedback_budget_too_low_raises(self):
+        """Feedback budget below 100 must be rejected."""
+        with pytest.raises(ValueError, match="feedback_history_budget_chars"):
+            ReviewLoopConfig(
+                worker_agents=["a"],
+                supervisor_agent="sup",
+                task_prompt="x",
+                feedback_history_budget_chars=50,
+            )
+
+    def test_feedback_budget_minimum_allowed(self):
+        """Exactly 100 chars is the minimum allowed."""
+        cfg = ReviewLoopConfig(
+            worker_agents=["a"],
+            supervisor_agent="sup",
+            task_prompt="x",
+            feedback_history_budget_chars=100,
+        )
+        assert cfg.feedback_history_budget_chars == 100
+
 
 class TestSupervisorReviewResult:
     def test_to_dict_empty(self):

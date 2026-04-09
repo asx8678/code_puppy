@@ -55,18 +55,59 @@ InvokeAgentFn = Callable[..., Awaitable[str]]
 # ---------------------------------------------------------------------------
 
 
-def format_feedback_history(feedback: list[FeedbackEntry]) -> str:
+def format_feedback_history(
+    feedback: list[FeedbackEntry],
+    budget_chars: int = 8000,
+) -> str:
     """Format accumulated feedback into an injectable prompt block.
 
     Port of Orion's _format_feedback_history (orchestrator.py:167-176).
+    With bounded growth protection: trims oldest feedback to stay within budget.
+
+    Args:
+        feedback: List of feedback entries from previous iterations
+        budget_chars: Maximum character budget for the formatted history
+
+    Returns:
+        Formatted feedback string trimmed to fit within budget
     """
     if not feedback:
         return ""
+
+    # Build entries from newest to oldest until budget exhausted
     lines: list[str] = []
-    for entry in feedback:
-        lines.append(f"### Iteration {entry.iteration} feedback:")
-        lines.append(entry.supervisor_output.strip())
-        lines.append("")
+    current_len = 0
+    entries_included = 0
+    header_note = ""
+
+    # Always try to include at least the most recent feedback entry
+    for entry in reversed(feedback):
+        entry_lines = [
+            f"### Iteration {entry.iteration} feedback:",
+            entry.supervisor_output.strip(),
+            "",
+        ]
+        entry_text = "\n".join(entry_lines)
+        entry_len = len(entry_text)
+
+        # Check if adding this entry would exceed budget (with margin for header)
+        header_overhead = 100 if entries_included < len(feedback) else 0
+        if current_len + entry_len + len(header_note) + header_overhead > budget_chars and entries_included > 0:
+            # Budget exhausted, stop adding older entries
+            omitted = len(feedback) - entries_included
+            if omitted > 0:
+                header_note = f"[Feedback from {omitted} earlier iteration(s) omitted to stay within prompt budget]\n\n"
+            break
+
+        lines.extend(entry_lines)
+        current_len += entry_len
+        entries_included += 1
+
+    # Reverse to maintain chronological order (oldest first of included)
+    lines.reverse()
+
+    if header_note:
+        return header_note + "\n".join(lines).strip()
     return "\n".join(lines).strip()
 
 
@@ -74,17 +115,24 @@ def build_iteration_prompt(
     task_prompt: str,
     feedback: list[FeedbackEntry],
     iteration: int,
+    feedback_budget_chars: int = 8000,
 ) -> str:
     """Construct the prompt for a worker agent on iteration N.
 
     On iteration 1, returns task_prompt unchanged. On later iterations, appends
     a "Previous supervisor feedback to address" block with all accumulated
     feedback, matching Orion's pattern at orchestrator.py:220-226.
+
+    Args:
+        task_prompt: The original task description
+        feedback: List of feedback entries from previous iterations
+        iteration: Current iteration number (1-indexed)
+        feedback_budget_chars: Character budget for feedback history
     """
     if iteration == 1 or not feedback:
         return task_prompt
 
-    feedback_block = format_feedback_history(feedback)
+    feedback_block = format_feedback_history(feedback, budget_chars=feedback_budget_chars)
     return (
         f"{task_prompt}\n\n"
         f"## Previous supervisor feedback to address (iteration {iteration}):\n\n"
@@ -212,19 +260,41 @@ async def run_supervisor_review_loop(
 
         # 1. Run each worker agent sequentially
         iteration_prompt = build_iteration_prompt(
-            config.task_prompt, feedback_history, iteration
+            config.task_prompt,
+            feedback_history,
+            iteration,
+            feedback_budget_chars=config.feedback_history_budget_chars,
         )
 
         agents_failed = False
         for agent_name in config.worker_agents:
             session_id = _build_session_id(config.session_prefix, agent_name, iteration)
             try:
-                output = await invoke(
-                    agent_name=agent_name,
-                    prompt=iteration_prompt,
-                    session_id=session_id,
-                )
+                # Apply timeout if configured
+                if config.per_invocation_timeout_seconds is not None:
+                    output = await asyncio.wait_for(
+                        invoke(
+                            agent_name=agent_name,
+                            prompt=iteration_prompt,
+                            session_id=session_id,
+                        ),
+                        timeout=config.per_invocation_timeout_seconds,
+                    )
+                else:
+                    output = await invoke(
+                        agent_name=agent_name,
+                        prompt=iteration_prompt,
+                        session_id=session_id,
+                    )
                 worker_outputs[agent_name] = str(output) if output is not None else ""
+            except asyncio.TimeoutError:
+                err_msg = f"worker agent {agent_name!r} timed out after {config.per_invocation_timeout_seconds}s"
+                logger.exception("supervisor_review: %s", err_msg)
+                iter_result.error = err_msg
+                worker_outputs[agent_name] = f"[TIMEOUT after {config.per_invocation_timeout_seconds}s]"
+                agents_failed = True
+                last_error = err_msg
+                break  # don't call supervisor if a worker timed out
             except Exception as exc:
                 err_msg = f"worker agent {agent_name!r} failed: {exc}"
                 logger.exception("supervisor_review: %s", err_msg)
@@ -249,14 +319,33 @@ async def run_supervisor_review_loop(
             config.session_prefix, config.supervisor_agent, iteration
         )
         try:
-            supervisor_output = await invoke(
-                agent_name=config.supervisor_agent,
-                prompt=supervisor_prompt,
-                session_id=supervisor_session,
-            )
+            # Apply timeout if configured
+            if config.per_invocation_timeout_seconds is not None:
+                supervisor_output = await asyncio.wait_for(
+                    invoke(
+                        agent_name=config.supervisor_agent,
+                        prompt=supervisor_prompt,
+                        session_id=supervisor_session,
+                    ),
+                    timeout=config.per_invocation_timeout_seconds,
+                )
+            else:
+                supervisor_output = await invoke(
+                    agent_name=config.supervisor_agent,
+                    prompt=supervisor_prompt,
+                    session_id=supervisor_session,
+                )
             supervisor_output = (
                 str(supervisor_output) if supervisor_output is not None else ""
             )
+        except asyncio.TimeoutError:
+            err_msg = f"supervisor agent {config.supervisor_agent!r} timed out after {config.per_invocation_timeout_seconds}s"
+            logger.exception("supervisor_review: %s", err_msg)
+            iter_result.error = err_msg
+            iter_result.duration_seconds = time.time() - iter_start
+            iterations.append(iter_result)
+            last_error = err_msg
+            break
         except Exception as exc:
             err_msg = f"supervisor agent {config.supervisor_agent!r} failed: {exc}"
             logger.exception("supervisor_review: %s", err_msg)

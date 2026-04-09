@@ -595,3 +595,200 @@ class TestWriteArtifactsPathTraversal:
         assert (artifacts_dir / "iter1_worker.log").exists()
         assert (artifacts_dir / "iter1_supervisor.log").exists()
         assert (artifacts_dir / "summary.json").exists()
+
+
+class TestTimeoutHandling:
+    """Regression tests for per_invocation_timeout_seconds (code_puppy-pyi)."""
+
+    @pytest.mark.asyncio
+    async def test_worker_timeout_graceful_failure(self):
+        """Hung worker agent times out gracefully with proper error recording."""
+        import asyncio
+
+        async def slow_worker(agent_name, prompt, session_id=None):
+            if agent_name == "worker":
+                # Simulate a hung agent that never returns
+                await asyncio.sleep(1000)
+            return "supervisor output"
+
+        cfg = ReviewLoopConfig(
+            worker_agents=["worker"],
+            supervisor_agent="sup",
+            task_prompt="task",
+            per_invocation_timeout_seconds=0.1,  # Very short timeout
+        )
+        result = await run_supervisor_review_loop(cfg, invoke_agent_fn=slow_worker)
+        assert result.success is False
+        assert result.error is not None
+        assert "timed out after 0.1s" in result.error
+        assert result.iterations_run == 1
+        # Check that the timeout was recorded in the iteration result
+        assert result.iterations[0].error is not None
+        assert "timed out" in result.iterations[0].error
+
+    @pytest.mark.asyncio
+    async def test_supervisor_timeout_graceful_failure(self):
+        """Hung supervisor agent times out gracefully with proper error recording."""
+        import asyncio
+
+        async def slow_supervisor(agent_name, prompt, session_id=None):
+            if agent_name == "sup":
+                # Simulate a hung supervisor
+                await asyncio.sleep(1000)
+            return "worker output"
+
+        cfg = ReviewLoopConfig(
+            worker_agents=["worker"],
+            supervisor_agent="sup",
+            task_prompt="task",
+            per_invocation_timeout_seconds=0.1,
+        )
+        result = await run_supervisor_review_loop(cfg, invoke_agent_fn=slow_supervisor)
+        assert result.success is False
+        assert result.error is not None
+        assert "supervisor agent" in result.error
+        assert "timed out" in result.error
+
+    @pytest.mark.asyncio
+    async def test_no_timeout_allows_slow_agents(self):
+        """When timeout is None (default), slow agents should complete."""
+        import asyncio
+
+        async def slightly_slow_agent(agent_name, prompt, session_id=None):
+            await asyncio.sleep(0.01)  # Small delay, but within reason
+            if agent_name == "sup":
+                return '{"verdict": "approved"}'
+            return "worker output"
+
+        cfg = ReviewLoopConfig(
+            worker_agents=["worker"],
+            supervisor_agent="sup",
+            task_prompt="task",
+            per_invocation_timeout_seconds=None,  # No timeout
+        )
+        result = await run_supervisor_review_loop(cfg, invoke_agent_fn=slightly_slow_agent)
+        assert result.success is True
+        assert result.iterations_run == 1
+
+
+class TestBoundedFeedbackHistory:
+    """Regression tests for feedback history budget (code_puppy-evn)."""
+
+    def test_format_feedback_history_empty(self):
+        """Empty feedback returns empty string."""
+        from code_puppy.plugins.supervisor_review.orchestrator import format_feedback_history
+
+        result = format_feedback_history([])
+        assert result == ""
+
+    def test_format_feedback_history_respects_budget(self):
+        """Feedback history is trimmed to respect character budget."""
+        from code_puppy.plugins.supervisor_review.models import FeedbackEntry
+        from code_puppy.plugins.supervisor_review.orchestrator import format_feedback_history
+
+        # Create many long feedback entries
+        entries = [
+            FeedbackEntry(iteration=i, supervisor_output=f"Feedback for iteration {i}: " + "x" * 500)
+            for i in range(1, 21)  # 20 iterations of ~550 chars each
+        ]
+
+        # With a tight budget, only recent entries should be included
+        result = format_feedback_history(entries, budget_chars=2000)
+        # Should include a note about omitted entries
+        assert "omitted" in result or len(result) <= 2000 + 100  # budget + margin
+        # Most recent iteration should be present
+        assert "Iteration 20 feedback" in result
+        # Very old iterations should be omitted or the text should be bounded
+        assert len(result) < 5000  # Definitely much smaller than full history
+
+    def test_format_feedback_history_keeps_most_recent(self):
+        """Most recent feedback is always included even with tight budget."""
+        from code_puppy.plugins.supervisor_review.models import FeedbackEntry
+        from code_puppy.plugins.supervisor_review.orchestrator import format_feedback_history
+
+        entries = [
+            FeedbackEntry(iteration=i, supervisor_output=f"Feedback {i}: " + "y" * 1000)
+            for i in range(1, 11)
+        ]
+
+        # Very tight budget - but should still include most recent
+        result = format_feedback_history(entries, budget_chars=500)
+        # Should mention the most recent iteration
+        assert "Iteration 10" in result
+        # Should have some content from the most recent feedback
+        assert "Feedback 10" in result
+
+    def test_format_feedback_history_omission_note(self):
+        """When entries are omitted, a note explains why."""
+        from code_puppy.plugins.supervisor_review.models import FeedbackEntry
+        from code_puppy.plugins.supervisor_review.orchestrator import format_feedback_history
+
+        entries = [
+            FeedbackEntry(iteration=i, supervisor_output=f"Feedback for iteration {i}")
+            for i in range(1, 6)
+        ]
+
+        # Tight budget should cause some omissions
+        result = format_feedback_history(entries, budget_chars=200)
+        # Should have a note about omitted entries
+        if "omitted" in result:
+            # Note format check
+            assert "earlier iteration(s) omitted" in result
+            assert "budget" in result.lower()
+
+    def test_feedback_budget_in_prompt(self):
+        """Feedback budget parameter affects prompt size."""
+        from code_puppy.plugins.supervisor_review.models import FeedbackEntry
+        from code_puppy.plugins.supervisor_review.orchestrator import build_iteration_prompt
+
+        entries = [
+            FeedbackEntry(iteration=i, supervisor_output=f"Iteration {i} feedback: " + "z" * 500)
+            for i in range(1, 11)
+        ]
+
+        # Large budget should include more content
+        large_budget_prompt = build_iteration_prompt("task", entries, iteration=2, feedback_budget_chars=10000)
+        # Small budget should be more compact
+        small_budget_prompt = build_iteration_prompt("task", entries, iteration=2, feedback_budget_chars=500)
+
+        assert len(large_budget_prompt) > len(small_budget_prompt)
+        # Both should include the most recent feedback
+        assert "Iteration 10" in large_budget_prompt
+        assert "Iteration 10" in small_budget_prompt
+
+    @pytest.mark.asyncio
+    async def test_feedback_history_bounded_in_loop(self):
+        """End-to-end: feedback history growth is bounded during review loop."""
+        import json
+
+        fake = FakeAgentScript(
+            {
+                "worker": ["attempt"] * 10,
+                "sup": [json.dumps({"verdict": "rejected", "reason": "x" * 1000})] * 9 + [json.dumps({"verdict": "approved"})],
+            }
+        )
+        cfg = ReviewLoopConfig(
+            worker_agents=["worker"],
+            supervisor_agent="sup",
+            task_prompt="task",
+            max_iterations=10,
+            feedback_history_budget_chars=2000,  # Tight budget
+        )
+        result = await run_supervisor_review_loop(cfg, invoke_agent_fn=fake)
+
+        # Should have run all iterations
+        assert result.iterations_run == 10
+        # Should have limited feedback history
+        # The feedback entries themselves are not truncated, but the prompt is bounded
+        # Check that the feedback history doesn't grow unbounded in memory
+        total_feedback_len = sum(
+            len(fe.supervisor_output) for fe in result.feedback_history
+        )
+        # Raw feedback might be large, but prompts should respect budget
+        assert len(result.feedback_history) == 9  # 9 rejected before approval
+
+        # Verify prompts in worker calls respect budget
+        worker_calls = [c for c in fake.calls if c["agent_name"] == "worker"]
+        # Later worker calls should have bounded prompt size
+        for call in worker_calls[3:]:  # Check middle/later calls
+            assert len(call["prompt"]) < 10000  # Should be bounded, not unbounded

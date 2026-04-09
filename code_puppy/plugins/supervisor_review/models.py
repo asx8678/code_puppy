@@ -78,6 +78,10 @@ class ReviewLoopConfig:
     max_iterations: int = 3
     satisfaction_mode: str = "structured"  # "structured" | "keyword" | "llm_judge"
     session_prefix: str | None = None
+    per_invocation_timeout_seconds: float | None = None
+    """Timeout for each worker/supervisor agent invocation. None means no timeout."""
+    feedback_history_budget_chars: int = 8000
+    """Character budget for feedback history in prompts. Older feedback is trimmed."""
 
     def __post_init__(self) -> None:
         if not self.worker_agents:
@@ -97,6 +101,14 @@ class ReviewLoopConfig:
             raise ValueError(
                 f"session_prefix must match allowlist pattern '^[a-zA-Z0-9_-]{{1,64}}$'; "
                 f"got {self.session_prefix!r}"
+            )
+        if self.per_invocation_timeout_seconds is not None and self.per_invocation_timeout_seconds <= 0:
+            raise ValueError(
+                f"per_invocation_timeout_seconds must be positive, got {self.per_invocation_timeout_seconds}"
+            )
+        if self.feedback_history_budget_chars < 100:
+            raise ValueError(
+                f"feedback_history_budget_chars must be at least 100, got {self.feedback_history_budget_chars}"
             )
 
 
