@@ -18,10 +18,12 @@ def _make_skill(name="skill-a", path="/tmp/skills/skill-a"):
 def _make_metadata(
     name="skill-a", desc="A skill", tags=None, path="/tmp/skills/skill-a"
 ):
+    skill_dir = Path(path)
     return SkillMetadata(
         name=name,
         description=desc,
-        path=Path(path),
+        path=skill_dir,
+        skill_md_path=skill_dir / "SKILL.md",
         tags=tags or ["tag1", "tag2"],
     )
 
