@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 from rich.markup import escape
 
+from code_puppy.utils.debouncer import Debouncer
+
 # Module-level import for patching in tests; guarded so missing config doesn't crash.
 try:
     from code_puppy.config import get_banner_color
@@ -96,10 +98,6 @@ LOADING_MESSAGES = [
 _RATE_UPDATE_INTERVAL = 0.2
 
 
-# Rate update throttle interval (5 Hz max) (Issue SR-H1)
-_RATE_UPDATE_INTERVAL = 0.2
-
-
 class StreamRenderer:
     """Renders streaming LLM events into a Textual CodePuppyApp.
 
@@ -124,8 +122,8 @@ class StreamRenderer:
         "_message_index",
         "_text_buffer",
         "_thinking_buffer",  # Buffer for thinking deltas (Issue SR-M1)
-        "_last_rate_update",
-        "_last_spinner_update",
+        "_rate_debouncer",
+        "_spinner_debouncer",
     )
 
     def __init__(self, app: "CodePuppyApp | TUIHost") -> None:
@@ -140,9 +138,9 @@ class StreamRenderer:
         self._message_index: int = 0
         self._text_buffer: dict[int, list[str]] = {}  # list buffer per key (Issue SR-H3)
         self._thinking_buffer: dict[int, list[str]] = {}  # list buffer for thinking (Issue SR-M1)
-        # Throttling timestamps for rate updates and spinner rotation (Issue SR-H1)
-        self._last_rate_update: float = 0.0
-        self._last_spinner_update: float = 0.0
+        # Debouncers for rate updates (5 Hz) and spinner rotation (2 Hz) (Issue SR-H1, code_puppy-31a.4)
+        self._rate_debouncer = Debouncer(_RATE_UPDATE_INTERVAL)
+        self._spinner_debouncer = Debouncer(0.5)
 
     # ------------------------------------------------------------------
     # Public API
@@ -206,9 +204,9 @@ class StreamRenderer:
         self._token_count = 0
         self._start_time = time.monotonic()
         self._message_index = 0
-        # Reset throttling timestamps (Issue SR-H1)
-        self._last_rate_update = 0.0
-        self._last_spinner_update = 0.0
+        # Reset debouncers (Issue SR-H1, code_puppy-31a.4)
+        self._rate_debouncer.reset()
+        self._spinner_debouncer.reset()
 
     # ------------------------------------------------------------------
     # Private event handlers
@@ -330,15 +328,13 @@ class StreamRenderer:
         now = time.monotonic()
 
         # Throttle rate updates to 5 Hz (Issue SR-H1)
-        if now - self._last_rate_update >= _RATE_UPDATE_INTERVAL:
-            self._last_rate_update = now
+        if self._rate_debouncer.should_update():
             elapsed = now - self._start_time
             if elapsed > 0:
                 rate = self._token_count / elapsed
                 self.app.update_token_rate(rate)
 
         # Decouple spinner rotation to 2 Hz (every 0.5s)
-        if now - self._last_spinner_update >= 0.5:
-            self._last_spinner_update = now
+        if self._spinner_debouncer.should_update():
             self._message_index = (self._message_index + 1) % len(LOADING_MESSAGES)
             self.app.set_working(True, LOADING_MESSAGES[self._message_index])
