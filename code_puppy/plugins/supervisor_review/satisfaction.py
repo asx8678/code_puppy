@@ -115,7 +115,8 @@ class StructuredSatisfactionChecker:
         # (orion-compatible)
         if "satisfied" in parsed and isinstance(parsed["satisfied"], bool):
             sat = parsed["satisfied"]
-            confidence = float(parsed.get("confidence", 0.9 if sat else 0.9))
+            default_conf = 0.9 if sat else 0.6
+            confidence = float(parsed.get("confidence", default_conf))
             reason = str(parsed.get("reason", "structured 'satisfied' field"))
             return SatisfactionResult(
                 satisfied=sat, confidence=confidence, reason=reason

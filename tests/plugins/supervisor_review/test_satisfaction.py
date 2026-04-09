@@ -40,6 +40,7 @@ class TestStructuredSatisfactionChecker:
     def test_satisfied_bool_false(self):
         r = self._check(json.dumps({"satisfied": False}))
         assert r.satisfied is False
+        assert r.confidence < 0.9  # rejection confidence default is 0.6
 
     def test_orion_aligned_true(self):
         r = self._check(json.dumps({"aligned": True, "issues": []}))
