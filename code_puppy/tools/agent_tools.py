@@ -48,6 +48,26 @@ from code_puppy.persistence import atomic_write_msgpack
 from code_puppy.tools.common import generate_group_id
 from code_puppy.tools.subagent_context import subagent_context
 
+# RunLimiter import with graceful degradation
+try:
+    from code_puppy.plugins.pack_parallelism.run_limiter import (
+        RunConcurrencyLimitError,
+        get_run_limiter,
+    )
+
+    _RUN_LIMITER_AVAILABLE = True
+except ImportError:
+    _RUN_LIMITER_AVAILABLE = False
+    # Fallback stubs for graceful degradation
+
+
+    class RunConcurrencyLimitError(Exception):  # type: ignore[no-redef]
+        pass
+
+
+    def get_run_limiter() -> None:  # type: ignore[misc]
+        return None
+
 # Set to track active subagent invocation tasks
 _active_subagent_tasks: set[asyncio.Task] = set()
 
@@ -713,89 +733,119 @@ def register_invoke_agent(agent):
             # This ensures all sub-agent output goes through the aggregated dashboard
             stream_handler = partial(subagent_stream_handler, session_id=session_id)
 
-            # Wrap the agent run in subagent context for tracking
-            with subagent_context(agent_name):
-                if get_use_dbos():
-                    # Generate a unique workflow ID for DBOS - ensures no collisions in back-to-back calls
-                    workflow_id = _generate_dbos_workflow_id(group_id)
+            # RunLimiter: centralized concurrency control for agent invocations
+            run_limiter = get_run_limiter() if _RUN_LIMITER_AVAILABLE else None
 
-                    # Add MCP servers to the DBOS agent's toolsets
-                    # (temp_agent is discarded after this invocation, so no need to restore)
-                    if subagent_mcp_servers:
-                        temp_agent._toolsets = (
-                            temp_agent._toolsets + subagent_mcp_servers
+            async def _run_with_limiter():
+                """Inner async function to enable limiter wrapping."""
+                # Notify if queued
+                if run_limiter is not None:
+                    waiters = run_limiter.waiters_count
+                    if waiters > 0:
+                        emit_info(
+                            f"[RunLimiter] Queued behind {waiters} other run(s); waiting...",
+                            message_group=group_id,
                         )
 
-                    with SetWorkflowID(workflow_id):
-                        task = asyncio.create_task(
-                            _run_with_streaming_retry(
-                                lambda: temp_agent.run(
-                                    prompt,
-                                    message_history=message_history,
-                                    usage_limits=UsageLimits(
-                                        request_limit=get_message_limit()
-                                    ),
-                                    event_stream_handler=stream_handler,
-                                )
-                            )
-                        )
-                        _active_subagent_tasks.add(task)
-                else:
-                    task = asyncio.create_task(
-                        _run_with_streaming_retry(
-                            lambda: temp_agent.run(
-                                prompt,
-                                message_history=message_history,
-                                usage_limits=UsageLimits(
-                                    request_limit=get_message_limit()
-                                ),
-                                event_stream_handler=stream_handler,
-                            )
-                        )
-                    )
-                    _active_subagent_tasks.add(task)
+                # Acquire slot (may wait if at limit)
+                if run_limiter is not None:
+                    await run_limiter.acquire_async()
 
                 try:
-                    result = await task
+                    # Wrap the agent run in subagent context for tracking
+                    with subagent_context(agent_name):
+                        if get_use_dbos():
+                            # Generate a unique workflow ID for DBOS - ensures no collisions in back-to-back calls
+                            nonlocal workflow_id
+                            workflow_id = _generate_dbos_workflow_id(group_id)
+
+                            # Add MCP servers to the DBOS agent's toolsets
+                            # (temp_agent is discarded after this invocation, so no need to restore)
+                            if subagent_mcp_servers:
+                                temp_agent._toolsets = (
+                                    temp_agent._toolsets + subagent_mcp_servers
+                                )
+
+                            with SetWorkflowID(workflow_id):
+                                task = asyncio.create_task(
+                                    _run_with_streaming_retry(
+                                        lambda: temp_agent.run(
+                                            prompt,
+                                            message_history=message_history,
+                                            usage_limits=UsageLimits(
+                                                request_limit=get_message_limit()
+                                            ),
+                                            event_stream_handler=stream_handler,
+                                        )
+                                    )
+                                )
+                                _active_subagent_tasks.add(task)
+                        else:
+                            task = asyncio.create_task(
+                                _run_with_streaming_retry(
+                                    lambda: temp_agent.run(
+                                        prompt,
+                                        message_history=message_history,
+                                        usage_limits=UsageLimits(
+                                            request_limit=get_message_limit()
+                                        ),
+                                        event_stream_handler=stream_handler,
+                                    )
+                                )
+                            )
+                            _active_subagent_tasks.add(task)
+
+                        try:
+                            result = await task
+                        finally:
+                            _active_subagent_tasks.discard(task)
+                            if task.cancelled():
+                                if get_use_dbos() and workflow_id:
+                                    await DBOS.cancel_workflow_async(workflow_id)
+
+                    # Extract the response from the result
+                    response = result.output
+
+                    # Update the session history with the new messages from this interaction
+                    # The result contains all_messages which includes the full conversation
+                    updated_history = result.all_messages()
+
+                    # Save to filesystem async (include initial prompt only for new sessions)
+                    await _save_session_history_async(
+                        session_id=session_id,
+                        message_history=updated_history,
+                        agent_name=agent_name,
+                        initial_prompt=prompt if is_new_session else None,
+                    )
+
+                    # Emit structured response message via MessageBus
+                    bus.emit(
+                        SubAgentResponseMessage(
+                            agent_name=agent_name,
+                            session_id=session_id,
+                            response=response,
+                            message_count=len(updated_history),
+                        )
+                    )
+
+                    # Emit clean completion summary
+                    emit_success(
+                        f"✓ {agent_name} completed successfully", message_group=group_id
+                    )
+
+                    return AgentInvokeOutput(
+                        response=response, agent_name=agent_name, session_id=session_id
+                    )
                 finally:
-                    _active_subagent_tasks.discard(task)
-                    if task.cancelled():
-                        if get_use_dbos() and workflow_id:
-                            await DBOS.cancel_workflow_async(workflow_id)
+                    # Release the limiter slot
+                    if run_limiter is not None:
+                        run_limiter.release()
 
-            # Extract the response from the result
-            response = result.output
-
-            # Update the session history with the new messages from this interaction
-            # The result contains all_messages which includes the full conversation
-            updated_history = result.all_messages()
-
-            # Save to filesystem async (include initial prompt only for new sessions)
-            await _save_session_history_async(
-                session_id=session_id,
-                message_history=updated_history,
-                agent_name=agent_name,
-                initial_prompt=prompt if is_new_session else None,
-            )
-
-            # Emit structured response message via MessageBus
-            bus.emit(
-                SubAgentResponseMessage(
-                    agent_name=agent_name,
-                    session_id=session_id,
-                    response=response,
-                    message_count=len(updated_history),
-                )
-            )
-
-            # Emit clean completion summary
-            emit_success(
-                f"✓ {agent_name} completed successfully", message_group=group_id
-            )
-
-            return AgentInvokeOutput(
-                response=response, agent_name=agent_name, session_id=session_id
-            )
+            # Execute with or without limiter
+            if run_limiter is not None:
+                return await _run_with_limiter()
+            else:
+                return await _run_with_limiter()  # Limiter is None inside, works as no-op
 
         except Exception as e:
             # Emit clean failure summary

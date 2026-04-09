@@ -2,14 +2,17 @@
 Pack Leader max-parallelism constraint plugin.
 
 Reads a configured ``max_parallelism`` value and injects it into every
-agent system prompt via the ``load_prompt`` hook, and exposes a
-``/pack-parallel N`` slash command to override it per-session.
+agent system prompt via the ``load_prompt`` hook, exposes a
+``/pack-parallel N`` slash command to override it per-session, and
+enforces the limit at runtime via RunLimiter.
 
 Permanent config (TOML):
     ~/.code_puppy/pack_parallelism.toml
 
     [pack_leader]
     max_parallelism = 2          # default: 2
+    allow_parallel = true        # if false, forces limit=1
+    run_wait_timeout = null      # seconds before rejecting (null = wait forever)
 
 Per-session override (slash command):
     /pack-parallel 4             # set to 4 for this session
@@ -20,6 +23,18 @@ import logging
 from pathlib import Path
 
 from code_puppy.callbacks import register_callback
+
+# Import RunLimiter for runtime enforcement
+try:
+    from .run_limiter import get_run_limiter, update_run_limiter_config
+    _RUN_LIMITER_AVAILABLE = True
+except ImportError:
+    _RUN_LIMITER_AVAILABLE = False
+    # Stubs for graceful degradation
+    def get_run_limiter():  # type: ignore[misc]
+        return None
+    def update_run_limiter_config(**kwargs):  # type: ignore[misc]
+        pass
 
 logger = logging.getLogger(__name__)
 
@@ -264,8 +279,24 @@ def _handle_command(command: str, name: str):
     # Invalidate agent caches so the new value is reflected in prompts
     _invalidate_agent_caches(previous_val, new_val)
 
+    # Also update the runtime limiter for immediate effect
+    if _RUN_LIMITER_AVAILABLE:
+        try:
+            update_run_limiter_config(max_concurrent_runs=new_val)
+            limiter = get_run_limiter()
+            active = limiter.active_count if limiter else 0
+            effective = limiter.effective_limit if limiter else new_val
+        except Exception as e:
+            logger.debug("Failed to update runtime limiter: %s", e)
+            active = "?"
+            effective = new_val
+    else:
+        active = "?"
+        effective = new_val
+
     emit_info(
         f"🐺 Pack Leader max parallelism → **{new_val}** (session only)\n"
+        f"   Runtime limiter: effective={effective}, active={active}\n"
         f"   To make this permanent, edit {_CONFIG_PATH}:\n"
         f"   [pack_leader]\n"
         f"   max_parallelism = {new_val}"
