@@ -185,10 +185,43 @@ class FileMemoryStorage:
             logger.warning("Invalid fact format for %s: missing 'text' key", self.agent_name)
             return
 
+        # Use batch method for efficiency (single write)
+        self.add_facts([fact])
+
+    def add_facts(self, facts: list[Fact]) -> int:
+        """Add multiple facts to storage in a single batch operation.
+
+        This is more efficient than calling add_fact() multiple times as it
+        performs only one file read and one file write for the entire batch.
+
+        Args:
+            facts: List of fact dictionaries to add
+
+        Returns:
+            Number of facts actually added (invalid facts are skipped)
+
+        Thread-safe: Yes
+        """
+        if not facts:
+            return 0
+
+        # Validate and filter facts
+        valid_facts = []
+        for fact in facts:
+            if isinstance(fact, dict) and "text" in fact:
+                valid_facts.append(fact)
+            else:
+                logger.debug("Skipping invalid fact in %s memory: %s", self.agent_name, fact)
+
+        if not valid_facts:
+            return 0
+
         with self._lock:
-            facts = self._load_unlocked()
-            facts.append(fact)
-            self._save_unlocked(facts)
+            existing_facts = self._load_unlocked()
+            existing_facts.extend(valid_facts)
+            self._save_unlocked(existing_facts)
+
+        return len(valid_facts)
 
     def remove_fact(self, text: str) -> bool:
         """Remove the first fact matching the given text.
@@ -201,17 +234,49 @@ class FileMemoryStorage:
 
         Thread-safe: Yes
         """
+        removed = self.remove_facts([text])
+        return bool(removed)
+
+    def remove_facts(self, texts: list[str]) -> list[str]:
+        """Remove multiple facts by their text in a single batch operation.
+
+        This is more efficient than calling remove_fact() multiple times as it
+        performs only one file read and one file write for the entire batch.
+
+        Args:
+            texts: List of fact texts to remove
+
+        Returns:
+            List of fact texts that were actually removed
+
+        Thread-safe: Yes
+        """
+        if not texts:
+            return []
+
+        texts_set = set(texts)  # O(1) lookup
+        removed_texts: list[str] = []
+
         with self._lock:
             facts = self._load_unlocked()
             original_count = len(facts)
 
-            # Remove first matching fact
-            new_facts = [f for f in facts if f.get("text") != text]
+            # Filter out matching facts and track which were removed
+            new_facts = []
+            removed_in_pass: set[str] = set()
+
+            for fact in facts:
+                fact_text = fact.get("text", "")
+                if fact_text in texts_set and fact_text not in removed_in_pass:
+                    removed_texts.append(fact_text)
+                    removed_in_pass.add(fact_text)  # Only remove first match per text
+                else:
+                    new_facts.append(fact)
 
             if len(new_facts) < original_count:
                 self._save_unlocked(new_facts)
-                return True
-            return False
+
+        return removed_texts
 
     def clear(self) -> None:
         """Clear all facts for this agent.
@@ -264,16 +329,41 @@ class FileMemoryStorage:
 
         Thread-safe: Yes
         """
+        result = self.update_facts({text: updates})
+        return bool(result)
+
+    def update_facts(self, updates: dict[str, dict[str, Any]]) -> list[str]:
+        """Update multiple facts in a single batch operation.
+
+        This is more efficient than calling update_fact() multiple times as it
+        performs only one file read and one file write for the entire batch.
+
+        Args:
+            updates: Dictionary mapping fact text to update dictionaries
+
+        Returns:
+            List of fact texts that were successfully updated
+
+        Thread-safe: Yes
+        """
+        if not updates:
+            return []
+
+        updated_texts: list[str] = []
+
         with self._lock:
             facts = self._load_unlocked()
+            facts_by_text = {f.get("text"): f for f in facts if f.get("text")}
 
-            for fact in facts:
-                if fact.get("text") == text:
-                    fact.update(updates)
-                    self._save_unlocked(facts)
-                    return True
+            for text, update_data in updates.items():
+                if text in facts_by_text:
+                    facts_by_text[text].update(update_data)
+                    updated_texts.append(text)
 
-            return False
+            if updated_texts:
+                self._save_unlocked(facts)
+
+        return updated_texts
 
     def reinforce_fact(self, text: str, session_id: str | None = None) -> bool:
         """Reinforce a fact by updating its last_reinforced timestamp.

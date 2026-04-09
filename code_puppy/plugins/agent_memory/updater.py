@@ -85,6 +85,7 @@ class MemoryUpdater:
         """Callback invoked by DebouncedQueue when flushing batched facts.
 
         Deduplicates facts by text (latest wins) before writing to storage.
+        Uses batch operation for efficient single-file-write.
 
         Args:
             facts: List of fact dictionaries to persist
@@ -101,10 +102,9 @@ class MemoryUpdater:
             if text:
                 unique_facts[text] = fact
 
-        # Write each unique fact to storage
-        # We use add_fact() for each, which appends to the existing list
-        for fact in unique_facts.values():
-            self._storage.add_fact(fact)
+        # Use batch add for single-file-write efficiency (was: N file writes)
+        if unique_facts:
+            self._storage.add_facts(list(unique_facts.values()))
 
         logger.debug(
             "Flushed %d facts to %s memory",

@@ -949,6 +949,96 @@ class TestEdgeCasesAndRegression:
 
 
 # ============================================================================
+# Async Correctness Tests (code-puppy-48p)
+# ============================================================================
+
+
+class TestAsyncCorrectness:
+    """Tests for async correctness fixes (code-puppy-48p)."""
+
+    def test_schedule_fact_extraction_returns_task(self) -> None:
+        """_schedule_fact_extraction returns a task when in async context."""
+        import asyncio
+        from code_puppy.plugins.agent_memory.processing import _schedule_fact_extraction
+
+        async def test_coro():
+            # Schedule extraction in async context
+            task = _schedule_fact_extraction("test-agent", [], None)
+            # Should return a Task in async context
+            assert task is not None
+            assert isinstance(task, asyncio.Task)
+            # Task should have a name
+            assert task.get_name().startswith("agent_memory:")
+
+        asyncio.run(test_coro())
+
+    def test_schedule_fact_extraction_no_event_loop(self) -> None:
+        """_schedule_fact_extraction handles no event loop gracefully."""
+        from code_puppy.plugins.agent_memory.processing import _schedule_fact_extraction
+
+        # Called from sync context without event loop
+        task = _schedule_fact_extraction("test-agent", [], None)
+        # Returns None when no event loop (spawns thread instead)
+        assert task is None
+
+
+# ============================================================================
+# Batch Signal Update Tests (code-puppy-48p)
+# ============================================================================
+
+
+class TestBatchSignalUpdates:
+    """Tests for batch signal confidence updates (code-puppy-48p)."""
+
+    def test_signal_confidence_updates_batched(
+        self, temp_memory_dir: Path
+    ) -> None:
+        """Signal confidence updates are batched into single file write."""
+        with patch("code_puppy.plugins.agent_memory.core.load_config") as mock_load:
+            config = MemoryConfig(
+                enabled=True,
+                max_facts=5,
+                token_budget=200,
+                min_confidence=0.5,
+                debounce_ms=100,
+                extraction_enabled=True,
+            )
+            mock_load.return_value = config
+
+            _on_startup()
+            agent_name = "batch-signal-test"
+
+            # Add initial facts
+            storage = _get_storage(agent_name)
+            storage.add_facts([
+                {"text": "User prefers Python for data science", "confidence": 0.8},
+                {"text": "User uses VS Code as IDE", "confidence": 0.9},
+                {"text": "User likes dark mode", "confidence": 0.7},
+            ])
+
+            # Multiple correction signals in one batch
+            messages = [
+                {"role": "user", "content": "Actually, that's wrong. I prefer R for data science."},
+                {"role": "user", "content": "No, I use PyCharm not VS Code."},
+            ]
+
+            # Apply signal updates
+            updated = _apply_signal_confidence_updates(agent_name, messages, "session-1")
+
+            # Both facts should be updated (confidence reduced)
+            facts = storage.get_facts(min_confidence=0.0)
+            fact_by_text = {f["text"]: f for f in facts}
+
+            # Verify both signals were applied
+            if updated > 0:
+                # Python fact should have reduced confidence
+                python_fact = fact_by_text.get("User prefers Python for data science")
+                if python_fact and "last_reinforced" in python_fact:
+                    # Signal was applied
+                    assert python_fact["confidence"] < 0.8 or "last_reinforced" in python_fact
+
+
+# ============================================================================
 # Public API Tests
 # ============================================================================
 

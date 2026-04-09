@@ -108,13 +108,17 @@ def _on_startup() -> None:
 
 
 def _on_shutdown() -> None:
-    """Flush pending memory writes on shutdown.
+    """Flush pending memory writes and clean up async tasks on shutdown.
 
-    Ensures all debounced facts are persisted before the application exits.
+    Ensures all debounced facts are persisted and async operations complete
+    before the application exits (code-puppy-48p: added async task cleanup).
     """
     if not _memory_enabled or (_config and not _config.enabled):
+        # Still clean up async tasks even if memory is disabled
+        _cleanup_async_tasks()
         return
 
+    # Flush pending facts
     flushed_count = 0
     for agent_name, updater in _updater_cache.items():
         try:
@@ -127,6 +131,21 @@ def _on_shutdown() -> None:
 
     if flushed_count > 0:
         logger.info(f"Agent Memory: Flushed {flushed_count} pending facts on shutdown")
+    
+    # Clean up async tasks (code-puppy-48p)
+    _cleanup_async_tasks()
+
+
+def _cleanup_async_tasks() -> None:
+    """Clean up any pending async tasks (code-puppy-48p fix)."""
+    try:
+        from .processing import cleanup_async_tasks
+        task_count = cleanup_async_tasks()
+        if task_count > 0:
+            logger.debug(f"Cleaned up {task_count} pending async tasks")
+    except Exception as e:
+        # Don't let cleanup errors break shutdown
+        logger.debug(f"Error during async task cleanup: {e}")
 
 
 def register_core_callbacks() -> None:

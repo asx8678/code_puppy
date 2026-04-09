@@ -683,3 +683,163 @@ class TestEdgeCases:
         facts = storage2.load()
         assert len(facts) == 1
         assert facts[0]["text"] == "Added via instance 1"
+
+
+# ============================================================================
+# Batch Operations Tests (code-puppy-48p)
+# ============================================================================
+
+
+class TestBatchOperations:
+    """Tests for batch operations - performance optimization (code-puppy-48p)."""
+
+    def test_add_facts_batch(self, isolated_storage: type[FileMemoryStorage]) -> None:
+        """add_facts() adds multiple facts in single write operation."""
+        storage = isolated_storage("batch-agent")
+        facts = [
+            {"text": "Fact 1", "confidence": 0.9},
+            {"text": "Fact 2", "confidence": 0.8},
+            {"text": "Fact 3", "confidence": 0.7},
+        ]
+
+        count = storage.add_facts(facts)
+
+        assert count == 3
+        loaded = storage.load()
+        assert len(loaded) == 3
+        texts = {f["text"] for f in loaded}
+        assert texts == {"Fact 1", "Fact 2", "Fact 3"}
+
+    def test_add_facts_empty_list(self, isolated_storage: type[FileMemoryStorage]) -> None:
+        """add_facts() with empty list returns 0."""
+        storage = isolated_storage("empty-batch-agent")
+        count = storage.add_facts([])
+        assert count == 0
+        assert storage.fact_count() == 0
+
+    def test_add_facts_invalid_filtered(self, isolated_storage: type[FileMemoryStorage]) -> None:
+        """add_facts() filters out invalid facts."""
+        storage = isolated_storage("filter-agent")
+        facts = [
+            {"text": "Valid fact", "confidence": 0.9},
+            {"confidence": 0.8},  # Missing text
+            "not a dict",  # Invalid type
+            {"text": "Another valid", "confidence": 0.7},
+        ]
+
+        count = storage.add_facts(facts)  # type: ignore[list-item]
+
+        assert count == 2  # Only valid facts added
+        loaded = storage.load()
+        assert len(loaded) == 2
+
+    def test_update_facts_batch(self, isolated_storage: type[FileMemoryStorage]) -> None:
+        """update_facts() updates multiple facts in single write."""
+        storage = isolated_storage("batch-update-agent")
+
+        # Pre-populate facts
+        storage.add_facts([
+            {"text": "Fact A", "confidence": 0.5, "tags": []},
+            {"text": "Fact B", "confidence": 0.6, "tags": []},
+            {"text": "Fact C", "confidence": 0.7, "tags": []},
+        ])
+
+        # Batch update
+        updates = {
+            "Fact A": {"confidence": 0.9, "updated": True},
+            "Fact B": {"confidence": 0.95, "updated": True},
+        }
+        updated = storage.update_facts(updates)
+
+        assert set(updated) == {"Fact A", "Fact B"}
+
+        # Verify updates
+        facts = {f["text"]: f for f in storage.load()}
+        assert facts["Fact A"]["confidence"] == 0.9
+        assert facts["Fact A"]["updated"] is True
+        assert facts["Fact B"]["confidence"] == 0.95
+        assert facts["Fact C"]["confidence"] == 0.7  # Unchanged
+
+    def test_update_facts_empty(self, isolated_storage: type[FileMemoryStorage]) -> None:
+        """update_facts() with empty dict returns empty list."""
+        storage = isolated_storage("empty-update-agent")
+        result = storage.update_facts({})
+        assert result == []
+
+    def test_update_facts_nonexistent(self, isolated_storage: type[FileMemoryStorage]) -> None:
+        """update_facts() skips nonexistent facts."""
+        storage = isolated_storage("missing-update-agent")
+        storage.add_fact({"text": "Exists", "confidence": 0.5})
+
+        updates = {
+            "Exists": {"confidence": 0.9},
+            "Does not exist": {"confidence": 0.8},
+        }
+        updated = storage.update_facts(updates)
+
+        assert updated == ["Exists"]
+
+    def test_remove_facts_batch(self, isolated_storage: type[FileMemoryStorage]) -> None:
+        """remove_facts() removes multiple facts in single write."""
+        storage = isolated_storage("batch-remove-agent")
+
+        # Pre-populate facts
+        storage.add_facts([
+            {"text": "Keep 1", "confidence": 0.9},
+            {"text": "Remove 1", "confidence": 0.8},
+            {"text": "Keep 2", "confidence": 0.7},
+            {"text": "Remove 2", "confidence": 0.6},
+        ])
+
+        # Batch remove
+        removed = storage.remove_facts(["Remove 1", "Remove 2"])
+
+        assert set(removed) == {"Remove 1", "Remove 2"}
+
+        # Verify removal
+        loaded = storage.load()
+        assert len(loaded) == 2
+        texts = {f["text"] for f in loaded}
+        assert texts == {"Keep 1", "Keep 2"}
+
+    def test_remove_facts_empty_list(self, isolated_storage: type[FileMemoryStorage]) -> None:
+        """remove_facts() with empty list returns empty list."""
+        storage = isolated_storage("empty-remove-agent")
+        result = storage.remove_facts([])
+        assert result == []
+
+    def test_remove_facts_nonexistent(self, isolated_storage: type[FileMemoryStorage]) -> None:
+        """remove_facts() handles nonexistent facts gracefully."""
+        storage = isolated_storage("missing-remove-agent")
+        storage.add_fact({"text": "Exists", "confidence": 0.5})
+
+        removed = storage.remove_facts(["Exists", "Does not exist"])
+
+        assert removed == ["Exists"]
+        assert storage.fact_count() == 0
+
+    def test_batch_operations_thread_safety(
+        self, isolated_storage: type[FileMemoryStorage]
+    ) -> None:
+        """Batch operations are thread-safe."""
+        import threading
+
+        storage = isolated_storage("threadsafe-batch-agent")
+        errors = []
+
+        def add_batch(batch_id: int) -> None:
+            try:
+                facts = [{"text": f"Batch{batch_id}-Fact{i}", "confidence": 0.5 + i * 0.1}
+                         for i in range(10)]
+                storage.add_facts(facts)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=add_batch, args=(i,)) for i in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(errors) == 0
+        assert storage.fact_count() == 50  # 5 threads x 10 facts
