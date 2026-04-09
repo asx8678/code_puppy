@@ -1675,6 +1675,135 @@ class TestForceReset:
         assert limiter.active_count == 1
         limiter.release()
 
+    @pytest.mark.asyncio
+    async def test_force_reset_cancels_waiters_no_over_credit(
+        self, reset_limiter
+    ):
+        """REGRESSION TEST: force_reset cancels waiters (no hang) AND prevents over-crediting.
+
+        This test verifies TWO critical properties:
+        1. Pending async waiters do NOT hang forever after force_reset (they get cancelled)
+        2. Post-reset concurrency is NOT over-credited (only limit tasks run concurrently)
+
+        Before the fix, waking waiters caused them to acquire on old semaphore
+        but release on new semaphore, allowing >limit concurrent tasks.
+
+        After the fix, waiters are cancelled, preventing both hanging and over-crediting.
+        """
+        limiter = get_run_limiter()
+        limit = limiter.effective_limit  # Should be 2 by default
+
+        # Fill the limiter to capacity with holder tasks
+        holder1_acquired = asyncio.Event()
+        holder2_acquired = asyncio.Event()
+
+        async def holder(acquired_event):
+            await limiter.acquire_async()
+            acquired_event.set()
+            # Hold the slot until cancelled
+            await asyncio.sleep(10)
+
+        # Start holder tasks to fill the limiter
+        holder1 = asyncio.create_task(holder(holder1_acquired))
+        holder2 = asyncio.create_task(holder(holder2_acquired))
+
+        # Wait for holders to acquire with bounded poll
+        for _ in range(50):  # Max 1 second total
+            if holder1_acquired.is_set() and holder2_acquired.is_set():
+                break
+            await asyncio.sleep(0.02)
+        assert limiter.active_count == limit, f"Expected {limit} active tasks"
+
+        # Start waiters that will block on the full semaphore
+        # These waiters should be CANCELLED by force_reset, not woken to succeed
+        waiter_results = []
+
+        async def waiter():
+            try:
+                await limiter.acquire_async()
+                # If we get here, we acquired (old bug behavior)
+                waiter_results.append("acquired")
+                await asyncio.sleep(0.01)
+                limiter.release()
+            except asyncio.CancelledError:
+                # Expected: we were cancelled by force_reset
+                waiter_results.append("cancelled")
+                raise  # Re-raise to propagate cancellation
+
+        # Start waiters
+        task1 = asyncio.create_task(waiter())
+        task2 = asyncio.create_task(waiter())
+
+        # Bounded poll: wait for waiters to register with the semaphore
+        for _ in range(50):  # Max 1 second total
+            if limiter.waiters_count >= 2:
+                break
+            await asyncio.sleep(0.02)
+        assert limiter.waiters_count >= 2, "Waiters should be registered"
+
+        # Force reset while waiters are pending
+        # This should CANCEL the waiters, not wake them
+        result = force_reset_limiter_state()
+        assert result["status"] == "reset"
+
+        # Cancel the holder tasks
+        holder1.cancel()
+        holder2.cancel()
+
+        # Wait for all tasks with timeout (proves waiters don't hang)
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(
+                    holder1, holder2, task1, task2, return_exceptions=True
+                ),
+                timeout=2.0,  # Should complete quickly if not stranded
+            )
+        except asyncio.TimeoutError:
+            pytest.fail("Tasks did not complete after force_reset - possible hang!")
+
+        # Verify waiters were cancelled (not acquired)
+        assert "cancelled" in waiter_results, "Waiters should have been cancelled"
+        assert "acquired" not in waiter_results, (
+            "Waiters should NOT have acquired (would cause over-crediting)"
+        )
+
+        # Verify counters are clean
+        assert limiter.active_count == 0
+        assert limiter.waiters_count == 0
+
+        # CRITICAL: Verify NO over-crediting - probe with >limit concurrent tasks
+        # We use a simple approach: spawn many tasks and track max concurrent
+        active_count_log = []
+        count_lock = asyncio.Lock()
+
+        async def probe_task():
+            await limiter.acquire_async()
+            try:
+                async with count_lock:
+                    active_count_log.append(limiter.active_count)
+                # Small delay to let other tasks start
+                await asyncio.sleep(0.05)
+                async with count_lock:
+                    active_count_log.append(limiter.active_count)
+            finally:
+                limiter.release()
+
+        # Run probe_limit tasks concurrently
+        probe_limit = limit + 2  # Try to run more than limit
+        probe_tasks = [asyncio.create_task(probe_task()) for _ in range(probe_limit)]
+        await asyncio.gather(*probe_tasks)
+
+        # Verify: at no point did more than 'limit' tasks run concurrently
+        max_concurrent_observed = max(active_count_log) if active_count_log else 0
+        assert max_concurrent_observed <= limit, (
+            f"Over-crediting detected! Max concurrent was {max_concurrent_observed}, "
+            f"but limit is {limit}. Waiters may have released on wrong semaphore."
+        )
+
+        # Verify final state is clean
+        assert limiter.active_count == 0
+        assert limiter.waiters_count == 0
+
 
 # ============================================================================
 # Integration test

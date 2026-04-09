@@ -212,7 +212,8 @@ class RunLimiter:
 
             # Successfully acquired
             with self._state_lock:
-                self._async_waiters -= 1
+                # Use max(0, ...) to prevent underflow if force_reset zeroed counters
+                self._async_waiters = max(0, self._async_waiters - 1)
                 self._async_active += 1
             _set_reentrancy_depth(1)
             logger.debug("RunLimiter: slot acquired (depth set to 1)")
@@ -265,13 +266,14 @@ class RunLimiter:
 
             if acquired:
                 with self._state_lock:
-                    self._sync_waiters -= 1
+                    # Use max(0, ...) to prevent underflow if force_reset zeroed counters
+                    self._sync_waiters = max(0, self._sync_waiters - 1)
                     self._sync_active += 1
                 return True
             else:
                 # Timeout
                 with self._state_lock:
-                    self._sync_waiters -= 1
+                    self._sync_waiters = max(0, self._sync_waiters - 1)
                 raise RunConcurrencyLimitError(
                     f"Timeout waiting for run slot after {effective_timeout}s "
                     f"(limit={self.effective_limit})",
@@ -718,6 +720,18 @@ def force_reset_limiter_state() -> dict:
     """EMERGENCY: force-reset all counters and recreate semaphores.
 
     Used by `/pack-parallel reset` to recover from stuck states.
+
+    SAFETY NOTE: This function cancels pending async waiters by cancelling
+    their futures in the old semaphore's waiter queue. This prevents the
+    over-crediting bug where woken waiters would release against the NEW
+    semaphore after acquiring on the OLD one.
+
+    Cancelled waiters will:
+    1. Have their acquire() future cancelled (raises CancelledError)
+    2. Hit the BaseException handler in acquire_async/acquire_sync
+    3. Decrement waiters counter (with max(0, ...) protection)
+    4. NOT proceed to release (preventing over-crediting)
+
     Returns a dict with the pre-reset state for logging.
     """
     global _limiter_instance
@@ -737,13 +751,28 @@ def force_reset_limiter_state() -> dict:
 
     limit = limiter.effective_limit
     with limiter._state_lock:
+        # CRITICAL FIX: Cancel pending async waiters instead of waking them.
+        # Waking waiters causes over-crediting because they acquire on the
+        # old semaphore but release on the new one after the swap.
+        # Cancellation prevents them from ever acquiring, so they never release.
+        if hasattr(limiter._async_sem, "_waiters") and limiter._async_sem._waiters:
+            for waiter in list(limiter._async_sem._waiters):
+                if hasattr(waiter, "cancel") and not waiter.done():
+                    waiter.cancel()
+
+        # Reset all counters to 0.
+        # The max(0, ...) guards in acquire paths prevent underflow if a
+        # waiter is in the middle of decrementing when we zero the counters.
         limiter._async_active = 0
-        limiter._async_waiters = 0
         limiter._sync_active = 0
+        limiter._async_waiters = 0
         limiter._sync_waiters = 0
         limiter._async_deficit = 0
         limiter._sync_deficit = 0
-        # Recreate semaphores from scratch
+
+        # Recreate semaphores from scratch - old semaphores are discarded.
+        # Any waiters still blocked on old semaphores will remain there
+        # but won't affect the new semaphore state.
         limiter._async_sem = asyncio.Semaphore(limit)
         limiter._sync_sem = threading.Semaphore(limit)
 
