@@ -8,7 +8,6 @@ This module tests the builder.py module which provides:
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -16,7 +15,6 @@ import pytest
 
 from code_puppy.plugins.fast_puppy.builder import (
     CRATES,
-    _build_crate,
     _check_disable_autobuild,
     _find_crate_dir,
     _find_repo_root,
@@ -42,10 +40,12 @@ class TestFindRepoRoot:
         workspace = tmp_path / "fake_workspace"
         workspace.mkdir()
         cargo_toml = workspace / "Cargo.toml"
-        cargo_toml.write_text("[workspace]\nmembers = [\"foo\"]\n")
+        cargo_toml.write_text('[workspace]\nmembers = ["foo"]\n')
 
         # Patch __file__ to be within the workspace
-        fake_plugin_file = workspace / "code_puppy" / "plugins" / "fast_puppy" / "builder.py"
+        fake_plugin_file = (
+            workspace / "code_puppy" / "plugins" / "fast_puppy" / "builder.py"
+        )
         fake_plugin_file.parent.mkdir(parents=True)
         fake_plugin_file.touch()
 
@@ -82,7 +82,8 @@ class TestFindCrateDir:
 
         # Patch the repo root discovery
         with patch(
-            "code_puppy.plugins.fast_puppy.builder._find_repo_root", return_value=workspace
+            "code_puppy.plugins.fast_puppy.builder._find_repo_root",
+            return_value=workspace,
         ):
             for crate_name in ["code_puppy_core", "turbo_ops", "turbo_parse"]:
                 result = _find_crate_dir(crate_name)
@@ -95,7 +96,8 @@ class TestFindCrateDir:
         workspace.mkdir()
 
         with patch(
-            "code_puppy.plugins.fast_puppy.builder._find_repo_root", return_value=workspace
+            "code_puppy.plugins.fast_puppy.builder._find_repo_root",
+            return_value=workspace,
         ):
             result = _find_crate_dir("nonexistent_crate")
             assert result is None
@@ -141,7 +143,6 @@ class TestIsCrateFresh:
         fake_binary.write_text("fake binary")
 
         # Make binary newer
-        old_time = 1000000000  # Some old timestamp
         rs_file.touch()
         # Binary is touched after (newer)
         fake_binary.touch()
@@ -197,7 +198,10 @@ class TestHasMaturin:
 
     def test_has_maturin_returns_true_when_maturin_in_path(self):
         """Mock shutil.which to return a path for maturin."""
-        with patch("shutil.which", side_effect=lambda x: f"/usr/bin/{x}" if x in ["maturin"] else None):
+        with patch(
+            "shutil.which",
+            side_effect=lambda x: f"/usr/bin/{x}" if x in ["maturin"] else None,
+        ):
             result = _has_maturin()
             assert result is True
 
@@ -227,10 +231,13 @@ class TestGetAllCrateStatus:
     def test_get_all_crate_status_returns_three_entries(self):
         """Verify new helper returns list of 3 dicts."""
         with patch(
-            "code_puppy.plugins.fast_puppy.builder._find_crate_dir", return_value=Path("/fake")
+            "code_puppy.plugins.fast_puppy.builder._find_crate_dir",
+            return_value=Path("/fake"),
         ):
             with patch("importlib.util.find_spec", return_value=None):
-                with patch("importlib.import_module", side_effect=ImportError("not found")):
+                with patch(
+                    "importlib.import_module", side_effect=ImportError("not found")
+                ):
                     result = get_all_crate_status()
 
         assert len(result) == 3
@@ -252,7 +259,10 @@ class TestBuildSingleCrate:
 
     def test_build_single_crate_returns_false_without_toolchain(self):
         """Returns False when no Rust toolchain."""
-        with patch("code_puppy.plugins.fast_puppy.builder._has_rust_toolchain", return_value=False):
+        with patch(
+            "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain",
+            return_value=False,
+        ):
             result = build_single_crate("turbo_ops")
             assert result is False
 
@@ -260,8 +270,13 @@ class TestBuildSingleCrate:
         """Test successful single crate build."""
         fake_crate_dir = MagicMock()
 
-        with patch("code_puppy.plugins.fast_puppy.builder._has_rust_toolchain", return_value=True):
-            with patch("code_puppy.plugins.fast_puppy.builder._has_maturin", return_value=True):
+        with patch(
+            "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain",
+            return_value=True,
+        ):
+            with patch(
+                "code_puppy.plugins.fast_puppy.builder._has_maturin", return_value=True
+            ):
                 with patch(
                     "code_puppy.plugins.fast_puppy.builder._find_crate_dir",
                     return_value=fake_crate_dir,
@@ -284,7 +299,8 @@ class TestTryAutoBuildAll:
     def test_try_auto_build_all_respects_disable_flag(self):
         """Mocks config disable_rust_autobuild=true and verifies no build attempted."""
         with patch(
-            "code_puppy.plugins.fast_puppy.builder._check_disable_autobuild", return_value=True
+            "code_puppy.plugins.fast_puppy.builder._check_disable_autobuild",
+            return_value=True,
         ):
             with patch(
                 "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain"
@@ -296,10 +312,12 @@ class TestTryAutoBuildAll:
     def test_try_auto_build_all_returns_empty_without_toolchain(self):
         """Returns empty dict when no Rust toolchain."""
         with patch(
-            "code_puppy.plugins.fast_puppy.builder._check_disable_autobuild", return_value=False
+            "code_puppy.plugins.fast_puppy.builder._check_disable_autobuild",
+            return_value=False,
         ):
             with patch(
-                "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain", return_value=False
+                "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain",
+                return_value=False,
             ):
                 result = _try_auto_build_all()
                 assert result == {}
@@ -323,7 +341,7 @@ class TestPrewarmWorkspace:
             assert "--workspace" in call_args
 
 
-class TestReloadAndPatchCrate:
+class TestReloadAndPatchCrateOld:
     """Tests for _reload_and_patch_crate() helper."""
 
     def test_reload_and_patch_imports_and_patches(self):
@@ -332,21 +350,27 @@ class TestReloadAndPatchCrate:
             "name": "test_crate",
             "probe": "some_module",
             "bridges": ["bridge_module"],
-            "patch_targets": [("target.module", "SOME_FLAG")],
+            "patch_targets": [
+                {
+                    "module": "target.module",
+                    "flags": {"SOME_FLAG": "available"},
+                }
+            ],
         }
 
-        with patch("importlib.import_module") as mock_import:
-            mock_mod = MagicMock()
-            mock_import.side_effect = [
-                mock_mod,  # First call for probe module
-                MagicMock(),  # Second call for bridge
-                MagicMock(),  # Third call for patch target
-            ]
+        with patch("importlib.util.find_spec", return_value=MagicMock()):
+            with patch("importlib.import_module") as mock_import:
+                mock_mod = MagicMock()
+                mock_import.side_effect = [
+                    mock_mod,  # First call for probe module
+                    MagicMock(),  # Second call for bridge
+                    MagicMock(),  # Third call for patch target
+                ]
 
-            with patch("importlib.reload"):
-                result = _reload_and_patch_crate(crate_spec)
-                # Should succeed if import_module doesn't raise
-                mock_import.assert_called()
+                with patch("importlib.reload"):
+                    _result = _reload_and_patch_crate(crate_spec)
+                    # Should succeed if import_module doesn't raise
+                    mock_import.assert_called()
 
 
 class TestCheckDisableAutobuild:
@@ -401,4 +425,104 @@ class TestFullBuildCycle:
         # but we verify the structure of the results
         assert isinstance(results, dict)
         for crate_spec in CRATES:
-            assert crate_spec["name"] in results or True  # May not be in results if skipped
+            # Every crate in CRATES should appear in results (either True or False)
+            assert crate_spec["name"] in results
+            assert isinstance(results[crate_spec["name"]], bool)
+
+
+class TestReloadAndPatchCrateRebind:
+    """Tests for the reload+rebind logic that prevents stale function references."""
+
+    def test_rebind_updates_stale_function_references(self, tmp_path):
+        """Regression test for C1: consumer modules using 'from X import Y'
+        must see the fresh Y after _reload_and_patch_crate runs.
+        """
+        import sys
+        import types
+        from unittest.mock import patch, MagicMock
+        from code_puppy.plugins.fast_puppy.builder import _reload_and_patch_crate
+
+        # Create a fake bridge module with a stub function
+        fake_bridge = types.ModuleType("fake_bridge_module")
+        fake_bridge.STUB_FLAG = False
+        fake_bridge.do_thing = lambda: "STUB"
+        sys.modules["fake_bridge_module"] = fake_bridge
+
+        # Create a fake consumer that imports the stub function
+        fake_consumer = types.ModuleType("fake_consumer_module")
+        fake_consumer.STUB_FLAG = False
+        fake_consumer.do_thing = fake_bridge.do_thing  # simulate 'from X import Y'
+        sys.modules["fake_consumer_module"] = fake_consumer
+
+        # Swap the bridge's implementation (simulating a rebuild)
+        fake_bridge.STUB_FLAG = True
+        fake_bridge.do_thing = lambda: "REAL"
+
+        # Mock find_spec to return a spec for the probe module
+        mock_spec = MagicMock()
+
+        crate_spec = {
+            "name": "fake",
+            "probe": "fake_probe_module",
+            "bridges": [],  # don't reload, we already swapped
+            "patch_targets": [
+                {
+                    "module": "fake_consumer_module",
+                    "flags": {"STUB_FLAG": "available"},
+                    "rebind_from": "fake_bridge_module",
+                    "rebind_names": ["do_thing"],
+                },
+            ],
+        }
+
+        try:
+            with patch("importlib.util.find_spec", return_value=mock_spec):
+                result = _reload_and_patch_crate(crate_spec)
+            assert result is True
+            assert fake_consumer.STUB_FLAG is True
+            # The critical assertion: the consumer's function ref was rebound
+            assert fake_consumer.do_thing() == "REAL"
+        finally:
+            del sys.modules["fake_bridge_module"]
+            del sys.modules["fake_consumer_module"]
+
+    def test_rebind_with_alias_map(self):
+        """Rebind should support aliasing (e.g., list_files → turbo_list_files)."""
+        import sys
+        import types
+        from unittest.mock import patch, MagicMock
+        from code_puppy.plugins.fast_puppy.builder import _reload_and_patch_crate
+
+        fake_source = types.ModuleType("fake_source_module")
+        fake_source.real_name = lambda: "REAL"
+        sys.modules["fake_source_module"] = fake_source
+
+        fake_consumer = types.ModuleType("fake_aliased_consumer")
+        fake_consumer.local_alias = lambda: "STUB"
+        sys.modules["fake_aliased_consumer"] = fake_consumer
+
+        # Mock find_spec to return a spec for the probe module
+        mock_spec = MagicMock()
+
+        crate_spec = {
+            "name": "fake",
+            "probe": "fake_probe2",
+            "bridges": [],
+            "patch_targets": [
+                {
+                    "module": "fake_aliased_consumer",
+                    "flags": {},
+                    "rebind_from": "fake_source_module",
+                    "rebind_names": ["real_name"],
+                    "rebind_as": {"real_name": "local_alias"},
+                },
+            ],
+        }
+
+        try:
+            with patch("importlib.util.find_spec", return_value=mock_spec):
+                _reload_and_patch_crate(crate_spec)
+            assert fake_consumer.local_alias() == "REAL"
+        finally:
+            del sys.modules["fake_source_module"]
+            del sys.modules["fake_aliased_consumer"]

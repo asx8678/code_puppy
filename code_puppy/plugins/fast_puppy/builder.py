@@ -28,7 +28,12 @@ CRATES = [
         "probe": "_code_puppy_core",
         "bridges": ["code_puppy._core_bridge"],
         "patch_targets": [
-            ("code_puppy.agents.base_agent", "RUST_AVAILABLE"),
+            {
+                "module": "code_puppy.agents.base_agent",
+                "flags": {"RUST_AVAILABLE": "available"},
+                "rebind_from": "code_puppy._core_bridge",
+                "rebind_names": [],  # base_agent uses module-attribute lookup
+            },
         ],
     },
     {
@@ -37,7 +42,17 @@ CRATES = [
         "probe": "turbo_ops",
         "bridges": [],
         "patch_targets": [
-            ("code_puppy.plugins.turbo_executor.orchestrator", "TURBO_OPS_AVAILABLE"),
+            {
+                "module": "code_puppy.plugins.turbo_executor.orchestrator",
+                "flags": {"TURBO_OPS_AVAILABLE": "available"},
+                "rebind_from": "turbo_ops",
+                "rebind_names": ["list_files", "grep", "read_file"],
+                "rebind_as": {
+                    "list_files": "turbo_list_files",
+                    "grep": "turbo_grep",
+                    "read_file": "turbo_read_file",
+                },
+            },
         ],
     },
     {
@@ -46,8 +61,42 @@ CRATES = [
         "probe": "turbo_parse",
         "bridges": ["code_puppy.turbo_parse_bridge"],
         "patch_targets": [
-            ("code_puppy.code_context.explorer", "TURBO_PARSE_AVAILABLE"),
-            ("code_puppy.plugins.turbo_parse.register_callbacks", "TURBO_PARSE_AVAILABLE"),
+            {
+                "module": "code_puppy.code_context.explorer",
+                "flags": {"TURBO_PARSE_AVAILABLE": "available"},
+                "rebind_from": "code_puppy.turbo_parse_bridge",
+                "rebind_names": [
+                    "is_language_supported",
+                    "extract_symbols_from_file",
+                ],
+            },
+            {
+                "module": "code_puppy.plugins.turbo_parse.register_callbacks",
+                "flags": {"TURBO_PARSE_AVAILABLE": "available"},
+                "rebind_from": "code_puppy.turbo_parse_bridge",
+                "rebind_names": [
+                    "parse_source",
+                    "parse_file",
+                    "parse_files_batch",
+                    "extract_symbols",
+                    "extract_syntax_diagnostics",
+                    "get_folds",
+                    "get_highlights",
+                    "is_language_supported",
+                    "supported_languages",
+                    "health_check",
+                    "stats",
+                ],
+                "rebind_as": {
+                    "parse_source": "_parse_source",
+                    "parse_file": "_parse_file",
+                    "parse_files_batch": "_parse_files_batch",
+                    "extract_symbols": "_extract_symbols",
+                    "extract_syntax_diagnostics": "_extract_diagnostics",
+                    "get_folds": "_get_folds",
+                    "get_highlights": "_get_highlights",
+                },
+            },
         ],
     },
 ]
@@ -94,10 +143,11 @@ def _is_crate_installed(probe_module: str) -> bool:
 
 
 def _is_crate_fresh(crate_dir: Path, probe_module: str) -> bool:
-    """Check if installed crate is fresh (binary mtime newer than all .rs sources).
+    """Check if installed crate is fresh (binary mtime newer than all source files).
 
-    Returns True if installed .so/.dylib mtime is newer than every .rs file
-    in crate_dir/src/. If not installed at all, returns False.
+    Returns True if installed .so/.dylib mtime is newer than every source file.
+    Checks Rust sources (.rs), tree-sitter queries (.scm), and config files.
+    If not installed at all, returns False.
     """
     # Find the installed extension module
     try:
@@ -111,14 +161,29 @@ def _is_crate_fresh(crate_dir: Path, probe_module: str) -> bool:
     except Exception:
         return False
 
-    # Check all .rs files in src/ directory
-    src_dir = crate_dir / "src"
-    if not src_dir.exists():
-        return False
+    # Collect all source files to check
+    source_files: list[Path] = []
 
+    # Rust sources in src/
+    src_dir = crate_dir / "src"
+    if src_dir.exists():
+        source_files.extend(src_dir.rglob("*.rs"))
+
+    # Tree-sitter queries (for turbo_parse)
+    queries_dir = crate_dir / "queries"
+    if queries_dir.exists():
+        source_files.extend(queries_dir.rglob("*.scm"))
+
+    # Build config files
+    for name in ("Cargo.toml", "Cargo.lock", "pyproject.toml", "build.rs"):
+        config_file = crate_dir / name
+        if config_file.exists():
+            source_files.append(config_file)
+
+    # Check all collected sources
     try:
-        for rs_file in src_dir.rglob("*.rs"):
-            if rs_file.stat().st_mtime > binary_mtime:
+        for src_file in source_files:
+            if src_file.stat().st_mtime > binary_mtime:
                 return False  # Source is newer than binary
         return True
     except Exception:
@@ -181,7 +246,9 @@ def _get_maturin_command() -> list[str]:
     return [sys.executable, "-m", "maturin"]
 
 
-def _emit_build_heartbeat(proc: subprocess.Popen, crate_name: str, stop_event: threading.Event) -> None:
+def _emit_build_heartbeat(
+    proc: subprocess.Popen, crate_name: str, stop_event: threading.Event
+) -> None:
     """Emit heartbeat messages during long builds.
 
     Runs in a daemon thread, emits message every 20 seconds.
@@ -192,7 +259,9 @@ def _emit_build_heartbeat(proc: subprocess.Popen, crate_name: str, stop_event: t
     while not stop_event.is_set() and proc.poll() is None:
         elapsed = time.time() - start_time
         if elapsed >= next_heartbeat:
-            emit_info(f"🐕⚡ Fast Puppy: Still building {crate_name}… ({int(elapsed)}s elapsed)")
+            emit_info(
+                f"🐕⚡ Fast Puppy: Still building {crate_name}… ({int(elapsed)}s elapsed)"
+            )
             next_heartbeat += 20.0
         time.sleep(1.0)
 
@@ -239,7 +308,13 @@ def _build_crate(crate_dir: Path, crate_name: str) -> tuple[bool, str]:
         if proc.returncode == 0:
             return True, ""
         else:
-            error_msg = stderr.strip() if stderr else stdout.strip() if stdout else "Unknown error"
+            error_msg = (
+                stderr.strip()
+                if stderr
+                else stdout.strip()
+                if stdout
+                else "Unknown error"
+            )
             return False, error_msg
 
     except subprocess.TimeoutExpired:
@@ -271,40 +346,106 @@ def _prewarm_workspace(repo_root: Path) -> None:
 
 
 def _reload_and_patch_crate(crate_spec: dict) -> bool:
-    """Reload bridge modules and patch availability flags after a build.
+    """Reload bridge modules and patch consumer flags/function references.
 
     Args:
         crate_spec: The crate specification dict from CRATES.
 
     Returns:
-        True if the crate is now importable after reload.
+        True if the probe module is now importable after reload.
     """
-    probe_module = crate_spec["probe"]
-    bridges = crate_spec.get("bridges", [])
-    patch_targets = crate_spec.get("patch_targets", [])
+    import importlib
+    import importlib.util
+    import sys
 
-    # First, check if it's now importable
+    # 1. Reload all bridge modules
+    for bridge_name in crate_spec.get("bridges", []):
+        if bridge_name in sys.modules:
+            try:
+                importlib.reload(sys.modules[bridge_name])
+                logger.debug("Reloaded bridge module %s", bridge_name)
+            except Exception as e:
+                logger.warning("Failed to reload bridge %s: %s", bridge_name, e)
+        else:
+            try:
+                importlib.import_module(bridge_name)
+            except Exception as e:
+                logger.warning("Failed to import bridge %s: %s", bridge_name, e)
+
+    # 2. Verify the probe module is now importable
+    probe_name = crate_spec["probe"]
     try:
-        importlib.import_module(probe_module)
-        is_available = True
-    except ImportError:
+        # Use find_spec first (doesn't execute code, just finds the module)
+        spec = importlib.util.find_spec(probe_name)
+        if spec is None:
+            is_available = False
+        else:
+            # Module exists, try to import/reload it
+            if probe_name in sys.modules:
+                try:
+                    importlib.reload(sys.modules[probe_name])
+                except Exception:
+                    pass  # reload failed but spec exists, still available
+            else:
+                try:
+                    importlib.import_module(probe_name)
+                except Exception:
+                    pass  # import failed but spec exists, still available
+            is_available = True
+    except Exception:
         is_available = False
 
-    # Reload all bridge modules
-    for bridge_module in bridges:
-        try:
-            mod = importlib.import_module(bridge_module)
-            importlib.reload(mod)
-        except Exception as e:
-            logger.debug("Failed to reload bridge %s: %s", bridge_module, e)
+    # 3. Patch each consumer module
+    for target in crate_spec.get("patch_targets", []):
+        module_name = target["module"]
+        if module_name not in sys.modules:
+            continue  # consumer not yet imported, nothing to patch
+        consumer = sys.modules[module_name]
 
-    # Patch the patch_targets with fresh availability
-    for module_name, attr_name in patch_targets:
-        try:
-            mod = importlib.import_module(module_name)
-            setattr(mod, attr_name, is_available)
-        except Exception as e:
-            logger.debug("Failed to patch %s.%s: %s", module_name, attr_name, e)
+        # 3a. Patch flags
+        for flag_name, value_source in target.get("flags", {}).items():
+            if value_source == "available":
+                value = is_available
+            else:
+                value = value_source
+            try:
+                setattr(consumer, flag_name, value)
+                logger.debug("Patched %s.%s = %r", module_name, flag_name, value)
+            except Exception as e:
+                logger.warning("Failed to patch %s.%s: %s", module_name, flag_name, e)
+
+        # 3b. Rebind function references from the fresh module
+        rebind_from = target.get("rebind_from")
+        rebind_names = target.get("rebind_names", [])
+        rebind_as = target.get("rebind_as", {})
+
+        if rebind_from and rebind_names and is_available:
+            try:
+                fresh_module = importlib.import_module(rebind_from)
+            except ImportError as e:
+                logger.warning("Cannot import %s for rebinding: %s", rebind_from, e)
+                continue
+
+            for fresh_name in rebind_names:
+                local_name = rebind_as.get(fresh_name, fresh_name)
+                try:
+                    fresh_value = getattr(fresh_module, fresh_name)
+                    setattr(consumer, local_name, fresh_value)
+                    logger.debug(
+                        "Rebound %s.%s = %s.%s",
+                        module_name,
+                        local_name,
+                        rebind_from,
+                        fresh_name,
+                    )
+                except AttributeError as e:
+                    logger.warning(
+                        "Cannot rebind %s.%s from %s: %s",
+                        module_name,
+                        local_name,
+                        rebind_from,
+                        e,
+                    )
 
     return is_available
 
@@ -313,6 +454,7 @@ def _check_disable_autobuild() -> bool:
     """Check if rust autobuild is disabled in config."""
     try:
         from code_puppy.config import get_value
+
         val = get_value("disable_rust_autobuild")
         return str(val).strip().lower() in {"1", "true", "yes", "on"}
     except Exception:
@@ -393,10 +535,14 @@ def _try_auto_build_all() -> dict[str, bool]:
                 emit_info(f"🐕⚡ Fast Puppy: ✅ {crate_name}: built and ready")
                 results[crate_name] = True
             else:
-                emit_info(f"🐕 Fast Puppy: ⚠️ {crate_name}: build succeeded but module not loadable")
+                emit_info(
+                    f"🐕 Fast Puppy: ⚠️ {crate_name}: build succeeded but module not loadable"
+                )
                 results[crate_name] = False
         else:
-            emit_info(f"🐕 Fast Puppy: ❌ {crate_name}: build failed — {error_msg[:100]}")
+            emit_info(
+                f"🐕 Fast Puppy: ❌ {crate_name}: build failed — {error_msg[:100]}"
+            )
             logger.debug("Build error for %s: %s", crate_name, error_msg)
             results[crate_name] = False
 
@@ -436,13 +582,15 @@ def get_all_crate_status() -> list[dict]:
         except ImportError:
             pass
 
-        statuses.append({
-            "name": crate_name,
-            "installed": installed,
-            "fresh": fresh,
-            "active": active,
-            "crate_dir_found": crate_dir is not None,
-        })
+        statuses.append(
+            {
+                "name": crate_name,
+                "installed": installed,
+                "fresh": fresh,
+                "active": active,
+                "crate_dir_found": crate_dir is not None,
+            }
+        )
 
     return statuses
 

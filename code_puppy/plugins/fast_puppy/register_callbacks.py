@@ -16,8 +16,6 @@ from __future__ import annotations
 
 import importlib
 import logging
-import shutil  # Re-export for test compatibility
-import subprocess  # Re-export for test compatibility
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info
@@ -78,53 +76,51 @@ def _write_persisted_preference(enabled: bool) -> None:
 
 
 def _on_startup():
-    """Auto-build Rust modules if needed, then force Rust enabled."""
+    """Auto-build Rust modules if needed, then respect user preference."""
     try:
-        _ = _read_persisted_preference()  # Read but don't use (force enable)
-
-        # Build all crates
         results = _try_auto_build_all()
 
-        # Import bridge after potential builds
         from code_puppy._core_bridge import (
-            RUST_AVAILABLE,
-            is_rust_enabled,
             set_rust_enabled,
         )
 
-        # Force Rust enabled after successful build
-        set_rust_enabled(True)
-        _write_persisted_preference(True)
-
-        # Emit summary banner
-        if len(results) == 3 and all(results.values()):
-            emit_info("🐕⚡ Fast Puppy: All Rust accelerators active — zoom! zoom! 🚀")
-        elif results:
-            active_count = sum(1 for v in results.values() if v)
-            total_count = len(CRATES)
-            # Find missing crates for the message
-            missing = [name for name, v in results.items() if not v]
-            if missing:
-                missing_str = ", ".join(missing)
-                emit_info(f"🐕⚡ Fast Puppy: {active_count}/{total_count} Rust accelerators active ({missing_str} missing — see /fast_puppy status)")
-            else:
-                emit_info(f"🐕⚡ Fast Puppy: {active_count}/{total_count} Rust accelerators active")
-        else:
-            # No results = no toolchain or disabled
-            if not _has_rust_toolchain():
-                emit_info("🐕 Fast Puppy: Pure Python mode (install Rust toolchain to enable acceleration)")
-            else:
-                emit_info("🐕 Fast Puppy: Rust toolchain found but no crates built yet")
-
-        # Additional status if code_puppy_core specifically is available
-        if RUST_AVAILABLE and not is_rust_enabled():
+        saved = _read_persisted_preference()
+        if saved is False:
+            # Respect explicit user opt-out
+            set_rust_enabled(False)
             emit_info(
-                "🐕💤 Fast Puppy: Rust installed but disabled (/fast_puppy enable to activate)"
+                "🐕💤 Fast Puppy: Rust acceleration disabled by puppy.cfg "
+                "— run /fast_puppy enable to re-enable"
             )
+            return
 
+        # Default: enable
+        set_rust_enabled(True)
+        if saved is None:
+            # First run — persist default
+            _write_persisted_preference(True)
+
+        # Emit summary banner based on results
+        active_count = sum(1 for v in results.values() if v)
+        total_count = len(results)
+        if active_count == total_count:
+            emit_info("🐕⚡ Fast Puppy: All Rust accelerators active — zoom! zoom! 🚀")
+        elif active_count > 0:
+            missing = [k for k, v in results.items() if not v]
+            emit_info(
+                f"🐕⚡ Fast Puppy: {active_count}/{total_count} Rust accelerators active "
+                f"(missing: {', '.join(missing)} — see /fast_puppy status)"
+            )
+        else:
+            emit_info(
+                "🐕 Fast Puppy: Pure Python mode "
+                "(install Rust toolchain to enable acceleration)"
+            )
     except Exception as e:
         logger.warning("Fast Puppy startup error: %s", e)
-        # Never let build failures crash the REPL
+        emit_info(
+            "🐕 Fast Puppy: startup hiccup — run /fast_puppy status for diagnostics"
+        )
 
 
 def _custom_help():
@@ -270,7 +266,6 @@ def _handle_fast_puppy(command: str, name: str):
     # status (default)
     # Get comprehensive status for all crates
     crate_statuses = get_all_crate_status()
-    core_status = next((s for s in crate_statuses if s["name"] == "code_puppy_core"), None)
 
     # Get runtime status from core bridge
     rust_status = get_rust_status()

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from code_puppy.plugins.fast_puppy.register_callbacks import (
     _custom_help,
@@ -57,7 +56,7 @@ class TestHandleFastPuppyStatus:
 
         with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info", side_effect=mock_emit):
             with patch(
-                "code_puppy.plugins.fast_puppy.builder.get_all_crate_status",
+                "code_puppy.plugins.fast_puppy.register_callbacks.get_all_crate_status",
                 return_value=[
                     {"name": "code_puppy_core", "installed": True, "fresh": True, "active": True, "crate_dir_found": True},
                     {"name": "turbo_ops", "installed": True, "fresh": True, "active": True, "crate_dir_found": True},
@@ -186,7 +185,7 @@ class TestHandleFastPuppyBuild:
                 return_value=True,
             ):
                 with patch(
-                    "code_puppy.plugins.fast_puppy.builder.build_single_crate",
+                    "code_puppy.plugins.fast_puppy.register_callbacks.build_single_crate",
                     return_value=True,
                 ):
                     with patch("importlib.reload") as mock_reload:
@@ -315,7 +314,7 @@ class TestHandleFastPuppyNoArgs:
         """Bare /fast_puppy should show status."""
         with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info") as mock_emit:
             with patch(
-                "code_puppy.plugins.fast_puppy.builder.get_all_crate_status",
+                "code_puppy.plugins.fast_puppy.register_callbacks.get_all_crate_status",
                 return_value=[
                     {"name": "code_puppy_core", "installed": False, "fresh": False, "active": False, "crate_dir_found": True},
                     {"name": "turbo_ops", "installed": False, "fresh": False, "active": False, "crate_dir_found": True},
@@ -480,3 +479,32 @@ class TestPersistedPreference:
         with patch("code_puppy.config.set_config_value") as mock_set:
             _write_persisted_preference(False)
             mock_set.assert_called_once_with("enable_fast_puppy", "false")
+
+
+class TestOnStartupRespectsUserPreference:
+    """Regression tests for C2."""
+
+    def test_on_startup_respects_persisted_false(self):
+        from unittest.mock import patch
+        from code_puppy.plugins.fast_puppy import register_callbacks as rc
+
+        with patch.object(rc, "_try_auto_build_all", return_value={"code_puppy_core": True}):
+            with patch.object(rc, "_read_persisted_preference", return_value=False):
+                with patch.object(rc, "_write_persisted_preference") as mock_write:
+                    with patch("code_puppy._core_bridge.set_rust_enabled") as mock_set:
+                        with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info"):
+                            rc._on_startup()
+                            mock_set.assert_called_once_with(False)
+                            mock_write.assert_not_called()  # MUST NOT overwrite user's choice
+
+    def test_on_startup_persists_default_on_first_run(self):
+        from unittest.mock import patch
+        from code_puppy.plugins.fast_puppy import register_callbacks as rc
+
+        with patch.object(rc, "_try_auto_build_all", return_value={"code_puppy_core": True}):
+            with patch.object(rc, "_read_persisted_preference", return_value=None):
+                with patch.object(rc, "_write_persisted_preference") as mock_write:
+                    with patch("code_puppy._core_bridge.set_rust_enabled"):
+                        with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info"):
+                            rc._on_startup()
+                            mock_write.assert_called_once_with(True)
