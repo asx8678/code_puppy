@@ -1272,3 +1272,171 @@ class TestIntegration:
         limiter.release()
         limiter.release()
         assert limiter.active_count == 0
+
+
+# ============================================================================
+# Regression tests for per-semaphore deficit tracking
+# ============================================================================
+
+
+class TestSuccessiveShrinksRegression:
+    """Regression tests for successive shrinks and per-semaphore deficit tracking.
+
+    These tests verify the fix for two critical bugs identified in review:
+    1. Successive shrinks overwriting drained counters and leaking half capacity
+    2. Releasing on one side restoring the idle semaphore above the new cap
+    """
+
+    def test_successive_shrinks_then_grow_restores_full_capacity(self):
+        """Successive shrinks followed by grow must restore full capacity.
+
+        Regression test for: The old shared-deficit model would double-count
+        drained slots when shrinking multiple times. With per-semaphore deficit
+        tracking, each shrink correctly drains from each semaphore and tracks
+        the undrainable remainder as that semaphore's deficit.
+        """
+        # Start with limit 5
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=5))
+
+        # Acquire 2 slots (leaving 3 slack)
+        limiter.acquire_sync(blocking=False)
+        limiter.acquire_sync(blocking=False)
+        assert limiter.active_count == 2
+
+        # First shrink: 5 -> 3 (excess = 2)
+        # Should drain 2 free slots from sync semaphore
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=3))
+        assert limiter.effective_limit == 3
+
+        # Should only be able to acquire 1 more (3 - 2 active = 1)
+        third = limiter.acquire_sync(blocking=False)
+        assert third, "Should acquire third slot up to new limit"
+        assert limiter.active_count == 3
+
+        # Fourth should fail
+        fourth = limiter.acquire_sync(blocking=False)
+        assert not fourth, "Should NOT acquire fourth after first shrink"
+
+        # Second shrink: 3 -> 2 (excess = 1)
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=2))
+        assert limiter.effective_limit == 2
+
+        # Current state: 3 active, but limit is 2
+        # We can't drain any slots (all in use), so sync_deficit becomes 1
+        assert limiter.active_count == 3
+
+        # Release all 3 slots (each absorbed by deficit until it reaches 0)
+        limiter.release()  # active=2, deficit absorbed
+        limiter.release()  # active=1, deficit absorbed (now 0)
+        limiter.release()  # active=0
+        assert limiter.active_count == 0
+
+        # Grow back to 5
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=5))
+        assert limiter.effective_limit == 5
+
+        # Should be able to acquire all 5 slots
+        for i in range(5):
+            acquired = limiter.acquire_sync(blocking=False)
+            assert acquired, f"Failed to acquire slot {i+1} after successive shrinks/grow"
+
+        assert limiter.active_count == 5
+
+        # Clean up
+        while limiter.active_count > 0:
+            limiter.release()
+
+    def test_shrink_does_not_over_release_idle_semaphore(self):
+        """Shrink must not over-release the idle semaphore.
+
+        Regression test for: The old model with shared deficit + restore would
+        sometimes release slots back to an idle semaphore, temporarily inflating
+        its capacity above the new cap. With per-semaphore deficit tracking,
+        each semaphore's deficit is independent and releases only affect that
+        semaphore's deficit counter, not the semaphore itself.
+        """
+        # Start with limit 4
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=4))
+
+        # Acquire 1 slot on sync side, 1 on async side (simulated via state)
+        # This leaves 2 slots "in use" across both semaphores
+        limiter.acquire_sync(blocking=False)  # sync active = 1
+        # Manually set async active to simulate mixed usage
+        limiter._async_active = 1  # async active = 1
+        assert limiter.active_count == 2
+
+        # Shrink: 4 -> 2 (excess = 2)
+        # Should drain 2 free slots from each semaphore
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=2))
+        assert limiter.effective_limit == 2
+
+        # Verify per-semaphore state:
+        # - Sync: started with 4, drained 2 free slots, deficit = 0 (1 active < 2 new limit)
+        # - Async: started with 4, drained 2 free slots, deficit = 0 (1 active < 2 new limit)
+        assert limiter._sync_deficit == 0, "Sync semaphore should have no deficit (1 active < 2 limit)"
+        assert limiter._async_deficit == 0, "Async semaphore should have no deficit (1 active < 2 limit)"
+
+        # Release sync slot - should go directly to semaphore (no deficit)
+        limiter.release()  # sync active goes 1 -> 0
+        # Verify we can re-acquire it
+        reacquired = limiter.acquire_sync(blocking=False)
+        assert reacquired, "Should re-acquire sync slot immediately (no deficit)"
+
+        # Clean up
+        limiter.release()
+        limiter._async_active = 0  # Clear the simulated async active
+
+    def test_successive_shrinks_accumulate_deficit_correctly(self):
+        """Successive shrinks must accumulate deficit correctly per semaphore.
+
+        Regression test for: The old model's shared deficit would be overwritten
+        on successive shrinks, losing track of the total capacity reduction needed.
+        """
+        # Start with limit 6
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=6))
+
+        # Acquire all 6 slots
+        for _ in range(6):
+            limiter.acquire_sync(blocking=False)
+        assert limiter.active_count == 6
+
+        # First shrink: 6 -> 4 (excess = 2)
+        # Can't drain any (all in use), so sync_deficit = 2
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=4))
+        assert limiter.effective_limit == 4
+        assert limiter._sync_deficit == 2
+
+        # Second shrink: 4 -> 2 (excess = 2)
+        # Still can't drain, so sync_deficit = 2 + 2 = 4
+        limiter.update_config(RunLimiterConfig(max_concurrent_runs=2))
+        assert limiter.effective_limit == 2
+        assert limiter._sync_deficit == 4, (
+            f"Expected sync_deficit=4 after successive shrinks (2+2), got {limiter._sync_deficit}"
+        )
+
+        # Release all 6 slots
+        for _ in range(6):
+            limiter.release()
+        assert limiter.active_count == 0
+
+        # After all releases, deficit should be 0 (4 absorbed by releases, 2 actually released)
+        # Actually: we released 6, but deficit was 4, so 4 absorbed, 2 released to semaphore
+        # New limit is 2, so we should be able to acquire exactly 2 slots
+        assert limiter._sync_deficit == 0, (
+            f"Deficit should be 0 after all releases, got {limiter._sync_deficit}"
+        )
+
+        acquired_count = 0
+        while limiter.acquire_sync(blocking=False):
+            acquired_count += 1
+            if acquired_count > 10:  # Safety break
+                break
+
+        assert acquired_count == 2, (
+            f"Expected 2 slots (new limit), got {acquired_count}. "
+            "Deficit tracking failed across successive shrinks."
+        )
+
+        # Clean up
+        while limiter.active_count > 0:
+            limiter.release()
