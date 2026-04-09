@@ -1675,6 +1675,107 @@ class TestForceReset:
         assert limiter.active_count == 1
         limiter.release()
 
+    @pytest.mark.asyncio
+    async def test_force_reset_with_active_async_waiters_completes_cleanly(
+        self, reset_limiter
+    ):
+        """REGRESSION TEST: force_reset must not strand coroutines awaiting the semaphore.
+
+        Before the fix, force_reset_limiter_state() would replace the async semaphore
+        without waking waiters, causing any coroutines in acquire_async() to hang
+        forever on the old semaphore.
+
+        After the fix, waiters are woken before semaphore replacement and complete
+        cleanly rather than hanging.
+        """
+        limiter = get_run_limiter()
+
+        # Fill the limiter with 2 active tasks (use separate tasks to avoid reentrancy)
+        holder1_acquired = asyncio.Event()
+        holder2_acquired = asyncio.Event()
+
+        async def holder(acquired_event):
+            await limiter.acquire_async()
+            acquired_event.set()
+            # Hold the slot until we're told to release
+            await asyncio.sleep(10)  # Long sleep, will be cancelled
+
+        # Start holder tasks to fill the limiter
+        holder1 = asyncio.create_task(holder(holder1_acquired))
+        holder2 = asyncio.create_task(holder(holder2_acquired))
+
+        # Wait for holders to acquire
+        await asyncio.wait_for(holder1_acquired.wait(), timeout=1.0)
+        await asyncio.wait_for(holder2_acquired.wait(), timeout=1.0)
+        assert limiter.active_count == 2
+
+        # Track whether waiters completed
+        waiter1_completed = asyncio.Event()
+        waiter2_completed = asyncio.Event()
+        waiter1_acquired = asyncio.Event()
+        waiter2_acquired = asyncio.Event()
+
+        async def waiter(event_acquired, event_completed):
+            """A waiter that will be blocked on the old semaphore."""
+            await limiter.acquire_async()
+            event_acquired.set()
+            # Simulate some work
+            await asyncio.sleep(0.01)
+            limiter.release()
+            event_completed.set()
+
+        # Start 2 waiters that will block on the full semaphore
+        task1 = asyncio.create_task(waiter(waiter1_acquired, waiter1_completed))
+        task2 = asyncio.create_task(waiter(waiter2_acquired, waiter2_completed))
+
+        # Give waiters time to start waiting on the semaphore
+        await asyncio.sleep(0.05)
+        assert limiter.waiters_count >= 2, "Waiters should be registered"
+
+        # Force reset while waiters are pending - this is the critical test
+        # Before the fix, waiters would hang forever on the old semaphore
+        result = force_reset_limiter_state()
+        assert result["status"] == "reset"
+
+        # Cancel the holder tasks (they're holding old slots)
+        holder1.cancel()
+        holder2.cancel()
+        try:
+            await holder1
+        except asyncio.CancelledError:
+            pass
+        try:
+            await holder2
+        except asyncio.CancelledError:
+            pass
+
+        # Wait for the woken waiters to complete their work
+        # Use a timeout to detect if they would hang forever
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(
+                    waiter1_completed.wait(),
+                    waiter2_completed.wait(),
+                ),
+                timeout=2.0,  # Should complete quickly if not stranded
+            )
+        except asyncio.TimeoutError:
+            pytest.fail(
+                "Waiters did not complete after force_reset - they were stranded!"
+            )
+
+        # Wait for tasks to finish
+        await asyncio.gather(task1, task2, return_exceptions=True)
+
+        # Verify counters stabilized correctly
+        assert limiter.active_count == 0
+        assert limiter.waiters_count == 0
+
+        # Verify new acquires work normally after reset
+        await limiter.acquire_async()
+        assert limiter.active_count == 1
+        limiter.release()
+
 
 # ============================================================================
 # Integration test
