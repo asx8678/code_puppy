@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
 import subprocess
 import tempfile
 from typing import Any
@@ -31,18 +32,55 @@ def _get_store() -> PromptStore:
     return _store
 
 
-def _get_editor_command() -> str:
-    """Get the editor command to use.
+# Sentinel-style comment prefix for editor-added comments.
+# Using '# // ' as the sentinel ensures it won't collide with:
+#   - Markdown headers (e.g., '# Heading', '## Subheader')
+#   - Code comments (e.g., '# This is a Python comment')
+# Editor comments MUST use this exact prefix to be stripped.
+_COMMENT_SENTINEL = "# // "
+
+
+def _strip_editor_comments(content: str) -> str:
+    """Strip editor-added comments from content.
+
+    Uses sentinel-style approach: only lines starting with '# // ' are stripped.
+    This preserves ALL other content including:
+#   - Markdown headers (e.g., '# Heading', '## Subheader')
+    - Code comments (e.g., '# TODO: fix this')
+    - Any other lines starting with '#'
+
+    Args:
+        content: Raw content from editor
+
+    Returns:
+        Content with editor comments removed
+    """
+    lines = content.split("\n")
+    result_lines = []
+    for line in lines:
+        stripped = line.strip()
+        # Only strip lines that start with '# // ' (sentinel for editor comments)
+        if stripped.startswith(_COMMENT_SENTINEL):
+            continue
+        result_lines.append(line)
+    return "\n".join(result_lines).strip()
+
+
+def _get_editor_command() -> list[str]:
+    """Get the editor command to use, tokenized for subprocess.
 
     Priority: $VISUAL > $EDITOR > nano (Unix) / notepad (Windows)
+
+    Returns:
+        List of command arguments (e.g., ["code", "--wait"] for EDITOR="code --wait")
     """
     editor = os.environ.get("VISUAL") or os.environ.get("EDITOR")
     if editor:
-        return editor
+        return shlex.split(editor)
     # Platform defaults
     if os.name == "nt":
-        return "notepad"
-    return "nano"
+        return ["notepad"]
+    return ["nano"]
 
 
 def _open_editor(initial_content: str) -> str | None:
@@ -54,7 +92,7 @@ def _open_editor(initial_content: str) -> str | None:
     Returns:
         The edited content, or None if the user cancelled/failed
     """
-    editor = _get_editor_command()
+    editor_cmd = _get_editor_command()
 
     # Create temp file with initial content
     with tempfile.NamedTemporaryFile(
@@ -64,8 +102,8 @@ def _open_editor(initial_content: str) -> str | None:
         temp_path = f.name
 
     try:
-        # Launch editor
-        result = subprocess.call([editor, temp_path])
+        # Launch editor (editor_cmd is already a list, append temp_path)
+        result = subprocess.call([*editor_cmd, temp_path])
         if result != 0:
             logger.warning(f"Editor exited with code {result}")
             return None
@@ -74,7 +112,7 @@ def _open_editor(initial_content: str) -> str | None:
         with open(temp_path, encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
-        emit_error(f"Editor not found: {editor}")
+        emit_error(f"Editor not found: {editor_cmd[0]}")
         emit_info(
             "Set $VISUAL or $EDITOR environment variable to your preferred editor"
         )
@@ -191,8 +229,9 @@ def _handle_create(args: list[str]) -> None:
     store = _get_store()
 
     # Open editor with starter content
-    starter = f"""# Enter your custom system prompt for {agent_name}
-# Lines starting with # are ignored
+    # IMPORTANT: Editor comments must use '# // ' prefix to be stripped
+    starter = f"""# // Enter your custom system prompt for {agent_name}
+# // Lines starting with '# // ' are ignored (all other lines preserved)
 
 You are a helpful AI assistant.
 """
@@ -202,9 +241,8 @@ You are a helpful AI assistant.
         emit_warning("Creation cancelled")
         return
 
-    # Remove comment lines
-    lines = [line for line in content.split("\n") if not line.strip().startswith("#")]
-    content = "\n".join(lines).strip()
+    # Strip editor comments (sentinel-style: only lines starting with '# ')
+    content = _strip_editor_comments(content)
 
     if not content:
         emit_error("Prompt content cannot be empty")
@@ -240,8 +278,10 @@ def _handle_edit(args: list[str]) -> None:
         return
 
     # Open editor with current content
+    # IMPORTANT: Editor comments must use '# // ' prefix to be stripped
     header = (
-        f"# Editing: {tmpl.name} ({tmpl.id})\n# Lines starting with # are ignored\n\n"
+        f"# // Editing: {tmpl.name} ({tmpl.id})\n"
+        f"# // Lines starting with '# // ' are ignored (all other lines preserved)\n\n"
     )
     content = _open_editor(header + tmpl.content)
 
@@ -249,9 +289,8 @@ def _handle_edit(args: list[str]) -> None:
         emit_warning("Edit cancelled")
         return
 
-    # Remove comment lines
-    lines = [line for line in content.split("\n") if not line.strip().startswith("#")]
-    content = "\n".join(lines).strip()
+    # Strip editor comments (sentinel-style: only lines starting with '# ')
+    content = _strip_editor_comments(content)
 
     if not content:
         emit_error("Prompt content cannot be empty")
@@ -454,16 +493,17 @@ def get_prompts_help() -> list[tuple[str, str]]:
     ]
 
 
-def inject_custom_prompt(
-    model_name: str, default_system_prompt: str, user_prompt: str
-) -> dict[str, str] | None:
-    """Callback for get_model_system_prompt hook.
+def load_custom_prompt() -> str | None:
+    """Callback for load_prompt hook.
 
     If the user has set an active custom prompt for the current agent,
-    return it instead of the default.
+    return it as a base system prompt addition.
+
+    This runs BEFORE get_model_system_prompt hooks, allowing other plugins
+    (like agent_skills and repo_compass) to enhance the prompt we provide.
 
     Returns:
-        Dict with custom prompt if active template exists, None otherwise
+        Custom prompt content if active template exists, None otherwise
     """
     try:
         agent_name = get_current_agent_name()
@@ -479,8 +519,5 @@ def inject_custom_prompt(
     if template is None:
         return None  # Let other handlers process
 
-    # Return the custom template content
-    return {
-        "instructions": template.content,
-        "user_prompt": user_prompt,
-    }
+    # Return the custom template content as a string for load_prompt hook
+    return template.content

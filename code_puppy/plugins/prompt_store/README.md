@@ -58,15 +58,38 @@ All commands are accessed via `/prompts`:
 
 ## Integration
 
-The plugin hooks into `get_model_system_prompt` callback. When an agent runs:
+The plugin hooks into the `load_prompt` callback (early-stage prompt assembly). When an agent runs:
 
-1. If you've activated a custom prompt for that agent → it's used
-2. Otherwise → the agent's default system prompt is used
-3. Other plugins (like `agent_skills`) can still inject content via the same hook
+1. If you've activated a custom prompt for that agent → it's loaded via `load_prompt`
+2. Otherwise → no contribution from prompt_store (agent's default is used)
+3. Other plugins (like `agent_skills`, `repo_compass`) hook into `get_model_system_prompt` 
+   to enhance the system prompt with their content
 
-Multiple plugins can hook `get_model_system_prompt`. The Prompt Store returns `None` when there's no active custom template, letting other handlers process. When a custom template is active, it returns the custom content.
+This architecture ensures:
+- **prompt_store** provides the **base template** (via `load_prompt`)
+- **agent_skills** adds available skills information
+- **repo_compass** adds project context
+- All contributions coexist in the final prompt
+
+The Prompt Store returns `None` when there's no active custom template, letting other handlers process normally.
 
 ## Environment Variables
 
 - `PUPPY_PROMPT_STORE`: Override the default store path
 - `EDITOR` or `VISUAL`: Specify your preferred editor for `/prompts create` and `/prompts edit`
+  - Supports editors with arguments (e.g., `EDITOR="code --wait"`, `VISUAL="subl -n -w"`)
+
+## Editor Comments
+
+When creating or editing templates in your editor, lines starting with `# // ` are treated as editor comments and stripped from the final content. This preserves:
+- Markdown headers (e.g., `# Heading`, `## Subheader`)
+- Regular code comments (e.g., `# TODO: fix this`)
+- All other lines starting with `#`
+
+Example:
+```
+# // This line is stripped (editor comment)
+# This line is preserved (regular comment)
+# Heading
+This is my prompt content.
+```

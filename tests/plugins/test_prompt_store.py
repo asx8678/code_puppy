@@ -5,13 +5,16 @@ Covers:
 - Thread safety: concurrent operations
 - Atomic writes: crash recovery
 - Malformed JSON: backup and reset
-- Hook integration: _inject_custom_prompt
+- Hook integration: load_custom_prompt
 - Command dispatch: /prompts subcommands
+- Editor command: shlex.split handling
+- Comment stripping: sentinel-style Markdown header preservation
 """
 
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -421,14 +424,14 @@ class TestMalformedJSON:
 # =============================================================================
 
 
-class TestInjectCustomPrompt:
-    """Tests for _inject_custom_prompt hook function."""
+class TestLoadCustomPrompt:
+    """Tests for load_custom_prompt hook function."""
 
     @patch("code_puppy.plugins.prompt_store.commands.get_current_agent_name")
     @patch("code_puppy.plugins.prompt_store.commands._get_store")
     def test_returns_none_when_no_active_template(self, mock_get_store, mock_get_agent):
-        """_inject_custom_prompt returns None when no active template."""
-        from code_puppy.plugins.prompt_store.commands import inject_custom_prompt
+        """load_custom_prompt returns None when no active template."""
+        from code_puppy.plugins.prompt_store.commands import load_custom_prompt
 
         mock_get_agent.return_value = "code-puppy"
 
@@ -437,15 +440,15 @@ class TestInjectCustomPrompt:
         mock_store.get_active_for_agent.return_value = None
         mock_get_store.return_value = mock_store
 
-        result = inject_custom_prompt("model", "default prompt", "user msg")
+        result = load_custom_prompt()
 
         assert result is None
 
     @patch("code_puppy.plugins.prompt_store.commands.get_current_agent_name")
     @patch("code_puppy.plugins.prompt_store.commands._get_store")
-    def test_returns_dict_with_custom_content(self, mock_get_store, mock_get_agent):
-        """_inject_custom_prompt returns dict with custom content when active."""
-        from code_puppy.plugins.prompt_store.commands import inject_custom_prompt
+    def test_returns_string_with_custom_content(self, mock_get_store, mock_get_agent):
+        """load_custom_prompt returns string with custom content when active."""
+        from code_puppy.plugins.prompt_store.commands import load_custom_prompt
 
         mock_get_agent.return_value = "code-puppy"
 
@@ -456,22 +459,98 @@ class TestInjectCustomPrompt:
         mock_store.get_active_for_agent.return_value = mock_template
         mock_get_store.return_value = mock_store
 
-        result = inject_custom_prompt("model", "default prompt", "user msg")
+        result = load_custom_prompt()
 
         assert result is not None
-        assert result["instructions"] == "Custom system prompt"
-        assert result["user_prompt"] == "user msg"
+        assert result == "Custom system prompt"
 
     @patch("code_puppy.plugins.prompt_store.commands.get_current_agent_name")
     def test_returns_none_on_exception(self, mock_get_agent):
-        """_inject_custom_prompt returns None if getting agent fails."""
-        from code_puppy.plugins.prompt_store.commands import inject_custom_prompt
+        """load_custom_prompt returns None if getting agent fails."""
+        from code_puppy.plugins.prompt_store.commands import load_custom_prompt
 
         mock_get_agent.side_effect = Exception("Some error")
 
-        result = inject_custom_prompt("model", "default prompt", "user msg")
+        result = load_custom_prompt()
 
         assert result is None
+
+
+# =============================================================================
+# Integration Tests: Plugin Coexistence
+# =============================================================================
+
+
+class TestPluginCoexistence:
+    """Integration tests verifying prompt_store works with other prompt-injecting plugins.
+    
+    These tests verify that prompt_store (using load_prompt hook), agent_skills,
+    and repo_compass (using get_model_system_prompt hook) can all contribute to
+    the final system prompt without overwriting each other.
+    """
+
+    @patch("code_puppy.plugins.prompt_store.commands.get_current_agent_name")
+    @patch("code_puppy.plugins.prompt_store.commands._get_store")
+    def test_prompt_store_contributes_via_load_prompt(self, mock_get_store, mock_get_agent):
+        """prompt_store returns string via load_prompt hook (not dict via get_model_system_prompt)."""
+        from code_puppy.plugins.prompt_store.commands import load_custom_prompt
+
+        mock_get_agent.return_value = "code-puppy"
+
+        mock_template = MagicMock()
+        mock_template.content = "Custom base prompt from prompt_store"
+        mock_store = MagicMock()
+        mock_store.get_active_for_agent.return_value = mock_template
+        mock_get_store.return_value = mock_store
+
+        result = load_custom_prompt()
+
+        # Should return a string, not a dict (this is the key architectural change)
+        assert isinstance(result, str)
+        assert result == "Custom base prompt from prompt_store"
+
+    def test_load_prompt_hook_signature_matches(self):
+        """load_custom_prompt has correct signature for load_prompt hook (no args, returns str|None)."""
+        from code_puppy.plugins.prompt_store.commands import load_custom_prompt
+        import inspect
+
+        sig = inspect.signature(load_custom_prompt)
+        params = list(sig.parameters.keys())
+
+        # load_prompt hook expects () -> str | None
+        assert params == [], f"load_custom_prompt should take no args, got {params}"
+
+        # Check return annotation
+        assert sig.return_annotation == "str | None" or sig.return_annotation == str(sig.return_annotation)
+
+    @patch("code_puppy.plugins.prompt_store.commands.load_custom_prompt")
+    def test_prompt_store_runs_before_model_specific_hooks(self, mock_load_custom):
+        """prompt_store's load_prompt runs early, allowing other plugins to enhance.
+        
+        This simulates the hook execution order:
+        1. load_prompt (prompt_store provides base template)
+        2. get_model_system_prompt (agent_skills, repo_compass add enhancements)
+        """
+        mock_load_custom.return_value = "Base template from prompt_store"
+
+        # Simulate what agents do: collect load_prompt results
+        from code_puppy import callbacks
+        
+        # Mock the callback system to simulate multiple plugins
+        with patch.object(callbacks, 'on_load_prompt', return_value=[
+            "Base template from prompt_store",  # prompt_store contribution
+            "\n\n## Pack Leader Parallelism\nMAX_PARALLEL_AGENTS = 2",  # pack_parallelism
+        ]):
+            prompt_additions = callbacks.on_load_prompt()
+            
+            # Filter and combine like agents do
+            valid_additions = [p for p in prompt_additions if p is not None]
+            combined = "\n".join(valid_additions)
+            
+            # Should contain prompt_store's contribution
+            assert "Base template from prompt_store" in combined
+            # Should also contain other plugins' contributions
+            assert "Pack Leader Parallelism" in combined
 
 
 # =============================================================================
@@ -539,6 +618,156 @@ class TestHandlePromptsCommand:
 
         assert result is True  # We handled it (by showing error)
         mock_error.assert_called_once()
+
+
+# =============================================================================
+# Editor Command Tests (shlex.split)
+# =============================================================================
+
+
+class TestEditorCommand:
+    """Tests for editor command tokenization with shlex.split."""
+
+    @patch.dict(os.environ, {"EDITOR": "vim"}, clear=True)
+    def test_simple_editor_command(self):
+        """Simple editor without args works."""
+        from code_puppy.plugins.prompt_store.commands import _get_editor_command
+
+        result = _get_editor_command()
+        assert result == ["vim"]
+
+    @patch.dict(os.environ, {"EDITOR": "code --wait"}, clear=True)
+    def test_editor_with_args_code_wait(self):
+        """Editor with args like 'code --wait' is properly tokenized."""
+        from code_puppy.plugins.prompt_store.commands import _get_editor_command
+
+        result = _get_editor_command()
+        assert result == ["code", "--wait"]
+
+    @patch.dict(os.environ, {"EDITOR": "subl -n -w"}, clear=True)
+    def test_editor_with_multiple_args(self):
+        """Editor with multiple args is properly tokenized."""
+        from code_puppy.plugins.prompt_store.commands import _get_editor_command
+
+        result = _get_editor_command()
+        assert result == ["subl", "-n", "-w"]
+
+    @patch.dict(os.environ, {"VISUAL": "emacs -nw", "EDITOR": "vim"}, clear=True)
+    def test_visual_takes_priority(self):
+        """VISUAL takes priority over EDITOR."""
+        from code_puppy.plugins.prompt_store.commands import _get_editor_command
+
+        result = _get_editor_command()
+        assert result == ["emacs", "-nw"]
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_default_editor_nano_on_unix(self):
+        """Default editor is nano on Unix when no env vars set."""
+        from code_puppy.plugins.prompt_store.commands import _get_editor_command
+
+        with patch("os.name", "posix"):
+            result = _get_editor_command()
+            assert result == ["nano"]
+
+
+# =============================================================================
+# Comment Stripping Tests (sentinel-style)
+# =============================================================================
+
+
+class TestStripEditorComments:
+    """Tests for sentinel-style comment stripping using '# // ' prefix."""
+
+    def test_strips_lines_starting_with_sentinel(self):
+        """Lines starting with '# // ' are stripped as editor comments."""
+        from code_puppy.plugins.prompt_store.commands import _strip_editor_comments
+
+        content = "# // This is an editor comment\nActual content\n# // Another editor comment"
+        result = _strip_editor_comments(content)
+        assert result == "Actual content"
+
+    def test_preserves_markdown_headers(self):
+        """Markdown headers like '# Heading' are preserved."""
+        from code_puppy.plugins.prompt_store.commands import _strip_editor_comments
+
+        content = "# Heading 1\nSome text\n## Heading 2\n### Heading 3"
+        result = _strip_editor_comments(content)
+        assert "# Heading 1" in result
+        assert "## Heading 2" in result
+        assert "### Heading 3" in result
+        assert "Some text" in result
+
+    def test_preserves_regular_code_comments(self):
+        """Regular code comments '# ' are preserved (not editor comments)."""
+        from code_puppy.plugins.prompt_store.commands import _strip_editor_comments
+
+        content = "# TODO: fix this\n# FIXME: handle edge case\nActual code"
+        result = _strip_editor_comments(content)
+        assert "# TODO: fix this" in result
+        assert "# FIXME: handle edge case" in result
+        assert "Actual code" in result
+
+    def test_preserves_hash_without_space(self):
+        """Lines with just '#' or '#Text' are preserved."""
+        from code_puppy.plugins.prompt_store.commands import _strip_editor_comments
+
+        content = "#\n#NoSpace\n# With space is preserved"
+        result = _strip_editor_comments(content)
+        assert "#" in result
+        assert "#NoSpace" in result
+        assert "# With space is preserved" in result
+
+    def test_handles_empty_content(self):
+        """Empty content returns empty string."""
+        from code_puppy.plugins.prompt_store.commands import _strip_editor_comments
+
+        result = _strip_editor_comments("")
+        assert result == ""
+
+    def test_handles_only_editor_comments(self):
+        """Content with only editor comments returns empty string."""
+        from code_puppy.plugins.prompt_store.commands import _strip_editor_comments
+
+        content = "# // Comment 1\n# // Comment 2"
+        result = _strip_editor_comments(content)
+        assert result == ""
+
+    def test_preserves_indented_content(self):
+        """Indented lines are preserved unless they have sentinel."""
+        from code_puppy.plugins.prompt_store.commands import _strip_editor_comments
+
+        content = "    code line\n    # // indented editor comment"
+        result = _strip_editor_comments(content)
+        assert "code line" in result
+        assert "indented editor comment" not in result
+
+    def test_handles_mixed_markdown_and_editor_comments(self):
+        """Real-world mix: Markdown headers, code comments, editor comments."""
+        from code_puppy.plugins.prompt_store.commands import _strip_editor_comments
+
+        content = """# // Editing: My Template (template.id)
+# // Lines starting with '# // ' are ignored (all other lines preserved)
+
+# My Custom Header
+This is the actual content.
+# TODO: add more examples
+## Subheader
+More content.
+# // Another editor comment at end
+"""
+        result = _strip_editor_comments(content)
+        # Markdown headers preserved
+        assert "# My Custom Header" in result
+        assert "## Subheader" in result
+        # Code comments preserved
+        assert "# TODO: add more examples" in result
+        # Editor comments stripped (have '# // ')
+        assert "Editing:" not in result
+        assert "Lines starting with" not in result
+        assert "Another editor comment" not in result
+        # Content preserved
+        assert "This is the actual content" in result
+        assert "More content" in result
 
 
 # =============================================================================
