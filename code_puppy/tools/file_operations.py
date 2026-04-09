@@ -28,6 +28,7 @@ from code_puppy.messaging import (  # New structured messaging types
 )
 from code_puppy.token_utils import estimate_token_count as _etc
 from code_puppy.utils.file_display import format_content_with_line_numbers, truncate_with_guidance
+from code_puppy.utils.gitignore import is_gitignored
 from code_puppy.utils.install_hints import format_missing_tool_message
 
 
@@ -459,6 +460,13 @@ async def _list_files(
         error_msg = f"Error: Error during list files operation: {e}"
         return ListFileOutput(content=error_msg, error=error_msg)
     # Note: Ignore file cleanup is handled by _cleanup_ignore_file atexit handler
+
+    # Gitignore filtering (HIGHER-RISK: bd code_puppy-31a.9)
+    # Only filter if explicitly enabled in config (defaults to OFF for safety)
+    from code_puppy.config import get_enable_gitignore_filtering
+
+    if get_enable_gitignore_filtering():
+        results = [f for f in results if not is_gitignored(f.full_path, base_dir=directory)]
 
     # Count items in results - single pass for performance
     dir_count = 0

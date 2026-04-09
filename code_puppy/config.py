@@ -446,6 +446,28 @@ get_enable_streaming = _make_bool_getter(
     """,
 )
 
+# bd code_puppy-31a.10: Post-edit syntax validation
+def get_post_edit_validation_enabled() -> bool:
+    """Return True if post-edit syntax validation is enabled (default: True).
+
+    Can be disabled via the `enable_post_edit_validation` key in puppy.cfg
+    or the `PUPPY_POST_EDIT_VALIDATION` env var (set to 0/false/no to disable).
+
+    When enabled, files created or modified via agent tools are validated
+    using tree-sitter parsers with a 500ms timeout. Syntax errors are
+    surfaced to the agent as warnings without blocking the operation.
+    This is fail-open: if the parser is unavailable or times out, no
+    warning is issued.
+    """
+    from code_puppy.config_package.env_helpers import env_bool
+
+    # Check env var first, fall back to config key, default to True
+    env_val = env_bool("PUPPY_POST_EDIT_VALIDATION", default=True)
+    if not env_val:
+        return False
+    # If env var is True/default, check config
+    return _is_truthy(get_value("enable_post_edit_validation"), default=True)
+
 
 DEFAULT_SECTION = "puppy"
 REQUIRED_KEYS = ["puppy_name", "owner_name"]
@@ -561,6 +583,27 @@ get_allow_recursion = _make_bool_getter(
     default=True,
     doc="""Get the allow_recursion configuration value.
     Returns True if recursion is allowed, False otherwise.
+    """,
+)
+
+# HIGHER-RISK CONFIG FLAG (bd code_puppy-31a.9):
+# Gitignore-aware filtering for list_files. This changes what files the agent sees,
+# which could break existing agent flows that depend on seeing gitignored files.
+# MANDATORY: Must default to False for at least one release cycle.
+# Opt in via puppy.cfg:
+#     [default]
+#     enable_gitignore_filtering = true
+get_enable_gitignore_filtering = _make_bool_getter(
+    "enable_gitignore_filtering",
+    default=False,
+    doc="""Get the enable_gitignore_filtering configuration value.
+
+    WARNING: HIGHER-RISK FLAG (bd code_puppy-31a.9). When True, list_files will
+    filter out files that match .gitignore patterns. This changes what files the
+    agent can see and could break existing workflows. Defaults to False for safety.
+    Opt in via puppy.cfg: enable_gitignore_filtering = true
+
+    Returns True if gitignore filtering is enabled, False otherwise.
     """,
 )
 

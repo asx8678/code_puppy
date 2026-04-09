@@ -30,10 +30,21 @@ from code_puppy.messaging import (  # Structured messaging types
     emit_warning,
     get_message_bus,
 )
-from code_puppy.config import get_diff_context_lines
+from code_puppy.config import get_diff_context_lines, get_post_edit_validation_enabled
 from code_puppy.tools.common import _find_best_window, generate_group_id
 from code_puppy.utils.file_display import safe_write_file
 from code_puppy.utils.whitespace import strip_added_blank_lines
+
+# Syntax validation imports (bd code_puppy-31a.10)
+# Deferred to function level to fail-open if imports break
+try:
+    from code_puppy.utils.syntax_validate import (
+        validate_file_sync,
+        format_validation_errors_for_agent,
+    )
+    _SYNTAX_VALIDATE_AVAILABLE = True
+except Exception:
+    _SYNTAX_VALIDATE_AVAILABLE = False
 
 # Hoisted import for file_permission_handler with optional dependency guard
 try:
@@ -83,6 +94,45 @@ def _create_rejection_response(file_path: str) -> dict[str, Any]:
         "rejection_type": "explicit_user_denial",
         "user_feedback": user_feedback,
     }
+
+
+def _maybe_attach_syntax_warning(result: dict[str, Any], file_path: str) -> None:
+    """Attach syntax warning to result dict if validation detects issues.
+
+    This function mutates the result dict in-place to add a 'syntax_warning'
+    key if post-edit validation finds syntax errors. The edit operation itself
+    is NOT blocked - this is purely advisory for the agent to self-correct.
+
+    Args:
+        result: The result dict from a successful file operation
+        file_path: Path to the file that was just written
+    """
+    # Only validate successful operations on validatable extensions
+    if not result.get("success"):
+        return
+    if not get_post_edit_validation_enabled():
+        return
+    if not _SYNTAX_VALIDATE_AVAILABLE:
+        return
+
+    try:
+        # Read the final content from disk (ensures we validate what was written)
+        with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
+            final_content = f.read()
+
+        # Run validation with 500ms timeout
+        v_result = validate_file_sync(file_path, final_content, timeout_s=0.5)
+        warning = format_validation_errors_for_agent(v_result)
+        if warning:
+            result["syntax_warning"] = warning
+    except Exception as e:
+        # Never let validation failures break the edit operation
+        # This ensures the fail-open guarantee
+        import logging
+
+        logging.getLogger(__name__).debug(
+            "post-edit validation skipped for %s: %s", file_path, e
+        )
 
 
 class DeleteSnippetPayload(BaseModel):
@@ -485,6 +535,8 @@ async def delete_snippet_from_file(
     diff = res.get("diff", "")
     if diff:
         _emit_diff_message(file_path, "modify", diff)
+    # Post-edit syntax validation (bd code_puppy-31a.10)
+    _maybe_attach_syntax_warning(res, file_path)
     return res
 
 
@@ -522,6 +574,8 @@ async def write_to_file(
         # Determine operation type based on whether file existed
         operation = "modify" if overwrite else "create"
         _emit_diff_message(path, operation, diff, new_content=content)
+    # Post-edit syntax validation (bd code_puppy-31a.10)
+    _maybe_attach_syntax_warning(res, path)
     return res
 
 
@@ -551,6 +605,8 @@ async def replace_in_file(
     diff = res.get("diff", "")
     if diff:
         _emit_diff_message(path, "modify", diff)
+    # Post-edit syntax validation (bd code_puppy-31a.10)
+    _maybe_attach_syntax_warning(res, path)
     return res
 
 
