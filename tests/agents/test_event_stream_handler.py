@@ -10,6 +10,7 @@ Covers:
 - Stream event batching behavior
 """
 
+import asyncio
 from io import StringIO
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -324,17 +325,18 @@ class TestEventStreamHandler:
 
         with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
             with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
-                with patch("rich.live.Live") as mock_live_cls:
-                    mock_live = MagicMock()
-                    mock_live.__exit__ = MagicMock(return_value=False)
-                    mock_live_cls.return_value = mock_live
-
-                    with patch("rich.markdown.Markdown"):
-                        await event_stream_handler(mock_ctx, event_stream())
+                with patch(
+                    "code_puppy.agents.event_stream_handler.get_banner_color",
+                    return_value="blue",
+                ):
+                    await event_stream_handler(mock_ctx, event_stream())
 
         # Spinner should be resumed when next part is not text/thinking/tool
-        # __exit__ should be called to cleanup Live context
-        assert mock_live.__exit__.called
+        # Text content should be printed as escaped plain text (markup=False)
+        # Verify content was printed (escaped, end="", markup=False)
+        print_calls = [call for call in console.print.call_args_list
+                       if call.args and isinstance(call.args[0], str) and "some content" in call.args[0]]
+        assert any("some content" in str(call) for call in print_calls), "Expected text content to be printed"
 
     @pytest.mark.asyncio
     async def test_handles_part_end_event_for_tool(self, mock_ctx):
@@ -405,18 +407,18 @@ class TestEventStreamHandler:
 
         with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
             with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
-                with patch("rich.live.Live") as mock_live_cls:
-                    mock_live = MagicMock()
-                    mock_live.__exit__ = MagicMock(return_value=False)
-                    mock_live_cls.return_value = mock_live
-
-                    with patch("rich.markdown.Markdown"):
-                        await event_stream_handler(mock_ctx, event_stream())
+                with patch(
+                    "code_puppy.agents.event_stream_handler.get_banner_color",
+                    return_value="blue",
+                ):
+                    await event_stream_handler(mock_ctx, event_stream())
 
         # The function checks: if next_kind not in ("text", "thinking", "tool-call")
         # So if next is "text", it should NOT call resume
-        # __exit__ should have been called for cleanup
-        assert mock_live.__exit__.called
+        # Text content should be printed as escaped plain text (markup=False)
+        print_calls = [call for call in console.print.call_args_list
+                       if call.args and isinstance(call.args[0], str) and "some content" in call.args[0]]
+        assert any("some content" in str(call) for call in print_calls), "Expected text content to be printed"
 
     @pytest.mark.asyncio
     async def test_streaming_with_multiple_text_deltas(self, mock_ctx):
@@ -613,17 +615,12 @@ class TestEventStreamHandler:
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
                 ):
-                    with patch("rich.live.Live") as mock_live_cls:
-                        mock_live = MagicMock()
-                        mock_live.__exit__ = MagicMock(return_value=False)
-                        mock_live_cls.return_value = mock_live
+                    await event_stream_handler(mock_ctx, event_stream())
 
-                        with patch("rich.markdown.Markdown"):
-                            await event_stream_handler(mock_ctx, event_stream())
-
-        # Verify cleanup was called
-        # finalize should be called for text parts
-        assert mock_live.__exit__.called
+        # Verify text content was printed and trailing newline was added
+        # Initial content "test" should be printed as escaped plain text
+        print_calls = [str(call) for call in console.print.call_args_list]
+        assert any("test" in call for call in print_calls), "Expected 'test' content to be printed"
 
     @pytest.mark.asyncio
     async def test_multiple_parts_in_sequence(self, mock_ctx):
@@ -1075,3 +1072,175 @@ class TestStreamEventBatching:
             _fire_stream_event("part_start", {"index": 0})
             # Buffer should remain empty since callbacks not available
             assert len(_pending_stream_events) == 0
+
+
+class TestStreamingDuplication:
+    """Test for the cascading duplication bug in console streaming.
+
+    This test class verifies that long text streams do not cause content
+    to be duplicated due to Rich Live's overflow behavior when content
+    exceeds terminal height.
+    """
+
+    @pytest.fixture
+    def mock_ctx(self):
+        """Create a mock RunContext."""
+        return MagicMock(spec=RunContext)
+
+    @pytest.mark.asyncio
+    async def test_long_text_stream_does_not_duplicate(self, mock_ctx):
+        """Test that long text streams (>terminal height) don't duplicate content.
+
+        Bug: Rich Live with vertical_overflow="visible" + refresh_per_second=4
+        causes the entire accumulated buffer to be re-emitted on every refresh
+        when content exceeds terminal height.
+
+        This test creates a deterministic 10-line terminal and streams 60 lines
+        of content, then verifies each line appears exactly once in output.
+        """
+        from rich.console import Console
+        import time
+
+        # Create a deterministic console with small height to force overflow
+        output_buffer = StringIO()
+        console = Console(
+            file=output_buffer,
+            width=80,
+            height=10,
+            force_terminal=True,
+            color_system=None,
+            # Enable record mode to capture all output including Live renders
+            record=True,
+        )
+
+        # Track content for debugging
+        test_lines = []
+
+        # Build event stream: 1 start + 60 deltas + 1 end
+        text_part = TextPart(content="")
+        start_event = PartStartEvent(index=0, part=text_part)
+
+        async def event_stream():
+            yield start_event
+            # Stream 60 lines to overflow 10-line terminal
+            for i in range(60):
+                line_content = f"line {i:02d}\n"
+                test_lines.append(line_content.strip())
+                delta = TextPartDelta(content_delta=line_content)
+                yield PartDeltaEvent(index=0, delta=delta)
+                # Small delay to allow Live refresh cycles
+                await asyncio.sleep(0.01)
+            # End event
+            yield PartEndEvent(index=0, part=text_part, next_part_kind=None)
+
+        # Set the streaming console
+        set_streaming_console(console)
+
+        # Patch spinners that are called by banner printers
+        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
+            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+                with patch(
+                    "code_puppy.agents.event_stream_handler.get_banner_color",
+                    return_value="blue",
+                ):
+                    # Use real Live and Markdown to capture actual bug behavior
+                    # (Don't mock them - we want to see the duplication)
+                    await event_stream_handler(mock_ctx, event_stream())
+                    # Allow time for final Live refresh cycles
+                    await asyncio.sleep(0.5)
+
+        # Get the captured output
+        output = output_buffer.getvalue()
+
+        # Also export the recorded output (captures all renders)
+        recorded = console.export_text()
+
+        # Combine both for analysis - use recorded if available as it's more comprehensive
+        analysis_output = recorded if recorded else output
+
+        # Each line should appear exactly ONCE in the output
+        # If Rich Live is duplicating, these counts will be > 1
+        sample_lines = [5, 15, 30, 45, 55]
+        duplication_detected = False
+        duplication_counts = {}
+
+        for line_num in sample_lines:
+            search_str = f"line {line_num:02d}"
+            count = analysis_output.count(search_str)
+            duplication_counts[search_str] = count
+            if count > 1:
+                duplication_detected = True
+
+        # Fail if any line appears more than once - this indicates the duplication bug
+        if duplication_detected:
+            # Build detailed failure message
+            failure_msg = "Duplication bug detected! Line counts:\n"
+            for line, count in duplication_counts.items():
+                status = "✓" if count == 1 else f"✗ (appears {count} times!)"
+                failure_msg += f"  {line}: {status}\n"
+            failure_msg += f"\nOutput preview (first 3000 chars):\n{analysis_output[:3000]}"
+            pytest.fail(failure_msg)
+
+        # If we get here, the test passes - but we should still check counts are exactly 1
+        for line_num in sample_lines:
+            search_str = f"line {line_num:02d}"
+            count = analysis_output.count(search_str)
+            # Each line must appear at least once (present) and at most once (no duplication)
+            assert count >= 1, f"Line '{search_str}' missing from output!"
+            assert count == 1, f"Line '{search_str}' appears {count} times, expected 1"
+
+    @pytest.mark.asyncio
+    async def test_text_streaming_preserves_brackets_verbatim(self, mock_ctx):
+        """Content with brackets should not have visible backslashes.
+
+        Regression test for a bug where escape() + markup=False caused
+        literal \[ and \] to appear in output for any text containing brackets
+        (markdown links, array syntax, footnotes, etc).
+        """
+        from io import StringIO
+        from rich.console import Console
+
+        buf = StringIO()
+        console = Console(
+            file=buf, width=120, force_terminal=False, color_system=None, record=True
+        )
+        set_streaming_console(console)
+
+        text_part = TextPart(content="")
+
+        async def event_stream():
+            yield PartStartEvent(index=0, part=text_part)
+            yield PartDeltaEvent(
+                index=0, delta=TextPartDelta(content_delta="See [1] for details.\n")
+            )
+            yield PartDeltaEvent(
+                index=0, delta=TextPartDelta(content_delta="array[0] = value\n")
+            )
+            yield PartDeltaEvent(
+                index=0,
+                delta=TextPartDelta(content_delta="[link text](https://example.com)\n"),
+            )
+            yield PartEndEvent(index=0, part=text_part, next_part_kind=None)
+
+        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
+            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+                with patch(
+                    "code_puppy.agents.event_stream_handler.get_banner_color",
+                    return_value="blue",
+                ):
+                    await event_stream_handler(mock_ctx, event_stream())
+
+        output = console.export_text()
+
+        # Brackets should appear verbatim — no visible backslashes
+        assert "See [1] for details" in output
+        assert "array[0] = value" in output
+        assert "[link text](https://example.com)" in output
+
+        # Verify no escaped backslashes leaked through
+        assert (
+            "\\[" not in output
+        ), f"Visible backslash-bracket leaked into output: {output!r}"
+        assert (
+            "\\]" not in output
+        ), f"Visible backslash-bracket leaked into output: {output!r}"

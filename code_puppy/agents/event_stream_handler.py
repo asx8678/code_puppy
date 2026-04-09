@@ -29,6 +29,12 @@ logger = logging.getLogger(__name__)
 _pending_stream_events: list[tuple[str, Any, Any]] = []
 _STREAM_FLUSH_INTERVAL = 50
 
+# Flush text-part delta buffer when it exceeds this many characters.
+# Larger than the TUI's 20-char threshold because terminal ANSI writes
+# benefit from batching; TUI updates a widget which has different perf
+# characteristics. See bd code_puppy-wmq3 for context.
+_TEXT_FLUSH_CHAR_THRESHOLD = 80
+
 
 def _fire_stream_event(event_type: str, event_data: Any) -> None:
     """Fire a stream event callback asynchronously (non-blocking) with batching.
@@ -101,8 +107,10 @@ _streaming_console: Console | None = None
 def set_streaming_console(console: Console | None) -> None:
     """Set the console used for streaming output.
 
-    This should be called with the same console used by the spinner
-    to avoid Live display conflicts that cause line duplication.
+    Sharing a console with the spinner keeps spinner pause/resume
+    coordination working during thinking-part and tool-call output.
+    Text parts stream as escaped plain chunks (no Rich Live wrapper)
+    to avoid the cascading re-render bug fixed in bd code_puppy-wmq3.
 
     Args:
         console: The Rich console to use, or None to use a fallback.
@@ -136,12 +144,19 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
     This function processes streaming events and emits TextPart, ThinkingPart,
     and ToolCallPart content with styled banners/tokens as they stream in.
 
+    Text parts are streamed as escaped plain text (not live markdown) to avoid
+    Rich Live re-render duplication that occurs with long content. The cascading
+    duplication bug (bd issue code_puppy-wmq3) happened because Rich Live with
+    vertical_overflow="visible" re-emits the entire buffer on every refresh when
+    content exceeds terminal height. Now we use list-buffered delta streaming with
+    flush-on-newline/80-chars, similar to the TUI approach in stream_renderer.py.
+    Final markdown formatting happens elsewhere via the message bus (AgentResponseMessage).
+    ThinkingPart and ToolCallPart streaming behavior is unchanged.
+
     Args:
         ctx: The run context.
         events: Async iterable of streaming events (PartStartEvent, PartDeltaEvent, etc.).
     """
-    from rich.live import Live
-    from rich.markdown import Markdown
 
     try:
         # If we're in a sub-agent and verbose mode is disabled, silently consume events
@@ -165,26 +180,8 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
         tool_names: dict[int, str] = {}  # Track tool name per tool part index
         did_stream_anything = False  # Track if we streamed any content
 
-        # Rich Live streaming state for text parts
-        text_buffers: dict[int, str] = {}  # Accumulated content per text part index
-        live_contexts: dict[int, Live] = {}  # Active Live context per text part index
-
-        def _enter_live_for_text_part(index: int) -> None:
-            """Create and enter a Live context for streaming markdown rendering."""
-            live = Live(
-                Markdown(""),
-                console=console,
-                refresh_per_second=4,  # Throttle to reduce flicker on long content
-                vertical_overflow="visible",  # Never truncate agent output
-                transient=False,  # Keep rendered output after Live exits
-                auto_refresh=True,
-            )
-            try:
-                live.__enter__()
-            except Exception:
-                # Live failed to start - don't store it, finally block will skip
-                return
-            live_contexts[index] = live
+        # Text part streaming state: list-buffered for O(1) append, flush on newline
+        text_buffers: dict[int, list[str]] = {}  # Accumulated content chunks per index
 
         async def _print_thinking_banner() -> None:
             """Print the THINKING banner with spinner pause and line clear."""
@@ -248,16 +245,14 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
                 elif isinstance(part, TextPart):
                     streaming_parts.add(event.index)
                     text_parts.add(event.index)
-                    # Initialize text buffer for this text part
-                    text_buffers[event.index] = ""
-                    # Handle initial content if present (lazy init of Live context)
+                    # Initialize text buffer for this text part (list for O(1) append)
+                    text_buffers[event.index] = []
+                    # Handle initial content if present
                     if part.content and part.content.strip():
                         await _print_response_banner()
                         banner_printed.add(event.index)
-                        text_buffers[event.index] = part.content
-                        # Create and enter Live context for streaming markdown
-                        _enter_live_for_text_part(event.index)
-                        live_contexts[event.index].update(Markdown(part.content))
+                        # Immediately print initial content as plain text
+                        console.print(part.content, end="", markup=False)
                 elif isinstance(part, ToolCallPart):
                     streaming_parts.add(event.index)
                     tool_parts.add(event.index)
@@ -285,22 +280,20 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
                     delta = event.delta
                     if isinstance(delta, (TextPartDelta, ThinkingPartDelta)):
                         if delta.content_delta:
-                            # For text parts, stream markdown with Rich Live
+                            # For text parts, stream as plain escaped text (no Live)
                             if event.index in text_parts:
                                 # Print banner on first content
                                 if event.index not in banner_printed:
                                     await _print_response_banner()
                                     banner_printed.add(event.index)
 
-                                # Lazy init: create Live context on first content arrival
-                                if event.index not in live_contexts:
-                                    _enter_live_for_text_part(event.index)
-
-                                # Append content to buffer and update Live display
-                                text_buffers[event.index] += delta.content_delta
-                                live_contexts[event.index].update(
-                                    Markdown(text_buffers[event.index])
-                                )
+                                # Append content to list buffer
+                                text_buffers[event.index].append(delta.content_delta)
+                                # Flush on newline or when buffer exceeds threshold
+                                buf = "".join(text_buffers[event.index])
+                                if "\n" in buf or len(buf) > _TEXT_FLUSH_CHAR_THRESHOLD:
+                                    console.print(buf, end="", markup=False)
+                                    text_buffers[event.index] = []
                             else:
                                 # For thinking parts, stream immediately (dim)
                                 if event.index not in banner_printed:
@@ -354,13 +347,18 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
                 )
 
                 if event.index in streaming_parts:
-                    # For text parts, exit the Live context to restore terminal state
+                    # For text parts, flush any remaining buffered content and add newline
                     if event.index in text_parts:
-                        if event.index in live_contexts:
-                            live_contexts[event.index].__exit__(None, None, None)
-                            del live_contexts[event.index]
-                        # Clean up text buffer
-                        text_buffers.pop(event.index, None)
+                        # Flush any remaining buffered content before cleanup
+                        if event.index in text_buffers:
+                            remaining = text_buffers.pop(event.index, None)
+                            if remaining:
+                                buf = "".join(remaining)
+                                if buf:
+                                    console.print(buf, end="", markup=False)
+                        # Print trailing newline only if banner was printed (i.e., we had content)
+                        if event.index in banner_printed:
+                            console.print()  # Final newline after text streaming
                     # For tool parts, clear the chunk counter line
                     elif event.index in tool_parts:
                         # Clear the chunk counter line by printing spaces and returning
@@ -387,15 +385,7 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
                         resume_all_spinners()
 
     finally:
-        # Ensure any dangling Live contexts are exited to restore terminal state
-        if "live_contexts" in locals():
-            for idx, live in list(live_contexts.items()):
-                try:
-                    live.__exit__(None, None, None)
-                except Exception:
-                    pass
-            live_contexts.clear()
-        # Force cursor visibility restoration (in case Live's cleanup was interrupted)
+        # Force cursor visibility restoration (defensive hygiene)
         try:
             console.show_cursor(True)
         except Exception:
