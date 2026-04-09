@@ -3,15 +3,20 @@
 Separates concerns of the main application lifecycle into distinct methods:
 argument parsing, renderer setup, logo display, signal handling,
 configuration/validation, and the top-level run dispatch.
+
+Import-time optimization notes:
+- DBOS and heavy TUI imports are deferred to runtime (inside methods)
+- This allows --help to be fast (~0.1s) while full runtime pays the import cost
+- Rich console is only imported in setup_renderers() where it's used
 """
+
+from __future__ import annotations
 
 import argparse
 import os
 import sys
 import time
-
-from dbos import DBOS, DBOSConfig
-from rich.console import Console
+from typing import TYPE_CHECKING
 
 from code_puppy import __version__, callbacks
 from code_puppy.config import (
@@ -28,12 +33,37 @@ from code_puppy.terminal_utils import reset_windows_terminal_full
 from code_puppy.version_checker import default_version_mismatch_behavior
 from code_puppy.dbos_utils import is_dbos_initialized
 
-# Import these so main() can call them by name — tests patch at this module level
-from code_puppy.interactive_loop import interactive_mode  # noqa: F401
-from code_puppy.prompt_runner import execute_single_prompt  # noqa: F401
+if TYPE_CHECKING:
+    # Type-only imports for static analysis — not loaded at runtime
+    from rich.console import Console
+    from dbos import DBOSConfig
 
 # Module-level flag accessible to external code
 shutdown_flag = False
+
+# Lazy-loaded function references — populated on first use of run()
+_interactive_mode: callable | None = None
+_execute_single_prompt: callable | None = None
+
+
+def _get_interactive_mode() -> callable:
+    """Lazy import interactive_mode to defer heavy TUI dependencies."""
+    global _interactive_mode
+    if _interactive_mode is None:
+        from code_puppy.interactive_loop import interactive_mode
+
+        _interactive_mode = interactive_mode
+    return _interactive_mode
+
+
+def _get_execute_single_prompt() -> callable:
+    """Lazy import execute_single_prompt to defer heavy dependencies."""
+    global _execute_single_prompt
+    if _execute_single_prompt is None:
+        from code_puppy.prompt_runner import execute_single_prompt
+
+        _execute_single_prompt = execute_single_prompt
+    return _execute_single_prompt
 
 
 class AppRunner:
@@ -332,8 +362,10 @@ class AppRunner:
 
         register_callback_handlers()
 
-        # Initialize DBOS if not disabled
+        # Initialize DBOS if not disabled (lazy import — DBOS is heavy and only needed here)
         if get_use_dbos():
+            from dbos import DBOS
+
             dbos_app_version = os.environ.get(
                 "DBOS_APP_VERSION", f"{current_version}-{int(time.time() * 1000)}"
             )
@@ -374,7 +406,7 @@ class AppRunner:
                 prompt_only_mode = False
 
             if prompt_only_mode:
-                await execute_single_prompt(initial_command, message_renderer)
+                await _get_execute_single_prompt()(initial_command, message_renderer)
             elif tui_mode:
                 from code_puppy.tui.launcher import textual_interactive_mode
 
@@ -383,7 +415,7 @@ class AppRunner:
                 )
             else:
                 # Default to interactive mode (no args = same as -i)
-                await interactive_mode(
+                await _get_interactive_mode()(
                     message_renderer, initial_command=initial_command
                 )
         finally:
@@ -393,6 +425,8 @@ class AppRunner:
                 bus_renderer.stop()
             await callbacks.on_shutdown()
             if get_use_dbos():
+                from dbos import DBOS
+
                 DBOS.destroy()
 
 

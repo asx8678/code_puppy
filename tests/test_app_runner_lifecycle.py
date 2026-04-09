@@ -157,7 +157,7 @@ class TestBridgeModeEnvironment:
             )
             stack.enter_context(
                 patch(
-                    "code_puppy.app_runner.execute_single_prompt",
+                    "code_puppy.prompt_runner.execute_single_prompt",
                     new_callable=AsyncMock,
                 )
             )
@@ -201,7 +201,7 @@ class TestBridgeModeEnvironment:
             )
             stack.enter_context(
                 patch(
-                    "code_puppy.app_runner.execute_single_prompt",
+                    "code_puppy.prompt_runner.execute_single_prompt",
                     new_callable=AsyncMock,
                 )
             )
@@ -250,11 +250,11 @@ class TestDBOSShutdownCleanup:
             )
             stack.enter_context(
                 patch(
-                    "code_puppy.app_runner.execute_single_prompt",
+                    "code_puppy.prompt_runner.execute_single_prompt",
                     new_callable=AsyncMock,
                 )
             )
-            stack.enter_context(patch("code_puppy.app_runner.DBOS", mock_dbos_cls))
+            stack.enter_context(patch("dbos.DBOS", mock_dbos_cls))
             _apply_patches(stack, patches)
 
             from code_puppy.app_runner import AppRunner
@@ -296,11 +296,11 @@ class TestDBOSShutdownCleanup:
             )
             stack.enter_context(
                 patch(
-                    "code_puppy.app_runner.execute_single_prompt",
+                    "code_puppy.prompt_runner.execute_single_prompt",
                     new_callable=AsyncMock,
                 )
             )
-            stack.enter_context(patch("code_puppy.app_runner.DBOS", mock_dbos_cls))
+            stack.enter_context(patch("dbos.DBOS", mock_dbos_cls))
             _apply_patches(stack, patches)
 
             from code_puppy.app_runner import AppRunner
