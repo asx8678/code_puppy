@@ -89,6 +89,10 @@ ABSOLUTE_TIMEOUT_SECONDS = 270
 # This helps avoid exceeding model context limits when commands produce very long lines
 MAX_LINE_LENGTH = 256
 
+# Hint appended when a line is truncated (used by _truncate_line)
+# This is exported for test assertions to avoid hardcoding the hint text
+LINE_TRUNCATION_HINT = "... [line truncated, command output too long, try filtering with grep]"
+
 # Batch size for shell output emissions to reduce bus overhead
 # Collects multiple lines and emits them together rather than one at a time
 SHELL_BATCH_SIZE = 10
@@ -101,7 +105,7 @@ def _truncate_line(line: str) -> str:
         return truncate_with_guidance(
             line,
             limit_chars=MAX_LINE_LENGTH,
-            hint="... [line truncated, command output too long, try filtering with grep]"
+            hint=LINE_TRUNCATION_HINT
         )
     return line
 

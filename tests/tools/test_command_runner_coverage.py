@@ -24,6 +24,7 @@ from code_puppy.tools.command_runner import (
     _RUNNING_PROCESSES,
     _RUNNING_PROCESSES_LOCK,
     _USER_KILLED_PROCESSES,
+    LINE_TRUNCATION_HINT,
     MAX_LINE_LENGTH,
     ReasoningOutput,
     ShellCommandOutput,
@@ -173,8 +174,8 @@ class TestRunShellCommandStreaming:
 
         # Lines should be truncated to MAX_LINE_LENGTH
         assert (
-            len(result.stdout.split("\n")[0]) <= MAX_LINE_LENGTH + 20
-        )  # +20 for "... [truncated]"
+            len(result.stdout.split("\n")[0]) <= MAX_LINE_LENGTH + len(LINE_TRUNCATION_HINT)
+        )
 
     def test_streaming_silent_mode(self):
         """Test that silent mode suppresses output emission."""
@@ -734,14 +735,14 @@ class TestTruncateLine:
         # One over limit - should truncate
         line_over_limit = "x" * (MAX_LINE_LENGTH + 1)
         result = _truncate_line(line_over_limit)
-        assert len(result) == MAX_LINE_LENGTH + len("... [truncated]")
-        assert result.endswith("... [truncated]")
+        assert len(result) == MAX_LINE_LENGTH + len(LINE_TRUNCATION_HINT) + 1  # +1 for newline
+        assert LINE_TRUNCATION_HINT in result
 
     def test_truncate_line_unicode(self):
         """Test truncation with unicode characters."""
         unicode_line = "🐺" * 300
         result = _truncate_line(unicode_line)
-        assert "... [truncated]" in result
+        assert LINE_TRUNCATION_HINT in result
 
 
 class TestProcessRegistration:
