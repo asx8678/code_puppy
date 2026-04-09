@@ -363,9 +363,12 @@ class TestAsyncConfigUpdates:
 
     async def test_update_config_higher_limit_adds_slots(self, limiter):
         """Increasing limit adds new slots for future acquires."""
-        # Fill using separate tasks (same task would use reentrancy bypass)
-        await limiter.acquire_async()
-        task2 = asyncio.create_task(limiter.acquire_async())
+        # Fill using separate tasks created BEFORE any acquire (independent contexts)
+        async def acquire_slot():
+            await limiter.acquire_async()
+
+        task1 = asyncio.create_task(acquire_slot())
+        task2 = asyncio.create_task(acquire_slot())
         await asyncio.sleep(0.05)
 
         assert limiter.active_count == 2
@@ -374,23 +377,31 @@ class TestAsyncConfigUpdates:
         limiter.update_config(new_config)
 
         # Should be able to acquire 2 more slots via new tasks
-        task3 = asyncio.create_task(limiter.acquire_async())
-        task4 = asyncio.create_task(limiter.acquire_async())
+        task3 = asyncio.create_task(acquire_slot())
+        task4 = asyncio.create_task(acquire_slot())
         await asyncio.sleep(0.05)
 
         assert limiter.active_count == 4
 
+        # Release all slots
         limiter.release()
-        for t in [task2, task3, task4]:
+        limiter.release()
+        await task1
+        await task2
+        for t in [task3, task4]:
+            limiter.release()
             await t
 
     async def test_update_config_lower_limit_respects_in_flight(self):
         """Lowering limit keeps existing acquisitions active."""
         limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=3))
 
-        # Use separate tasks to fill slots
-        await limiter.acquire_async()
-        task2 = asyncio.create_task(limiter.acquire_async())
+        # Use separate tasks created BEFORE any acquire (independent contexts)
+        async def acquire_slot():
+            await limiter.acquire_async()
+
+        task1 = asyncio.create_task(acquire_slot())
+        task2 = asyncio.create_task(acquire_slot())
         await asyncio.sleep(0.05)
         assert limiter.active_count == 2
 
@@ -400,13 +411,14 @@ class TestAsyncConfigUpdates:
         assert limiter.active_count == 2
         assert limiter.effective_limit == 1
 
+        # New waiter should block because active==limit
         new_acquired = asyncio.Event()
 
         async def new_waiter():
             await limiter.acquire_async()
             new_acquired.set()
 
-        task = asyncio.create_task(new_waiter())
+        task3 = asyncio.create_task(new_waiter())
         await asyncio.sleep(0.05)
         assert not new_acquired.is_set()
 
@@ -420,12 +432,12 @@ class TestAsyncConfigUpdates:
         await asyncio.wait_for(new_acquired.wait(), timeout=1.0)
 
         limiter.release()
-        await task
-        await task2  # Clean up the task that was holding a slot
+        await task3
+        await task1
+        await task2
 
 
 # ============================================================================
-# Cancellation tests (Bug #1 fix)
 # Cancellation tests (Bug #1 fix)
 # ============================================================================
 
@@ -437,17 +449,34 @@ class TestCancellation:
     async def test_cancelled_acquire_decrements_waiters(self):
         """When an async acquire is cancelled while waiting, waiters_count is properly decremented."""
         limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=1))
-        await limiter.acquire_async()  # Fill it
+
+        # Create holder task first (independent context)
+        holder_task = asyncio.create_task(limiter.acquire_async())
+        await asyncio.sleep(0.05)
         assert limiter.active_count == 1
 
-        # Start a waiter and cancel it
-        task = asyncio.create_task(limiter.acquire_async())
-        await asyncio.sleep(0.05)
-        assert limiter.waiters_count == 1
+        # Now create waiter that will block (also independent context)
+        ready_to_wait = asyncio.Event()
+        should_acquire = asyncio.Event()
 
-        task.cancel()
+        async def waiter():
+            ready_to_wait.set()
+            await should_acquire.wait()  # Wait for signal
+            await limiter.acquire_async()
+
+        waiter_task = asyncio.create_task(waiter())
+        await asyncio.wait_for(ready_to_wait.wait(), timeout=1.0)
+        
+        # Signal waiter to start acquiring (will block since holder has slot)
+        should_acquire.set()
+        await asyncio.sleep(0.05)
+
+        assert limiter.waiters_count == 1  # Waiter is waiting
+
+        # Cancel the waiter
+        waiter_task.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await task
+            await waiter_task
 
         # Waiter count should be 0 after cancellation
         await asyncio.sleep(0.05)  # Let cleanup finish
@@ -455,22 +484,40 @@ class TestCancellation:
         assert limiter.active_count == 1  # Still holding original
 
         limiter.release()
+        await holder_task
         assert limiter.active_count == 0
 
     async def test_cancelled_acquire_does_not_leak_slot(self):
         """After a cancelled acquire, a new caller can still acquire the released slot."""
         limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=1))
-        await limiter.acquire_async()  # Fill
 
-        # Cancel a waiter
-        cancelled_task = asyncio.create_task(limiter.acquire_async())
+        # Create holder task first (independent context)
+        holder_task = asyncio.create_task(limiter.acquire_async())
         await asyncio.sleep(0.05)
-        cancelled_task.cancel()
+        assert limiter.active_count == 1
+
+        # Create waiter that will block
+        ready_to_wait = asyncio.Event()
+        should_acquire = asyncio.Event()
+
+        async def waiter():
+            ready_to_wait.set()
+            await should_acquire.wait()
+            await limiter.acquire_async()
+
+        waiter_task = asyncio.create_task(waiter())
+        await asyncio.wait_for(ready_to_wait.wait(), timeout=1.0)
+        should_acquire.set()
+        await asyncio.sleep(0.05)
+
+        # Cancel the waiter
+        waiter_task.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await cancelled_task
+            await waiter_task
 
         # Release the original slot
         limiter.release()
+        await holder_task
 
         # A new caller MUST be able to acquire immediately — no zombie slot stealing
         await asyncio.wait_for(limiter.acquire_async(), timeout=0.5)
@@ -480,42 +527,52 @@ class TestCancellation:
     async def test_many_cancellations_no_drift(self):
         """Stress test: many cancelled acquires should not drift active/waiter counts."""
         limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=2))
-        # Use separate tasks to fill both slots (same task would use reentrancy bypass)
-        await limiter.acquire_async()
-        task2 = asyncio.create_task(limiter.acquire_async())
+
+        # Create all waiter tasks BEFORE any acquires (so they're independent)
+        ready_events = [asyncio.Event() for _ in range(22)]
+
+        async def waiter(ready: asyncio.Event):
+            ready.set()
+            await limiter.acquire_async()
+
+        # Start 2 holders first
+        holder1 = asyncio.create_task(limiter.acquire_async())
+        holder2 = asyncio.create_task(limiter.acquire_async())
         await asyncio.sleep(0.05)
 
-        # Start 20 waiters and cancel them all
-        waiters = [asyncio.create_task(limiter.acquire_async()) for _ in range(20)]
+        # Now start 20 waiters
+        waiters = [asyncio.create_task(waiter(ready_events[i])) for i in range(20)]
         await asyncio.sleep(0.1)
 
+        # Cancel all waiters
         for w in waiters:
             w.cancel()
 
-        # Wait for all cancellations to propagate
         results = await asyncio.gather(*waiters, return_exceptions=True)
         assert all(isinstance(r, asyncio.CancelledError) for r in results)
 
         # Counts should be clean
         await asyncio.sleep(0.05)
         assert limiter.waiters_count == 0
-        assert limiter.active_count == 2  # Still holding the original 2
+        assert limiter.active_count == 2  # Only holders
 
-        # Release both slots
+        # Release holder slots
         limiter.release()
-        limiter.release()  # task2's slot (need to release from same async context)
-        await task2  # Just to clean up the task
+        limiter.release()
+        await holder1
+        await holder2
         assert limiter.active_count == 0
 
     async def test_timeout_then_success_for_next_caller(self):
         """After a timeout, subsequent callers can still acquire when slots free up."""
         limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=1))
-        # Use separate task to hold the slot
+
+        # Create holder task independently
         holder_task = asyncio.create_task(limiter.acquire_async())
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.05)
         assert limiter.active_count == 1
 
-        # This task tries to acquire and times out
+        # Now this task tries to acquire and times out
         with pytest.raises(RunConcurrencyLimitError):
             await limiter.acquire_async(timeout=0.05)
 
@@ -574,95 +631,112 @@ class TestReentrancy:
         limiter.release()  # depth 0
         assert limiter.active_count == 0
 
-    async def test_parallel_tasks_are_independent(self):
-        """Child tasks created via create_task are independent - they need their own slot.
+    async def test_child_task_inherits_reentrancy_bypass(self):
+        """Child tasks created via asyncio.create_task() inherit the parent's slot.
 
-        Each asyncio.Task has its own entry in the WeakKeyDictionary. When a child
-        task is created via create_task(), it starts fresh with depth=0 and must
-        acquire its own slot. This is different from direct nested calls in the
-        same task which use reentrancy bypass.
+        This is the CRITICAL fix for nested invoke_agent deadlocks: when an agent
+        holds a slot and spawns a sub-agent via create_task, the sub-agent's own
+        acquire_async() must be a no-op bypass (because the parent is already
+        counting the slot). Otherwise we get deadlock when nested depth > limit.
 
-        For nested agent calls within the same logical "job", the invoke_agent
-        tool implementation should use the same task to ensure reentrancy works.
+        Mechanism: contextvars.ContextVar is snapshotted by asyncio.create_task().
         """
         limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=1))
 
-        await limiter.acquire_async()  # Parent task holds slot
-        assert limiter.active_count == 1
-
-        # A child task is a NEW Task - it does NOT inherit parent's slot
-        child_acquired = asyncio.Event()
-        child_released = asyncio.Event()
-
-        async def child():
-            # Child is a new Task with depth=0, so this will BLOCK until parent releases
-            await limiter.acquire_async()
-            child_acquired.set()
-            # Hold the slot for a moment before releasing (to allow verification)
-            await asyncio.sleep(0.01)
-            limiter.release()
-            child_released.set()
-
-        child_task = asyncio.create_task(child())
-        # Child is blocked because parent holds the only slot
-        await asyncio.sleep(0.05)
-        assert not child_acquired.is_set()
-        assert limiter.waiters_count == 1  # Child is waiting
-
-        # Parent releases
-        limiter.release()
-        # Now child can acquire
-        await asyncio.wait_for(child_acquired.wait(), timeout=0.5)
-        # Verify child still holds slot (hasn't released yet due to sleep)
-        assert limiter.active_count == 1
-
-        # Wait for child to finish
-        await asyncio.wait_for(child_released.wait(), timeout=0.5)
-        await child_task
-        assert limiter.active_count == 0
-
-    async def test_reentrancy_only_within_same_task(self):
-        """Reentrancy bypass only works for nested calls within the SAME task.
-
-        When code in a task calls acquire_async multiple times (e.g., nested
-        function calls), the subsequent calls bypass because the depth > 0.
-
-        But child tasks created via create_task() are independent and need
-        their own slot - this prevents runaway parallelism while allowing
-        the same logical agent invocation to make nested calls safely.
-        """
-        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=1))
-
-        child_acquired = asyncio.Event()
         child_done = asyncio.Event()
+        child_observed_active = None
+        child_observed_limit_reached = None
 
         async def child_work():
-            # Child is a NEW Task with depth=0
-            # This will BLOCK until the parent releases
+            nonlocal child_observed_active, child_observed_limit_reached
+            # Child inherits parent's context with depth=1
+            # So this acquire should be a NO-OP bypass
             await limiter.acquire_async()
-            # Now child holds the slot
-            child_acquired.set()
-            await asyncio.sleep(0.01)
+            # The active count should still be 1 (parent's slot)
+            child_observed_active = limiter.active_count
+            # Try a DEEPER nested acquire — should also bypass
+            await limiter.acquire_async()
+            child_observed_limit_reached = limiter.active_count
+            # Release both bypasses
+            limiter.release()
             limiter.release()
             child_done.set()
 
-        await limiter.acquire_async()  # Parent takes slot
-        child_task = asyncio.create_task(child_work())
-        # Child is blocked, waiting
-        await asyncio.sleep(0.05)
-        assert not child_acquired.is_set()
-
-        # Release so child can proceed
-        limiter.release()
-        # Wait for child to acquire (verifying it can get a slot)
-        await asyncio.wait_for(child_acquired.wait(), timeout=1.0)
-        # Child should hold the slot now
+        # Parent acquires slot
+        await limiter.acquire_async()
         assert limiter.active_count == 1
-        # Wait for child to complete
+
+        # Spawn child — it inherits context with depth=1
+        child_task = asyncio.create_task(child_work())
         await asyncio.wait_for(child_done.wait(), timeout=1.0)
         await child_task
 
+        # Child should have observed active_count=1 throughout (no new slots taken)
+        assert child_observed_active == 1, (
+            f"Child's nested acquire did not bypass! observed active={child_observed_active}"
+        )
+        assert child_observed_limit_reached == 1, (
+            "Deeper nesting did not bypass!"
+        )
+
+        # Parent still holds its slot
+        assert limiter.active_count == 1
+        limiter.release()
         assert limiter.active_count == 0
+
+    async def test_sibling_tasks_do_not_share_reentrancy(self):
+        """Sibling tasks (created before any acquire) don't share reentrancy state.
+
+        This verifies that contextvar scoping is per-task: two independent tasks
+        can each acquire their own slot without interference.
+        """
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=2))
+
+        t1_acquired = asyncio.Event()
+        t2_acquired = asyncio.Event()
+        t1_release = asyncio.Event()
+        t2_release = asyncio.Event()
+
+        async def worker(acquired_ev, release_ev):
+            await limiter.acquire_async()
+            acquired_ev.set()
+            await release_ev.wait()
+            limiter.release()
+
+        task1 = asyncio.create_task(worker(t1_acquired, t1_release))
+        task2 = asyncio.create_task(worker(t2_acquired, t2_release))
+
+        # Both should acquire independently
+        await asyncio.wait_for(t1_acquired.wait(), timeout=1.0)
+        await asyncio.wait_for(t2_acquired.wait(), timeout=1.0)
+        assert limiter.active_count == 2  # Both hold real slots
+
+        t1_release.set()
+        t2_release.set()
+        await asyncio.gather(task1, task2)
+        assert limiter.active_count == 0
+
+    async def test_deeply_nested_create_task_chain(self):
+        """Simulate agent_tools.py pattern: chain of create_task -> create_task -> ...
+
+        Only the OUTERMOST task takes a real slot; all nested create_task children
+        inherit the bypass. This prevents deadlock when nested depth > limit.
+        """
+        limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=1))
+        depth_reached = 0
+
+        async def recurse(levels_remaining: int):
+            nonlocal depth_reached
+            await limiter.acquire_async()  # Only the FIRST call takes a slot
+            depth_reached = max(depth_reached, 5 - levels_remaining)
+            if levels_remaining > 0:
+                child = asyncio.create_task(recurse(levels_remaining - 1))
+                await child
+            limiter.release()
+
+        await recurse(5)
+        assert depth_reached == 5, f"Expected depth 5, got {depth_reached}"
+        assert limiter.active_count == 0  # All cleaned up
 
 
 # ============================================================================

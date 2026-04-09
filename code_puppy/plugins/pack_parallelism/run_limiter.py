@@ -2,57 +2,44 @@
 
 Fixes two critical bugs in the previous implementation:
 1. Zombie executor-thread leak on asyncio cancellation (now uses native asyncio.Semaphore)
-2. Reentrant deadlock from nested agent invocations (now uses task-based reentrancy tracking)
+2. Reentrant deadlock from nested agent invocations (now uses contextvar reentrancy tracking)
 
 Design:
 - asyncio.Semaphore for the async path (primary, cancellation-safe)
 - threading.Semaphore for the sync path (tests only)
 - Independent semaphores - they do NOT share state (deliberate simplification)
-- WeakKeyDictionary keyed by asyncio.Task for reentrancy depth tracking
+- contextvars.ContextVar for reentrancy depth tracking (CRITICAL: create_task copies context)
 - Default wait_timeout = 600s (fail loud, not silent hang)
 """
 
 import asyncio
+import contextvars
 import logging
 import threading
-import weakref
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-# Task-local reentrancy depth counter — async only
-# Maps asyncio.Task -> depth. When > 0, the task already holds a slot.
-# Nested acquires bypass the limiter; nested releases just decrement the depth.
-# WeakKeyDictionary ensures entries are auto-cleaned when tasks are garbage collected.
-_reentrancy_depth: weakref.WeakKeyDictionary[asyncio.Task, int] = weakref.WeakKeyDictionary()
-
-
-def _get_current_task() -> asyncio.Task | None:
-    """Get the current asyncio Task, or None if not in an async context."""
-    try:
-        return asyncio.current_task()
-    except RuntimeError:
-        return None
+# Task-local reentrancy depth counter.
+# ContextVar is the correct primitive: asyncio.create_task() snapshots the
+# current context, so child tasks INHERIT the parent's depth. This is exactly
+# what we need for nested invoke_agent deadlock prevention — when a parent
+# agent holds a slot and spawns a child agent (via create_task), the child
+# inherits depth=1 and its own acquire_async() call bypasses the limiter.
+_reentrancy_depth: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "run_limiter_reentrancy_depth", default=0
+)
 
 
 def _get_reentrancy_depth() -> int:
-    """Get reentrancy depth for current task."""
-    task = _get_current_task()
-    if task is None:
-        return 0
-    return _reentrancy_depth.get(task, 0)
+    """Get reentrancy depth for the current async context."""
+    return _reentrancy_depth.get()
 
 
 def _set_reentrancy_depth(depth: int) -> None:
-    """Set reentrancy depth for current task."""
-    task = _get_current_task()
-    if task is None:
-        return
-    if depth <= 0:
-        _reentrancy_depth.pop(task, None)
-    else:
-        _reentrancy_depth[task] = depth
+    """Set reentrancy depth for the current async context."""
+    _reentrancy_depth.set(max(0, depth))
 
 
 class RunConcurrencyLimitError(Exception):
