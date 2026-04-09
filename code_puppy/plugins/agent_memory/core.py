@@ -80,12 +80,13 @@ def _on_startup() -> None:
     """
     global _config, _extractor, _detector, _memory_enabled
 
-    # Phase 6: Check if memory is enabled (OPT-IN)
-    _memory_enabled = is_memory_enabled()
-
     _config = load_config()
 
-    if not _config.enabled:
+    # Phase 6: Check if memory is enabled (OPT-IN)
+    # Use loaded config for enabled status (allows tests to mock config)
+    _memory_enabled = _config.enabled
+
+    if not _memory_enabled:
         logger.debug(
             "Agent Memory plugin loaded but disabled "
             "(set enable_agent_memory=true in puppy.cfg to activate)"

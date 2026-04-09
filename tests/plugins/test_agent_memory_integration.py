@@ -713,7 +713,10 @@ class TestEndToEndIntegration:
         self, temp_memory_dir: Path
     ) -> None:
         """End-to-end: test prompt injection respects token budget."""
-        with patch("code_puppy.plugins.agent_memory.core.load_config") as mock_load:
+        # Patch both core.load_config (used by _on_startup) and prompts.load_config (used by _on_load_prompt)
+        with patch("code_puppy.plugins.agent_memory.core.load_config") as mock_core_load, patch(
+            "code_puppy.plugins.agent_memory.prompts.load_config"
+        ) as mock_prompts_load:
             # Create custom config with specific values (dataclass is frozen)
             custom_config = MemoryConfig(
                 enabled=True,
@@ -723,7 +726,8 @@ class TestEndToEndIntegration:
                 debounce_ms=100,
                 extraction_enabled=True,
             )
-            mock_load.return_value = custom_config
+            mock_core_load.return_value = custom_config
+            mock_prompts_load.return_value = custom_config
 
             _on_startup()
 
@@ -739,7 +743,7 @@ class TestEndToEndIntegration:
                 })
 
             # Try to load prompt with mock context
-            with patch("code_puppy.plugins.agent_memory.prompts.get_current_run_context") as mock_ctx:
+            with patch("code_puppy.run_context.get_current_run_context") as mock_ctx:
                 mock_context = MagicMock()
                 mock_context.component_name = agent_name
                 mock_ctx.return_value = mock_context

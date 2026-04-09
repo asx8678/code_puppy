@@ -129,14 +129,13 @@ class TestMemoryCommandHandler:
         """When memory is disabled, should warn and return True."""
         from code_puppy.plugins.agent_memory.register_callbacks import (
             _handle_memory_command,
-            _memory_enabled,
         )
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._memory_enabled",
-            False,
+            "code_puppy.plugins.agent_memory.commands._is_memory_enabled",
+            return_value=False,
         ), patch(
-            "code_puppy.messaging.emit_warning"
+            "code_puppy.plugins.agent_memory.commands.emit_warning"
         ) as mock_emit:
             result = _handle_memory_command("/memory show", "memory")
             assert result is True
@@ -155,8 +154,8 @@ class TestMemoryCommandHandler:
         mock_agent.name = "test-agent"
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._memory_enabled",
-            True,
+            "code_puppy.plugins.agent_memory.commands._is_memory_enabled",
+            return_value=True,
         ), patch(
             "code_puppy.agents.get_current_agent", return_value=mock_agent
         ), patch(
@@ -177,10 +176,10 @@ class TestMemoryCommandHandler:
         )
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._memory_enabled",
-            True,
+            "code_puppy.plugins.agent_memory.commands._is_memory_enabled",
+            return_value=True,
         ), patch(
-            "code_puppy.messaging.emit_info"
+            "code_puppy.plugins.agent_memory.commands.emit_info"
         ) as mock_emit:
             result = _handle_memory_command("/memory help", "memory")
             assert result is True
@@ -193,12 +192,12 @@ class TestMemoryCommandHandler:
         )
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._memory_enabled",
-            True,
+            "code_puppy.plugins.agent_memory.commands._is_memory_enabled",
+            return_value=True,
         ), patch(
-            "code_puppy.messaging.emit_warning"
+            "code_puppy.plugins.agent_memory.commands.emit_warning"
         ) as mock_warning, patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._show_memory_help"
+            "code_puppy.plugins.agent_memory.commands._show_memory_help"
         ) as mock_help:
             result = _handle_memory_command("/memory foobar", "memory")
             assert result is True
@@ -212,10 +211,10 @@ class TestMemoryCommandHandler:
         )
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._memory_enabled",
-            True,
+            "code_puppy.plugins.agent_memory.commands._is_memory_enabled",
+            return_value=True,
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._show_memory_help"
+            "code_puppy.plugins.agent_memory.commands._show_memory_help"
         ) as mock_help:
             result = _handle_memory_command("/memory", "memory")
             assert result is True
@@ -230,10 +229,10 @@ class TestMemoryShowCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
             return_value=None,
         ), patch(
-            "code_puppy.messaging.emit_error"
+            "code_puppy.plugins.agent_memory.commands.emit_error"
         ) as mock_emit:
             _show_memories()
             mock_emit.assert_called_once()
@@ -244,16 +243,16 @@ class TestMemoryShowCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
             return_value="test-agent",
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_storage"
+            "code_puppy.plugins.agent_memory.commands._get_agent_storage"
         ) as mock_get_storage:
             mock_storage = MagicMock()
             mock_storage.load.return_value = []
             mock_get_storage.return_value = mock_storage
 
-            with patch("code_puppy.messaging.emit_info") as mock_emit:
+            with patch("code_puppy.plugins.agent_memory.commands.emit_info") as mock_emit:
                 _show_memories()
                 mock_emit.assert_called_once()
                 assert "no memories" in str(mock_emit.call_args[0][0]).lower()
@@ -276,10 +275,10 @@ class TestMemoryShowCommand:
         ]
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
             return_value="test-agent",
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_storage"
+            "code_puppy.plugins.agent_memory.commands._get_agent_storage"
         ) as mock_get_storage:
             mock_storage = MagicMock()
             mock_storage.load.return_value = mock_facts
@@ -301,10 +300,10 @@ class TestMemoryClearCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _clear_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
             return_value=None,
         ), patch(
-            "code_puppy.messaging.emit_warning"
+            "code_puppy.plugins.agent_memory.commands.emit_warning"
         ) as mock_emit:
             _clear_memories()
             mock_emit.assert_called_once()
@@ -315,16 +314,16 @@ class TestMemoryClearCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _clear_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
             return_value="test-agent",
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_storage"
+            "code_puppy.plugins.agent_memory.commands._get_agent_storage"
         ) as mock_get_storage:
             mock_storage = MagicMock()
             mock_storage.fact_count.return_value = 0
             mock_get_storage.return_value = mock_storage
 
-            with patch("code_puppy.messaging.emit_info") as mock_emit:
+            with patch("code_puppy.plugins.agent_memory.commands.emit_info") as mock_emit:
                 _clear_memories()
                 mock_emit.assert_called_once()
                 assert "no memories" in str(mock_emit.call_args[0][0]).lower()
@@ -334,16 +333,16 @@ class TestMemoryClearCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _clear_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
             return_value="test-agent",
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_storage"
+            "code_puppy.plugins.agent_memory.commands._get_agent_storage"
         ) as mock_get_storage:
             mock_storage = MagicMock()
             mock_storage.fact_count.return_value = 5
             mock_get_storage.return_value = mock_storage
 
-            with patch("code_puppy.messaging.emit_success") as mock_emit:
+            with patch("code_puppy.plugins.agent_memory.commands.emit_success") as mock_emit:
                 _clear_memories()
                 mock_storage.clear.assert_called_once()
                 mock_emit.assert_called_once()
@@ -358,10 +357,10 @@ class TestMemoryExportCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _export_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
             return_value=None,
         ), patch(
-            "code_puppy.messaging.emit_error"
+            "code_puppy.plugins.agent_memory.commands.emit_error"
         ) as mock_emit:
             _export_memories()
             mock_emit.assert_called_once()
@@ -372,16 +371,16 @@ class TestMemoryExportCommand:
         from code_puppy.plugins.agent_memory.register_callbacks import _export_memories
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
             return_value="test-agent",
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_storage"
+            "code_puppy.plugins.agent_memory.commands._get_agent_storage"
         ) as mock_get_storage:
             mock_storage = MagicMock()
             mock_storage.load.return_value = []
             mock_get_storage.return_value = mock_storage
 
-            with patch("code_puppy.messaging.emit_info") as mock_emit:
+            with patch("code_puppy.plugins.agent_memory.commands.emit_info") as mock_emit:
                 _export_memories()
                 mock_emit.assert_called_once()
                 # Check the syntax output
@@ -401,16 +400,16 @@ class TestMemoryExportCommand:
         ]
 
         with patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_name",
+            "code_puppy.plugins.agent_memory.commands._get_agent_name",
             return_value="test-agent",
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks._get_agent_storage"
+            "code_puppy.plugins.agent_memory.commands._get_agent_storage"
         ) as mock_get_storage:
             mock_storage = MagicMock()
             mock_storage.load.return_value = mock_facts
             mock_get_storage.return_value = mock_storage
 
-            with patch("code_puppy.messaging.emit_info") as mock_emit:
+            with patch("code_puppy.plugins.agent_memory.commands.emit_info") as mock_emit:
                 _export_memories()
                 mock_emit.assert_called_once()
                 syntax = mock_emit.call_args[0][0]
@@ -439,7 +438,7 @@ class TestMemoryStartup:
             "code_puppy.plugins.agent_memory.config.is_memory_enabled",
             return_value=False,
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks.logger"
+            "code_puppy.plugins.agent_memory.core.logger"
         ) as mock_logger:
             _on_startup()
             mock_logger.debug.assert_called()
@@ -449,13 +448,17 @@ class TestMemoryStartup:
     def test_startup_logs_when_enabled(self) -> None:
         """Startup should log when memory is enabled."""
         from code_puppy.plugins.agent_memory.register_callbacks import _on_startup
+        from code_puppy.plugins.agent_memory.config import MemoryConfig
 
         with patch(
             "code_puppy.plugins.agent_memory.config.is_memory_enabled",
             return_value=True,
         ), patch(
-            "code_puppy.plugins.agent_memory.register_callbacks.logger"
-        ) as mock_logger:
+            "code_puppy.plugins.agent_memory.core.logger"
+        ) as mock_logger, patch(
+            "code_puppy.plugins.agent_memory.core.load_config",
+            return_value=MemoryConfig(enabled=True),
+        ):
             _on_startup()
             mock_logger.debug.assert_called()
             log_msg = str(mock_logger.debug.call_args[0][0])

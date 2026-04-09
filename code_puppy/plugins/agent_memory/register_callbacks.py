@@ -48,6 +48,7 @@ from .messaging import (
     _extract_user_messages,
 )
 from .commands import (
+    _is_memory_enabled,
     _get_agent_name,
     _get_agent_storage,
 )

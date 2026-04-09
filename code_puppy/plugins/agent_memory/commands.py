@@ -14,10 +14,15 @@ from typing import Literal, TYPE_CHECKING
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
 
-from .core import is_memory_enabled_global
-
 if TYPE_CHECKING:
     from .storage import FileMemoryStorage
+
+# Import from core module - tests will patch via register_callbacks re-exports
+def _is_memory_enabled() -> bool:
+    """Check if memory is enabled - extracted for testability."""
+    from .core import is_memory_enabled_global
+    return is_memory_enabled_global()
+
 
 # Import from messaging module - tests will patch via register_callbacks re-exports
 def _get_agent_name() -> str | None:
@@ -224,7 +229,7 @@ def _handle_memory_command(
         return None
 
     # Check if memory is enabled
-    if not is_memory_enabled_global():
+    if not _is_memory_enabled():
         emit_warning(
             "🧠 Agent memory is disabled. Set enable_agent_memory=true in puppy.cfg to activate."
         )

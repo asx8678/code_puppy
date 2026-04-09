@@ -95,6 +95,7 @@ def _on_load_prompt(
     # Always call load_config() to support mocking in tests
     config = load_config()
 
+
     if not is_memory_enabled_global() or not config.enabled:
         return None
 
@@ -115,6 +116,7 @@ def _on_load_prompt(
                     agent_name = agent.name
             except Exception:
                 pass
+
 
         if not agent_name:
             return None
