@@ -273,7 +273,7 @@ def test_debounced_queue_concurrent_adds():
 
 
 def test_debounced_queue_graceful_shutdown():
-    """Test that shutdown callback flushes pending items."""
+    """Test that shutdown callback flushes pending items and invokes callback."""
     flushed_items = []
 
     def callback(items: list[int]) -> None:
@@ -289,10 +289,14 @@ def test_debounced_queue_graceful_shutdown():
     assert queue.pending_count() == 3
     assert len(flushed_items) == 0
 
-    # Simulate shutdown - call the internal flush method directly
-    # (the _on_shutdown would be called by the callbacks system)
-    flushed = queue.flush()
-    assert sorted(flushed) == [1, 2, 3]
+    # Simulate shutdown by calling _on_shutdown directly
+    # This is what the callbacks system would call
+    queue._on_shutdown()
+
+    # Items should be flushed AND callback should have been invoked
+    assert sorted(flushed_items) == [1, 2, 3]
+    assert queue.pending_count() == 0
+    assert queue.is_empty()
 
 
 def test_debounced_queue_manual_flush():
@@ -404,3 +408,46 @@ def test_debounced_queue_non_daemon_timer():
 
     # Clean up
     queue.flush()
+
+
+def test_debounced_queue_shutdown_invokes_callback():
+    """Test that _on_shutdown properly invokes the callback with pending items."""
+    flushed_items = []
+
+    def callback(items: list[str]) -> None:
+        flushed_items.extend(items)
+
+    queue = DebouncedQueue[str](callback=callback, interval_ms=10000)  # Very long interval
+
+    # Add items
+    queue.add("key1", "value1")
+    queue.add("key2", "value2")
+    queue.add("key1", "value1_updated")  # Should replace
+
+    # Verify items are pending but not flushed
+    assert queue.pending_count() == 2
+    assert len(flushed_items) == 0
+
+    # Call shutdown
+    queue._on_shutdown()
+
+    # Callback should have been invoked with items
+    assert sorted(flushed_items) == ["value1_updated", "value2"]
+    assert queue.is_empty()
+
+
+def test_debounced_queue_shutdown_sets_shutdown_flag():
+    """Test that _on_shutdown sets the shutdown flag."""
+    queue = DebouncedQueue[str](callback=lambda x: None, interval_ms=1000)
+
+    # Initially not shutdown
+    assert not queue._shutdown
+
+    # Add items
+    queue.add("key", "value")
+
+    # Call shutdown
+    queue._on_shutdown()
+
+    # Shutdown flag should be set
+    assert queue._shutdown

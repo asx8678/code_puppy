@@ -207,8 +207,10 @@ class DebouncedQueue(Generic[T]):
             atexit.register(self._on_shutdown)
 
     def _on_shutdown(self) -> None:
-        """Flush remaining items on shutdown."""
-        self.flush()
+        """Flush remaining items on shutdown, invoking the callback."""
+        with self._lock:
+            self._shutdown = True
+        self._flush_and_callback()
 
     def add(self, key: str, value: T) -> None:
         """Add an item with the given key.
