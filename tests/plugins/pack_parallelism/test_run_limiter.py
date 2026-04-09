@@ -7,11 +7,6 @@ These tests verify the RunLimiter class functionality including:
 - Context managers
 - Config reload
 - Mixed sync/async callers
-
-NOTE: Several async tests are marked SKIP due to a deadlock bug in acquire_async()
-where nested lock acquisition causes deadlock when waiting for a slot.
-See: code_puppy-zvb "BUG: RunLimiter.acquire_async() deadlocks on lock re-entrancy"
-When that bug is fixed, convert @pytest.mark.skip to regular tests.
 """
 
 import asyncio
@@ -111,9 +106,6 @@ class TestAsyncAcquire:
         assert limiter.active_count == 1
         limiter.release()
 
-    @pytest.mark.skip(
-        reason="Deadlock bug code_puppy-zvb: nested lock in acquire_async"
-    )
     async def test_acquire_waits_when_full(self, limiter):
         """Async acquire when full: waits until slot released."""
         # Fill the limiter
@@ -148,9 +140,6 @@ class TestAsyncAcquire:
         await holder_task
         await waiter_task
 
-    @pytest.mark.skip(
-        reason="Deadlock bug code_puppy-zvb: nested lock in acquire_async"
-    )
     async def test_acquire_timeout_raises(self, limiter):
         """Async acquire with timeout: raises RunConcurrencyLimitError on expiry."""
         await limiter.acquire_async()
@@ -164,9 +153,6 @@ class TestAsyncAcquire:
         limiter.release()
         limiter.release()
 
-    @pytest.mark.skip(
-        reason="Deadlock bug code_puppy-zvb: nested lock in acquire_async"
-    )
     async def test_acquire_timeout_zero_fast_fail(self, limiter):
         """Async acquire with timeout=0: immediately fails if full."""
         await limiter.acquire_async()
@@ -186,9 +172,6 @@ class TestAsyncAcquire:
         limiter.release()
         limiter.release()
 
-    @pytest.mark.skip(
-        reason="Deadlock bug code_puppy-zvb: nested lock in acquire_async"
-    )
     async def test_only_n_async_run_concurrently_with_n_equals_2(self, limiter):
         """Only 2 async workers run concurrently with limit=2."""
         max_observed = 0
@@ -209,9 +192,6 @@ class TestAsyncAcquire:
         await asyncio.gather(*[worker(i) for i in range(6)])
         assert max_observed == 2
 
-    @pytest.mark.skip(
-        reason="Deadlock bug code_puppy-zvb: nested lock in acquire_async"
-    )
     async def test_only_n_async_run_concurrently_with_n_equals_3(self):
         """Only 3 async workers run concurrently with limit=3."""
         limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=3))
@@ -254,9 +234,6 @@ class TestAsyncSlotContextManager:
             pass
         assert limiter.active_count == 0
 
-    @pytest.mark.skip(
-        reason="Deadlock bug code_puppy-zvb: nested lock in acquire_async"
-    )
     async def test_slot_async_raises_when_full_non_blocking(self, limiter):
         """slot_async with timeout=0 raises when limiter is full."""
         await limiter.acquire_async()
@@ -351,9 +328,6 @@ class TestConfigReload:
 class TestAsyncConfigUpdates:
     """Test update_config with async waiters."""
 
-    @pytest.mark.skip(
-        reason="Deadlock bug code_puppy-zvb: nested lock in acquire_async"
-    )
     async def test_update_config_higher_limit_unblocks_waiters(self, limiter):
         """Increasing limit unblocks queued async waiters."""
         await limiter.acquire_async()
@@ -385,9 +359,6 @@ class TestAsyncConfigUpdates:
             limiter.release()
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    @pytest.mark.skip(
-        reason="Deadlock bug code_puppy-zvb: nested lock in acquire_async"
-    )
     async def test_update_config_lower_limit_respects_in_flight(self):
         """Lowering limit keeps existing acquisitions active."""
         limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=3))
@@ -412,11 +383,16 @@ class TestAsyncConfigUpdates:
         await asyncio.sleep(0.05)
         assert not new_acquired.is_set()
 
-        limiter.release()
+        # Must release BOTH slots since limit is now 1
+        limiter.release()  # active=1
+        await asyncio.sleep(0.05)
+        # Still blocked because active==limit
+        assert not new_acquired.is_set()
+
+        limiter.release()  # active=0, waiter can acquire
         await asyncio.wait_for(new_acquired.wait(), timeout=1.0)
 
-        for _ in range(3):
-            limiter.release()
+        limiter.release()
         await task
 
 
@@ -429,23 +405,21 @@ class TestAsyncConfigUpdates:
 class TestMixedSyncAsync:
     """Test mixed sync/async callers sharing the same limiter."""
 
-    @pytest.mark.skip(
-        reason="Deadlock bug code_puppy-zvb: nested lock in acquire_async"
-    )
     async def test_mixed_sync_async_share_limiter(self, limiter):
         """Sync and async callers share the same limit and queue."""
+        # Fill the limiter completely first
+        limiter.acquire_sync()
+        limiter.acquire_sync()
+        assert limiter.active_count == 2
+
         release_sync = threading.Event()
 
         def sync_holder():
-            limiter.acquire_sync()
             release_sync.wait(timeout=2.0)
             limiter.release()
 
         loop = asyncio.get_running_loop()
         sync_task = loop.run_in_executor(None, sync_holder)
-
-        await asyncio.sleep(0.05)
-        assert limiter.active_count == 1
 
         async_acquired = asyncio.Event()
 
@@ -463,13 +437,11 @@ class TestMixedSyncAsync:
 
         await sync_task
         limiter.release()
+        limiter.release()
         await async_task
 
-    @pytest.mark.skip(
-        reason="Relies on cross-notification from release, implementation incomplete"
-    )
-    async def test_async_release_notifies_sync_waiters(self, limiter):
-        """Async release notifies sync waiters in background thread."""
+    async def test_release_notifies_sync_waiters(self, limiter):
+        """Release notifies sync waiters in background thread."""
         limiter.acquire_sync()
         limiter.acquire_sync()
 
@@ -506,9 +478,6 @@ class TestMixedSyncAsync:
 class TestAsyncFairness:
     """Test FIFO fairness for async waiters."""
 
-    @pytest.mark.skip(
-        reason="Deadlock bug code_puppy-zvb: nested lock in acquire_async"
-    )
     async def test_async_fifo_fairness(self):
         """Waiters acquire slots in order they started waiting."""
         limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=1))
