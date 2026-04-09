@@ -11,9 +11,14 @@ import signal
 import sys
 import tempfile
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from code_puppy.scheduler.config import SCHEDULER_PID_FILE, ScheduledTask, load_tasks
+from code_puppy.scheduler.config import (
+    SCHEDULER_PID_FILE,
+    ScheduledTask,
+    load_tasks,
+    save_tasks,
+)
 from code_puppy.scheduler.executor import execute_task
 
 # Global flag for graceful shutdown
@@ -153,6 +158,53 @@ def signal_handler(signum, frame):
     _shutdown_requested = True
 
 
+def _reconcile_incomplete_tasks() -> list[str]:
+    """Reconcile orphaned tasks from previous daemon sessions.
+
+    On daemon startup, any tasks with last_status='running' are considered
+    orphaned - they were interrupted by a daemon crash. This function marks
+    them as 'failed' with an explanatory error message.
+
+    Ported from Orion pattern: backend/jobs.py:432-469
+    Design rationale: self-healing crash recovery prevents zombie tasks
+    that appear to be running but have no worker process.
+
+    Returns:
+        List of task IDs that were reconciled (orphaned tasks marked as failed)
+    """
+    reconciled_ids: list[str] = []
+    now = datetime.now(timezone.utc)
+
+    try:
+        tasks = load_tasks()
+    except Exception:
+        # If we can't load tasks, we can't reconcile - but daemon should still start
+        return reconciled_ids
+
+    for task in tasks:
+        if task.last_status == "running":
+            # Task was orphaned by a daemon crash
+            task.last_status = "failed"
+            task.last_exit_code = -1
+            # Update last_run to show when we detected the orphan
+            task.last_run = now.isoformat()
+            reconciled_ids.append(task.id)
+
+    if reconciled_ids:
+        try:
+            save_tasks(tasks)
+            print(
+                f"[Scheduler] Reconciled {len(reconciled_ids)} orphaned task(s) "
+                f"from previous daemon session: {', '.join(reconciled_ids)}"
+            )
+        except Exception as e:
+            # Log but don't fail startup - we can continue with potentially
+            # inconsistent state
+            print(f"[Scheduler] Warning: Failed to persist reconciled tasks: {e}")
+
+    return reconciled_ids
+
+
 def start_daemon(foreground: bool = False):
     """Start the scheduler daemon.
 
@@ -161,6 +213,10 @@ def start_daemon(foreground: bool = False):
     """
     global _shutdown_requested
     _shutdown_requested = False
+
+    # Self-healing: reconcile orphaned tasks from previous crash
+    # This must run before any tasks can be executed
+    _reconcile_incomplete_tasks()
 
     # Set up signal handlers
     signal.signal(signal.SIGTERM, signal_handler)
