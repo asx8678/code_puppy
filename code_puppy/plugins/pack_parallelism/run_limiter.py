@@ -1,21 +1,58 @@
-"""RunLimiter - thread-safe + asyncio-safe concurrency gate for agent invocations.
+"""RunLimiter - semaphore-based concurrency gate for agent invocations.
 
-Based on Orion's backend/jobs.py pattern but adapted for code_puppy's mixed sync/async world.
-Uses Condition variables for fair FIFO queueing and supports both sync and async callers.
+Fixes two critical bugs in the previous implementation:
+1. Zombie executor-thread leak on asyncio cancellation (now uses native asyncio.Semaphore)
+2. Reentrant deadlock from nested agent invocations (now uses task-based reentrancy tracking)
+
+Design:
+- asyncio.Semaphore for the async path (primary, cancellation-safe)
+- threading.Semaphore for the sync path (tests only)
+- Independent semaphores - they do NOT share state (deliberate simplification)
+- WeakKeyDictionary keyed by asyncio.Task for reentrancy depth tracking
+- Default wait_timeout = 600s (fail loud, not silent hang)
 """
-
-from __future__ import annotations
 
 import asyncio
 import logging
 import threading
+import weakref
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
-from typing import TypeVar
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")
+# Task-local reentrancy depth counter — async only
+# Maps asyncio.Task -> depth. When > 0, the task already holds a slot.
+# Nested acquires bypass the limiter; nested releases just decrement the depth.
+# WeakKeyDictionary ensures entries are auto-cleaned when tasks are garbage collected.
+_reentrancy_depth: weakref.WeakKeyDictionary[asyncio.Task, int] = weakref.WeakKeyDictionary()
+
+
+def _get_current_task() -> asyncio.Task | None:
+    """Get the current asyncio Task, or None if not in an async context."""
+    try:
+        return asyncio.current_task()
+    except RuntimeError:
+        return None
+
+
+def _get_reentrancy_depth() -> int:
+    """Get reentrancy depth for current task."""
+    task = _get_current_task()
+    if task is None:
+        return 0
+    return _reentrancy_depth.get(task, 0)
+
+
+def _set_reentrancy_depth(depth: int) -> None:
+    """Set reentrancy depth for current task."""
+    task = _get_current_task()
+    if task is None:
+        return
+    if depth <= 0:
+        _reentrancy_depth.pop(task, None)
+    else:
+        _reentrancy_depth[task] = depth
 
 
 class RunConcurrencyLimitError(Exception):
@@ -34,33 +71,53 @@ class RunConcurrencyLimitError(Exception):
 class RunLimiterConfig:
     """Configuration for RunLimiter.
 
-    Matches Orion's pattern:
     - max_concurrent_runs: hard cap (when allow_parallel=True)
     - allow_parallel=False: forces max=1 regardless of max_concurrent_runs
-    - wait_timeout: None=forever, float=seconds before raising
+    - wait_timeout: None=forever, float=seconds before raising (default: 600)
     """
 
     max_concurrent_runs: int = 2
     allow_parallel: bool = True
-    wait_timeout: float | None = None  # None = wait forever
+    wait_timeout: float | None = 600.0  # CHANGED: was None, now 10 minutes default
 
 
 class RunLimiter:
-    """Thread + async-safe limiter for concurrent agent runs.
+    """Semaphore-based concurrency limiter for agent invocations.
 
-    Uses threading.Condition for sync side and asyncio.Condition for async side.
-    Both share the same underlying counter protected by independent locks.
+    Uses independent asyncio.Semaphore (primary async path, cancellation-safe)
+    and threading.Semaphore (sync path for tests). They do NOT share state —
+    this is a deliberate simplification. Production only uses the async path.
 
-    Fairness: FIFO queueing via condition variable notify/wait pattern.
-
-    Graceful degradation: if initialized with invalid config, falls back to
-    sensible defaults and logs a warning rather than crashing.
+    Features:
+    - Native cancellation handling via asyncio.Semaphore
+    - Reentrancy bypass via contextvars (nested invoke_agent calls don't deadlock)
+    - Configurable wait timeout (default 600s) fails loud instead of hanging forever
     """
 
     def __init__(self, config: RunLimiterConfig | None = None):
         self._config = config or RunLimiterConfig()
+        self._validate_and_fix_config()
 
-        # Validate config with fallback
+        limit = self.effective_limit
+
+        # Observability counters — shared across sync and async for reporting
+        self._state_lock = threading.Lock()
+        self._async_active = 0
+        self._async_waiters = 0
+        self._sync_active = 0
+        self._sync_waiters = 0
+
+        # Independent gates — each with its own slot count
+        self._async_sem = asyncio.Semaphore(limit)
+        self._sync_sem = threading.Semaphore(limit)
+
+        # Shrink tracking: when limit is lowered, this tracks how many excess
+        # releases should NOT create new capacity. Decremented on each release
+        # until it reaches 0, then releases resume normal behavior.
+        self._shrink_deficit = 0
+
+    def _validate_and_fix_config(self) -> None:
+        """Validate config and replace invalid values with defaults."""
         if self._config.max_concurrent_runs < 1:
             logger.warning(
                 "Invalid max_concurrent_runs=%d, using default=2",
@@ -72,14 +129,6 @@ class RunLimiter:
                 wait_timeout=self._config.wait_timeout,
             )
 
-        # Shared state (synchronized via _condition which holds _lock)
-        self._active_count: int = 0
-        self._waiters_count: int = 0  # Waiting threads/coroutines
-
-        # Sync primitives - async path bridges to sync via executor
-        self._lock = threading.Lock()
-        self._condition = threading.Condition(self._lock)
-
     @property
     def effective_limit(self) -> int:
         """Actual cap enforced (respects allow_parallel)."""
@@ -90,23 +139,107 @@ class RunLimiter:
     @property
     def active_count(self) -> int:
         """Current number of active runs (thread-safe read)."""
-        with self._lock:
-            return self._active_count
+        with self._state_lock:
+            return self._async_active + self._sync_active
 
     @property
     def waiters_count(self) -> int:
         """Number of callers currently waiting for a slot."""
-        with self._lock:
-            return self._waiters_count
+        with self._state_lock:
+            return self._async_waiters + self._sync_waiters
 
-    def _can_acquire(self) -> bool:
-        """Check if slot available (must hold _lock)."""
-        return self._active_count < self.effective_limit
+    async def acquire_async(self, timeout: float | None = None) -> None:
+        """Async acquire. Cancellation-safe via native asyncio.Semaphore.
+
+        Reentrant: if the current task already holds a slot,
+        this is a no-op bypass (just increments the depth counter).
+
+        Args:
+            timeout: Max seconds to wait (None = use config default = 600s)
+
+        Raises:
+            RunConcurrencyLimitError: On timeout
+        """
+        # Reentrancy check — bypass if current task already holds a slot
+        depth = _get_reentrancy_depth()
+        if depth > 0:
+            _set_reentrancy_depth(depth + 1)
+            logger.debug(
+                "RunLimiter: reentrant acquire bypassed (depth now %d)", depth + 1
+            )
+            return
+
+        # Effective timeout
+        effective_timeout = (
+            timeout if timeout is not None else self._config.wait_timeout
+        )
+
+        # For timeout=0, fail immediately if limit reached or semaphore locked
+        if effective_timeout == 0:
+            if self.active_count >= self.effective_limit or self._async_sem.locked():
+                raise RunConcurrencyLimitError(
+                    f"Run slot not available (limit={self.effective_limit})",
+                    active=self.active_count,
+                    limit=self.effective_limit,
+                    waited=None,
+                )
+            # Try quick acquire
+            try:
+                await asyncio.wait_for(self._async_sem.acquire(), timeout=0.001)
+                with self._state_lock:
+                    self._async_active += 1
+                _set_reentrancy_depth(1)
+                return
+            except asyncio.TimeoutError:
+                raise RunConcurrencyLimitError(
+                    f"Run slot not available (limit={self.effective_limit})",
+                    active=self.active_count,
+                    limit=self.effective_limit,
+                    waited=None,
+                )
+
+        # Increment waiters counter
+        with self._state_lock:
+            self._async_waiters += 1
+
+        try:
+            if effective_timeout is None:
+                await self._async_sem.acquire()
+            else:
+                try:
+                    await asyncio.wait_for(
+                        self._async_sem.acquire(),
+                        timeout=effective_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    raise RunConcurrencyLimitError(
+                        f"Timeout waiting for run slot after {effective_timeout}s "
+                        f"(limit={self.effective_limit})",
+                        active=self.active_count,
+                        limit=self.effective_limit,
+                        waited=effective_timeout,
+                    ) from None
+
+            # Successfully acquired
+            with self._state_lock:
+                self._async_waiters -= 1
+                self._async_active += 1
+            _set_reentrancy_depth(1)
+            logger.debug("RunLimiter: slot acquired (depth set to 1)")
+
+        except BaseException:
+            # Cancellation, timeout, or any error — clean up waiter counter
+            with self._state_lock:
+                self._async_waiters = max(0, self._async_waiters - 1)
+            raise
 
     def acquire_sync(
         self, *, blocking: bool = True, timeout: float | None = None
     ) -> bool:
-        """Try to acquire a slot (sync).
+        """Sync acquire using threading.Semaphore.
+
+        NOTE: Sync path does NOT participate in reentrancy bypass.
+        Sync is only used from tests; production uses acquire_async.
 
         Args:
             blocking: If False, return immediately with True/False
@@ -118,121 +251,118 @@ class RunLimiter:
         Raises:
             RunConcurrencyLimitError: If timeout expires while waiting
         """
-        import time
-
-        effective_timeout = (
-            timeout if timeout is not None else self._config.wait_timeout
-        )
-
-        with self._condition:  # Holds self._lock
-            if self._can_acquire():
-                self._active_count += 1
+        if not blocking:
+            acquired = self._sync_sem.acquire(blocking=False)
+            if acquired:
+                with self._state_lock:
+                    self._sync_active += 1
                 return True
+            return False
 
-            if not blocking:
-                return False
-
-            # Need to wait - increment waiters count
-            self._waiters_count += 1
-
-            start_time = time.monotonic()
-
-            try:
-                while True:
-                    if self._can_acquire():
-                        self._active_count += 1
-                        self._waiters_count -= 1
-                        return True
-
-                    # Check timeout
-                    if effective_timeout is not None:
-                        elapsed = time.monotonic() - start_time
-                        remaining = effective_timeout - elapsed
-                        if remaining <= 0:
-                            self._waiters_count -= 1
-                            raise RunConcurrencyLimitError(
-                                f"Timeout waiting for run slot (limit={self.effective_limit})",
-                                active=self._active_count,
-                                limit=self.effective_limit,
-                                waited=effective_timeout,
-                            )
-                        # Wait with timeout
-                        if not self._condition.wait(timeout=remaining):
-                            # Timeout expired
-                            self._waiters_count -= 1
-                            raise RunConcurrencyLimitError(
-                                f"Timeout waiting for run slot (limit={self.effective_limit})",
-                                active=self._active_count,
-                                limit=self.effective_limit,
-                                waited=effective_timeout,
-                            )
-                    else:
-                        # Wait forever
-                        self._condition.wait()
-            except RunConcurrencyLimitError:
-                raise
-            except Exception:
-                # Ensure waiter count is decremented on unexpected error
-                self._waiters_count = max(0, self._waiters_count - 1)
-                raise
-
-    async def acquire_async(self, timeout: float | None = None) -> None:
-        """Async acquire with optional wait timeout.
-
-        Bridges to the sync implementation via executor to avoid dual-lock
-        complexity. This ensures a single source of truth for the active count
-        and eliminates the risk of sync/async notification deadlocks.
-
-        Args:
-            timeout: Max seconds to wait (None = use config default = infinite)
-
-        Raises:
-            RunConcurrencyLimitError: On timeout
-        """
         effective_timeout = (
             timeout if timeout is not None else self._config.wait_timeout
         )
 
-        loop = asyncio.get_running_loop()
+        with self._state_lock:
+            self._sync_waiters += 1
 
-        def _blocking_acquire():
-            acquired = self.acquire_sync(
+        try:
+            # threading.Semaphore.acquire returns True on success, False on timeout
+            acquired = self._sync_sem.acquire(
                 blocking=True,
                 timeout=effective_timeout,
             )
-            if not acquired:
-                # Non-blocking case returned False, or should not happen with blocking=True
+
+            if acquired:
+                with self._state_lock:
+                    self._sync_waiters -= 1
+                    self._sync_active += 1
+                return True
+            else:
+                # Timeout
+                with self._state_lock:
+                    self._sync_waiters -= 1
                 raise RunConcurrencyLimitError(
-                    f"Run slot not available (limit={self.effective_limit})",
+                    f"Timeout waiting for run slot after {effective_timeout}s "
+                    f"(limit={self.effective_limit})",
                     active=self.active_count,
                     limit=self.effective_limit,
-                    waited=None,
+                    waited=effective_timeout,
                 )
-
-        try:
-            await loop.run_in_executor(None, _blocking_acquire)
-        except RunConcurrencyLimitError:
+        except BaseException:
+            with self._state_lock:
+                # Only decrement if we haven't already
+                if self._sync_waiters > 0:
+                    self._sync_waiters -= 1
             raise
-        except Exception as e:
-            # Wrap unexpected errors
-            raise RunConcurrencyLimitError(
-                f"Unexpected error acquiring run slot: {e}",
-                active=self.active_count,
-                limit=self.effective_limit,
-                waited=effective_timeout,
-            ) from e
 
     def release(self) -> None:
-        """Release a slot. Notifies one waiter (FIFO via condition variable)."""
-        with self._lock:
-            if self._active_count > 0:
-                self._active_count -= 1
-            else:
-                logger.warning("RunLimiter.release() called with no active runs")
+        """Release a slot. Auto-detects async vs sync context.
 
-        # Notify sync waiters (async callers use sync path via executor)
-        with self._condition:
-            self._condition.notify()
+        Reentrancy-aware: if called from a context where depth > 1,
+        only decrements the depth counter without releasing the actual slot.
+        """
+        # Check async reentrancy first
+        depth = _get_reentrancy_depth()
+        if depth > 1:
+            _set_reentrancy_depth(depth - 1)
+            logger.debug("RunLimiter: reentrant release (depth now %d)", depth - 1)
+            return
+
+        # Detect async vs sync context
+        in_async = False
+        try:
+            asyncio.get_running_loop()
+            in_async = True
+        except RuntimeError:
+            in_async = False
+
+        if in_async:
+            with self._state_lock:
+                if self._async_active > 0:
+                    self._async_active -= 1
+                    # Handle shrink deficit: don't release to semaphore if deficit > 0
+                    if self._shrink_deficit > 0:
+                        self._shrink_deficit -= 1
+                        logger.debug("RunLimiter: release absorbed by shrink deficit")
+                    else:
+                        self._async_sem.release()
+                    if depth == 1:
+                        _set_reentrancy_depth(0)
+                elif self._sync_active > 0:
+                    # Fallback: released from async context but only sync active
+                    logger.debug(
+                        "RunLimiter.release() from async context, releasing sync slot"
+                    )
+                    self._sync_active -= 1
+                    if self._shrink_deficit > 0:
+                        self._shrink_deficit -= 1
+                        logger.debug("RunLimiter: sync release absorbed by shrink deficit")
+                    else:
+                        self._sync_sem.release()
+                else:
+                    logger.warning("RunLimiter.release() called with no active runs")
+        else:
+            with self._state_lock:
+                if self._sync_active > 0:
+                    self._sync_active -= 1
+                    if self._shrink_deficit > 0:
+                        self._shrink_deficit -= 1
+                        logger.debug("RunLimiter: sync release absorbed by shrink deficit")
+                    else:
+                        self._sync_sem.release()
+                elif self._async_active > 0:
+                    logger.debug(
+                        "RunLimiter.release() from sync context, releasing async slot"
+                    )
+                    self._async_active -= 1
+                    if self._shrink_deficit > 0:
+                        self._shrink_deficit -= 1
+                        logger.debug("RunLimiter: async release absorbed by shrink deficit")
+                    else:
+                        self._async_sem.release()
+                else:
+                    logger.warning("RunLimiter.release() called with no active runs")
 
     @contextmanager
     def slot_sync(self, *, blocking: bool = True, timeout: float | None = None):
@@ -243,7 +373,7 @@ class RunLimiter:
                 run_agent()
 
         Raises:
-            RunConcurrencyLimitError: If timeout expires
+            RunConcurrencyLimitError: If timeout expires or non-blocking and full
         """
         acquired = self.acquire_sync(blocking=blocking, timeout=timeout)
         if not acquired:
@@ -276,13 +406,14 @@ class RunLimiter:
             self.release()
 
     def update_config(self, new_config: RunLimiterConfig) -> None:
-        """Atomically swap config and re-check bounds.
+        """Atomically swap config.
 
-        If the new limit is higher than before, notifies waiters.
-        If lower, active runs are not affected (only new acquisitions).
+        If the new limit is higher, grow both semaphores.
+        If lower, active runs are unaffected; subsequent acquires respect the new limit.
+        For shrinking with in-flight runs, we create fresh semaphores with the new
+        capacity while preserving active counts. Existing releases will drain to
+        the old semaphore; new acquires get the new capacity.
         """
-        old_limit = self.effective_limit
-
         # Validate before applying
         if new_config.max_concurrent_runs < 1:
             logger.warning(
@@ -291,74 +422,88 @@ class RunLimiter:
             )
             return
 
+        old_limit = self.effective_limit
         self._config = new_config
         new_limit = self.effective_limit
 
         logger.info(
-            "RunLimiter config updated: limit %d -> %d",
-            old_limit,
-            new_limit,
+            "RunLimiter config updated: limit %d -> %d", old_limit, new_limit
         )
 
-        # If limit increased, wake up waiters (async uses sync path via executor)
         if new_limit > old_limit:
-            with self._condition:
-                # Notify multiple times in case multiple slots opened
-                for _ in range(new_limit - old_limit):
-                    self._condition.notify()
+            # Grow both semaphores by releasing extra slots
+            diff = new_limit - old_limit
+            for _ in range(diff):
+                self._async_sem.release()
+                self._sync_sem.release()
+            # Clear any shrink deficit since we're growing
+            with self._state_lock:
+                self._shrink_deficit = 0
+        elif new_limit < old_limit:
+            # Shrink: Track deficit - next N releases won't create capacity
+            with self._state_lock:
+                self._shrink_deficit = old_limit - new_limit
+            # Also try to drain existing semaphore capacity if any
+            # This prevents new waiters from acquiring during shrink
+            excess_capacity = old_limit - self.active_count
+            for _ in range(excess_capacity):
+                # Create a task to acquire and hold this slot temporarily
+                # to drain the semaphore capacity
+                asyncio.create_task(self._drain_slot())
+
+    async def _drain_slot(self):
+        """Helper to drain a slot from the semaphore during shrink."""
+        try:
+            await self._async_sem.acquire()
+            # Hold briefly then release - this drains and restores without
+            # incrementing active_count (we don't call our acquire)
+            await asyncio.sleep(0.001)
+            with self._state_lock:
+                if self._shrink_deficit > 0:
+                    self._shrink_deficit -= 1
+                else:
+                    self._async_sem.release()
+        except Exception:
+            pass
 
 
-# Singleton instance management
+# ============================================================================
+# Singleton management
+# ============================================================================
+
 _limiter_instance: RunLimiter | None = None
 _limiter_lock = threading.Lock()
 
 
 def _build_from_config() -> RunLimiter:
-    """Build a RunLimiter from config file or defaults."""
-    # Read from pack_parallelism.toml if available
+    """Build a RunLimiter from ~/.code_puppy/pack_parallelism.toml."""
     from pathlib import Path
 
     config_path = Path.home() / ".code_puppy" / "pack_parallelism.toml"
 
-    max_runs = 2  # Default from MAX_PARALLEL_AGENTS convention
+    max_runs = 2
     allow_parallel = True
-    wait_timeout = None
+    wait_timeout: float | None = 600.0  # New default: 10 minutes
 
     if config_path.exists():
         try:
-            import tomllib  # Python 3.11+
+            try:
+                import tomllib
+            except ImportError:
+                import tomli as tomllib  # type: ignore[no-redef]
 
             with open(config_path, "rb") as fh:
                 data = tomllib.load(fh)
 
             pack_leader = data.get("pack_leader", {})
-            # pack_parallelism uses 'max_parallelism', we map it
             max_runs = pack_leader.get("max_parallelism", max_runs)
             allow_parallel = pack_leader.get("allow_parallel", allow_parallel)
-            # Optional: timeout configuration
             timeout_val = pack_leader.get("run_wait_timeout")
             if timeout_val is not None:
                 wait_timeout = float(timeout_val)
+            elif "run_wait_timeout" in pack_leader:
+                wait_timeout = None  # Explicitly set to None = forever (advanced users)
 
-        except ImportError:
-            # Python < 3.11 - try tomli
-            try:
-                import tomli
-
-                with open(config_path, "rb") as fh:
-                    data = tomli.load(fh)
-
-                pack_leader = data.get("pack_leader", {})
-                max_runs = pack_leader.get("max_parallelism", max_runs)
-                allow_parallel = pack_leader.get("allow_parallel", allow_parallel)
-                timeout_val = pack_leader.get("run_wait_timeout")
-                if timeout_val is not None:
-                    wait_timeout = float(timeout_val)
-
-            except ImportError:
-                logger.debug("No TOML library available for config parsing")
-            except Exception as e:
-                logger.warning("Failed to parse pack_parallelism.toml: %s", e)
         except Exception as e:
             logger.warning("Failed to parse pack_parallelism.toml: %s", e)
 
@@ -367,7 +512,6 @@ def _build_from_config() -> RunLimiter:
         allow_parallel=allow_parallel,
         wait_timeout=wait_timeout,
     )
-
     return RunLimiter(config)
 
 
@@ -385,9 +529,10 @@ def get_run_limiter() -> RunLimiter:
                 try:
                     _limiter_instance = _build_from_config()
                     logger.info(
-                        "RunLimiter initialized: limit=%d, allow_parallel=%s",
+                        "RunLimiter initialized: limit=%d, allow_parallel=%s, wait_timeout=%s",
                         _limiter_instance.effective_limit,
                         _limiter_instance._config.allow_parallel,
+                        _limiter_instance._config.wait_timeout,
                     )
                 except Exception as e:
                     logger.warning(
@@ -403,10 +548,13 @@ def reset_run_limiter_for_tests() -> None:
     """Reset the singleton for testing.
 
     Clears the instance so the next get_run_limiter() call re-initializes.
+    Also clears reentrancy depth for the current task.
     """
     global _limiter_instance
     with _limiter_lock:
         _limiter_instance = None
+        # Clear current task's reentrancy depth if any
+        _set_reentrancy_depth(0)
         logger.debug("RunLimiter singleton reset for tests")
 
 
@@ -436,3 +584,36 @@ def update_run_limiter_config(
     )
 
     limiter.update_config(new_config)
+
+
+def force_reset_limiter_state() -> dict:
+    """EMERGENCY: force-reset all counters and recreate semaphores.
+
+    Used by `/pack-parallel reset` to recover from stuck states.
+    Returns a dict with the pre-reset state for logging.
+    """
+    global _limiter_instance
+    if _limiter_instance is None:
+        return {"status": "no_instance"}
+
+    limiter = _limiter_instance
+    old_state = {
+        "async_active": limiter._async_active,
+        "async_waiters": limiter._async_waiters,
+        "sync_active": limiter._sync_active,
+        "sync_waiters": limiter._sync_waiters,
+        "limit": limiter.effective_limit,
+    }
+
+    limit = limiter.effective_limit
+    with limiter._state_lock:
+        limiter._async_active = 0
+        limiter._async_waiters = 0
+        limiter._sync_active = 0
+        limiter._sync_waiters = 0
+        # Recreate semaphores from scratch
+        limiter._async_sem = asyncio.Semaphore(limit)
+        limiter._sync_sem = threading.Semaphore(limit)
+
+    logger.warning("RunLimiter force-reset. Previous state: %s", old_state)
+    return {"status": "reset", "previous": old_state}

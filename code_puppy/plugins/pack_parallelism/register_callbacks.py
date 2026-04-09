@@ -228,7 +228,7 @@ def _invalidate_agent_caches(previous_val: int | None, new_val: int) -> None:
 
 
 def _handle_command(command: str, name: str):
-    """Handle /pack-parallel [N] slash command."""
+    """Handle /pack-parallel [N|status|reset] slash command."""
     global _session_max
 
     if name not in _COMMAND_NAMES:
@@ -254,14 +254,48 @@ def _handle_command(command: str, name: str):
         emit_info(
             f"🐺 Pack Leader max parallelism: **{current}** (from {source})\n"
             f"   Config file default: {config_val}\n"
-            f"   Usage: /pack-parallel <N>  (e.g. /pack-parallel 4)"
+            f"   Usage: /pack-parallel <N>  (e.g. /pack-parallel 4)\n"
+            f"          /pack-parallel status\n"
+            f"          /pack-parallel reset"
         )
         return True
 
+    subcommand = parts[1].lower()
+
+    # Handle status subcommand
+    if subcommand == "status":
+        if _RUN_LIMITER_AVAILABLE:
+            limiter = get_run_limiter()
+            emit_info(
+                f"🐺 RunLimiter status:\n"
+                f"   Active: {limiter.active_count}\n"
+                f"   Waiters: {limiter.waiters_count}\n"
+                f"   Limit: {limiter.effective_limit}\n"
+                f"   Wait timeout: {limiter._config.wait_timeout}s"
+            )
+        else:
+            emit_error("RunLimiter not available")
+        return True
+
+    # Handle reset subcommand
+    if subcommand == "reset":
+        if _RUN_LIMITER_AVAILABLE:
+            from .run_limiter import force_reset_limiter_state
+
+            result = force_reset_limiter_state()
+            emit_info(f"🐺 RunLimiter force-reset: {result}")
+        else:
+            emit_error("RunLimiter not available")
+        return True
+
+    # Try to parse as integer for set operation
     try:
         new_val = int(parts[1])
     except ValueError:
-        emit_error(f"pack-parallel: '{parts[1]}' is not a valid integer")
+        emit_error(
+            f"pack-parallel: '{parts[1]}' is not a valid integer or subcommand "
+            f"(try 'status' or 'reset')"
+        )
         return True
 
     if new_val < 1:
@@ -318,9 +352,11 @@ def _command_help() -> list[tuple[str, str]]:
         (
             "pack-parallel",
             f"Get/set Pack Leader max parallel agents (current: {max_p}). "
-            f"Usage: /pack-parallel N",
+            f"Usage: /pack-parallel N | status | reset",
         ),
         ("pack-par", "Alias for /pack-parallel"),
+        ("pack-parallel status", "Show RunLimiter active/waiting counts"),
+        ("pack-parallel reset", "Emergency reset of stuck limiter state"),
     ]
 
 
