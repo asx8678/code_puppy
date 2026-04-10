@@ -14,6 +14,8 @@ The Adversarial Planning system uses multiple specialized agents to:
 
 ## Quick Start
 
+> 📚 **New to adversarial planning?** Start with the [quick guide in the main README](../../../README.md#adversarial-planning-quick-guide-️) for a beginner-friendly overview and command cheat sheet.
+
 ```bash
 # Start planning (auto-selects mode)
 /ap Implement OAuth2 authentication with Google

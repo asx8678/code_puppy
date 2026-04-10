@@ -88,6 +88,42 @@ For local development with graceful multi-service shutdown:
 
 ## Usage
 
+### Adversarial Planning Quick Guide ⚔️
+
+**What is it?** Adversarial planning is Code Puppy's way of tackling high-stakes changes safely. Instead of jumping straight to solutions, multiple specialized agents work together: one investigates your codebase (researcher), two planners create independent approaches (conservative + contrarian), reviewers attack the plans to find flaws, and an arbiter synthesizes the best surviving approach. In deep mode, a red team stress-tests everything before execution.
+
+**When to use which command:**
+
+| Command | When to Use | Example |
+|---------|-------------|---------|
+| `/ap <task>` | **Auto mode** — let Code Puppy pick standard vs deep based on risk keywords (database, auth, migrate, deploy) | `/ap Add user authentication` |
+| `/ap-standard <task>` | **Fast mode** for routine work — skips red team and detailed change-set synthesis | `/ap-standard Add dark mode toggle` |
+| `/ap-deep <task>` | **Thorough mode** for migrations, security work, production changes, high blast radius | `/ap-deep Migrate from REST to GraphQL` |
+| `/ap-status` | Check active planning sessions and their progress | `/ap-status` |
+| `/ap-abort` | Stop all running adversarial planning sessions | `/ap-abort` |
+
+**Quick rule of thumb:**
+- **Standard** = faster, good for normal feature work
+- **Deep** = slower but safer, required for database changes, security work, production deployments
+- **Auto** = Code Puppy reads your task and chooses (detects keywords like "migrate", "database", "OAuth", "deploy")
+
+**The flow at a glance:**
+```
+/ap command
+    ↓
+Researcher (discovers evidence)
+    ↓
+Planner A (conservative)  +  Planner B (contrarian)  ← isolated, don't see each other
+    ↓                            ↓
+Reviewers attack both plans to falsify weak claims
+    ↓
+Arbiter merges what survived
+    ↓
+Red team stress test (deep mode only) → go / conditional-go / no-go verdict
+```
+
+📖 **For the full deep dive**, see the [plugin documentation](code_puppy/plugins/adversarial_planning/README.md).
+
 ### Adding Models from models.dev 🆕
 
 While there are several models configured right out of the box from providers like Synthetic, Cerebras, OpenAI, Google, and Anthropic, Code Puppy integrates with [models.dev](https://models.dev) to let you browse and add models from **65+ providers** with a single command:
