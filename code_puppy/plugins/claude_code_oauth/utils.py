@@ -32,11 +32,7 @@ logger = logging.getLogger(__name__)
 # the raw model name (e.g. ``claude-opus-4-5-20251101``) and the
 # prefixed form (e.g. ``claude-code-claude-opus-4-5-20251101``). Add an
 # entry here to permanently suppress a model in the UI/model picker.
-BLOCKED_CLAUDE_CODE_MODELS = frozenset(
-    {
-        "claude-opus-4-5-20251101",
-    }
-)
+BLOCKED_CLAUDE_CODE_MODELS = frozenset()
 
 
 def _is_blocked_claude_model(model_name: str) -> bool:
