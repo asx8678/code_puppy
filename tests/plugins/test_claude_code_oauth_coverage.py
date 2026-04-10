@@ -960,3 +960,128 @@ class TestAgentRunCallbacks:
         mock_hb.refresh_count = 0
         _active_heartbeats["s2"] = mock_hb
         await _on_agent_run_end("agent", "model", session_id="s2")
+
+
+class TestOnStartup:
+    """Tests for _on_startup proactive token refresh."""
+
+    def test_no_tokens_skips(self):
+        from code_puppy.plugins.claude_code_oauth.register_callbacks import _on_startup
+
+        with patch(
+            "code_puppy.plugins.claude_code_oauth.register_callbacks.load_stored_tokens",
+            return_value=None,
+        ):
+            _on_startup()  # should return early, no warning
+
+    def test_no_access_token_skips(self):
+        from code_puppy.plugins.claude_code_oauth.register_callbacks import _on_startup
+
+        with patch(
+            "code_puppy.plugins.claude_code_oauth.register_callbacks.load_stored_tokens",
+            return_value={"refresh_token": "rt"},
+        ):
+            _on_startup()  # should return early, no warning
+
+    def test_valid_token_no_warning(self):
+        from code_puppy.plugins.claude_code_oauth.register_callbacks import _on_startup
+
+        with (
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.load_stored_tokens",
+                return_value={"access_token": "at"},
+            ),
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.get_valid_access_token",
+                return_value="at",
+            ),
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.emit_warning"
+            ) as mock_warn,
+        ):
+            _on_startup()
+            mock_warn.assert_not_called()
+
+    def test_expired_token_emits_warning(self):
+        from code_puppy.plugins.claude_code_oauth.register_callbacks import _on_startup
+
+        with (
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.load_stored_tokens",
+                return_value={"access_token": "at"},
+            ),
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.get_valid_access_token",
+                return_value=None,
+            ),
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.emit_warning"
+            ) as mock_warn,
+        ):
+            _on_startup()
+            mock_warn.assert_called_once()
+            assert "/claude-code-auth" in mock_warn.call_args[0][0]
+
+
+class TestOnShutdown:
+    """Tests for _on_shutdown last-minute token refresh."""
+
+    def test_no_tokens_skips(self):
+        from code_puppy.plugins.claude_code_oauth.register_callbacks import _on_shutdown
+
+        with (
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.load_stored_tokens",
+                return_value=None,
+            ),
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.refresh_access_token"
+            ) as mock_refresh,
+        ):
+            _on_shutdown()
+            mock_refresh.assert_not_called()
+
+    def test_no_refresh_token_skips(self):
+        from code_puppy.plugins.claude_code_oauth.register_callbacks import _on_shutdown
+
+        with (
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.load_stored_tokens",
+                return_value={"access_token": "at"},
+            ),
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.refresh_access_token"
+            ) as mock_refresh,
+        ):
+            _on_shutdown()
+            mock_refresh.assert_not_called()
+
+    def test_calls_refresh(self):
+        from code_puppy.plugins.claude_code_oauth.register_callbacks import _on_shutdown
+
+        with (
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.load_stored_tokens",
+                return_value={"refresh_token": "rt"},
+            ),
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.refresh_access_token"
+            ) as mock_refresh,
+        ):
+            _on_shutdown()
+            mock_refresh.assert_called_once()
+
+    def test_refresh_exception_handled(self):
+        from code_puppy.plugins.claude_code_oauth.register_callbacks import _on_shutdown
+
+        with (
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.load_stored_tokens",
+                return_value={"refresh_token": "rt"},
+            ),
+            patch(
+                "code_puppy.plugins.claude_code_oauth.register_callbacks.refresh_access_token",
+                side_effect=RuntimeError("network down"),
+            ),
+        ):
+            _on_shutdown()  # should not raise

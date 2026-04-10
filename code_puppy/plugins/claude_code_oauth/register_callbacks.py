@@ -33,11 +33,51 @@ from .utils import (
     load_claude_models_filtered,
     load_stored_tokens,
     prepare_oauth_context,
+    refresh_access_token,
     remove_claude_code_models,
     save_tokens,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _on_startup() -> None:
+    """Proactively refresh Claude Code OAuth tokens at startup.
+
+    Without this, tokens that expire between sessions cause 'model not
+    available' errors on the first request.  By refreshing eagerly we
+    surface auth problems early and give users a clear next step.
+    """
+    tokens = load_stored_tokens()
+    if not tokens or not tokens.get("access_token"):
+        # User hasn't authenticated yet — nothing to refresh
+        return
+
+    token = get_valid_access_token()
+    if token:
+        logger.debug("Claude Code OAuth token is valid at startup")
+    else:
+        emit_warning(
+            "⚠️ Claude Code OAuth token expired and refresh failed. "
+            "Run /claude-code-auth to re-authenticate."
+        )
+
+
+def _on_shutdown() -> None:
+    """Attempt a last-minute token refresh before exit.
+
+    Refreshing now means the next session starts with a fresh token,
+    reducing the chance of 'model not available' on restart.
+    """
+    tokens = load_stored_tokens()
+    if not tokens or not tokens.get("refresh_token"):
+        return
+
+    try:
+        refresh_access_token()
+    except Exception as exc:
+        # Never block shutdown — just log and move on
+        logger.debug("Claude Code OAuth shutdown refresh failed: %s", exc)
 
 
 class _OAuthResult:
@@ -441,6 +481,8 @@ async def _on_agent_run_end(
             logger.debug("Error stopping token refresh heartbeat: %s", exc)
 
 
+register_callback("startup", _on_startup)
+register_callback("shutdown", _on_shutdown)
 register_callback("custom_command_help", _custom_help)
 register_callback("custom_command", _handle_custom_command)
 register_callback("register_model_type", _register_model_types)
