@@ -4,6 +4,8 @@ import asyncio
 import logging
 from typing import Literal
 
+from code_puppy.plugins.customizable_commands.register_callbacks import MarkdownCommandResult
+
 logger = logging.getLogger(__name__)
 
 _COMMAND_NAMES = {"ap", "ap-standard", "ap-deep", "ap-status", "ap-abort"}
@@ -39,7 +41,7 @@ def handle_command(command: str, name: str) -> Literal[True] | str | None:
     return None
 
 
-def _handle_ap(parts: list[str], mode: Literal["auto", "standard", "deep"]) -> str | Literal[True]:
+def _handle_ap(parts: list[str], mode: Literal["auto", "standard", "deep"]) -> MarkdownCommandResult | Literal[True]:
     """Handle /ap, /ap-standard, /ap-deep commands."""
     from code_puppy.messaging import emit_info, emit_error
     
@@ -83,7 +85,7 @@ Please wait...
 """)
     
     # Return prompt for the planning agent to execute
-    return f"""Run adversarial planning for this task:
+    return MarkdownCommandResult(f"""Run adversarial planning for this task:
 
 {task}
 
@@ -96,7 +98,7 @@ After completion, display:
 4. Quick wins
 5. Monday morning actions
 6. Any blockers or conditions
-"""
+""")
 
 
 def _handle_status() -> Literal[True]:
