@@ -33,6 +33,13 @@ from .loader import (
     reload_puppy_config,
     reset_puppy_config_for_tests,
 )
+from ._resolvers import (
+    resolve_str,
+    resolve_bool,
+    resolve_int,
+    resolve_float,
+    resolve_path,
+)
 
 __all__ = [
     # env_helpers
@@ -47,4 +54,10 @@ __all__ = [
     "get_puppy_config",
     "reload_puppy_config",
     "reset_puppy_config_for_tests",
+    # resolvers
+    "resolve_str",
+    "resolve_bool",
+    "resolve_int",
+    "resolve_float",
+    "resolve_path",
 ]

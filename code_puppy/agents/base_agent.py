@@ -71,19 +71,11 @@ from code_puppy.compaction import (
 from code_puppy.config import (
     get_agent_pinned_model,
     get_compaction_strategy,
-    get_compaction_threshold,
     get_global_model_name,
-    get_message_limit,
-    get_protected_token_count,
-    get_summarization_arg_max_length,
-    get_summarization_history_dir,
-    get_summarization_history_offload_enabled,
-    get_summarization_keep_fraction,
-    get_summarization_pretruncate_enabled,
-    get_summarization_trigger_fraction,
     get_use_dbos,
     get_value,
 )
+from code_puppy.config_package import get_puppy_config
 from code_puppy.error_logging import log_error
 from code_puppy.keymap import cancel_agent_uses_signal, get_cancel_agent_char_code
 from code_puppy.mcp_ import get_mcp_manager
@@ -871,12 +863,13 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Get the configured protected token count using model-aware fraction thresholds
         model_name = self.get_model_name()
         model_max = self.get_model_context_length()
+        cfg = get_puppy_config()
         thresholds = compute_summarization_thresholds(
             model_name,
-            trigger_fraction=get_summarization_trigger_fraction(),
-            keep_fraction=get_summarization_keep_fraction(),
-            absolute_trigger=int(get_compaction_threshold() * model_max),  # Convert proportion to tokens
-            absolute_protected=get_protected_token_count(),
+            trigger_fraction=cfg.summarization_trigger_fraction,
+            keep_fraction=cfg.summarization_keep_fraction,
+            absolute_trigger=int(cfg.compaction_threshold * model_max),  # Convert proportion to tokens
+            absolute_protected=cfg.protected_token_count,
         )
         # Use the keep_tokens (protected zone) from computed thresholds
         protected_tokens_limit = thresholds.keep_tokens
@@ -1179,9 +1172,10 @@ class BaseAgent(ABC, AgentPromptMixin):
             return [], []
 
         # --- Phase 1: Pre-truncation of tool call args (cheap token reclamation) ---
-        if get_summarization_pretruncate_enabled():
+        cfg = get_puppy_config()
+        if cfg.summarization_pretruncate_enabled:
             try:
-                max_arg_len = get_summarization_arg_max_length()
+                max_arg_len = cfg.summarization_arg_max_length
                 truncated_msgs, trunc_count = pretruncate_messages(
                     messages,
                     keep_recent=10,
@@ -1219,11 +1213,11 @@ class BaseAgent(ABC, AgentPromptMixin):
         system_message = messages[0]
 
         # --- Phase 2: History offload (opt-in debugging) ---
-        if get_summarization_history_offload_enabled():
+        if cfg.summarization_history_offload_enabled:
             try:
                 # Handle explicit session_id=None using `or 'unknown'` before sanitization
                 session_id = getattr(self, "session_id", None) or "unknown"
-                history_dir = get_summarization_history_dir()
+                history_dir = cfg.summarization_history_dir
                 offload_path = offload_evicted_messages(
                     messages_to_summarize,
                     session_id=session_id,
@@ -1573,8 +1567,11 @@ class BaseAgent(ABC, AgentPromptMixin):
         )
         update_spinner_context(context_summary)
 
+        # Get config for compaction settings
+        cfg = get_puppy_config()
+
         # Get the configured compaction threshold
-        compaction_threshold = get_compaction_threshold()
+        compaction_threshold = cfg.compaction_threshold
 
         # Get the configured compaction strategy
         compaction_strategy = get_compaction_strategy()
@@ -1596,7 +1593,7 @@ class BaseAgent(ABC, AgentPromptMixin):
 
             if compaction_strategy == "truncation":
                 # Use truncation instead of summarization
-                protected_tokens = get_protected_token_count()
+                protected_tokens = cfg.protected_token_count
                 # Pass pre-serialized messages to avoid re-serialization
                 filtered_messages = self.filter_huge_messages(
                     messages, serialized_messages=_serialized_messages_for_rust
@@ -2530,7 +2527,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                             message_group="token_context_status",
                         )
 
-                usage_limits = UsageLimits(request_limit=get_message_limit())
+                cfg = get_puppy_config()
+                usage_limits = UsageLimits(request_limit=cfg.message_limit)
 
                 # Build context managers based on configuration, then run once.
                 @contextlib.contextmanager

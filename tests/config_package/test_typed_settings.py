@@ -385,6 +385,13 @@ class TestToDict:
             "protected_token_count",
             "message_limit",
             "compaction_strategy",
+            "compaction_threshold",
+            "summarization_trigger_fraction",
+            "summarization_keep_fraction",
+            "summarization_pretruncate_enabled",
+            "summarization_arg_max_length",
+            "summarization_history_offload_enabled",
+            "summarization_history_dir",
             "debug",
             "log_level",
             "puppy_name",
@@ -574,3 +581,138 @@ class TestFieldsMatchLoader:
 
         # No TypeError should have occurred (implicitly tested)
         # If loader missed a field, PuppyConfig() construction would raise TypeError
+
+
+# ─────────────────────────────────────────────────────────────
+# Immutability Tests (Frozen Dataclass)
+# ─────────────────────────────────────────────────────────────
+
+
+class TestImmutability:
+    """Tests for frozen dataclass immutability behavior."""
+
+    def test_dataclass_is_frozen(self):
+        """PuppyConfig should be a frozen dataclass."""
+        cfg = load_puppy_config()
+        assert cfg.__dataclass_params__.frozen is True
+
+    def test_field_modification_raises_frozen_instance_error(self):
+        """Modifying any field should raise FrozenInstanceError."""
+        cfg = load_puppy_config()
+
+        with pytest.raises((FrozenInstanceError, AttributeError)):
+            cfg.default_model = "modified"
+
+    def test_nested_field_modification_raises_frozen_instance_error(self):
+        """Modifying nested structures should also be blocked."""
+        cfg = load_puppy_config()
+
+        # Even path fields should be immutable
+        with pytest.raises((FrozenInstanceError, AttributeError)):
+            cfg.data_dir = Path("/modified")
+
+    def test_cached_config_is_immutable(self):
+        """The cached singleton should also be immutable."""
+        reset_puppy_config_for_tests()
+        cfg = get_puppy_config()
+
+        # Verify it's the same instance on second call
+        cfg2 = get_puppy_config()
+        assert cfg is cfg2
+
+        # Verify mutation still fails on cached instance
+        with pytest.raises((FrozenInstanceError, AttributeError)):
+            cfg.default_model = "modified"
+
+    def test_reloaded_config_is_immutable(self):
+        """Reloaded config should also be frozen."""
+        cfg = reload_puppy_config()
+        assert cfg.__dataclass_params__.frozen is True
+
+        with pytest.raises((FrozenInstanceError, AttributeError)):
+            cfg.temperature = 1.5
+
+
+# ─────────────────────────────────────────────────────────────
+# Summarization Fields Tests
+# ─────────────────────────────────────────────────────────────
+
+
+class TestSummarizationFields:
+    """Tests for summarization/compaction config fields."""
+
+    def test_summarization_trigger_fraction_default(self):
+        """summarization_trigger_fraction should default to 0.85."""
+        cfg = load_puppy_config()
+        assert isinstance(cfg.summarization_trigger_fraction, float)
+        assert 0.5 <= cfg.summarization_trigger_fraction <= 0.95
+
+    def test_summarization_keep_fraction_default(self):
+        """summarization_keep_fraction should default to 0.10."""
+        cfg = load_puppy_config()
+        assert isinstance(cfg.summarization_keep_fraction, float)
+        assert 0.05 <= cfg.summarization_keep_fraction <= 0.50
+
+    def test_summarization_pretruncate_enabled_default(self):
+        """summarization_pretruncate_enabled should default to True."""
+        cfg = load_puppy_config()
+        assert isinstance(cfg.summarization_pretruncate_enabled, bool)
+        assert cfg.summarization_pretruncate_enabled is True
+
+    def test_summarization_arg_max_length_default(self):
+        """summarization_arg_max_length should default to 500."""
+        cfg = load_puppy_config()
+        assert isinstance(cfg.summarization_arg_max_length, int)
+        assert 100 <= cfg.summarization_arg_max_length <= 10000
+
+    def test_summarization_history_offload_enabled_default(self):
+        """summarization_history_offload_enabled should default to False."""
+        cfg = load_puppy_config()
+        assert isinstance(cfg.summarization_history_offload_enabled, bool)
+        assert cfg.summarization_history_offload_enabled is False
+
+    def test_summarization_history_dir_is_path(self):
+        """summarization_history_dir should be a Path."""
+        cfg = load_puppy_config()
+        assert isinstance(cfg.summarization_history_dir, Path)
+        assert cfg.summarization_history_dir.is_absolute()
+
+    def test_compaction_threshold_default(self):
+        """compaction_threshold should default to 0.85."""
+        cfg = load_puppy_config()
+        assert isinstance(cfg.compaction_threshold, float)
+        assert 0.5 <= cfg.compaction_threshold <= 0.95
+
+    def test_summarization_trigger_fraction_env_override(self, monkeypatch):
+        """PUPPY_SUMMARIZATION_TRIGGER_FRACTION should override default."""
+        monkeypatch.setenv("PUPPY_SUMMARIZATION_TRIGGER_FRACTION", "0.75")
+        cfg = load_puppy_config()
+        assert cfg.summarization_trigger_fraction == 0.75
+
+    def test_summarization_keep_fraction_env_override(self, monkeypatch):
+        """PUPPY_SUMMARIZATION_KEEP_FRACTION should override default."""
+        monkeypatch.setenv("PUPPY_SUMMARIZATION_KEEP_FRACTION", "0.15")
+        cfg = load_puppy_config()
+        assert cfg.summarization_keep_fraction == 0.15
+
+    def test_summarization_pretruncate_enabled_env_override(self, monkeypatch):
+        """PUPPY_SUMMARIZATION_PRETRUNCATE_ENABLED should override default."""
+        monkeypatch.setenv("PUPPY_SUMMARIZATION_PRETRUNCATE_ENABLED", "false")
+        cfg = load_puppy_config()
+        assert cfg.summarization_pretruncate_enabled is False
+
+    def test_summarization_arg_max_length_env_override(self, monkeypatch):
+        """PUPPY_SUMMARIZATION_ARG_MAX_LENGTH should override default."""
+        monkeypatch.setenv("PUPPY_SUMMARIZATION_ARG_MAX_LENGTH", "1000")
+        cfg = load_puppy_config()
+        assert cfg.summarization_arg_max_length == 1000
+
+    def test_compaction_threshold_env_override(self, monkeypatch):
+        """PUPPY_COMPACTION_THRESHOLD should override default."""
+        monkeypatch.setenv("PUPPY_COMPACTION_THRESHOLD", "0.90")
+        cfg = load_puppy_config()
+        assert cfg.compaction_threshold == 0.90
+
+
+# Import needed for immutability tests
+from dataclasses import FrozenInstanceError

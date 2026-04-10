@@ -46,7 +46,7 @@ _SENSITIVE_SUFFIXES: frozenset[str] = frozenset(
 )
 
 
-@dataclass(slots=True, frozen=False)
+@dataclass(slots=True, frozen=True)
 class PuppyConfig:
     """Typed settings for code_puppy.
 
@@ -55,6 +55,9 @@ class PuppyConfig:
 
     All fields are required (no dataclass defaults) — defaults come from
     the loader, making it the single source of truth for default values.
+
+    This dataclass is FROZEN — instances are immutable. Attempts to
+    modify fields after creation will raise FrozenInstanceError.
 
     Load via:
         >>> from code_puppy.config_package import get_puppy_config
@@ -92,6 +95,15 @@ class PuppyConfig:
         protected_token_count: Tokens to protect during compaction
         message_limit: Max messages per conversation
         compaction_strategy: Strategy for context compaction
+        compaction_threshold: Threshold (0.0-1.0) triggering compaction
+
+        # Summarization / compaction (deepagents port)
+        summarization_trigger_fraction: Fraction of context triggering summarization
+        summarization_keep_fraction: Fraction of context to preserve
+        summarization_pretruncate_enabled: Enable pre-truncation of tool args
+        summarization_arg_max_length: Max characters for tool args before truncation
+        summarization_history_offload_enabled: Enable history offload to file
+        summarization_history_dir: Directory for history offload files
 
         # Debug / logging
         debug: Debug mode flag
@@ -145,6 +157,17 @@ class PuppyConfig:
     protected_token_count: int
     message_limit: int
     compaction_strategy: str
+    compaction_threshold: float
+
+    # ─────────────────────────────────────────────────────────────
+    # Summarization / Compaction (deepagents port)
+    # ─────────────────────────────────────────────────────────────
+    summarization_trigger_fraction: float
+    summarization_keep_fraction: float
+    summarization_pretruncate_enabled: bool
+    summarization_arg_max_length: int
+    summarization_history_offload_enabled: bool
+    summarization_history_dir: Path
 
     # ─────────────────────────────────────────────────────────────
     # Debug / Logging

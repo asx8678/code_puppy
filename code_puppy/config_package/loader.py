@@ -25,12 +25,16 @@ from pathlib import Path
 from typing import Any
 
 from code_puppy.config_package.env_helpers import (
-    env_bool,
-    env_int,
     env_path,
     get_first_env,
 )
 from code_puppy.config_package.models import PuppyConfig
+from code_puppy.config_package._resolvers import (
+    resolve_str,
+    resolve_bool,
+    resolve_int,
+    resolve_float,
+)
 
 
 # Singleton cache
@@ -119,137 +123,12 @@ def load_puppy_config() -> PuppyConfig:
     # Attempt to import legacy config (graceful fallback if it fails)
     legacy_ok, legacy_config = _get_legacy_config()
 
-    # Helper to get values with fallback chain: env -> legacy -> default
-    def _get_str(
-        env_names: tuple[str, ...],
-        legacy_key: str,
-        hardcoded_default: str,
-        legacy_fallback_names: tuple[str, ...] = (),
-    ) -> str:
-        """Get string value from env, legacy config, or default."""
-        # Try env vars first
-        env_val = get_first_env(*env_names)
-        if env_val is not None:
-            return env_val
-
-        # Try legacy config if available
-        if legacy_ok:
-            # First try the primary legacy key
-            legacy_val = _get_legacy_value(legacy_config, legacy_key)
-            if legacy_val:
-                return legacy_val
-
-            # Try legacy fallback names (for compatibility)
-            for fallback_key in legacy_fallback_names:
-                legacy_val = _get_legacy_value(legacy_config, fallback_key)
-                if legacy_val:
-                    return legacy_val
-
-        return hardcoded_default
-
-    def _get_bool(
-        env_names: tuple[str, ...],
-        legacy_key: str,
-        hardcoded_default: bool,
-    ) -> bool:
-        """Get boolean value from env, legacy config, or default."""
-        # Check env vars first (these already have default handling)
-        env_result = env_bool(*env_names, default=hardcoded_default)
-
-        # If env vars were set, use that value
-        if get_first_env(*env_names) is not None:
-            return env_result
-
-        # Try legacy config
-        if legacy_ok:
-            legacy_val = _get_legacy_value(legacy_config, legacy_key)
-            if legacy_val is not None:
-                # Parse legacy value as bool
-                return legacy_val.strip().lower() in {"1", "true", "yes", "on"}
-
-        return hardcoded_default
-
-    def _get_int(
-        env_names: tuple[str, ...],
-        legacy_key: str,
-        hardcoded_default: int,
-        min_val: int | None = None,
-        max_val: int | None = None,
-    ) -> int:
-        """Get integer value from env, legacy config, or default."""
-        # Check env vars first
-        env_result = env_int(*env_names, default=hardcoded_default)
-
-        # If env vars were set, use that value (already validated)
-        if get_first_env(*env_names) is not None:
-            if min_val is not None:
-                env_result = max(min_val, env_result)
-            if max_val is not None:
-                env_result = min(max_val, env_result)
-            return env_result
-
-        # Try legacy config
-        if legacy_ok:
-            legacy_val = _get_legacy_value(legacy_config, legacy_key)
-            if legacy_val is not None:
-                try:
-                    result = int(legacy_val)
-                    if min_val is not None:
-                        result = max(min_val, result)
-                    if max_val is not None:
-                        result = min(max_val, result)
-                    return result
-                except (ValueError, TypeError):
-                    pass
-
-        return hardcoded_default
-
-    def _get_float(
-        env_names: tuple[str, ...],
-        legacy_key: str,
-        hardcoded_default: float,
-        min_val: float | None = None,
-        max_val: float | None = None,
-    ) -> float:
-        """Get float value from env, legacy config, or default."""
-        # Check if env vars are explicitly set (for sentinel check)
-        raw_env_val = get_first_env(*env_names)
-
-        # Check env vars first
-        env_result = _env_optional_float(*env_names, default=hardcoded_default)
-
-        if min_val is not None:
-            env_result = (
-                max(min_val, env_result)
-                if env_result is not None
-                else hardcoded_default
-            )
-        if max_val is not None:
-            env_result = (
-                min(max_val, env_result)
-                if env_result is not None
-                else hardcoded_default
-            )
-
-        # If env var was explicitly set, use that value (even if it equals hardcoded_default)
-        if raw_env_val is not None:
-            return env_result if env_result is not None else hardcoded_default
-
-        # Try legacy config only if env var was not explicitly set
-        if legacy_ok:
-            legacy_val = _get_legacy_value(legacy_config, legacy_key)
-            if legacy_val is not None:
-                try:
-                    result = float(legacy_val)
-                    if min_val is not None:
-                        result = max(min_val, result)
-                    if max_val is not None:
-                        result = min(max_val, result)
-                    return result
-                except (ValueError, TypeError):
-                    pass
-
-        return env_result if env_result is not None else hardcoded_default
+    # Create resolver context
+    resolver_ctx = {
+        "_legacy_ok": legacy_ok,
+        "_legacy_config": legacy_config,
+        "_get_legacy_value": _get_legacy_value,
+    }
 
     # ─────────────────────────────────────────────────────────────
     # Build paths (using legacy constants or env vars)
@@ -316,24 +195,29 @@ def load_puppy_config() -> PuppyConfig:
         sessions_dir=sessions_dir,
         models_file=models_file,
         # Agent / Model
-        default_agent=_get_str(("PUPPY_DEFAULT_AGENT",), "default_agent", "code-puppy"),
-        default_model=_get_str(
+        default_agent=resolve_str(
+            ("PUPPY_DEFAULT_AGENT",), "default_agent", "code-puppy", **resolver_ctx
+        ),
+        default_model=resolve_str(
             ("PUPPY_DEFAULT_MODEL", "CODE_PUPPY_DEFAULT_MODEL"),
             "model",
             "claude-opus-4-6",
+            **resolver_ctx,
         ),
         # Concurrency (from parallel task)
-        max_concurrent_runs=_get_int(
+        max_concurrent_runs=resolve_int(
             ("PUPPY_MAX_CONCURRENT_RUNS", "CODE_PUPPY_MAX_CONCURRENT_RUNS"),
             "max_concurrent_runs",
             2,
             min_val=1,
             max_val=100,
+            **resolver_ctx,
         ),
-        allow_parallel_runs=_get_bool(
+        allow_parallel_runs=resolve_bool(
             ("PUPPY_ALLOW_PARALLEL_RUNS", "CODE_PUPPY_ALLOW_PARALLEL_RUNS"),
             "allow_parallel_runs",
             True,
+            **resolver_ctx,
         ),
         run_wait_timeout=_env_optional_float(
             "PUPPY_RUN_WAIT_TIMEOUT",
@@ -341,79 +225,141 @@ def load_puppy_config() -> PuppyConfig:
             default=600.0,
         ),
         # Messaging / UI
-        ws_history_maxlen=_get_int(
+        ws_history_maxlen=resolve_int(
             ("PUPPY_WS_HISTORY_MAXLEN",),
             "ws_history_maxlen",
             200,
             min_val=10,
             max_val=10000,
+            **resolver_ctx,
         ),
         # Feature flags
-        session_logger_enabled=_get_bool(
+        session_logger_enabled=resolve_bool(
             ("PUPPY_SESSION_LOGGER", "CODE_PUPPY_SESSION_LOGGER"),
             "session_logger_enabled",
             False,
+            **resolver_ctx,
         ),
-        rust_autobuild_disabled=_get_bool(
+        rust_autobuild_disabled=resolve_bool(
             ("PUPPY_DISABLE_RUST_AUTOBUILD", "CODE_PUPPY_DISABLE_RUST_AUTOBUILD"),
             "disable_rust_autobuild",
             False,
+            **resolver_ctx,
         ),
-        enable_dbos=_get_bool(
+        enable_dbos=resolve_bool(
             ("PUPPY_ENABLE_DBOS", "CODE_PUPPY_ENABLE_DBOS"),
             "enable_dbos",
             True,
+            **resolver_ctx,
         ),
-        enable_streaming=_get_bool(
+        enable_streaming=resolve_bool(
             ("PUPPY_ENABLE_STREAMING",),
             "enable_streaming",
             True,
+            **resolver_ctx,
         ),
-        enable_agent_memory=_get_bool(
+        enable_agent_memory=resolve_bool(
             ("PUPPY_ENABLE_AGENT_MEMORY",),
             "enable_agent_memory",
             False,
+            **resolver_ctx,
         ),
         # UI / Behavior
-        temperature=_get_float(
+        temperature=resolve_float(
             ("PUPPY_TEMPERATURE",),
             "temperature",
             0.0,
             min_val=0.0,
             max_val=2.0,
+            **resolver_ctx,
         ),
-        protected_token_count=_get_int(
+        protected_token_count=resolve_int(
             ("PUPPY_PROTECTED_TOKEN_COUNT",),
             "protected_token_count",
             4000,
             min_val=0,
             max_val=100000,
+            **resolver_ctx,
         ),
-        message_limit=_get_int(
+        message_limit=resolve_int(
             ("PUPPY_MESSAGE_LIMIT",),
             "message_limit",
             100,
             min_val=10,
             max_val=10000,
+            **resolver_ctx,
         ),
-        compaction_strategy=_get_str(
-            ("PUPPY_COMPACTION_STRATEGY",), "compaction_strategy", "summarize"
+        compaction_strategy=resolve_str(
+            ("PUPPY_COMPACTION_STRATEGY",), "compaction_strategy", "summarize", **resolver_ctx
+        ),
+        compaction_threshold=resolve_float(
+            ("PUPPY_COMPACTION_THRESHOLD",),
+            "compaction_threshold",
+            0.85,
+            min_val=0.5,
+            max_val=0.95,
+            **resolver_ctx,
+        ),
+        # Summarization / Compaction (deepagents port)
+        summarization_trigger_fraction=resolve_float(
+            ("PUPPY_SUMMARIZATION_TRIGGER_FRACTION",),
+            "summarization_trigger_fraction",
+            0.85,
+            min_val=0.5,
+            max_val=0.95,
+            **resolver_ctx,
+        ),
+        summarization_keep_fraction=resolve_float(
+            ("PUPPY_SUMMARIZATION_KEEP_FRACTION",),
+            "summarization_keep_fraction",
+            0.10,
+            min_val=0.05,
+            max_val=0.50,
+            **resolver_ctx,
+        ),
+        summarization_pretruncate_enabled=resolve_bool(
+            ("PUPPY_SUMMARIZATION_PRETRUNCATE_ENABLED",),
+            "summarization_pretruncate_enabled",
+            True,
+            **resolver_ctx,
+        ),
+        summarization_arg_max_length=resolve_int(
+            ("PUPPY_SUMMARIZATION_ARG_MAX_LENGTH",),
+            "summarization_arg_max_length",
+            500,
+            min_val=100,
+            max_val=10000,
+            **resolver_ctx,
+        ),
+        summarization_history_offload_enabled=resolve_bool(
+            ("PUPPY_SUMMARIZATION_HISTORY_OFFLOAD_ENABLED",),
+            "summarization_history_offload_enabled",
+            False,
+            **resolver_ctx,
+        ),
+        summarization_history_dir=env_path(
+            "PUPPY_SUMMARIZATION_HISTORY_DIR",
+            default=data_dir / "history",
         ),
         # Debug / Logging
-        debug=_get_bool(
+        debug=resolve_bool(
             ("PUPPY_DEBUG", "CODE_PUPPY_DEBUG", "DEBUG"),
             "debug",
             False,
+            **resolver_ctx,
         ),
-        log_level=_get_str(
+        log_level=resolve_str(
             ("PUPPY_LOG_LEVEL", "CODE_PUPPY_LOG_LEVEL", "LOG_LEVEL"),
             "log_level",
             "INFO",
+            **resolver_ctx,
         ),
         # Identity
-        puppy_name=_get_str(("PUPPY_NAME",), "puppy_name", "Puppy"),
-        owner_name=_get_str(
-            ("PUPPY_OWNER_NAME", "CODE_PUPPY_OWNER"), "owner_name", "Master"
+        puppy_name=resolve_str(
+            ("PUPPY_NAME",), "puppy_name", "Puppy", **resolver_ctx
+        ),
+        owner_name=resolve_str(
+            ("PUPPY_OWNER_NAME", "CODE_PUPPY_OWNER"), "owner_name", "Master", **resolver_ctx
         ),
     )
 
