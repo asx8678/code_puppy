@@ -122,6 +122,24 @@ Arbiter merges what survived
 Red team stress test (deep mode only) → go / conditional-go / no-go verdict
 ```
 
+**Example model setup for AP roles:**
+
+> ⚠️ This is an **EXAMPLE** setup, not a hard requirement. Use what you have!
+
+| Agent | Suggested Model | Why |
+|-------|-----------------|-----|
+| `ap-researcher` | GPT-5.4 | Strong at code analysis and evidence gathering |
+| `ap-planner-a` | Claude Opus 4.6 | Conservative planner—use latest Claude for proven patterns |
+| `ap-planner-b` | Claude Opus 4.5 | Contrarian planner—different model = more divergent thinking |
+| `ap-reviewer` | GPT-5.4 | Fast, thorough critique; good at spotting flaws |
+| `ap-arbiter` | GPT-5.4 | Balanced synthesis and decision-making |
+| `ap-red-team` | Claude Opus 4.6 | Deep stress testing needs best available reasoning |
+
+**Key tips:**
+- Using **different strong models** for Planner A and Planner B produces more meaningfully different plans—encourages genuine creative divergence.
+- Only have **one strong model**? You can still run AP! Use the same model for both planners—it still works, just with less natural diversity.
+- Start with auto mode (`/ap`) and let Code Puppy pick standard vs deep based on your task.
+
 📖 **For the full deep dive**, see the [plugin documentation](code_puppy/plugins/adversarial_planning/README.md).
 
 ### Adding Models from models.dev 🆕
