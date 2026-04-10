@@ -18,7 +18,7 @@ class DefaultStrategy:
         return "default"
 
     def route(self, context: RoutingContext) -> RoutingDecision:
-        from code_puppy.model_factory import _MODEL_BUILDERS
+        from code_puppy.model_config import get_model_builder, resolve_model_type
 
         model_config = context.config.get(context.model_name)
         if not model_config:
@@ -26,8 +26,13 @@ class DefaultStrategy:
                 f"Model '{context.model_name}' not found in configuration."
             )
 
-        model_type = model_config.get("type")
-        builder = _MODEL_BUILDERS.get(model_type)
+        model_type = resolve_model_type(model_config)
+        if not model_type:
+            raise ValueError(
+                f"Model '{context.model_name}' has no 'type' in configuration."
+            )
+
+        builder = get_model_builder(model_type)
         if builder is None:
             raise ValueError(f"Unsupported model type: {model_type}")
 

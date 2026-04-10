@@ -14,9 +14,10 @@ class PluginStrategy:
         return "plugin"
 
     def route(self, context: RoutingContext) -> RoutingDecision | None:
-        from code_puppy.model_factory import (
-            _CUSTOM_MODEL_PROVIDERS,
-            _load_plugin_model_providers,
+        from code_puppy.model_config import (
+            get_custom_provider,
+            load_plugin_providers,
+            resolve_model_type,
         )
         from code_puppy import callbacks
 
@@ -24,15 +25,15 @@ class PluginStrategy:
         if not model_config:
             return None
 
-        model_type = model_config.get("type")
+        model_type = resolve_model_type(model_config)
         if not model_type:
             return None
 
-        _load_plugin_model_providers()
+        load_plugin_providers()
 
         # Check custom provider classes first
-        if model_type in _CUSTOM_MODEL_PROVIDERS:
-            provider_class = _CUSTOM_MODEL_PROVIDERS[model_type]
+        provider_class = get_custom_provider(model_type)
+        if provider_class is not None:
             try:
                 result = provider_class(
                     model_name=context.model_name,

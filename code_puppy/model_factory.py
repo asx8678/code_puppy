@@ -40,49 +40,14 @@ logger = logging.getLogger(__name__)
 # Pre-compiled regex pattern for environment variable substitution (e.g., ${VAR_NAME} or $VAR_NAME)
 _ENV_VAR_RE = re.compile(r"\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
 
-# Registry for custom model provider classes from plugins
-_CUSTOM_MODEL_PROVIDERS: dict[str, type] = {}
-
-
-_providers_loaded = False
-
-
-def _load_plugin_model_providers():
-    """Load custom model providers from plugins (lazy, called on first use)."""
-    global _CUSTOM_MODEL_PROVIDERS, _providers_loaded
-    if _providers_loaded:
-        return
-    _providers_loaded = True
-    try:
-        from code_puppy.callbacks import on_register_model_providers
-
-        results = on_register_model_providers()
-        for result in results:
-            if isinstance(result, dict):
-                _CUSTOM_MODEL_PROVIDERS.update(result)
-    except Exception as e:
-        logger.warning("Failed to load plugin model providers: %s", e)
-
-
-# Registry for model builder functions: model_type -> builder callable
-# Signature: builder(model_name: str, model_config: dict, config: dict) -> Any
-_MODEL_BUILDERS: dict[str, Callable] = {}
-
-
-def register_model_builder(type_name: str, builder: Callable) -> None:
-    """Register a builder function for a model type.
-
-    The builder must have the signature:
-        builder(model_name: str, model_config: dict, config: dict) -> Any
-
-    Built-in model types are registered at module load. Plugins can call this
-    function to add or override builders for additional model types.
-
-    Args:
-        type_name: The model type string (e.g. "openai", "anthropic").
-        builder: Callable that constructs and returns the model instance.
-    """
-    _MODEL_BUILDERS[type_name] = builder
+# Import centralized model configuration
+# Model builder registry and custom providers are now centralized in model_config module
+from code_puppy.model_config import (
+    _MODEL_BUILDERS,
+    _CUSTOM_MODEL_PROVIDERS,
+    register_model_builder,
+    load_plugin_providers as _load_plugin_model_providers,
+)
 
 
 # Anthropic beta header required for 1M context window support.
