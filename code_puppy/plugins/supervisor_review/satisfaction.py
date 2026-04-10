@@ -8,14 +8,17 @@ Three strategies are provided:
    works as a zero-config fallback. Ported from Orion
    supervisor/orchestrator.py:179-187.
 3. LLMJudgeSatisfactionChecker — uses a second LLM call to judge the
-   supervisor output. Expensive. Stubbed in this round; full impl requires
-   invoke_agent wiring (Round B).
+   supervisor output. Expensive but most reliable. Full async implementation
+   with sync fallback (bd code_puppy-056).
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from typing import Awaitable, Callable
 
 from code_puppy.plugins.supervisor_review.models import SatisfactionResult
 
@@ -225,44 +228,170 @@ class KeywordSatisfactionChecker:
 
 
 # ---------------------------------------------------------------------------
-# LLM judge checker (stub for Round A; full impl in Round B)
+# LLM judge checker (bd code_puppy-056)
 # ---------------------------------------------------------------------------
+
+_JUDGE_PROMPT_TEMPLATE = """\
+You are an impartial judge evaluating whether a code review supervisor \
+considers a piece of work complete and satisfactory.
+
+## Supervisor's review output
+
+{supervisor_output}
+
+## Your task
+
+Based ONLY on the supervisor's output above, determine whether the supervisor \
+considers the work COMPLETE and SATISFACTORY, or whether more iteration is needed.
+
+Look for explicit approval signals (e.g. "approved", "looks good", "all requirements met") \
+or rejection signals (e.g. "needs work", "issues found", "not complete").
+
+Respond with ONLY a JSON object — no markdown fences, no extra text:
+{{"satisfied": true or false, "confidence": 0.0 to 1.0, "reason": "brief explanation"}}
+"""
+
+
+def _parse_judge_response(judge_output: str) -> SatisfactionResult:
+    """Parse the judge agent's response into a SatisfactionResult.
+
+    Tries structured JSON parsing first, then falls back to keyword heuristic.
+    """
+    if not judge_output:
+        return SatisfactionResult(
+            satisfied=False,
+            confidence=0.0,
+            reason="empty judge response",
+        )
+
+    # Try structured parsing first
+    if extract_json_from_text is not None:
+        parsed = extract_json_from_text(judge_output)
+        if isinstance(parsed, dict):
+            if "satisfied" in parsed and isinstance(parsed["satisfied"], bool):
+                return SatisfactionResult(
+                    satisfied=parsed["satisfied"],
+                    confidence=float(parsed.get("confidence", 0.8)),
+                    reason=str(parsed.get("reason", "llm_judge verdict")),
+                )
+
+    # Fall back to keyword heuristic on the judge's response
+    text = judge_output.lower()
+    if any(kw in text for kw in ("satisfied\": true", "complete", "approved", "satisfactory")):
+        return SatisfactionResult(
+            satisfied=True,
+            confidence=0.6,
+            reason="llm_judge keyword heuristic: approval signals detected",
+        )
+    if any(kw in text for kw in ("satisfied\": false", "incomplete", "rejected", "needs work")):
+        return SatisfactionResult(
+            satisfied=False,
+            confidence=0.6,
+            reason="llm_judge keyword heuristic: rejection signals detected",
+        )
+
+    return SatisfactionResult(
+        satisfied=False,
+        confidence=0.3,
+        reason="llm_judge: could not parse judge response",
+    )
 
 
 class LLMJudgeSatisfactionChecker:
     """Uses a second LLM call to judge supervisor satisfaction.
 
-    This is a STUB in Round A — the full implementation requires wiring to
-    invoke_agent, which is Round B's responsibility. For now, this checker
-    delegates to StructuredSatisfactionChecker with a degraded confidence
-    score so it's usable but honest about being a placeholder.
+    Provides two evaluation paths:
 
-    A warning is logged on first use to make the stub behavior explicit.
+    - ``is_satisfied_async`` (preferred): invokes a judge agent via
+      ``invoke_agent_headless`` and parses the structured response.
+      Used automatically by the orchestrator's async loop.
+    - ``is_satisfied`` (sync fallback): delegates to
+      ``StructuredSatisfactionChecker`` with slightly degraded confidence
+      for callers that cannot run async code.
+
+    Args:
+        judge_agent: Name of the agent to use as the judge (default: "shepherd").
+        invoke_agent_fn: Optional async callable for dependency injection.
+            Signature: ``(agent_name, prompt, session_id=None) -> str``.
+            If None, ``invoke_agent_headless`` is imported lazily.
     """
 
-    _warning_logged = False  # Class-level flag to warn only once
-
-    def __init__(self, judge_agent: str = "shepherd") -> None:
+    def __init__(
+        self,
+        judge_agent: str = "shepherd",
+        invoke_agent_fn: "Callable[..., Awaitable[str]] | None" = None,
+    ) -> None:
         self.judge_agent = judge_agent
+        self._invoke_agent_fn = invoke_agent_fn
         self._fallback = StructuredSatisfactionChecker()
 
     def is_satisfied(self, supervisor_output: str) -> SatisfactionResult:
-        # Log warning on first use to make stub behavior explicit
-        if not LLMJudgeSatisfactionChecker._warning_logged:
-            logger.warning(
-                "LLMJudgeSatisfactionChecker is a stub and delegates to "
-                "StructuredSatisfactionChecker with degraded confidence. "
-                "Configure a custom judge_agent_fn for full LLM judge functionality."
-            )
-            LLMJudgeSatisfactionChecker._warning_logged = True
+        """Sync fallback — delegates to StructuredSatisfactionChecker.
 
+        The LLM judge requires an async context to invoke a sub-agent.
+        When called synchronously, this method delegates to the structured
+        checker with slightly degraded confidence so callers get a usable
+        result without the full LLM judge capability.
+        """
         result = self._fallback.is_satisfied(supervisor_output)
-        # Flag that this was the stubbed path
         return SatisfactionResult(
             satisfied=result.satisfied,
-            confidence=max(0.0, result.confidence - 0.2),
-            reason=f"[llm_judge stub: delegated to structured] {result.reason}",
+            confidence=max(0.0, result.confidence - 0.1),
+            reason=f"[llm_judge sync fallback] {result.reason}",
         )
+
+    async def is_satisfied_async(self, supervisor_output: str) -> SatisfactionResult:
+        """Async LLM judge — invokes a judge agent for satisfaction evaluation.
+
+        Sends the supervisor output to a judge agent with a structured prompt
+        requesting a JSON verdict. Falls back to the structured checker if
+        the judge invocation fails for any reason.
+
+        Args:
+            supervisor_output: The supervisor agent's review text.
+
+        Returns:
+            SatisfactionResult with the judge's verdict.
+        """
+        if not supervisor_output:
+            return SatisfactionResult(
+                satisfied=False, confidence=0.0, reason="empty supervisor output"
+            )
+
+        # Resolve the invoke function
+        invoke = self._invoke_agent_fn
+        if invoke is None:
+            try:
+                from code_puppy.tools.agent_tools import invoke_agent_headless
+                invoke = invoke_agent_headless
+            except ImportError:
+                logger.warning(
+                    "LLMJudgeSatisfactionChecker: invoke_agent_headless unavailable; "
+                    "falling back to structured checker"
+                )
+                return self.is_satisfied(supervisor_output)
+
+        # Build the judge prompt
+        prompt = _JUDGE_PROMPT_TEMPLATE.format(
+            supervisor_output=supervisor_output.strip()
+        )
+
+        # Invoke the judge agent
+        try:
+            judge_response = await invoke(
+                agent_name=self.judge_agent,
+                prompt=prompt,
+            )
+        except Exception as exc:
+            logger.warning(
+                "LLMJudgeSatisfactionChecker: judge agent %r failed: %s; "
+                "falling back to structured checker",
+                self.judge_agent,
+                exc,
+            )
+            return self.is_satisfied(supervisor_output)
+
+        return _parse_judge_response(str(judge_response) if judge_response else "")
 
 
 # ---------------------------------------------------------------------------

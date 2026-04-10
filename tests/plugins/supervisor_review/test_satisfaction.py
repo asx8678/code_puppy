@@ -1,4 +1,4 @@
-"""Tests for supervisor_review.satisfaction (bd code_puppy-79p)."""
+"""Tests for supervisor_review.satisfaction (bd code_puppy-79p, code_puppy-056)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from code_puppy.plugins.supervisor_review.satisfaction import (
     KeywordSatisfactionChecker,
     LLMJudgeSatisfactionChecker,
     StructuredSatisfactionChecker,
+    _parse_judge_response,
     get_satisfaction_checker,
 )
 
@@ -103,50 +104,177 @@ class TestKeywordSatisfactionChecker:
         assert "no approval or rejection" in r.reason
 
 
+class TestParseJudgeResponse:
+    """Tests for _parse_judge_response helper (bd code_puppy-056)."""
+
+    def test_empty_response(self):
+        r = _parse_judge_response("")
+        assert r.satisfied is False
+        assert r.confidence == 0.0
+        assert "empty" in r.reason
+
+    def test_structured_json_satisfied_true(self):
+        r = _parse_judge_response(
+            json.dumps({"satisfied": True, "confidence": 0.9, "reason": "all done"})
+        )
+        assert r.satisfied is True
+        assert r.confidence == 0.9
+        assert r.reason == "all done"
+
+    def test_structured_json_satisfied_false(self):
+        r = _parse_judge_response(
+            json.dumps({"satisfied": False, "confidence": 0.85, "reason": "issues found"})
+        )
+        assert r.satisfied is False
+        assert r.confidence == 0.85
+
+    def test_structured_json_default_confidence(self):
+        r = _parse_judge_response(json.dumps({"satisfied": True}))
+        assert r.satisfied is True
+        assert r.confidence == 0.8  # default when not specified
+
+    def test_keyword_approval_fallback(self):
+        r = _parse_judge_response("The work is complete and approved by the supervisor.")
+        assert r.satisfied is True
+        assert "keyword heuristic" in r.reason
+
+    def test_keyword_rejection_fallback(self):
+        r = _parse_judge_response("The supervisor says the work needs work.")
+        assert r.satisfied is False
+        assert "keyword heuristic" in r.reason
+
+    def test_unparseable_response(self):
+        r = _parse_judge_response("I am not sure what to make of this.")
+        assert r.satisfied is False
+        assert r.confidence == 0.3
+        assert "could not parse" in r.reason
+
+
 class TestLLMJudgeSatisfactionChecker:
-    def test_stub_delegates_with_lower_confidence(self):
+    """Tests for the full LLMJudgeSatisfactionChecker (bd code_puppy-056)."""
+
+    def test_sync_fallback_delegates_to_structured(self):
+        """Sync is_satisfied delegates to structured with degraded confidence."""
         checker = LLMJudgeSatisfactionChecker()
         r = checker.is_satisfied(json.dumps({"verdict": "approved", "confidence": 0.9}))
         assert r.satisfied is True
-        assert r.confidence < 0.9  # degraded
-        assert "llm_judge stub" in r.reason
+        assert r.confidence < 0.9  # degraded by 0.1
+        assert "sync fallback" in r.reason
 
-    def test_stub_logs_warning_on_first_use(self, caplog):
-        """Stub logs a warning on first use to make behavior explicit (code_puppy-bnp)."""
-        import logging
+    def test_sync_fallback_empty_output(self):
+        checker = LLMJudgeSatisfactionChecker()
+        r = checker.is_satisfied("")
+        assert r.satisfied is False
 
-        # Reset the warning flag to ensure we test the first-use behavior
-        LLMJudgeSatisfactionChecker._warning_logged = False
+    def test_constructor_default_judge_agent(self):
+        checker = LLMJudgeSatisfactionChecker()
+        assert checker.judge_agent == "shepherd"
 
-        with caplog.at_level(logging.WARNING):
-            checker = LLMJudgeSatisfactionChecker()
-            checker.is_satisfied(json.dumps({"verdict": "approved"}))
+    def test_constructor_custom_judge_agent(self):
+        checker = LLMJudgeSatisfactionChecker(judge_agent="custom-reviewer")
+        assert checker.judge_agent == "custom-reviewer"
 
-        # Warning should be logged on first use
-        assert "LLMJudgeSatisfactionChecker is a stub" in caplog.text
-        assert "delegates to StructuredSatisfactionChecker" in caplog.text
-        assert "Configure a custom judge_agent_fn" in caplog.text
+    def test_constructor_with_invoke_fn(self):
+        async def mock_invoke(agent_name, prompt, session_id=None):
+            return '{"satisfied": true}'
 
-    def test_stub_warning_logged_only_once(self, caplog):
-        """Warning is only logged once, not on every call (code_puppy-bnp)."""
-        import logging
+        checker = LLMJudgeSatisfactionChecker(invoke_agent_fn=mock_invoke)
+        assert checker._invoke_agent_fn is mock_invoke
 
-        # Reset the warning flag
-        LLMJudgeSatisfactionChecker._warning_logged = False
+    def test_has_async_method(self):
+        """LLMJudgeSatisfactionChecker must have is_satisfied_async for orchestrator."""
+        import asyncio
 
-        with caplog.at_level(logging.WARNING):
-            checker1 = LLMJudgeSatisfactionChecker()
-            checker1.is_satisfied(json.dumps({"verdict": "approved"}))
+        checker = LLMJudgeSatisfactionChecker()
+        assert hasattr(checker, "is_satisfied_async")
+        assert asyncio.iscoroutinefunction(checker.is_satisfied_async)
 
-            # Clear the log records
-            caplog.clear()
+    @pytest.mark.asyncio
+    async def test_async_satisfied_via_injected_fn(self):
+        """Async path invokes judge and parses structured response."""
+        async def mock_invoke(agent_name, prompt, session_id=None):
+            assert agent_name == "shepherd"
+            assert "Supervisor's review output" in prompt
+            return json.dumps({"satisfied": True, "confidence": 0.92, "reason": "looks good"})
 
-            # Create a new instance - warning should NOT be logged again
-            checker2 = LLMJudgeSatisfactionChecker()
-            checker2.is_satisfied(json.dumps({"verdict": "approved"}))
+        checker = LLMJudgeSatisfactionChecker(invoke_agent_fn=mock_invoke)
+        r = await checker.is_satisfied_async("All tests pass. Work is complete.")
+        assert r.satisfied is True
+        assert r.confidence == 0.92
+        assert r.reason == "looks good"
 
-        # No new warning should be logged
-        assert "LLMJudgeSatisfactionChecker is a stub" not in caplog.text
+    @pytest.mark.asyncio
+    async def test_async_rejected_via_injected_fn(self):
+        """Async path correctly detects rejection."""
+        async def mock_invoke(agent_name, prompt, session_id=None):
+            return json.dumps({"satisfied": False, "confidence": 0.8, "reason": "tests failing"})
+
+        checker = LLMJudgeSatisfactionChecker(invoke_agent_fn=mock_invoke)
+        r = await checker.is_satisfied_async("Some issues remain. Needs revision.")
+        assert r.satisfied is False
+        assert r.reason == "tests failing"
+
+    @pytest.mark.asyncio
+    async def test_async_custom_judge_agent(self):
+        """Async path uses the configured judge_agent name."""
+        called_with_agent = []
+
+        async def mock_invoke(agent_name, prompt, session_id=None):
+            called_with_agent.append(agent_name)
+            return json.dumps({"satisfied": True})
+
+        checker = LLMJudgeSatisfactionChecker(
+            judge_agent="my-custom-judge", invoke_agent_fn=mock_invoke
+        )
+        await checker.is_satisfied_async("supervisor output")
+        assert called_with_agent == ["my-custom-judge"]
+
+    @pytest.mark.asyncio
+    async def test_async_fallback_on_invoke_failure(self):
+        """Async path falls back to structured checker if judge agent fails."""
+        async def mock_invoke(agent_name, prompt, session_id=None):
+            raise RuntimeError("agent unavailable")
+
+        checker = LLMJudgeSatisfactionChecker(invoke_agent_fn=mock_invoke)
+        r = await checker.is_satisfied_async(
+            json.dumps({"verdict": "approved", "confidence": 0.9})
+        )
+        # Should fall back to sync path (structured with degraded confidence)
+        assert r.satisfied is True
+        assert "sync fallback" in r.reason
+
+    @pytest.mark.asyncio
+    async def test_async_empty_supervisor_output(self):
+        """Async path handles empty supervisor output."""
+        async def mock_invoke(agent_name, prompt, session_id=None):
+            raise AssertionError("should not be called for empty output")
+
+        checker = LLMJudgeSatisfactionChecker(invoke_agent_fn=mock_invoke)
+        r = await checker.is_satisfied_async("")
+        assert r.satisfied is False
+        assert r.confidence == 0.0
+
+    @pytest.mark.asyncio
+    async def test_async_judge_returns_garbage(self):
+        """Async path handles unparseable judge response gracefully."""
+        async def mock_invoke(agent_name, prompt, session_id=None):
+            return "I don't understand the question."
+
+        checker = LLMJudgeSatisfactionChecker(invoke_agent_fn=mock_invoke)
+        r = await checker.is_satisfied_async("supervisor says stuff")
+        assert r.satisfied is False
+        assert "could not parse" in r.reason
+
+    @pytest.mark.asyncio
+    async def test_async_judge_returns_none(self):
+        """Async path handles None response from judge agent."""
+        async def mock_invoke(agent_name, prompt, session_id=None):
+            return None
+
+        checker = LLMJudgeSatisfactionChecker(invoke_agent_fn=mock_invoke)
+        r = await checker.is_satisfied_async("supervisor output text")
+        assert r.satisfied is False
+        assert "empty" in r.reason
 
 
 class TestGetSatisfactionChecker:

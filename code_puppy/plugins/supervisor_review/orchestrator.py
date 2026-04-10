@@ -362,9 +362,12 @@ async def run_supervisor_review_loop(
 
         iter_result.supervisor_output = supervisor_output
 
-        # 3. Check satisfaction
+        # 3. Check satisfaction (prefer async path for LLM judge)
         try:
-            satisfaction = checker.is_satisfied(supervisor_output)
+            if hasattr(checker, "is_satisfied_async"):
+                satisfaction = await checker.is_satisfied_async(supervisor_output)
+            else:
+                satisfaction = checker.is_satisfied(supervisor_output)
         except Exception as exc:
             logger.exception("supervisor_review: satisfaction checker failed: %s", exc)
             satisfaction = None
