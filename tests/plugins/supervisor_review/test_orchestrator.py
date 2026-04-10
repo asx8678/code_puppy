@@ -826,12 +826,7 @@ class TestBoundedFeedbackHistory:
         # Should have run all iterations
         assert result.iterations_run == 10
         # Should have limited feedback history
-        # The feedback entries themselves are not truncated, but the prompt is bounded
-        # Check that the feedback history doesn't grow unbounded in memory
-        total_feedback_len = sum(
-            len(fe.supervisor_output) for fe in result.feedback_history
-        )
-        # Raw feedback might be large, but prompts should respect budget
+        # The feedback entries themselves are not truncated, but prompts should respect budget
         assert len(result.feedback_history) == 9  # 9 rejected before approval
 
         # Verify prompts in worker calls respect budget

@@ -392,7 +392,6 @@ class TestDeficitInvariants:
         assert limiter.active_count == 3
 
         # Shrink to 2
-        old_limit = 5
         new_limit = 2
         limiter.update_config(RunLimiterConfig(max_concurrent_runs=new_limit))
 

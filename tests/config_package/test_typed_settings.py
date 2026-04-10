@@ -1,10 +1,10 @@
-from dataclasses import FrozenInstanceError
 """Tests for typed PuppyConfig settings.
 
 These tests verify the behavior of the typed configuration layer,
 including env var parsing, legacy fallback, singleton behavior,
 and resilience guarantees.
 """
+from dataclasses import FrozenInstanceError
 
 from pathlib import Path
 
