@@ -10,6 +10,11 @@ from rich.console import Console
 from rich.live import Live
 from rich.text import Text
 
+from code_puppy.utils.min_duration import (
+    SPINNER_MIN_DURATION_NO_MSG,
+    ensure_min_duration,
+)
+
 from .spinner_base import SpinnerBase
 
 
@@ -29,6 +34,7 @@ class ConsoleSpinner(SpinnerBase):
         self._stop_event = threading.Event()
         self._paused = False
         self._live = None
+        self._start_time: float = 0.0  # monotonic start for min-duration pacing
 
         # Register this spinner for global management
         from . import register_spinner
@@ -38,6 +44,7 @@ class ConsoleSpinner(SpinnerBase):
     def start(self):
         """Start the spinner animation."""
         super().start()
+        self._start_time = time.monotonic()
         self._stop_event.clear()
 
         # Don't start a new thread if one is already running
@@ -66,6 +73,11 @@ class ConsoleSpinner(SpinnerBase):
         """Stop the spinner animation."""
         if not self._is_spinning:
             return
+
+        # UX pacing: enforce minimum display duration to prevent sub-second
+        # flicker.  Adopted from plandex's spinner min-duration pattern.
+        if self._start_time > 0:
+            ensure_min_duration(self._start_time, SPINNER_MIN_DURATION_NO_MSG)
 
         self._stop_event.set()
         self._is_spinning = False

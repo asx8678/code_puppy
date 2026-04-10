@@ -1,5 +1,9 @@
 # file_operations.py
 
+# ---------------------------------------------------------------------------
+# Module-level helper functions (exposed for unit tests _and_ used as tools)
+# ---------------------------------------------------------------------------
+import asyncio
 import atexit
 import functools
 import os
@@ -11,13 +15,13 @@ import tempfile
 from pydantic import BaseModel
 from pydantic_ai import RunContext
 
-# ---------------------------------------------------------------------------
-# Module-level helper functions (exposed for unit tests _and_ used as tools)
-# ---------------------------------------------------------------------------
-import asyncio
-
 from code_puppy.async_utils import format_size
 from code_puppy.concurrency_limits import FileOpsLimiter
+from code_puppy.constants import (
+    MAX_GREP_FILE_SIZE_BYTES,
+    MAX_GREP_MATCHES,
+    MAX_READ_FILE_TOKENS,
+)
 from code_puppy.messaging import (  # New structured messaging types
     FileContentMessage,
     FileEntry,
@@ -27,6 +31,7 @@ from code_puppy.messaging import (  # New structured messaging types
     get_message_bus,
 )
 from code_puppy.token_utils import estimate_token_count as _etc
+from code_puppy.utils.eol import normalize_eol
 from code_puppy.utils.file_display import (
     format_content_with_line_numbers,
     truncate_with_guidance,
@@ -732,13 +737,17 @@ def _read_file_sync(
                 "utf-8", errors="replace"
             )
 
+            # EOL normalization: CRLF → LF for text files, binary passthrough.
+            # Ported from plandex shared/utils.go NormalizeEOL.
+            content = normalize_eol(content)
+
             # Use shared token estimation (content-aware, sampling for large texts)
             num_tokens = _etc(content)
-            if num_tokens > 10000:
+            if num_tokens > MAX_READ_FILE_TOKENS:
                 return (
                     None,
                     0,
-                    "The file is massive, greater than 10,000 tokens which is dangerous to read entirely. Please read this file in chunks.",
+                    f"The file is massive, greater than {MAX_READ_FILE_TOKENS:,} tokens which is dangerous to read entirely. Please read this file in chunks.",
                 )
 
             # Count total lines for the message
@@ -817,8 +826,8 @@ async def _grep(
         # Use ripgrep to search for the string
         # Use absolute path to ensure it works from any directory
         # --json for structured output
-        # --max-count 50 to limit results
-        # --max-filesize 5M to avoid huge files (increased from 1M)
+        # --max-count MAX_GREP_MATCHES to limit results
+        # --max-filesize MAX_GREP_FILE_SIZE_BYTES to avoid huge files
         # --type=all to search across all recognized text file types
         # --ignore-file to obey our ignore list
 
@@ -845,9 +854,9 @@ async def _grep(
             rg_path,
             "--json",
             "--max-count",
-            "50",
+            str(MAX_GREP_MATCHES),
             "--max-filesize",
-            "5M",
+            f"{MAX_GREP_FILE_SIZE_BYTES // (1024 * 1024)}M",
             "--type=all",
         ]
 
@@ -906,8 +915,8 @@ async def _grep(
                             line_content=_sanitize_string(stripped),
                         )
                         matches.append(match_info)
-                        # Limit to 50 matches total, same as original implementation
-                        if len(matches) >= 50:
+                        # Limit to MAX_GREP_MATCHES total
+                        if len(matches) >= MAX_GREP_MATCHES:
                             break
             except json.JSONDecodeError:
                 # Skip lines that aren't valid JSON

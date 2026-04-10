@@ -11,18 +11,27 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from code_puppy.constants import (
+    SUMMARIZATION_ABSOLUTE_PROTECTED_DEFAULT,
+    SUMMARIZATION_ABSOLUTE_TRIGGER_DEFAULT,
+    SUMMARIZATION_KEEP_FRACTION_DEFAULT,
+    SUMMARIZATION_MIN_KEEP_TOKENS,
+    SUMMARIZATION_MIN_TRIGGER_TOKENS,
+    SUMMARIZATION_TRIGGER_FRACTION_DEFAULT,
+)
+
 if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
 
-# Default absolute fallback values
-DEFAULT_ABSOLUTE_TRIGGER = 170_000
-DEFAULT_ABSOLUTE_PROTECTED = 50_000
+# Default absolute fallback values (centralized in constants.py)
+DEFAULT_ABSOLUTE_TRIGGER = SUMMARIZATION_ABSOLUTE_TRIGGER_DEFAULT
+DEFAULT_ABSOLUTE_PROTECTED = SUMMARIZATION_ABSOLUTE_PROTECTED_DEFAULT
 
-# Default fraction values (trigger at 85% of context, keep 10%)
-DEFAULT_TRIGGER_FRACTION = 0.85
-DEFAULT_KEEP_FRACTION = 0.10
+# Default fraction values (centralized in constants.py)
+DEFAULT_TRIGGER_FRACTION = SUMMARIZATION_TRIGGER_FRACTION_DEFAULT
+DEFAULT_KEEP_FRACTION = SUMMARIZATION_KEEP_FRACTION_DEFAULT
 
 
 @dataclass(frozen=True)
@@ -112,8 +121,8 @@ def compute_summarization_thresholds(
             keep_tokens = max(1, trigger_tokens // 2)
 
         # Absolute minimums - never go below reasonable floor
-        trigger_tokens = max(1000, trigger_tokens)
-        keep_tokens = max(100, keep_tokens)
+        trigger_tokens = max(SUMMARIZATION_MIN_TRIGGER_TOKENS, trigger_tokens)
+        keep_tokens = max(SUMMARIZATION_MIN_KEEP_TOKENS, keep_tokens)
 
         return SummarizationThresholds(
             trigger_tokens=trigger_tokens,
