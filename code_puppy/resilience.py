@@ -35,17 +35,8 @@ def walk_causes(
     Returns a list starting with ``exc`` itself, followed by each nested cause
     (preferring ``__cause__`` over ``__context__``). Cycle-safe via identity tracking.
 
-    Useful for finding wrapped errors — e.g., SSL errors hidden inside
-    ``httpx.ConnectError``. Ported from gemini-cli retry.ts:93-122
-    (``getNetworkErrorCode``) which walks JavaScript ``.cause`` chains.
-
-    Args:
-        exc: The top-level exception.
-        max_depth: Maximum chain depth to walk (default 5). Guards against
-            pathological or cyclic chains.
-
-    Returns:
-        List of exceptions in chain order (shallowest first).
+    Args: exc - The top-level exception. max_depth - Maximum chain depth (default 5).
+    Returns: List of exceptions in chain order (shallowest first).
     """
     chain: list[BaseException] = [exc]
     seen: set[int] = {id(exc)}
@@ -73,15 +64,9 @@ def _is_coro_func(func: Callable) -> bool:
 def _is_terminal_quota_error(exc: BaseException) -> bool:
     """Classify whether an exception represents a *terminal* (not transient) quota.
 
-    Returns True if the exception chain contains any of:
-    - ``httpx.HTTPStatusError`` with status 429 AND a Retry-After > 300 seconds
-    - Message substring indicating daily/monthly quota exhaustion:
-      "daily", "per day", "monthly", "per month", "quota_exhausted",
-      "quota exceeded for quota metric"
-
-    Otherwise returns False (error is transient, normal retry applies).
-
-    Inspired by gemini-cli retry.ts:268-295 ``TerminalQuotaError`` classification.
+    Returns True if the exception chain contains ``httpx.HTTPStatusError`` with
+    status 429 AND Retry-After > 300 seconds, or message indicating daily/monthly
+    quota exhaustion. Otherwise returns False (error is transient).
     """
     # Walk the cause chain
     for err in walk_causes(exc):
@@ -107,7 +92,7 @@ def _is_terminal_quota_error(exc: BaseException) -> bool:
                 except ValueError:
                     pass
 
-        # String match on message
+        # Check for daily/monthly quota exhaustion markers
         msg = str(err).lower()
         terminal_markers = (
             "daily",
@@ -136,13 +121,13 @@ class RetryConfig:
     """Configuration for retry behavior.
 
     Attributes:
-        max_attempts: Maximum number of retry attempts (default: 3)
-        base_delay: Initial delay between retries in seconds (default: 1.0)
-        max_delay: Maximum delay between retries in seconds (default: 60.0)
-        exponential_base: Base for exponential backoff (default: 2.0)
-        retryable_exceptions: Tuple of exception types to retry
-            (default: (ConnectionError, TimeoutError, OSError, ValueError))
-        on_retry: Optional callback called on each retry with (attempt, error, delay)
+        max_attempts (int): Maximum retry attempts (default: 3)
+        base_delay (float): Initial delay in seconds (default: 1.0)
+        max_delay (float): Maximum delay in seconds (default: 60.0)
+        exponential_base (float): Base for exponential backoff (default: 2.0)
+        retryable_exceptions (tuple): Exception types to retry
+        on_retry: Optional callback with (attempt, error, delay)
+        temperature_escalation: Optional temperature values per attempt
     """
 
     max_attempts: int = 3
@@ -156,6 +141,7 @@ class RetryConfig:
         ValueError,  # Parse errors
     )
     on_retry: Callable[[int, Exception, float], None] | None = None
+    temperature_escalation: list[float] | None = None
 
 
 @dataclass
@@ -163,10 +149,10 @@ class CircuitBreakerConfig:
     """Configuration for circuit breaker.
 
     Attributes:
-        failure_threshold: Number of failures before opening circuit
-        recovery_timeout: Seconds to wait before attempting recovery
-        half_open_max_calls: Max calls allowed in half-open state
-        success_threshold: Consecutive successes needed to close circuit
+        failure_threshold (int): Failures before opening circuit
+        recovery_timeout (float): Seconds before recovery attempt
+        half_open_max_calls (int): Max calls in half-open state
+        success_threshold (int): Consecutive successes to close circuit
     """
 
     failure_threshold: int = 5
@@ -193,10 +179,6 @@ class CircuitBreaker:
 
     Tracks failures and opens circuit when threshold is reached,
     preventing further calls until service recovers.
-
-    Note: asyncio.Lock is non-reentrant. Do not use the same CircuitBreaker
-    instance in a call chain where one wrapped function calls another wrapped
-    function. Use separate CircuitBreaker instances for nested calls.
     """
 
     def __init__(self, name: str, config: CircuitBreakerConfig | None = None):
@@ -295,31 +277,65 @@ class CircuitOpenError(Exception):
     pass
 
 
+@dataclass
+class RetryState:
+    """Mutable state for the current retry loop.
+
+    Allows the retried function to observe the current attempt number
+    and any per-attempt parameters (e.g., temperature escalation).
+
+    Inspired by Agentless ``localize.py:250-300`` which escalates LLM
+    temperature on validation-failure retries (0→0.2→0.4→0.8→1.0).
+
+    Example:
+        >>> state = RetryState()
+        >>> config = RetryConfig(
+        ...     max_attempts=5,
+        ...     base_delay=0.1,
+        ...     temperature_escalation=[0.0, 0.2, 0.4, 0.8, 1.0],
+        ... )
+        >>> async def call_llm():
+        ...     temp = state.temperature or 0.0
+        ...     return await some_llm_api(temperature=temp)
+        >>> # state.attempt and state.temperature are updated each iteration
+    """
+
+    attempt: int = 0
+    _temperature: float | None = field(default=None, repr=False)
+
+    @property
+    def temperature(self) -> float | None:
+        """Current temperature from escalation config, or None if not set."""
+        return self._temperature
+
+
 async def with_retry(
     func: Callable[[], T],
     config: RetryConfig | None = None,
     on_terminal_quota: Callable[[Exception], Any] | None = None,
+    *,
+    state: RetryState | None = None,
 ) -> T:
     """Execute function with retry logic.
 
-    Args:
-        func: Function to execute (sync or async)
-        config: Retry configuration
-        on_terminal_quota: Optional callback for terminal quota errors. Called
-            when a terminal (non-transient) quota error is detected. If the
-            callback returns a truthy value, the retry attempt counter is
-            reset and the loop continues (e.g., to try a fallback model).
-
-    Returns:
-        Result from successful execution
+    Args: func - Function to execute (sync or async). config - Retry configuration.
+        on_terminal_quota - Optional callback for terminal quota errors.
+        state - Optional RetryState to track attempt and temperature.
+    Returns: Result from successful execution.
 
     Raises:
         Exception: The last exception after all retries exhausted
     """
     cfg = config or RetryConfig()
+    if state is None:
+        state = RetryState()
     last_error: Exception | None = None
 
     for attempt in range(cfg.max_attempts):
+        state.attempt = attempt
+        if cfg.temperature_escalation is not None:
+            idx = min(attempt, len(cfg.temperature_escalation) - 1)
+            state._temperature = cfg.temperature_escalation[idx]
         try:
             result = func()
             if inspect.isawaitable(result):
@@ -377,21 +393,10 @@ def with_retry_sync(
     func: Callable[[], T],
     config: RetryConfig | None = None,
     on_terminal_quota: Callable[[Exception], Any] | None = None,
+    *,
+    state: RetryState | None = None,
 ) -> T:
-    """Synchronous version of with_retry.
-
-    This is a thin wrapper around the async with_retry function that
-    runs it using a dedicated background thread's event loop.
-
-    Args:
-        func: Synchronous function to execute
-        config: Retry configuration
-        on_terminal_quota: Optional callback for terminal quota errors.
-            In the sync version, this callback must be synchronous.
-
-    Returns:
-        Result from successful execution
-    """
+    """Synchronous version of with_retry. Wraps async with_retry using background thread event loop."""
     try:
         asyncio.get_running_loop()
         warnings.warn(
@@ -400,7 +405,7 @@ def with_retry_sync(
         )
     except RuntimeError:
         pass  # No running loop, safe to use
-    return run_async_sync(with_retry(func, config, on_terminal_quota))
+    return run_async_sync(with_retry(func, config, on_terminal_quota, state=state))
 
 
 async def with_fallback(
@@ -450,13 +455,9 @@ def retry(
         ValueError,  # Parse errors
     ),
     on_terminal_quota: Callable[[Exception], Any] | None = None,
+    temperature_escalation: list[float] | None = None,
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Decorator to add retry logic to a function.
-
-    Example:
-        @retry(max_attempts=3)
-        async def fetch_data():
-            ...
 
     Args:
         max_attempts: Maximum number of retry attempts
@@ -465,6 +466,7 @@ def retry(
         exponential_base: Base for exponential backoff
         retryable_exceptions: Tuple of exception types to retry
         on_terminal_quota: Optional callback for terminal quota errors
+        temperature_escalation: Optional list of temperature values for each attempt
     """
     config = RetryConfig(
         max_attempts=max_attempts,
@@ -472,6 +474,7 @@ def retry(
         max_delay=max_delay,
         exponential_base=exponential_base,
         retryable_exceptions=retryable_exceptions,
+        temperature_escalation=temperature_escalation,
     )
 
     def decorator(func: Callable[P, T]) -> Callable[P, T]:
@@ -500,13 +503,7 @@ def circuit_breaker(
     failure_threshold: int = 5,
     recovery_timeout: float = 30.0,
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
-    """Decorator to add circuit breaker to a function.
-
-    Example:
-        @circuit_breaker("api_calls")
-        async def call_api():
-            ...
-    """
+    """Decorator to add circuit breaker to a function."""
     breaker = CircuitBreaker(
         name,
         CircuitBreakerConfig(

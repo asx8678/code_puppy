@@ -11,6 +11,7 @@ from code_puppy.resilience import (
     CircuitOpenError,
     CircuitState,
     RetryConfig,
+    RetryState,
     circuit_breaker,
     get_circuit_breaker_status,
     get_or_create_circuit_breaker,
@@ -442,6 +443,117 @@ class TestCircuitBreakerRegistry:
 
         assert "status_test" in status
         assert status["status_test"]["state"] == "CLOSED"
+
+
+class TestTemperatureEscalation:
+    """Test temperature escalation on retry (ADOPT from Agentless)."""
+
+    @pytest.mark.asyncio
+    async def test_temperature_escalates_on_retry(self):
+        """Temperature values increase with each attempt."""
+        state = RetryState()
+        temps_seen = []
+        call_count = 0
+
+        async def flaky_func():
+            nonlocal call_count
+            call_count += 1
+            temps_seen.append(state.temperature)
+            if call_count < 4:
+                raise ValueError(f"Attempt {call_count}")
+            return "success"
+
+        config = RetryConfig(
+            max_attempts=5,
+            base_delay=0.01,
+            temperature_escalation=[0.0, 0.2, 0.4, 0.8, 1.0],
+        )
+        result = await with_retry(flaky_func, config, state=state)
+        assert result == "success"
+        assert temps_seen == [0.0, 0.2, 0.4, 0.8]
+
+    @pytest.mark.asyncio
+    async def test_temperature_none_without_escalation(self):
+        """Without escalation config, temperature is None."""
+        state = RetryState()
+
+        async def success_func():
+            return state.temperature
+
+        config = RetryConfig(max_attempts=3, base_delay=0.01)
+        result = await with_retry(success_func, config, state=state)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_temperature_reuses_last_value(self):
+        """When attempts exceed escalation list, last value is reused."""
+        state = RetryState()
+        temps_seen = []
+        call_count = 0
+
+        async def always_fails():
+            nonlocal call_count
+            call_count += 1
+            temps_seen.append(state.temperature)
+            raise ValueError("Fail")
+
+        config = RetryConfig(
+            max_attempts=5,
+            base_delay=0.01,
+            temperature_escalation=[0.0, 0.5],
+        )
+        with pytest.raises(ValueError):
+            await with_retry(always_fails, config, state=state)
+        # [0.0, 0.5, 0.5, 0.5, 0.5]
+        assert temps_seen == [0.0, 0.5, 0.5, 0.5, 0.5]
+
+    @pytest.mark.asyncio
+    async def test_state_attempt_number_tracked(self):
+        """RetryState.attempt is updated on each attempt."""
+        state = RetryState()
+        attempts_seen = []
+        call_count = 0
+
+        async def flaky():
+            nonlocal call_count
+            call_count += 1
+            attempts_seen.append(state.attempt)
+            if call_count < 3:
+                raise ValueError("Fail")
+            return "ok"
+
+        config = RetryConfig(max_attempts=5, base_delay=0.01)
+        await with_retry(flaky, config, state=state)
+        assert attempts_seen == [0, 1, 2]
+
+    def test_retry_state_defaults(self):
+        """RetryState has sensible defaults."""
+        state = RetryState()
+        assert state.attempt == 0
+        assert state.temperature is None
+
+    def test_sync_retry_with_temperature(self):
+        """with_retry_sync also supports temperature escalation."""
+        state = RetryState()
+        temps_seen = []
+        call_count = 0
+
+        def flaky():
+            nonlocal call_count
+            call_count += 1
+            temps_seen.append(state.temperature)
+            if call_count < 2:
+                raise ValueError("Fail")
+            return "ok"
+
+        config = RetryConfig(
+            max_attempts=3,
+            base_delay=0.01,
+            temperature_escalation=[0.0, 0.8, 1.0],
+        )
+        result = with_retry_sync(flaky, config, state=state)
+        assert result == "ok"
+        assert temps_seen == [0.0, 0.8]
 
 
 class TestIntegration:

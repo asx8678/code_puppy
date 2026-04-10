@@ -16,7 +16,9 @@ from .file_display import (
     truncate_with_guidance,
     open_nofollow,
     safe_write_file,
+    inject_scope_context,
 )
+from .checkpoint import CheckpointStore
 from .install_hints import install_hint, format_missing_tool_message
 from .path_safety import (
     PathSafetyError,
@@ -54,6 +56,9 @@ __all__ = [
     "truncate_with_guidance",
     "open_nofollow",
     "safe_write_file",
+    "inject_scope_context",
+    # Checkpointing (ported from Agentless skip_existing pattern)
+    "CheckpointStore",
     # Install hints (ported from deepagents)
     "install_hint",
     "format_missing_tool_message",

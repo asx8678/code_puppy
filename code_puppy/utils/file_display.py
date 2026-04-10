@@ -72,6 +72,139 @@ def format_content_with_line_numbers(
 
 
 # ---------------------------------------------------------------------------
+# Sticky-scroll scope context injection (ADOPT from Agentless)
+# ---------------------------------------------------------------------------
+
+_SCOPE_KEYWORDS = frozenset({
+    "class ", "def ", "async def ",
+    # JS/TS
+    "function ", "export function ", "export default function ",
+    "export class ", "export default class ",
+    # Rust
+    "fn ", "pub fn ", "impl ", "pub struct ", "struct ", "enum ", "pub enum ",
+    "mod ", "pub mod ", "trait ", "pub trait ",
+    # Go
+    "func ", "type ",
+})
+
+
+def _is_scope_line(line: str) -> bool:
+    """Check if a line starts a new scope (class, function, etc.).
+
+    Uses indent-stripped keyword matching — language-agnostic heuristic
+    that works for Python, JS/TS, Rust, Go, Java, C/C++, and most
+    brace-delimited languages.
+    """
+    stripped = line.lstrip()
+    return any(stripped.startswith(kw) for kw in _SCOPE_KEYWORDS)
+
+
+def _indent_level(line: str) -> int:
+    """Return the indentation level (number of leading spaces/tabs)."""
+    return len(line) - len(line.lstrip())
+
+
+def inject_scope_context(
+    lines: list[str],
+    start_line: int,
+    end_line: int,
+    *,
+    max_context_lines: int = 5,
+    context_prefix: str = "// ",
+) -> list[str]:
+    """Inject enclosing scope context when displaying a code fragment.
+
+    When showing lines ``start_line..end_line`` of a file, this function
+    scans preceding lines to find enclosing scope declarations (class,
+    function, method, impl block, etc.) and prepends them as context
+    headers — similar to VS Code's "sticky scroll" feature.
+
+    This prevents "floating code" where a fragment is shown without any
+    indication of which class or function it belongs to.
+
+    Ported from Agentless ``preprocess_data.py:16-55`` (sticky_scroll).
+    Adapted to be multi-language via keyword heuristics instead of
+    Python-only indent detection.
+
+    Args:
+        lines: All lines of the file (0-indexed list).
+        start_line: First line to display (1-based, inclusive).
+        end_line: Last line to display (1-based, inclusive).
+        max_context_lines: Maximum number of scope context lines to inject.
+        context_prefix: Prefix for context lines (default: ``"// "``).
+
+    Returns:
+        A list of strings: context lines (prefixed) followed by the
+        requested fragment lines. If no enclosing scopes are found,
+        returns just the fragment lines.
+
+    Examples:
+        >>> lines = [
+        ...     "class MyClass:",
+        ...     "    def my_method(self):",
+        ...     "        x = 1",
+        ...     "        y = 2",
+        ...     "        return x + y",
+        ... ]
+        >>> result = inject_scope_context(lines, 3, 5)
+        >>> result[0]  # context: class
+        '// class MyClass:'
+        >>> result[1]  # context: method
+        '//     def my_method(self):'
+        >>> result[2]  # actual line 3
+        '        x = 1'
+
+        >>> # No enclosing scope → just the fragment
+        >>> lines = ["x = 1", "y = 2"]
+        >>> inject_scope_context(lines, 1, 2)
+        ['x = 1', 'y = 2']
+    """
+    # Convert to 0-based
+    start_idx = max(0, start_line - 1)
+    end_idx = min(len(lines), end_line)
+
+    if start_idx >= len(lines):
+        return []
+
+    # Fragment lines
+    fragment = lines[start_idx:end_idx]
+    if not fragment:
+        return []
+
+    # Scan lines BEFORE the fragment to build scope stack
+    # The scope stack tracks enclosing scopes at decreasing indent levels
+    scopes: list[tuple[int, str]] = []  # (indent_level, line_text)
+
+    for i in range(start_idx):
+        line = lines[i]
+        if not line.strip():
+            continue
+        if _is_scope_line(line):
+            indent = _indent_level(line)
+            # Pop any scopes at same or deeper indent level
+            while scopes and scopes[-1][0] >= indent:
+                scopes.pop()
+            scopes.append((indent, line.rstrip()))
+
+    # Filter: only keep scopes that are at a shallower indent than
+    # the first non-empty line of the fragment
+    first_non_empty = next(
+        (line for line in fragment if line.strip()), None
+    )
+    if first_non_empty is not None:
+        fragment_indent = _indent_level(first_non_empty)
+        scopes = [(lvl, text) for lvl, text in scopes if lvl < fragment_indent]
+
+    # Limit context lines
+    if len(scopes) > max_context_lines:
+        scopes = scopes[-max_context_lines:]
+
+    # Build result: context lines + fragment
+    context = [f"{context_prefix}{text}" for _, text in scopes]
+    return context + list(fragment)
+
+
+# ---------------------------------------------------------------------------
 # Truncation with guidance message (ADOPT #6)
 # ---------------------------------------------------------------------------
 

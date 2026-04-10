@@ -18,6 +18,7 @@ from code_puppy.utils.file_display import (
     MAX_LINE_LENGTH,
     TRUNCATION_HINTS,
     format_content_with_line_numbers,
+    inject_scope_context,
     open_nofollow,
     safe_write_file,
     truncate_with_guidance,
@@ -343,6 +344,160 @@ class TestSafeWriteFile:
 
 
 # =============================================================================
+# Part 4: Sticky-Scroll Scope Context (ADOPT from Agentless)
+# =============================================================================
+
+
+class TestInjectScopeContext:
+    """Test sticky-scroll scope context injection."""
+
+    def test_python_class_and_method_context(self):
+        """Python class+method enclosing a code fragment → 2 context lines."""
+        lines = [
+            "class MyClass:",
+            "    def my_method(self):",
+            "        x = 1",
+            "        y = 2",
+            "        return x + y",
+        ]
+        result = inject_scope_context(lines, 3, 5)
+        assert len(result) == 5  # 2 context + 3 fragment
+        assert result[0] == "// class MyClass:"
+        assert result[1] == "//     def my_method(self):"
+        assert result[2] == "        x = 1"
+        assert result[3] == "        y = 2"
+        assert result[4] == "        return x + y"
+
+    def test_no_enclosing_scope(self):
+        """Top-level code with no enclosing scope → no context added."""
+        lines = ["x = 1", "y = 2", "z = 3"]
+        result = inject_scope_context(lines, 1, 3)
+        assert result == ["x = 1", "y = 2", "z = 3"]
+
+    def test_nested_classes(self):
+        """Nested class scopes → both shown as context."""
+        lines = [
+            "class Outer:",
+            "    class Inner:",
+            "        def method(self):",
+            "            return 42",
+        ]
+        result = inject_scope_context(lines, 4, 4)
+        assert any("Outer" in line for line in result)
+        assert any("Inner" in line for line in result)
+        assert any("method" in line for line in result)
+        assert result[-1] == "            return 42"
+
+    def test_javascript_function_context(self):
+        """JS function keyword detected as scope."""
+        lines = [
+            "function processData(input) {",
+            "  const result = input.map(x => x * 2);",
+            "  return result;",
+            "}",
+        ]
+        result = inject_scope_context(lines, 2, 3)
+        assert result[0] == "// function processData(input) {"
+        assert result[1] == "  const result = input.map(x => x * 2);"
+
+    def test_rust_impl_and_fn_context(self):
+        """Rust impl + fn detected as scope."""
+        lines = [
+            "impl MyStruct {",
+            "    pub fn process(&self) -> Result<()> {",
+            "        let data = self.load()?;",
+            "        Ok(data)",
+            "    }",
+            "}",
+        ]
+        result = inject_scope_context(lines, 3, 4)
+        assert result[0] == "// impl MyStruct {"
+        assert result[1] == "//     pub fn process(&self) -> Result<()> {"
+        assert result[2] == "        let data = self.load()?;"
+
+    def test_max_context_lines_respected(self):
+        """Only the innermost N scopes are shown when max_context_lines is set."""
+        lines = [
+            "class A:",
+            "    class B:",
+            "        class C:",
+            "            def deep_method(self):",
+            "                return 1",
+        ]
+        result = inject_scope_context(lines, 5, 5, max_context_lines=2)
+        context_lines = [l for l in result if l.startswith("// ")]
+        assert len(context_lines) == 2
+        # Should show innermost 2: C and deep_method
+        assert any("C" in l for l in context_lines)
+        assert any("deep_method" in l for l in context_lines)
+
+    def test_custom_context_prefix(self):
+        """Custom prefix applied to context lines."""
+        lines = [
+            "class Foo:",
+            "    def bar(self):",
+            "        pass",
+        ]
+        result = inject_scope_context(lines, 3, 3, context_prefix="# ")
+        assert result[0].startswith("# ")
+
+    def test_empty_lines_before_fragment(self):
+        """Empty lines between scopes are ignored."""
+        lines = [
+            "class MyClass:",
+            "",
+            "    def method(self):",
+            "",
+            "        x = 1",
+        ]
+        result = inject_scope_context(lines, 5, 5)
+        context_lines = [l for l in result if l.startswith("// ")]
+        assert len(context_lines) == 2
+
+    def test_start_line_beyond_file(self):
+        """Start line beyond file length → empty result."""
+        lines = ["x = 1"]
+        result = inject_scope_context(lines, 10, 15)
+        assert result == []
+
+    def test_fragment_at_file_start(self):
+        """Fragment starting at line 1 → no context possible."""
+        lines = [
+            "def main():",
+            "    print('hello')",
+        ]
+        result = inject_scope_context(lines, 1, 2)
+        # No context since we start at the beginning
+        assert result == ["def main():", "    print('hello')"]
+
+    def test_sibling_scopes_not_leaked(self):
+        """Sibling function scope should not leak into next function's context."""
+        lines = [
+            "class MyClass:",
+            "    def method_a(self):",
+            "        return 1",
+            "    def method_b(self):",
+            "        return 2",
+        ]
+        result = inject_scope_context(lines, 5, 5)
+        # Should show class + method_b context, NOT method_a
+        assert not any("method_a" in l for l in result)
+        assert any("MyClass" in l for l in result)
+        assert any("method_b" in l for l in result)
+
+    def test_async_def_detected(self):
+        """async def is recognized as a scope keyword."""
+        lines = [
+            "class Handler:",
+            "    async def handle(self, request):",
+            "        response = await process(request)",
+            "        return response",
+        ]
+        result = inject_scope_context(lines, 3, 4)
+        assert any("async def handle" in l for l in result)
+
+
+# =============================================================================
 # Integration with existing tools
 # =============================================================================
 
@@ -365,6 +520,7 @@ class TestIntegrationWithTools:
         """All utilities are exported from utils module."""
         from code_puppy.utils import (
             format_content_with_line_numbers,
+            inject_scope_context,
             open_nofollow,
             safe_write_file,
             truncate_with_guidance,
@@ -375,6 +531,7 @@ class TestIntegrationWithTools:
         assert callable(truncate_with_guidance)
         assert callable(open_nofollow)
         assert callable(safe_write_file)
+        assert callable(inject_scope_context)
 
 
 if __name__ == "__main__":
