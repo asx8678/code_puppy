@@ -40,7 +40,7 @@ class APPlannerBAgent(BaseAdversarialAgent):
     """
     
     ROLE_NAME = "planner-b"
-    ROLE_DESCRIPTION = "Creates contrarian plan challenging defaults"
+    ROLE_DESCRIPTION = "Alternative planner — Challenges the obvious approach. Produces a meaningfully different plan than the safe planner."
     
     # Read-only tools - planners only examine, they don't write
     # Plus agent/skill awareness for coordination

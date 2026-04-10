@@ -37,7 +37,7 @@ class APArbiterAgent(BaseAdversarialAgent):
     """
     
     ROLE_NAME = "arbiter"
-    ROLE_DESCRIPTION = "Merges surviving elements into executable plan"
+    ROLE_DESCRIPTION = "Judge — Keeps only parts that survived review. Merges surviving elements and decides go/conditional/no-go."
     
     # Arbiter needs FULL coordination capabilities
     ALLOWED_TOOLS = [

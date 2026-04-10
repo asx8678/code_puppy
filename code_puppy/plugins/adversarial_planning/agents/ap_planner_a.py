@@ -35,7 +35,7 @@ class APPlannerAAgent(BaseAdversarialAgent):
     """
     
     ROLE_NAME = "planner-a"
-    ROLE_DESCRIPTION = "Creates conservative plan minimizing blast radius"
+    ROLE_DESCRIPTION = "Safe planner — Low-risk plan using proven patterns. Prioritizes easy rollback and minimal blast radius."
     
     # Read-only tools - planners only examine, they don't write
     # Plus agent/skill awareness for coordination

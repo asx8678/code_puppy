@@ -29,7 +29,7 @@ class APResearcherAgent(BaseAdversarialAgent):
     """
     
     ROLE_NAME = "researcher"
-    ROLE_DESCRIPTION = "Discovers environment evidence before planning"
+    ROLE_DESCRIPTION = "Fact-finder — Checks the repo first. Separates verified facts from guesses and unknowns so planners have solid ground to build on."
     
     # Read-only tools plus agent/skill awareness for proper coordination
     ALLOWED_TOOLS = [

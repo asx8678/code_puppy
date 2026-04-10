@@ -39,7 +39,7 @@ class APRedTeamAgent(BaseAdversarialAgent):
     """
     
     ROLE_NAME = "red-team"
-    ROLE_DESCRIPTION = "Attacks merged plan across failure dimensions"
+    ROLE_DESCRIPTION = "Disaster simulator — Stress-tests the plan against outages, security issues, edge cases, and rare events."
     
     # Can inspect - read-only but deep analysis
     # Plus agent/skill awareness for comprehensive testing

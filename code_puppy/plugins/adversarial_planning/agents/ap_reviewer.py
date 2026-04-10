@@ -36,7 +36,7 @@ class APReviewerAgent(BaseAdversarialAgent):
     """
     
     ROLE_NAME = "reviewer"
-    ROLE_DESCRIPTION = "Falsifies plans using evidence-based attacks"
+    ROLE_DESCRIPTION = "Plan attacker — Tries to prove the plan wrong. Checks evidence, assumptions, and missing steps with brutal honesty."
     
     # Can inspect more than planners - still read-only but broader search
     # Plus agent/skill awareness for coordination and verification
