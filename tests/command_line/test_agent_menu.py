@@ -4,6 +4,9 @@ Covers menu initialization, agent entry retrieval, rendering,
 pagination, current agent marking, and preview panel display.
 """
 
+import json
+import os
+import tempfile
 from unittest.mock import patch
 
 from code_puppy.command_line.agent_menu import (
@@ -218,7 +221,7 @@ class TestRenderMenuPanel:
         text = _get_text_from_formatted(result)
         assert "current" in text
 
-    @patch("code_puppy.command_line.agent_menu.get_agent_pinned_model")
+    @patch("code_puppy.command_line.agent_menu.get_effective_agent_pinned_model")
     def test_shows_pinned_model_marker(self, mock_pinned_model):
         """Test that pinned models are displayed in the menu."""
         mock_pinned_model.return_value = "gpt-4"
@@ -231,7 +234,7 @@ class TestRenderMenuPanel:
         text = _get_text_from_formatted(result)
         assert "gpt-4" in text
 
-    @patch("code_puppy.command_line.agent_menu.get_agent_pinned_model")
+    @patch("code_puppy.command_line.agent_menu.get_effective_agent_pinned_model")
     def test_unpinned_model_shows_no_marker(self, mock_pinned_model):
         """Test that unpinned agents show no pinned model marker."""
         mock_pinned_model.return_value = None
@@ -391,7 +394,7 @@ class TestRenderPreviewPanel:
         # Emojis are sanitized for clean terminal rendering
         assert "Code Puppy" in text
 
-    @patch("code_puppy.command_line.agent_menu.get_agent_pinned_model")
+    @patch("code_puppy.command_line.agent_menu.get_effective_agent_pinned_model")
     def test_renders_pinned_model(self, mock_pinned_model):
         """Test that pinned model is shown in the preview panel."""
         mock_pinned_model.return_value = "gpt-4"
@@ -403,7 +406,7 @@ class TestRenderPreviewPanel:
         assert "Pinned Model:" in text
         assert "gpt-4" in text
 
-    @patch("code_puppy.command_line.agent_menu.get_agent_pinned_model")
+    @patch("code_puppy.command_line.agent_menu.get_effective_agent_pinned_model")
     def test_renders_unpinned_model_shows_default(self, mock_pinned_model):
         """Test that unpinned model shows 'default' in preview."""
         mock_pinned_model.return_value = None
@@ -663,206 +666,225 @@ class TestGetPinnedModelWithJSONAgents:
     """Test _get_pinned_model function with JSON agents."""
 
     @patch("code_puppy.agents.json_agent.discover_json_agents")
-    @patch("code_puppy.command_line.agent_menu.get_agent_pinned_model")
-    def test_returns_builtin_agent_pinned_model(self, mock_builtin, mock_json_agents):
+    @patch("code_puppy.config.get_agent_pinned_model")
+    def test_returns_builtin_agent_pinned_model(self, mock_builtin, mock_discover):
         """Test that built-in agent pinned model is returned."""
+        mock_discover.return_value = {}
         mock_builtin.return_value = "gpt-4"
-        mock_json_agents.return_value = {}
 
         result = _get_pinned_model("code_puppy")
 
         assert result == "gpt-4"
 
-    @patch("code_puppy.agents.json_agent.discover_json_agents")
-    @patch("code_puppy.command_line.agent_menu.get_agent_pinned_model")
-    def test_returns_json_agent_pinned_model(self, mock_builtin, mock_json_agents):
+    def test_returns_json_agent_pinned_model(self):
         """Test that JSON agent pinned model is returned."""
-        import json
-        import tempfile
-
-        mock_builtin.return_value = None
-
-        # Create a temporary JSON agent file
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump({"name": "test_agent", "model": "claude-3-opus"}, f)
             json_file = f.name
 
-        mock_json_agents.return_value = {"test_agent": json_file}
+        try:
+            with patch(
+                "code_puppy.agents.json_agent.discover_json_agents"
+            ) as mock_discover:
+                mock_discover.return_value = {"test_agent": json_file}
 
-        result = _get_pinned_model("test_agent")
+                result = _get_pinned_model("test_agent")
 
-        assert result == "claude-3-opus"
+                assert result == "claude-3-opus"
+        finally:
+            os.unlink(json_file)
 
-        # Clean up
-        import os
-
-        os.unlink(json_file)
-
-    @patch("code_puppy.agents.json_agent.discover_json_agents")
-    @patch("code_puppy.command_line.agent_menu.get_agent_pinned_model")
-    def test_returns_none_for_unpinned_json_agent(self, mock_builtin, mock_json_agents):
+    def test_returns_none_for_unpinned_json_agent(self):
         """Test that None is returned for JSON agent without pinned model."""
-        import json
-        import tempfile
-
-        mock_builtin.return_value = None
-
         # Create a temporary JSON agent file without model key
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump({"name": "test_agent"}, f)
             json_file = f.name
 
-        mock_json_agents.return_value = {"test_agent": json_file}
+        try:
+            with patch(
+                "code_puppy.agents.json_agent.discover_json_agents"
+            ) as mock_discover:
+                mock_discover.return_value = {"test_agent": json_file}
 
-        result = _get_pinned_model("test_agent")
+                with patch(
+                    "code_puppy.config.get_agent_pinned_model"
+                ) as mock_get_pin:
+                    mock_get_pin.return_value = None
 
-        assert result is None
+                    result = _get_pinned_model("test_agent")
 
-        # Clean up
-        import os
+                    assert result is None
+        finally:
+            os.unlink(json_file)
 
-        os.unlink(json_file)
-
-    @patch("code_puppy.agents.json_agent.discover_json_agents")
-    @patch("code_puppy.command_line.agent_menu.get_agent_pinned_model")
-    def test_handles_json_agent_read_error(self, mock_builtin, mock_json_agents):
+    def test_handles_json_agent_read_error(self):
         """Test that read errors are handled gracefully."""
-        mock_builtin.return_value = None
-        mock_json_agents.return_value = {"test_agent": "/nonexistent/file.json"}
+        with patch(
+            "code_puppy.agents.json_agent.discover_json_agents"
+        ) as mock_discover:
+            mock_discover.return_value = {"test_agent": "/nonexistent/file.json"}
 
-        result = _get_pinned_model("test_agent")
+            with patch(
+                "code_puppy.config.get_agent_pinned_model"
+            ) as mock_get_pin:
+                mock_get_pin.return_value = None
 
-        assert result is None
+                result = _get_pinned_model("test_agent")
 
-    @patch("code_puppy.agents.json_agent.discover_json_agents")
-    @patch("code_puppy.command_line.agent_menu.get_agent_pinned_model")
-    def test_builtin_takes_precedence_over_json(self, mock_builtin, mock_json_agents):
-        """Test that built-in pinned model takes precedence."""
-        import json
-        import tempfile
+                assert result is None
 
-        mock_builtin.return_value = "gpt-4"
+    def test_json_model_takes_precedence_over_config_pin(self):
+        """THE KEY FIX: JSON model takes precedence over config pin.
 
-        # Create a temporary JSON agent file with different model
+        This is the main regression test for the mixed-source pinning bug.
+        When a JSON agent has `model` in its file, that should take precedence
+        over any config pin (agent_model_* in puppy.cfg).
+        """
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump({"name": "code_puppy", "model": "claude-3-opus"}, f)
+            json.dump({"name": "test_agent", "model": "json-model"}, f)
             json_file = f.name
 
-        mock_json_agents.return_value = {"code_puppy": json_file}
+        try:
+            with patch(
+                "code_puppy.agents.json_agent.discover_json_agents"
+            ) as mock_discover:
+                mock_discover.return_value = {"test_agent": json_file}
 
-        result = _get_pinned_model("code_puppy")
+                with patch(
+                    "code_puppy.config.get_agent_pinned_model"
+                ) as mock_get_pin:
+                    # Config pin exists (the "stale" pin)
+                    mock_get_pin.return_value = "config-model"
 
-        # Built-in should take precedence
-        assert result == "gpt-4"
+                    # JSON model should take precedence
+                    result = _get_pinned_model("test_agent")
+                    assert result == "json-model"
+        finally:
+            os.unlink(json_file)
 
-        # Clean up
-        import os
+    def test_json_model_fallback_to_config_pin(self):
+        """When JSON has no model, fall back to config pin."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            # No model key in JSON
+            json.dump({"name": "test_agent"}, f)
+            json_file = f.name
 
-        os.unlink(json_file)
+        try:
+            with patch(
+                "code_puppy.agents.json_agent.discover_json_agents"
+            ) as mock_discover:
+                mock_discover.return_value = {"test_agent": json_file}
+
+                with patch(
+                    "code_puppy.config.get_agent_pinned_model"
+                ) as mock_get_pin:
+                    mock_get_pin.return_value = "config-model"
+
+                    result = _get_pinned_model("test_agent")
+                    # Falls back to config
+                    assert result == "config-model"
+        finally:
+            os.unlink(json_file)
 
 
 class TestApplyPinnedModelWithJSONAgents:
     """Test _apply_pinned_model function with JSON agents."""
 
-    @patch("code_puppy.command_line.agent_menu.set_agent_pinned_model")
-    @patch("code_puppy.command_line.agent_menu.emit_success")
     @patch("code_puppy.command_line.agent_menu._reload_agent_if_current")
     @patch("code_puppy.agents.json_agent.discover_json_agents")
-    def test_pins_builtin_agent(
-        self, mock_json_agents, mock_reload, mock_emit, mock_set_pin
-    ):
-        """Test that built-in agents use config functions."""
-        mock_json_agents.return_value = {}
-
-        _apply_pinned_model("code_puppy", "gpt-4")
-
-        mock_set_pin.assert_called_once_with("code_puppy", "gpt-4")
-        mock_reload.assert_called_once_with("code_puppy", "gpt-4")
-
-    @patch("code_puppy.command_line.agent_menu.emit_success")
-    @patch("code_puppy.command_line.agent_menu._reload_agent_if_current")
-    @patch("code_puppy.agents.json_agent.discover_json_agents")
-    def test_pins_json_agent(self, mock_json_agents, mock_reload, mock_emit):
+    def test_pins_json_agent(self, mock_discover, mock_reload):
         """Test that JSON agents have model written to file."""
-        import json
-        import tempfile
-
         # Create a temporary JSON agent file
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump({"name": "test_agent"}, f)
             json_file = f.name
 
-        mock_json_agents.return_value = {"test_agent": json_file}
+        mock_discover.return_value = {"test_agent": json_file}
 
-        _apply_pinned_model("test_agent", "claude-3-opus")
+        try:
+            with patch(
+                "code_puppy.config.clear_agent_pinned_model"
+            ) as mock_clear_config:
+                _apply_pinned_model("test_agent", "claude-3-opus")
 
-        # Verify the file was updated
-        with open(json_file, "r") as f:
-            agent_config = json.load(f)
+                # Verify the file was updated
+                with open(json_file, "r") as f:
+                    agent_config = json.load(f)
 
-        assert agent_config.get("model") == "claude-3-opus"
-        mock_reload.assert_called_once_with("test_agent", "claude-3-opus")
+                assert agent_config.get("model") == "claude-3-opus"
+                # Should also clear stale config pin
+                mock_clear_config.assert_called_once_with("test_agent")
+                mock_reload.assert_called_once_with("test_agent", "claude-3-opus")
+        finally:
+            os.unlink(json_file)
 
-        # Clean up
-        import os
-
-        os.unlink(json_file)
-
-    @patch("code_puppy.command_line.agent_menu.clear_agent_pinned_model")
-    @patch("code_puppy.command_line.agent_menu.emit_success")
     @patch("code_puppy.command_line.agent_menu._reload_agent_if_current")
     @patch("code_puppy.agents.json_agent.discover_json_agents")
-    def test_unpins_builtin_agent(
-        self, mock_json_agents, mock_reload, mock_emit, mock_clear_pin
-    ):
-        """Test that built-in agents have pin cleared via config."""
-        mock_json_agents.return_value = {}
+    def test_unpins_json_agent_clears_both_json_and_config(self, mock_discover, mock_reload):
+        """THE BUG FIX: Unpinning a JSON agent clears BOTH JSON model AND config pin.
 
-        _apply_pinned_model("code_puppy", "(unpin)")
-
-        mock_clear_pin.assert_called_once_with("code_puppy")
-        mock_reload.assert_called_once_with("code_puppy", None)
-
-    @patch("code_puppy.command_line.agent_menu.emit_success")
-    @patch("code_puppy.command_line.agent_menu._reload_agent_if_current")
-    @patch("code_puppy.agents.json_agent.discover_json_agents")
-    def test_unpins_json_agent(self, mock_json_agents, mock_reload, mock_emit):
-        """Test that JSON agents have model key removed."""
-        import json
-        import tempfile
-
+        This is the key regression test for the migration-analyst bug:
+        1. User unpins via /agents or /unpin
+        2. Old behavior: Only JSON model removed, config pin remained (hidden fallback)
+        3. Fixed behavior: Both JSON model and config pin are cleared
+        """
         # Create a temporary JSON agent file with model key
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump({"name": "test_agent", "model": "claude-3-opus"}, f)
             json_file = f.name
 
-        mock_json_agents.return_value = {"test_agent": json_file}
+        mock_discover.return_value = {"test_agent": json_file}
 
-        _apply_pinned_model("test_agent", "(unpin)")
+        try:
+            with patch(
+                "code_puppy.config.clear_agent_pinned_model"
+            ) as mock_clear_config:
+                _apply_pinned_model("test_agent", "(unpin)")
 
-        # Verify the model key was removed
-        with open(json_file, "r") as f:
-            agent_config = json.load(f)
+                # Verify the model key was removed from JSON
+                with open(json_file, "r") as f:
+                    agent_config = json.load(f)
 
-        assert "model" not in agent_config
-        mock_reload.assert_called_once_with("test_agent", None)
+                assert "model" not in agent_config
 
-        # Clean up
-        import os
+                # THE BUG FIX: Should also clear config pin
+                mock_clear_config.assert_called_once_with("test_agent")
+                mock_reload.assert_called_once_with("test_agent", None)
+        finally:
+            os.unlink(json_file)
 
-        os.unlink(json_file)
-
-    @patch("code_puppy.command_line.agent_menu.emit_success")
     @patch("code_puppy.command_line.agent_menu.emit_warning")
     @patch("code_puppy.agents.json_agent.discover_json_agents")
-    def test_handles_json_agent_write_error(
-        self, mock_json_agents, mock_emit_warning, mock_emit_success
-    ):
+    def test_handles_json_agent_write_error(self, mock_discover, mock_warning):
         """Test that write errors are handled gracefully."""
-        # Use a directory path instead of a file path to cause an error
-        mock_json_agents.return_value = {"test_agent": "/"}
+        mock_discover.return_value = {"test_agent": "/"}
 
         _apply_pinned_model("test_agent", "claude-3-opus")
 
         # Should emit a warning instead of crashing
-        assert mock_emit_warning.called
+        assert mock_warning.called
+
+    @patch("code_puppy.command_line.agent_menu._reload_agent_if_current")
+    @patch("code_puppy.config.set_agent_pinned_model")
+    @patch("code_puppy.agents.json_agent.discover_json_agents")
+    def test_pins_builtin_agent_uses_config(self, mock_discover, mock_set, mock_reload):
+        """Test that built-in agents use config functions."""
+        mock_discover.return_value = {}
+
+        _apply_pinned_model("code_puppy", "gpt-4")
+
+        mock_set.assert_called_once_with("code_puppy", "gpt-4")
+        mock_reload.assert_called_once_with("code_puppy", "gpt-4")
+
+    @patch("code_puppy.command_line.agent_menu._reload_agent_if_current")
+    @patch("code_puppy.config.clear_agent_pinned_model")
+    @patch("code_puppy.agents.json_agent.discover_json_agents")
+    def test_unpins_builtin_agent_uses_config(self, mock_discover, mock_clear, mock_reload):
+        """Test that built-in agents have pin cleared via config."""
+        mock_discover.return_value = {}
+
+        _apply_pinned_model("code_puppy", "(unpin)")
+
+        mock_clear.assert_called_once_with("code_puppy")
+        mock_reload.assert_called_once_with("code_puppy", None)

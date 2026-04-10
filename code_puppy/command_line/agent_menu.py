@@ -34,10 +34,9 @@ from code_puppy.command_line.pagination import (
     get_page_for_index,
     get_total_pages,
 )
-from code_puppy.config import (
-    clear_agent_pinned_model,
-    get_agent_pinned_model,
-    set_agent_pinned_model,
+from code_puppy.agent_model_pinning import (
+    apply_agent_pinned_model,
+    get_effective_agent_pinned_model,
 )
 from code_puppy.messaging import emit_info, emit_success, emit_warning
 from code_puppy.tools.command_runner import set_awaiting_user_input
@@ -111,33 +110,11 @@ def _sanitize_display_text(text: str) -> str:
 def _get_pinned_model(agent_name: str) -> str | None:
     """Return the pinned model for an agent, if any.
 
-    Checks both built-in agent config and JSON agent files.
+    Uses the shared helper to ensure consistent behavior:
+    - JSON agents: JSON `model` key takes precedence over config pin
+    - Built-in agents: use config pin
     """
-    import json
-
-    # First check built-in agent config
-    try:
-        pinned = get_agent_pinned_model(agent_name)
-        if pinned:
-            return pinned
-    except Exception:
-        pass  # Continue to check JSON agents
-
-    # Check if it's a JSON agent
-    try:
-        from code_puppy.agents.json_agent import discover_json_agents
-
-        json_agents = discover_json_agents()
-        if agent_name in json_agents:
-            agent_file_path = json_agents[agent_name]
-            with open(agent_file_path, "r", encoding="utf-8") as f:
-                agent_config = json.load(f)
-            model = agent_config.get("model")
-            return model if model else None
-    except Exception:
-        pass  # Return None if we can't read the JSON file
-
-    return None
+    return get_effective_agent_pinned_model(agent_name)
 
 
 def _build_model_picker_choices(
@@ -211,52 +188,16 @@ def _reload_agent_if_current(agent_name: str, pinned_model: str | None) -> None:
 def _apply_pinned_model(agent_name: str, model_choice: str) -> None:
     """Persist a pinned model selection for an agent.
 
-    Handles both built-in agents (via config) and JSON agents (via JSON file).
+    Uses the shared helper for consistent handling of JSON vs built-in agents.
+    For JSON agents, also clears stale config pins to ensure single source of truth.
     """
-    import json
-
-    # Check if this is a JSON agent or a built-in agent
     try:
-        from code_puppy.agents.json_agent import discover_json_agents
+        pinned_model = apply_agent_pinned_model(agent_name, model_choice)
 
-        json_agents = discover_json_agents()
-        is_json_agent = agent_name in json_agents
-    except Exception:
-        is_json_agent = False
-
-    try:
-        if is_json_agent:
-            # Handle JSON agent - modify the JSON file
-            agent_file_path = json_agents[agent_name]
-
-            with open(agent_file_path, "r", encoding="utf-8") as f:
-                agent_config = json.load(f)
-
-            if model_choice == "(unpin)":
-                # Remove the model key if it exists
-                if "model" in agent_config:
-                    del agent_config["model"]
-                emit_success(f"Model pin cleared for '{agent_name}'")
-                pinned_model = None
-            else:
-                # Set the model
-                agent_config["model"] = model_choice
-                emit_success(f"Pinned '{model_choice}' to '{agent_name}'")
-                pinned_model = model_choice
-
-            # Save the updated configuration
-            with open(agent_file_path, "w", encoding="utf-8") as f:
-                json.dump(agent_config, f, indent=2, ensure_ascii=False)
+        if model_choice == "(unpin)":
+            emit_success(f"Model pin cleared for '{agent_name}'")
         else:
-            # Handle built-in Python agent - use config functions
-            if model_choice == "(unpin)":
-                clear_agent_pinned_model(agent_name)
-                emit_success(f"Model pin cleared for '{agent_name}'")
-                pinned_model = None
-            else:
-                set_agent_pinned_model(agent_name, model_choice)
-                emit_success(f"Pinned '{model_choice}' to '{agent_name}'")
-                pinned_model = model_choice
+            emit_success(f"Pinned '{model_choice}' to '{agent_name}'")
 
         _reload_agent_if_current(agent_name, pinned_model)
     except Exception as exc:

@@ -15,12 +15,17 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.widgets import Footer, RichLog, Static
 
+from code_puppy.agent_model_pinning import (
+    apply_agent_pinned_model,
+    get_effective_agent_pinned_model,
+)
 from code_puppy.tui.base_screen import MenuScreen
 from code_puppy.tui.widgets.searchable_list import SearchableList, SearchableListItem
 from code_puppy.tui.widgets.split_panel import SplitPanel
 
+
 # ---------------------------------------------------------------------------
-# Helpers — thin wrappers around agent_menu helpers so logic stays in one place
+# Helpers
 # ---------------------------------------------------------------------------
 
 
@@ -39,93 +44,43 @@ def _get_agent_entries() -> list[tuple[str, str, str]]:
 
 
 def _get_pinned_model(agent_name: str) -> str | None:
-    """Return the pinned model for *agent_name*, checking both built-ins and JSON agents."""
-    import json
+    """Return the pinned model for *agent_name*.
 
-    from code_puppy.config import get_agent_pinned_model
-
-    try:
-        pinned = get_agent_pinned_model(agent_name)
-        if pinned:
-            return pinned
-    except Exception:
-        pass
-
-    try:
-        from code_puppy.agents.json_agent import discover_json_agents
-
-        json_agents = discover_json_agents()
-        if agent_name in json_agents:
-            with open(json_agents[agent_name], "r", encoding="utf-8") as fh:
-                cfg = json.load(fh)
-            model = cfg.get("model")
-            return model if model else None
-    except Exception:
-        pass
-
-    return None
+    Uses the shared helper to ensure consistent behavior:
+    - JSON agents: JSON `model` key takes precedence over config pin
+    - Built-in agents: use config pin
+    """
+    return get_effective_agent_pinned_model(agent_name)
 
 
-def _apply_pinned_model(agent_name: str, model_choice: str) -> None:
-    """Persist *model_choice* for *agent_name* (handles both built-in and JSON agents)."""
-    import json
+def _apply_pinned_model_and_reload(agent_name: str, model_choice: str) -> None:
+    """Persist *model_choice* for *agent_name* and reload if current.
 
-    from code_puppy.config import clear_agent_pinned_model, set_agent_pinned_model
-    from code_puppy.messaging import emit_success, emit_warning
+    Handles both built-in agents and JSON agents, ensuring stale config
+    pins are cleared for JSON agents.
+    """
+    from code_puppy.agents import get_current_agent
+    from code_puppy.messaging import emit_info, emit_warning
 
     try:
-        from code_puppy.agents.json_agent import discover_json_agents
-
-        json_agents = discover_json_agents()
-        is_json = agent_name in json_agents
-    except Exception:
-        is_json = False
-
-    try:
-        if is_json:
-            path = json_agents[agent_name]  # type: ignore[possibly-undefined]
-            with open(path, "r", encoding="utf-8") as fh:
-                cfg = json.load(fh)
-            if model_choice == "(unpin)":
-                cfg.pop("model", None)
-                pinned_model: str | None = None
-                emit_success(f"Model pin cleared for '{agent_name}'")
-            else:
-                cfg["model"] = model_choice
-                pinned_model = model_choice
-                emit_success(f"Pinned '{model_choice}' to '{agent_name}'")
-            with open(path, "w", encoding="utf-8") as fh:
-                json.dump(cfg, fh, indent=2, ensure_ascii=False)
-        else:
-            if model_choice == "(unpin)":
-                clear_agent_pinned_model(agent_name)
-                pinned_model = None
-                emit_success(f"Model pin cleared for '{agent_name}'")
-            else:
-                set_agent_pinned_model(agent_name, model_choice)
-                pinned_model = model_choice
-                emit_success(f"Pinned '{model_choice}' to '{agent_name}'")
-
-        # Reload live agent if it's the active one
-        from code_puppy.agents import get_current_agent
-        from code_puppy.messaging import emit_info, emit_warning as _warn
-
-        current = get_current_agent()
-        if current and current.name == agent_name:
-            try:
-                if hasattr(current, "refresh_config"):
-                    current.refresh_config()
-                current.reload_code_generation_agent()
-                if pinned_model:
-                    emit_info(
-                        f"Active agent reloaded with pinned model '{pinned_model}'"
-                    )
-                else:
-                    emit_info("Active agent reloaded with default model")
-            except Exception as exc:
-                _warn(f"Pinned model applied but reload failed: {exc}")
+        pinned_model = apply_agent_pinned_model(agent_name, model_choice)
     except Exception as exc:
         emit_warning(f"Failed to apply pinned model: {exc}")
+        return
+
+    # Reload live agent if it's the active one
+    current = get_current_agent()
+    if current and current.name == agent_name:
+        try:
+            if hasattr(current, "refresh_config"):
+                current.refresh_config()
+            current.reload_code_generation_agent()
+            if pinned_model:
+                emit_info(f"Active agent reloaded with pinned model '{pinned_model}'")
+            else:
+                emit_info("Active agent reloaded with default model")
+        except Exception as exc:
+            emit_warning(f"Pinned model applied but reload failed: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +328,7 @@ class AgentScreen(MenuScreen):
 
             def _on_dismiss(model_choice: str | None) -> None:
                 if model_choice:
-                    _apply_pinned_model(agent_name, model_choice)
+                    _apply_pinned_model_and_reload(agent_name, model_choice)
                     # Refresh the list to show new badge
                     self._refresh_entries()
                     self._populate_list()

@@ -288,6 +288,7 @@ def _get_json_agents_pinned_to_model(model_name: str) -> list:
 )
 def handle_pin_model_command(command: str) -> bool:
     """Pin a specific model to an agent."""
+    from code_puppy.agent_model_pinning import apply_agent_pinned_model
     from code_puppy.agents.agent_manager import get_agent_descriptions
     from code_puppy.agents.json_agent import discover_json_agents
     from code_puppy.command_line.model_picker_completion import load_model_names
@@ -333,9 +334,8 @@ def handle_pin_model_command(command: str) -> bool:
         emit_warning(f"Available models: {', '.join(available_models)}")
         return True
 
-    # Check if this is a JSON agent or a built-in Python agent
+    # Check if this is a valid agent
     json_agents = discover_json_agents()
-
     is_json_agent = agent_name in json_agents
     is_builtin_agent = agent_name in builtin_agents
 
@@ -354,27 +354,9 @@ def handle_pin_model_command(command: str) -> bool:
                 emit_info(f"  {name} ({path})")
         return True
 
-    # Handle different agent types
+    # Apply the pinned model using the shared helper
     try:
-        if is_json_agent:
-            # Handle JSON agent - modify the JSON file
-            agent_file_path = json_agents[agent_name]
-
-            with open(agent_file_path, "r", encoding="utf-8") as f:
-                agent_config = json.load(f)
-
-            # Set the model
-            agent_config["model"] = model_name
-
-            # Save the updated configuration
-            with open(agent_file_path, "w", encoding="utf-8") as f:
-                json.dump(agent_config, f, indent=2, ensure_ascii=False)
-
-        else:
-            # Handle built-in Python agent - store in config
-            from code_puppy.config import set_agent_pinned_model
-
-            set_agent_pinned_model(agent_name, model_name)
+        apply_agent_pinned_model(agent_name, model_name)
 
         emit_success(f"Model '{model_name}' pinned to agent '{agent_name}'")
 
@@ -382,7 +364,7 @@ def handle_pin_model_command(command: str) -> bool:
         from code_puppy.agents import get_current_agent
 
         current_agent = get_current_agent()
-        if current_agent.name == agent_name:
+        if current_agent and current_agent.name == agent_name:
             try:
                 if is_json_agent and hasattr(current_agent, "refresh_config"):
                     current_agent.refresh_config()
@@ -406,9 +388,12 @@ def handle_pin_model_command(command: str) -> bool:
 )
 def handle_unpin_command(command: str) -> bool:
     """Unpin a model from an agent (resets to default)."""
+    from code_puppy.agent_model_pinning import (
+        apply_agent_pinned_model,
+        get_effective_agent_pinned_model,
+    )
     from code_puppy.agents.agent_manager import get_agent_descriptions
     from code_puppy.agents.json_agent import discover_json_agents
-    from code_puppy.config import get_agent_pinned_model
     from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
 
     tokens = command.split()
@@ -423,7 +408,7 @@ def handle_unpin_command(command: str) -> bool:
         if builtin_agents:
             emit_info("Available built-in agents:")
             for agent_name, description in builtin_agents.items():
-                pinned_model = get_agent_pinned_model(agent_name)
+                pinned_model = get_effective_agent_pinned_model(agent_name)
                 if pinned_model:
                     emit_info(f"  {agent_name} - {description} [→ {pinned_model}]")
                 else:
@@ -485,27 +470,10 @@ def handle_unpin_command(command: str) -> bool:
                 emit_info(f"  {name} ({path})")
         return True
 
+    # Apply the unpin using the shared helper
+    # This fixes the bug where config pins weren't cleared for JSON agents
     try:
-        if is_json_agent:
-            # Handle JSON agent - remove the model from JSON file
-            agent_file_path = json_agents[agent_name]
-
-            with open(agent_file_path, "r", encoding="utf-8") as f:
-                agent_config = json.load(f)
-
-            # Remove the model key if it exists
-            if "model" in agent_config:
-                del agent_config["model"]
-
-            # Save the updated configuration
-            with open(agent_file_path, "w", encoding="utf-8") as f:
-                json.dump(agent_config, f, indent=2, ensure_ascii=False)
-
-        else:
-            # Handle built-in Python agent - clear from config
-            from code_puppy.config import clear_agent_pinned_model
-
-            clear_agent_pinned_model(agent_name)
+        apply_agent_pinned_model(agent_name, "(unpin)")
 
         emit_success(f"Model unpinned from agent '{agent_name}' (reset to default)")
 
@@ -513,7 +481,7 @@ def handle_unpin_command(command: str) -> bool:
         from code_puppy.agents import get_current_agent
 
         current_agent = get_current_agent()
-        if current_agent.name == agent_name:
+        if current_agent and current_agent.name == agent_name:
             try:
                 if is_json_agent and hasattr(current_agent, "refresh_config"):
                     current_agent.refresh_config()
