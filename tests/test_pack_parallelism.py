@@ -2,6 +2,7 @@
 
 import builtins
 import importlib
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
@@ -136,10 +137,44 @@ class TestHandleCommand:
             result = self.plugin._handle_command("/pack-parallel", "pack-parallel")
         assert result is True
 
-    def test_valid_int_sets_session_max(self):
-        with patch("code_puppy.messaging.emit_info"):
-            self.plugin._handle_command("/pack-parallel 4", "pack-parallel")
+    def test_unknown_args_rejected(self):
+        """Unknown trailing arguments should produce an error."""
+        with patch.object(self.plugin, "_write_config_max") as mock_write:
+            with patch("code_puppy.messaging.emit_error") as mock_err:
+                result = self.plugin._handle_command(
+                    "/pack-parallel 4 banana", "pack-parallel"
+                )
+        assert result is True
+        mock_err.assert_called_once()
+        mock_write.assert_not_called()
+        # Value should NOT have been set
+        assert self.plugin._session_max is None
+        assert self.plugin._cached_config == 2  # unchanged
+
+    def test_fallback_to_session_on_write_failure(self):
+        """When disk write fails, fall back to session-only and warn user."""
+        with patch.object(self.plugin, "_write_config_max", return_value=False):
+            with patch("code_puppy.messaging.emit_info") as mock_info:
+                result = self.plugin._handle_command(
+                    "/pack-parallel 4", "pack-parallel"
+                )
+        assert result is True
+        # Should fall back to session-only
         assert self.plugin._session_max == 4
+        # Should NOT have updated the config cache
+        assert self.plugin._cached_config == 2  # unchanged from setup_method
+        # Message should mention failure
+        call_text = " ".join(str(c) for c in mock_info.call_args_list)
+        assert "failed" in call_text.lower() or "could not" in call_text.lower()
+
+    def test_valid_int_persists_to_config(self):
+        with patch.object(self.plugin, "_write_config_max", return_value=True) as mock_write:
+            with patch("code_puppy.messaging.emit_info"):
+                self.plugin._handle_command("/pack-parallel 4", "pack-parallel")
+        # Default behavior: persists to config, clears session override
+        assert self.plugin._session_max is None
+        assert self.plugin._cached_config == 4
+        mock_write.assert_called_once_with(4)
 
     def test_invalid_string_returns_true_with_error(self):
         with patch("code_puppy.messaging.emit_error") as mock_err:
@@ -160,24 +195,54 @@ class TestHandleCommand:
         mock_err.assert_called_once()
 
     def test_pack_par_alias_works(self):
-        with patch("code_puppy.messaging.emit_info"):
-            result = self.plugin._handle_command("/pack-par 3", "pack-par")
+        with patch.object(self.plugin, "_write_config_max", return_value=True) as mock_write:
+            with patch("code_puppy.messaging.emit_info"):
+                result = self.plugin._handle_command("/pack-par 3", "pack-par")
         assert result is True
-        assert self.plugin._session_max == 3
+        assert self.plugin._cached_config == 3
+        assert self.plugin._session_max is None
+        mock_write.assert_called_once_with(3)
 
     def test_cap_at_32(self):
         """Values above 32 should be capped with a warning."""
-        with patch("code_puppy.messaging.emit_info") as mock_info:
-            self.plugin._handle_command("/pack-parallel 50", "pack-parallel")
-        assert self.plugin._session_max == 32
+        with patch.object(self.plugin, "_write_config_max", return_value=True) as mock_write:
+            with patch("code_puppy.messaging.emit_info") as mock_info:
+                self.plugin._handle_command("/pack-parallel 50", "pack-parallel")
+        # Should persist the capped value
+        assert self.plugin._cached_config == 32
+        assert self.plugin._session_max is None
+        mock_write.assert_called_once_with(32)
         # Warning message should mention the cap
         warning_text = " ".join(str(c) for c in mock_info.call_args_list)
         assert "32" in warning_text
 
     def test_exactly_32_is_accepted(self):
-        with patch("code_puppy.messaging.emit_info"):
-            self.plugin._handle_command("/pack-parallel 32", "pack-parallel")
-        assert self.plugin._session_max == 32
+        with patch.object(self.plugin, "_write_config_max", return_value=True) as mock_write:
+            with patch("code_puppy.messaging.emit_info"):
+                self.plugin._handle_command("/pack-parallel 32", "pack-parallel")
+        assert self.plugin._cached_config == 32
+        assert self.plugin._session_max is None
+        mock_write.assert_called_once_with(32)
+
+    def test_session_flag_sets_session_max(self):
+        """--session flag should set _session_max without writing to disk."""
+        with patch.object(self.plugin, "_write_config_max", return_value=True) as mock_write:
+            with patch("code_puppy.messaging.emit_info"):
+                self.plugin._handle_command(
+                    "/pack-parallel 4 --session", "pack-parallel"
+                )
+        assert self.plugin._session_max == 4
+        mock_write.assert_not_called()
+
+    def test_session_flag_message_mentions_session(self):
+        """--session flag should produce message with session-only wording."""
+        with patch.object(self.plugin, "_write_config_max"):
+            with patch("code_puppy.messaging.emit_info") as mock_info:
+                self.plugin._handle_command(
+                    "/pack-parallel 4 --session", "pack-parallel"
+                )
+        call_texts = " ".join(str(c) for c in mock_info.call_args_list)
+        assert "session only" in call_texts.lower()
 
 
 class TestCommandHelp:
@@ -281,12 +346,13 @@ class TestCommandBustsCache:
         mock_agent._state = mock_state
         mock_agent.reload_code_generation_agent = MagicMock()
 
-        with patch("code_puppy.messaging.emit_info"):
-            with patch(
-                "code_puppy.agents.agent_manager.get_current_agent",
-                return_value=mock_agent,
-            ):
-                plugin._handle_command("/pack-parallel 4", "pack-parallel")
+        with patch.object(plugin, "_write_config_max", return_value=True):
+            with patch("code_puppy.messaging.emit_info"):
+                with patch(
+                    "code_puppy.agents.agent_manager.get_current_agent",
+                    return_value=mock_agent,
+                ):
+                    plugin._handle_command("/pack-parallel 4", "pack-parallel")
 
         # Verify both caches were busted
         assert mock_state.cached_system_prompt is None
@@ -300,12 +366,13 @@ class TestCommandBustsCache:
 
         mock_agent = MagicMock()
 
-        with patch("code_puppy.messaging.emit_info"):
-            with patch(
-                "code_puppy.agents.agent_manager.get_current_agent",
-                return_value=mock_agent,
-            ) as mock_get:
-                plugin._handle_command("/pack-parallel 4", "pack-parallel")
+        with patch.object(plugin, "_write_config_max", return_value=True):
+            with patch("code_puppy.messaging.emit_info"):
+                with patch(
+                    "code_puppy.agents.agent_manager.get_current_agent",
+                    return_value=mock_agent,
+                ) as mock_get:
+                    plugin._handle_command("/pack-parallel 4", "pack-parallel")
 
         # get_current_agent should NOT be called because optimization
         # skips invalidation when previous_val == new_val
@@ -317,12 +384,13 @@ class TestCommandBustsCache:
         plugin._session_max = None
         plugin._cached_config = 2
 
-        with patch("code_puppy.messaging.emit_info") as mock_info:
-            with patch(
-                "code_puppy.agents.agent_manager.get_current_agent",
-                side_effect=Exception("No agent available"),
-            ):
-                result = plugin._handle_command("/pack-parallel 4", "pack-parallel")
+        with patch.object(plugin, "_write_config_max", return_value=True):
+            with patch("code_puppy.messaging.emit_info") as mock_info:
+                with patch(
+                    "code_puppy.agents.agent_manager.get_current_agent",
+                    side_effect=Exception("No agent available"),
+                ):
+                    result = plugin._handle_command("/pack-parallel 4", "pack-parallel")
 
         # Should return True (command handled) despite agent error
         assert result is True
@@ -338,11 +406,12 @@ class TestCommandBustsCache:
         plugin._session_max = None
         plugin._cached_config = 2
 
-        with patch("code_puppy.messaging.emit_info") as mock_info:
-            with patch(
-                "code_puppy.agents.agent_manager.get_current_agent", return_value=None
-            ):
-                result = plugin._handle_command("/pack-parallel 4", "pack-parallel")
+        with patch.object(plugin, "_write_config_max", return_value=True):
+            with patch("code_puppy.messaging.emit_info") as mock_info:
+                with patch(
+                    "code_puppy.agents.agent_manager.get_current_agent", return_value=None
+                ):
+                    result = plugin._handle_command("/pack-parallel 4", "pack-parallel")
 
         assert result is True
         mock_info.assert_called()
@@ -363,16 +432,180 @@ class TestCommandBustsCache:
             lambda self, val: (_ for _ in ()).throw(Exception("Cannot set")),
         )
 
-        with patch("code_puppy.messaging.emit_info") as mock_info:
-            with patch(
-                "code_puppy.agents.agent_manager.get_current_agent",
-                return_value=mock_agent,
-            ):
-                result = plugin._handle_command("/pack-parallel 4", "pack-parallel")
+        with patch.object(plugin, "_write_config_max", return_value=True):
+            with patch("code_puppy.messaging.emit_info") as mock_info:
+                with patch(
+                    "code_puppy.agents.agent_manager.get_current_agent",
+                    return_value=mock_agent,
+                ):
+                    result = plugin._handle_command("/pack-parallel 4", "pack-parallel")
 
         # Should return True (command handled) despite cache error
         assert result is True
-        # Value should still be set
-        assert plugin._session_max == 4
+        # Value should still be persisted to config
+        assert plugin._cached_config == 4
+        assert plugin._session_max is None
         # Success message should be emitted
         mock_info.assert_called()
+
+
+class TestWriteConfigMax:
+    def test_creates_file_when_missing(self, tmp_path):
+        """Writing to non-existent file creates it with proper content."""
+        plugin = _reload_plugin()
+        config = tmp_path / "pack_parallelism.toml"
+        with patch.object(plugin, "_CONFIG_PATH", config):
+            plugin._write_config_max(4)
+        content = config.read_text()
+        assert "[pack_leader]" in content
+        assert "max_parallelism = 4" in content
+
+    def test_creates_parent_directory(self, tmp_path):
+        """Writing creates parent dir if it doesn't exist."""
+        plugin = _reload_plugin()
+        config = tmp_path / "subdir" / "pack_parallelism.toml"
+        with patch.object(plugin, "_CONFIG_PATH", config):
+            plugin._write_config_max(5)
+        assert config.exists()
+        content = config.read_text()
+        assert "max_parallelism = 5" in content
+
+    def test_updates_existing_value(self, tmp_path):
+        """Updating existing max_parallelism replaces the line."""
+        plugin = _reload_plugin()
+        config = tmp_path / "pack_parallelism.toml"
+        config.write_text("[pack_leader]\nmax_parallelism = 2\n")
+        with patch.object(plugin, "_CONFIG_PATH", config):
+            plugin._write_config_max(8)
+        content = config.read_text()
+        assert "max_parallelism = 8" in content
+        assert "max_parallelism = 2" not in content
+
+    def test_preserves_other_keys(self, tmp_path):
+        """Other keys in [pack_leader] section are preserved."""
+        plugin = _reload_plugin()
+        config = tmp_path / "pack_parallelism.toml"
+        config.write_text(
+            "[pack_leader]\nallow_parallel = true\nmax_parallelism = 2\nrun_wait_timeout = 300\n"
+        )
+        with patch.object(plugin, "_CONFIG_PATH", config):
+            plugin._write_config_max(10)
+        content = config.read_text()
+        assert "allow_parallel = true" in content
+        assert "run_wait_timeout = 300" in content
+        assert "max_parallelism = 10" in content
+
+    def test_preserves_comments(self, tmp_path):
+        """Comments in the config file are preserved."""
+        plugin = _reload_plugin()
+        config = tmp_path / "pack_parallelism.toml"
+        config.write_text("# My comment\n[pack_leader]\nmax_parallelism = 2\n")
+        with patch.object(plugin, "_CONFIG_PATH", config):
+            plugin._write_config_max(7)
+        content = config.read_text()
+        assert "# My comment" in content
+        assert "max_parallelism = 7" in content
+
+    def test_inserts_key_when_section_exists_without_key(self, tmp_path):
+        """If [pack_leader] exists but has no max_parallelism, insert the key."""
+        plugin = _reload_plugin()
+        config = tmp_path / "pack_parallelism.toml"
+        config.write_text("[pack_leader]\nallow_parallel = true\n")
+        with patch.object(plugin, "_CONFIG_PATH", config):
+            plugin._write_config_max(3)
+        content = config.read_text()
+        assert "max_parallelism = 3" in content
+        assert "allow_parallel = true" in content
+
+    def test_appends_section_when_missing(self, tmp_path):
+        """If file exists but has no [pack_leader] section, append it."""
+        plugin = _reload_plugin()
+        config = tmp_path / "pack_parallelism.toml"
+        config.write_text("[other_section]\nfoo = bar\n")
+        with patch.object(plugin, "_CONFIG_PATH", config):
+            plugin._write_config_max(9)
+        content = config.read_text()
+        assert "[other_section]" in content
+        assert "foo = bar" in content
+        assert "[pack_leader]" in content
+        assert "max_parallelism = 9" in content
+
+    def test_invalidates_cached_config(self, tmp_path):
+        """After writing, _cached_config should be None."""
+        plugin = _reload_plugin()
+        plugin._cached_config = 2
+        config = tmp_path / "pack_parallelism.toml"
+        with patch.object(plugin, "_CONFIG_PATH", config):
+            plugin._write_config_max(5)
+        assert plugin._cached_config is None
+
+    def test_handles_inline_comment_on_section_header(self, tmp_path):
+        """Section headers with inline comments should not cause duplicates."""
+        plugin = _reload_plugin()
+        config = tmp_path / "pack_parallelism.toml"
+        config.write_text("[pack_leader] # my comment\nmax_parallelism = 2\n")
+        with patch.object(plugin, "_CONFIG_PATH", config):
+            plugin._write_config_max(8)
+        content = config.read_text()
+        # Should update in place, not append a duplicate section
+        assert content.count("[pack_leader]") == 1
+        assert "max_parallelism = 8" in content
+        assert "max_parallelism = 2" not in content
+
+    def test_graceful_failure_on_write_error(self, tmp_path):
+        """Write failure should not crash, returns False and logs warning."""
+        plugin = _reload_plugin()
+        config = tmp_path / "pack_parallelism.toml"
+        with patch.object(plugin, "_CONFIG_PATH", config):
+            with patch("builtins.open", side_effect=OSError("Permission denied")):
+                result = plugin._write_config_max(5)
+        assert result is False
+
+    def test_returns_true_on_success(self, tmp_path):
+        """Successful write returns True."""
+        plugin = _reload_plugin()
+        config = tmp_path / "pack_parallelism.toml"
+        with patch.object(plugin, "_CONFIG_PATH", config):
+            result = plugin._write_config_max(4)
+        assert result is True
+        assert config.exists()
+
+    def test_graceful_failure_on_read_only_dir(self, tmp_path):
+        """Write failure should not crash, just log a warning."""
+        plugin = _reload_plugin()
+        # Point to a path that can't be written
+        config = Path("/proc/nonexistent/pack_parallelism.toml")
+        with patch.object(plugin, "_CONFIG_PATH", config):
+            # Should not raise
+            plugin._write_config_max(5)
+
+
+class TestOnStartup:
+    def test_emits_info_with_current_value(self):
+        plugin = _reload_plugin()
+        plugin._cached_config = 5
+        with patch("code_puppy.messaging.emit_info") as mock_info:
+            plugin._on_startup()
+        mock_info.assert_called_once()
+        call_text = str(mock_info.call_args)
+        assert "5" in call_text
+        assert "config" in call_text.lower()
+
+    def test_shows_session_source_when_override_active(self):
+        plugin = _reload_plugin()
+        plugin._session_max = 3
+        plugin._cached_config = 5
+        with patch("code_puppy.messaging.emit_info") as mock_info:
+            plugin._on_startup()
+        call_text = str(mock_info.call_args)
+        assert "3" in call_text
+        assert "session" in call_text.lower()
+
+    def test_survives_missing_messaging_module(self):
+        """Should fall back to print if messaging is unavailable."""
+        plugin = _reload_plugin()
+        plugin._cached_config = 2
+        with patch.dict("sys.modules", {"code_puppy.messaging": None}):
+            with patch("builtins.print") as mock_print:
+                plugin._on_startup()
+        mock_print.assert_called_once()

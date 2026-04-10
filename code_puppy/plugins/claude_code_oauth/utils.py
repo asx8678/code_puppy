@@ -550,7 +550,7 @@ def load_claude_models_filtered() -> dict[str, Any]:
         # Filter to only latest models
         latest_names = set(
             filter_latest_claude_models(
-                model_names, max_per_family={"default": 1, "opus": 3}
+                model_names, max_per_family={"default": 1, "opus": 6}
             )
         )
 
@@ -665,6 +665,9 @@ def filter_latest_claude_models(
     for model_name in models:
         if model_name == "claude-opus-4-6":
             family_models.setdefault("opus", []).append((model_name, 4, 6, 20260205))
+            continue
+        if model_name == "claude-opus-4-5":
+            family_models.setdefault("opus", []).append((model_name, 4, 5, 20251101))
             continue
         if model_name == "claude-sonnet-4-6":
             family_models.setdefault("sonnet", []).append((model_name, 4, 6, 20250610))
@@ -789,7 +792,7 @@ def add_models_to_extra_config(models: list[str]) -> bool:
         models = _filter_blocked_claude_models(models)
         # Filter to only latest haiku, sonnet, and opus models
         filtered_models = filter_latest_claude_models(
-            models, max_per_family={"default": 1, "opus": 3}
+            models, max_per_family={"default": 1, "opus": 6}
         )
         filtered_models = _filter_blocked_claude_models(filtered_models)
 

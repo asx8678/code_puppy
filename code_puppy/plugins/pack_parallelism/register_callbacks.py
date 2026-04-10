@@ -20,6 +20,7 @@ Per-session override (slash command):
 """
 
 import logging
+import os
 from pathlib import Path
 
 from code_puppy.callbacks import register_callback
@@ -151,6 +152,83 @@ def _read_config_max() -> int:
     return _cached_config
 
 
+def _write_config_max(value: int) -> bool:
+    """Write max_parallelism to the TOML config file, preserving other content.
+
+    Writes atomically using a temp file and os.replace(). Creates the
+    config directory if it doesn't exist. On failure, logs a warning
+    but does not crash (fail gracefully per rule #4).
+
+    Returns True if the write succeeded, False if it failed.
+    """
+    global _cached_config
+    try:
+        # Ensure parent directory exists
+        _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+        lines: list[str] = []
+        pack_leader_idx: int | None = None
+        max_parallelism_idx: int | None = None
+
+        if _CONFIG_PATH.exists():
+            with open(_CONFIG_PATH, "r", encoding="utf-8") as fh:
+                lines = fh.readlines()
+
+            # Find [pack_leader] section and max_parallelism key
+            in_pack_leader = False
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                # Strip inline comments: "[pack_leader] # comment" → "[pack_leader]"
+                header_part = stripped.split("#")[0].rstrip() if "#" in stripped else stripped
+                if header_part.startswith("[") and header_part.endswith("]"):
+                    section_name = header_part[1:-1].strip()
+                    if section_name == "pack_leader":
+                        pack_leader_idx = i
+                        in_pack_leader = True
+                    else:
+                        in_pack_leader = False
+                    continue
+
+                if in_pack_leader and "=" in stripped:
+                    key = stripped.split("=")[0].strip()
+                    if key == "max_parallelism":
+                        max_parallelism_idx = i
+                        break  # Found the key we need to update
+
+        # Build new lines
+        new_lines = lines.copy() if lines else []
+
+        if pack_leader_idx is None:
+            # No [pack_leader] section exists, append it
+            if new_lines and not new_lines[-1].endswith("\n"):
+                new_lines.append("\n")
+            new_lines.append("[pack_leader]\n")
+            new_lines.append(f"max_parallelism = {value}\n")
+        elif max_parallelism_idx is not None:
+            # Update existing max_parallelism line
+            new_lines[max_parallelism_idx] = f"max_parallelism = {value}\n"
+        else:
+            # Section exists but no max_parallelism key, insert after section header
+            insert_idx = pack_leader_idx + 1
+            new_lines.insert(insert_idx, f"max_parallelism = {value}\n")
+
+        # Write atomically
+        tmp_path = _CONFIG_PATH.with_suffix(".tmp")
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            fh.writelines(new_lines)
+        os.replace(tmp_path, _CONFIG_PATH)
+
+        # Invalidate cache so next read picks up the new value
+        _cached_config = None
+        return True
+
+    except Exception as exc:
+        logger.warning(
+            "pack_parallelism: failed to write config %s: %s", _CONFIG_PATH, exc
+        )
+        return False
+
+
 def _effective_max() -> int:
     """Return the currently active max (session override > config file > builtin default)."""
     if _session_max is not None:
@@ -178,6 +256,26 @@ def _prompt_addition() -> str | None:
 
 
 register_callback("load_prompt", _prompt_addition)
+
+
+# ---------------------------------------------------------------------------
+# startup hook — display pack-parallel value on startup
+# ---------------------------------------------------------------------------
+
+
+def _on_startup():
+    """Display current pack-parallel limit on startup."""
+    try:
+        from code_puppy.messaging import emit_info
+    except ImportError:
+        emit_info = print  # type: ignore[assignment]
+
+    max_p = _effective_max()
+    source = "config" if _session_max is None else "session"
+    emit_info(f"🐺 Pack parallelism limit: {max_p} (from {source})")
+
+
+register_callback("startup", _on_startup)
 
 
 # ---------------------------------------------------------------------------
@@ -228,8 +326,8 @@ def _invalidate_agent_caches(previous_val: int | None, new_val: int) -> None:
 
 
 def _handle_command(command: str, name: str):
-    """Handle /pack-parallel [N|status|reset] slash command."""
-    global _session_max
+    """Handle /pack-parallel [N|status|reset|--session] slash command."""
+    global _session_max, _cached_config
 
     if name not in _COMMAND_NAMES:
         return None  # not ours
@@ -254,7 +352,8 @@ def _handle_command(command: str, name: str):
         emit_info(
             f"🐺 Pack Leader max parallelism: **{current}** (from {source})\n"
             f"   Config file default: {config_val}\n"
-            f"   Usage: /pack-parallel <N>  (e.g. /pack-parallel 4)\n"
+            f"   Usage: /pack-parallel <N>          (saves as default)\n"
+            f"          /pack-parallel <N> --session (this session only)\n"
             f"          /pack-parallel status\n"
             f"          /pack-parallel reset"
         )
@@ -306,9 +405,37 @@ def _handle_command(command: str, name: str):
         emit_info(f"⚠️ /pack-parallel: {new_val} is very high, capping at 32")
         new_val = 32
 
-    # Remember previous value for optimization
-    previous_val = _session_max
-    _session_max = new_val
+    # Check for --session flag and reject unknown args
+    extras = set(parts[2:])
+    unknown = extras - {"--session"}
+    if unknown:
+        emit_error(
+            f"pack-parallel: unknown argument(s): {', '.join(sorted(unknown))}. "
+            f"Did you mean --session?"
+        )
+        return True
+    session_only = "--session" in extras
+
+    # Remember previous value for cache invalidation optimization
+    previous_val = _effective_max()
+
+    if session_only:
+        # Session-only mode: don't write to disk
+        _session_max = new_val
+        source_msg = "(session only — will reset on restart)"
+        saved_path_msg = ""
+    else:
+        # Default: persist to config file
+        if _write_config_max(new_val):
+            _cached_config = new_val  # Update cache directly
+            _session_max = None  # Clear session override so config takes effect
+            source_msg = "(saved as default)"
+            saved_path_msg = f"\n   Saved to {_CONFIG_PATH}"
+        else:
+            # Persistence failed — fall back to session-only
+            _session_max = new_val
+            source_msg = "(session only — failed to save to disk)"
+            saved_path_msg = f"\n   ⚠️ Could not write to {_CONFIG_PATH}"
 
     # Invalidate agent caches so the new value is reflected in prompts
     _invalidate_agent_caches(previous_val, new_val)
@@ -329,11 +456,9 @@ def _handle_command(command: str, name: str):
         effective = new_val
 
     emit_info(
-        f"🐺 Pack Leader max parallelism → **{new_val}** (session only)\n"
-        f"   Runtime limiter: effective={effective}, active={active}\n"
-        f"   To make this permanent, edit {_CONFIG_PATH}:\n"
-        f"   [pack_leader]\n"
-        f"   max_parallelism = {new_val}"
+        f"🐺 Pack Leader max parallelism → **{new_val}** {source_msg}\n"
+        f"   Runtime limiter: effective={effective}, active={active}"
+        f"{saved_path_msg}"
     )
     return True
 
@@ -352,7 +477,7 @@ def _command_help() -> list[tuple[str, str]]:
         (
             "pack-parallel",
             f"Get/set Pack Leader max parallel agents (current: {max_p}). "
-            f"Usage: /pack-parallel N | status | reset",
+            f"Usage: /pack-parallel N [--session] | status | reset",
         ),
         ("pack-par", "Alias for /pack-parallel"),
         ("pack-parallel status", "Show RunLimiter active/waiting counts"),
