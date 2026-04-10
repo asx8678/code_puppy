@@ -1,3 +1,4 @@
+from dataclasses import FrozenInstanceError
 """Tests for typed PuppyConfig settings.
 
 These tests verify the behavior of the typed configuration layer,
@@ -548,8 +549,6 @@ class TestConcurrencyFields:
         and not fall through to legacy config.
         """
         # Import the legacy config to monkeypatch it
-        from code_puppy.config_package.loader import _get_legacy_config
-
         # Set explicit env value that equals the hardcoded default (600.0)
         monkeypatch.setenv("PUPPY_RUN_WAIT_TIMEOUT", "600.0")
 
@@ -714,5 +713,3 @@ class TestSummarizationFields:
         assert cfg.compaction_threshold == 0.90
 
 
-# Import needed for immutability tests
-from dataclasses import FrozenInstanceError

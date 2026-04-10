@@ -9,7 +9,6 @@ Opt-in via config key `summarization_history_offload_enabled` (default: False).
 from __future__ import annotations
 
 import logging
-import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path

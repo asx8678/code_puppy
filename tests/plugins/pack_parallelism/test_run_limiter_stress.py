@@ -9,7 +9,6 @@ These tests cover:
 
 import asyncio
 import threading
-from unittest.mock import patch
 
 import pytest
 
@@ -48,8 +47,6 @@ class TestInflightWaiters:
         they should still get a slot when capacity becomes available,
         not be silently forgotten.
         """
-        from code_puppy.plugins.pack_parallelism.run_limiter import _set_reentrancy_depth
-
         limiter = RunLimiter(RunLimiterConfig(max_concurrent_runs=2))
 
         # Use fully independent tasks (they get fresh context)
@@ -397,8 +394,6 @@ class TestDeficitInvariants:
         # Shrink to 2
         old_limit = 5
         new_limit = 2
-        excess = old_limit - new_limit  # 3
-
         limiter.update_config(RunLimiterConfig(max_concurrent_runs=new_limit))
 
         # After shrink:

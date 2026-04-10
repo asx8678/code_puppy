@@ -120,7 +120,7 @@ class TestLLMJudgeSatisfactionChecker:
 
         with caplog.at_level(logging.WARNING):
             checker = LLMJudgeSatisfactionChecker()
-            r = checker.is_satisfied(json.dumps({"verdict": "approved"}))
+            checker.is_satisfied(json.dumps({"verdict": "approved"}))
 
         # Warning should be logged on first use
         assert "LLMJudgeSatisfactionChecker is a stub" in caplog.text

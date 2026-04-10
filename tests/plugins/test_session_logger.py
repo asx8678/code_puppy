@@ -924,7 +924,7 @@ class TestSessionLoggerAsyncNonBlocking:
 
         # Run 5 tool calls concurrently
         start = time.monotonic()
-        results = await asyncio.gather(*[simulate_tool_call(i) for i in range(5)])
+        await asyncio.gather(*[simulate_tool_call(i) for i in range(5)])
         total_elapsed = time.monotonic() - start
 
         # Total time should be much less than sequential (5 * ~0.1s = 0.5s)
