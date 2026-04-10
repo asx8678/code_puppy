@@ -51,30 +51,28 @@ class TrackedSemaphore:
     def __init__(self, value: int):
         self._semaphore = asyncio.Semaphore(value)
         self._initial_value = value
-        # Use a lock to ensure thread-safe counter updates
-        self._lock = asyncio.Lock()
+        # Thread-safe counter for monitoring (works in both sync and async contexts)
+        self._counter_lock = threading.Lock()
         self._available = value
     
     async def acquire(self) -> None:
         """Acquire a slot from the semaphore."""
         await self._semaphore.acquire()
-        async with self._lock:
+        with self._counter_lock:
             self._available -= 1
     
     def release(self) -> None:
         """Release a slot back to the semaphore."""
         self._semaphore.release()
-        # Use asyncio.run_coroutine_threadsafe or direct update if in async context
-        # For simplicity, we update the counter directly since it's only used for
-        # monitoring and doesn't need to be 100% precise
-        self._available = min(self._available + 1, self._initial_value)
+        with self._counter_lock:
+            self._available = min(self._available + 1, self._initial_value)
     
     @property
     def value(self) -> int:
-        """Get the current approximate number of available slots.
+        """Get the current number of available slots.
         
-        This is an approximation for monitoring purposes. The actual
-        semaphore value is managed internally by asyncio.Semaphore.
+        Thread-safe. The actual semaphore value is managed
+        internally by asyncio.Semaphore.
         """
         return max(0, self._available)
     
@@ -295,7 +293,6 @@ def reload_concurrency_config() -> None:
         _api_calls_semaphore, \
         _tool_calls_semaphore
 
-    global _cached_config
     _cached_config = None
     _file_ops_semaphore = None
     _api_calls_semaphore = None

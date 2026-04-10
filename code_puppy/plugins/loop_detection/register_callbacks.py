@@ -22,8 +22,9 @@ import json
 import logging
 import threading
 from collections import defaultdict, deque
-from functools import lru_cache
 from typing import Any
+
+import time
 
 from code_puppy.callbacks import register_callback
 from code_puppy.config import get_value
@@ -44,54 +45,95 @@ _lock = threading.Lock()
 _session_history: dict[str, deque[str]] = defaultdict(lambda: deque(maxlen=_DEFAULT_HISTORY_SIZE))
 _session_warned: dict[str, set[str]] = defaultdict(set)
 
+# TTL-based config cache — re-reads config every _CONFIG_TTL seconds
+_CONFIG_TTL = 5.0  # seconds
+_config_cache: dict[str, Any] = {}
+_config_cache_time: float = 0.0
 
-@lru_cache(maxsize=1)
+
+def _invalidate_config_cache() -> None:
+    """Invalidate the config cache, forcing a re-read on next access."""
+    global _config_cache_time
+    _config_cache_time = 0.0
+
+
 def _get_exempt_tools() -> frozenset[str]:
-    """Read exempt tools from puppy.cfg.
+    """Read exempt tools from puppy.cfg (cached with TTL).
 
     Returns:
         Set of tool names that are allowed to repeat without triggering loop detection.
     """
+    global _config_cache, _config_cache_time
+    now = time.monotonic()
+    if now - _config_cache_time < _CONFIG_TTL and "exempt_tools" in _config_cache:
+        return _config_cache["exempt_tools"]
+
     try:
         exempt_str = get_value("loop_detection_exempt_tools")
         if exempt_str:
             tools = {t.strip() for t in exempt_str.split(",") if t.strip()}
-            return frozenset(tools)
+            result = frozenset(tools)
+        else:
+            result = _DEFAULT_EXEMPT_TOOLS
     except Exception as exc:
-        logger.debug(f"Failed to read loop_detection_exempt_tools config: {exc}")
-    return _DEFAULT_EXEMPT_TOOLS
+        logger.debug("Failed to read loop_detection_exempt_tools config: %s", exc)
+        result = _DEFAULT_EXEMPT_TOOLS
+
+    _config_cache["exempt_tools"] = result
+    _config_cache_time = now
+    return result
 
 
-@lru_cache(maxsize=1)
 def _get_warn_threshold() -> int:
-    """Read warn threshold from puppy.cfg.
+    """Read warn threshold from puppy.cfg (cached with TTL).
 
     Returns:
         Number of identical tool calls before injecting a warning.
     """
+    global _config_cache, _config_cache_time
+    now = time.monotonic()
+    if now - _config_cache_time < _CONFIG_TTL and "warn_threshold" in _config_cache:
+        return _config_cache["warn_threshold"]
+
     try:
         val = get_value("loop_detection_warn")
         if val:
-            return max(1, int(val))
+            result = max(1, int(val))
+        else:
+            result = _DEFAULT_WARN_THRESHOLD
     except (ValueError, TypeError) as exc:
-        logger.debug(f"Invalid loop_detection_warn config: {exc}")
-    return _DEFAULT_WARN_THRESHOLD
+        logger.debug("Invalid loop_detection_warn config: %s", exc)
+        result = _DEFAULT_WARN_THRESHOLD
+
+    _config_cache["warn_threshold"] = result
+    _config_cache_time = now
+    return result
 
 
-@lru_cache(maxsize=1)
 def _get_hard_threshold() -> int:
-    """Read hard/stop threshold from puppy.cfg.
+    """Read hard/stop threshold from puppy.cfg (cached with TTL).
 
     Returns:
         Number of identical tool calls before blocking the tool.
     """
+    global _config_cache, _config_cache_time
+    now = time.monotonic()
+    if now - _config_cache_time < _CONFIG_TTL and "hard_threshold" in _config_cache:
+        return _config_cache["hard_threshold"]
+
     try:
         val = get_value("loop_detection_stop")
         if val:
-            return max(1, int(val))
+            result = max(1, int(val))
+        else:
+            result = _DEFAULT_HARD_THRESHOLD
     except (ValueError, TypeError) as exc:
-        logger.debug(f"Invalid loop_detection_stop config: {exc}")
-    return _DEFAULT_HARD_THRESHOLD
+        logger.debug("Invalid loop_detection_stop config: %s", exc)
+        result = _DEFAULT_HARD_THRESHOLD
+
+    _config_cache["hard_threshold"] = result
+    _config_cache_time = now
+    return result
 
 
 def _normalize_tool_args(tool_args: Any) -> dict[str, Any]:
@@ -400,7 +442,7 @@ async def _on_post_tool_call(
         try:
             emit_warning(warning_text)
         except Exception as exc:
-            logger.debug(f"Failed to emit loop warning: {exc}")
+            logger.debug("Failed to emit loop warning: %s", exc)
 
 
 def reset_loop_detection(session_id: str | None = None) -> None:
@@ -416,7 +458,7 @@ def reset_loop_detection(session_id: str | None = None) -> None:
         if session_id:
             _session_history.pop(session_id, None)
             _session_warned.pop(session_id, None)
-            logger.debug(f"Reset loop detection for session {session_id}")
+            logger.debug("Reset loop detection for session %s", session_id)
         else:
             _session_history.clear()
             _session_warned.clear()

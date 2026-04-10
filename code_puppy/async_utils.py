@@ -103,22 +103,22 @@ def _shutdown_executor() -> None:
         _executor = None
 
 
-# Register cleanup at exit to ensure proper executor shutdown
-atexit.register(_shutdown_executor)
-
-
 def _register_shutdown_callback() -> None:
-    """Register executor shutdown with the callbacks system if available."""
+    """Register executor shutdown with the app lifecycle system.
+
+    Prefers the callbacks system for proper ordering during graceful shutdown.
+    Falls back to atexit if the callbacks system is unavailable.
+    """
     try:
         from code_puppy.callbacks import register_callback
 
         register_callback("shutdown", _shutdown_executor)
     except ImportError:
-        # Callbacks system not available, atexit registration is sufficient
-        pass
+        # Callbacks system not available — fall back to atexit
+        atexit.register(_shutdown_executor)
 
 
-# Register with callbacks system for proper app lifecycle integration
+# Register with callbacks system (or atexit as fallback)
 _register_shutdown_callback()
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from code_puppy import callbacks as callbacks_module
+from code_puppy.permission_decision import Deny
 from code_puppy.plugins.tool_allowlist.register_callbacks import (
     _get_allowlist,
     _get_denylist,
@@ -120,7 +121,7 @@ class TestOnPreToolCall:
         assert result is None
 
     def test_tool_not_in_allowlist_returns_blocked(self, monkeypatch):
-        """Tool not in allowlist -> returns blocked dict."""
+        """Tool not in allowlist -> returns Deny."""
         monkeypatch.setattr(
             "code_puppy.plugins.tool_allowlist.register_callbacks._get_allowlist",
             lambda: {"read_file"},
@@ -132,12 +133,12 @@ class TestOnPreToolCall:
 
         result = _on_pre_tool_call("grep", {})
         assert result is not None
-        assert result["blocked"] is True
-        assert "not in the allowlist" in result["reason"]
-        assert "grep" in result["error_message"]
+        assert isinstance(result, Deny)
+        assert "not in the allowlist" in result.reason
+        assert "grep" in result.user_feedback
 
     def test_tool_in_denylist_returns_blocked(self, monkeypatch):
-        """Tool in denylist -> returns blocked dict."""
+        """Tool in denylist -> returns Deny."""
         monkeypatch.setattr(
             "code_puppy.plugins.tool_allowlist.register_callbacks._get_allowlist",
             lambda: set(),
@@ -149,8 +150,8 @@ class TestOnPreToolCall:
 
         result = _on_pre_tool_call("agent_run_shell_command", {})
         assert result is not None
-        assert result["blocked"] is True
-        assert "in the denylist" in result["reason"]
+        assert isinstance(result, Deny)
+        assert "in the denylist" in result.reason
 
     def test_tool_not_in_denylist_returns_none(self, monkeypatch):
         """Tool not in denylist -> returns None (allow)."""
@@ -179,8 +180,8 @@ class TestOnPreToolCall:
 
         result = _on_pre_tool_call("dangerous_tool", {})
         assert result is not None
-        assert result["blocked"] is True
-        assert "in the denylist" in result["reason"]
+        assert isinstance(result, Deny)
+        assert "in the denylist" in result.reason
 
 
 class TestConfigIntegration:

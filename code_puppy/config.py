@@ -12,6 +12,64 @@ from typing import Callable
 from code_puppy.session_storage import save_session_async
 from code_puppy import runtime_state
 
+# Public API exports
+__all__ = [
+    # Path constants
+    "STATE_DIR",
+    "CONFIG_DIR",
+    "CACHE_DIR",
+    "AUTOSAVE_DIR",
+    "EXTRA_MODELS_FILE",
+    # Core config access
+    "get_value",
+    "set_value",
+    "get_config_keys",
+    "set_config_value",
+    # Model management
+    "set_model_name",
+    "get_global_model_name",
+    "get_all_model_settings",
+    "model_supports_setting",
+    "set_model_setting",
+    # OpenAI reasoning/verbosity
+    "get_openai_reasoning_effort",
+    "set_openai_reasoning_effort",
+    "get_openai_reasoning_summary",
+    "set_openai_reasoning_summary",
+    "get_openai_verbosity",
+    "set_openai_verbosity",
+    # Agent pinned models
+    "get_agent_pinned_model",
+    "set_agent_pinned_model",
+    "clear_agent_pinned_model",
+    "get_agents_pinned_to_model",
+    "get_all_agent_pinned_models",
+    # Feature toggles
+    "get_use_dbos",
+    "get_yolo_mode",
+    "get_auto_save_session",
+    # Personalization
+    "get_puppy_name",
+    "get_owner_name",
+    "get_default_agent",
+    # Session/compaction
+    "get_resume_message_count",
+    "get_compaction_threshold",
+    "get_compaction_strategy",
+    "get_protected_token_count",
+    # Temperature
+    "get_temperature",
+    "get_effective_temperature",
+    # UI colors
+    "set_diff_addition_color",
+    "set_diff_deletion_color",
+    "set_banner_color",
+    # Agents directory
+    "get_user_agents_directory",
+    # Environment
+    "load_api_keys_to_environment",
+]
+
 # Compiled regex for _sanitize_model_name_for_key - single pass replacement
 _SANITIZE_MODEL_NAME_RE = re.compile(r"[.\-/]")
 
@@ -2272,6 +2330,9 @@ def get_ws_history_ttl_seconds() -> int:
 
 
 # --- AGENT MEMORY CONFIGURATION ---
+
+# DEPRECATED(audit-2026): Use memory_enabled instead. This getter exists
+# for backward compatibility with existing puppy.cfg files.
 def get_enable_agent_memory() -> bool:
     """Return True if agent memory is enabled (default False).
 

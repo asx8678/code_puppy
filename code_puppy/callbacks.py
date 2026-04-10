@@ -14,6 +14,50 @@ from code_puppy.run_context import (
     create_root_run_context,
 )
 
+__all__ = [
+    # Registration API
+    "register_callback",
+    "unregister_callback",
+    "clear_callbacks",
+    "get_callbacks",
+    "count_callbacks",
+    # Trigger functions (used by core and plugins)
+    "on_startup",
+    "on_shutdown",
+    "on_invoke_agent",
+    "on_agent_exception",
+    "on_version_check",
+    "on_load_model_config",
+    "on_load_models_config",
+    "on_edit_file",
+    "on_create_file",
+    "on_replace_in_file",
+    "on_delete_snippet",
+    "on_delete_file",
+    "on_run_shell_command",
+    "on_agent_run_start",
+    "on_agent_run_end",
+    "on_pre_tool_call",
+    "on_post_tool_call",
+    "on_register_tools",
+    "on_register_agents",
+    "on_register_model_type",
+    "on_file_permission",
+    "on_file_permission_async",
+    "on_register_mcp_catalog_servers",
+    "on_register_browser_types",
+    "on_get_motd",
+    "on_register_model_providers",
+    "on_stream_event",
+    "on_custom_command",
+    "on_custom_command_help",
+    "on_get_model_system_prompt",
+    "on_load_prompt",
+    # Backlog management
+    "drain_backlog",
+    "drain_all_backlogs",
+]
+
 # Sentinel value to distinguish callback failures from None returns
 _CALLBACK_FAILED = object()
 """Sentinel returned by callbacks when they fail with an exception."""
@@ -380,13 +424,16 @@ async def on_agent_exception(exception: Exception, *args, **kwargs) -> list[Any]
 
 
 async def on_version_check(*args, **kwargs) -> list[Any]:
+    # TODO(audit-2026): No plugin implements version_check. Consider removal or implementation.
     return await _trigger_callbacks("version_check", *args, **kwargs)
 
 
+# Extension point: plugin-provided model config patches (no default handler required)
 def on_load_model_config(*args, **kwargs) -> list[Any]:
     return _trigger_callbacks_sync("load_model_config", *args, **kwargs)
 
 
+# Extension point: plugin-provided model configurations (no default handler required)
 def on_load_models_config() -> list[Any]:
     """Trigger callbacks to load additional model configurations.
 
@@ -400,6 +447,8 @@ def on_load_models_config() -> list[Any]:
     return _trigger_callbacks_sync("load_models_config")
 
 
+# Extension points: file mutation observers (no default handler required).
+# Plugins can register for these hooks to observe file changes.
 def on_edit_file(*args, **kwargs) -> Any:
     return _trigger_callbacks_sync("edit_file", *args, **kwargs)
 
@@ -797,6 +846,7 @@ def on_register_tools() -> list[dict[str, Any]]:
     return _trigger_callbacks_sync("register_tools")
 
 
+# Extension point: plugin-provided agent catalogue entries (no default handler required)
 def on_register_agents() -> list[dict[str, Any]]:
     """Collect custom agent registrations from plugins.
 
@@ -1005,6 +1055,7 @@ async def on_agent_run_end(
     )
 
 
+# Extension point: no default handler required
 def on_register_mcp_catalog_servers() -> list[Any]:
     """Trigger callbacks to register additional MCP catalog servers.
 
@@ -1017,6 +1068,7 @@ def on_register_mcp_catalog_servers() -> list[Any]:
     return _trigger_callbacks_sync("register_mcp_catalog_servers")
 
 
+# Extension point: no default handler required
 def on_register_browser_types() -> list[Any]:
     """Trigger callbacks to register custom browser types/providers.
 
@@ -1042,6 +1094,7 @@ def on_register_browser_types() -> list[Any]:
     return _trigger_callbacks_sync("register_browser_types")
 
 
+# Extension point: no default handler required
 def on_get_motd() -> list[Any]:
     """Trigger callbacks to get custom MOTD content.
 
@@ -1054,6 +1107,7 @@ def on_get_motd() -> list[Any]:
     return _trigger_callbacks_sync("get_motd")
 
 
+# Extension point: no default handler required
 def on_register_model_providers() -> list[Any]:
     """Trigger callbacks to register custom model provider classes.
 

@@ -22,6 +22,7 @@ from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.config import get_value
+from code_puppy.permission_decision import Deny
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +128,7 @@ def _is_tool_allowed(
 
 def _on_pre_tool_call(
     tool_name: str, tool_args: dict[str, Any], context: Any = None
-) -> dict[str, Any] | None:
+) -> Deny | None:
     """Pre-tool-call callback to enforce allowlist/denylist restrictions.
 
     Args:
@@ -137,7 +138,7 @@ def _on_pre_tool_call(
 
     Returns:
         None if the tool is allowed to proceed.
-        Dict with {"blocked": True, ...} if the tool should be denied.
+        Deny object if the tool should be denied.
     """
     allowlist = _get_allowlist()
     denylist = _get_denylist()
@@ -150,19 +151,18 @@ def _on_pre_tool_call(
     if not allowlist and not denylist:
         if default_policy == "deny":
             reason = f"Tool '{tool_name}' blocked by default policy (no allowlist configured)"
-            logger.warning(f"Tool blocked: {reason}")
-            return {
-                "blocked": True,
-                "reason": reason,
-                "error_message": f"🚫 Tool blocked: {reason}",
-            }
+            logger.warning("Tool blocked: %s", reason)
+            return Deny(
+                reason=reason,
+                user_feedback=f"🚫 Tool blocked: {reason}",
+            )
         # 'allow' and 'audit' policies permit tools when no restrictions configured
         if default_policy == "audit":
-            logger.info(f"Tool audit (allowed): {tool_name}")
+            logger.info("Tool audit (allowed): %s", tool_name)
         return None
 
     if _is_tool_allowed(tool_name, allowlist, denylist, default_policy):
-        logger.info(f"Tool allowed: {tool_name}")
+        logger.info("Tool allowed: %s", tool_name)
         return None
 
     # Tool is blocked - determine reason
@@ -174,13 +174,12 @@ def _on_pre_tool_call(
     else:
         reason = f"Tool '{tool_name}' is blocked by policy"
 
-    logger.warning(f"Tool blocked: {reason}")
+    logger.warning("Tool blocked: %s", reason)
 
-    return {
-        "blocked": True,
-        "reason": reason,
-        "error_message": f"🚫 Tool blocked: {reason}",
-    }
+    return Deny(
+        reason=reason,
+        user_feedback=f"🚫 Tool blocked: {reason}",
+    )
 
 
 def _audit_log_tool_call(

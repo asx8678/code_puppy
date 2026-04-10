@@ -57,10 +57,8 @@ def _get_plugin_module(fresh: bool = False) -> ModuleType:
 
 
 def _clear_config_cache(module):
-    """Clear the lru_cache on config functions."""
-    module._get_exempt_tools.cache_clear()
-    module._get_warn_threshold.cache_clear()
-    module._get_hard_threshold.cache_clear()
+    """Clear the TTL config cache."""
+    module._invalidate_config_cache()
 
 
 class TestHashToolCalls:

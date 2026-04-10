@@ -150,6 +150,7 @@ class PuppyConfig:
     rust_autobuild_disabled: bool
     enable_dbos: bool
     enable_streaming: bool
+    # DEPRECATED(audit-2026): Legacy config key, use memory_enabled instead
     enable_agent_memory: bool
 
     # ─────────────────────────────────────────────────────────────

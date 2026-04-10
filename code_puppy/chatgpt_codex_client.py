@@ -142,8 +142,8 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
             content = request.content
             if content:
                 return content
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Could not read request.content: %s", exc)
 
         # Fallback to private attr if necessary - use getattr with exception handling
         # to gracefully handle property access failures (hasattr can raise if property raises)
@@ -151,8 +151,8 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
             content = getattr(request, "_content", None)
             if content is not None:
                 return content
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Fallback _content access failed: %s", exc)
 
         return None
 
@@ -165,7 +165,8 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         """
         try:
             data = json.loads(body.decode("utf-8"))
-        except Exception:
+        except Exception as exc:
+            logger.debug("Body decode failed in codex injection: %s", exc)
             return None, False
 
         if not isinstance(data, dict):

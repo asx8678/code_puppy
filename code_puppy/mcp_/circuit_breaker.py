@@ -16,8 +16,9 @@ import time
 from enum import Enum
 from typing import Any, Callable
 
-logger = logging.getLogger(__name__)
+from code_puppy.circuit_state import CircuitState
 
+logger = logging.getLogger(__name__)
 
 # Cache for coroutine function checks (avoids repeated introspection on hot paths)
 @functools.lru_cache(maxsize=128)
@@ -25,13 +26,6 @@ def _is_coro_func(func: Callable) -> bool:
     """Cached check if a function is a coroutine function."""
     return inspect.iscoroutinefunction(func)
 
-
-class CircuitState(Enum):
-    """Circuit breaker states."""
-
-    CLOSED = "closed"  # Normal operation
-    OPEN = "open"  # Blocking calls
-    HALF_OPEN = "half_open"  # Testing recovery
 
 
 class CircuitOpenError(Exception):

@@ -559,13 +559,21 @@ class HealthMonitor:
         await self.close()
 
     def __del__(self) -> None:
-        """Warn if there are still running monitoring tasks on garbage collection."""
-        if self.monitoring_tasks:
-            logger.warning(
-                f"HealthMonitor garbage collected with {len(self.monitoring_tasks)} "
-                f"active monitoring tasks. Use 'async with' or call close() to "
-                f"prevent orphaned tasks."
-            )
+        """Warn if there are still running monitoring tasks on garbage collection.
+
+        NOTE(audit-2026): Guarded against interpreter shutdown where logger
+        or self.monitoring_tasks may already be torn down. Prefer using
+        'async with' or calling close() for deterministic cleanup.
+        """
+        try:
+            if getattr(self, "monitoring_tasks", None):
+                logger.warning(
+                    "HealthMonitor garbage collected with %d active monitoring tasks. "
+                    "Use 'async with' or call close() to prevent orphaned tasks.",
+                    len(self.monitoring_tasks),
+                )
+        except Exception:
+            pass  # Interpreter shutting down — nothing we can do
 
     async def shutdown(self) -> None:
         """

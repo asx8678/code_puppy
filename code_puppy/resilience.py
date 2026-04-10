@@ -16,10 +16,10 @@ import random
 import time
 import warnings
 from dataclasses import dataclass, field
-from enum import Enum, auto
 from typing import Any, Callable, Generic, ParamSpec, TypeVar
 
 from code_puppy.async_utils import run_async_sync
+from code_puppy.circuit_state import CircuitState
 
 logger = logging.getLogger(__name__)
 
@@ -107,14 +107,6 @@ def _is_terminal_quota_error(exc: BaseException) -> bool:
             return True
 
     return False
-
-
-class CircuitState(Enum):
-    """Circuit breaker states."""
-
-    CLOSED = auto()  # Normal operation
-    OPEN = auto()  # Failing, reject calls
-    HALF_OPEN = auto()  # Testing if service recovered
 
 
 @dataclass

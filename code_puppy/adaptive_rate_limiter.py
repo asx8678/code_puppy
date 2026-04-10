@@ -20,7 +20,6 @@ instance, matching the pattern used by ``concurrency_limits.py``.
 from __future__ import annotations
 
 import asyncio
-import enum
 import functools
 import logging
 import math
@@ -28,17 +27,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from code_puppy.circuit_state import CircuitState
+
 logger = logging.getLogger(__name__)
-
-# ── Circuit state ───────────────────────────────────────────────────────────
-
-
-class CircuitState(enum.Enum):
-    """States of the per-model circuit breaker."""
-
-    CLOSED = "closed"
-    OPEN = "open"
-    HALF_OPEN = "half_open"
 
 
 # ── Tunable defaults ────────────────────────────────────────────────────────

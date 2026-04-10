@@ -395,6 +395,9 @@ def _get_shell_executor() -> ThreadPoolExecutor:
                     thread_name_prefix="shell_cmd_",
                 )
                 if _HAS_ATEXIT and atexit:
+                    # NOTE(audit-2026): wait=False is intentional — avoid blocking
+                    # app exit. Orphaned subprocesses are an accepted trade-off
+                    # vs. hanging on a long-running command at shutdown.
                     atexit.register(_SHELL_EXECUTOR.shutdown, wait=False)
     return _SHELL_EXECUTOR
 

@@ -757,9 +757,13 @@ class TestHealthMonitorContextManager:
             # Manually trigger __del__ while tasks are running
             health_monitor.__del__()
             mock_logger.warning.assert_called_once()
-            warning_message = mock_logger.warning.call_args[0][0]
-            assert "HealthMonitor garbage collected" in warning_message
-            assert "1 active monitoring tasks" in warning_message
+            # With lazy % formatting, check format string and args separately
+            call_args = mock_logger.warning.call_args
+            warning_format = call_args[0][0]
+            warning_args = call_args[0][1:]
+            assert "HealthMonitor garbage collected" in warning_format
+            assert "%d active monitoring tasks" in warning_format
+            assert warning_args == (1,)  # One active monitoring task
         
         # Clean up
         await health_monitor.stop_monitoring("test-server")

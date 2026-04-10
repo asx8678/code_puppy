@@ -87,7 +87,6 @@ from code_puppy.tools.file_modifications import (
     register_create_file,
     register_delete_file,
     register_delete_snippet,
-    register_edit_file,
     register_replace_in_file,
 )
 from code_puppy.tools.file_operations import (
@@ -124,7 +123,6 @@ TOOL_REGISTRY = {
     "read_file": register_read_file,
     "grep": register_grep,
     # File Modifications
-    "edit_file": register_edit_file,  # DEPRECATED: auto-expanded to create_file, replace_in_file, delete_snippet
     "create_file": register_create_file,
     "replace_in_file": register_replace_in_file,
     "delete_snippet": register_delete_snippet,

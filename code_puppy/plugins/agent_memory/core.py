@@ -89,7 +89,7 @@ def _on_startup() -> None:
     if not _memory_enabled:
         logger.debug(
             "Agent Memory plugin loaded but disabled "
-            "(set enable_agent_memory=true in puppy.cfg to activate)"
+            "(set memory_enabled=true in puppy.cfg to activate)"
         )
         return
 
