@@ -437,7 +437,7 @@ def _handle_save_session_request(msg: dict) -> None:
             return 0
 
         # Save the session
-        metadata = save_session(
+        save_session(
             history=history,
             session_name=session_id,
             base_dir=base_dir,
@@ -487,8 +487,11 @@ def _on_shutdown() -> None:
 
     _bridge_shutdown = True
 
-    # Signal executor to stop (closing client will cause it to wind down)
+    # Join executor thread with timeout to allow in-flight prompts to complete
+    thread = _executor_thread
     _executor_thread = None
+    if thread is not None and thread.is_alive():
+        thread.join(timeout=3.0)
 
     if _client is not None:
         try:

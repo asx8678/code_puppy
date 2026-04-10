@@ -231,8 +231,8 @@ class StatusDisplay:
         - 700ms if there's a loading message displayed
         - 350ms if no message (or very fast operations)
 
-        Note: This is a synchronous method using time.sleep(). If called from
-        async contexts, consider running in a thread or tolerating the brief block.
+        If called from an async event loop, the sleep is skipped to avoid
+        blocking — the min-duration is a UI nicety, not a correctness requirement.
         """
         # Lazy import to avoid circular dependency during module initialization
         from code_puppy.messaging import emit_info
@@ -251,9 +251,15 @@ class StatusDisplay:
                 try:
                     elapsed = time.time() - self.start_time
                     if elapsed < required_min:
-                        # Sleep the residual time synchronously.
-                        # Max sleep is bounded by constants (< 700ms).
-                        time.sleep(required_min - elapsed)
+                        # Only block if we're NOT in an async event loop.
+                        # The min-duration is a UI nicety to prevent flicker;
+                        # blocking the event loop is a worse outcome.
+                        try:
+                            asyncio.get_running_loop()
+                            # Event loop running — skip blocking sleep
+                        except RuntimeError:
+                            # No event loop — safe to block
+                            time.sleep(required_min - elapsed)
                 except Exception:
                     # Defensive: don't let timing issues crash the stop
                     pass

@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 _pending_stream_events: list[tuple[str, Any, Any]] = []
 _STREAM_FLUSH_INTERVAL = 50
 
+# Track active flush tasks to prevent garbage collection and ensure completion
+_active_flush_tasks: set[asyncio.Task] = set()
+
 # Flush text-part delta buffer when it exceeds this many characters.
 # Larger than the TUI's 20-char threshold because terminal ANSI writes
 # benefit from batching; TUI updates a widget which has different perf
@@ -64,7 +67,9 @@ def _fire_stream_event(event_type: str, event_data: Any) -> None:
         ):
             batch = _pending_stream_events.copy()
             _pending_stream_events.clear()
-            asyncio.create_task(_flush_stream_events(batch))
+            task = asyncio.create_task(_flush_stream_events(batch))
+            _active_flush_tasks.add(task)
+            task.add_done_callback(_active_flush_tasks.discard)
     except ImportError:
         logger.debug("callbacks or messaging module not available for stream event")
     except Exception as e:
@@ -90,6 +95,7 @@ async def _drain_pending_stream_events() -> None:
     """Drain any pending stream events before handler exits.
 
     Ensures that any batched events are delivered before the handler completes.
+    Also awaits any in-flight flush tasks to prevent event loss on shutdown.
     """
     global _pending_stream_events
 
@@ -97,6 +103,11 @@ async def _drain_pending_stream_events() -> None:
         batch = _pending_stream_events.copy()
         _pending_stream_events.clear()
         await _flush_stream_events(batch)
+
+    # Await any in-flight flush tasks
+    if _active_flush_tasks:
+        await asyncio.gather(*_active_flush_tasks, return_exceptions=True)
+        _active_flush_tasks.clear()
 
 
 # Module-level console for streaming output

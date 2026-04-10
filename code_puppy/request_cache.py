@@ -13,8 +13,8 @@ Key benefits:
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -418,29 +418,29 @@ class RequestCache:
 
 
 # Global cache instance for reuse across clients
-# Each client type can have its own cache or share this one
 _global_request_cache: RequestCache | None = None
+_global_cache_lock = threading.Lock()
 
 
 def get_global_request_cache() -> RequestCache:
     """Get or create the global request cache.
 
     This shared cache can be used across multiple clients for
-    maximum efficiency. Thread-safe for async usage.
+    maximum efficiency. Thread-safe via double-check locking.
     """
     global _global_request_cache
     if _global_request_cache is None:
-        _global_request_cache = RequestCache()
+        with _global_cache_lock:
+            if _global_request_cache is None:
+                _global_request_cache = RequestCache()
     return _global_request_cache
 
 
 def reset_global_request_cache() -> None:
-    """Reset the global request cache.
-
-    Useful for testing or when you want to clear cached data.
-    """
+    """Reset the global request cache."""
     global _global_request_cache
-    _global_request_cache = None
+    with _global_cache_lock:
+        _global_request_cache = None
 
 
 class RequestCacheMixin:

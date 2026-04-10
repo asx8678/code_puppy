@@ -230,9 +230,9 @@ def _hash_tool_calls(tool_name: str, tool_args: Any) -> str:
     args = _normalize_tool_args(tool_args)
     key = _stable_tool_key(tool_name, args)
 
-    # Create normalized representation
-    normalized = f"{tool_name}:{key}"
-    blob = json.dumps([normalized], sort_keys=True, default=str)
+    # Hash the already-deterministic key directly — _stable_tool_key
+    # returns json.dumps(sort_keys=True) output, no need to re-serialize
+    blob = f"{tool_name}:{key}"
 
     # MD5 truncated to 12 chars is sufficient for loop detection (not for security)
     return hashlib.md5(blob.encode(), usedforsecurity=False).hexdigest()[:12]

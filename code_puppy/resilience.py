@@ -164,18 +164,6 @@ class CircuitBreakerConfig:
     volume_threshold: int = 0
 
 
-@dataclass
-class FallbackConfig(Generic[T]):
-    """Configuration for fallback chain.
-
-    Attributes:
-        fallbacks: List of fallback functions to try in order
-        default_value: Default value if all fallbacks fail
-    """
-
-    fallbacks: list[Callable[P, T]] = field(default_factory=list)
-    default_value: T | None = None
-
 
 class CircuitBreaker:
     """Circuit breaker for preventing cascade failures.
@@ -514,34 +502,32 @@ async def with_fallback(
     fallbacks: list[Callable[[], T]],
     default: T | None = None,
 ) -> T | None:
-    """Try primary function, fall back to alternatives on failure.
+    """Execute primary function with fallback chain.
 
     Args:
-        primary: Primary function to try
-        fallbacks: List of fallback functions to try in order
-        default: Default value if all fail
+        primary: Primary function to execute
+        fallbacks: List of fallback functions to try if primary fails
+        default: Default value to return if all functions fail
 
     Returns:
-        Result from first successful function, or default
+        Result from primary or first successful fallback, or default if all fail
     """
-    functions = [primary] + fallbacks
+    errors: list[Exception] = []
 
-    for i, func in enumerate(functions):
+    for func in [primary, *fallbacks]:
         try:
             result = func()
             if inspect.isawaitable(result):
                 result = await result
-            if i > 0:
-                logger.info(f"Fallback {i} succeeded after primary failed")
             return result
         except Exception as e:
-            func_name = getattr(func, "__name__", repr(func))
-            logger.warning(
-                f"{'Primary' if i == 0 else f'Fallback {i}'} {func_name} failed: {e}"
-            )
+            errors.append(e)
+            logger.warning(f"Function failed, trying fallback: {e}")
             continue
 
+    logger.error(f"All fallback functions failed after {len(errors)} attempts")
     return default
+
 
 
 def retry(

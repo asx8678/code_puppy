@@ -2,6 +2,7 @@ import asyncio
 import atexit
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from typing import List
 
 from pydantic_ai import Agent
 
@@ -15,6 +16,7 @@ _agent_lock = threading.Lock()
 # Safe sync runner for async agent.run calls
 # Avoids "event loop is already running" by offloading to a separate thread loop when needed
 _thread_pool: ThreadPoolExecutor | None = None
+_pool_lock = threading.Lock()
 
 # Reload counter
 _reload_count = 0
@@ -24,17 +26,20 @@ def _ensure_thread_pool():
     global _thread_pool
     # Check if pool is None OR if it's been shutdown
     if _thread_pool is None or _thread_pool._shutdown:
-        _thread_pool = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="summarizer-loop"
-        )
+        with _pool_lock:
+            if _thread_pool is None or _thread_pool._shutdown:
+                _thread_pool = ThreadPoolExecutor(
+                    max_workers=1, thread_name_prefix="summarizer-loop"
+                )
     return _thread_pool
 
 
 def _shutdown_thread_pool():
     global _thread_pool
-    if _thread_pool is not None:
-        _thread_pool.shutdown(wait=False)
-        _thread_pool = None
+    with _pool_lock:
+        if _thread_pool is not None:
+            _thread_pool.shutdown(wait=False)
+            _thread_pool = None
 
 
 atexit.register(_shutdown_thread_pool)
