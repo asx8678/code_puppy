@@ -94,6 +94,48 @@ class TestBuildSupervisorPrompt:
         )
         assert "task" in result
 
+    def test_worker_outputs_wrapped_in_trust_boundary_delimiters(self):
+        """Worker outputs are wrapped in <worker-output> XML-style tags (code_puppy-koy)."""
+        result = build_supervisor_prompt(
+            "do thing",
+            {"agent_a": "output A", "agent_b": "output B"},
+            iteration=1,
+            satisfaction_mode="structured",
+        )
+        # Check for trust-boundary delimiters
+        assert "<worker-output agent='agent_a'>" in result
+        assert "<worker-output agent='agent_b'>" in result
+        assert "</worker-output>" in result
+        assert "output A" in result
+        assert "output B" in result
+
+    def test_untrusted_content_warning_in_prompt(self):
+        """Prompt includes explicit warning about untrusted worker content (code_puppy-koy)."""
+        result = build_supervisor_prompt(
+            "do thing",
+            {"agent_x": "some output"},
+            iteration=1,
+            satisfaction_mode="structured",
+        )
+        # Check for untrusted content warning
+        assert "UNTRUSTED CONTENT" in result
+        assert "NOT from a trusted source" in result
+        assert "may contain errors" in result
+        assert "hallucinations" in result
+
+    def test_empty_worker_output_handled(self):
+        """Empty worker outputs are wrapped in delimiters with (no output) placeholder."""
+        result = build_supervisor_prompt(
+            "task",
+            {"agent_empty": ""},
+            iteration=1,
+            satisfaction_mode="structured",
+        )
+        # Check empty output is wrapped in delimiters
+        assert "<worker-output agent='agent_empty'>" in result
+        assert "(no output)" in result
+        assert "</worker-output>" in result
+
 
 class FakeAgentScript:
     """Helper: a scripted fake invoke_agent that returns predetermined outputs.

@@ -14,9 +14,12 @@ Three strategies are provided:
 
 from __future__ import annotations
 
+import logging
 from typing import Protocol
 
 from code_puppy.plugins.supervisor_review.models import SatisfactionResult
+
+logger = logging.getLogger(__name__)
 
 try:
     from code_puppy.utils.llm_parsing import extract_json_from_text
@@ -233,13 +236,26 @@ class LLMJudgeSatisfactionChecker:
     invoke_agent, which is Round B's responsibility. For now, this checker
     delegates to StructuredSatisfactionChecker with a degraded confidence
     score so it's usable but honest about being a placeholder.
+
+    A warning is logged on first use to make the stub behavior explicit.
     """
+
+    _warning_logged = False  # Class-level flag to warn only once
 
     def __init__(self, judge_agent: str = "shepherd") -> None:
         self.judge_agent = judge_agent
         self._fallback = StructuredSatisfactionChecker()
 
     def is_satisfied(self, supervisor_output: str) -> SatisfactionResult:
+        # Log warning on first use to make stub behavior explicit
+        if not LLMJudgeSatisfactionChecker._warning_logged:
+            logger.warning(
+                "LLMJudgeSatisfactionChecker is a stub and delegates to "
+                "StructuredSatisfactionChecker with degraded confidence. "
+                "Configure a custom judge_agent_fn for full LLM judge functionality."
+            )
+            LLMJudgeSatisfactionChecker._warning_logged = True
+
         result = self._fallback.is_satisfied(supervisor_output)
         # Flag that this was the stubbed path
         return SatisfactionResult(

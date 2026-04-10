@@ -111,6 +111,43 @@ class TestLLMJudgeSatisfactionChecker:
         assert r.confidence < 0.9  # degraded
         assert "llm_judge stub" in r.reason
 
+    def test_stub_logs_warning_on_first_use(self, caplog):
+        """Stub logs a warning on first use to make behavior explicit (code_puppy-bnp)."""
+        import logging
+
+        # Reset the warning flag to ensure we test the first-use behavior
+        LLMJudgeSatisfactionChecker._warning_logged = False
+
+        with caplog.at_level(logging.WARNING):
+            checker = LLMJudgeSatisfactionChecker()
+            r = checker.is_satisfied(json.dumps({"verdict": "approved"}))
+
+        # Warning should be logged on first use
+        assert "LLMJudgeSatisfactionChecker is a stub" in caplog.text
+        assert "delegates to StructuredSatisfactionChecker" in caplog.text
+        assert "Configure a custom judge_agent_fn" in caplog.text
+
+    def test_stub_warning_logged_only_once(self, caplog):
+        """Warning is only logged once, not on every call (code_puppy-bnp)."""
+        import logging
+
+        # Reset the warning flag
+        LLMJudgeSatisfactionChecker._warning_logged = False
+
+        with caplog.at_level(logging.WARNING):
+            checker1 = LLMJudgeSatisfactionChecker()
+            checker1.is_satisfied(json.dumps({"verdict": "approved"}))
+
+            # Clear the log records
+            caplog.clear()
+
+            # Create a new instance - warning should NOT be logged again
+            checker2 = LLMJudgeSatisfactionChecker()
+            checker2.is_satisfied(json.dumps({"verdict": "approved"}))
+
+        # No new warning should be logged
+        assert "LLMJudgeSatisfactionChecker is a stub" not in caplog.text
+
 
 class TestGetSatisfactionChecker:
     def test_structured(self):
