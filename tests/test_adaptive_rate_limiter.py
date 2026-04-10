@@ -490,3 +490,90 @@ class TestHttpUtilsIntegration:
 
         client = RetryingAsyncClient(model_name="GPT-4o")
         assert client.model_name == "gpt-4o"
+
+
+class TestCheckModelSlot:
+    """Tests for the non-consuming check_model_slot() preview."""
+
+    async def test_unknown_model_returns_true(self):
+        """Models with no state are not throttled."""
+        from code_puppy.adaptive_rate_limiter import check_model_slot
+
+        assert check_model_slot("never-seen-model") is True
+
+    async def test_empty_model_returns_true(self):
+        from code_puppy.adaptive_rate_limiter import check_model_slot
+
+        assert check_model_slot("") is True
+
+    async def test_available_slot_returns_true(self):
+        from code_puppy.adaptive_rate_limiter import (
+            acquire_model_slot,
+            check_model_slot,
+            configure,
+            release_model_slot,
+        )
+
+        configure(initial_limit=5)
+        await acquire_model_slot("gpt-4")
+        release_model_slot("gpt-4")
+
+        # State exists, limit=5, active=0 → True
+        assert check_model_slot("gpt-4") is True
+
+    async def test_full_slots_returns_false(self):
+        from code_puppy.adaptive_rate_limiter import (
+            acquire_model_slot,
+            check_model_slot,
+            configure,
+            release_model_slot,
+        )
+
+        configure(initial_limit=1, min_limit=1)
+        await acquire_model_slot("gpt-4")
+
+        # Slot occupied → False
+        assert check_model_slot("gpt-4") is False
+
+        release_model_slot("gpt-4")
+        # Now free again
+        assert check_model_slot("gpt-4") is True
+
+    async def test_open_circuit_returns_false(self):
+        from code_puppy.adaptive_rate_limiter import (
+            check_model_slot,
+            configure,
+            record_rate_limit,
+        )
+
+        configure(circuit_breaker_enabled=True)
+        await record_rate_limit("gpt-4")
+
+        # Circuit opened → False
+        assert check_model_slot("gpt-4") is False
+
+    async def test_does_not_consume_slot(self):
+        """Calling check_model_slot should NOT change active_count."""
+        from code_puppy.adaptive_rate_limiter import (
+            _state,
+            acquire_model_slot,
+            check_model_slot,
+            configure,
+            release_model_slot,
+        )
+
+        configure(initial_limit=2)
+        await acquire_model_slot("gpt-4")
+
+        before = _state.model_states.get("gpt-4")
+        assert before is not None
+        active_before = before.active_count
+
+        # Check should not change active_count
+        check_model_slot("gpt-4")
+        check_model_slot("gpt-4")
+        check_model_slot("gpt-4")
+
+        assert before.active_count == active_before
+
+        release_model_slot("gpt-4")

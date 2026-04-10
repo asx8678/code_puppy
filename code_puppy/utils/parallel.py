@@ -177,3 +177,193 @@ async def map_with_concurrency(
         raise
 
     return ParallelResult(results=results, aborted=_was_aborted)
+
+
+@dataclass
+class BulkheadStats:
+    """Snapshot of bulkhead throughput counters.
+
+    Attributes:
+        active: Currently executing tasks.
+        queued: Tasks waiting in the overflow queue.
+        max_concurrent: Configured concurrency limit.
+        max_queue: Configured queue capacity.
+        completed: Total successful executions since last reset.
+        rejected: Total rejections (queue full) since last reset.
+        timed_out: Total queue-timeout expirations since last reset.
+    """
+
+    active: int
+    queued: int
+    max_concurrent: int
+    max_queue: int
+    completed: int
+    rejected: int
+    timed_out: int
+
+
+class BulkheadFullError(Exception):
+    """Raised when the bulkhead's concurrent slots AND overflow queue are both full."""
+
+    def __init__(self, name: str, max_concurrent: int, max_queue: int) -> None:
+        self.bulkhead_name = name
+        self.max_concurrent = max_concurrent
+        self.max_queue = max_queue
+        super().__init__(
+            f"Bulkhead '{name}' is full "
+            f"(max_concurrent={max_concurrent}, max_queue={max_queue})"
+        )
+
+
+class BulkheadTimeoutError(Exception):
+    """Raised when a queued item exceeds its queue timeout."""
+
+    def __init__(self, name: str, queue_timeout: float) -> None:
+        self.bulkhead_name = name
+        self.queue_timeout = queue_timeout
+        super().__init__(
+            f"Bulkhead '{name}' queue timeout after {queue_timeout}s"
+        )
+
+
+class Bulkhead:
+    """Bounded-concurrency execution gate with overflow queue.
+
+    Limits concurrent task execution to ``max_concurrent``.  When all slots
+    are occupied, new tasks are queued (up to ``max_queue``).  Queued tasks
+    are given a ``queue_timeout`` — if a slot doesn't open in time, a
+    :class:`BulkheadTimeoutError` is raised.
+
+    This is complementary to :func:`map_with_concurrency` (which is
+    batch-oriented).  The Bulkhead is designed for **service-style
+    throttling** where tasks arrive continuously.
+
+    Inspired by ruflo's ``resilience/bulkhead.ts`` — ported to async Python
+    with ``asyncio`` primitives.
+
+    Usage::
+
+        bulkhead = Bulkhead("llm-api", max_concurrent=5, max_queue=20)
+
+        result = await bulkhead.execute(lambda: call_api(prompt))
+
+    Args:
+        name: Identifier for logging and error messages.
+        max_concurrent: Maximum simultaneous executions (default 10).
+        max_queue: Maximum overflow queue depth (default 100).
+        queue_timeout: Seconds before a queued item times out (default 30.0).
+    """
+
+    def __init__(
+        self,
+        name: str,
+        max_concurrent: int = 10,
+        max_queue: int = 100,
+        queue_timeout: float = 30.0,
+    ) -> None:
+        if max_concurrent < 1:
+            raise ValueError(f"max_concurrent must be >= 1, got {max_concurrent}")
+        if max_queue < 0:
+            raise ValueError(f"max_queue must be >= 0, got {max_queue}")
+
+        self.name = name
+        self._max_concurrent = max_concurrent
+        self._max_queue = max_queue
+        self._queue_timeout = queue_timeout
+
+        self._active = 0
+        self._gate = asyncio.Semaphore(max_concurrent)
+        self._queue_depth = 0
+        self._lock = asyncio.Lock()
+
+        # Stats
+        self._completed = 0
+        self._rejected = 0
+        self._timed_out = 0
+
+    async def execute(self, fn: Callable[[], Awaitable[R]]) -> R:
+        """Execute *fn* within the bulkhead's concurrency limits.
+
+        If a slot is immediately available, *fn* runs right away.
+        Otherwise it is queued.  Raises :class:`BulkheadFullError` if
+        the queue is also full, or :class:`BulkheadTimeoutError` if the
+        queue wait exceeds ``queue_timeout``.
+
+        Args:
+            fn: Async callable to execute.
+
+        Returns:
+            The return value of *fn*.
+        """
+        # Fast path: try to acquire without blocking
+        acquired = self._gate._value > 0  # noqa: SLF001 — peek only
+        if not acquired:
+            # Check queue capacity
+            async with self._lock:
+                if self._queue_depth >= self._max_queue:
+                    self._rejected += 1
+                    raise BulkheadFullError(
+                        self.name, self._max_concurrent, self._max_queue
+                    )
+                self._queue_depth += 1
+
+            # Wait for a slot with timeout
+            try:
+                await asyncio.wait_for(
+                    self._gate.acquire(), timeout=self._queue_timeout
+                )
+            except asyncio.TimeoutError:
+                async with self._lock:
+                    self._queue_depth -= 1
+                    self._timed_out += 1
+                raise BulkheadTimeoutError(
+                    self.name, self._queue_timeout
+                ) from None
+            else:
+                async with self._lock:
+                    self._queue_depth -= 1
+        else:
+            await self._gate.acquire()
+
+        # We have a slot — execute
+        async with self._lock:
+            self._active += 1
+        try:
+            return await fn()
+        finally:
+            async with self._lock:
+                self._active -= 1
+                self._completed += 1
+            self._gate.release()
+
+    def has_capacity(self) -> bool:
+        """Return ``True`` if there is room for at least one more task
+        (either a concurrent slot or a queue slot)."""
+        return (
+            self._gate._value > 0  # noqa: SLF001
+            or self._queue_depth < self._max_queue
+        )
+
+    def available_capacity(self) -> int:
+        """Return total available capacity (free slots + free queue space)."""
+        free_slots = self._gate._value  # noqa: SLF001
+        free_queue = self._max_queue - self._queue_depth
+        return free_slots + free_queue
+
+    def get_stats(self) -> BulkheadStats:
+        """Return a snapshot of current bulkhead statistics."""
+        return BulkheadStats(
+            active=self._active,
+            queued=self._queue_depth,
+            max_concurrent=self._max_concurrent,
+            max_queue=self._max_queue,
+            completed=self._completed,
+            rejected=self._rejected,
+            timed_out=self._timed_out,
+        )
+
+    def reset_stats(self) -> None:
+        """Reset throughput counters (completed, rejected, timed_out) to zero."""
+        self._completed = 0
+        self._rejected = 0
+        self._timed_out = 0

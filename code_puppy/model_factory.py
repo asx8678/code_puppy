@@ -76,8 +76,17 @@ def _build_anthropic_beta_header(
 def get_api_key(env_var_name: str) -> str | None:
     """Get an API key from config first, then fall back to environment variable.
 
-    This allows users to set API keys via `/set KIMI_API_KEY=xxx` in addition to
-    setting them as environment variables.
+    Supports shell command resolution: if the config value starts with ``!``,
+    the rest is executed as a shell command and stdout is used as the value.
+    This enables integration with credential managers like 1Password CLI,
+    AWS SSM, HashiCorp Vault, etc.
+
+    Examples::
+
+        # In puppy.cfg or via /set:
+        /set openai_api_key=!op read "OpenAI API Key"
+        /set anthropic_api_key=ANTHROPIC_API_KEY
+        /set custom_key=sk-abc123...
 
     Args:
         env_var_name: The name of the environment variable (e.g., "OPENAI_API_KEY")
@@ -88,7 +97,17 @@ def get_api_key(env_var_name: str) -> str | None:
     # First check config (case-insensitive key lookup)
     config_value = get_value(env_var_name.lower())
     if config_value:
-        return config_value
+        # Support shell command resolution for config values
+        # e.g., "!op read 'OpenAI API Key'" executes and uses stdout
+        try:
+            from code_puppy.utils.config_resolve import resolve_config_value_sync
+
+            resolved = resolve_config_value_sync(config_value)
+            if resolved:
+                return resolved
+        except ImportError:
+            # config_resolve not available — use raw config value
+            return config_value
 
     # Fall back to environment variable
     return os.environ.get(env_var_name)

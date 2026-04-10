@@ -31,13 +31,14 @@ from code_puppy.messaging import (  # New structured messaging types
     get_message_bus,
 )
 from code_puppy.token_utils import estimate_token_count as _etc
-from code_puppy.utils.eol import normalize_eol
+from code_puppy.utils.eol import normalize_eol, strip_bom
 from code_puppy.utils.file_display import (
     format_content_with_line_numbers,
     truncate_with_guidance,
 )
 from code_puppy.utils.gitignore import is_gitignored
 from code_puppy.utils.install_hints import format_missing_tool_message
+from code_puppy.utils.macos_path import resolve_path_with_variants
 
 
 # Pydantic models for tool return types
@@ -696,6 +697,11 @@ def _read_file_sync(
     # SECURITY: Normalize path (validation done in _read_file before thread pool dispatch)
     file_path = os.path.abspath(os.path.expanduser(file_path))
 
+    # Try macOS path variants if file not found (handles screenshot
+    # filenames with NFD encoding, narrow NBSP, curly quotes)
+    if not os.path.exists(file_path):
+        file_path = resolve_path_with_variants(file_path)
+
     if not os.path.exists(file_path):
         error_msg = f"File {file_path} does not exist"
         return "", 0, error_msg
@@ -740,6 +746,10 @@ def _read_file_sync(
             # EOL normalization: CRLF → LF for text files, binary passthrough.
             # Ported from plandex shared/utils.go NormalizeEOL.
             content = normalize_eol(content)
+
+            # BOM stripping: remove invisible BOM that confuses LLMs
+            # (the model should see clean content without encoding markers)
+            content, _ = strip_bom(content)  # Discard BOM on read — LLM shouldn't see it
 
             # Use shared token estimation (content-aware, sampling for large texts)
             num_tokens = _etc(content)

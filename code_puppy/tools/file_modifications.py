@@ -32,6 +32,8 @@ from code_puppy.messaging import (  # Structured messaging types
 )
 from code_puppy.config import get_diff_context_lines, get_post_edit_validation_enabled
 from code_puppy.tools.common import _find_best_window, generate_group_id
+from code_puppy.utils.eol import strip_bom, restore_bom
+from code_puppy.utils.file_mutex import file_lock
 from code_puppy.utils.file_display import safe_write_file
 from code_puppy.utils.whitespace import strip_added_blank_lines
 
@@ -295,6 +297,8 @@ def _delete_snippet_from_file(
             original = f.read()
         # Sanitize any surrogate characters from reading
         original = _sanitize_surrogates(original)
+        # Strip BOM for matching (LLM output never has BOM)
+        original, bom = strip_bom(original)
         if snippet not in original:
             return {
                 "error": f"Snippet not found in file '{file_path}'.",
@@ -314,7 +318,8 @@ def _delete_snippet_from_file(
             )
         )
         # SECURITY FIX (deepagents ADOPT #3): Use O_NOFOLLOW to prevent symlink attacks
-        safe_write_file(file_path, modified, encoding="utf-8")
+        # Restore BOM if the original file had one
+        safe_write_file(file_path, restore_bom(modified, bom), encoding="utf-8")
         return {
             "success": True,
             "path": file_path,
@@ -349,6 +354,8 @@ def _replace_in_file(
 
         # Sanitize any surrogate characters from reading
         original = _sanitize_surrogates(original)
+        # Strip BOM for matching (LLM output never has BOM)
+        original, bom = strip_bom(original)
 
         modified = original
         # Cache splitlines result to avoid repeated calls
@@ -434,7 +441,8 @@ def _replace_in_file(
             )
         )
         # SECURITY FIX (deepagents ADOPT #3): Use O_NOFOLLOW to prevent symlink attacks
-        safe_write_file(file_path, modified, encoding="utf-8")
+        # Restore BOM if the original file had one
+        safe_write_file(file_path, restore_bom(modified, bom), encoding="utf-8")
         return {
             "success": True,
             "path": file_path,
@@ -471,6 +479,8 @@ def _write_to_file(
             with open(file_path, "r", encoding="utf-8", errors="surrogateescape") as f:
                 old_content = f.read()
             old_content = _sanitize_surrogates(old_content)
+            # Preserve BOM from original file for restoration
+            old_content, bom = strip_bom(old_content)
             # Strip surplus blank lines that the LLM may have hallucinated
             content = strip_added_blank_lines(old_content, content)
             old_lines = old_content.splitlines(keepends=True)
@@ -490,7 +500,8 @@ def _write_to_file(
 
         os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
         # SECURITY FIX (deepagents ADOPT #3): Use O_NOFOLLOW to prevent symlink attacks
-        safe_write_file(file_path, content, encoding="utf-8")
+        # Restore BOM if the original file had one (new content from LLM won't have BOM)
+        safe_write_file(file_path, restore_bom(content, bom if exists else ""), encoding="utf-8")
 
         action = "overwritten" if exists else "created"
         return {
@@ -523,13 +534,14 @@ async def delete_snippet_from_file(
     ):
         return _create_rejection_response(file_path)
 
-    res = await asyncio.to_thread(
-        _delete_snippet_from_file,
-        context,
-        file_path,
-        snippet,
-        message_group=message_group,
-    )
+    async with file_lock(file_path):
+        res = await asyncio.to_thread(
+            _delete_snippet_from_file,
+            context,
+            file_path,
+            snippet,
+            message_group=message_group,
+        )
     diff = res.get("diff", "")
     if diff:
         _emit_diff_message(file_path, "modify", diff)
@@ -559,14 +571,15 @@ async def write_to_file(
     ):
         return _create_rejection_response(path)
 
-    res = await asyncio.to_thread(
-        _write_to_file,
-        context,
-        path,
-        content,
-        overwrite=overwrite,
-        message_group=message_group,
-    )
+    async with file_lock(path):
+        res = await asyncio.to_thread(
+            _write_to_file,
+            context,
+            path,
+            content,
+            overwrite=overwrite,
+            message_group=message_group,
+        )
     diff = res.get("diff", "")
     if diff:
         # Determine operation type based on whether file existed
@@ -597,9 +610,10 @@ async def replace_in_file(
     ):
         return _create_rejection_response(path)
 
-    res = await asyncio.to_thread(
-        _replace_in_file, context, path, replacements, message_group=message_group
-    )
+    async with file_lock(path):
+        res = await asyncio.to_thread(
+            _replace_in_file, context, path, replacements, message_group=message_group
+        )
     diff = res.get("diff", "")
     if diff:
         _emit_diff_message(path, "modify", diff)

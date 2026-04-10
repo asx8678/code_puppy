@@ -97,6 +97,14 @@ logger = logging.getLogger(__name__)
 # Using RLock to allow nested locking (safety guard for complex scenarios)
 _callbacks_lock = threading.RLock()
 
+# Shutdown reentrancy guard — prevents recursive cleanup when signals
+# arrive during an ongoing shutdown.  Inspired by oh-my-pi's
+# postmortem.ts (idle → running → complete state machine).
+# See: ../oh-my-pi-main/packages/utils/src/postmortem.ts:runCleanup()
+_ShutdownStage = Literal["idle", "running", "complete"]
+_shutdown_stage: _ShutdownStage = "idle"
+_shutdown_stage_lock = threading.Lock()
+
 
 def register_callback(phase: PhaseType, func: CallbackFunc) -> None:
     with _callbacks_lock:
@@ -310,7 +318,57 @@ async def on_startup() -> list[Any]:
 
 
 async def on_shutdown() -> list[Any]:
-    return await _trigger_callbacks("shutdown")
+    """Trigger shutdown callbacks with reentrancy protection.
+
+    Implements a 3-state machine (idle → running → complete) to prevent
+    recursive cleanup when signals arrive during an ongoing shutdown.
+
+    Ported from oh-my-pi's postmortem.ts reentrancy guard pattern.
+
+    Returns:
+        List of results from shutdown callbacks, or empty list if
+        shutdown is already running or complete.
+    """
+    global _shutdown_stage
+
+    with _shutdown_stage_lock:
+        if _shutdown_stage == "running":
+            logger.warning(
+                "Shutdown triggered recursively (already running); "
+                "ignoring duplicate shutdown request"
+            )
+            return []
+        if _shutdown_stage == "complete":
+            logger.debug("Shutdown already complete; ignoring duplicate request")
+            return []
+        _shutdown_stage = "running"
+
+    try:
+        results = await _trigger_callbacks("shutdown")
+        return results
+    finally:
+        with _shutdown_stage_lock:
+            _shutdown_stage = "complete"
+
+
+def get_shutdown_stage() -> str:
+    """Return the current shutdown stage for monitoring/testing.
+
+    Returns:
+        One of "idle", "running", or "complete".
+    """
+    with _shutdown_stage_lock:
+        return _shutdown_stage
+
+
+def reset_shutdown_stage() -> None:
+    """Reset the shutdown stage to idle.
+
+    Only intended for testing. Do not call in production code.
+    """
+    global _shutdown_stage
+    with _shutdown_stage_lock:
+        _shutdown_stage = "idle"
 
 
 async def on_invoke_agent(*args, **kwargs) -> list[Any]:

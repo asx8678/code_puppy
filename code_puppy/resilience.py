@@ -11,6 +11,7 @@ import asyncio
 import functools
 import inspect
 import logging
+import collections
 import random
 import time
 import warnings
@@ -155,12 +156,20 @@ class CircuitBreakerConfig:
         recovery_timeout (float): Seconds before recovery attempt
         half_open_max_calls (int): Max calls in half-open state
         success_threshold (int): Consecutive successes to close circuit
+        rolling_window_seconds (float): Time window for counting failures.
+            Only failures within this window count toward the threshold.
+            Set to 0.0 to disable (use cumulative counting). Default: 0.0.
+        volume_threshold (int): Minimum total requests in the rolling
+            window before the circuit can trip. Prevents false trips on
+            low traffic. Default: 0 (disabled).
     """
 
     failure_threshold: int = 5
     recovery_timeout: float = 30.0
     half_open_max_calls: int = 3
     success_threshold: int = 2
+    rolling_window_seconds: float = 0.0
+    volume_threshold: int = 0
 
 
 @dataclass
@@ -192,6 +201,8 @@ class CircuitBreaker:
         self.last_failure_time: float = 0.0
         self.half_open_calls = 0
         self._lock = asyncio.Lock()
+        # Rolling window tracking
+        self._request_history: collections.deque[tuple[float, bool]] = collections.deque()
 
     async def call(self, func: Callable[[], T]) -> T:
         """Execute function with circuit breaker protection.
@@ -239,9 +250,19 @@ class CircuitBreaker:
             await self._on_failure(was_half_open, failure_threshold)
             raise
 
+    def _clean_old_requests(self) -> None:
+        """Remove request entries outside the rolling window."""
+        if self.config.rolling_window_seconds <= 0:
+            return
+        cutoff = time.time() - self.config.rolling_window_seconds
+        while self._request_history and self._request_history[0][0] < cutoff:
+            self._request_history.popleft()
+
     async def _on_success(self, was_half_open: bool) -> None:
         """Record successful call."""
         async with self._lock:
+            self._request_history.append((time.time(), True))
+            self._clean_old_requests()
             if was_half_open:
                 self.successes += 1
                 if self.successes >= self.config.success_threshold:
@@ -253,12 +274,28 @@ class CircuitBreaker:
     async def _on_failure(self, was_half_open: bool, failure_threshold: int) -> None:
         """Record failed call."""
         async with self._lock:
+            now = time.time()
             self.failures += 1
-            self.last_failure_time = time.time()
+            self.last_failure_time = now
+            self._request_history.append((now, False))
+            self._clean_old_requests()
 
             if was_half_open:
                 logger.warning(f"Circuit {self.name} opening (failure in half-open)")
                 self.state = CircuitState.OPEN
+            elif self.config.rolling_window_seconds > 0:
+                # Rolling window mode: count failures in window
+                window_failures = sum(1 for _, ok in self._request_history if not ok)
+                window_total = len(self._request_history)
+                if (
+                    window_total >= self.config.volume_threshold
+                    and window_failures >= failure_threshold
+                ):
+                    logger.warning(
+                        f"Circuit {self.name} opening "
+                        f"({window_failures} failures in {window_total} requests)"
+                    )
+                    self.state = CircuitState.OPEN
             elif self.failures >= failure_threshold:
                 logger.warning(
                     f"Circuit {self.name} opening ({self.failures} failures)"
@@ -271,6 +308,7 @@ class CircuitBreaker:
         self.failures = 0
         self.successes = 0
         self.half_open_calls = 0
+        self._request_history.clear()
 
 
 class CircuitOpenError(Exception):
@@ -311,13 +349,38 @@ class RetryState:
         return self._temperature
 
 
+@dataclass
+class RetryResult(Generic[T]):
+    """Structured result from a retry operation.
+
+    Returned by ``with_retry(..., return_result=True)`` to give callers
+    visibility into the retry history without catching exceptions.
+
+    Inspired by ruflo's ``resilience/retry.ts:RetryResult<T>``.
+
+    Attributes:
+        success: Whether the operation eventually succeeded.
+        result: The return value on success, or ``None`` on failure.
+        attempts: Total number of attempts made (1 = no retries).
+        total_time: Wall-clock seconds from first attempt to resolution.
+        errors: List of all exceptions encountered during retries.
+    """
+
+    success: bool
+    result: T | None = None
+    attempts: int = 0
+    total_time: float = 0.0
+    errors: list[Exception] = field(default_factory=list)
+
+
 async def with_retry(
     func: Callable[[], T],
     config: RetryConfig | None = None,
     on_terminal_quota: Callable[[Exception], Any] | None = None,
     *,
     state: RetryState | None = None,
-) -> T:
+    return_result: bool = False,
+) -> T | RetryResult[T]:
     """Execute function with retry logic.
 
     Args: func - Function to execute (sync or async). config - Retry configuration.
@@ -332,6 +395,8 @@ async def with_retry(
     if state is None:
         state = RetryState()
     last_error: Exception | None = None
+    start_time = time.monotonic()
+    errors: list[Exception] = []
 
     for attempt in range(cfg.max_attempts):
         state.attempt = attempt
@@ -342,9 +407,18 @@ async def with_retry(
             result = func()
             if inspect.isawaitable(result):
                 result = await result
+            if return_result:
+                return RetryResult(
+                    success=True,
+                    result=result,
+                    attempts=attempt + 1,
+                    total_time=time.monotonic() - start_time,
+                    errors=errors,
+                )
             return result
         except Exception as e:
             last_error = e
+            errors.append(e)
 
             # Check for terminal quota errors before deciding to retry
             if _is_terminal_quota_error(e):
@@ -362,14 +436,38 @@ async def with_retry(
                         attempt = 0  # Reset attempt counter
                         continue
                     # Callback returned falsy - treat as terminal, don't retry
+                    if return_result:
+                        return RetryResult(
+                            success=False,
+                            result=None,
+                            attempts=attempt + 1,
+                            total_time=time.monotonic() - start_time,
+                            errors=errors,
+                        )
                     raise
                 # No callback - terminal errors don't retry
+                if return_result:
+                    return RetryResult(
+                        success=False,
+                        result=None,
+                        attempts=attempt + 1,
+                        total_time=time.monotonic() - start_time,
+                        errors=errors,
+                    )
                 raise
 
             # Check if any exception in the cause chain is retryable
             exc_chain = walk_causes(e)
             if not any(isinstance(err, cfg.retryable_exceptions) for err in exc_chain):
                 # Not a retryable exception - re-raise immediately
+                if return_result:
+                    return RetryResult(
+                        success=False,
+                        result=None,
+                        attempts=attempt + 1,
+                        total_time=time.monotonic() - start_time,
+                        errors=errors,
+                    )
                 raise
 
             # Retryable exception - proceed with retry logic
@@ -388,6 +486,14 @@ async def with_retry(
                 await asyncio.sleep(delay)
 
     assert last_error is not None
+    if return_result:
+        return RetryResult(
+            success=False,
+            result=None,
+            attempts=attempt + 1,
+            total_time=time.monotonic() - start_time,
+            errors=errors,
+        )
     raise last_error
 
 
@@ -397,7 +503,8 @@ def with_retry_sync(
     on_terminal_quota: Callable[[Exception], Any] | None = None,
     *,
     state: RetryState | None = None,
-) -> T:
+    return_result: bool = False,
+) -> T | RetryResult[T]:
     """Synchronous version of with_retry. Wraps async with_retry using background thread event loop."""
     try:
         asyncio.get_running_loop()
@@ -407,7 +514,7 @@ def with_retry_sync(
         )
     except RuntimeError:
         pass  # No running loop, safe to use
-    return run_async_sync(with_retry(func, config, on_terminal_quota, state=state))
+    return run_async_sync(with_retry(func, config, on_terminal_quota, state=state, return_result=return_result))
 
 
 async def with_fallback(

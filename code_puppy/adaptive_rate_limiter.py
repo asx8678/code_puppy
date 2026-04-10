@@ -759,6 +759,44 @@ def release_model_slot(model_name: str) -> None:
             pass
 
 
+def check_model_slot(model_name: str) -> bool:
+    """Check whether a concurrency slot is available for *model_name* **without acquiring it**.
+
+    This is a non-consuming preview — useful for UI status indicators,
+    load-balancing decisions, or pre-flight checks before committing to
+    a request.
+
+    Inspired by ruflo's ``SlidingWindowRateLimiter.check()`` which
+    separates "would this be allowed?" from "use a token".
+
+    Args:
+        model_name: The model to check availability for.
+
+    Returns:
+        ``True`` if ``acquire_model_slot`` would succeed immediately
+        (i.e., active_count < current_limit and circuit is not OPEN).
+        ``False`` otherwise.
+
+    Note:
+        This is inherently racy — the result may be stale by the time
+        the caller acts on it.  Use for advisory/display purposes only.
+    """
+    key = _normalize_model_name(model_name)
+    if key is None:
+        return True  # Unknown model = no throttling
+
+    state = _state.model_states.get(key)
+    if state is None:
+        return True  # No state = no throttling yet
+
+    # Check circuit breaker first
+    if _state.cfg_circuit_breaker_enabled and state.circuit_state == CircuitState.OPEN:
+        return False
+
+    # Check concurrency slot availability
+    return state.active_count < math.ceil(state.current_limit)
+
+
 def get_model_semaphore(model_name: str) -> ModelRateLimitState | None:
     """Return the per-model state, or ``None`` if the model is not tracked.
 

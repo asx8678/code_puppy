@@ -17,7 +17,7 @@ If any check fails the content is returned unchanged.
 
 from __future__ import annotations
 
-__all__ = ["normalize_eol", "looks_textish"]
+__all__ = ["normalize_eol", "looks_textish", "strip_bom", "restore_bom"]
 
 
 def looks_textish(content: str) -> bool:
@@ -85,3 +85,62 @@ def normalize_eol(content: str) -> str:
     result = content.replace("\r\n", "\n")
     result = result.replace("\r", "\n")
     return result
+
+
+# --- BOM Handling ---
+# Ported from pi-mono-main packages/coding-agent/src/core/tools/edit-diff.ts:137-139
+# The BOM (Byte Order Mark) is an invisible character at the start of files
+# created by some Windows editors. LLMs never include BOM in their output,
+# so string matching fails silently on BOM-encoded files without this handling.
+
+# UTF-8 BOM: EF BB BF (decoded as U+FEFF)
+_UTF8_BOM = "\ufeff"
+
+
+def strip_bom(content: str) -> tuple[str, str]:
+    """Strip the Unicode BOM from the beginning of content.
+
+    Returns a tuple of (stripped_content, bom_string). The bom_string is
+    empty if no BOM was present, or the BOM character(s) if one was found.
+    This allows callers to re-prepend the BOM after modifications.
+
+    Only handles UTF-8 BOM (U+FEFF) since Python's str type means the
+    content has already been decoded — UTF-16/32 BOMs become U+FEFF during
+    decoding.
+
+    Args:
+        content: File content that may start with a BOM.
+
+    Returns:
+        Tuple of (content_without_bom, bom_prefix).
+
+    Examples:
+        >>> strip_bom("\\ufeffhello")
+        ('hello', '\\ufeff')
+        >>> strip_bom("hello")
+        ('hello', '')
+    """
+    if content.startswith(_UTF8_BOM):
+        return content[1:], _UTF8_BOM
+    return content, ""
+
+
+def restore_bom(content: str, bom: str) -> str:
+    """Re-prepend a BOM to content if one was originally present.
+
+    Args:
+        content: Modified content without BOM.
+        bom: The BOM string from a prior ``strip_bom()`` call (empty if none).
+
+    Returns:
+        Content with BOM restored (or unchanged if bom is empty).
+
+    Examples:
+        >>> restore_bom("hello", "\\ufeff")
+        '\\ufeffhello'
+        >>> restore_bom("hello", "")
+        'hello'
+    """
+    if bom:
+        return bom + content
+    return content

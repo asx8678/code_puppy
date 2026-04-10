@@ -11,6 +11,7 @@ from code_puppy.resilience import (
     CircuitOpenError,
     CircuitState,
     RetryConfig,
+    RetryResult,
     RetryState,
     circuit_breaker,
     get_circuit_breaker_status,
@@ -610,3 +611,170 @@ class TestIntegration:
         # Primary called twice (initial + 1 retry)
         assert primary_calls == 2
         assert fallback_calls == 1
+
+
+class TestRetryResult:
+    """Tests for RetryResult metadata object."""
+
+    async def test_return_result_success_first_attempt(self):
+        async def succeeds():
+            return 42
+
+        result = await with_retry(succeeds, return_result=True)
+        assert isinstance(result, RetryResult)
+        assert result.success is True
+        assert result.result == 42
+        assert result.attempts == 1
+        assert result.total_time >= 0
+        assert result.errors == []
+
+    async def test_return_result_success_after_retries(self):
+        call_count = 0
+
+        async def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ConnectionError("retry me")
+            return "ok"
+
+        cfg = RetryConfig(max_attempts=5, base_delay=0.01, max_delay=0.05)
+        result = await with_retry(flaky, cfg, return_result=True)
+        assert result.success is True
+        assert result.result == "ok"
+        assert result.attempts == 3
+        assert len(result.errors) == 2
+        assert all(isinstance(e, ConnectionError) for e in result.errors)
+
+    async def test_return_result_all_fail(self):
+        async def always_fails():
+            raise ConnectionError("nope")
+
+        cfg = RetryConfig(max_attempts=3, base_delay=0.01, max_delay=0.02)
+        result = await with_retry(always_fails, cfg, return_result=True)
+        assert result.success is False
+        assert result.result is None
+        assert result.attempts == 3
+        assert len(result.errors) == 3
+        assert result.total_time > 0
+
+    async def test_return_result_non_retryable(self):
+        async def type_error():
+            raise TypeError("not retryable")
+
+        cfg = RetryConfig(max_attempts=3, base_delay=0.01)
+        result = await with_retry(type_error, cfg, return_result=True)
+        assert result.success is False
+        assert result.attempts == 1
+        assert len(result.errors) == 1
+        assert isinstance(result.errors[0], TypeError)
+
+    async def test_default_still_raises(self):
+        """Without return_result=True, behavior is unchanged."""
+        async def fails():
+            raise ConnectionError("boom")
+
+        cfg = RetryConfig(max_attempts=2, base_delay=0.01)
+        with pytest.raises(ConnectionError):
+            await with_retry(fails, cfg)
+
+
+class TestRollingWindowCircuitBreaker:
+    """Tests for rolling window and volume threshold enhancements."""
+
+    async def test_rolling_window_expires_old_failures(self):
+        """Failures outside the window should not count."""
+        config = CircuitBreakerConfig(
+            failure_threshold=3,
+            rolling_window_seconds=0.2,
+            volume_threshold=0,
+        )
+        cb = CircuitBreaker("test-rolling", config)
+
+        # Record 2 failures
+        for _ in range(2):
+            try:
+                await cb.call(lambda: (_ for _ in ()).throw(ValueError("err")))
+            except ValueError:
+                pass
+
+        # Wait for window to expire
+        await asyncio.sleep(0.3)
+
+        # Record 1 more failure — total in window is now only 1, not 3
+        try:
+            await cb.call(lambda: (_ for _ in ()).throw(ValueError("err")))
+        except ValueError:
+            pass
+
+        # Circuit should still be CLOSED (only 1 failure in window)
+        assert cb.state == CircuitState.CLOSED
+
+    async def test_volume_threshold_prevents_false_trip(self):
+        """Circuit shouldn't trip if total requests are below volume_threshold."""
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            rolling_window_seconds=10.0,
+            volume_threshold=5,
+        )
+        cb = CircuitBreaker("test-volume", config)
+
+        # Record 3 failures (exceeds failure_threshold=2 but below volume_threshold=5)
+        for _ in range(3):
+            try:
+                await cb.call(lambda: (_ for _ in ()).throw(ValueError("err")))
+            except ValueError:
+                pass
+
+        # Should still be CLOSED — not enough total traffic
+        assert cb.state == CircuitState.CLOSED
+
+    async def test_volume_threshold_trips_when_met(self):
+        """Circuit trips when both failure_threshold AND volume_threshold are met."""
+        config = CircuitBreakerConfig(
+            failure_threshold=3,
+            rolling_window_seconds=10.0,
+            volume_threshold=5,
+        )
+        cb = CircuitBreaker("test-trips", config)
+
+        # 2 successes + 3 failures = 5 total (meets volume), 3 failures (meets threshold)
+        for _ in range(2):
+            await cb.call(lambda: "ok")
+        for _ in range(3):
+            try:
+                await cb.call(lambda: (_ for _ in ()).throw(ValueError("err")))
+            except ValueError:
+                pass
+
+        assert cb.state == CircuitState.OPEN
+
+    async def test_rolling_window_disabled_by_default(self):
+        """With default config (rolling_window=0), behavior is cumulative as before."""
+        config = CircuitBreakerConfig(failure_threshold=3)
+        cb = CircuitBreaker("test-default", config)
+
+        for _ in range(3):
+            try:
+                await cb.call(lambda: (_ for _ in ()).throw(ValueError("err")))
+            except ValueError:
+                pass
+
+        assert cb.state == CircuitState.OPEN
+
+    async def test_reset_clears_history(self):
+        config = CircuitBreakerConfig(
+            failure_threshold=5,
+            rolling_window_seconds=10.0,
+        )
+        cb = CircuitBreaker("test-reset", config)
+
+        for _ in range(3):
+            try:
+                await cb.call(lambda: (_ for _ in ()).throw(ValueError("err")))
+            except ValueError:
+                pass
+
+        assert len(cb._request_history) == 3
+        cb._reset()
+        assert len(cb._request_history) == 0
