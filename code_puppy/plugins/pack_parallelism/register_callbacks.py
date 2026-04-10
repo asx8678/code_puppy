@@ -10,7 +10,7 @@ Permanent config (TOML):
     ~/.code_puppy/pack_parallelism.toml
 
     [pack_leader]
-    max_parallelism = 2          # default: 2
+    max_parallelism = 6          # default: 6
     allow_parallel = true        # if false, forces limit=1
     run_wait_timeout = null      # seconds before rejecting (null = wait forever)
 
@@ -39,7 +39,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 _CONFIG_PATH = Path.home() / ".code_puppy" / "pack_parallelism.toml"
-_BUILTIN_DEFAULT = 2
+_BUILTIN_DEFAULT = 6
 
 # Module-level per-session override; None means "use config file value"
 _session_max: int | None = None

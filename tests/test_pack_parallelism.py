@@ -21,7 +21,7 @@ class TestReadConfigMax:
         plugin = _reload_plugin()
         with patch.object(plugin, "_CONFIG_PATH", tmp_path / "nonexistent.toml"):
             plugin._cached_config = None
-            assert plugin._read_config_max() == 2
+            assert plugin._read_config_max() == 6
 
     def test_reads_value_from_toml(self, tmp_path):
         config = tmp_path / "pack_parallelism.toml"
@@ -37,7 +37,7 @@ class TestReadConfigMax:
         plugin = _reload_plugin()
         with patch.object(plugin, "_CONFIG_PATH", config):
             plugin._cached_config = None
-            assert plugin._read_config_max() == 2
+            assert plugin._read_config_max() == 6
 
     def test_malformed_toml_returns_default(self, tmp_path):
         config = tmp_path / "pack_parallelism.toml"
@@ -45,7 +45,7 @@ class TestReadConfigMax:
         plugin = _reload_plugin()
         with patch.object(plugin, "_CONFIG_PATH", config):
             plugin._cached_config = None
-            assert plugin._read_config_max() == 2
+            assert plugin._read_config_max() == 6
 
     def test_manual_parser_exact_key_match(self, tmp_path):
         """Verify the manual parser doesn't match max_parallelism_extra."""
