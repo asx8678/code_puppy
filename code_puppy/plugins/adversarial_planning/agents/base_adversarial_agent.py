@@ -42,7 +42,9 @@ class BaseAdversarialAgent(BaseAgent, ABC):
     @property
     def display_name(self) -> str:
         """Human-readable name for the agent."""
-        return f"AP {self.ROLE_NAME.title()} ⚔️"
+        # Replace hyphens with spaces and title-case each word
+        formatted = self.ROLE_NAME.replace("-", " ").title()
+        return f"AP {formatted} ⚔️"
     
     @property
     def description(self) -> str:

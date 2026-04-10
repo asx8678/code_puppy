@@ -44,19 +44,11 @@ def _register_agents() -> list[dict]:
     Returns:
         List of agent registration dictionaries
     """
-    # TODO(code_puppy-793): Add specialized agents for each phase
-    # Phase 0A: Researcher
-    # Phase 0B: Framer
-    # Phase 1A: Conservative Planner
-    # Phase 1B: Contrarian Planner
-    # Phase 2A/B: Reviewer
-    # Phase 4: Arbiter
-    # Phase 5: Red Team
-    # Phase 6: Decision
-    # Phase 7: Executor
+    from .agents import get_adversarial_agents
     
-    logger.debug("Registering adversarial planning agents (stub)")
-    return []
+    agents = get_adversarial_agents()
+    logger.debug(f"Registering {len(agents)} adversarial planning agents")
+    return agents
 
 
 def _custom_help() -> list[tuple[str, str]]:

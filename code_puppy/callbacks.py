@@ -856,6 +856,17 @@ def on_register_agents() -> list[dict[str, Any]]:
 
     Example return: [{"name": "my-agent", "class": MyAgentClass}]
     """
+    # AP visibility fix: Ensure plugins are discovered and loaded for register_agents
+    # BEFORE checking callback count, since lazy-loaded plugins register callbacks
+    # at import time. Without this, AP agents would not be visible in /agent.
+    try:
+        from code_puppy.plugins import ensure_plugins_loaded_for_phase, load_plugin_callbacks
+
+        load_plugin_callbacks()
+        ensure_plugins_loaded_for_phase("register_agents")
+    except ImportError:
+        pass  # Plugin system not available
+
     return _trigger_callbacks_sync("register_agents")
 
 
