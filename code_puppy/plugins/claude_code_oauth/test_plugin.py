@@ -12,6 +12,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Switch to project root for predictable relative paths
 os.chdir(PROJECT_ROOT)
 
+# ruff: noqa: E402
+from code_puppy.callbacks import get_callbacks
+
 
 def test_plugin_imports() -> bool:
     """Verify the plugin modules import correctly."""
@@ -241,6 +244,39 @@ def test_configuration() -> bool:
         return False
 
 
+def test_no_shutdown_refresh_callback_registered() -> bool:
+    """Verify that shutdown callback is NOT registered (code_puppy-1vv).
+
+    The shutdown refresh was removed because Claude already has request-time
+    and proactive heartbeat-based token refresh, making shutdown refresh
+    unnecessary and potentially problematic.
+    """
+    print("\n=== Testing No Shutdown Callback (code_puppy-1vv) ===")
+
+    # Explicitly import to ensure the plugin's register_callbacks is loaded
+    # before checking the registry (makes test order-independent)
+    import importlib
+
+    importlib.import_module("code_puppy.plugins.claude_code_oauth.register_callbacks")
+
+    shutdown_callbacks = get_callbacks("shutdown")
+    callback_modules = []
+    for cb in shutdown_callbacks:
+        if hasattr(cb, "__module__"):
+            callback_modules.append(cb.__module__)
+        elif hasattr(cb, "__wrapped__") and hasattr(cb.__wrapped__, "__module__"):
+            callback_modules.append(cb.__wrapped__.__module__)
+
+    has_claude_shutdown = any("claude_code_oauth" in m for m in callback_modules)
+
+    if has_claude_shutdown:
+        print("❌ Claude Code OAuth shutdown callback should not be registered")
+        return False
+
+    print("✅ No Claude Code OAuth shutdown callback registered")
+    return True
+
+
 def main() -> bool:
     """Run all manual checks."""
     print("Claude Code OAuth Plugin Test Suite")
@@ -252,6 +288,7 @@ def main() -> bool:
         test_file_operations,
         test_command_handlers,
         test_configuration,
+        test_no_shutdown_refresh_callback_registered,
     ]
 
     passed = 0

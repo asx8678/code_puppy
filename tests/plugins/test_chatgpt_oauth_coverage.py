@@ -326,65 +326,40 @@ class TestOnStartup:
             assert "/chatgpt-auth" in mock_warn.call_args[0][0]
 
 
-class TestOnShutdown:
-    """Tests for _on_shutdown last-minute token refresh."""
+class TestNoShutdownCallback:
+    """Verify that shutdown callback is NOT registered (code_puppy-1vv).
 
-    def test_no_tokens_skips(self):
-        from code_puppy.plugins.chatgpt_oauth.register_callbacks import _on_shutdown
+    The shutdown refresh was removed because it could trigger unconditional
+    token refresh attempts during exit, which is unnecessary and potentially
+    problematic. Request-time refresh in get_valid_access_token() is sufficient.
+    """
 
-        with (
-            patch(
-                "code_puppy.plugins.chatgpt_oauth.register_callbacks.load_stored_tokens",
-                return_value=None,
-            ),
-            patch(
-                "code_puppy.plugins.chatgpt_oauth.register_callbacks.refresh_access_token"
-            ) as mock_refresh,
-        ):
-            _on_shutdown()
-            mock_refresh.assert_not_called()
+    def test_no_shutdown_callback_registered(self):
+        # Explicitly import to ensure the plugin's register_callbacks is loaded
+        # before checking the registry (makes test order-independent)
+        import importlib
 
-    def test_no_refresh_token_skips(self):
-        from code_puppy.plugins.chatgpt_oauth.register_callbacks import _on_shutdown
+        importlib.import_module("code_puppy.plugins.chatgpt_oauth.register_callbacks")
+        from code_puppy.callbacks import get_callbacks
 
-        with (
-            patch(
-                "code_puppy.plugins.chatgpt_oauth.register_callbacks.load_stored_tokens",
-                return_value={"access_token": "at"},
-            ),
-            patch(
-                "code_puppy.plugins.chatgpt_oauth.register_callbacks.refresh_access_token"
-            ) as mock_refresh,
-        ):
-            _on_shutdown()
-            mock_refresh.assert_not_called()
+        shutdown_callbacks = get_callbacks("shutdown")
+        callback_modules = []
+        for cb in shutdown_callbacks:
+            if hasattr(cb, "__module__"):
+                callback_modules.append(cb.__module__)
+            elif hasattr(cb, "__wrapped__") and hasattr(cb.__wrapped__, "__module__"):
+                callback_modules.append(cb.__wrapped__.__module__)
 
-    def test_calls_refresh(self):
-        from code_puppy.plugins.chatgpt_oauth.register_callbacks import _on_shutdown
+        # No chatgpt_oauth callback should be registered for shutdown
+        assert not any("chatgpt_oauth" in m for m in callback_modules), (
+            "ChatGPT OAuth shutdown callback should not be registered"
+        )
 
-        with (
-            patch(
-                "code_puppy.plugins.chatgpt_oauth.register_callbacks.load_stored_tokens",
-                return_value={"refresh_token": "rt"},
-            ),
-            patch(
-                "code_puppy.plugins.chatgpt_oauth.register_callbacks.refresh_access_token"
-            ) as mock_refresh,
-        ):
-            _on_shutdown()
-            mock_refresh.assert_called_once()
+    def test_on_shutdown_function_not_exported(self):
+        """Verify _on_shutdown is not exported from register_callbacks module."""
+        import code_puppy.plugins.chatgpt_oauth.register_callbacks as rc
 
-    def test_refresh_exception_handled(self):
-        from code_puppy.plugins.chatgpt_oauth.register_callbacks import _on_shutdown
-
-        with (
-            patch(
-                "code_puppy.plugins.chatgpt_oauth.register_callbacks.load_stored_tokens",
-                return_value={"refresh_token": "rt"},
-            ),
-            patch(
-                "code_puppy.plugins.chatgpt_oauth.register_callbacks.refresh_access_token",
-                side_effect=RuntimeError("network down"),
-            ),
-        ):
-            _on_shutdown()  # should not raise
+        # _on_shutdown should not exist (it was removed as part of code_puppy-1vv)
+        assert not hasattr(rc, "_on_shutdown"), (
+            "_on_shutdown should not exist in register_callbacks module"
+        )

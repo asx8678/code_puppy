@@ -219,6 +219,103 @@ def _is_token_actually_expired(tokens: dict[str, Any]) -> bool:
     return time.time() >= expires_at_value
 
 
+# Unrecoverable OAuth error codes that indicate the refresh token is dead
+# and cannot be used anymore. These require user re-authentication.
+UNRECOVERABLE_OAUTH_ERRORS = frozenset(
+    {
+        "invalid_grant",
+        "invalid_token",
+        "token_expired",
+        "unauthorized_client",
+        "access_denied",
+        "invalid_client",
+    }
+)
+
+# Explicit phrases in error messages/descriptions that indicate unrecoverable errors.
+UNRECOVERABLE_ERROR_PHRASES = frozenset(
+    {
+        "token expired",
+        "refresh token expired",
+        "token has expired",
+        "could not validate your token",
+        "invalid grant",
+    }
+)
+
+
+def _is_unrecoverable_token_error(response: Any) -> bool:
+    """Check if an OAuth response indicates an unrecoverable token error.
+
+    Supports both response shapes:
+    a) OAuth style: {"error": "invalid_grant", "error_description": "..."}
+    b) Nested API style: {"error": {"code": "token_expired", "message": "..."}}
+
+    Args:
+        response: The requests Response object from a failed token refresh.
+
+    Returns:
+        True if the error is unrecoverable (token is dead, user must re-auth).
+    """
+    # 401 Unauthorized is always unrecoverable
+    if response.status_code == 401:
+        return True
+
+    # 400 Bad Request often carries OAuth error codes
+    if response.status_code == 400:
+        try:
+            error_data = response.json()
+
+            # Handle OAuth style: {"error": "invalid_grant", "error_description": "..."}
+            error_code = error_data.get("error")
+            if isinstance(error_code, str):
+                error_code_lower = error_code.lower()
+                if error_code_lower in UNRECOVERABLE_OAUTH_ERRORS:
+                    return True
+                # Check error_description for explicit phrases
+                error_desc = error_data.get("error_description", "").lower()
+                if any(phrase in error_desc for phrase in UNRECOVERABLE_ERROR_PHRASES):
+                    return True
+
+            # Handle nested API style: {"error": {"code": "token_expired", "message": "..."}}
+            elif isinstance(error_code, dict):
+                nested_code = error_code.get("code", "").lower()
+                if nested_code in UNRECOVERABLE_OAUTH_ERRORS:
+                    return True
+                # Check nested message for explicit phrases
+                nested_message = error_code.get("message", "").lower()
+                if any(
+                    phrase in nested_message for phrase in UNRECOVERABLE_ERROR_PHRASES
+                ):
+                    return True
+
+        except (ValueError, AttributeError):
+            pass
+
+    return False
+
+
+def _is_transient_error(response: Any) -> bool:
+    """Check if an error is likely transient (can be retried).
+
+    Args:
+        response: The requests Response object from a failed token refresh.
+
+    Returns:
+        True if the error appears to be transient (network/server issues).
+    """
+    # 5xx server errors are transient
+    if 500 <= response.status_code < 600:
+        return True
+    # 429 rate limit is transient
+    if response.status_code == 429:
+        return True
+    # 400 with non-unrecoverable error might be transient
+    if response.status_code == 400:
+        return not _is_unrecoverable_token_error(response)
+    return False
+
+
 def is_token_expired(tokens: dict[str, Any]) -> bool:
     expires_at_value = _get_expires_at_value(tokens)
     if expires_at_value is None:
@@ -251,6 +348,20 @@ def update_claude_code_model_tokens(access_token: str) -> bool:
 
 
 def refresh_access_token(force: bool = False) -> str | None:
+    """Refresh the access token using the refresh token.
+
+    On successful refresh, the access token is saved and model tokens updated.
+    Errors are classified as:
+    - Unrecoverable (401, invalid_grant, etc.): Log user-friendly warning
+    - Transient (5xx, 429, network issues): Log quietly at debug level
+    - Ambiguous: Log at debug level without alarming the user
+
+    Args:
+        force: Force refresh even if token is not yet expired.
+
+    Returns:
+        New access token if refresh succeeded, None otherwise.
+    """
     tokens = load_stored_tokens()
     if not tokens:
         return None
@@ -308,15 +419,51 @@ def refresh_access_token(force: bool = False) -> str | None:
                 update_claude_code_model_tokens(tokens["access_token"])
                 return tokens["access_token"]
         else:
-            logger.error(
-                "Token refresh failed: %s - %s", response.status_code, response.text
-            )
+            # Classify error for appropriate logging
+            if _is_unrecoverable_token_error(response):
+                logger.warning(
+                    "Claude token refresh failed with unrecoverable error (%s). "
+                    "Tokens may need re-authentication. Error: %s",
+                    response.status_code,
+                    response.text[:200],
+                )
+            elif _is_transient_error(response):
+                logger.debug(
+                    "Claude token refresh failed (transient %s): %s",
+                    response.status_code,
+                    response.text[:200],
+                )
+            else:
+                # Ambiguous/unclassified error - log quietly
+                logger.debug(
+                    "Claude token refresh failed (%s): %s",
+                    response.status_code,
+                    response.text[:200],
+                )
+    except requests.exceptions.Timeout:
+        logger.debug("Claude token refresh timed out (transient)")
+    except requests.exceptions.ConnectionError:
+        logger.debug("Claude token refresh connection error (transient)")
+    except requests.exceptions.RequestException as exc:
+        logger.debug("Claude token refresh request error (transient): %s", exc)
     except Exception as exc:  # pragma: no cover - defensive logging
-        logger.error("Token refresh error: %s", exc)
+        logger.error("Unexpected Claude token refresh error: %s", exc)
     return None
 
 
 def get_valid_access_token() -> str | None:
+    """Get a valid access token, refreshing if needed.
+
+    This function respects Claude's existing semantics where a still-valid
+    access token may continue to be used until actual expiry, even if the
+    proactive refresh buffer has been exceeded.
+
+    Args:
+        None
+
+    Returns:
+        Valid access token string, or None if not authenticated or refresh failed.
+    """
     tokens = load_stored_tokens()
     if not tokens:
         logger.debug("No stored Claude Code OAuth tokens found")
@@ -333,11 +480,15 @@ def get_valid_access_token() -> str | None:
         if refreshed:
             return refreshed
         if not _is_token_actually_expired(tokens):
-            logger.warning(
+            # Token is still technically valid - use it but warn once
+            logger.debug(
                 "Claude Code token refresh failed; using existing access token until expiry"
             )
             return access_token
-        logger.warning("Claude Code token refresh failed")
+        logger.warning(
+            "Claude Code token refresh failed and token has expired. "
+            "Run /claude-code-auth to re-authenticate."
+        )
         return None
 
     return access_token

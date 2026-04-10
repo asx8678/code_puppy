@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from code_puppy.callbacks import get_callbacks
 from code_puppy.plugins.chatgpt_oauth import config, utils
 
 
@@ -148,7 +149,7 @@ def test_parse_jwt_claims():
 def test_save_and_load_tokens(tmp_path):
     """Test token storage and retrieval."""
     with patch.object(
-        config, "get_token_storage_path", return_value=tmp_path / "tokens.json"
+        utils, "get_token_storage_path", return_value=tmp_path / "tokens.json"
     ):
         tokens = {
             "access_token": "test_access",
@@ -167,12 +168,12 @@ def test_save_and_load_tokens(tmp_path):
 def test_save_and_load_chatgpt_models(tmp_path):
     """Test ChatGPT models configuration."""
     with patch.object(
-        config, "get_chatgpt_models_path", return_value=tmp_path / "chatgpt_models.json"
+        utils, "get_chatgpt_models_path", return_value=tmp_path / "chatgpt_models.json"
     ):
         models = {
-            "chatgpt-gpt-4o": {
-                "type": "openai",
-                "name": "gpt-4o",
+            "chatgpt-gpt-5.4": {
+                "type": "chatgpt_oauth",
+                "name": "gpt-5.4",
                 "oauth_source": "chatgpt-oauth-plugin",
             }
         }
@@ -188,15 +189,15 @@ def test_save_and_load_chatgpt_models(tmp_path):
 def test_remove_chatgpt_models(tmp_path):
     """Test removal of ChatGPT models from config."""
     with patch.object(
-        config, "get_chatgpt_models_path", return_value=tmp_path / "chatgpt_models.json"
+        utils, "get_chatgpt_models_path", return_value=tmp_path / "chatgpt_models.json"
     ):
         models = {
-            "chatgpt-gpt-4o": {
-                "type": "openai",
+            "chatgpt-gpt-5.4": {
+                "type": "chatgpt_oauth",
                 "oauth_source": "chatgpt-oauth-plugin",
             },
-            "claude-3-opus": {
-                "type": "anthropic",
+            "some-other-model": {
+                "type": "other",
                 "oauth_source": "other",
             },
         }
@@ -208,8 +209,8 @@ def test_remove_chatgpt_models(tmp_path):
 
         # Verify only ChatGPT model was removed
         remaining = utils.load_chatgpt_models()
-        assert "chatgpt-gpt-4o" not in remaining
-        assert "claude-3-opus" in remaining
+        assert "chatgpt-gpt-5.4" not in remaining
+        assert "some-other-model" in remaining
 
 
 @patch("code_puppy.plugins.chatgpt_oauth.utils.requests.post")
@@ -239,10 +240,11 @@ def test_fetch_chatgpt_models(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 200
     # New response format uses "models" key with "slug" field
+    # Note: gpt-4o and gpt-3.5-turbo are blocked models and will be filtered out
     mock_response.json.return_value = {
         "models": [
-            {"slug": "gpt-4o"},
-            {"slug": "gpt-3.5-turbo"},
+            {"slug": "gpt-5.4"},
+            {"slug": "gpt-5.3-codex"},
             {"slug": "o1-preview"},
             {"slug": "codex-mini"},
         ]
@@ -254,11 +256,14 @@ def test_fetch_chatgpt_models(mock_get):
     # Required models always injected
     assert "gpt-5.4" in models
     assert "gpt-5.3-instant" in models
-    # API-returned models present too
-    assert "gpt-4o" in models
-    assert "gpt-3.5-turbo" in models
+    # API-returned models present too (blocked models like gpt-4o are filtered)
+    assert "gpt-5.4" in models
+    assert "gpt-5.3-codex" in models
     assert "o1-preview" in models
     assert "codex-mini" in models
+    # Blocked models should NOT be present
+    assert "gpt-4o" not in models
+    assert "gpt-3.5-turbo" not in models
 
 
 @patch("code_puppy.plugins.chatgpt_oauth.utils.requests.get")
@@ -271,30 +276,420 @@ def test_fetch_chatgpt_models_fallback(mock_get):
 
     models = utils.fetch_chatgpt_models("test_access_token", "test_account_id")
     assert models is not None
-    # Should return default models (including new required ones)
+    # Should return default models (blocked models like gpt-5.2 are filtered out)
     assert "gpt-5.4" in models
     assert "gpt-5.3-instant" in models
     assert "gpt-5.3-codex-spark" in models
     assert "gpt-5.3-codex" in models
-    assert "gpt-5.2-codex" in models
-    assert "gpt-5.2" in models
+    # Blocked models should NOT be present
+    assert "gpt-5.2-codex" not in models
+    assert "gpt-5.2" not in models
 
 
 def test_add_models_to_chatgpt_config(tmp_path):
     """Test adding models to chatgpt_models.json."""
     with patch.object(
-        config, "get_chatgpt_models_path", return_value=tmp_path / "chatgpt_models.json"
+        utils, "get_chatgpt_models_path", return_value=tmp_path / "chatgpt_models.json"
     ):
-        models = ["gpt-4o", "gpt-3.5-turbo"]
+        models = ["gpt-5.4", "gpt-5.3-instant"]
 
         assert utils.add_models_to_extra_config(models)
 
         loaded = utils.load_chatgpt_models()
-        assert "chatgpt-gpt-4o" in loaded
-        assert "chatgpt-gpt-3.5-turbo" in loaded
-        assert loaded["chatgpt-gpt-4o"]["type"] == "chatgpt_oauth"
-        assert loaded["chatgpt-gpt-4o"]["name"] == "gpt-4o"
-        assert loaded["chatgpt-gpt-4o"]["oauth_source"] == "chatgpt-oauth-plugin"
+        assert "chatgpt-gpt-5.4" in loaded
+        assert "chatgpt-gpt-5.3-instant" in loaded
+        assert loaded["chatgpt-gpt-5.4"]["type"] == "chatgpt_oauth"
+        assert loaded["chatgpt-gpt-5.4"]["name"] == "gpt-5.4"
+        assert loaded["chatgpt-gpt-5.4"]["oauth_source"] == "chatgpt-oauth-plugin"
+
+
+def test_no_shutdown_refresh_callback_registered():
+    """Verify that shutdown callback is NOT registered (code_puppy-1vv).
+
+    The shutdown refresh was removed because it could trigger unconditional
+    token refresh attempts during exit, which is unnecessary and potentially
+    problematic.
+    """
+    # Explicitly import to ensure the plugin's register_callbacks is loaded
+    # before checking the registry (makes test order-independent)
+    import importlib
+
+    importlib.import_module("code_puppy.plugins.chatgpt_oauth.register_callbacks")
+
+    shutdown_callbacks = get_callbacks("shutdown")
+    # Get the module paths of registered callbacks
+    callback_modules = []
+    for cb in shutdown_callbacks:
+        if hasattr(cb, "__module__"):
+            callback_modules.append(cb.__module__)
+        elif hasattr(cb, "__wrapped__") and hasattr(cb.__wrapped__, "__module__"):
+            callback_modules.append(cb.__wrapped__.__module__)
+
+    # No chatgpt_oauth callback should be registered for shutdown
+    assert not any("chatgpt_oauth" in m for m in callback_modules), (
+        "ChatGPT OAuth shutdown callback should not be registered"
+    )
+
+
+@patch("code_puppy.plugins.chatgpt_oauth.utils.requests.post")
+def test_refresh_success_syncs_api_key(mock_post, tmp_path):
+    """On successful refresh, api_key should be kept in sync with access_token.
+
+    This ensures compatibility with code that expects api_key to be available.
+    """
+    with patch.object(
+        utils, "get_token_storage_path", return_value=tmp_path / "tokens.json"
+    ):
+        # Pre-populate with tokens
+        initial_tokens = {
+            "access_token": "old_access_token",
+            "refresh_token": "test_refresh",
+            "api_key": "old_access_token",
+            "account_id": "test_account",
+        }
+        utils.save_tokens(initial_tokens)
+
+        # Mock successful refresh response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "access_token": "new_access_token_123",
+            "refresh_token": "new_refresh_token",
+        }
+        mock_post.return_value = mock_response
+
+        # Refresh
+        result = utils.refresh_access_token()
+
+        assert result == "new_access_token_123"
+
+        # Verify saved tokens have api_key synced
+        saved = utils.load_stored_tokens()
+        assert saved["access_token"] == "new_access_token_123"
+        assert saved["api_key"] == "new_access_token_123"
+        assert saved["refresh_token"] == "new_refresh_token"
+        # account_id should be preserved
+        assert saved["account_id"] == "test_account"
+
+
+@patch("code_puppy.plugins.chatgpt_oauth.utils.requests.post")
+def test_fatal_refresh_error_clears_tokens(mock_post, tmp_path):
+    """Unrecoverable errors (401, invalid_grant) should clear token cache.
+
+    This prevents the app from pretending the user is authenticated when
+    the refresh token is dead.
+    """
+    with patch.object(
+        utils, "get_token_storage_path", return_value=tmp_path / "tokens.json"
+    ):
+        # Pre-populate with tokens
+        initial_tokens = {
+            "access_token": "expired_token",
+            "refresh_token": "dead_refresh_token",
+            "api_key": "expired_token",
+        }
+        utils.save_tokens(initial_tokens)
+
+        # Mock 401 Unauthorized response
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.text = "Unauthorized"
+        mock_post.return_value = mock_response
+
+        # Refresh should fail and clear tokens
+        result = utils.refresh_access_token()
+
+        assert result is None
+        # Token cache should be cleared
+        assert utils.load_stored_tokens() is None
+        assert not (tmp_path / "tokens.json").exists()
+
+
+@patch("code_puppy.plugins.chatgpt_oauth.utils.requests.post")
+def test_invalid_grant_clears_tokens(mock_post, tmp_path):
+    """OAuth 'invalid_grant' error should clear token cache as unrecoverable."""
+    with patch.object(
+        utils, "get_token_storage_path", return_value=tmp_path / "tokens.json"
+    ):
+        # Pre-populate with tokens
+        initial_tokens = {
+            "access_token": "expired_token",
+            "refresh_token": "revoked_token",
+        }
+        utils.save_tokens(initial_tokens)
+
+        # Mock 400 with invalid_grant error
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = {
+            "error": "invalid_grant",
+            "error_description": "The provided authorization grant is invalid",
+        }
+        mock_post.return_value = mock_response
+
+        # Refresh should fail and clear tokens
+        result = utils.refresh_access_token()
+
+        assert result is None
+        assert utils.load_stored_tokens() is None
+
+
+@patch("code_puppy.plugins.chatgpt_oauth.utils.requests.post")
+def test_token_expired_error_clears_tokens(mock_post, tmp_path):
+    """OAuth 'token_expired' error should clear token cache as unrecoverable."""
+    with patch.object(
+        utils, "get_token_storage_path", return_value=tmp_path / "tokens.json"
+    ):
+        initial_tokens = {
+            "access_token": "expired_token",
+            "refresh_token": "expired_refresh",
+        }
+        utils.save_tokens(initial_tokens)
+
+        # Mock 400 with token_expired error in description
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = {
+            "error": "invalid_request",
+            "error_description": "The refresh token has expired",
+        }
+        mock_post.return_value = mock_response
+
+        result = utils.refresh_access_token()
+
+        assert result is None
+        assert utils.load_stored_tokens() is None
+
+
+@patch("code_puppy.plugins.chatgpt_oauth.utils.requests.post")
+def test_transient_error_preserves_tokens(mock_post, tmp_path):
+    """Transient errors (500, 502, timeout) should NOT clear token cache.
+
+    These are server/network issues that may resolve on retry.
+    """
+    with patch.object(
+        utils, "get_token_storage_path", return_value=tmp_path / "tokens.json"
+    ):
+        initial_tokens = {
+            "access_token": "valid_token",
+            "refresh_token": "valid_refresh",
+            "api_key": "valid_token",
+        }
+        utils.save_tokens(initial_tokens)
+
+        # Mock 500 Server Error
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+        mock_post.return_value = mock_response
+
+        # Refresh should fail but NOT clear tokens
+        result = utils.refresh_access_token()
+
+        assert result is None
+        # Token cache should be preserved for retry
+        saved = utils.load_stored_tokens()
+        assert saved is not None
+        assert saved["access_token"] == "valid_token"
+        assert saved["refresh_token"] == "valid_refresh"
+
+
+@patch("code_puppy.plugins.chatgpt_oauth.utils.requests.post")
+def test_rate_limit_error_preserves_tokens(mock_post, tmp_path):
+    """HTTP 429 rate limit should NOT clear token cache."""
+    with patch.object(
+        utils, "get_token_storage_path", return_value=tmp_path / "tokens.json"
+    ):
+        initial_tokens = {
+            "access_token": "valid_token",
+            "refresh_token": "valid_refresh",
+        }
+        utils.save_tokens(initial_tokens)
+
+        # Mock 429 Too Many Requests
+        mock_response = MagicMock()
+        mock_response.status_code = 429
+        mock_response.text = "Rate limited"
+        mock_post.return_value = mock_response
+
+        result = utils.refresh_access_token()
+
+        assert result is None
+        # Tokens should be preserved
+        assert utils.load_stored_tokens() is not None
+
+
+@patch("code_puppy.plugins.chatgpt_oauth.utils.requests.post")
+def test_network_timeout_preserves_tokens(mock_post, tmp_path):
+    """Network timeout should NOT clear token cache."""
+    from requests.exceptions import Timeout
+
+    with patch.object(
+        utils, "get_token_storage_path", return_value=tmp_path / "tokens.json"
+    ):
+        initial_tokens = {
+            "access_token": "valid_token",
+            "refresh_token": "valid_refresh",
+        }
+        utils.save_tokens(initial_tokens)
+
+        # Simulate timeout
+        mock_post.side_effect = Timeout("Request timed out")
+
+        result = utils.refresh_access_token()
+
+        assert result is None
+        # Tokens should be preserved
+        saved = utils.load_stored_tokens()
+        assert saved is not None
+        assert saved["access_token"] == "valid_token"
+
+
+@patch("code_puppy.plugins.chatgpt_oauth.utils.requests.post")
+def test_connection_error_preserves_tokens(mock_post, tmp_path):
+    """Connection error should NOT clear token cache."""
+    from requests.exceptions import ConnectionError
+
+    with patch.object(
+        utils, "get_token_storage_path", return_value=tmp_path / "tokens.json"
+    ):
+        initial_tokens = {
+            "access_token": "valid_token",
+            "refresh_token": "valid_refresh",
+        }
+        utils.save_tokens(initial_tokens)
+
+        # Simulate connection error
+        mock_post.side_effect = ConnectionError("No route to host")
+
+        result = utils.refresh_access_token()
+
+        assert result is None
+        # Tokens should be preserved
+        assert utils.load_stored_tokens() is not None
+
+
+def test_unrecoverable_error_detection():
+    """Test the _is_unrecoverable_token_error helper."""
+    # 401 is always unrecoverable
+    mock_resp_401 = MagicMock()
+    mock_resp_401.status_code = 401
+    mock_resp_401.json.return_value = {}
+    assert utils._is_unrecoverable_token_error(mock_resp_401) is True
+
+    # 400 with invalid_grant is unrecoverable (OAuth style)
+    mock_resp_invalid_grant = MagicMock()
+    mock_resp_invalid_grant.status_code = 400
+    mock_resp_invalid_grant.json.return_value = {
+        "error": "invalid_grant",
+        "error_description": "Bad grant",
+    }
+    assert utils._is_unrecoverable_token_error(mock_resp_invalid_grant) is True
+
+    # 400 with token_expired in description is unrecoverable
+    mock_resp_token_expired = MagicMock()
+    mock_resp_token_expired.status_code = 400
+    mock_resp_token_expired.json.return_value = {
+        "error": "invalid_request",
+        "error_description": "The token has expired",
+    }
+    assert utils._is_unrecoverable_token_error(mock_resp_token_expired) is True
+
+    # 400 with nested API style error is unrecoverable
+    mock_resp_nested = MagicMock()
+    mock_resp_nested.status_code = 400
+    mock_resp_nested.json.return_value = {
+        "error": {
+            "code": "token_expired",
+            "message": "Could not validate your token, it may have expired",
+        }
+    }
+    assert utils._is_unrecoverable_token_error(mock_resp_nested) is True
+
+    # 400 with nested API style using invalid_grant code
+    mock_resp_nested_grant = MagicMock()
+    mock_resp_nested_grant.status_code = 400
+    mock_resp_nested_grant.json.return_value = {
+        "error": {
+            "code": "invalid_grant",
+            "message": "The authorization grant is invalid",
+        }
+    }
+    assert utils._is_unrecoverable_token_error(mock_resp_nested_grant) is True
+
+    # 500 is NOT unrecoverable
+    mock_resp_500 = MagicMock()
+    mock_resp_500.status_code = 500
+    mock_resp_500.json.return_value = {"error": "server_error"}
+    assert utils._is_unrecoverable_token_error(mock_resp_500) is False
+
+    # 400 with unknown error is NOT unrecoverable
+    mock_resp_unknown = MagicMock()
+    mock_resp_unknown.status_code = 400
+    mock_resp_unknown.json.return_value = {"error": "temporarily_unavailable"}
+    assert utils._is_unrecoverable_token_error(mock_resp_unknown) is False
+
+    # 400 with non-JSON body is NOT unrecoverable (unknown)
+    mock_resp_nonjson = MagicMock()
+    mock_resp_nonjson.status_code = 400
+    mock_resp_nonjson.json.side_effect = ValueError("Not JSON")
+    assert utils._is_unrecoverable_token_error(mock_resp_nonjson) is False
+
+
+@patch("code_puppy.plugins.chatgpt_oauth.utils.requests.post")
+def test_ambiguous_error_description_preserves_tokens(mock_post, tmp_path):
+    """Ambiguous/transient error descriptions should NOT clear tokens.
+
+    Only explicit unrecoverable phrases should trigger token clearing.
+    Generic or ambiguous messages should be treated as transient.
+    """
+    with patch.object(
+        utils, "get_token_storage_path", return_value=tmp_path / "tokens.json"
+    ):
+        # Pre-populate with tokens
+        initial_tokens = {
+            "access_token": "valid_token",
+            "refresh_token": "valid_refresh",
+        }
+        utils.save_tokens(initial_tokens)
+
+        # Mock 400 with ambiguous error description (not in allowlist)
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = {
+            "error": "error",
+            "error_description": "An error occurred processing the request",
+        }
+        mock_post.return_value = mock_response
+
+        # Refresh should fail but NOT clear tokens
+        result = utils.refresh_access_token()
+
+        assert result is None
+        # Token cache should be preserved for retry
+        saved = utils.load_stored_tokens()
+        assert saved is not None
+        assert saved["access_token"] == "valid_token"
+        assert saved["refresh_token"] == "valid_refresh"
+
+
+def test_clear_stored_tokens(tmp_path):
+    """Test that clear_stored_tokens safely removes the token file."""
+    token_path = tmp_path / "tokens.json"
+    with patch.object(utils, "get_token_storage_path", return_value=token_path):
+        # Save some tokens first
+        utils.save_tokens({"access_token": "test", "refresh_token": "test"})
+        assert token_path.exists()
+
+        # Clear them
+        assert utils.clear_stored_tokens() is True
+        assert not token_path.exists()
+
+        # After clearing, load should return None
+        assert utils.load_stored_tokens() is None
+
+        # Clearing when file doesn't exist should still succeed
+        assert utils.clear_stored_tokens() is True
 
 
 if __name__ == "__main__":

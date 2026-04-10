@@ -33,7 +33,6 @@ from .utils import (
     load_claude_models_filtered,
     load_stored_tokens,
     prepare_oauth_context,
-    refresh_access_token,
     remove_claude_code_models,
     save_tokens,
 )
@@ -61,23 +60,6 @@ def _on_startup() -> None:
             "⚠️ Claude Code OAuth token expired and refresh failed. "
             "Run /claude-code-auth to re-authenticate."
         )
-
-
-def _on_shutdown() -> None:
-    """Attempt a last-minute token refresh before exit.
-
-    Refreshing now means the next session starts with a fresh token,
-    reducing the chance of 'model not available' on restart.
-    """
-    tokens = load_stored_tokens()
-    if not tokens or not tokens.get("refresh_token"):
-        return
-
-    try:
-        refresh_access_token()
-    except Exception as exc:
-        # Never block shutdown — just log and move on
-        logger.debug("Claude Code OAuth shutdown refresh failed: %s", exc)
 
 
 class _OAuthResult:
@@ -482,7 +464,6 @@ async def _on_agent_run_end(
 
 
 register_callback("startup", _on_startup)
-register_callback("shutdown", _on_shutdown)
 register_callback("custom_command_help", _custom_help)
 register_callback("custom_command", _handle_custom_command)
 register_callback("register_model_type", _register_model_types)

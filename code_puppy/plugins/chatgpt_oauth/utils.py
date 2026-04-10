@@ -180,8 +180,110 @@ def get_valid_access_token() -> str | None:
     return access_token
 
 
+# Unrecoverable OAuth error codes that indicate the refresh token is dead
+# and cannot be used anymore. These require user re-authentication.
+UNRECOVERABLE_OAUTH_ERRORS = frozenset(
+    {
+        "invalid_grant",
+        "invalid_token",
+        "token_expired",
+        "unauthorized_client",
+        "access_denied",
+        "invalid_client",
+    }
+)
+
+# Explicit phrases in error messages/descriptions that indicate unrecoverable errors.
+# These are exact phrases (matched case-insensitively) to avoid false positives.
+UNRECOVERABLE_ERROR_PHRASES = frozenset(
+    {
+        "token expired",
+        "refresh token expired",
+        "token has expired",
+        "could not validate your token",
+        "invalid grant",
+    }
+)
+
+
+def _is_unrecoverable_token_error(response: Any) -> bool:
+    """Check if an OAuth response indicates an unrecoverable token error.
+
+    Supports both response shapes:
+    a) OAuth style: {"error": "invalid_grant", "error_description": "..."}
+    b) Nested API style: {"error": {"code": "token_expired", "message": "..."}}
+
+    Args:
+        response: The requests Response object from a failed token refresh.
+
+    Returns:
+        True if the error is unrecoverable (token is dead, user must re-auth).
+    """
+    # 401 Unauthorized is always unrecoverable
+    if response.status_code == 401:
+        return True
+
+    # 400 Bad Request often carries OAuth error codes
+    if response.status_code == 400:
+        try:
+            error_data = response.json()
+
+            # Handle OAuth style: {"error": "invalid_grant", "error_description": "..."}
+            error_code = error_data.get("error")
+            if isinstance(error_code, str):
+                error_code_lower = error_code.lower()
+                if error_code_lower in UNRECOVERABLE_OAUTH_ERRORS:
+                    return True
+                # Check error_description for explicit phrases
+                error_desc = error_data.get("error_description", "").lower()
+                if any(phrase in error_desc for phrase in UNRECOVERABLE_ERROR_PHRASES):
+                    return True
+
+            # Handle nested API style: {"error": {"code": "token_expired", "message": "..."}}
+            elif isinstance(error_code, dict):
+                nested_code = error_code.get("code", "").lower()
+                if nested_code in UNRECOVERABLE_OAUTH_ERRORS:
+                    return True
+                # Check nested message for explicit phrases
+                nested_message = error_code.get("message", "").lower()
+                if any(
+                    phrase in nested_message for phrase in UNRECOVERABLE_ERROR_PHRASES
+                ):
+                    return True
+
+        except (ValueError, AttributeError):
+            pass
+
+    return False
+
+
+def clear_stored_tokens() -> bool:
+    """Safely invalidate and remove stored OAuth tokens.
+
+    This clears the token cache so the app stops pretending the user
+    is authenticated when tokens are unrecoverably invalid.
+
+    Returns:
+        True if tokens were cleared successfully.
+    """
+    try:
+        token_path = get_token_storage_path()
+        if token_path.exists():
+            token_path.unlink()
+            logger.info("Cleared stored OAuth tokens (token cache invalidated)")
+            return True
+        return True  # Nothing to clear is also success
+    except Exception as exc:
+        logger.warning("Failed to clear token cache: %s", exc)
+        return False
+
+
 def refresh_access_token() -> str | None:
     """Refresh the access token using the refresh token.
+
+    On successful refresh, the api_key field is kept in sync with access_token.
+    On unrecoverable errors (401, invalid_grant, etc.), stored tokens are
+    invalidated so the user can re-authenticate cleanly.
 
     Returns:
         New access token if refresh succeeded, None otherwise.
@@ -223,15 +325,36 @@ def refresh_access_token() -> str | None:
                     .replace("+00:00", "Z"),
                 }
             )
+            # Keep api_key in sync with access_token for compatibility
+            if tokens.get("access_token"):
+                tokens["api_key"] = tokens["access_token"]
             if save_tokens(tokens):
                 logger.info("Successfully refreshed ChatGPT OAuth token")
                 return tokens["access_token"]
         else:
-            logger.error(
-                "Token refresh failed: %s - %s", response.status_code, response.text
-            )
+            # Check for unrecoverable errors (401, invalid_grant, etc.)
+            if _is_unrecoverable_token_error(response):
+                logger.warning(
+                    "Token refresh failed with unrecoverable error (%s). "
+                    "Clearing token cache - user must re-authenticate.",
+                    response.status_code,
+                )
+                clear_stored_tokens()
+            else:
+                # Transient error - log quietly without clearing tokens
+                logger.debug(
+                    "Token refresh failed (transient): %s - %s",
+                    response.status_code,
+                    response.text[:200],
+                )
+    except requests.exceptions.Timeout:
+        logger.debug("Token refresh timed out (transient)")
+    except requests.exceptions.ConnectionError:
+        logger.debug("Token refresh connection error (transient)")
+    except requests.exceptions.RequestException as exc:
+        logger.debug("Token refresh request error (transient): %s", exc)
     except Exception as exc:
-        logger.error("Token refresh error: %s", exc)
+        logger.error("Unexpected token refresh error: %s", exc)
 
     return None
 

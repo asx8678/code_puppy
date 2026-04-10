@@ -18,7 +18,6 @@ from .utils import (
     get_valid_access_token,
     load_chatgpt_models,
     load_stored_tokens,
-    refresh_access_token,
     remove_chatgpt_models,
 )
 
@@ -45,23 +44,6 @@ def _on_startup() -> None:
             "⚠️ ChatGPT OAuth token expired and refresh failed. "
             "Run /chatgpt-auth to re-authenticate."
         )
-
-
-def _on_shutdown() -> None:
-    """Attempt a last-minute token refresh before exit.
-
-    Refreshing now means the next session starts with a fresh token,
-    reducing the chance of 'model not available' on restart.
-    """
-    tokens = load_stored_tokens()
-    if not tokens or not tokens.get("refresh_token"):
-        return
-
-    try:
-        refresh_access_token()
-    except Exception as exc:
-        # Never block shutdown — just log and move on
-        logger.debug("ChatGPT OAuth shutdown refresh failed: %s", exc)
 
 
 def _custom_help() -> list[tuple[str, str]]:
@@ -211,7 +193,6 @@ def _register_model_types() -> list[dict[str, Any]]:
 
 
 register_callback("startup", _on_startup)
-register_callback("shutdown", _on_shutdown)
 register_callback("custom_command_help", _custom_help)
 register_callback("custom_command", _handle_custom_command)
 register_callback("register_model_type", _register_model_types)
