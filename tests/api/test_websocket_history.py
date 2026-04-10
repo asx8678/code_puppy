@@ -524,3 +524,162 @@ def test_default_maxlen_from_config():
             buf.record("test", {"type": f"e{i}"})
 
         assert len(buf.get_history("test")) == 50
+
+
+# =============================================================================
+# TTL Cleanup Tests
+# =============================================================================
+
+
+class TestSessionHistoryBufferTTL:
+    """Tests for TTL cleanup of abandoned sessions."""
+
+    def test_ttl_cleanup_removes_expired_sessions(self):
+        """Expired sessions are removed by cleanup_expired_sessions."""
+        buf = SessionHistoryBuffer(maxlen=10, ttl_seconds=1)
+
+        # Record to session-1
+        buf.record("session-1", {"type": "event1"})
+
+        # Wait for it to expire
+        import time
+        time.sleep(1.1)
+
+        # Now create session-2 (has fresh timestamp)
+        buf.record("session-2", {"type": "event2"})
+
+        assert buf.session_count() == 2
+        assert buf.has_session("session-1")
+        assert buf.has_session("session-2")
+
+        # Cleanup should remove only session-1
+        removed = buf.cleanup_expired_sessions()
+        assert removed == 1
+        assert buf.session_count() == 1
+        assert not buf.has_session("session-1")
+        assert buf.has_session("session-2")
+
+    def test_access_updates_timestamp(self):
+        """Recording or retrieving updates the access timestamp."""
+        buf = SessionHistoryBuffer(maxlen=10, ttl_seconds=1)
+
+        # Record
+        buf.record("session", {"type": "event1"})
+        first_access = buf.get_session_last_access("session")
+        assert first_access is not None
+
+        # Wait a bit
+        import time
+        time.sleep(0.1)
+
+        # Access updates timestamp
+        buf.get_history("session")
+        second_access = buf.get_session_last_access("session")
+        assert second_access > first_access
+
+        # Record also updates timestamp
+        time.sleep(0.1)
+        buf.record("session", {"type": "event2"})
+        third_access = buf.get_session_last_access("session")
+        assert third_access > second_access
+
+    def test_ttl_disabled_with_zero(self):
+        """TTL of 0 disables automatic cleanup."""
+        buf = SessionHistoryBuffer(maxlen=10, ttl_seconds=0)
+
+        buf.record("session", {"type": "event"})
+
+        # Cleanup should do nothing
+        removed = buf.cleanup_expired_sessions()
+        assert removed == 0
+        assert buf.has_session("session")
+
+    def test_custom_ttl_override(self):
+        """Cleanup accepts custom TTL override."""
+        buf = SessionHistoryBuffer(maxlen=10, ttl_seconds=3600)  # Long default TTL
+
+        buf.record("session", {"type": "event"})
+
+        # Short sleep
+        import time
+        time.sleep(0.1)
+
+        # Use short custom TTL to force expiration of even recent sessions
+        removed = buf.cleanup_expired_sessions(custom_ttl=0.05)
+        assert removed == 1
+        assert not buf.has_session("session")
+
+    def test_clear_session_removes_access_timestamp(self):
+        """clear_session removes both history and access timestamp."""
+        buf = SessionHistoryBuffer(maxlen=10, ttl_seconds=1)
+
+        buf.record("session", {"type": "event"})
+        assert buf.get_session_last_access("session") is not None
+
+        buf.clear_session("session")
+        assert buf.get_session_last_access("session") is None
+        assert not buf.has_session("session")
+
+    def test_clear_all_removes_access_timestamps(self):
+        """clear_all removes access timestamps along with history."""
+        buf = SessionHistoryBuffer(maxlen=10, ttl_seconds=1)
+
+        buf.record("s1", {"type": "event1"})
+        buf.record("s2", {"type": "event2"})
+
+        assert buf.get_session_last_access("s1") is not None
+        assert buf.get_session_last_access("s2") is not None
+
+        buf.clear_all()
+
+        assert buf.get_session_last_access("s1") is None
+        assert buf.get_session_last_access("s2") is None
+
+    def test_no_session_returns_none_access_time(self):
+        """get_session_last_access returns None for unknown session."""
+        buf = SessionHistoryBuffer(maxlen=10, ttl_seconds=1)
+
+        assert buf.get_session_last_access("unknown") is None
+
+    def test_ttl_config_from_getter(self):
+        """TTL is read from config getter when not provided."""
+        with patch(
+            "code_puppy.messaging.history_buffer.get_ws_history_ttl_seconds",
+            return_value=1800,
+        ):
+            buf = SessionHistoryBuffer()
+            assert buf._ttl_seconds == 1800
+
+    def test_partial_expiration(self):
+        """Only expired sessions are removed, active ones remain."""
+        buf = SessionHistoryBuffer(maxlen=10, ttl_seconds=0.5)
+
+        # Create sessions at different times
+        buf.record("old-session", {"type": "old"})
+
+        import time
+        time.sleep(0.6)
+
+        buf.record("new-session", {"type": "new"})
+
+        # Cleanup should only remove old-session
+        removed = buf.cleanup_expired_sessions()
+        assert removed == 1
+        assert not buf.has_session("old-session")
+        assert buf.has_session("new-session")
+
+    def test_cleanup_logs_on_removal(self, caplog):
+        """Cleanup logs when sessions are removed."""
+        import logging
+
+        buf = SessionHistoryBuffer(maxlen=10, ttl_seconds=0.1)
+
+        buf.record("session", {"type": "event"})
+
+        import time
+        time.sleep(0.15)
+
+        with caplog.at_level(logging.DEBUG):
+            buf.cleanup_expired_sessions()
+
+        assert "cleaned up" in caplog.text.lower() or "SessionHistoryBuffer" in caplog.text

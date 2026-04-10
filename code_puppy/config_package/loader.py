@@ -233,6 +233,13 @@ def load_puppy_config() -> PuppyConfig:
             max_val=10000,
             **resolver_ctx,
         ),
+        ws_history_ttl_seconds=_get_int(
+            ("PUPPY_WS_HISTORY_TTL_SECONDS",),
+            "ws_history_ttl_seconds",
+            3600,
+            min_val=0,
+            max_val=86400 * 7,  # Max 1 week
+        ),
         # Feature flags
         session_logger_enabled=resolve_bool(
             ("PUPPY_SESSION_LOGGER", "CODE_PUPPY_SESSION_LOGGER"),

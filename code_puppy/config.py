@@ -2253,6 +2253,24 @@ def get_ws_history_maxlen() -> int:
         return 200
 
 
+def get_ws_history_ttl_seconds() -> int:
+    """Get TTL in seconds for abandoned WebSocket session history.
+
+    Sessions that haven't been accessed within this TTL are automatically
+    cleaned up to prevent memory leaks. Set to 0 to disable TTL cleanup.
+
+    Environment: PUPPY_WS_HISTORY_TTL_SECONDS
+    Default: 3600 (1 hour)
+    """
+    val = get_value("ws_history_ttl_seconds")
+    if val is None:
+        return 3600
+    try:
+        return int(val)
+    except ValueError:
+        return 3600
+
+
 # --- AGENT MEMORY CONFIGURATION ---
 def get_enable_agent_memory() -> bool:
     """Return True if agent memory is enabled (default False).

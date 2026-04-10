@@ -82,6 +82,7 @@ class PuppyConfig:
 
         # Messaging / UI
         ws_history_maxlen: Max WebSocket history entries for SSE replay
+        ws_history_ttl_seconds: TTL for abandoned session history (0 = disabled)
 
         # Feature flags
         session_logger_enabled: Enable session logging
@@ -140,6 +141,7 @@ class PuppyConfig:
     # Messaging / UI
     # ─────────────────────────────────────────────────────────────
     ws_history_maxlen: int
+    ws_history_ttl_seconds: int
 
     # ─────────────────────────────────────────────────────────────
     # Feature Flags
