@@ -127,7 +127,9 @@ class RetryConfig:
         exponential_base (float): Base for exponential backoff (default: 2.0)
         retryable_exceptions (tuple): Exception types to retry
         on_retry: Optional callback with (attempt, error, delay)
-        temperature_escalation: Optional temperature values per attempt
+        temperature_escalation: Optional temperature values per attempt.
+            Use with ``with_retry(func, config, state=state)`` — not with the
+            ``@retry`` decorator, which cannot expose state to the wrapped function.
     """
 
     max_attempts: int = 3
@@ -455,9 +457,12 @@ def retry(
         ValueError,  # Parse errors
     ),
     on_terminal_quota: Callable[[Exception], Any] | None = None,
-    temperature_escalation: list[float] | None = None,
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Decorator to add retry logic to a function.
+
+    Note: For temperature escalation, use ``with_retry()`` directly with
+    an explicit ``RetryState`` instead of this decorator. The decorator
+    cannot expose per-attempt state to the wrapped function.
 
     Args:
         max_attempts: Maximum number of retry attempts
@@ -466,7 +471,6 @@ def retry(
         exponential_base: Base for exponential backoff
         retryable_exceptions: Tuple of exception types to retry
         on_terminal_quota: Optional callback for terminal quota errors
-        temperature_escalation: Optional list of temperature values for each attempt
     """
     config = RetryConfig(
         max_attempts=max_attempts,
@@ -474,7 +478,6 @@ def retry(
         max_delay=max_delay,
         exponential_base=exponential_base,
         retryable_exceptions=retryable_exceptions,
-        temperature_escalation=temperature_escalation,
     )
 
     def decorator(func: Callable[P, T]) -> Callable[P, T]:

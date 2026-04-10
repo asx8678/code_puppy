@@ -359,6 +359,13 @@ class TestCircuitBreaker:
 class TestRetryDecorator:
     """Test @retry decorator."""
 
+    def test_decorator_does_not_accept_temperature_escalation(self):
+        """The retry decorator should NOT accept temperature_escalation."""
+        import inspect
+
+        sig = inspect.signature(retry)
+        assert "temperature_escalation" not in sig.parameters
+
     @pytest.mark.asyncio
     async def test_async_retry_decorator(self):
         """Test retry decorator on async function."""

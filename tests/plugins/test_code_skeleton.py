@@ -188,3 +188,56 @@ class TestGetSkeletonForFile:
         test_file.write_bytes(b"\x00\x01\x02\x03")
         result = get_skeleton_for_file(str(test_file))
         assert isinstance(result, str)  # Should not crash
+
+
+class TestContextCommand:
+    """Test /context command that uses inject_scope_context."""
+
+    def test_context_command_with_python_file(self, tmp_path):
+        """Context command shows enclosing scope for a code fragment."""
+        test_file = tmp_path / "example.py"
+        test_file.write_text(
+            "class Calculator:\n"
+            "    def add(self, a, b):\n"
+            "        return a + b\n"
+            "\n"
+            "    def multiply(self, a, b):\n"
+            "        result = a * b\n"
+            "        return result\n"
+        )
+
+        from code_puppy.plugins.code_skeleton.register_callbacks import (
+            _handle_context_command,
+        )
+
+        result = _handle_context_command(f"/context {test_file} 3 3", "context")
+        assert result is not None
+        assert "Calculator" in result  # scope context
+        assert "add" in result  # scope context
+        assert "return a + b" in result  # actual line
+
+    def test_context_command_wrong_name(self):
+        """Returns None for non-context commands."""
+        from code_puppy.plugins.code_skeleton.register_callbacks import (
+            _handle_context_command,
+        )
+
+        assert _handle_context_command("/other test", "other") is None
+
+    def test_context_command_missing_args(self):
+        """Returns usage string when args missing."""
+        from code_puppy.plugins.code_skeleton.register_callbacks import (
+            _handle_context_command,
+        )
+
+        result = _handle_context_command("/context", "context")
+        assert "Usage" in result
+
+    def test_context_command_nonexistent_file(self):
+        """Returns error for nonexistent file."""
+        from code_puppy.plugins.code_skeleton.register_callbacks import (
+            _handle_context_command,
+        )
+
+        result = _handle_context_command("/context /nonexistent 1 5", "context")
+        assert "Error" in result

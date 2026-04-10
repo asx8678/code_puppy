@@ -101,9 +101,7 @@ class CheckpointStore:
     def is_done(self, item_id: str) -> bool:
         """Check if an item has already been processed.
 
-        This is a fast O(1) lookup against the in-memory set.
-        No lock needed — reads are safe after ``__init__``, and
-        the set only grows (items are never removed).
+        Thread-safe O(1) lookup against the in-memory set.
 
         Args:
             item_id: Unique identifier for the work item.
@@ -111,7 +109,8 @@ class CheckpointStore:
         Returns:
             True if the item was previously saved.
         """
-        return str(item_id) in self._done
+        with self._lock:
+            return str(item_id) in self._done
 
     def get_result(self, item_id: str) -> Any | None:
         """Retrieve the saved result for a completed item.
@@ -122,7 +121,8 @@ class CheckpointStore:
         Returns:
             The saved result, or None if not found.
         """
-        return self._results.get(str(item_id))
+        with self._lock:
+            return self._results.get(str(item_id))
 
     def save(self, item_id: str, result: Any = None) -> None:
         """Save a completed item to the checkpoint file.

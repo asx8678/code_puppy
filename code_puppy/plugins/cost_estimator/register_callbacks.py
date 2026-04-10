@@ -75,18 +75,12 @@ def _on_pre_tool_call(
     tool_args: dict,
     context=None,
 ) -> None:
-    """Track token usage on tool calls (non-blocking).
+    """Track token usage on tool calls.
 
-    In dry-run mode (PUP_DRY_RUN=1), this could intercept LLM calls
-    and log estimated costs instead of making real API requests.
-    For now, it logs tool call metadata for cost tracking.
+    Always tracks token estimates for /cost reporting.
+    In dry-run mode (PUP_DRY_RUN=1), additionally logs estimates.
     """
-    # Only track if dry-run mode is enabled
-    if not _DRY_RUN:
-        return None
-
-    # Log tool call for cost tracking
-    if tool_name in ("send_message", "invoke_agent"):
+    if tool_name in ("invoke_agent",):
         prompt = tool_args.get("prompt", "") or tool_args.get("message", "")
         if prompt:
             from .estimator import count_tokens, track_session_tokens
@@ -94,10 +88,12 @@ def _on_pre_tool_call(
             model = tool_args.get("model", "gpt-4o")
             tokens = count_tokens(str(prompt), model=model)
             track_session_tokens(model, tokens)
-            logger.info(
-                "cost_estimator: %s → ~%d tokens (%s)",
-                tool_name, tokens, model,
-            )
+
+            if _DRY_RUN:
+                logger.info(
+                    "cost_estimator: %s → ~%d tokens (%s)",
+                    tool_name, tokens, model,
+                )
 
     return None
 
