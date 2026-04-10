@@ -211,29 +211,23 @@ def build_supervisor_prompt(
 async def _default_invoke_agent(
     agent_name: str, prompt: str, session_id: str | None = None
 ) -> str:
-    """Default invoke_agent adapter. Imports lazily to avoid circular deps.
+    """Default invoke_agent adapter. Uses invoke_agent_headless from agent_tools.
 
-    In Round A, this function may not be fully wired — Round B will complete
-    the integration with code_puppy.tools.agent_tools.invoke_agent.
+    This is a simplified invocation path for the supervisor_review loop.
+    It does not handle streaming, DBOS, or session persistence — those
+    features are handled by the full invoke_agent tool closure.
     """
     try:
-        from code_puppy.tools.agent_tools import invoke_agent as real_invoke
+        from code_puppy.tools.agent_tools import invoke_agent_headless
     except ImportError as exc:
         raise RuntimeError(
-            "invoke_agent is unavailable — supervisor_review plugin requires "
-            "code_puppy.tools.agent_tools (Round B integration pending)"
+            "invoke_agent_headless is unavailable — supervisor_review plugin "
+            "requires code_puppy.tools.agent_tools"
         ) from exc
 
-    # The real invoke_agent may be sync or async; adapt accordingly.
-    result = real_invoke(agent_name=agent_name, prompt=prompt, session_id=session_id)
-    if asyncio.iscoroutine(result):
-        result = await result
-    # real_invoke may return a dict or an object — extract text
-    if isinstance(result, dict):
-        return str(result.get("response") or result.get("output") or result)
-    if hasattr(result, "response"):
-        return str(getattr(result, "response"))
-    return str(result)
+    return await invoke_agent_headless(
+        agent_name=agent_name, prompt=prompt, session_id=session_id,
+    )
 
 
 async def run_supervisor_review_loop(

@@ -920,3 +920,99 @@ def register_invoke_agent(agent):
             _browser_session_var.reset(browser_session_token)
 
     return invoke_agent
+
+
+async def invoke_agent_headless(
+    agent_name: str,
+    prompt: str,
+    session_id: str | None = None,
+) -> str:
+    """Invoke a sub-agent without RunContext — for plugin use.
+
+    Simplified version of the invoke_agent tool closure that can be
+    imported at module level. Used by plugins like supervisor_review
+    that need to invoke agents outside of a pydantic-ai tool context.
+
+    Does NOT handle: streaming dashboards, DBOS workflows, browser/terminal
+    session isolation, or session persistence. For the full-featured version,
+    use the invoke_agent tool registered via register_invoke_agent().
+
+    Args:
+        agent_name: Name of the agent to invoke (e.g. "code-puppy").
+        prompt: The prompt to send to the agent.
+        session_id: Optional session ID for the invocation. Auto-generated
+            if None. Used for logging/tracking only (no persistence).
+
+    Returns:
+        The agent's text response.
+
+    Raises:
+        RuntimeError: If agent loading or model initialization fails.
+    """
+    from code_puppy.agents.agent_manager import load_agent
+    from code_puppy.model_factory import ModelFactory, make_model_settings
+    from code_puppy.model_utils import prepare_prompt_for_model
+    from code_puppy.tools import register_tools_for_agent
+    from code_puppy import callbacks
+
+    # Load agent config
+    agent_config = load_agent(agent_name)
+    model_name = agent_config.get_model_name()
+    models_config = ModelFactory.load_config()
+
+    if model_name not in models_config:
+        raise RuntimeError(f"Model '{model_name}' not found in configuration")
+
+    model = ModelFactory.get_model(model_name, models_config)
+    if model is None:
+        raise RuntimeError(
+            f"Failed to initialize model '{model_name}' for agent "
+            f"'{agent_name}'. Check that required API keys are set."
+        )
+
+    # Build instructions
+    instructions = agent_config.get_full_system_prompt()
+    puppy_rules = agent_config.load_puppy_rules()
+    if puppy_rules:
+        instructions += f"\n\n{puppy_rules}"
+
+    prompt_additions = callbacks._trigger_callbacks_sync("load_prompt")
+    prompt_additions = [p for p in prompt_additions if p is not None]
+    if prompt_additions:
+        instructions += "\n" + "\n".join(prompt_additions)
+
+    # Handle model-specific prompt preparation
+    prepared = prepare_prompt_for_model(
+        model_name, instructions, prompt, prepend_system_to_user=True,
+    )
+    instructions = prepared.instructions
+    prompt = prepared.user_prompt
+
+    # Create temp agent
+    model_settings = make_model_settings(model_name)
+    temp_agent = Agent(
+        model=model,
+        instructions=instructions,
+        output_type=str,
+        retries=3,
+        model_settings=model_settings,
+    )
+
+    # Register tools
+    agent_tools = agent_config.get_available_tools()
+    register_tools_for_agent(temp_agent, agent_tools, model_name=model_name)
+
+    # RunLimiter: respect concurrency limits if available
+    run_limiter = get_run_limiter() if _RUN_LIMITER_AVAILABLE else None
+    if run_limiter is not None:
+        await run_limiter.acquire_async()
+
+    try:
+        result = await temp_agent.run(
+            prompt,
+            usage_limits=UsageLimits(request_limit=get_message_limit()),
+        )
+        return str(result.output)
+    finally:
+        if run_limiter is not None:
+            run_limiter.release()
