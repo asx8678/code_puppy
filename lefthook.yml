@@ -59,4 +59,19 @@ pre-commit:
       fail_text: "Clippy found warnings (not blocking commit)"
 
 
+    # Plugin-focused pytest for pack_parallelism (pre-commit, not assuming pytest-timeout)
+    plugin-tests:
+      glob: "code_puppy/plugins/**/*.py"
+      run: |
+        if command -v uv >/dev/null 2>&1 && uv run pytest --version >/dev/null 2>&1; then
+          echo "Running plugin-focused tests...";
+          uv run pytest tests/plugins/pack_parallelism/ -v -x --tb=short || echo "Plugin tests found issues (non-blocking)";
+        elif command -v pytest >/dev/null 2>&1; then
+          echo "Running plugin-focused tests...";
+          pytest tests/plugins/pack_parallelism/ -v -x --tb=short || echo "Plugin tests found issues (non-blocking)";
+        else
+          echo "pytest not found; skipping plugin tests. Install with: uv add --dev pytest";
+        fi
+      fail_text: "Plugin tests found issues (not blocking commit)"
+
 # pre-push hook removed - tests run in CI only

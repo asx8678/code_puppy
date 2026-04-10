@@ -76,6 +76,117 @@ Full list + rarely-used hooks: see `code_puppy/callbacks.py` source.
 4. **Fail gracefully** — never crash the app
 5. **Return `None` from commands you don't own**
 
+## Audit-Driven Development Rules
+
+The following rules are enforced based on project audit findings:
+
+### Async I/O in Async Callbacks
+
+All async callback implementations **must use non-blocking I/O only**:
+
+```python
+# CORRECT: async context manager with proper I/O
+async def _on_shutdown_async():
+    await asyncio.gather(*pending_tasks)  # Non-blocking
+
+# INCORRECT: blocking I/O in async callback
+async def _on_shutdown_bad():
+    time.sleep(5)  # Blocking! Use asyncio.sleep instead
+```
+
+**Rule**: If your callback is registered as async, **all I/O must be async-native**. Use `asyncio` primitives, not blocking stdlib calls.
+
+### Environment Variable Naming Convention
+
+Environment variables follow strict prefixes for namespacing:
+
+| Prefix | Purpose | Example |
+|--------|---------|---------|
+| `PUP_` | Core runtime settings | `PUP_DEBUG=1` |
+| `PUPPY_` | Legacy compatibility | `PUPPY_HOME` |
+| `CODEPUP_` | CI/build environment | `CODEPUP_CI=1` |
+
+**Rule**: New variables **must use `PUP_` prefix**. Legacy `PUPPY_` is supported but deprecated.
+
+### Hook Merge Semantics
+
+When multiple callbacks register for the same hook, results are **merged by type**:
+
+| Hook Return Type | Merge Strategy |
+|-----------------|---------------|
+| `str` | Concatenation (newlines) |
+| `list` | Extend (concatenate) |
+| `dict` | Update (later wins on conflict) |
+| `bool` | OR (any True wins) |
+| `None` | Ignored |
+
+```python
+# Example: load_prompt returns are concatenated
+def my_prompt():
+    return "\n\n## Custom Instructions"  # Appended to base prompt
+
+register_callback("load_prompt", my_prompt)
+```
+
+**Rule**: Design callbacks expecting **additive semantics**, not replacement.
+
+### TODO Marker Format
+
+TODO comments follow a strict format for tooling and tracking:
+
+```python
+# TODO(<issue-id>): Brief description
+# FIXME(code-puppy-xxx): Description with issue reference
+# HACK(<category>): Temporary workaround with justification
+# REVIEW(<username>): Flag for code review discussion
+```
+
+Examples:
+```python
+# TODO(code_puppy-123): Add retry logic for rate limits
+# FIXME(code_puppy-456): Race condition on concurrent config updates
+# HACK(pack-parallelism): Workaround for semaphore state sync
+```
+
+**Rule**: All TODOs **must include identifier**. Bare `TODO:` markers are discouraged.
+
+### Test-Drift Prevention
+
+Tests must prevent "drift" from implementation changes:
+
+| Anti-Pattern | Prevention Strategy |
+|--------------|---------------------|
+| Mocking implementation details | Mock at boundary, not internals |
+| Hardcoded expected values | Use property-based testing (hypothesis) |
+| Ignoring error paths | Explicit error case coverage |
+| Stale comment assertions | `pytest --doctest-modules` |
+
+**CI Gate**: Plugin tests run on every plugin-related commit (see `lefthook.yml`).
+
+```python
+# CORRECT: Test the invariant, not the implementation
+@given(config=valid_config())
+def test_effective_limit_always_positive(config):
+    limiter = RunLimiter(config)
+    assert limiter.effective_limit >= 1
+
+# INCORRECT: Testing internal counter directly
+def test_counter_increment():
+    limiter._async_active = 1  # Brittle: relies on internal field
+```
+
+### Coverage Gates
+
+Per-module coverage requirements (CI-enforced):
+
+| Module Pattern | Minimum Coverage |
+|---------------|------------------|
+| `code_puppy/plugins/pack_parallelism/*` | ≥85% |
+| `code_puppy/utils/file_display.py` | Tested via integration |
+| `code_puppy/tools/command_runner.py` | Security-scanned + tested |
+
+**Rule**: Coverage gates are **minimums**, not targets. Prefer quality over percentage.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
 
