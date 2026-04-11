@@ -9,6 +9,7 @@ to agents.
 
 import asyncio
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -788,7 +789,8 @@ class MCPManager:
             return {"server_id": server_id, "exists": True, "error": str(e)}
 
 
-# Singleton instance
+# Singleton instance with double-checked locking for thread-safety
+_manager_lock = threading.Lock()
 _manager_instance: MCPManager | None = None
 
 
@@ -796,10 +798,15 @@ def get_mcp_manager() -> MCPManager:
     """
     Get the singleton MCPManager instance.
 
+    Uses double-checked locking pattern for thread-safe initialization
+    compatible with Python 3.14t free-threading.
+
     Returns:
         The global MCPManager instance
     """
     global _manager_instance
-    if _manager_instance is None:
-        _manager_instance = MCPManager()
+    if _manager_instance is None:  # Fast path
+        with _manager_lock:
+            if _manager_instance is None:  # Double-check
+                _manager_instance = MCPManager()
     return _manager_instance
