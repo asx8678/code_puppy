@@ -100,3 +100,25 @@ def test_write_to_file_binary_content(tmp_path):
         assert "success" in res or "error" in res
     except Exception:
         assert True
+
+
+def test_delete_snippet_relative_path_assertion(tmp_path, monkeypatch):
+    """Regression: _delete_snippet_from_file must receive an absolute path.
+
+    The tool layer (register_delete_snippet) resolves relative paths via
+    os.path.abspath before calling the internal helper.  This test verifies
+    the assertion catches relative paths and that absolute paths work.
+    """
+    import os
+    import pytest
+
+    target = tmp_path / "rel_test.py"
+    target.write_text("hello\nworld\n")
+
+    # Relative path must trigger the assertion guard
+    with pytest.raises(AssertionError, match="Expected absolute path"):
+        file_modifications._delete_snippet_from_file(None, "rel_test.py", "hello\n")
+
+    # Absolute path must succeed
+    res = file_modifications._delete_snippet_from_file(None, str(target), "hello\n")
+    assert res.get("changed") or "error" not in res

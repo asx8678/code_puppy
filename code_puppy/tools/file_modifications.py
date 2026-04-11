@@ -981,6 +981,7 @@ def register_delete_snippet(agent):
         context: RunContext, file_path: str = "", snippet: str = ""
     ) -> dict[str, Any]:
         """Remove the first occurrence of a text snippet from a file."""
+        file_path = os.path.abspath(file_path)
         group_id = generate_group_id("delete_snippet", file_path)
         result = await _remove_snippet(
             context, file_path, snippet, message_group=group_id
