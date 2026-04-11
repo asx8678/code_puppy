@@ -265,6 +265,28 @@ class TestSecurityBoundarySingleton:
         boundary2 = get_security_boundary()
         assert boundary1 is boundary2
 
+    def test_get_security_boundary_thread_safety(self):
+        """Regression test: concurrent singleton access must return same instance."""
+        import threading
+
+        # Reset singleton
+        reset_security_boundary()
+
+        results = []
+        barrier = threading.Barrier(10)
+
+        def worker():
+            barrier.wait()
+            results.append(id(get_security_boundary()))
+
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(set(results)) == 1, f"Expected 1 unique instance, got {len(set(results))}"
+
     def test_get_security_boundary_creates_new_after_reset(self):
         """Test that a new instance is created after reset."""
         boundary1 = get_security_boundary()
