@@ -10,6 +10,7 @@ import concurrent.futures
 import json
 import logging
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -288,22 +289,29 @@ class PolicyEngine:
 
 # ── Singleton ──────────────────────────────────────────────────────────
 _engine: PolicyEngine | None = None
+_engine_lock = threading.Lock()
 
 
 def get_policy_engine() -> PolicyEngine:
-    """Get or create the singleton PolicyEngine."""
+    """Get or create the singleton PolicyEngine (thread-safe)."""
     global _engine
     if _engine is None:
-        from code_puppy.config import get_yolo_mode
-        from code_puppy.policy_config import load_policy_rules
+        with _engine_lock:
+            # Double-checked locking: re-check after acquiring the lock
+            if _engine is None:
+                from code_puppy.config import get_yolo_mode
+                from code_puppy.policy_config import load_policy_rules
 
-        default: Decision = "allow" if get_yolo_mode() else "ask_user"
-        _engine = PolicyEngine(default_decision=default)
-        load_policy_rules(_engine)
+                default: Decision = "allow" if get_yolo_mode() else "ask_user"
+                # FIX: Build in local variable first, fully initialize, THEN publish
+                engine = PolicyEngine(default_decision=default)
+                load_policy_rules(engine)
+                _engine = engine  # ONLY publish after full initialization
     return _engine
 
 
 def reset_policy_engine() -> None:
-    """Reset the singleton (useful for testing)."""
+    """Reset the singleton (useful for testing). Thread-safe."""
     global _engine
-    _engine = None
+    with _engine_lock:
+        _engine = None
