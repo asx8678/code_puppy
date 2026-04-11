@@ -25,10 +25,6 @@ name = "parse_bench"
 harness = false
 required-features = []
 
-# Don't enable python feature for benchmarks
-[profile.bench]
-inherits = "release"
-
 [dependencies]
 pyo3 = { workspace = true, optional = true }
 serde = { workspace = true }
