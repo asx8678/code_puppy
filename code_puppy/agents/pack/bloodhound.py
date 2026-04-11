@@ -1,5 +1,7 @@
 """Bloodhound - The issue tracking specialist who follows the scent of dependencies 🐕‍🦺"""
 
+from typing import override
+
 from code_puppy.config import get_puppy_name
 
 from ... import callbacks
@@ -14,17 +16,21 @@ class BloodhoundAgent(BaseAgent):
     """
 
     @property
+    @override
     def name(self) -> str:
         return "bloodhound"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Bloodhound 🐕‍🦺"
 
     @property
+    @override
     def description(self) -> str:
         return "Issue tracking specialist - follows the scent of dependencies with bd"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the list of tools available to Bloodhound."""
         return [
@@ -35,6 +41,7 @@ class BloodhoundAgent(BaseAgent):
             "read_file",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get Bloodhound's system prompt."""
         puppy_name = get_puppy_name()

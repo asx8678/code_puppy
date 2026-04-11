@@ -4,7 +4,7 @@ A specialized agent for high-performance batch file operations using
 the turbo executor plugin. Works with any model — model pinning is config-driven.
 """
 
-from typing import Any
+from typing import Any, override
 
 from code_puppy.agents.base_agent import BaseAgent
 from code_puppy.plugins.turbo_executor import (
@@ -32,19 +32,23 @@ class TurboExecutorAgent(BaseAgent):
     # Model pinning: Xiaomi V2 Pro with 1M context window
 
     @property
+    @override
     def name(self) -> str:
         return "turbo-executor"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Turbo Executor 🚀"
 
     @property
+    @override
     def description(self) -> str:
         return (
             "High-performance batch file operations specialist — works with any model"
         )
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get tools available to Turbo Executor.
 
@@ -60,6 +64,7 @@ class TurboExecutorAgent(BaseAgent):
             "agent_share_your_reasoning",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get Turbo Executor's system prompt.
 

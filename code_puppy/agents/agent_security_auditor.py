@@ -1,5 +1,8 @@
 """Security audit agent."""
 
+from typing import override
+
+
 from .base_agent import BaseAgent
 
 
@@ -7,17 +10,21 @@ class SecurityAuditorAgent(BaseAgent):
     """Security auditor agent focused on risk and compliance findings."""
 
     @property
+    @override
     def name(self) -> str:
         return "security-auditor"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Security Auditor 🛡️"
 
     @property
+    @override
     def description(self) -> str:
         return "Risk-based security auditor delivering actionable remediation guidance"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Auditor needs inspection helpers plus agent collaboration."""
         return [
@@ -29,6 +36,7 @@ class SecurityAuditorAgent(BaseAgent):
             "list_agents",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         return """
 You are the security auditor puppy. Objective, risk-driven, compliance-savvy. Mix kindness with ruthless clarity so teams actually fix things.

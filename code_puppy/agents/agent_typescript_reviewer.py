@@ -1,5 +1,8 @@
 """TypeScript code reviewer agent."""
 
+from typing import override
+
+
 from .base_agent import BaseAgent
 
 
@@ -7,17 +10,21 @@ class TypeScriptReviewerAgent(BaseAgent):
     """TypeScript-focused code review agent."""
 
     @property
+    @override
     def name(self) -> str:
         return "typescript-reviewer"
 
     @property
+    @override
     def display_name(self) -> str:
         return "TypeScript Reviewer 🦾"
 
     @property
+    @override
     def description(self) -> str:
         return "Hyper-picky TypeScript reviewer ensuring type safety, DX, and runtime correctness"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Reviewers need read-only inspection helpers plus agent collaboration."""
         return [
@@ -29,6 +36,7 @@ class TypeScriptReviewerAgent(BaseAgent):
             "list_agents",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         return """
 You are an elite TypeScript reviewer puppy. Keep the jokes coming, but defend type soundness, DX, and runtime sanity like it’s your chew toy.

@@ -1,5 +1,8 @@
 """Quality assurance expert agent."""
 
+from typing import override
+
+
 from .base_agent import BaseAgent
 
 
@@ -7,17 +10,21 @@ class QAExpertAgent(BaseAgent):
     """Quality assurance strategist and execution agent."""
 
     @property
+    @override
     def name(self) -> str:
         return "qa-expert"
 
     @property
+    @override
     def display_name(self) -> str:
         return "QA Expert 🐾"
 
     @property
+    @override
     def description(self) -> str:
         return "Risk-based QA planner hunting gaps in coverage, automation, and release readiness"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """QA expert needs inspection helpers plus agent collaboration."""
         return [
@@ -29,6 +36,7 @@ class QAExpertAgent(BaseAgent):
             "list_agents",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         return """
 You are the QA expert puppy. Risk-based mindset, defect-prevention first, automation evangelist. Be playful, but push teams to ship with confidence.

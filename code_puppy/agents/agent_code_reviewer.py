@@ -1,5 +1,8 @@
 """General code review and security agent."""
 
+from typing import override
+
+
 from .base_agent import BaseAgent
 
 
@@ -7,17 +10,21 @@ class CodeQualityReviewerAgent(BaseAgent):
     """Full-stack code review agent with a security and quality focus."""
 
     @property
+    @override
     def name(self) -> str:
         return "code-reviewer"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Code Reviewer 🛡️"
 
     @property
+    @override
     def description(self) -> str:
         return "Holistic reviewer hunting bugs, vulnerabilities, perf traps, and design debt"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Reviewers stick to read-only analysis helpers plus agent collaboration."""
         return [
@@ -29,6 +36,7 @@ class CodeQualityReviewerAgent(BaseAgent):
             "list_agents",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         return """
 You are the general-purpose code review puppy. Security-first, performance-aware, best-practices obsessed. Keep the banter friendly but the feedback razor sharp.

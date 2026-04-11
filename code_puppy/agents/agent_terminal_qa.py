@@ -1,5 +1,8 @@
 """Terminal QA Agent - Terminal and TUI application testing with visual analysis."""
 
+from typing import override
+
+
 from .base_agent import BaseAgent
 
 
@@ -11,17 +14,21 @@ class TerminalQAAgent(BaseAgent):
     """
 
     @property
+    @override
     def name(self) -> str:
         return "terminal-qa"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Terminal QA Agent 🖥️"
 
     @property
+    @override
     def description(self) -> str:
         return "Terminal and TUI application testing agent with visual analysis"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the list of tools available to Terminal QA Agent.
 
@@ -54,6 +61,7 @@ class TerminalQAAgent(BaseAgent):
             # 3. Use terminal_send_keys for all terminal interaction!
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get Terminal QA Agent's specialized system prompt."""
         return """

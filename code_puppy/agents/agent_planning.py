@@ -1,5 +1,8 @@
 """Planning Agent - Breaks down complex tasks into actionable steps with strategic roadmapping."""
 
+from typing import override
+
+
 from code_puppy.config import get_puppy_name
 
 from .. import callbacks
@@ -10,20 +13,24 @@ class PlanningAgent(BaseAgent):
     """Planning Agent - Analyzes requirements and creates detailed execution plans."""
 
     @property
+    @override
     def name(self) -> str:
         return "planning-agent"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Planning Agent 📋"
 
     @property
+    @override
     def description(self) -> str:
         return (
             "Breaks down complex coding tasks into clear, actionable steps. "
             "Analyzes project structure, identifies dependencies, and creates execution roadmaps."
         )
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the list of tools available to the Planning Agent."""
         return [
@@ -36,6 +43,7 @@ class PlanningAgent(BaseAgent):
             "list_or_search_skills",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get the Planning Agent's system prompt."""
         puppy_name = get_puppy_name()

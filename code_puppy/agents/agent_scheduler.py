@@ -4,6 +4,9 @@ This agent helps users create, manage, and monitor scheduled tasks
 that run automatically even when Code Puppy isn't open.
 """
 
+from typing import override
+
+
 from .base_agent import BaseAgent
 
 
@@ -11,14 +14,17 @@ class SchedulerAgent(BaseAgent):
     """Scheduler Agent - Helps automate Code Puppy tasks on a schedule."""
 
     @property
+    @override
     def name(self) -> str:
         return "scheduler-agent"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Scheduler Agent 📅"
 
     @property
+    @override
     def description(self) -> str:
         return (
             "Helps you create and manage scheduled tasks - automate code reviews, "
@@ -26,6 +32,7 @@ class SchedulerAgent(BaseAgent):
             "and walk you through setting up new scheduled prompts."
         )
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the list of tools available to the Scheduler Agent."""
         return [
@@ -47,6 +54,7 @@ class SchedulerAgent(BaseAgent):
             "scheduler_view_log",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get the Scheduler Agent's system prompt."""
         return """You are the Scheduler Agent 📅, a friendly assistant that helps users automate Code Puppy tasks.

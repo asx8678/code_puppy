@@ -4,6 +4,8 @@ This pup fetches completed feature branches and brings them home to the base bra
 Expert in local git merge operations and keeping the codebase integrated.
 """
 
+from typing import override
+
 from code_puppy.config import get_puppy_name
 
 from ... import callbacks
@@ -14,17 +16,21 @@ class RetrieverAgent(BaseAgent):
     """Retriever - Merge specialist who fetches branches and brings them home."""
 
     @property
+    @override
     def name(self) -> str:
         return "retriever"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Retriever 🦮"
 
     @property
+    @override
     def description(self) -> str:
         return "Merge specialist - fetches completed branches and brings them home to the base branch"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the list of tools available to Retriever."""
         return [
@@ -39,6 +45,7 @@ class RetrieverAgent(BaseAgent):
             "list_files",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get Retriever's system prompt."""
         puppy_name = get_puppy_name()
