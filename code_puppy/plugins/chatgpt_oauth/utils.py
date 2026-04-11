@@ -537,6 +537,7 @@ def _filter_blocked_chatgpt_models(models: list[str]) -> list[str]:
 REQUIRED_CODEX_MODELS = [
     "gpt-5.4",
     "gpt-5.3-instant",
+    "gpt-5.3-codex-spark",
     "gpt-5.3-codex",
 ]
 

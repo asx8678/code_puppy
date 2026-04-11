@@ -4,6 +4,7 @@ import logging
 import os
 import pathlib
 import re
+import threading
 from types import MappingProxyType
 from typing import Any
 
@@ -861,6 +862,7 @@ def is_quota_exception(exc: BaseException) -> bool:
 # --- Model config caching (eliminates repeated disk reads) ---
 _model_config_cache: MappingProxyType | None = None
 _model_config_mtimes: dict[str, float] = {}
+_model_config_lock = threading.Lock()
 
 
 def _freeze_nested(obj: Any) -> Any:
@@ -887,7 +889,8 @@ def _freeze_nested(obj: Any) -> Any:
 def invalidate_model_config_cache() -> None:
     """Force next ModelFactory.load_config() call to re-read from disk."""
     global _model_config_cache
-    _model_config_cache = None
+    with _model_config_lock:
+        _model_config_cache = None
 
 
 class ModelFactory:
@@ -896,7 +899,6 @@ class ModelFactory:
     @staticmethod
     def load_config() -> dict[str, Any]:
         global _model_config_cache, _model_config_mtimes
-
         # Check if any source file has changed since last cache
         # Use module-level _config_module imports so that monkeypatch in tests can override them
 
@@ -917,9 +919,10 @@ class ModelFactory:
             except OSError:
                 pass  # File doesn't exist
 
-        # Return cache if valid
-        if _model_config_cache is not None and current_mtimes == _model_config_mtimes:
-            return _model_config_cache
+        # Check cache with lock - fast path for cache hits
+        with _model_config_lock:
+            if _model_config_cache is not None and current_mtimes == _model_config_mtimes:
+                return _model_config_cache
 
         load_model_config_callbacks = callbacks.get_callbacks("load_model_config")
         if len(load_model_config_callbacks) > 0:
@@ -1007,11 +1010,12 @@ class ModelFactory:
             )
 
         # Populate cache with nested immutability
-        _model_config_cache = _freeze_nested(config)
-        _model_config_mtimes.clear()
-        _model_config_mtimes.update(current_mtimes)
-
-        return _model_config_cache
+        frozen = _freeze_nested(config)
+        with _model_config_lock:
+            _model_config_cache = frozen
+            _model_config_mtimes.clear()
+            _model_config_mtimes.update(current_mtimes)
+        return frozen
 
     @staticmethod
     def get_model(model_name: str, config: dict[str, Any]) -> Any:
