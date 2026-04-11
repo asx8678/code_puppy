@@ -66,6 +66,7 @@ HomePage = "https://github.com/mpfaffenberger/code_puppy"
 [project.scripts]
 code-puppy = "code_puppy.main:main_entry"
 pup = "code_puppy.main:main_entry"
+gac = "code_puppy.plugins.git_auto_commit.cli:main"
 
 [tool.logfire]
 ignore_no_config = true

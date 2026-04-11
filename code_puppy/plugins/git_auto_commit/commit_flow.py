@@ -11,6 +11,7 @@ Each phase calls check_gac_context() FIRST — safety before everything.
 from __future__ import annotations
 
 import re
+import shlex
 from typing import Any
 
 from code_puppy.plugins.git_auto_commit.context_guard import (
@@ -240,11 +241,10 @@ def execute_commit(message: str, cwd: str | None = None) -> dict[str, Any]:
     if not message or not message.strip():
         raise CommitFlowError("Commit message cannot be empty", phase="execute")
 
-    # Sanitize message for shell (prevent injection)
-    # Escape double quotes, backticks, and dollar signs
-    safe_message = message.replace('"', '\\"').replace("`", "\\`").replace("$", "\\$")
+    # Sanitize message for shell (prevent injection) using shlex.quote
+    safe_message = shlex.quote(message)
 
-    result = execute_git_command_sync(f'git commit -m "{safe_message}"', cwd)
+    result = execute_git_command_sync(f"git commit -m {safe_message}", cwd)
     if not result["success"]:
         raise CommitFlowError(
             f"Commit failed: {result['error']}",
