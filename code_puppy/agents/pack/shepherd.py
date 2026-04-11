@@ -4,6 +4,8 @@ Reviews code for quality, best practices, and catches issues before they
 reach the base branch. A vigilant guardian of code quality in the pack workflow!
 """
 
+from typing import override
+
 from code_puppy.config import get_puppy_name
 
 from ... import callbacks
@@ -14,20 +16,24 @@ class ShepherdAgent(BaseAgent):
     """Shepherd - Code review critic that guides the flock toward quality code."""
 
     @property
+    @override
     def name(self) -> str:
         return "shepherd"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Shepherd 🐕"
 
     @property
+    @override
     def description(self) -> str:
         return (
             "Code review critic - guides the flock toward quality code "
             "and best practices"
         )
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the review toolkit available to Shepherd."""
         return [
@@ -41,6 +47,7 @@ class ShepherdAgent(BaseAgent):
             # Explain review feedback
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get Shepherd's system prompt - the guardian's instructions!"""
         puppy_name = get_puppy_name()

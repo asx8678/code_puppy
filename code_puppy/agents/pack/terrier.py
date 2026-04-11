@@ -4,6 +4,8 @@ This good boy digs git worktrees for parallel development.
 Each worktree is a separate working directory on a different branch.
 """
 
+from typing import override
+
 from code_puppy.config import get_puppy_name
 
 from ... import callbacks
@@ -14,17 +16,21 @@ class TerrierAgent(BaseAgent):
     """Terrier - Digs worktrees for parallel development workflows."""
 
     @property
+    @override
     def name(self) -> str:
         return "terrier"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Terrier 🐕"
 
     @property
+    @override
     def description(self) -> str:
         return "Worktree specialist - digs new worktrees for parallel development"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the list of tools available to the Terrier."""
         return [
@@ -35,6 +41,7 @@ class TerrierAgent(BaseAgent):
             "list_files",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get the Terrier's system prompt."""
         puppy_name = get_puppy_name()
