@@ -296,6 +296,14 @@ class TestConfigKeys:
 class TestCallbacksErrorHandling:
     """Test callbacks error handling and edge cases."""
 
+    def setup_method(self):
+        """Disable plugin loading for isolated testing."""
+        os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
+
+    def teardown_method(self):
+        """Re-enable plugin loading after each test."""
+        os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
+
     def test_register_callback_rejects_invalid_phase(self):
         """Test that registering callback with invalid phase raises error."""
 

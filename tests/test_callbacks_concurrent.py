@@ -10,6 +10,7 @@ Covers:
 
 import asyncio
 import logging
+import os
 from unittest.mock import patch
 
 import pytest
@@ -32,6 +33,12 @@ class TestTriggerCallbacksSync:
 
     def setup_method(self):
         clear_callbacks()
+        # Disable auto-plugin-loading for isolated callback testing
+        os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
+
+    def teardown_method(self):
+        """Re-enable plugin loading after each test."""
+        os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
     def test_no_callbacks_returns_empty(self):
         result = _trigger_callbacks_sync("startup")
@@ -125,6 +132,12 @@ class TestTriggerCallbacksAsync:
 
     def setup_method(self):
         clear_callbacks()
+        # Disable auto-plugin-loading for isolated callback testing
+        os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
+
+    def teardown_method(self):
+        """Re-enable plugin loading after each test."""
+        os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
     @pytest.mark.asyncio
     async def test_no_callbacks_returns_empty(self):
@@ -195,6 +208,12 @@ class TestOnStartupShutdown:
 
     def setup_method(self):
         clear_callbacks()
+        # Disable auto-plugin-loading for isolated callback testing
+        os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
+
+    def teardown_method(self):
+        """Re-enable plugin loading after each test."""
+        os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
     @pytest.mark.asyncio
     async def test_on_startup_triggers_callbacks(self):

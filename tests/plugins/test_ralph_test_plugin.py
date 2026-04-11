@@ -1,5 +1,7 @@
 """Tests for the ralph_test plugin and new callback hooks."""
 
+import os
+
 import pytest
 
 from code_puppy.callbacks import (
@@ -35,10 +37,13 @@ class TestRegisterToolsCallback:
     def setup_method(self):
         """Clear callbacks before each test."""
         clear_callbacks("register_tools")
+        # Disable auto-plugin-loading for isolated callback testing
+        os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
 
     def teardown_method(self):
         """Clear callbacks after each test."""
         clear_callbacks("register_tools")
+        os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
     def test_register_tools_callback_returns_empty_list_when_no_callbacks(self):
         """Test that on_register_tools returns empty list when no callbacks registered."""
@@ -95,10 +100,13 @@ class TestRegisterAgentsCallback:
     def setup_method(self):
         """Clear callbacks before each test."""
         clear_callbacks("register_agents")
+        # Disable auto-plugin-loading for isolated callback testing
+        os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
 
     def teardown_method(self):
         """Clear callbacks after each test."""
         clear_callbacks("register_agents")
+        os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
     def test_register_agents_callback_returns_empty_list_when_no_callbacks(self):
         """Test that on_register_agents returns empty list when no callbacks registered."""
@@ -158,10 +166,13 @@ class TestAgentRunEndCallback:
     def setup_method(self):
         """Clear callbacks before each test."""
         clear_callbacks("agent_run_end")
+        # Disable auto-plugin-loading for isolated callback testing
+        os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
 
     def teardown_method(self):
         """Clear callbacks after each test."""
         clear_callbacks("agent_run_end")
+        os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
     @pytest.mark.asyncio
     async def test_agent_run_end_returns_empty_when_no_callbacks(self):

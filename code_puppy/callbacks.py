@@ -231,9 +231,18 @@ def _ensure_plugins_loaded_for_phase(phase: PhaseType) -> None:
     This is called before triggering callbacks to ensure plugins that
     registered for this phase via lazy loading are actually loaded.
     """
-    try:
-        from code_puppy.plugins import ensure_plugins_loaded_for_phase
+    import os
 
+    # Allow tests to disable auto-plugin-loading for isolated testing
+    if os.environ.get("PUP_DISABLE_CALLBACK_PLUGIN_LOADING"):
+        return
+
+    try:
+        from code_puppy.plugins import ensure_plugins_loaded_for_phase, load_plugin_callbacks
+
+        # Ensure plugins are discovered first (idempotent - safe to call multiple times)
+        load_plugin_callbacks()
+        # Then load plugins for this specific phase
         ensure_plugins_loaded_for_phase(phase)
     except ImportError:
         # Plugin system not available (shouldn't happen in normal operation)
@@ -241,17 +250,11 @@ def _ensure_plugins_loaded_for_phase(phase: PhaseType) -> None:
 
 
 def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> list[Any]:
-    # Cheap early-exit: check count before doing any work
-    if not count_callbacks(phase):
-        # Only buffer if this phase could potentially have listeners later
-        # (i.e., a plugin that registers callbacks for this phase might load)
-        _backlog.buffer_event(phase, args, kwargs)
-        return []
-
     # Ensure lazy-loaded plugins for this phase are loaded first
+    # MUST happen before count check, otherwise plugins never get a chance to register
     _ensure_plugins_loaded_for_phase(phase)
 
-    # Re-check after plugin loading (they may have registered callbacks)
+    # Now check if any callbacks are registered
     callbacks = get_callbacks(phase)
     if not callbacks:
         _backlog.buffer_event(phase, args, kwargs)
@@ -288,18 +291,12 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> list[Any]:
 
 
 async def _trigger_callbacks(phase: PhaseType, *args, **kwargs) -> list[Any]:
-    # Cheap early-exit: check count before doing any work (including plugin loading)
-    if not count_callbacks(phase):
-        # Only buffer if this phase could potentially have listeners later
-        _backlog.buffer_event(phase, args, kwargs)
-        return []
-
     # Ensure lazy-loaded plugins for this phase are loaded first
+    # MUST happen before count check, otherwise plugins never get a chance to register
     _ensure_plugins_loaded_for_phase(phase)
 
-    # Re-check after plugin loading (they may have registered callbacks)
+    # Now check if any callbacks are registered
     callbacks = get_callbacks(phase)
-
     if not callbacks:
         _backlog.buffer_event(phase, args, kwargs)
         return []
@@ -856,16 +853,20 @@ def on_register_agents() -> list[dict[str, Any]]:
 
     Example return: [{"name": "my-agent", "class": MyAgentClass}]
     """
-    # AP visibility fix: Ensure plugins are discovered and loaded for register_agents
-    # BEFORE checking callback count, since lazy-loaded plugins register callbacks
-    # at import time. Without this, AP agents would not be visible in /agent.
-    try:
-        from code_puppy.plugins import ensure_plugins_loaded_for_phase, load_plugin_callbacks
+    import os
 
-        load_plugin_callbacks()
-        ensure_plugins_loaded_for_phase("register_agents")
-    except ImportError:
-        pass  # Plugin system not available
+    # Allow tests to disable auto-plugin-loading for isolated testing
+    if not os.environ.get("PUP_DISABLE_CALLBACK_PLUGIN_LOADING"):
+        # AP visibility fix: Ensure plugins are discovered and loaded for register_agents
+        # BEFORE checking callback count, since lazy-loaded plugins register callbacks
+        # at import time. Without this, AP agents would not be visible in /agent.
+        try:
+            from code_puppy.plugins import ensure_plugins_loaded_for_phase, load_plugin_callbacks
+
+            load_plugin_callbacks()
+            ensure_plugins_loaded_for_phase("register_agents")
+        except ImportError:
+            pass  # Plugin system not available
 
     return _trigger_callbacks_sync("register_agents")
 
@@ -925,11 +926,11 @@ def on_get_model_system_prompt(
         List of results from registered callbacks in execution order.
     """
     phase: PhaseType = "get_model_system_prompt"
-    if not count_callbacks(phase):
-        _backlog.buffer_event(phase, (model_name, default_system_prompt, user_prompt), {})
-        return []
 
+    # Ensure plugins are loaded BEFORE checking count, otherwise lazy-loaded
+    # plugins never get a chance to register callbacks
     _ensure_plugins_loaded_for_phase(phase)
+
     callbacks = get_callbacks(phase)
     if not callbacks:
         _backlog.buffer_event(phase, (model_name, default_system_prompt, user_prompt), {})

@@ -1,4 +1,5 @@
 import asyncio
+import os
 from unittest.mock import patch
 
 import pytest
@@ -29,6 +30,12 @@ class TestCallbacksExtended:
     def setup_method(self):
         """Clean up callbacks before each test."""
         clear_callbacks()
+        # Disable auto-plugin-loading for isolated callback testing
+        os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
+
+    def teardown_method(self):
+        """Re-enable plugin loading after each test."""
+        os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
     def test_register_callback(self):
         """Test callback registration."""
@@ -327,6 +334,12 @@ class TestPreToolCallCallback:
     def setup_method(self):
         """Clean up callbacks before each test."""
         clear_callbacks()
+        # Disable auto-plugin-loading for isolated callback testing
+        os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
+
+    def teardown_method(self):
+        """Re-enable plugin loading after each test."""
+        os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
     @pytest.mark.asyncio
     async def test_pre_tool_call_receives_correct_args(self):
@@ -426,6 +439,12 @@ class TestPostToolCallCallback:
     def setup_method(self):
         """Clean up callbacks before each test."""
         clear_callbacks()
+        # Disable auto-plugin-loading for isolated callback testing
+        os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
+
+    def teardown_method(self):
+        """Re-enable plugin loading after each test."""
+        os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
     @pytest.mark.asyncio
     async def test_post_tool_call_receives_all_args(self):
@@ -553,6 +572,12 @@ class TestStreamEventCallback:
     def setup_method(self):
         """Clean up callbacks before each test."""
         clear_callbacks()
+        # Disable auto-plugin-loading for isolated callback testing
+        os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
+
+    def teardown_method(self):
+        """Re-enable plugin loading after each test."""
+        os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
     @pytest.mark.asyncio
     async def test_stream_event_receives_correct_args(self):
@@ -671,6 +696,12 @@ class TestNewConcurrentAndEnsureFuture:
     def setup_method(self):
         """Clean up callbacks before each test."""
         clear_callbacks()
+        # Disable auto-plugin-loading for isolated callback testing
+        os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
+
+    def teardown_method(self):
+        """Re-enable plugin loading after each test."""
+        os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
     @pytest.mark.asyncio
     async def test_async_callback_runs_via_ensure_future_in_sync_trigger(self):

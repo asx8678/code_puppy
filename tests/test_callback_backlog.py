@@ -1,5 +1,7 @@
 """Tests for the callback event backlog system."""
 
+import os
+
 import pytest
 from code_puppy import _backlog
 from code_puppy.callbacks import (
@@ -14,11 +16,14 @@ from code_puppy.callbacks import (
 @pytest.fixture(autouse=True)
 def _clean_state():
     """Reset backlog and callbacks between tests."""
+    # Disable auto-plugin-loading for isolated testing
+    os.environ["PUP_DISABLE_CALLBACK_PLUGIN_LOADING"] = "1"
     _backlog.clear()
     clear_callbacks()
     yield
     _backlog.clear()
     clear_callbacks()
+    os.environ.pop("PUP_DISABLE_CALLBACK_PLUGIN_LOADING", None)
 
 
 def test_backlog_buffers_when_no_listeners():
