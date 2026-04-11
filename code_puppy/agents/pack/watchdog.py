@@ -4,6 +4,8 @@ This vigilant guardian ensures tests exist, pass, and cover the right things.
 No untested code shall pass on Watchdog's watch!
 """
 
+from typing import override
+
 from code_puppy.config import get_puppy_name
 
 from ... import callbacks
@@ -18,20 +20,24 @@ class WatchdogAgent(BaseAgent):
     """
 
     @property
+    @override
     def name(self) -> str:
         return "watchdog"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Watchdog 🐕‍🦺"
 
     @property
+    @override
     def description(self) -> str:
         return (
             "QA critic - vigilant guardian that ensures tests pass and "
             "quality standards are met"
         )
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the list of tools available to Watchdog."""
         return [
@@ -46,6 +52,7 @@ class WatchdogAgent(BaseAgent):
             # Explain QA findings - very important!
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get Watchdog's system prompt."""
         puppy_name = get_puppy_name()

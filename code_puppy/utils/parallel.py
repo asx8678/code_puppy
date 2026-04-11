@@ -10,14 +10,14 @@ from collections.abc import Callable
 import asyncio
 import collections
 from dataclasses import dataclass
-from typing import Awaitable, Generic, TypeVar
+from typing import Awaitable, TypeVar
 
 T = TypeVar("T")
 R = TypeVar("R")
 
 
 @dataclass
-class ParallelResult(Generic[R]):
+class ParallelResult[R]:
     """Result of a parallel map operation.
 
     Attributes:

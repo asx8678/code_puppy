@@ -1,5 +1,8 @@
 """Agent Creator - helps users create new JSON agents."""
 
+from typing import override
+
+
 import json
 import os
 
@@ -14,17 +17,21 @@ class AgentCreatorAgent(BaseAgent):
     """Specialized agent for creating JSON agent configurations."""
 
     @property
+    @override
     def name(self) -> str:
         return "agent-creator"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Agent Creator 🏗️"
 
     @property
+    @override
     def description(self) -> str:
         return "Helps you create new JSON agent configurations with proper schema validation"
 
+    @override
     def get_system_prompt(self) -> str:
         available_tools = get_available_tool_names()
         agents_dir = get_user_agents_directory()
@@ -483,6 +490,7 @@ This is crucial for ensuring agents can properly use the tools they're given acc
 Your goal is to take users from idea to working agent in one smooth conversation!
 """
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get all tools needed for agent creation."""
         from code_puppy.config import get_universal_constructor_enabled
@@ -595,6 +603,7 @@ Your goal is to take users from idea to working agent in one smooth conversation
         except Exception as e:
             return False, f"Failed to create agent file: {e}"
 
+    @override
     def get_user_prompt(self) -> str | None:
         """Get the initial user prompt."""
         return "Hi! I'm the Agent Creator 🏗️ Let's build an awesome agent together!"

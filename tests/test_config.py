@@ -532,14 +532,14 @@ class TestCommandHistory:
     @patch("os.path.isfile")
     @patch("pathlib.Path.touch")
     @patch("os.path.expanduser")
-    @patch("shutil.copy2")
+    @patch("pathlib.Path.copy")
     @patch("pathlib.Path.unlink")
     @patch("os.makedirs")
     def test_initialize_command_history_file_migrates_old_file(
         self,
         mock_makedirs,
         mock_unlink,
-        mock_copy2,
+        mock_copy,
         mock_expanduser,
         mock_touch,
         mock_isfile,
@@ -557,7 +557,7 @@ class TestCommandHistory:
         # Assert
         assert mock_isfile.call_count == 2
         mock_touch.assert_called_once()
-        mock_copy2.assert_called_once()
+        mock_copy.assert_called_once()
         mock_unlink.assert_called_once()
 
     @patch("os.path.isfile")

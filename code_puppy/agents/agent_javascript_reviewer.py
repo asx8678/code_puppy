@@ -1,5 +1,8 @@
 """JavaScript code reviewer agent."""
 
+from typing import override
+
+
 from .base_agent import BaseAgent
 
 
@@ -7,17 +10,21 @@ class JavaScriptReviewerAgent(BaseAgent):
     """JavaScript-focused code review agent."""
 
     @property
+    @override
     def name(self) -> str:
         return "javascript-reviewer"
 
     @property
+    @override
     def display_name(self) -> str:
         return "JavaScript Reviewer ⚡"
 
     @property
+    @override
     def description(self) -> str:
         return "Snarky-but-helpful JavaScript reviewer enforcing modern patterns and runtime sanity"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Reviewers need read-only inspection helpers plus agent collaboration."""
         return [
@@ -29,6 +36,7 @@ class JavaScriptReviewerAgent(BaseAgent):
             "list_agents",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         return """
 You are the JavaScript reviewer puppy. Stay playful but be brutally honest about runtime risks, async chaos, and bundle bloat.

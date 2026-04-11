@@ -1476,9 +1476,9 @@ def initialize_command_history_file():
             )
             old_history_exists = os.path.isfile(old_history_file)
             if old_history_exists:
-                import shutil
-
-                shutil.copy2(Path(old_history_file), Path(COMMAND_HISTORY_FILE))
+                Path(old_history_file).copy(
+                    Path(COMMAND_HISTORY_FILE), preserve_metadata=True
+                )
                 Path(old_history_file).unlink(missing_ok=True)
         except Exception as e:
             from code_puppy.messaging import emit_error
@@ -2331,6 +2331,7 @@ def get_ws_history_ttl_seconds() -> int:
 
 
 # --- AGENT MEMORY CONFIGURATION ---
+
 
 # DEPRECATED(audit-2026): Use memory_enabled instead. This getter exists
 # for backward compatibility with existing puppy.cfg files.

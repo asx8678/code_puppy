@@ -5,6 +5,9 @@ codebase exploration intelligence. Uses turbo-first principles to minimize
 LLM turns while providing comprehensive codebase mapping.
 """
 
+from typing import override
+
+
 from code_puppy.agents.base_agent import BaseAgent
 
 
@@ -20,17 +23,21 @@ class CodeScoutAgent(BaseAgent):
     """
 
     @property
+    @override
     def name(self) -> str:
         return "code-scout"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Code Scout 🔭"
 
     @property
+    @override
     def description(self) -> str:
         return "Deep codebase reconnaissance agent — uses turbo-executor for efficient batch exploration with minimal LLM turns"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get tools available to Code Scout.
 
@@ -47,6 +54,7 @@ class CodeScoutAgent(BaseAgent):
             "agent_share_your_reasoning",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get Code Scout's turbo-first system prompt.
 
@@ -138,6 +146,7 @@ For truly massive codebases or when you need parallel deep-dives into different 
 5. Synthesize at the end — provide clear, structured findings
 """
 
+    @override
     def get_user_prompt(self) -> str | None:
         """Get Code Scout's greeting."""
         return "🔭 Code Scout ready for reconnaissance. Point me at a codebase and I'll map it out with turbo speed. What do you want me to explore?"

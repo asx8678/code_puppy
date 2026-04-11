@@ -15,7 +15,7 @@ import random
 import time
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Generic, ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
 from code_puppy.async_utils import run_async_sync
 from code_puppy.circuit_state import CircuitState
@@ -329,7 +329,7 @@ class RetryState:
 
 
 @dataclass
-class RetryResult(Generic[T]):
+class RetryResult[T]:
     """Structured result from a retry operation.
 
     Returned by ``with_retry(..., return_result=True)`` to give callers
