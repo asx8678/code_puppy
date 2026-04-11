@@ -8,12 +8,15 @@ This module tests the run_with_mcp async method which handles:
 """
 
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic_ai import BinaryContent, DocumentUrl, ImageUrl
+from pydantic_ai import UsageLimits
 
 from code_puppy.agents.agent_code_puppy import CodePuppyAgent
+from code_puppy.config_package.models import PuppyConfig
 
 
 class TestBaseAgentRunMCP:
@@ -182,21 +185,71 @@ class TestBaseAgentRunMCP:
         mock_set_workflow_id.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("code_puppy.agents.base_agent.get_message_limit", return_value=1000)
-    async def test_run_with_mcp_with_usage_limits(self, mock_get_limit, agent):
+    async def test_run_with_mcp_with_usage_limits(self, agent):
         """Test run_with_mcp includes usage limits."""
+        # Create a mock config with a custom message limit
+        mock_config = PuppyConfig(
+            # Paths
+            data_dir=Path("~/.code_puppy"),
+            config_dir=Path("~/.code_puppy"),
+            config_file=Path("~/.code_puppy/puppy.cfg"),
+            sessions_dir=Path("~/.code_puppy/sessions"),
+            models_file=Path("~/.code_puppy/models.json"),
+            # Agent / Model
+            default_agent="code-puppy",
+            default_model="claude-opus-4-6",
+            # Concurrency
+            max_concurrent_runs=2,
+            allow_parallel_runs=True,
+            run_wait_timeout=600.0,
+            # Messaging / UI
+            ws_history_maxlen=200,
+            ws_history_ttl_seconds=3600,
+            # Feature flags
+            session_logger_enabled=False,
+            rust_autobuild_disabled=False,
+            enable_dbos=True,
+            enable_streaming=True,
+            enable_agent_memory=False,
+            # UI / Behavior - key setting for this test
+            temperature=0.0,
+            protected_token_count=4000,
+            message_limit=1000,  # Custom limit to verify
+            compaction_strategy="summarize",
+            compaction_threshold=0.85,
+            # Summarization / Compaction
+            summarization_trigger_fraction=0.85,
+            summarization_keep_fraction=0.10,
+            summarization_pretruncate_enabled=True,
+            summarization_arg_max_length=500,
+            summarization_history_offload_enabled=False,
+            summarization_history_dir=Path("~/.code_puppy/history"),
+            # Debug / Logging
+            debug=False,
+            log_level="INFO",
+            # Identity
+            puppy_name="Puppy",
+            owner_name="Master",
+        )
+
         mock_agent = MagicMock()
         agent._code_generation_agent = mock_agent
         mock_run = AsyncMock(return_value=MagicMock(data="response"))
         mock_agent.run = mock_run
 
-        await agent.run_with_mcp("Usage limit test")
+        with patch(
+            "code_puppy.agents.base_agent.get_puppy_config",
+            return_value=mock_config,
+        ):
+            await agent.run_with_mcp("Usage limit test")
 
         # Verify usage_limits was passed with correct limit
         call_kwargs = mock_run.call_args[1]
         assert "usage_limits" in call_kwargs
-        # The usage_limits object should have been created
-        mock_get_limit.assert_called_once()
+        # Verify the usage_limits object has our custom limit
+        usage_limits = call_kwargs["usage_limits"]
+        assert isinstance(usage_limits, UsageLimits)
+        assert usage_limits.request_limit == 1000
 
     @pytest.mark.asyncio
     @patch.object(

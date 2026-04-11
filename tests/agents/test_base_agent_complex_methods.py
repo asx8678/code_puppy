@@ -7,6 +7,8 @@ This module tests the following complex methods in BaseAgent:
 - summarize_messages()
 """
 
+from dataclasses import replace
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,6 +16,7 @@ from pydantic_ai import RunContext
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ThinkingPart
 
 from code_puppy.agents.agent_code_puppy import CodePuppyAgent
+from code_puppy.config_package.models import PuppyConfig
 
 
 class TestBaseAgentComplexMethods:
@@ -295,19 +298,56 @@ class TestBaseAgentComplexMethods:
 
         messages = [system_msg, big_old_task_msg, current_task_msg]
 
+        # Create a mock config with the values we need for truncation to trigger
+        mock_config = PuppyConfig(
+            # Paths
+            data_dir=Path("~/.code_puppy"),
+            config_dir=Path("~/.code_puppy"),
+            config_file=Path("~/.code_puppy/puppy.cfg"),
+            sessions_dir=Path("~/.code_puppy/sessions"),
+            models_file=Path("~/.code_puppy/models.json"),
+            # Agent / Model
+            default_agent="code-puppy",
+            default_model="claude-opus-4-6",
+            # Concurrency
+            max_concurrent_runs=2,
+            allow_parallel_runs=True,
+            run_wait_timeout=600.0,
+            # Messaging / UI
+            ws_history_maxlen=200,
+            ws_history_ttl_seconds=3600,
+            # Feature flags
+            session_logger_enabled=False,
+            rust_autobuild_disabled=False,
+            enable_dbos=True,
+            enable_streaming=True,
+            enable_agent_memory=False,
+            # UI / Behavior - key settings for this test
+            temperature=0.0,
+            protected_token_count=50,  # Low to trigger truncation
+            message_limit=100,
+            compaction_strategy="truncation",  # Use truncation strategy
+            compaction_threshold=0.0,  # Always trigger compaction
+            # Summarization / Compaction
+            summarization_trigger_fraction=0.85,
+            summarization_keep_fraction=0.10,
+            summarization_pretruncate_enabled=True,
+            summarization_arg_max_length=500,
+            summarization_history_offload_enabled=False,
+            summarization_history_dir=Path("~/.code_puppy/history"),
+            # Debug / Logging
+            debug=False,
+            log_level="INFO",
+            # Identity
+            puppy_name="Puppy",
+            owner_name="Master",
+        )
+
         with (
             patch("code_puppy.agents.base_agent.update_spinner_context"),
             patch(
-                "code_puppy.agents.base_agent.get_compaction_threshold",
-                return_value=0.0,
-            ),
-            patch(
-                "code_puppy.agents.base_agent.get_compaction_strategy",
-                return_value="truncation",
-            ),
-            patch(
-                "code_puppy.agents.base_agent.get_protected_token_count",
-                return_value=50,
+                "code_puppy.agents.base_agent.get_puppy_config",
+                return_value=mock_config,
             ),
         ):
             agent.message_history_processor(mock_run_context, messages)

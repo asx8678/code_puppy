@@ -14,11 +14,16 @@ use hashline::{
     strip_hashline_prefixes as strip_hashline_prefixes_impl,
     validate_hashline_anchor as validate_hashline_anchor_impl,
 };
-use pruning::{prune_and_filter_impl, split_for_summarization_impl, truncation_indices_impl};
+use pruning::{
+    prune_and_filter_core, prune_and_filter_impl,
+    split_for_summarization_core, split_for_summarization_impl, truncation_indices_impl,
+};
 use serialization::{
     deserialize_session_impl, serialize_session_impl, serialize_session_incremental_impl,
 };
+use token_estimation::process_messages_batch_core;
 use token_estimation::process_messages_batch_impl;
+use types::{Message, ToolDefinition};
 
 // ── Result types exposed to Python ──────────────────────────────────────────
 
@@ -160,6 +165,150 @@ fn validate_hashline_anchor(idx: u32, line: &str, expected_hash: &str) -> bool {
     validate_hashline_anchor_impl(idx, line, expected_hash)
 }
 
+// ── MessageBatch pyclass ───────────────────────────────────────────────────
+
+#[pyclass]
+pub struct MessageBatch {
+    messages: Vec<Message>,
+    /// Cached after first process() call
+    per_message_tokens: Option<Vec<i64>>,
+    total_tokens: Option<i64>,
+    message_hashes: Option<Vec<i64>>,
+    context_overhead_tokens: Option<i64>,
+}
+
+#[pymethods]
+impl MessageBatch {
+    /// Create batch from Python list of message dicts (serialized format)
+    #[new]
+    fn from_py_list(messages: &Bound<'_, PyList>) -> PyResult<Self> {
+        let msgs: Vec<Message> = messages
+            .iter()
+            .map(|o| Message::from_py(&o))
+            .collect::<PyResult<_>>()?;
+
+        Ok(MessageBatch {
+            messages: msgs,
+            per_message_tokens: None,
+            total_tokens: None,
+            message_hashes: None,
+            context_overhead_tokens: None,
+        })
+    }
+
+    /// Get number of messages
+    fn len(&self) -> usize {
+        self.messages.len()
+    }
+
+    /// Get whether the batch is empty
+    fn is_empty(&self) -> bool {
+        self.messages.is_empty()
+    }
+
+    /// Process messages and cache token counts (wraps process_messages_batch logic)
+    #[pyo3(signature = (tool_definitions, mcp_tool_definitions, system_prompt))]
+    fn process(
+        &mut self,
+        tool_definitions: &Bound<'_, PyList>,
+        mcp_tool_definitions: &Bound<'_, PyList>,
+        system_prompt: &str,
+    ) -> PyResult<ProcessResult> {
+        let tool_defs: Vec<ToolDefinition> = tool_definitions
+            .iter()
+            .map(|o| ToolDefinition::from_py(&o))
+            .collect::<PyResult<_>>()?;
+        let mcp_defs: Vec<ToolDefinition> = mcp_tool_definitions
+            .iter()
+            .map(|o| ToolDefinition::from_py(&o))
+            .collect::<PyResult<_>>()?;
+
+        let (per_message_tokens, total_message_tokens, context_overhead, message_hashes) =
+            process_messages_batch_core(
+                &self.messages,
+                &tool_defs,
+                &mcp_defs,
+                system_prompt,
+            );
+
+        // Cache the results
+        self.per_message_tokens = Some(per_message_tokens.clone());
+        self.total_tokens = Some(total_message_tokens);
+        self.message_hashes = Some(message_hashes.clone());
+        self.context_overhead_tokens = Some(context_overhead);
+
+        Ok(ProcessResult {
+            per_message_tokens,
+            total_message_tokens,
+            context_overhead_tokens: context_overhead,
+            message_hashes,
+        })
+    }
+
+    /// Prune and filter using cached messages (wraps prune_and_filter logic)
+    #[pyo3(signature = (max_tokens_per_message = 50000))]
+    fn prune_and_filter(&self, max_tokens_per_message: i64) -> PyResult<PruneResult> {
+        Ok(prune_and_filter_core(&self.messages, max_tokens_per_message))
+    }
+
+    /// Get truncation indices using cached token counts
+    #[pyo3(signature = (protected_tokens, second_has_thinking = false))]
+    fn truncation_indices(
+        &self,
+        protected_tokens: i64,
+        second_has_thinking: bool,
+    ) -> PyResult<Vec<usize>> {
+        let per_message_tokens = self
+            .per_message_tokens
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err(
+                "process() must be called before truncation_indices()"
+            ))?;
+
+        Ok(truncation_indices_impl(
+            per_message_tokens,
+            protected_tokens,
+            second_has_thinking,
+        ))
+    }
+
+    /// Split for summarization using cached data
+    fn split_for_summarization(&self, protected_tokens_limit: i64) -> PyResult<SplitResult> {
+        let per_message_tokens = self
+            .per_message_tokens
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err(
+                "process() must be called before split_for_summarization()"
+            ))?;
+
+        Ok(split_for_summarization_core(
+            per_message_tokens,
+            &self.messages,
+            protected_tokens_limit,
+        ))
+    }
+
+    /// Get cached per-message tokens (None if process() not called yet)
+    fn get_per_message_tokens(&self) -> Option<Vec<i64>> {
+        self.per_message_tokens.clone()
+    }
+
+    /// Get cached total tokens (None if process() not called yet)
+    fn get_total_tokens(&self) -> Option<i64> {
+        self.total_tokens
+    }
+
+    /// Get cached message hashes (None if process() not called yet)
+    fn get_message_hashes(&self) -> Option<Vec<i64>> {
+        self.message_hashes.clone()
+    }
+
+    /// Get cached context overhead tokens (None if process() not called yet)
+    fn get_context_overhead_tokens(&self) -> Option<i64> {
+        self.context_overhead_tokens
+    }
+}
+
 // ── Module registration ─────────────────────────────────────────────────────
 
 #[pymodule]
@@ -167,6 +316,7 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ProcessResult>()?;
     m.add_class::<PruneResult>()?;
     m.add_class::<SplitResult>()?;
+    m.add_class::<MessageBatch>()?;
     m.add_function(wrap_pyfunction!(process_messages_batch, m)?)?;
     m.add_function(wrap_pyfunction!(prune_and_filter, m)?)?;
     m.add_function(wrap_pyfunction!(truncation_indices, m)?)?;

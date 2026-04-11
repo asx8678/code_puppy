@@ -30,7 +30,11 @@ from pydantic_ai.durable_exec.dbos import DBOSAgent
 # Rust acceleration bridge (optional - falls back to Python)
 from code_puppy import _core_bridge
 from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
-from code_puppy._core_bridge import serialize_messages_for_rust
+from code_puppy._core_bridge import (
+    serialize_messages_for_rust,  # Keep for any remaining edge cases
+    MessageBatchHandle,
+    create_message_batch,
+)
 
 if RUST_AVAILABLE:
     pass
@@ -141,6 +145,49 @@ class BaseAgent(ABC, AgentPromptMixin):
         self.id = str(uuid.uuid7())  # time-sortable for chronological ordering
         # Mutable runtime state container - separates state from immutable config
         self._state = AgentRuntimeState()
+
+        # Message batch cache for avoiding repeated serialization
+        self._cached_batch: MessageBatchHandle | None = None
+        self._cached_batch_messages_id: int | None = None
+        self._cached_batch_messages_len: int = 0
+
+    def _get_or_create_batch(self, messages: list[ModelMessage]) -> MessageBatchHandle:
+        """Return cached batch if messages unchanged, else create new.
+
+        Uses object identity and length as a fast heuristic for detecting
+        changes. This catches the common case where the same list object
+        is passed repeatedly, or where messages have been added.
+
+        Args:
+            messages: The message list to create a batch for
+
+        Returns:
+            MessageBatchHandle wrapping the messages (cached or new)
+        """
+        msg_id = id(messages)
+        msg_len = len(messages)
+
+        # Cache hit: same list object with same length
+        if (self._cached_batch is not None and
+            self._cached_batch_messages_id == msg_id and
+            self._cached_batch_messages_len == msg_len):
+            return self._cached_batch
+
+        # Cache miss: create new batch
+        self._cached_batch = create_message_batch(messages)
+        self._cached_batch_messages_id = msg_id
+        self._cached_batch_messages_len = msg_len
+        return self._cached_batch
+
+    def _invalidate_batch_cache(self) -> None:
+        """Invalidate the cached message batch.
+
+        Call this after mutating the message history to ensure
+        the next batch creation reflects the changes.
+        """
+        self._cached_batch = None
+        self._cached_batch_messages_id = None
+        self._cached_batch_messages_len = 0
 
     # Backward-compatible properties that delegate to _state for migration support
     @property
@@ -745,23 +792,25 @@ class BaseAgent(ABC, AgentPromptMixin):
     def filter_huge_messages(
         self,
         messages: list[ModelMessage],
-        serialized_messages: list[dict] | None = None,
+        serialized_messages: list[dict] | MessageBatchHandle | None = None,
     ) -> list[ModelMessage]:
         """Filter out messages that exceed the token threshold.
 
         Args:
             messages: List of messages to filter
-            serialized_messages: Pre-serialized messages for Rust (if available)
+            serialized_messages: Pre-serialized messages or MessageBatchHandle for Rust (if available)
 
         Returns:
             Filtered list of messages
         """
         if _rust_enabled():
             try:
-                serialized = serialized_messages or serialize_messages_for_rust(
-                    messages
-                )
-                result = _core_bridge.prune_and_filter(serialized, 50000)
+                # Use MessageBatchHandle if provided, otherwise create one
+                if isinstance(serialized_messages, MessageBatchHandle):
+                    batch = serialized_messages
+                else:
+                    batch = create_message_batch(messages)
+                result = batch.prune_and_filter(50000)
                 return [messages[i] for i in result.surviving_indices]
             except Exception as exc:
                 logger.debug(
@@ -834,14 +883,14 @@ class BaseAgent(ABC, AgentPromptMixin):
     def split_messages_for_protected_summarization(
         self,
         messages: list[ModelMessage],
-        serialized_messages: list[dict] | None = None,
+        serialized_messages: list[dict] | MessageBatchHandle | None = None,
     ) -> tuple[list[ModelMessage], list[ModelMessage]]:
         """
         Split messages into two groups: messages to summarize and protected recent messages.
 
         Args:
             messages: Full message list to split
-            serialized_messages: Pre-serialized messages for Rust (if available)
+            serialized_messages: Pre-serialized messages or MessageBatchHandle for Rust (if available)
 
         Returns:
             Tuple of (messages_to_summarize, protected_messages)
@@ -877,12 +926,14 @@ class BaseAgent(ABC, AgentPromptMixin):
         # --- Rust fast path ------------------------------------------------
         if _rust_enabled():
             try:
-                # Use pre-serialized messages if available
-                serialized = serialized_messages or serialize_messages_for_rust(
-                    messages
-                )
-                result = _core_bridge.process_messages_batch(serialized, [], [], "")
-                per_message_tokens = result.per_message_tokens
+                # Use MessageBatchHandle if provided, otherwise create one
+                if isinstance(serialized_messages, MessageBatchHandle):
+                    batch = serialized_messages
+                else:
+                    batch = create_message_batch(messages)
+                # Process to get per-message tokens (cached in batch)
+                batch.process([], [], "")
+                per_message_tokens = batch.get_per_message_tokens()
 
                 # Build tool_call_ids_per_message: list of [(id, kind), ...] per message
                 tool_call_ids_per_message: list[list[tuple[str, str]]] = []
@@ -1144,7 +1195,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         self,
         messages: list[ModelMessage],
         with_protection: bool = True,
-        serialized_messages: list[dict] | None = None,
+        serialized_messages: list[dict] | MessageBatchHandle | None = None,
     ) -> tuple[list[ModelMessage], list[ModelMessage]]:
         """Summarize messages while protecting recent messages up to PROTECTED_TOKENS.
 
@@ -1161,7 +1212,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         Args:
             messages: Messages to summarize
             with_protection: Whether to protect recent messages
-            serialized_messages: Pre-serialized messages for Rust (if available)
+            serialized_messages: Pre-serialized messages or MessageBatchHandle for Rust (if available)
 
         Returns:
             Tuple of (compacted_messages, summarized_source_messages)
@@ -1440,7 +1491,7 @@ class BaseAgent(ABC, AgentPromptMixin):
     def prune_interrupted_tool_calls(
         self,
         messages: list[ModelMessage],
-        serialized_messages: list[dict] | None = None,
+        serialized_messages: list[dict] | MessageBatchHandle | None = None,
     ) -> list[ModelMessage]:
         """
         Remove any messages that participate in mismatched tool call sequences.
@@ -1451,7 +1502,7 @@ class BaseAgent(ABC, AgentPromptMixin):
 
         Args:
             messages: List of messages to prune
-            serialized_messages: Pre-serialized messages for Rust (if available)
+            serialized_messages: Pre-serialized messages or MessageBatchHandle for Rust (if available)
 
         Returns:
             Pruned list of messages with mismatched tool calls removed
@@ -1463,10 +1514,12 @@ class BaseAgent(ABC, AgentPromptMixin):
         # in a single pass, plus filters empty thinking parts and trailing responses
         if _rust_enabled():
             try:
-                serialized = serialized_messages or serialize_messages_for_rust(
-                    messages
-                )
-                result = _core_bridge.prune_and_filter(serialized, 999_999_999)
+                # Use MessageBatchHandle if provided, otherwise create one
+                if isinstance(serialized_messages, MessageBatchHandle):
+                    batch = serialized_messages
+                else:
+                    batch = create_message_batch(messages)
+                result = batch.prune_and_filter(999_999_999)
                 return [messages[i] for i in result.surviving_indices]
             except Exception as exc:
                 logger.debug(
@@ -1502,13 +1555,13 @@ class BaseAgent(ABC, AgentPromptMixin):
         # First, prune any interrupted/mismatched tool-call conversations
         model_max = self.get_model_context_length()
 
-        # Serialize once and reuse for all Rust operations within this pipeline
-        _serialized_messages_for_rust: list[dict] | None = None
+        # Create MessageBatchHandle once and reuse for all Rust operations within this pipeline
+        _message_batch: MessageBatchHandle | None = None
 
         # Use Rust batch processing when available (single pass for tokens + hashes)
         if _rust_enabled():
             try:
-                _serialized_messages_for_rust = serialize_messages_for_rust(messages)
+                _message_batch = self._get_or_create_batch(messages)
                 # Extract actual tool definitions for accurate context overhead
                 # Use cached tool_defs (only computed once per agent lifecycle)
                 if self._state.cached_tool_defs is None:
@@ -1539,9 +1592,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                         else ""
                     )
                 system_prompt = self._state.cached_system_prompt
-                batch_result = _core_bridge.process_messages_batch(
-                    _serialized_messages_for_rust, tool_defs, mcp_defs, system_prompt
-                )
+                batch_result = _message_batch.process(tool_defs, mcp_defs, system_prompt)
                 message_tokens = batch_result.total_message_tokens
                 context_overhead = batch_result.context_overhead_tokens
                 self._state.rust_per_message_tokens = batch_result.per_message_tokens
@@ -1550,6 +1601,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                     "Rust fallback in message_history_processor: %s", exc, exc_info=True
                 )
                 # Fall back to Python on any Rust error
+                _message_batch = None  # Reset batch on failure
                 message_tokens = sum(
                     self.estimate_tokens_for_message(msg) for msg in messages
                 )
@@ -1594,9 +1646,9 @@ class BaseAgent(ABC, AgentPromptMixin):
             if compaction_strategy == "truncation":
                 # Use truncation instead of summarization
                 protected_tokens = cfg.protected_token_count
-                # Pass pre-serialized messages to avoid re-serialization
+                # Pass MessageBatchHandle to avoid re-serialization
                 filtered_messages = self.filter_huge_messages(
-                    messages, serialized_messages=_serialized_messages_for_rust
+                    messages, serialized_messages=_message_batch
                 )
                 # Pass cached per_message_tokens when available from Rust batch processing
                 cached_tokens = self._state.rust_per_message_tokens
@@ -1604,6 +1656,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                     filtered_messages,
                     protected_tokens,
                     per_message_tokens=cached_tokens,
+                    serialized_messages=_message_batch,
                 )
                 # Track dropped messages by hash so message_history_accumulator
                 # won't re-inject them from pydantic-ai's full message list on
@@ -1621,14 +1674,14 @@ class BaseAgent(ABC, AgentPromptMixin):
                 )
             else:
                 # Default to summarization (safe to proceed - no pending tool calls)
-                # Pass pre-serialized messages to avoid re-serialization
+                # Pass MessageBatchHandle to avoid re-serialization
                 filtered_messages = self.filter_huge_messages(
-                    messages, serialized_messages=_serialized_messages_for_rust
+                    messages, serialized_messages=_message_batch
                 )
-                # Also pass serialized messages to summarize_messages for split_messages_for_protected_summarization
+                # Also pass MessageBatchHandle to summarize_messages for split_messages_for_protected_summarization
                 result_messages, summarized_messages = self.summarize_messages(
                     filtered_messages,
-                    serialized_messages=_serialized_messages_for_rust,
+                    serialized_messages=_message_batch,
                 )
                 # For summarization, we need to estimate tokens since messages are transformed
                 final_token_count = sum(
@@ -1652,7 +1705,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         messages: list[ModelMessage],
         protected_tokens: int,
         per_message_tokens: list[int | None] = None,
-        serialized_messages: list[dict] | None = None,
+        serialized_messages: list[dict] | MessageBatchHandle | None = None,
     ) -> list[ModelMessage]:
         """
         Truncate message history to manage token usage.
@@ -1668,7 +1721,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             per_message_tokens: Optional pre-computed per-message token counts.
                 When provided (e.g., from message_history_processor), avoids
                 re-serializing and re-computing token counts.
-            serialized_messages: Optional pre-serialized messages for Rust.
+            serialized_messages: Optional pre-serialized messages or MessageBatchHandle for Rust.
                 When provided and per_message_tokens is not available, avoids re-serializing.
 
         Returns:
@@ -1679,16 +1732,22 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Try Rust fast path
         if _rust_enabled():
             try:
-                if per_message_tokens is not None:
+                # Use MessageBatchHandle if provided
+                if isinstance(serialized_messages, MessageBatchHandle):
+                    batch = serialized_messages
+                    # Ensure process() has been called to populate token counts
+                    if batch.get_per_message_tokens() is None:
+                        batch.process([], [], "")
+                    tokens = batch.get_per_message_tokens()
+                elif per_message_tokens is not None:
                     # Reuse pre-computed tokens from caller (e.g., message_history_processor)
                     tokens = per_message_tokens
                 else:
                     # Compute from scratch when not provided
-                    serialized = serialized_messages or serialize_messages_for_rust(
-                        messages
-                    )
-                    batch = _core_bridge.process_messages_batch(serialized, [], [], "")
-                    tokens = batch.per_message_tokens
+                    batch = create_message_batch(messages)
+                    batch.process([], [], "")
+                    tokens = batch.get_per_message_tokens()
+
                 second_has_thinking = len(messages) > 1 and any(
                     isinstance(p, ThinkingPart) for p in messages[1].parts
                 )

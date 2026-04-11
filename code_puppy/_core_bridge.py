@@ -15,6 +15,7 @@ except ImportError:
 
 try:
     from _code_puppy_core import (
+        MessageBatch,
         ProcessResult,
         PruneResult,
         SplitResult,
@@ -30,6 +31,7 @@ try:
     RUST_AVAILABLE = True
 except ImportError:
     RUST_AVAILABLE = False
+    MessageBatch = None  # type: ignore[assignment,misc]
 
     # Provide type stubs so downstream code can reference them
     ProcessResult = None  # type: ignore[assignment,misc]
@@ -174,3 +176,147 @@ def serialize_message_for_rust(message: Any) -> dict:
 def serialize_messages_for_rust(messages: list) -> list[dict]:
     """Batch convert messages for Rust consumption."""
     return [serialize_message_for_rust(m) for m in messages]
+
+
+class MessageBatchHandle:
+    """Zero-copy wrapper around Rust MessageBatch for batched operations.
+
+    This class serializes pydantic-ai messages ONCE during construction,
+    then allows multiple Rust operations without re-serialization.
+
+    Usage:
+        batch = MessageBatchHandle(messages)
+        result = batch.process(tool_defs, mcp_defs, system_prompt)
+        indices = batch.truncation_indices(protected_tokens, has_thinking)
+        pruned = batch.prune_and_filter(50000)
+    """
+
+    __slots__ = ("_rust_batch", "_py_messages", "_serialized")
+
+    def __init__(self, messages: list) -> None:
+        """Create batch from pydantic-ai ModelMessage list.
+
+        Args:
+            messages: List of pydantic-ai ModelMessage objects
+        """
+        self._py_messages = messages
+        self._serialized = [serialize_message_for_rust(m) for m in messages]
+
+        if RUST_AVAILABLE:
+            self._rust_batch = MessageBatch(self._serialized)
+        else:
+            self._rust_batch = None
+
+    def __len__(self) -> int:
+        return len(self._py_messages)
+
+    @property
+    def messages(self) -> list:
+        """Access original Python messages."""
+        return self._py_messages
+
+    @property
+    def serialized(self) -> list[dict]:
+        """Access serialized dict form (for legacy code paths)."""
+        return self._serialized
+
+    def process(
+        self,
+        tool_definitions: list,
+        mcp_tool_definitions: list,
+        system_prompt: str,
+    ) -> "ProcessResult":
+        """Process messages and cache token counts."""
+        if self._rust_batch is not None:
+            return self._rust_batch.process(
+                tool_definitions, mcp_tool_definitions, system_prompt
+            )
+        # Fallback: use standalone function
+        return process_messages_batch(
+            self._serialized, tool_definitions, mcp_tool_definitions, system_prompt
+        )
+
+    def prune_and_filter(self, max_tokens_per_message: int = 50000) -> "PruneResult":
+        """Prune interrupted tool calls and filter huge messages."""
+        if self._rust_batch is not None:
+            return self._rust_batch.prune_and_filter(max_tokens_per_message)
+        return prune_and_filter(self._serialized, max_tokens_per_message)
+
+    def truncation_indices(
+        self, protected_tokens: int, second_has_thinking: bool
+    ) -> list[int]:
+        """Get indices to keep after truncation."""
+        if self._rust_batch is not None:
+            return self._rust_batch.truncation_indices(protected_tokens, second_has_thinking)
+        # Fallback requires per_message_tokens - not available without process()
+        raise RuntimeError("truncation_indices requires process() to be called first")
+
+    def split_for_summarization(self, protected_tokens_limit: int) -> "SplitResult":
+        """Split messages for summarization."""
+        if self._rust_batch is not None:
+            return self._rust_batch.split_for_summarization(protected_tokens_limit)
+        raise RuntimeError("split_for_summarization requires Rust batch with process() called")
+
+    def get_per_message_tokens(self) -> list[int] | None:
+        """Get cached per-message token counts (None if process() not called)."""
+        if self._rust_batch is not None:
+            return self._rust_batch.get_per_message_tokens()
+        return None
+
+    def get_total_tokens(self) -> int | None:
+        """Get cached total token count (None if process() not called)."""
+        if self._rust_batch is not None:
+            return self._rust_batch.get_total_tokens()
+        return None
+
+    def get_message_hashes(self) -> list[int] | None:
+        """Get cached message hashes (None if process() not called)."""
+        if self._rust_batch is not None:
+            return self._rust_batch.get_message_hashes()
+        return None
+
+
+def create_message_batch(messages: list) -> MessageBatchHandle:
+    """Factory function for creating MessageBatchHandle.
+
+    Args:
+        messages: List of pydantic-ai ModelMessage objects
+
+    Returns:
+        MessageBatchHandle wrapping the messages
+    """
+    return MessageBatchHandle(messages)
+
+
+__all__ = [
+    # Core serialization
+    "serialize_message_for_rust",
+    "serialize_messages_for_rust",
+    # Message batch wrapper
+    "MessageBatchHandle",
+    "create_message_batch",
+    # Rust availability flags
+    "RUST_AVAILABLE",
+    "is_rust_enabled",
+    "set_rust_enabled",
+    "get_rust_status",
+    # Hashline acceleration
+    "HASHLINE_RUST_AVAILABLE",
+    "compute_line_hash",
+    "format_hashlines",
+    "strip_hashline_prefixes",
+    "validate_hashline_anchor",
+    # Rust types (for type hints)
+    "ProcessResult",
+    "PruneResult",
+    "SplitResult",
+    "MessageBatch",
+    # Standalone functions (for legacy/fallback use)
+    "process_messages_batch",
+    "prune_and_filter",
+    "truncation_indices",
+    "split_for_summarization",
+    "serialize_session",
+    "deserialize_session",
+    "serialize_session_incremental",
+]

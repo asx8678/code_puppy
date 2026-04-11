@@ -303,7 +303,7 @@ class TestBinarySplitSummarize:
 class TestSummarizeMessages:
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
     @patch(
-        "code_puppy.agents.base_agent.get_protected_token_count", return_value=100000
+        "code_puppy.config.get_protected_token_count", return_value=100000
     )
     @patch("code_puppy.agents.base_agent.emit_info")
     def test_nothing_to_summarize(self, mock_info, mock_tokens, mock_sync, agent):
@@ -319,7 +319,7 @@ class TestSummarizeMessages:
         assert summarized == []
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
+    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch(
         "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
@@ -347,7 +347,7 @@ class TestSummarizeMessages:
         assert len(summarized) > 0
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
+    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch("code_puppy.agents.base_agent.emit_error")
     @patch(
@@ -385,7 +385,7 @@ class TestSummarizeMessages:
         mock_error.assert_called_once()
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
+    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch("code_puppy.agents.base_agent.emit_error")
     @patch(
@@ -418,7 +418,7 @@ class TestSummarizeMessages:
         assert summarized == []
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
+    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch(
         "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
@@ -441,7 +441,7 @@ class TestSummarizeMessages:
         assert result[0] is msgs[0]
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
+    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch(
         "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
@@ -466,7 +466,7 @@ class TestSummarizeMessages:
             assert len(result) > 0
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
+    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch(
         "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",

@@ -178,6 +178,42 @@ fn estimate_context_overhead(
     total
 }
 
+/// Core processing logic that operates on already-parsed messages.
+pub fn process_messages_batch_core(
+    msgs: &[Message],
+    tool_defs: &[ToolDefinition],
+    mcp_defs: &[ToolDefinition],
+    system_prompt: &str,
+) -> (Vec<i64>, i64, i64, Vec<i64>) {
+    let mut per_message_tokens = Vec::with_capacity(msgs.len());
+    let mut message_hashes = Vec::with_capacity(msgs.len());
+    let mut total_message_tokens: i64 = 0;
+
+    for msg in msgs {
+        let mut msg_tokens: i64 = 0;
+        for part in &msg.parts {
+            let s = stringify_part_for_tokens(part);
+            if !s.is_empty() {
+                msg_tokens += estimate_tokens(&s);
+            }
+        }
+        msg_tokens = std::cmp::max(1, msg_tokens);
+        per_message_tokens.push(msg_tokens);
+        total_message_tokens += msg_tokens;
+        message_hashes.push(hash_message(msg));
+    }
+
+    let context_overhead = estimate_context_overhead(tool_defs, mcp_defs, system_prompt);
+
+    (
+        per_message_tokens,
+        total_message_tokens,
+        context_overhead,
+        message_hashes,
+    )
+}
+
+/// Wrapper that parses PyList then calls the core implementation.
 pub fn process_messages_batch_impl(
     messages: &Bound<'_, PyList>,
     tool_definitions: &Bound<'_, PyList>,
@@ -197,30 +233,13 @@ pub fn process_messages_batch_impl(
         .map(|o| ToolDefinition::from_py(&o))
         .collect::<PyResult<_>>()?;
 
-    let mut per_message_tokens = Vec::with_capacity(msgs.len());
-    let mut message_hashes = Vec::with_capacity(msgs.len());
-    let mut total_message_tokens: i64 = 0;
-
-    for msg in &msgs {
-        let mut msg_tokens: i64 = 0;
-        for part in &msg.parts {
-            let s = stringify_part_for_tokens(part);
-            if !s.is_empty() {
-                msg_tokens += estimate_tokens(&s);
-            }
-        }
-        msg_tokens = std::cmp::max(1, msg_tokens);
-        per_message_tokens.push(msg_tokens);
-        total_message_tokens += msg_tokens;
-        message_hashes.push(hash_message(msg));
-    }
-
-    let context_overhead = estimate_context_overhead(&tool_defs, &mcp_defs, system_prompt);
+    let (per_message_tokens, total_message_tokens, context_overhead_tokens, message_hashes) =
+        process_messages_batch_core(&msgs, &tool_defs, &mcp_defs, system_prompt);
 
     Ok(ProcessResult {
         per_message_tokens,
         total_message_tokens,
-        context_overhead_tokens: context_overhead,
+        context_overhead_tokens,
         message_hashes,
     })
 }

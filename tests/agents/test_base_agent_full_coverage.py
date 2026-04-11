@@ -509,7 +509,7 @@ class TestSplitMessagesForProtectedSummarization:
         assert to_summarize == []
         assert protected == msgs
 
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=100)
+    @patch("code_puppy.config.get_protected_token_count", return_value=100)
     @patch("code_puppy.agents.base_agent.emit_info")
     def test_splits_messages(self, mock_info, mock_tokens, agent):
         msgs = [
@@ -526,7 +526,7 @@ class TestSummarizeMessages:
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
     @patch(
-        "code_puppy.agents.base_agent.get_protected_token_count", return_value=100000
+        "code_puppy.config.get_protected_token_count", return_value=100000
     )
     @patch("code_puppy.agents.base_agent.emit_info")
     def test_nothing_to_summarize(self, mock_info, mock_tokens, mock_summarize, agent):
@@ -543,7 +543,7 @@ class TestSummarizeMessages:
         "code_puppy.agents.base_agent.run_summarization_sync",
         return_value="summary text",
     )
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
+    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch("code_puppy.agents.base_agent.emit_warning")
     def test_non_list_summarization_result(
@@ -559,7 +559,7 @@ class TestSummarizeMessages:
         assert len(result) >= 1
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
+    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch("code_puppy.agents.base_agent.emit_error")
     def test_summarization_error(
@@ -579,7 +579,7 @@ class TestSummarizeMessages:
         assert result == msgs  # Returns original on failure
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
+    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch("code_puppy.agents.base_agent.emit_error")
     def test_unexpected_error(
@@ -595,7 +595,7 @@ class TestSummarizeMessages:
         assert result == msgs
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=50)
+    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     def test_without_protection(self, mock_info, mock_tokens, mock_summarize, agent):
         mock_summarize.return_value = [
@@ -613,11 +613,11 @@ class TestMessageHistoryProcessor:
     """Tests for message_history_processor compaction branches (lines 1059-1098)."""
 
     @patch(
-        "code_puppy.agents.base_agent.get_compaction_strategy",
+        "code_puppy.config.get_compaction_strategy",
         return_value="summarization",
     )
-    @patch("code_puppy.agents.base_agent.get_compaction_threshold", return_value=0.01)
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=100)
+    @patch("code_puppy.config.get_compaction_threshold", return_value=0.01)
+    @patch("code_puppy.config.get_protected_token_count", return_value=100)
     @patch("code_puppy.agents.base_agent.update_spinner_context")
     @patch("code_puppy.agents.base_agent.emit_warning")
     @patch("code_puppy.agents.base_agent.emit_info")
@@ -642,11 +642,11 @@ class TestMessageHistoryProcessor:
         assert isinstance(result, (list, tuple))
 
     @patch(
-        "code_puppy.agents.base_agent.get_compaction_strategy",
+        "code_puppy.config.get_compaction_strategy",
         return_value="truncation",
     )
-    @patch("code_puppy.agents.base_agent.get_compaction_threshold", return_value=0.01)
-    @patch("code_puppy.agents.base_agent.get_protected_token_count", return_value=100)
+    @patch("code_puppy.config.get_compaction_threshold", return_value=0.01)
+    @patch("code_puppy.config.get_protected_token_count", return_value=100)
     @patch("code_puppy.agents.base_agent.update_spinner_context")
     @patch("code_puppy.agents.base_agent.emit_info")
     def test_truncation_strategy(
@@ -1017,9 +1017,9 @@ class TestMessageHistoryAccumulator:
     @patch("code_puppy.agents.base_agent.on_message_history_processor_start")
     @patch("code_puppy.agents.base_agent.on_message_history_processor_end")
     @patch("code_puppy.agents.base_agent.update_spinner_context")
-    @patch("code_puppy.agents.base_agent.get_compaction_threshold", return_value=0.99)
+    @patch("code_puppy.config.get_compaction_threshold", return_value=0.99)
     @patch(
-        "code_puppy.agents.base_agent.get_compaction_strategy",
+        "code_puppy.config.get_compaction_strategy",
         return_value="truncation",
     )
     def test_filters_empty_thinking_parts(
@@ -1041,9 +1041,9 @@ class TestMessageHistoryAccumulator:
     @patch("code_puppy.agents.base_agent.on_message_history_processor_start")
     @patch("code_puppy.agents.base_agent.on_message_history_processor_end")
     @patch("code_puppy.agents.base_agent.update_spinner_context")
-    @patch("code_puppy.agents.base_agent.get_compaction_threshold", return_value=0.99)
+    @patch("code_puppy.config.get_compaction_threshold", return_value=0.99)
     @patch(
-        "code_puppy.agents.base_agent.get_compaction_strategy",
+        "code_puppy.config.get_compaction_strategy",
         return_value="truncation",
     )
     def test_multi_part_with_empty_thinking(
@@ -1064,9 +1064,9 @@ class TestMessageHistoryAccumulator:
     @patch("code_puppy.agents.base_agent.on_message_history_processor_start")
     @patch("code_puppy.agents.base_agent.on_message_history_processor_end")
     @patch("code_puppy.agents.base_agent.update_spinner_context")
-    @patch("code_puppy.agents.base_agent.get_compaction_threshold", return_value=0.99)
+    @patch("code_puppy.config.get_compaction_threshold", return_value=0.99)
     @patch(
-        "code_puppy.agents.base_agent.get_compaction_strategy",
+        "code_puppy.config.get_compaction_strategy",
         return_value="truncation",
     )
     def test_dedup_with_compacted_hash(
@@ -1125,7 +1125,7 @@ class TestRunWithMcp:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1166,7 +1166,7 @@ class TestRunWithMcp:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1198,7 +1198,7 @@ class TestRunWithMcp:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1232,7 +1232,7 @@ class TestRunWithMcp:
                 agent, "_create_agent_with_output_type", return_value=mock_agent
             ),
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1261,7 +1261,7 @@ class TestRunWithMcp:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1294,7 +1294,7 @@ class TestRunWithMcp:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=True),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1325,7 +1325,7 @@ class TestRunWithMcp:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1355,7 +1355,7 @@ class TestRunWithMcp:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1382,7 +1382,7 @@ class TestRunWithMcp:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1412,7 +1412,7 @@ class TestRunWithMcp:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1447,7 +1447,7 @@ class TestRunWithMcp:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1531,11 +1531,11 @@ class TestMessageHistoryProcessorCompaction:
     """Tests for message_history_processor compaction paths (lines 1059-1098)."""
 
     @patch(
-        "code_puppy.agents.base_agent.get_compaction_strategy",
+        "code_puppy.config.get_compaction_strategy",
         return_value="summarization",
     )
     @patch(
-        "code_puppy.agents.base_agent.get_compaction_threshold", return_value=0.01
+        "code_puppy.config.get_compaction_threshold", return_value=0.01
     )  # very low threshold
     @patch("code_puppy.agents.base_agent.update_spinner_context")
     @patch("code_puppy.agents.base_agent.emit_info")
@@ -1559,10 +1559,10 @@ class TestMessageHistoryProcessorCompaction:
             agent.message_history_processor(ctx, msgs)
 
     @patch(
-        "code_puppy.agents.base_agent.get_compaction_strategy",
+        "code_puppy.config.get_compaction_strategy",
         return_value="truncation",
     )
-    @patch("code_puppy.agents.base_agent.get_compaction_threshold", return_value=0.01)
+    @patch("code_puppy.config.get_compaction_threshold", return_value=0.01)
     @patch("code_puppy.agents.base_agent.update_spinner_context")
     @patch("code_puppy.agents.base_agent.emit_info")
     def test_truncation_path(
@@ -1854,7 +1854,7 @@ class TestRunWithMcpAdditional:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=True),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1884,7 +1884,7 @@ class TestRunWithMcpAdditional:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1913,7 +1913,7 @@ class TestRunWithMcpAdditional:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1943,7 +1943,7 @@ class TestRunWithMcpAdditional:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -1972,7 +1972,7 @@ class TestRunWithMcpAdditional:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",
@@ -2005,7 +2005,7 @@ class TestRunWithMcpAdditional:
 
         with (
             patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep,
-            patch("code_puppy.agents.base_agent.get_message_limit", return_value=100),
+            patch("code_puppy.config.get_message_limit", return_value=100),
             patch("code_puppy.agents.base_agent.get_use_dbos", return_value=False),
             patch(
                 "code_puppy.agents.base_agent.on_agent_run_start",

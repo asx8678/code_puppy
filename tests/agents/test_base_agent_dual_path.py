@@ -85,7 +85,7 @@ class TestFilterHugeMessagesDualPath:
     """Exercise both Rust and Python paths in filter_huge_messages."""
 
     @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
-    @patch("code_puppy._core_bridge.prune_and_filter")
+    @patch("code_puppy._core_bridge.MessageBatchHandle.prune_and_filter")
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
     def test_rust_path_returns_subset(
         self,
@@ -104,7 +104,7 @@ class TestFilterHugeMessagesDualPath:
 
     @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
     @patch(
-        "code_puppy._core_bridge.prune_and_filter",
+        "code_puppy._core_bridge.MessageBatchHandle.prune_and_filter",
         side_effect=RuntimeError("boom"),
     )
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
@@ -148,7 +148,7 @@ class TestFilterHugeMessagesDualPath:
 
 class TestPruneInterruptedToolCallsDualPath:
     @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
-    @patch("code_puppy._core_bridge.prune_and_filter")
+    @patch("code_puppy._core_bridge.MessageBatchHandle.prune_and_filter")
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
     def test_rust_path_returns_subset(self, mock_serialize, mock_prune):
         mock_serialize.return_value = [{"fake": True}]
@@ -162,7 +162,7 @@ class TestPruneInterruptedToolCallsDualPath:
 
     @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
     @patch(
-        "code_puppy._core_bridge.prune_and_filter",
+        "code_puppy._core_bridge.MessageBatchHandle.prune_and_filter",
         side_effect=Exception("boom"),
     )
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
@@ -270,23 +270,27 @@ class TestMessageHistoryProcessorDualPath:
         assert isinstance(result, list)
 
     @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
-    @patch("code_puppy.agents.base_agent._rust_enabled", new=lambda: True)
-    @patch("code_puppy._core_bridge.process_messages_batch")
+    @patch("code_puppy._core_bridge.MessageBatchHandle.process")
     @patch("code_puppy.agents.base_agent.serialize_messages_for_rust")
-    @patch("code_puppy.agents.base_agent.get_compaction_threshold", return_value=0.0)
-    @patch(
-        "code_puppy.agents.base_agent.get_compaction_strategy",
-        return_value="truncation",
-    )
+    @patch("code_puppy.config.get_compaction_strategy", return_value="truncation")
+    @patch("code_puppy.config_package.get_puppy_config")
     def test_rust_path_triggers_compaction(
         self,
+        mock_get_config,
         mock_strategy,
-        mock_threshold,
         mock_serialize,
         mock_batch,
         agent,
     ):
         """When proportion_used > threshold, compaction kicks in (Rust path)."""
+        # Create a mock config with low threshold to trigger compaction
+        mock_cfg = SimpleNamespace(
+            compaction_threshold=0.0,  # 0% threshold to always trigger compaction
+            protected_token_count=1000,
+            summarization_trigger_fraction=0.8,
+            summarization_keep_fraction=0.4,
+        )
+        mock_get_config.return_value = mock_cfg
         mock_serialize.return_value = [{"fake": True}]
         mock_batch.return_value = _fake_batch_result(
             total_message_tokens=150_000, context_overhead_tokens=60_000
