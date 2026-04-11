@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Awaitable, TypeVar
 
 T = TypeVar("T")
+R = TypeVar("R")
 
 
 @dataclass
