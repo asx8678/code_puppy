@@ -380,3 +380,101 @@ def test_policy_rule_with_args_pattern_compiles():
         decision="deny",
     )
     assert rule._compiled_args is not None
+
+
+# ---------------------------------------------------------------------------
+# Concurrency regression test — singleton thread-safety
+# ---------------------------------------------------------------------------
+
+
+def test_get_policy_engine_singleton_thread_safety(tmp_path, monkeypatch):
+    """
+    Regression test for code_puppy-68x.4: publication order bug.
+
+    Proves that:
+    1. Multiple threads calling get_policy_engine() get the same instance
+    2. No thread can observe an engine before policy loading completes
+    3. All threads see fully initialized engine with all rules loaded
+    """
+    import json
+    import threading
+    import time
+    from code_puppy import policy_engine
+    from code_puppy.policy_config import load_policy_rules
+
+    # Reset singleton state before test
+    policy_engine._engine = None
+
+    # Create a policy file with one rule
+    proj_file = tmp_path / "policy.json"
+    proj_file.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {"tool_name": "test_tool", "decision": "allow", "priority": 10},
+                ]
+            }
+        )
+    )
+
+    # Mock load_policy_rules at the policy_config module level
+    # (that's where get_policy_engine imports it from)
+    original_load = load_policy_rules
+    load_started = threading.Event()
+    load_completed = threading.Event()
+
+    def slow_load_policy_rules(engine, user_policy=None, project_policy=None):
+        load_started.set()
+        # Small delay to widen the race window
+        time.sleep(0.05)
+        result = original_load(
+            engine, user_policy=user_policy, project_policy=project_policy or proj_file
+        )
+        load_completed.set()
+        return result
+
+    monkeypatch.setattr(
+        "code_puppy.policy_config.load_policy_rules", slow_load_policy_rules
+    )
+
+    # Track what each thread observes
+    results = {"instances": [], "rule_counts": [], "second_call_instances": []}
+    results_lock = threading.Lock()
+    barrier = threading.Barrier(5)  # 5 threads start simultaneously
+
+    def racer():
+        # All threads wait here, then race to call get_policy_engine()
+        barrier.wait()
+        engine = policy_engine.get_policy_engine()
+        with results_lock:
+            results["instances"].append(id(engine))
+            results["rule_counts"].append(len(engine.rules))
+        # Second call should return same instance
+        engine2 = policy_engine.get_policy_engine()
+        with results_lock:
+            results["second_call_instances"].append(id(engine2))
+
+    threads = [threading.Thread(target=racer) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # Verify all threads got the SAME instance
+    unique_instances = set(results["instances"])
+    assert len(unique_instances) == 1, f"Expected 1 instance, got {len(unique_instances)}"
+
+    # Verify all threads saw the fully initialized engine with 1 rule
+    for i, count in enumerate(results["rule_counts"]):
+        assert count == 1, f"Thread {i} saw {count} rules, expected 1 (partial init bug!)"
+
+    # Verify second calls return same instance
+    for i, inst_id in enumerate(results["second_call_instances"]):
+        assert inst_id == results["instances"][i], f"Thread {i} got different instance on second call"
+
+    # Verify load_policy_rules was actually called
+    assert load_started.is_set(), "load_policy_rules was never called"
+    assert load_completed.is_set(), "load_policy_rules did not complete"
+
+    # Cleanup: reset singleton for other tests
+    policy_engine._engine = None
