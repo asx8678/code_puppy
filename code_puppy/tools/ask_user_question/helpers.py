@@ -5,12 +5,10 @@ callers don't have to hand-roll the "skip if only one option" pattern.
 """
 
 from collections.abc import Callable
-from typing import Sequence, TypeVar
-
-T = TypeVar("T")
+from typing import Sequence
 
 
-def select_with_smart_defaults(
+def select_with_smart_defaults[T](
     items: Sequence[T],
     *,
     display_fn: Callable[[T], str] | None = None,

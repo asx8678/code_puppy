@@ -24,15 +24,12 @@ from collections.abc import Callable
 import asyncio
 import os
 import threading
-from typing import TypeVar
 
 __all__ = [
     "peek_file_sync",
     "peek_file",
     "reset_pools",
 ]
-
-T = TypeVar("T")
 
 # --- Pool configuration ---
 _POOLED_BUFFER_SIZE = 512  # Async pool slot size; larger peeks allocate ad hoc
@@ -85,7 +82,7 @@ def _release_async_index(index: int) -> None:
     _async_available.append(index)
 
 
-def peek_file_sync(
+def peek_file_sync[T](
     file_path: str | os.PathLike[str],
     max_bytes: int,
     op: Callable[[bytes], T],
@@ -126,7 +123,7 @@ def peek_file_sync(
     return op(header)
 
 
-async def peek_file(
+async def peek_file[T](
     file_path: str | os.PathLike[str],
     max_bytes: int,
     op: Callable[[bytes], T],
