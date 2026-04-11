@@ -271,6 +271,12 @@ def _build_crate(crate_dir: Path, crate_name: str) -> tuple[bool, str]:
     Returns (success, error_msg).
     Uses 600 second timeout (turbo_parse is slow).
     """
+    # Log free-threading status for build diagnostics
+    try:
+        gil_enabled = sys._is_gil_enabled()
+        logger.info("Building %s (GIL %s)", crate_name, "enabled" if gil_enabled else "disabled — free-threaded")
+    except AttributeError:
+        pass
     cmd_base = _get_maturin_command()
     cmd = cmd_base + [
         "develop",

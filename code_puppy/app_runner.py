@@ -64,6 +64,21 @@ def _get_execute_single_prompt() -> callable:
     return _execute_single_prompt
 
 
+def _log_gil_status() -> None:
+    """Log whether the Python GIL is enabled or disabled (free-threaded mode)."""
+    from code_puppy.messaging import emit_info
+
+    try:
+        gil_enabled = sys._is_gil_enabled()  # Python 3.13+
+    except AttributeError:
+        return  # Python < 3.13, GIL is always enabled
+
+    if not gil_enabled:
+        emit_info("🧵 Free-threaded Python active (GIL disabled)")
+    else:
+        emit_info("🔒 GIL enabled (set PYTHON_GIL=0 or use python3.14t for free-threading)")
+
+
 class AppRunner:
     """Orchestrates all top-level concerns of the Code Puppy application.
 
@@ -354,6 +369,9 @@ class AppRunner:
                 default_version_mismatch_behavior(current_version)
 
         await callbacks.on_startup()
+
+        # Log free-threading (no-GIL) status
+        _log_gil_status()
 
         # Register workflow state callback handlers for tracking flags
         from code_puppy.workflow_state import register_callback_handlers

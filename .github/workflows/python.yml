@@ -73,7 +73,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ['3.14']
+        python-version: ['3.14', '3.14t']
     steps:
       - uses: actions/checkout@v4
       
@@ -89,4 +89,34 @@ jobs:
       - name: Run tests
         run: uv run pytest tests/ -q --tb=short -x
         env:
+          PYTHONDONTWRITEBYTECODE: 1
+
+  test-free-threaded:
+    name: Test (free-threaded)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+      
+      - name: Set up Python 3.14t
+        run: uv python install 3.14t
+      
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+      
+      - name: Verify GIL is disabled
+        run: uv run python -c "import sys; assert not sys._is_gil_enabled(), 'GIL should be disabled'"
+        env:
+          PYTHON_GIL: '0'
+      
+      - name: Run tests (free-threaded)
+        run: uv run pytest tests/ -q --tb=short -x
+        env:
+          PYTHON_GIL: '0'
           PYTHONDONTWRITEBYTECODE: 1

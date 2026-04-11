@@ -272,6 +272,12 @@ def load_puppy_config() -> PuppyConfig:
             False,
             **resolver_ctx,
         ),
+        free_threading_enabled=resolve_bool(
+            ("PUP_FREE_THREADING",),
+            "free_threading",
+            False,
+            **resolver_ctx,
+        ),
         # UI / Behavior
         temperature=resolve_float(
             ("PUPPY_TEMPERATURE",),

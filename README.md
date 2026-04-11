@@ -297,6 +297,26 @@ To disable auto-build, set in `~/.code_puppy/puppy.cfg`:
 disable_rust_autobuild=true
 ```
 
+### Free-Threaded Python (No-GIL)
+
+Code Puppy fully supports Python's free-threaded mode (PEP 703), which
+disables the Global Interpreter Lock for true multi-core parallelism.
+
+```bash
+# Option 1: Use the free-threaded Python interpreter directly
+python3.14t -m code_puppy
+
+# Option 2: Set the environment variable before launch
+PYTHON_GIL=0 pup
+
+# Option 3: Set in puppy.cfg (advisory — logged at startup)
+free_threading=true
+```
+
+All three Rust accelerator crates (`code_puppy_core`, `turbo_ops`,
+`turbo_parse`) are built with PyO3's `free-threaded` feature and work
+correctly in both GIL and no-GIL modes.
+
 ## Requirements
 
 - Python 3.11+

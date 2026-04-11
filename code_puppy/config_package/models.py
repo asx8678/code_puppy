@@ -90,6 +90,7 @@ class PuppyConfig:
         enable_dbos: Enable DBOS integration
         enable_streaming: Enable SSE streaming responses
         enable_agent_memory: Enable agent memory features
+        free_threading_enabled: Whether free-threaded Python (no-GIL) is active
 
         # UI / behavior
         temperature: Default temperature for model calls
@@ -152,6 +153,7 @@ class PuppyConfig:
     enable_streaming: bool
     # DEPRECATED(audit-2026): Legacy config key, use memory_enabled instead
     enable_agent_memory: bool
+    free_threading_enabled: bool
 
     # ─────────────────────────────────────────────────────────────
     # UI / Behavior
