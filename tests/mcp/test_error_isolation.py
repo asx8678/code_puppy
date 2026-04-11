@@ -626,6 +626,42 @@ class TestGetErrorIsolator:
         assert isolator is not None
         assert isinstance(isolator, MCPErrorIsolator)
 
+    def test_get_error_isolator_thread_safety(self):
+        """Regression test: concurrent singleton access must return same instance.
+
+        Verifies that when multiple threads call get_error_isolator()
+        simultaneously, only one MCPErrorIsolator is created and every
+        thread receives the identical instance.
+        """
+        import threading
+
+        import code_puppy.mcp_.error_isolation as mod
+
+        # Reset singleton so threads compete to create it
+        mod._isolator_instance = None
+
+        num_threads = 20
+        results: list[int] = []
+        barrier = threading.Barrier(num_threads)
+
+        def worker():
+            barrier.wait()
+            results.append(id(get_error_isolator()))
+
+        threads = [threading.Thread(target=worker) for _ in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(results) == num_threads, (
+            f"Expected {num_threads} results, got {len(results)}"
+        )
+        unique_ids = set(results)
+        assert len(unique_ids) == 1, (
+            f"Expected exactly 1 unique instance, got {len(unique_ids)}: {unique_ids}"
+        )
+
 
 class TestErrorIsolationIntegration:
     """Integration tests for error isolation system."""
