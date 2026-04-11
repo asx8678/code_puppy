@@ -274,7 +274,11 @@ def _build_crate(crate_dir: Path, crate_name: str) -> tuple[bool, str]:
     # Log free-threading status for build diagnostics
     try:
         gil_enabled = sys._is_gil_enabled()
-        logger.info("Building %s (GIL %s)", crate_name, "enabled" if gil_enabled else "disabled — free-threaded")
+        logger.info(
+            "Building %s (GIL %s)",
+            crate_name,
+            "enabled" if gil_enabled else "disabled — free-threaded",
+        )
     except AttributeError:
         pass
     cmd_base = _get_maturin_command()
@@ -313,13 +317,25 @@ def _build_crate(crate_dir: Path, crate_name: str) -> tuple[bool, str]:
         if proc.returncode == 0:
             return True, ""
         else:
-            error_msg = (
-                stderr.strip()
-                if stderr
-                else stdout.strip()
-                if stdout
-                else "Unknown error"
-            )
+            # Filter out warning lines from stderr so real errors are visible
+            if stderr:
+                filtered_lines = [
+                    line
+                    for line in stderr.strip().splitlines()
+                    if not line.strip().startswith("warning:")
+                ]
+                error_msg = "\n".join(filtered_lines)
+                if not error_msg:
+                    # All lines were warnings - fall back to stdout or generic message
+                    error_msg = (
+                        stdout.strip()
+                        if stdout
+                        else "(build failed with warnings only — see logs)"
+                    )
+            elif stdout:
+                error_msg = stdout.strip()
+            else:
+                error_msg = "Unknown error"
             return False, error_msg
 
     except subprocess.TimeoutExpired:
@@ -544,7 +560,7 @@ def _try_auto_build_all() -> dict[str, bool]:
                 results[crate_name] = False
         else:
             emit_info(
-                f"🐕 Fast Puppy: ❌ {crate_name}: build failed — {error_msg[:100]}"
+                f"🐕 Fast Puppy: ❌ {crate_name}: build failed — {error_msg[:300]}"
             )
             logger.debug("Build error for %s: %s", crate_name, error_msg)
             results[crate_name] = False

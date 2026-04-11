@@ -13,6 +13,7 @@ import pytest
 
 from code_puppy.plugins.fast_puppy.builder import (
     CRATES,
+    _build_crate,
     _check_disable_autobuild,
     _find_crate_dir,
     _find_repo_root,
@@ -426,6 +427,101 @@ class TestFullBuildCycle:
             # Every crate in CRATES should appear in results (either True or False)
             assert crate_spec["name"] in results
             assert isinstance(results[crate_spec["name"]], bool)
+
+
+class TestBuildCrateWarningFiltering:
+    """Tests for _build_crate() warning filtering behavior.
+
+    These tests verify that warning lines are filtered from stderr so that
+    real errors remain visible, and appropriate fallback messages are used
+    when only warnings are present.
+    """
+
+    def test_warning_only_stderr_empty_stdout_returns_fallback(self, tmp_path):
+        """When stderr has only warnings and stdout is empty, return fallback message."""
+        crate_dir = tmp_path / "fake_crate"
+        crate_dir.mkdir()
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        mock_proc.poll.return_value = 1
+        mock_proc.communicate.return_value = ("", "warning: first\nwarning: second")
+
+        with patch("subprocess.Popen", return_value=mock_proc):
+            with patch(
+                "code_puppy.plugins.fast_puppy.builder._get_maturin_command",
+                return_value=["maturin"],
+            ):
+                success, error_msg = _build_crate(crate_dir, "test_crate")
+
+        assert success is False
+        assert "build failed with warnings only" in error_msg
+
+    def test_warning_only_stderr_with_stdout_returns_stdout(self, tmp_path):
+        """When stderr has only warnings but stdout has content, return stdout."""
+        crate_dir = tmp_path / "fake_crate"
+        crate_dir.mkdir()
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        mock_proc.poll.return_value = 1
+        mock_proc.communicate.return_value = (
+            "real error from stdout",
+            "warning: first",
+        )
+
+        with patch("subprocess.Popen", return_value=mock_proc):
+            with patch(
+                "code_puppy.plugins.fast_puppy.builder._get_maturin_command",
+                return_value=["maturin"],
+            ):
+                success, error_msg = _build_crate(crate_dir, "test_crate")
+
+        assert success is False
+        assert error_msg == "real error from stdout"
+
+    def test_mixed_warnings_and_errors_filters_warnings(self, tmp_path):
+        """When stderr has both warnings and errors, only non-warning lines are returned."""
+        crate_dir = tmp_path / "fake_crate"
+        crate_dir.mkdir()
+
+        stderr_content = "warning: ignored\nerror: real problem\n  --> src/lib.rs:1:1"
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        mock_proc.poll.return_value = 1
+        mock_proc.communicate.return_value = ("", stderr_content)
+
+        with patch("subprocess.Popen", return_value=mock_proc):
+            with patch(
+                "code_puppy.plugins.fast_puppy.builder._get_maturin_command",
+                return_value=["maturin"],
+            ):
+                success, error_msg = _build_crate(crate_dir, "test_crate")
+
+        assert success is False
+        assert "warning:" not in error_msg
+        assert "error: real problem" in error_msg
+        assert "src/lib.rs:1:1" in error_msg
+
+    def test_no_warnings_returns_error_unchanged(self, tmp_path):
+        """When stderr has no warnings, the error message is returned unchanged."""
+        crate_dir = tmp_path / "fake_crate"
+        crate_dir.mkdir()
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        mock_proc.poll.return_value = 1
+        mock_proc.communicate.return_value = ("", "error: pure error")
+
+        with patch("subprocess.Popen", return_value=mock_proc):
+            with patch(
+                "code_puppy.plugins.fast_puppy.builder._get_maturin_command",
+                return_value=["maturin"],
+            ):
+                success, error_msg = _build_crate(crate_dir, "test_crate")
+
+        assert success is False
+        assert error_msg == "error: pure error"
 
 
 class TestReloadAndPatchCrateRebind:
