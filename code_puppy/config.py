@@ -295,7 +295,7 @@ def _make_int_getter(
             if max_val is not None:
                 result = min(max_val, result)
             return result
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return default
 
     getter.__name__ = getter_name
@@ -340,7 +340,7 @@ def _make_float_getter(
             if max_val is not None:
                 result = min(max_val, result)
             return result
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return default
 
     getter.__name__ = getter_name
@@ -1177,7 +1177,7 @@ def get_temperature() -> float | None:
         temp = float(val)
         # Clamp to valid range (most APIs accept 0-2)
         return max(0.0, min(2.0, temp))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
@@ -1233,7 +1233,7 @@ def get_model_setting(
 
     try:
         return float(val)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return default
 
 
@@ -1296,7 +1296,7 @@ def get_all_model_settings(model_name: str) -> dict:
                             settings[setting_name] = int(val_stripped)
                         else:
                             settings[setting_name] = float(val_stripped)
-                    except (ValueError, TypeError):
+                    except ValueError, TypeError:
                         # Keep as string if not a number
                         settings[setting_name] = val_stripped
 
@@ -1476,7 +1476,9 @@ def initialize_command_history_file():
             )
             old_history_exists = os.path.isfile(old_history_file)
             if old_history_exists:
-                Path(old_history_file).copy(Path(COMMAND_HISTORY_FILE), preserve_metadata=True)
+                Path(old_history_file).copy(
+                    Path(COMMAND_HISTORY_FILE), preserve_metadata=True
+                )
                 Path(old_history_file).unlink(missing_ok=True)
         except Exception as e:
             from code_puppy.messaging import emit_error
@@ -1556,7 +1558,7 @@ def get_protected_token_count():
 
         # Apply constraints: minimum 1000, maximum 75% of context length
         return max(1000, min(configured_value, max_protected_tokens))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         # If parsing fails, return a reasonable default that respects the 75% limit
         model_context_length = get_model_context_length()
         max_protected_tokens = int(model_context_length * 0.75)
@@ -1635,7 +1637,7 @@ def get_summarization_trigger_fraction() -> float:
     try:
         result = float(val) if val else 0.85
         return max(0.5, min(0.95, result))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 0.85
 
 
@@ -1651,7 +1653,7 @@ def get_summarization_keep_fraction() -> float:
     try:
         result = float(val) if val else 0.10
         return max(0.05, min(0.50, result))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 0.10
 
 
@@ -1737,7 +1739,7 @@ def get_message_limit(default: int = 1000) -> int:
     val = get_value("message_limit")
     try:
         return int(val) if val else default
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return default
 
 
@@ -1758,7 +1760,7 @@ def save_command_to_history(command: str):
             command = command.encode("utf-8", errors="surrogatepass").decode(
                 "utf-8", errors="replace"
             )
-        except (UnicodeEncodeError, UnicodeDecodeError):
+        except UnicodeEncodeError, UnicodeDecodeError:
             # If that fails, do a more aggressive cleanup
             command = "".join(
                 char if ord(char) < 0xD800 or ord(char) > 0xDFFF else "\ufffd"
@@ -2329,6 +2331,7 @@ def get_ws_history_ttl_seconds() -> int:
 
 
 # --- AGENT MEMORY CONFIGURATION ---
+
 
 # DEPRECATED(audit-2026): Use memory_enabled instead. This getter exists
 # for backward compatibility with existing puppy.cfg files.
