@@ -1,9 +1,10 @@
+from collections.abc import Callable
 import asyncio
 import logging
 import threading
 import traceback
 import weakref
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 from code_puppy import _backlog
 from code_puppy.run_context import (
@@ -97,7 +98,7 @@ PhaseType = Literal[
     "message_history_processor_start",
     "message_history_processor_end",
 ]
-CallbackFunc = Callable[..., Any]
+type CallbackFunc = Callable[..., Any]
 
 _callbacks: dict[PhaseType, list[CallbackFunc]] = {
     "startup": [],

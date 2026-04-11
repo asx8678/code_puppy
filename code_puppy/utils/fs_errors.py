@@ -18,8 +18,6 @@ Usage:
         raise
 """
 
-from __future__ import annotations
-
 import errno
 
 __all__ = [

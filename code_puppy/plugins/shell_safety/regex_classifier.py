@@ -19,8 +19,6 @@ SECURITY FIXES (issue code_puppy-70t):
 - Added explicit find -delete/-exec patterns for mass deletion detection
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 from typing import Literal

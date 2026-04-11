@@ -5,8 +5,6 @@ sending msgpack-framed event messages.  Includes reconnect logic with
 exponential backoff and a background sender thread for non-blocking writes.
 """
 
-from __future__ import annotations
-
 import logging
 import queue
 import socket

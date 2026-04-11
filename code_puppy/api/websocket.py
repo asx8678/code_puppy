@@ -21,8 +21,6 @@ Session History Replay:
     session_id only sees history for that session.
 """
 
-from __future__ import annotations
-
 import asyncio
 import base64
 import logging

@@ -8,8 +8,6 @@ Inspired by Agentless ``compress_file.py``. Uses tree-sitter (multi-language)
 with regex fallback.
 """
 
-from __future__ import annotations
-
 import logging
 
 from code_puppy.callbacks import register_callback

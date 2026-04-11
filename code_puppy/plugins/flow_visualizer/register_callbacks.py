@@ -11,7 +11,7 @@ Registers the flow visualizer with code_puppy's callback hooks:
 
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from rich.console import Console
 
@@ -57,7 +57,7 @@ def _on_startup():
 async def _on_agent_run_start(
     agent_name: str,
     model_name: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
 ) -> None:
     """Track agent start — create a new lane."""
     global _flow_state
@@ -75,7 +75,7 @@ async def _on_agent_run_start(
 async def _on_stream_event(
     event_type: str,
     event_data: Any,
-    agent_session_id: Optional[str] = None,
+    agent_session_id: str | None = None,
 ) -> None:
     """Update lane detail based on stream event."""
     global _flow_state
@@ -99,11 +99,11 @@ async def _on_stream_event(
 async def _on_agent_run_end(
     agent_name: str,
     model_name: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     success: bool = True,
-    error: Optional[Exception] = None,
-    response_text: Optional[str] = None,
-    metadata: Optional[dict] = None,
+    error: Exception | None = None,
+    response_text: str | None = None,
+    metadata: dict | None = None,
 ) -> None:
     """Mark lane as done or failed when agent ends."""
     global _flow_state

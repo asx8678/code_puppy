@@ -1,7 +1,5 @@
 """Tests for chatgpt_oauth/register_callbacks.py full coverage."""
 
-from __future__ import annotations
-
 import os
 from unittest.mock import MagicMock, patch
 

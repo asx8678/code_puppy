@@ -8,13 +8,14 @@ failures when MCP servers become unhealthy. The circuit breaker has three states
 - HALF_OPEN: Limited calls allowed to test recovery
 """
 
+from collections.abc import Callable
 import asyncio
 import functools
 import inspect
 import logging
 import time
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 from code_puppy.circuit_state import CircuitState
 

@@ -19,8 +19,6 @@ Config (puppy.cfg):
     max_dir_entries = 500
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import re

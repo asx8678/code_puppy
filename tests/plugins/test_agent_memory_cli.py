@@ -3,8 +3,6 @@
 Tests the Phase 6 implementation: configuration support and /memory slash command.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 import pytest

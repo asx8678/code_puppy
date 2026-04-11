@@ -4,8 +4,6 @@ Provides a MemoryUpdater class that sits between the fact extraction layer
 and the storage layer, batching writes with a configurable debounce window.
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 from datetime import datetime, timezone

@@ -12,8 +12,6 @@ to ensure snapshots are deterministic across runs and machines. See
 `_snapshot_helpers.normalize_for_snapshot()` for details.
 """
 
-from __future__ import annotations
-
 import pytest
 from unittest.mock import patch
 

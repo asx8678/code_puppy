@@ -3,8 +3,6 @@
 Targeted tests to reach 100% on specific missed lines.
 """
 
-from __future__ import annotations
-
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
 

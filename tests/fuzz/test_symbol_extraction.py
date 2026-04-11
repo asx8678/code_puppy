@@ -8,8 +8,6 @@ This module provides property-based testing to verify that extract_symbols:
 4. Maintains invariants across all inputs
 """
 
-from __future__ import annotations
-
 import pytest
 from hypothesis import given, settings, strategies as st
 

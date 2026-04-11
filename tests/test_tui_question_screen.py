@@ -11,8 +11,6 @@ Covers:
 - Render helpers (smoke tests — no running app required)
 """
 
-from __future__ import annotations
-
 import pytest
 
 

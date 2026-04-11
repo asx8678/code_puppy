@@ -5,8 +5,7 @@ fallback chains, and circuit breakers to operations. Used by both
 the agent pack system and general tool execution.
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable
 import asyncio
 import functools
 import inspect
@@ -16,7 +15,7 @@ import random
 import time
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Callable, Generic, ParamSpec, TypeVar
+from typing import Any, Generic, ParamSpec, TypeVar
 
 from code_puppy.async_utils import run_async_sync
 from code_puppy.circuit_state import CircuitState

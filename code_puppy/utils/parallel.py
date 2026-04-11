@@ -6,10 +6,11 @@ Provides a bounded-concurrency async map and a from-scratch counting semaphore.
 Inspired by oh-my-pi's parallel.ts.
 """
 
+from collections.abc import Callable
 import asyncio
 import collections
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Generic, TypeVar
+from typing import Awaitable, Generic, TypeVar
 
 T = TypeVar("T")
 R = TypeVar("R")

@@ -228,7 +228,7 @@ def _render_menu_panel(
     page: int,
     selected_idx: int,
     current_agent_name: str,
-) -> List:
+) -> list:
     """Render the left menu panel with pagination.
 
     Args:
@@ -302,7 +302,7 @@ def _render_menu_panel(
 
 def _render_preview_panel(
     entry: tuple[str, str, str | None], current_agent_name: str
-) -> List:
+) -> list:
     """Render the right preview panel with agent details.
 
     Args:

@@ -4,8 +4,6 @@ Tests that agents can properly delegate batch file operations to the
 turbo-executor agent via invoke_agent and the load_prompt callback.
 """
 
-from __future__ import annotations
-
 import pytest
 
 

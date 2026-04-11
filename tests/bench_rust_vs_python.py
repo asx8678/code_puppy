@@ -15,13 +15,10 @@ Run:
     python -m pytest tests/bench_rust_vs_python.py -v -s -k "end_to_end"  # key benchmark
 """
 
-from __future__ import annotations
-
 import math
 import pickle
 import statistics
 import time
-from typing import Dict, List, Tuple
 
 import pytest
 from pydantic_ai.messages import (
@@ -53,13 +50,13 @@ WARM_UP = 3  # warm-up iterations (discarded)
 SCALES = [10, 50, 100, 200, 500]  # message-history sizes to test
 
 # Collected across all tests for the final summary table
-_summary_rows: List[Dict] = []
+_summary_rows: list[dict] = []
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def _build_realistic_history(n: int) -> List[ModelMessage]:
+def _build_realistic_history(n: int) -> list[ModelMessage]:
     """Build a realistic *n*-message history with mixed content types.
 
     Pattern (repeating cycle of 7):
@@ -71,7 +68,7 @@ def _build_realistic_history(n: int) -> List[ModelMessage]:
       5: user follow-up
       6: assistant with thinking part
     """
-    messages: List[ModelMessage] = []
+    messages: list[ModelMessage] = []
 
     # System prompt — always first
     messages.append(
@@ -203,7 +200,7 @@ class _Stats:
     __slots__ = ("times_ns",)
 
     def __init__(self) -> None:
-        self.times_ns: List[int] = []
+        self.times_ns: list[int] = []
 
     def record(self, ns: int) -> None:
         self.times_ns.append(ns)

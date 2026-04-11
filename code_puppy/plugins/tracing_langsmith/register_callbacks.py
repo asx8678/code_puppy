@@ -10,13 +10,11 @@ Environment Variables:
     LANGSMITH_BASE_URL: Optional custom API endpoint
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import time
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from code_puppy.async_utils import warn_once
 from code_puppy.callbacks import register_callback
@@ -142,7 +140,7 @@ def _is_plugin_active() -> bool:
 async def _on_agent_run_start(
     agent_name: str,
     model_name: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
 ) -> None:
     """Start a new LangSmith trace for the agent run.
 
@@ -193,11 +191,11 @@ async def _on_agent_run_start(
 async def _on_agent_run_end(
     agent_name: str,
     model_name: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     success: bool = True,
-    error: Optional[Exception] = None,
-    response_text: Optional[str] = None,
-    metadata: Optional[dict] = None,
+    error: Exception | None = None,
+    response_text: str | None = None,
+    metadata: dict | None = None,
 ) -> None:
     """Close the LangSmith trace for the agent run.
 
@@ -235,7 +233,7 @@ async def _on_agent_run_end(
         if metadata:
             outputs.update(metadata)
 
-        error_info: Optional[str] = None
+        error_info: str | None = None
         if error is not None:
             error_info = str(error)
             outputs["error"] = error_info
@@ -379,7 +377,7 @@ async def _on_post_tool_call(
 async def _on_stream_event(
     event_type: str,
     event_data: Any,
-    agent_session_id: Optional[str] = None,
+    agent_session_id: str | None = None,
 ) -> None:
     """Log stream events to the active trace.
 

@@ -1,10 +1,8 @@
 """Code Explorer — File and directory exploration with symbol extraction and caching."""
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from code_puppy.code_context.models import CodeContext, FileOutline, SymbolInfo
 from code_puppy.tools.file_operations import _read_file_sync
@@ -33,12 +31,12 @@ class CodeExplorer:
             enable_cache: Whether to enable result caching (default: True)
         """
         self.enable_cache = enable_cache
-        self._cache: Dict[str, CodeContext] = {}
+        self._cache: dict[str, CodeContext] = {}
         self._parse_count = 0
         self._cache_hits = 0
         self._cache_misses = 0
 
-    def _detect_language(self, file_path: str) -> Optional[str]:
+    def _detect_language(self, file_path: str) -> str | None:
         """Detect programming language from file extension."""
         ext = Path(file_path).suffix.lower()
         mapping = {
@@ -170,7 +168,7 @@ class CodeExplorer:
         pattern: str = "*",
         recursive: bool = True,
         max_files: int = 50,
-    ) -> List[CodeContext]:
+    ) -> list[CodeContext]:
         """Explore a directory and return code contexts for all supported files.
 
         Args:
@@ -183,7 +181,7 @@ class CodeExplorer:
             List of CodeContext objects
         """
         dir_path = Path(directory).resolve()
-        contexts: List[CodeContext] = []
+        contexts: list[CodeContext] = []
 
         if not dir_path.exists():
             logger.error(f"Directory not found: {directory}")
@@ -220,7 +218,7 @@ class CodeExplorer:
         return contexts
 
     def get_outline(
-        self, file_path: str, max_depth: Optional[int] = None
+        self, file_path: str, max_depth: int | None = None
     ) -> FileOutline:
         """Get the hierarchical outline of a file.
 
@@ -250,8 +248,8 @@ class CodeExplorer:
         return context.outline
 
     def _limit_depth(
-        self, symbols: List[SymbolInfo], max_depth: int, current_depth: int = 1
-    ) -> List[SymbolInfo]:
+        self, symbols: list[SymbolInfo], max_depth: int, current_depth: int = 1
+    ) -> list[SymbolInfo]:
         """Limit the depth of symbol hierarchy."""
         if current_depth >= max_depth:
             # Remove all children at this depth
@@ -268,7 +266,7 @@ class CodeExplorer:
 
         return symbols
 
-    def invalidate_cache(self, file_path: Optional[str] = None) -> None:
+    def invalidate_cache(self, file_path: str | None = None) -> None:
         """Invalidate the cache for a specific file or all files.
 
         Args:
@@ -296,7 +294,7 @@ class CodeExplorer:
 
     def find_symbol_definitions(
         self, directory: str, symbol_name: str
-    ) -> List[tuple[str, SymbolInfo]]:
+    ) -> list[tuple[str, SymbolInfo]]:
         """Find all definitions of a symbol name across a directory.
 
         Args:
@@ -306,7 +304,7 @@ class CodeExplorer:
         Returns:
             List of (file_path, symbol_info) tuples
         """
-        results: List[tuple[str, SymbolInfo]] = []
+        results: list[tuple[str, SymbolInfo]] = []
 
         contexts = self.explore_directory(
             directory, pattern="*", recursive=True, max_files=100

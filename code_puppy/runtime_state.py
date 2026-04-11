@@ -10,18 +10,17 @@ Runtime State vs Config:
 """
 
 import datetime
-from typing import Optional
 
 # =============================================================================
 # Runtime-Only State Variables
 # =============================================================================
 
 #: Runtime-only autosave session ID (per-process). Changes when session rotates.
-_CURRENT_AUTOSAVE_ID: Optional[str] = None
+_CURRENT_AUTOSAVE_ID: str | None = None
 
 #: Session-local model name (initialized from file on first access, then cached).
 # This prevents model changes in other terminals from affecting this running instance.
-_SESSION_MODEL: Optional[str] = None
+_SESSION_MODEL: str | None = None
 
 
 # =============================================================================
@@ -86,7 +85,7 @@ def reset_autosave_id() -> None:
 # Session Model State
 # =============================================================================
 
-def get_session_model() -> Optional[str]:
+def get_session_model() -> str | None:
     """Get the cached session model name.
 
     Returns:
@@ -96,7 +95,7 @@ def get_session_model() -> Optional[str]:
     return _SESSION_MODEL
 
 
-def set_session_model(model: Optional[str]) -> None:
+def set_session_model(model: str | None) -> None:
     """Set the session-local model name.
 
     This updates only the runtime cache. To persist the model to config,

@@ -17,8 +17,6 @@ Migration candidates (code_puppy/ files that could use this utility):
   benefit from fenced JSON extraction before falling back to line parsing
 """
 
-from __future__ import annotations
-
 import json
 import re
 from typing import Any

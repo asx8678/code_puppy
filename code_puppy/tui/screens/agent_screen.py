@@ -9,8 +9,6 @@ Features:
 - No emoji sanitization needed — Textual/Rich handles them natively
 """
 
-from __future__ import annotations
-
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.widgets import Footer, RichLog, Static

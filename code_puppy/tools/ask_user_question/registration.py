@@ -1,7 +1,5 @@
 """Tool registration for ask_user_question."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import Field

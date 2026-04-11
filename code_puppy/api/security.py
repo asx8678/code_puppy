@@ -12,8 +12,6 @@ This module centralises the allow-list used by:
 - the /ws/events and /ws/terminal origin enforcement
 """
 
-from __future__ import annotations
-
 import logging
 import os
 from urllib.parse import urlparse

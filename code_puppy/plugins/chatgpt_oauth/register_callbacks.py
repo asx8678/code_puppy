@@ -6,7 +6,7 @@ the 'chatgpt_oauth' model type handler.
 
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info, emit_success, emit_warning
@@ -123,7 +123,7 @@ def _handle_custom_command(command: str, name: str) -> bool | None:
 
 
 def _create_chatgpt_oauth_model(
-    model_name: str, model_config: Dict, config: Dict
+    model_name: str, model_config: dict, config: dict
 ) -> Any:
     """Create a ChatGPT OAuth model instance.
 

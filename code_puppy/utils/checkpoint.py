@@ -18,8 +18,6 @@ Usage:
 Thread-safe: Multiple threads can call ``save()`` concurrently.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os

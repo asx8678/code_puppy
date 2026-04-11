@@ -4,8 +4,6 @@ Lightweight sub-screen pushed by AgentScreen when the user presses P.
 Dismisses with the selected model name (or None to cancel).
 """
 
-from __future__ import annotations
-
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.widgets import Footer, Static

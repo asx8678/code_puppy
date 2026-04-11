@@ -5,6 +5,7 @@ loads tool metadata, extracts function signatures, and provides access
 to enabled tools for the LLM.
 """
 
+from collections.abc import Callable
 import importlib.util
 import inspect
 import logging
@@ -12,7 +13,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
-from typing import Callable
 
 from . import USER_UC_DIR
 from .models import ToolMeta, UCToolInfo

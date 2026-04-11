@@ -5,8 +5,6 @@ This module provides a unified API for directory indexing that:
 2. Falls back to the pure Python implementation when Rust is unavailable
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING

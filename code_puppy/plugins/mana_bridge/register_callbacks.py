@@ -9,8 +9,6 @@ If Mana is not running the plugin logs a warning and disables itself
 without affecting the rest of Code Puppy.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import os

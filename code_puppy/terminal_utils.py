@@ -3,16 +3,13 @@
 Handles Windows console mode resets and Unix terminal sanity restoration.
 """
 
-from __future__ import annotations
-
 import os
 import platform
 import subprocess
 import sys
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
 
-if TYPE_CHECKING:
-    from rich.console import Console
+from rich.console import Console
 
 # Store the original console ctrl handler so we can restore it if needed
 _original_ctrl_handler: Callable | None = None
@@ -347,7 +344,7 @@ def detect_truecolor_support() -> bool:
     return False
 
 
-def print_truecolor_warning(console: "Console" | None = None) -> None:
+def print_truecolor_warning(console: Console | None = None) -> None:
     """Print a big fat red warning if truecolor is not supported.
 
     Args:

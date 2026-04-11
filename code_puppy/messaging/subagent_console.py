@@ -11,8 +11,6 @@ Usage:
     >>> manager.unregister_agent("session-123")
 """
 
-from __future__ import annotations
-
 import threading
 import time
 from dataclasses import dataclass, field
@@ -115,7 +113,9 @@ class SubAgentConsoleManager:
     Thread-safe: All operations are protected by locks.
     """
 
-    _instance: "SubAgentConsoleManager" | None = None
+    # Forward reference to the enclosing class; must be stringified because
+    # the class body is still executing at annotation evaluation time.
+    _instance: "SubAgentConsoleManager | None" = None
     _lock = threading.Lock()
 
     def __init__(self, console: Console | None = None):

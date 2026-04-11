@@ -4,16 +4,15 @@ Provides pseudo-terminal (PTY) functionality for interactive shell sessions
 via WebSocket connections. Supports Unix (pty module) and Windows (pywinpty).
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import os
 import signal
 import struct
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ class PTYSession:
     winpty_process: Any = None  # Windows only
     cols: int = 80
     rows: int = 24
-    on_output: Callable[[bytes | None, None]] = None
+    on_output: Callable[[bytes], None] | None = None
     _reader_task: asyncio.Task | None = None  # type: ignore
     _running: bool = field(default=False, init=False)
 
@@ -99,7 +98,7 @@ class PTYManager:
         session_id: str,
         cols: int = 80,
         rows: int = 24,
-        on_output: Callable[[bytes | None, None]] = None,
+        on_output: Callable[[bytes], None] | None = None,
         shell: str | None = None,
     ) -> PTYSession:
         """Create a new PTY session.

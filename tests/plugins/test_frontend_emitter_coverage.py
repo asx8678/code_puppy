@@ -1,7 +1,5 @@
 """Tests for frontend_emitter plugin - register_callbacks.py and emitter.py."""
 
-from __future__ import annotations
-
 import asyncio
 from unittest.mock import MagicMock, patch
 

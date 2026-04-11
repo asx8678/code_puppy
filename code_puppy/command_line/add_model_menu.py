@@ -202,7 +202,7 @@ class AddModelMenu:
         self.current_page += 1
         self._set_selected_index(self.current_page * PAGE_SIZE)
 
-    def _render_provider_list(self) -> List:
+    def _render_provider_list(self) -> list:
         """Render the provider list panel."""
         lines = []
 
@@ -252,7 +252,7 @@ class AddModelMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_model_list(self) -> List:
+    def _render_model_list(self) -> list:
         """Render the model list panel."""
         lines = []
 
@@ -312,7 +312,7 @@ class AddModelMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_navigation_hints(self, lines: List):
+    def _render_navigation_hints(self, lines: list):
         """Render navigation hints at the bottom of the list panel."""
         lines.append(("", "\n"))
         lines.append(("fg:ansibrightblack", "  ↑/↓ "))
@@ -330,7 +330,7 @@ class AddModelMenu:
         lines.append(("fg:ansibrightred", "  Ctrl+C "))
         lines.append(("", "Cancel"))
 
-    def _render_model_details(self) -> List:
+    def _render_model_details(self) -> list:
         """Render the model details panel."""
         lines = []
 

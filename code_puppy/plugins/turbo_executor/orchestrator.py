@@ -4,8 +4,6 @@ Provides sequential (and future parallel) execution of file operations
 with structured result collection.
 """
 
-from __future__ import annotations
-
 import asyncio
 import time
 from datetime import datetime, timezone

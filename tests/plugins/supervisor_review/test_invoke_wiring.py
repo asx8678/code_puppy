@@ -4,8 +4,6 @@ Verifies that the runtime wiring between supervisor_review's orchestrator
 and code_puppy.tools.agent_tools.invoke_agent_headless works correctly.
 """
 
-from __future__ import annotations
-
 import pytest
 
 

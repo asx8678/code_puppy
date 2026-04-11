@@ -17,8 +17,6 @@ Note on hook architecture:
     further enhance the prompt.
 """
 
-from __future__ import annotations
-
 import logging
 
 from code_puppy.callbacks import register_callback

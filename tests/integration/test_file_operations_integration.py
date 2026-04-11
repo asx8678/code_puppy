@@ -6,8 +6,6 @@ verifies that the agent correctly chooses the right tools and that filesystem
 changes match expectations.
 """
 
-from __future__ import annotations
-
 import os
 import shutil
 import tempfile

@@ -3,11 +3,11 @@
 Supports multiple simultaneous instances with unique profile directories.
 """
 
+from collections.abc import Callable
 import asyncio
 import atexit
 import contextvars
 from pathlib import Path
-from typing import Callable
 
 from playwright.async_api import Browser, BrowserContext, Page
 

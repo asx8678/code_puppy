@@ -29,8 +29,6 @@ Security note:
     in their own config files.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import os

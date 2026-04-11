@@ -44,7 +44,7 @@ This plugin integrates with:
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic_ai import RunContext
 
@@ -87,7 +87,7 @@ def _register_get_code_context_tool(agent):
         file_path: str,
         include_content: bool = False,
         with_symbols: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get enhanced code context for a file including symbols and outline.
 
         Use this tool when you need to:
@@ -120,7 +120,7 @@ def _register_get_code_context_tool(agent):
                 file_path, include_content=include_content, with_symbols=with_symbols
             )
 
-            result: Dict[str, Any] = {
+            result: dict[str, Any] = {
                 "file_path": code_context.file_path,
                 "language": code_context.language,
                 "num_lines": code_context.num_lines,
@@ -158,7 +158,7 @@ def _register_explore_directory_tool(agent):
         pattern: str = "*",
         recursive: bool = True,
         max_files: int = 50,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Explore a directory and get code contexts for all supported files.
 
         Use this tool when you need to:
@@ -191,7 +191,7 @@ def _register_explore_directory_tool(agent):
             )
 
             context_dicts = []
-            language_counts: Dict[str, int] = {}
+            language_counts: dict[str, int] = {}
             total_symbols = 0
 
             for ctx in contexts:
@@ -243,8 +243,8 @@ def _register_get_file_outline_tool(agent):
     async def get_file_outline(
         context: RunContext,
         file_path: str,
-        max_depth: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        max_depth: int | None = None,
+    ) -> dict[str, Any]:
         """Get hierarchical symbol outline for a file.
 
         Use this tool when you need to:
@@ -286,7 +286,7 @@ def _register_get_file_outline_tool(agent):
             }
 
 
-def _register_tools() -> List[Dict[str, Any]]:
+def _register_tools() -> list[dict[str, Any]]:
     """Register code explorer tools.
 
     Returns a list of tool definitions for the register_tools callback.
@@ -312,7 +312,7 @@ def _register_tools() -> List[Dict[str, Any]]:
 # -----------------------------------------------------------------------------
 
 
-def _explore_help() -> List[tuple[str, str]]:
+def _explore_help() -> list[tuple[str, str]]:
     """Return help entries for the /explore command."""
     return [
         ("explore", "Symbol-augmented code exploration with turbo_parse"),
@@ -323,7 +323,7 @@ def _explore_help() -> List[tuple[str, str]]:
     ]
 
 
-def _format_file_context(context: Dict[str, Any]) -> str:
+def _format_file_context(context: dict[str, Any]) -> str:
     """Format a code context for display."""
     lines = [
         f"📄 {context.get('file_path', 'unknown')}",
@@ -396,7 +396,7 @@ def _handle_explore_dir(path_str: str) -> str:
         ]
 
         # Group by language
-        by_language: Dict[str, List[Dict[str, Any]]] = {}
+        by_language: dict[str, list[dict[str, Any]]] = {}
         for ctx in contexts:
             lang = ctx.language or "unknown"
             if lang not in by_language:
@@ -452,7 +452,7 @@ Examples:
 """
 
 
-def _handle_explore_command(command: str, name: str) -> Optional[bool | str]:
+def _handle_explore_command(command: str, name: str) -> bool | str | None:
     """Handle the /explore custom slash command."""
     if name != "explore":
         return None

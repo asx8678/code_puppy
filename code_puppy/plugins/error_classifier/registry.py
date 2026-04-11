@@ -1,11 +1,8 @@
 """Central registry for exception metadata."""
 
-from __future__ import annotations
-
 import logging
 import re
 import threading
-from typing import Type
 
 from .exinfo import ExInfo
 
@@ -22,14 +19,14 @@ class ExceptionRegistry:
     This class is thread-safe for concurrent registrations.
     """
 
-    _registry: dict[Type[Exception], ExInfo] = {}
+    _registry: dict[type[Exception], ExInfo] = {}
     _patterns: list[tuple[re.Pattern, ExInfo]] = []
     _lock: threading.Lock = threading.Lock()
 
     @classmethod
     def register(
         cls,
-        exc_class: Type[Exception],
+        exc_class: type[Exception],
         ex_info: ExInfo,
     ) -> None:
         """Register ExInfo for an exception class.

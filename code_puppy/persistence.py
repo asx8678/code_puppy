@@ -4,6 +4,7 @@ This module provides atomic file write operations to prevent partial/corrupt
 files on crash or interruption. All writes use temp-file + atomic replace.
 """
 
+from collections.abc import Callable
 import asyncio
 import contextlib
 import json
@@ -11,7 +12,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import msgpack
 

@@ -18,7 +18,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from tempfile import gettempdir, mkdtemp
-from typing import Any, Union
+from typing import Any
 
 from PIL import Image, UnidentifiedImageError
 from pydantic_ai import BinaryContent, RunContext, ToolReturn
@@ -148,7 +148,7 @@ def _validate_and_prepare_image(
     image_bytes: bytes,
     source_path: str | None = None,
     max_edge: int | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Verify image bytes, determine the real MIME type, and optionally resize.
 
     The MIME type is determined from the decoded image content, not from the file
@@ -280,7 +280,7 @@ async def _capture_terminal_screenshot(
 
 async def terminal_screenshot(
     full_page: bool = False, save_to_disk: bool = True
-) -> Union[ToolReturn, dict[str, Any]]:
+) -> ToolReturn | dict[str, Any]:
     """Take a screenshot of the terminal browser.
 
     Captures a screenshot and returns it via ToolReturn with BinaryContent
@@ -403,7 +403,7 @@ async def terminal_read_output(lines: int = 50) -> dict[str, Any]:
 
 async def load_image(
     image_path: str, max_height: int = DEFAULT_MAX_HEIGHT
-) -> Union[ToolReturn, dict[str, Any]]:
+) -> ToolReturn | dict[str, Any]:
     """Load an image from the filesystem for visual analysis.
 
     Verifies the file is a real image, derives the MIME type from the actual
@@ -499,7 +499,7 @@ def register_terminal_screenshot(agent):
     @agent.tool
     async def terminal_screenshot_analyze(
         context: RunContext, full_page: bool = False
-    ) -> Union[ToolReturn, dict[str, Any]]:
+    ) -> ToolReturn | dict[str, Any]:
         """
         Take a screenshot of the terminal browser.
 
@@ -546,7 +546,7 @@ def register_load_image(agent):
     @agent.tool
     async def load_image_for_analysis(
         context: RunContext, image_path: str
-    ) -> Union[ToolReturn, dict[str, Any]]:
+    ) -> ToolReturn | dict[str, Any]:
         """Load an image file so you can see and analyze it.
 
         Args:
@@ -565,7 +565,7 @@ def register_terminal_compare_mockup(agent):
     @agent.tool
     async def terminal_compare_mockup(
         context: RunContext, mockup_path: str
-    ) -> Union[ToolReturn, dict[str, Any]]:
+    ) -> ToolReturn | dict[str, Any]:
         """
         Compare the terminal to a mockup image.
 

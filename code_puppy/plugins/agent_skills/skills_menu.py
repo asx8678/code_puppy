@@ -117,7 +117,7 @@ class SkillsMenu:
         self._refresh_data()
         self.update_display()
 
-    def _render_skill_list(self) -> List:
+    def _render_skill_list(self) -> list:
         """Render the skill list panel."""
         lines = []
 
@@ -183,7 +183,7 @@ class SkillsMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_navigation_hints(self, lines: List) -> None:
+    def _render_navigation_hints(self, lines: list) -> None:
         """Render navigation hints at the bottom."""
         lines.append(("", "\n"))
         lines.append(("fg:ansibrightblack", "  ↑/↓ or j/k "))
@@ -205,7 +205,7 @@ class SkillsMenu:
         lines.append(("fg:ansired", "  q  "))
         lines.append(("", "Exit"))
 
-    def _render_skill_details(self) -> List:
+    def _render_skill_details(self) -> list:
         """Render the skill details panel."""
         lines = []
 

@@ -5,8 +5,6 @@ like "code_puppy.callbacks:register_callback" to their corresponding
 Python objects, with helpful error messages for missing dependencies.
 """
 
-from __future__ import annotations
-
 import importlib
 from typing import Any
 

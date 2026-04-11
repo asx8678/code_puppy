@@ -9,8 +9,6 @@ exhaustion while remaining generous enough for real-world projects.
 Override individual limits via ``~/.code_puppy/puppy.cfg`` where noted.
 """
 
-from __future__ import annotations
-
 __all__ = [
     # File / context size limits
     "MAX_CONTEXT_BODY_BYTES",

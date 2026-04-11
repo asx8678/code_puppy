@@ -8,8 +8,6 @@ Prevents memory poisoning by implementing:
 This module is part of the code-puppy-eed fix for memory poisoning issues.
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 from dataclasses import dataclass, field

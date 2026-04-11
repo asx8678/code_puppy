@@ -13,6 +13,7 @@ This module also handles:
 - Tool ID sanitization for cross-provider message history compatibility
 """
 
+from collections.abc import Callable
 import asyncio
 import hashlib
 import json
@@ -22,7 +23,7 @@ import re
 import time
 from email.utils import parsedate_to_datetime
 from functools import lru_cache
-from typing import Any, Callable, MutableMapping
+from typing import Any, MutableMapping
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import httpx

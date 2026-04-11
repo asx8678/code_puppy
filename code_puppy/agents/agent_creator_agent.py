@@ -504,7 +504,7 @@ Your goal is to take users from idea to working agent in one smooth conversation
 
         return tools
 
-    def validate_agent_json(self, agent_config: Dict) -> list[str]:
+    def validate_agent_json(self, agent_config: dict) -> list[str]:
         """Validate a JSON agent configuration.
 
         Args:
@@ -563,7 +563,7 @@ Your goal is to take users from idea to working agent in one smooth conversation
         agents_dir = get_user_agents_directory()
         return os.path.join(agents_dir, f"{agent_name}.json")
 
-    def create_agent_json(self, agent_config: Dict) -> tuple[bool, str]:
+    def create_agent_json(self, agent_config: dict) -> tuple[bool, str]:
         """Create a JSON agent file.
 
         Args:

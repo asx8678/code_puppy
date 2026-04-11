@@ -1,7 +1,5 @@
 """Tests for the Loop Detection Plugin."""
 
-from __future__ import annotations
-
 import importlib
 import json
 import sys

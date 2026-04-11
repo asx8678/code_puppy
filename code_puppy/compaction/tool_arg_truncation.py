@@ -5,8 +5,6 @@ LLM call for full summarization. Targets write_file/edit_file tool calls where
 the 'content' arg can be huge.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import logging
 from typing import Any, Sequence

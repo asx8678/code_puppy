@@ -4,8 +4,6 @@ Orchestrates signal confidence updates and fact extraction when
 an agent run completes.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Any
 

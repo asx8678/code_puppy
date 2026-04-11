@@ -6,8 +6,6 @@ exist on the main branch as well. These test failures are NOT caused by the
 plugin loader security changes in code_puppy-ped.
 """
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 

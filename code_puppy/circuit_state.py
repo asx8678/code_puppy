@@ -7,8 +7,6 @@ Used by circuit breaker implementations across the codebase. Uses string
 values for debuggability (visible in logs and repr).
 """
 
-from __future__ import annotations
-
 from enum import Enum
 
 

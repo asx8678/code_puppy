@@ -3,8 +3,6 @@
 Covers StreamLineParser, SSEParser, and parse_jsonl_lenient.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from code_puppy.utils.stream_parser import (

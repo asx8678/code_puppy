@@ -1,7 +1,5 @@
 """Core initialization tests for antigravity_model."""
 
-from __future__ import annotations
-
 import pytest
 
 from code_puppy.plugins.antigravity_oauth.antigravity_model import AntigravityModel

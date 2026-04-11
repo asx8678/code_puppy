@@ -9,8 +9,6 @@ Provides a single-screen form for configuring a custom MCP server:
 Wired via: /mcp add → app.py pushes MCPFormScreen
 """
 
-from __future__ import annotations
-
 import json
 import os
 import re

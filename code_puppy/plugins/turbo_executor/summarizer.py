@@ -6,8 +6,6 @@ Converts raw PlanResult data into human-readable markdown summaries:
 - Summarizes list_files with file counts and directory structure
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from collections.abc import Callable

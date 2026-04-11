@@ -5,10 +5,8 @@ quality-gated multi-agent review can call it. Adopted from
 orion-multistep-analysis supervisor/orchestrator.py:582-742.
 """
 
-from __future__ import annotations
-
 import logging
-from typing import Any, List
+from typing import Any
 
 from pydantic_ai import RunContext
 
@@ -128,7 +126,7 @@ def register_supervisor_review_tool(agent: Any) -> None:
         return result.to_dict()
 
 
-def _register_tools() -> List[dict[str, Any]]:
+def _register_tools() -> list[dict[str, Any]]:
     """Callback for the 'register_tools' hook."""
     return [
         {

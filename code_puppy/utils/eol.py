@@ -15,8 +15,6 @@ The heuristic is intentionally conservative:
 If any check fails the content is returned unchanged.
 """
 
-from __future__ import annotations
-
 __all__ = ["normalize_eol", "looks_textish", "strip_bom", "restore_bom"]
 
 

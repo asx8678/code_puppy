@@ -20,12 +20,11 @@ Usage:
     is_binary = await peek_file(path, 512, lambda header: b'\\x00' in header)
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable
 import asyncio
 import os
 import threading
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 __all__ = [
     "peek_file_sync",

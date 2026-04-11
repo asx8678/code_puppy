@@ -78,7 +78,7 @@ The /parse command provides CLI access to the turbo_parse functionality:
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic_ai import RunContext
 
@@ -211,8 +211,8 @@ def _register_parse_code_tool(agent):
         context: RunContext,
         source: str,
         language: str,
-        options: Dict[str, Any] | None = None,
-    ) -> Dict[str, Any]:
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Parse source code and extract AST, symbols, and diagnostics.
 
         Use this tool when you need to:
@@ -332,8 +332,8 @@ def _register_get_highlights_tool(agent):
         context: RunContext,
         source: str,
         language: str,
-        options: Dict[str, Any] | None = None,
-    ) -> Dict[str, Any]:
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Extract syntax highlighting captures from source code.
 
         Use this tool when you need to:
@@ -401,8 +401,8 @@ def _register_get_folds_tool(agent):
         context: RunContext,
         source: str,
         language: str,
-        options: Dict[str, Any] | None = None,
-    ) -> Dict[str, Any]:
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Extract code fold ranges from source code.
 
         Use this tool when you need to:
@@ -470,8 +470,8 @@ def _register_get_outline_tool(agent):
         context: RunContext,
         source: str,
         language: str,
-        options: Dict[str, Any] | None = None,
-    ) -> Dict[str, Any]:
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Extract hierarchical symbol outline from source code.
 
         Use this tool when you need to:
@@ -543,8 +543,8 @@ def _register_get_outline_tool(agent):
 
 
 def _limit_depth(
-    items: List[Dict[str, Any]], max_depth: int, current_depth: int = 1
-) -> List[Dict[str, Any]]:
+    items: list[dict[str, Any]], max_depth: int, current_depth: int = 1
+) -> list[dict[str, Any]]:
     """Limit the depth of hierarchical items.
 
     Args:
@@ -571,7 +571,7 @@ def _limit_depth(
     return items
 
 
-def _register_tools() -> List[Dict[str, Any]]:
+def _register_tools() -> list[dict[str, Any]]:
     """Register turbo_parse tools.
 
     Returns a list of tool definitions for the register_tools callback.
@@ -605,7 +605,7 @@ def _register_tools() -> List[Dict[str, Any]]:
 # ============================================================================
 
 
-def _parse_help() -> List[tuple[str, str]]:
+def _parse_help() -> list[tuple[str, str]]:
     """Return help entries for the /parse command.
 
     Returns:
@@ -619,7 +619,7 @@ def _parse_help() -> List[tuple[str, str]]:
     ]
 
 
-def _get_language_from_extension(file_path: str) -> Optional[str]:
+def _get_language_from_extension(file_path: str) -> str | None:
     """Infer language from file extension.
 
     Args:
@@ -853,7 +853,7 @@ def _handle_parse_help() -> str:
     return "\n".join(lines)
 
 
-def _handle_parse_command(command: str, name: str) -> Optional[bool | str]:
+def _handle_parse_command(command: str, name: str) -> bool | str | None:
     """Handle the /parse custom slash command.
 
     Args:

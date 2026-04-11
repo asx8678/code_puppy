@@ -29,8 +29,6 @@ Usage:
 This is part of an epic to move security enforcement into the core (code_puppy-vdfn).
 """
 
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass, field
 from typing import Any

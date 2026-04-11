@@ -5,8 +5,6 @@ This module provides Hypothesis strategies to generate valid Elixir
 source code for property-based testing of symbol extraction.
 """
 
-from __future__ import annotations
-
 import string
 
 from hypothesis import strategies as st

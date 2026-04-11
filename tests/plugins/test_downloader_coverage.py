@@ -1,7 +1,5 @@
 """100% coverage tests for code_puppy/plugins/agent_skills/downloader.py."""
 
-from __future__ import annotations
-
 import shutil
 import zipfile
 from io import BytesIO

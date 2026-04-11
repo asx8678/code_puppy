@@ -32,10 +32,11 @@ It also handles request/response correlation for user interactions:
     └─────────────────────────────────────────────────────────────┘
 """
 
+from collections.abc import Callable
 import asyncio
 import threading
 from collections import deque
-from typing import Any, Callable
+from typing import Any
 from uuid import uuid4
 
 from code_puppy.config import get_bus_request_timeout_seconds

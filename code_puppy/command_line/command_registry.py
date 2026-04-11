@@ -4,8 +4,8 @@ This module provides a decorator-based registration system for commands,
 enabling automatic help generation and eliminating static command lists.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 
 @dataclass

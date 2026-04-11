@@ -4,8 +4,6 @@ Tests for code_puppy.utils.parallel — worker pool and semaphore.
 Inspired by oh-my-pi's parallel.ts.
 """
 
-from __future__ import annotations
-
 import asyncio
 import time
 

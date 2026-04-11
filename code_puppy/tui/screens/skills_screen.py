@@ -13,8 +13,6 @@ Key bindings:
 Wired via: /skills → app.py pushes SkillsScreen
 """
 
-from __future__ import annotations
-
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.widgets import Footer, RichLog, Static

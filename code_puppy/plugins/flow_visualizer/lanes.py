@@ -9,7 +9,6 @@ from __future__ import annotations
 import time
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Dict, Optional
 
 
 # Color mapping for different agent types
@@ -53,12 +52,12 @@ class FlowLaneState:
     """
     agent_name: str
     model_name: str
-    session_id: Optional[str]
+    session_id: str | None
     status: str = "running"  # "running", "done", "failed"
     detail: str = ""  # Current activity description
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
-    duration: Optional[float] = None
+    ended_at: float | None = None
+    duration: float | None = None
     color: str = "white"
 
 
@@ -83,7 +82,7 @@ class FlowState:
         return new_state
 
 
-def _get_session_key(session_id: Optional[str]) -> str:
+def _get_session_key(session_id: str | None) -> str:
     """Get a valid dict key from session_id, handling None."""
     return session_id if session_id is not None else "__default__"
 
@@ -92,7 +91,7 @@ def reduce_agent_start(
     state: FlowState,
     agent_name: str,
     model_name: str,
-    session_id: Optional[str],
+    session_id: str | None,
 ) -> FlowState:
     """Create a new lane when an agent starts.
     
@@ -126,8 +125,8 @@ def reduce_agent_start(
 def reduce_stream_event(
     state: FlowState,
     event_type: str,
-    event_data: Optional[object],
-    session_id: Optional[str],
+    event_data: object | None,
+    session_id: str | None,
 ) -> FlowState:
     """Update lane detail based on stream event.
     
@@ -188,9 +187,9 @@ def reduce_stream_event(
 def reduce_agent_end(
     state: FlowState,
     agent_name: str,
-    session_id: Optional[str],
+    session_id: str | None,
     success: bool,
-    error: Optional[Exception],
+    error: Exception | None,
 ) -> FlowState:
     """Mark a lane as done or failed when an agent ends.
     

@@ -11,13 +11,12 @@ with the following improvements:
 4. Pluggable satisfaction: three checker strategies (see satisfaction.py).
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable
 import asyncio
 import logging
 import time
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable
 
 from code_puppy.plugins.supervisor_review.models import (
     FeedbackEntry,

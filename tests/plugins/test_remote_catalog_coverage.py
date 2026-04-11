@@ -1,7 +1,5 @@
 """Tests for agent_skills/remote_catalog.py full coverage."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch

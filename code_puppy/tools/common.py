@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+from collections.abc import Callable
 import asyncio
 import fnmatch
 import functools
@@ -11,7 +10,6 @@ import sys
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable
 
 from code_puppy.async_utils import run_async_sync
 from code_puppy.config_package import env_bool
@@ -821,7 +819,7 @@ def format_diff_with_colors(diff_text: str) -> Text:
 async def arrow_select_async(
     message: str,
     choices: list[str],
-    preview_callback: Callable[[int | None, str]] = None,
+    preview_callback: Callable[[int | None], str] | None = None,
 ) -> str:
     """Async version: Show an arrow-key navigable selector with optional preview.
 
@@ -942,7 +940,7 @@ async def arrow_select_async(
 def arrow_select(
     message: str,
     choices: list[str],
-    preview_callback: Callable[[int | None, str]] = None,
+    preview_callback: Callable[[int | None], str] | None = None,
 ) -> str:
     """Show an arrow-key navigable selector (synchronous version).
 

@@ -11,8 +11,6 @@ Covers:
 - Comment stripping: sentinel-style Markdown header preservation
 """
 
-from __future__ import annotations
-
 import json
 import os
 import tempfile

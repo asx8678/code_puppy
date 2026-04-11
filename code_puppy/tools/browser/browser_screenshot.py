@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from tempfile import gettempdir, mkdtemp
-from typing import Any, Union
+from typing import Any
 
 from pydantic_ai import BinaryContent, RunContext, ToolReturn
 
@@ -79,7 +79,7 @@ async def take_screenshot(
     full_page: bool = False,
     element_selector: str | None = None,
     save_screenshot: bool = True,
-) -> Union[ToolReturn, dict[str, Any]]:
+) -> ToolReturn | dict[str, Any]:
     """Take a screenshot of the browser page.
 
     Returns a ToolReturn with BinaryContent so multimodal models can
@@ -156,7 +156,7 @@ def register_take_screenshot_and_analyze(agent):
         context: RunContext,
         full_page: bool = False,
         element_selector: str | None = None,
-    ) -> Union[ToolReturn, dict[str, Any]]:
+    ) -> ToolReturn | dict[str, Any]:
         """
         Take a screenshot of the browser page.
 

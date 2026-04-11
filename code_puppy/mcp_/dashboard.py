@@ -120,7 +120,7 @@ class MCPDashboard:
             latency_str,
         ]
 
-    def render_health_indicator(self, health: Dict | None) -> str:
+    def render_health_indicator(self, health: dict | None) -> str:
         """
         Render health status indicator
 
@@ -164,7 +164,7 @@ class MCPDashboard:
 
         return indicators.get(state, "[dim]? Unk[/dim]")
 
-    def render_metrics_summary(self, metrics: Dict) -> str:
+    def render_metrics_summary(self, metrics: dict) -> str:
         """
         Render a summary of server metrics
 

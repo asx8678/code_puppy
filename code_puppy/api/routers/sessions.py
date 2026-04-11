@@ -1,7 +1,5 @@
 """Sessions API endpoints for retrieving subagent session data."""
 
-from __future__ import annotations
-
 import asyncio
 import json
 import re

@@ -48,8 +48,6 @@ By inverting roles, the reviewer:
 Based on Orion's implementation in orion-multistep-analysis/src/research_agent/agents/runtime.py:274-312
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import TypeVar

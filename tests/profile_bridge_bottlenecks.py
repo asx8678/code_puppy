@@ -16,7 +16,6 @@ import math
 import json
 import statistics
 from collections import defaultdict
-from typing import List
 
 from pydantic_ai.messages import (
     ModelMessage,

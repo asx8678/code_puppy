@@ -5,13 +5,13 @@ This module provides continuous health monitoring for MCP servers with
 automatic recovery actions when consecutive failures are detected.
 """
 
+from collections.abc import Callable
 import asyncio
 import logging
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable
 
 import httpx
 

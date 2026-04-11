@@ -9,8 +9,6 @@ Tests cover:
 - Stream events sent to both tracers
 """
 
-from __future__ import annotations
-
 import asyncio
 import os
 import sys

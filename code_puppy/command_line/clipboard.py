@@ -8,8 +8,6 @@ Also provides a thread-safe ClipboardAttachmentManager for managing
 pending clipboard image attachments in the CLI.
 """
 
-from __future__ import annotations
-
 import io
 import logging
 import subprocess
@@ -56,7 +54,7 @@ _last_clipboard_capture: float = 0.0
 MAX_CLIPBOARD_CONTENT_BYTES = 1024 * 1024  # 1MB
 
 
-def _safe_open_image(image_bytes: bytes) -> "Image.Image" | None:
+def _safe_open_image(image_bytes: bytes) -> "Image.Image | None":
     """Safely open and verify an image from bytes.
 
     Verifies image integrity to protect against malicious images.
@@ -382,7 +380,7 @@ def get_clipboard_image() -> bytes | None:
         return None
 
 
-def get_clipboard_image_as_binary_content() -> "BinaryContent" | None:
+def get_clipboard_image_as_binary_content() -> "BinaryContent | None":
     """Get clipboard image as pydantic-ai BinaryContent.
 
     This is the preferred method for integrating clipboard images

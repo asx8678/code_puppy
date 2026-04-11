@@ -7,8 +7,6 @@ orion-multistep-analysis supervisor/orchestrator.py with improvements:
 - Agent-agnostic (Orion hardcoded 3 specific agents; we allow any list)
 """
 
-from __future__ import annotations
-
 import re
 import time
 from dataclasses import dataclass, field

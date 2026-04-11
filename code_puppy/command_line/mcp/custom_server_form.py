@@ -122,7 +122,7 @@ class CustomServerForm:
         """Get the currently selected server type."""
         return SERVER_TYPES[self.selected_type_idx]
 
-    def _render_form(self) -> List:
+    def _render_form(self) -> list:
         """Render the form panel."""
         lines = []
 
@@ -222,7 +222,7 @@ class CustomServerForm:
 
         return lines
 
-    def _render_preview(self) -> List:
+    def _render_preview(self) -> list:
         """Render the preview/help panel."""
         lines = []
 

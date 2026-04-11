@@ -37,8 +37,6 @@ Example:
     ...     print(preview["summary"])
 """
 
-from __future__ import annotations
-
 # Context guard exports from 7db.8
 from code_puppy.plugins.git_auto_commit.context_guard import (
     GACContextError,

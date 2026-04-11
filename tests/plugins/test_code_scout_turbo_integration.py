@@ -8,8 +8,6 @@ Tests that verify the scout-turbo integration:
 5. No naming conflicts with turbo-executor
 """
 
-from __future__ import annotations
-
 import pytest
 
 # Conditional skip based on whether CodeScoutAgent can be imported

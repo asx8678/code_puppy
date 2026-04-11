@@ -5,13 +5,12 @@ enabling tools to be registered directly from functions without
 manual schema definition.
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable
 import inspect
 import types
 import typing
 from dataclasses import dataclass, field
-from typing import Any, Callable, get_type_hints
+from typing import Any, get_type_hints
 
 # JSON Schema types mapped from Python types
 _TYPE_MAP: dict[type, str] = {
@@ -27,11 +26,11 @@ _TYPE_MAP: dict[type, str] = {
 
 def _get_json_type(py_type: type) -> str:
     """Convert Python type to JSON Schema type."""
-    # Handle Optional[T] -> T
+    # Handle T | None -> T
     origin = typing.get_origin(py_type)
     args = typing.get_args(py_type)
 
-    # Handle Optional types (Union[T, None])
+    # Handle Optional types (T | None)
     if origin is typing.Union or origin is types.UnionType:
         # Filter out NoneType
         non_none = [arg for arg in args if arg is not type(None)]

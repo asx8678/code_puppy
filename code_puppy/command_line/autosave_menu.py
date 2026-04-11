@@ -167,7 +167,7 @@ def _render_menu_panel(
     page: int,
     selected_idx: int,
     browse_mode: bool = False,
-) -> List:
+) -> list:
     """Render the left menu panel with pagination."""
     lines = []
     total_pages = get_total_pages(len(entries), PAGE_SIZE)
@@ -239,7 +239,7 @@ def _render_menu_panel(
 
 def _render_message_browser_panel(
     history: list, message_idx: int, session_name: str
-) -> List:
+) -> list:
     """Render the message browser panel showing a single message.
 
     Args:
@@ -332,7 +332,7 @@ def _render_message_browser_panel(
     return lines
 
 
-def _render_preview_panel(base_dir: Path, entry: tuple[str, dict | None]) -> List:
+def _render_preview_panel(base_dir: Path, entry: tuple[str, dict | None]) -> list:
     """Render the right preview panel with message content using rich markdown."""
     lines = []
 

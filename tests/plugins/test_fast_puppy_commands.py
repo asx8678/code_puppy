@@ -6,8 +6,6 @@ This module tests the register_callbacks.py command handler:
 - /fast_puppy enable/disable commands
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 

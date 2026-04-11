@@ -11,8 +11,9 @@ All functions follow the same pattern:
 3. Use hardcoded default as last resort
 """
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from code_puppy.config_package.env_helpers import get_first_env
 

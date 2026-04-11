@@ -2,7 +2,6 @@ import asyncio
 import atexit
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import List
 
 from pydantic_ai import Agent
 
@@ -45,7 +44,7 @@ def _shutdown_thread_pool():
 atexit.register(_shutdown_thread_pool)
 
 
-async def _run_agent_async(agent: Agent, prompt: str, message_history: List):
+async def _run_agent_async(agent: Agent, prompt: str, message_history: list):
     return await agent.run(prompt, message_history=message_history)
 
 
@@ -57,7 +56,7 @@ class SummarizationError(Exception):
         super().__init__(message)
 
 
-def run_summarization_sync(prompt: str, message_history: List) -> List:
+def run_summarization_sync(prompt: str, message_history: list) -> list:
     """Run the summarization agent synchronously.
 
     Raises:

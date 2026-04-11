@@ -5,8 +5,6 @@ engage the Context7 tool. We assert on clear connectivity lines and
 ensure recent events are printed. Guarded by CONTEXT7_API_KEY.
 """
 
-from __future__ import annotations
-
 import os
 import re
 import time

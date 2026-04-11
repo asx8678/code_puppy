@@ -4,8 +4,6 @@ This module provides generic auto-build functionality for all Rust crates
 in the code_puppy workspace: code_puppy_core, turbo_ops, turbo_parse.
 """
 
-from __future__ import annotations
-
 import importlib
 import importlib.util
 import logging

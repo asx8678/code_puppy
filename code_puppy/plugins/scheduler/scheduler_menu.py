@@ -82,7 +82,7 @@ class SchedulerMenu:
             return ("✗", "fg:ansired")
         return ("○", "fg:ansibrightblack")
 
-    def _render_task_list(self) -> List:
+    def _render_task_list(self) -> list:
         """Render the task list panel."""
         lines = []
 
@@ -128,7 +128,7 @@ class SchedulerMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_navigation_hints(self, lines: List) -> None:
+    def _render_navigation_hints(self, lines: list) -> None:
         """Render navigation hints."""
         lines.append(("", "\n"))
         lines.append(("fg:ansibrightblack", "  ↑/↓ j/k "))
@@ -150,7 +150,7 @@ class SchedulerMenu:
         lines.append(("fg:ansired", "  q "))
         lines.append(("", "Exit"))
 
-    def _render_task_details(self) -> List:
+    def _render_task_details(self) -> list:
         """Render the task details panel."""
         lines = []
         lines.append(("dim cyan", " TASK DETAILS\n\n"))

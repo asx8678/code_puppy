@@ -10,8 +10,6 @@ extract_symbols:
 4. Maintains invariants across all inputs
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 import pytest

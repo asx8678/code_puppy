@@ -10,8 +10,6 @@ Import-time optimization notes:
 - Rich console is only imported in setup_renderers() where it's used
 """
 
-from __future__ import annotations
-
 import argparse
 import os
 import sys

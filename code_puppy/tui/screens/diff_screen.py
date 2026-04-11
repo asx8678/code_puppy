@@ -7,8 +7,6 @@ Import shared data (color palettes, language samples) from the original
 diff_menu to avoid duplication.
 """
 
-from __future__ import annotations
-
 from rich.console import Group
 from rich.text import Text
 from textual.app import ComposeResult

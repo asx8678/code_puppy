@@ -1,7 +1,5 @@
 """Tests for lazy import functionality in code_puppy package."""
 
-from __future__ import annotations
-
 import sys
 from types import ModuleType
 

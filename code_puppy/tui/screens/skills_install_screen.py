@@ -11,8 +11,6 @@ Key bindings:
 Wired via: SkillsScreen 'i' binding → pushes SkillsInstallScreen
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from textual.app import ComposeResult

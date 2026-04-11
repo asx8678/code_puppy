@@ -15,8 +15,6 @@ File format::
     prompt as a ``<system-rule>`` block when the trigger fires.
 """
 
-from __future__ import annotations
-
 import logging
 import re
 from dataclasses import dataclass, field

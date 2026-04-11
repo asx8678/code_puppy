@@ -4,8 +4,6 @@ Covers import, instantiation, class hierarchy, bindings,
 and inner widget accessibility — all without spinning up a real TUI.
 """
 
-from __future__ import annotations
-
 import pytest
 
 

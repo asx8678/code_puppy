@@ -6,10 +6,10 @@ for different tool outputs (THINKING, SHELL COMMAND, READ FILE, etc.).
 Use /colors to launch the TUI and customize your banners!
 """
 
+from collections.abc import Callable
 import asyncio
 import io
 import sys
-from typing import Callable
 
 try:
     from prompt_toolkit import Application

@@ -7,8 +7,6 @@ Includes tests for shlex.quote() shell injection prevention.
 All tests mock execute_git_command_sync to avoid actual git execution.
 """
 
-from __future__ import annotations
-
 import shlex
 from unittest.mock import patch
 

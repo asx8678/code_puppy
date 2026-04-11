@@ -15,8 +15,6 @@ The tool_policy_default setting controls behavior when both lists are empty:
 - 'audit': All tools allowed but logged (for monitoring)
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Any
 

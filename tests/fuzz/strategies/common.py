@@ -7,8 +7,6 @@ This module provides:
 3. Edge case strategies (empty content, unicode, long identifiers, etc.)
 """
 
-from __future__ import annotations
-
 import string
 from typing import Any
 

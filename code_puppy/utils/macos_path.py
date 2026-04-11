@@ -11,8 +11,6 @@ This module provides a fallback chain that tries variant encodings when
 a file path doesn't exist, transparently resolving these quirks.
 """
 
-from __future__ import annotations
-
 import os
 import re
 import sys

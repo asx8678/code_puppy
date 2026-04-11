@@ -1,7 +1,5 @@
 """Tests for code_puppy.utils.parallel — Semaphore, map_with_concurrency, Bulkhead."""
 
-from __future__ import annotations
-
 import asyncio
 import pytest
 

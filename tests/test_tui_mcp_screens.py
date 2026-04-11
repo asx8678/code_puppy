@@ -8,8 +8,6 @@ Verifies:
 - Constants and data structures are defined
 """
 
-from __future__ import annotations
-
 import json
 
 import pytest

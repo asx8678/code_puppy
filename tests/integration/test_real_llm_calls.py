@@ -1,7 +1,5 @@
 """Integration test ensuring live LLM commands include explicit carriage returns."""
 
-from __future__ import annotations
-
 import time
 
 import pexpect

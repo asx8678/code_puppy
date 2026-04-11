@@ -1,11 +1,9 @@
-from __future__ import annotations
-
+from collections.abc import Callable
 import json
 import os
 import pickle
 import warnings
 from pathlib import Path
-from typing import Callable, List
 
 import msgpack
 import pytest
@@ -22,7 +20,7 @@ from code_puppy.session_storage import (
 
 
 @pytest.fixture()
-def history() -> List[str]:
+def history() -> list[str]:
     return ["one", "two", "three"]
 
 
@@ -72,7 +70,7 @@ def pydantic_history():
     ]
 
 
-def test_save_and_load_session(tmp_path: Path, history: List[str], token_estimator):
+def test_save_and_load_session(tmp_path: Path, history: list[str], token_estimator):
     session_name = "demo_session"
     timestamp = "2024-01-01T00:00:00"
     metadata = save_session(
@@ -98,7 +96,7 @@ def test_save_and_load_session(tmp_path: Path, history: List[str], token_estimat
     assert loaded_history == history
 
 
-def test_list_sessions(tmp_path: Path, history: List[str], token_estimator):
+def test_list_sessions(tmp_path: Path, history: list[str], token_estimator):
     names = ["beta", "alpha", "gamma"]
     for name in names:
         save_session(
@@ -112,7 +110,7 @@ def test_list_sessions(tmp_path: Path, history: List[str], token_estimator):
     assert list_sessions(tmp_path) == sorted(names)
 
 
-def test_cleanup_sessions(tmp_path: Path, history: List[str], token_estimator):
+def test_cleanup_sessions(tmp_path: Path, history: list[str], token_estimator):
     session_names = ["session_earliest", "session_middle", "session_latest"]
     for index, name in enumerate(session_names):
         metadata = save_session(
@@ -211,7 +209,7 @@ def test_pydantic_messages_with_compacted_hashes(
 
 
 def test_save_session_writes_msgpack_format(
-    tmp_path: Path, history: List[str], token_estimator
+    tmp_path: Path, history: list[str], token_estimator
 ):
     """Verify that save_session writes MessagePack data, not pickle."""
     metadata = save_session(
@@ -235,7 +233,7 @@ def test_save_session_writes_msgpack_format(
 
 
 def test_save_session_writes_compacted_hashes(
-    tmp_path: Path, history: List[str], token_estimator
+    tmp_path: Path, history: list[str], token_estimator
 ):
     """Verify that compacted_hashes are preserved across save/load."""
     hashes = ["abc123", "def456"]
@@ -253,7 +251,7 @@ def test_save_session_writes_compacted_hashes(
 
 
 def test_load_session_msgpack_round_trip(
-    tmp_path: Path, history: List[str], token_estimator
+    tmp_path: Path, history: list[str], token_estimator
 ):
     """Full round-trip: save with MessagePack, load back, check equality."""
     save_session(
@@ -341,7 +339,7 @@ def test_load_session_legacy_pickle_list_format(tmp_path: Path):
 
 
 def test_save_session_async_submits_to_background_thread(
-    tmp_path: Path, history: List[str], token_estimator
+    tmp_path: Path, history: list[str], token_estimator
 ):
     """Verify that save_session_async submits to thread pool without blocking."""
     import threading
@@ -387,7 +385,7 @@ def test_save_session_async_submits_to_background_thread(
 
 
 def test_save_session_async_handles_errors_gracefully(
-    tmp_path: Path, history: List[str], token_estimator
+    tmp_path: Path, history: list[str], token_estimator
 ):
     """Verify that save_session_async logs errors but doesn't raise to caller."""
     import code_puppy.session_storage as session_module

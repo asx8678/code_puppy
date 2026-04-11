@@ -15,8 +15,6 @@ The matcher is cached via :func:`functools.lru_cache` so repeated
 queries on the same directory are O(1).
 """
 
-from __future__ import annotations
-
 import functools
 import logging
 from dataclasses import dataclass

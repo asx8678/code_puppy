@@ -6,8 +6,6 @@ pattern). Adapted to Python asyncio.Lock primitives.
 Different files run concurrently; the same file (by realpath) is serialized.
 """
 
-from __future__ import annotations
-
 import asyncio
 import os
 import threading

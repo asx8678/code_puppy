@@ -5,8 +5,6 @@ registration.  All tests run WITHOUT Mana actually running — socket
 connections are mocked or allowed to fail gracefully.
 """
 
-from __future__ import annotations
-
 import importlib
 import os
 import socket

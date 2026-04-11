@@ -16,8 +16,6 @@ Import-time optimization:
 - Tests that import from cli_runner don't trigger heavy deps unless used
 """
 
-from __future__ import annotations
-
 import asyncio
 import sys
 import traceback

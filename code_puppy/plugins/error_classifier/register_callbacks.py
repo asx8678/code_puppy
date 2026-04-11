@@ -4,10 +4,8 @@ Connects the exception registry to the callback system for automatic
 error classification and user-facing messaging.
 """
 
-from __future__ import annotations
-
 import logging
-from typing import Any, Set
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_error, emit_info, emit_warning
@@ -18,7 +16,7 @@ from .registry import ExceptionRegistry
 logger = logging.getLogger(__name__)
 
 # Track exception IDs we've already emitted to prevent duplicates
-_seen_exception_ids: Set[int] = set()
+_seen_exception_ids: set[int] = set()
 
 
 def _format_and_emit(ex_info: ExInfo, exception: Exception) -> None:

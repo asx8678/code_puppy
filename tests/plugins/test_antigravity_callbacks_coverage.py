@@ -1,7 +1,5 @@
 """Tests for antigravity_oauth/register_callbacks.py and oauth.py full coverage."""
 
-from __future__ import annotations
-
 import threading
 import time
 from http.server import HTTPServer

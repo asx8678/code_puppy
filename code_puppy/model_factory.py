@@ -1,10 +1,11 @@
+from collections.abc import Callable
 import json
 import logging
 import os
 import pathlib
 import re
 from types import MappingProxyType
-from typing import Any, Callable
+from typing import Any
 
 import httpx
 

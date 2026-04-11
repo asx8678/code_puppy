@@ -12,13 +12,12 @@ Three strategies are provided:
    with sync fallback (bd code_puppy-056).
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable
 import logging
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from typing import Awaitable, Callable
+    from typing import Awaitable
 
 from code_puppy.plugins.supervisor_review.models import SatisfactionResult
 

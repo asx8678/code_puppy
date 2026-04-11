@@ -7,8 +7,6 @@ Tests cover:
 - warn_once hint behavior
 """
 
-from __future__ import annotations
-
 import asyncio
 import os
 import sys

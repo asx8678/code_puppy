@@ -1,7 +1,5 @@
 """Tab-completion for ``/ollama-setup <model>``."""
 
-from __future__ import annotations
-
 from typing import Iterable
 
 from prompt_toolkit.completion import Completer, Completion
