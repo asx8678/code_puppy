@@ -789,24 +789,25 @@ class MCPManager:
             return {"server_id": server_id, "exists": True, "error": str(e)}
 
 
-# Singleton instance with double-checked locking for thread-safety
-_manager_lock = threading.Lock()
+# Singleton instance with double-checked locking for thread safety
 _manager_instance: MCPManager | None = None
+_manager_lock = threading.Lock()
 
 
 def get_mcp_manager() -> MCPManager:
     """
     Get the singleton MCPManager instance.
 
-    Uses double-checked locking pattern for thread-safe initialization
-    compatible with Python 3.14t free-threading.
+    Uses double-checked locking pattern for thread-safe singleton initialization.
 
     Returns:
         The global MCPManager instance
     """
     global _manager_instance
-    if _manager_instance is None:  # Fast path
+    # First check (no lock) - fast path when already initialized
+    if _manager_instance is None:
+        # Second check (with lock) - ensures only one thread creates instance
         with _manager_lock:
-            if _manager_instance is None:  # Double-check
+            if _manager_instance is None:
                 _manager_instance = MCPManager()
     return _manager_instance
