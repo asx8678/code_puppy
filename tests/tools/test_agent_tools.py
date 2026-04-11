@@ -76,9 +76,9 @@ class TestSaveSessionHistory:
             _save_session_history_sync("my-session", [], "agent", "hello")
         msgpack_file = tmp_path / "my-session.msgpack"
         assert msgpack_file.exists()
-        # msgpack format stores metadata inside the msgpack file now
-        import msgpack
-        data = msgpack.unpackb(msgpack_file.read_bytes(), raw=False)
+        # JSON format stores metadata inside the file now (msgpack is now JSON)
+        import json
+        data = json.loads(msgpack_file.read_bytes())
         assert data["metadata"]["session_id"] == "my-session"
         assert data["metadata"]["initial_prompt"] == "hello"
 
@@ -98,8 +98,8 @@ class TestSaveSessionHistory:
         ):
             _save_session_history_sync("my-session", [{"role": "user", "content": "test"}], "agent")
         # Verify update happened (check metadata updated)
-        import msgpack
-        data = msgpack.unpackb((tmp_path / "my-session.msgpack").read_bytes(), raw=False)
+        import json
+        data = json.loads((tmp_path / "my-session.msgpack").read_bytes())
         assert data["metadata"]["message_count"] == 1
         # initial_prompt preserved from first save
         assert data["metadata"]["initial_prompt"] == "hello"

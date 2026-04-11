@@ -2,7 +2,6 @@
 import asyncio
 import itertools
 import logging
-import msgpack
 import re
 import traceback
 from datetime import datetime
@@ -47,7 +46,7 @@ from code_puppy.messaging import (
     get_session_context,
     set_session_context,
 )
-from code_puppy.persistence import atomic_write_msgpack
+from code_puppy.persistence import atomic_write_msgpack, read_msgpack
 from code_puppy.tools.common import generate_group_id
 from code_puppy.tools.subagent_context import subagent_context
 
@@ -364,7 +363,7 @@ def _save_session_history_sync(
     saved_initial_prompt = initial_prompt
     if initial_prompt is None and msgpack_path.exists():
         try:
-            existing_data = msgpack.unpackb(msgpack_path.read_bytes(), raw=False)
+            existing_data = read_msgpack(msgpack_path)
             if isinstance(existing_data, dict):
                 existing_meta = existing_data.get("metadata", {})
                 saved_initial_prompt = existing_meta.get("initial_prompt")
@@ -410,8 +409,7 @@ def _load_session_history_sync(session_id: str) -> list[ModelMessage]:
 
     if msgpack_path.exists():
         try:
-            raw = msgpack_path.read_bytes()
-            data = msgpack.unpackb(raw, raw=False)
+            data = read_msgpack(msgpack_path)
 
             # v2 format with folded metadata
             if isinstance(data, dict) and data.get("format") == "pydantic-ai-json-v2":

@@ -181,27 +181,32 @@ class TestAtomicWriteJson:
 
 
 class TestAtomicWriteMsgpack:
-    """Test atomic msgpack file writes."""
+    """Test atomic msgpack file writes (now uses JSON for free-threaded Python compatibility)."""
 
     def test_write_and_read(self, tmp_path: Path):
-        """Test msgpack data can be written and read back."""
+        """Test JSON data can be written and read back (msgpack is now JSON)."""
         test_file = tmp_path / "test.msgpack"
-        data = {"key": "value", "number": 42, "binary": b"bytes"}
+        data = {"key": "value", "number": 42}  # Note: binary data not supported in JSON
 
         atomic_write_msgpack(test_file, data)
 
         assert test_file.exists()
-        loaded = msgpack.unpackb(test_file.read_bytes(), raw=False)
+        loaded = json.loads(test_file.read_bytes())
         assert loaded == data
 
     def test_non_serializable_raises(self, tmp_path: Path):
         """Test that non-serializable data raises TypeError."""
         test_file = tmp_path / "test.msgpack"
 
-        with pytest.raises(TypeError, match="not msgpack-serializable"):
-            atomic_write_msgpack(
-                test_file, {"file": open(__file__)}
-            )  # File objects can't be serialized
+        # Use bytes as non-serializable data (bytes aren't JSON serializable without special handling)
+        # Note: atomic_write_msgpack uses default=str for backward compat,
+        # so we test the underlying error by passing something truly unserializable
+        class Unserializable:
+            def __str__(self):
+                raise RuntimeError("can't serialize")
+
+        with pytest.raises((TypeError, RuntimeError), match="(not JSON-serializable|can't serialize)"):
+            atomic_write_msgpack(test_file, {"obj": Unserializable()})
 
     def test_read_msgpack_with_default(self, tmp_path: Path):
         """Test read_msgpack returns default for missing file."""
@@ -211,10 +216,10 @@ class TestAtomicWriteMsgpack:
         assert result == {"default": True}
 
     def test_read_msgpack_existing(self, tmp_path: Path):
-        """Test read_msgpack loads existing file."""
+        """Test read_msgpack loads existing JSON file."""
         test_file = tmp_path / "test.msgpack"
         data = {"key": "value"}
-        test_file.write_bytes(msgpack.packb(data, use_bin_type=True))
+        test_file.write_bytes(json.dumps(data).encode("utf-8"))
 
         result = read_msgpack(test_file)
         assert result == data
