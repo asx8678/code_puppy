@@ -8,7 +8,6 @@ supporting both locked built-in defaults and editable user templates.
 import json
 import logging
 import os
-import shutil
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -121,7 +120,7 @@ class PromptStore:
         """Backup the broken store file and start fresh."""
         backup_path = self.store_path.with_suffix(".json.bak")
         try:
-            shutil.copy2(self.store_path, backup_path)
+            self.store_path.copy(backup_path, preserve_metadata=True)
             logger.info(f"Backed up broken store to {backup_path}")
         except Exception as e:
             logger.warning(f"Failed to backup broken store: {e}")

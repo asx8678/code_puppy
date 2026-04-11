@@ -7,7 +7,6 @@ handling of corrupt or missing data files.
 import json
 import logging
 import os
-import shutil
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -67,7 +66,7 @@ class FileMemoryStorage:
             # Use .json.bak suffix before any existing suffixes
             backup_name = f"{self._file_path.stem}.corrupt.{timestamp}.json.bak"
             backup_path = self._file_path.parent / backup_name
-            shutil.copy2(self._file_path, backup_path)
+            self._file_path.copy(backup_path, preserve_metadata=True)
             logger.warning(
                 "Corrupt memory file for %s backed up to %s",
                 self.agent_name,
