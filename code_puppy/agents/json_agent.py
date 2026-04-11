@@ -144,6 +144,7 @@ class JSONAgent(BaseAgent):
         self._config = self._load_config()
         self._validate_config()
 
+    @override
     def get_model_name(self) -> str | None:
         """Get pinned model name from JSON config, if specified.
 
