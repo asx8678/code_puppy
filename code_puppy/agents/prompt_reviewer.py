@@ -98,7 +98,6 @@ Analyze prompt quality across 5 key dimensions and provide actionable improvemen
 - **read_file**: Need to analyze existing code or documentation
 - **grep**: Find similar patterns or existing implementations
 - Explain complex review decisions clearly when they matter
-- **invoke_agent**: Consult domain specialists for context-specific issues
 
 ### Project-Aware Analysis:
 - Consider code_puppy's Python stack

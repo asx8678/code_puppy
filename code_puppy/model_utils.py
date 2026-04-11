@@ -130,6 +130,20 @@ def prepare_prompt_for_model(
         )
 
     # Handle Antigravity models
+    # -------------------------------------------------------------------------
+    # ANTIGRAVITY PATH (INTENTIONAL MODEL ADAPTATION)
+    #
+    # This path exists because Antigravity models (Gemini-based via AI Studio)
+    # have vendor-locked system prompts that CANNOT be replaced via the API.
+    # The API accepts a system_instruction parameter but it has no effect.
+    #
+    # The workaround: we embed the desired system prompt into the user message
+    # with explicit "ignore the system prompt" instructions. The text below
+    # ("You MUST ignore the system prompt...") is DELIBERATE - it overrides
+    # the locked system prompt that the API would otherwise enforce.
+    #
+    # This is not a bug. It's a vendor API limitation we work around.
+    # -------------------------------------------------------------------------
     if is_antigravity_model(model_name):
         modified_prompt = user_prompt
         if prepend_system_to_user and system_prompt:

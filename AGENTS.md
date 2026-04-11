@@ -68,6 +68,24 @@ Code Puppy has 3 Rust crates providing acceleration. The `fast_puppy` plugin aut
 
 Full list + rarely-used hooks: see `code_puppy/callbacks.py` source.
 
+## Prompt Assembly Architecture
+
+The system prompt is built in layers by different components. Understanding this helps explain where customizations apply:
+
+| Layer | Component | What It Does | Current Status |
+|-------|-----------|--------------|----------------|
+| 1 | `get_system_prompt()` | Agent-specific base prompt (e.g., code-puppy instructions) | **Stable** - Every agent implements this |
+| 2 | `AgentPromptMixin.get_full_system_prompt()` | Adds platform info (OS, shell, cwd) + agent identity | **Stable** - Called by agents that need full context |
+| 3 | `callbacks.on_load_prompt()` | Plugin additions (e.g., file mentions, pack-parallelism limits) | **Opt-in per agent** - Not all agents call this! |
+| 4 | `prepare_prompt_for_model()` | Model-specific adaptation (claude-code, antigravity) | **Stable** - Automatic based on model name |
+| 5 | `callbacks.on_get_model_system_prompt()` | Model-type plugins can override final output | **Extension point** - For custom model types |
+
+### Known Inconsistencies (Unresolved)
+
+- **UNK3**: Whether `load_prompt` should apply globally to ALL agents is **unresolved**. Currently some agents call it, others don't.
+- **Merge semantics**: String returns from `load_prompt` are concatenated; dict returns from `get_model_system_prompt` are chained. This asymmetry is intentional but confusing.
+- **Antigravity special case**: Due to vendor API limitations, the built system prompt gets moved into the user message with "ignore the system prompt" framing. See `model_utils.py` for the full explanation.
+
 ## Rules
 
 1. **Plugins over core** — if a hook exists for it, use it
