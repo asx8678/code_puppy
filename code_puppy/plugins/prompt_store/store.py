@@ -4,7 +4,6 @@ This module provides thread-safe persistence for prompt templates,
 supporting both locked built-in defaults and editable user templates.
 """
 
-from __future__ import annotations
 
 import json
 import logging

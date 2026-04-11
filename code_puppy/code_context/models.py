@@ -1,6 +1,5 @@
 """Code Context Models — Data classes for symbol and code context representation."""
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any

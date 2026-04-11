@@ -4,7 +4,6 @@ This module contains pure reducer functions for managing flow lane state.
 All functions are side-effect free and return new state objects.
 """
 
-from __future__ import annotations
 
 import time
 from copy import deepcopy

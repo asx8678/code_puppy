@@ -8,7 +8,6 @@ This ensures the model retains awareness of which files were touched even
 after older messages are compacted away.
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 

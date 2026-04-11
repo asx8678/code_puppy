@@ -17,7 +17,6 @@ The module is a **singleton** – all state lives in a ``_RateLimiterState``
 instance, matching the pattern used by ``concurrency_limits.py``.
 """
 
-from __future__ import annotations
 
 import asyncio
 import functools
