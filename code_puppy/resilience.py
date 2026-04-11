@@ -23,6 +23,7 @@ from code_puppy.circuit_state import CircuitState
 logger = logging.getLogger(__name__)
 
 P = ParamSpec("P")
+T = TypeVar("T")
 
 
 def walk_causes(
