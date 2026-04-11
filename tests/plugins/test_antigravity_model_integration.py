@@ -1,7 +1,5 @@
 """Integration-style tests for antigravity_model."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 

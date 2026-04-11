@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import msgpack
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -113,24 +112,42 @@ def _load_json_sync(file_path: Path) -> dict:
 
 
 def _load_session_sync(file_path: Path) -> Any:
-    """Synchronous session load — tries msgpack then falls back to pickle."""
-    # Try msgpack sidecar first
-    msgpack_path = file_path.with_suffix(".msgpack")
-    if msgpack_path.exists():
-        try:
-            raw = msgpack_path.read_bytes()
-            data = msgpack.unpackb(raw, raw=False)
-            from pydantic_ai.messages import ModelMessagesTypeAdapter
+    """Synchronous session load.
 
-            return ModelMessagesTypeAdapter.validate_python(data)
-        except Exception:
-            pass  # Fall through to pickle
-
-    # SECURITY FIX j0ha/l1en: Pickle fallback removed - RCE vulnerability
-    raise ValueError(
-        "Legacy pickle session format is no longer supported due to security "
-        "vulnerabilities (RCE risk - CVE-class). Please migrate to msgpack format."
+    Delegates to :func:`code_puppy.session_storage._load_raw_bytes` so that
+    the API loader stays in sync with the on-disk format actually written by
+    :func:`session_storage.save_session`. That format is
+    ``MSGPACK\\x01 + HMAC + msgpack`` stored in the ``.pkl`` file itself —
+    not a ``.msgpack`` sidecar. The previous implementation only looked at a
+    sidecar that save_session never creates, so freshly-saved sessions
+    appeared as "legacy pickle" and failed to load.
+    """
+    from code_puppy.session_storage import (
+        _LEGACY_SIGNED_HEADER,
+        _MSGPACK_MAGIC,
+        _load_raw_bytes,
+        _parse_session_payload,
     )
+
+    if not file_path.exists():
+        raise FileNotFoundError(str(file_path))
+
+    raw = file_path.read_bytes()
+
+    # Reject anything that isn't the current msgpack+HMAC format with a
+    # clear message. _load_raw_bytes already refuses legacy pickle formats
+    # for RCE safety; we just forward the error unchanged.
+    if not raw.startswith(_MSGPACK_MAGIC) and not raw.startswith(_LEGACY_SIGNED_HEADER):
+        # Probably a raw pickle file from a pre-migration install. Be
+        # explicit about why we won't load it.
+        raise ValueError(
+            "Session file is not in the expected msgpack+HMAC format. "
+            "Legacy pickle sessions are no longer supported (RCE risk)."
+        )
+
+    data = _load_raw_bytes(raw)
+    messages, _ = _parse_session_payload(data)
+    return messages
 
 
 @router.get("/")

@@ -5,8 +5,6 @@ with the model's context window. Falls back to absolute values when
 model context is unknown.
 """
 
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

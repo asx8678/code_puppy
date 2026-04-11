@@ -7,8 +7,6 @@ Includes integration tests that verify all phases work together.
 All tests mock execute_git_command_sync to avoid actual git execution.
 """
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 import pytest

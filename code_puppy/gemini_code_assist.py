@@ -6,6 +6,8 @@ Generative Language API. The Code Assist API supports OAuth authentication
 and has a different request/response format.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import uuid

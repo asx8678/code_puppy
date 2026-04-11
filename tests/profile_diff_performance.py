@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from collections.abc import Callable
 """Profile diff generation performance to determine if Rust acceleration is needed.
 
 This measures:
@@ -15,7 +16,6 @@ import difflib
 import time
 import random
 import string
-from typing import Callable
 
 
 def generate_code_file(num_lines: int, line_length: int = 80) -> str:

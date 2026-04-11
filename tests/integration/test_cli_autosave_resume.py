@@ -1,7 +1,5 @@
 """Integration tests for autosave resume and session rotation."""
 
-from __future__ import annotations
-
 import os
 import shutil
 import sys

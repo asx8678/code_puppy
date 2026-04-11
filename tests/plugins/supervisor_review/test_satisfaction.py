@@ -1,7 +1,5 @@
 """Tests for supervisor_review.satisfaction (bd code_puppy-79p, code_puppy-056)."""
 
-from __future__ import annotations
-
 import json
 
 import pytest

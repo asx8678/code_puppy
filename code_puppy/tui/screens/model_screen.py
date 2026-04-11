@@ -4,8 +4,6 @@ Replaces the interactive_model_picker() that reads from stdin
 (which deadlocks in Textual TUI because Textual owns stdin).
 """
 
-from __future__ import annotations
-
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.widgets import Footer, RichLog, Static

@@ -5,8 +5,6 @@ actionable error messages that help users understand WHY a command
 was blocked and WHAT they can do about it.
 """
 
-from __future__ import annotations
-
 from code_puppy.plugins.git_auto_commit.policy_errors import (
     DENIAL_SUGGESTIONS,
     GACPolicyError,

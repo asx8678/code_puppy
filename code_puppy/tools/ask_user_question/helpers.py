@@ -4,7 +4,8 @@ Provides conveniences like auto-collapsing single-choice prompts so
 callers don't have to hand-roll the "skip if only one option" pattern.
 """
 
-from typing import Callable, Sequence, TypeVar
+from collections.abc import Callable
+from typing import Sequence, TypeVar
 
 T = TypeVar("T")
 

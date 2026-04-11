@@ -4,8 +4,6 @@ Handles retrieving conversation messages from various sources and
 normalizing them to a standard format.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from code_puppy.run_context import get_current_run_context

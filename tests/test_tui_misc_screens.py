@@ -7,8 +7,6 @@ Verifies:
 - Helper functions exist and behave correctly
 """
 
-from __future__ import annotations
-
 import pytest
 
 

@@ -7,8 +7,6 @@ and ``api_requests.py:7-20`` token counting.
 Uses tiktoken when available, falls back to character-based heuristic.
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 from dataclasses import dataclass, field

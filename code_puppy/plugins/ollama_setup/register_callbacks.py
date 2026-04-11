@@ -7,14 +7,12 @@ Cloud models supported (the Ollama "Recommended Models" cloud tier):
     kimi-k2.5:cloud, glm-5:cloud, minimax-m2.7:cloud, qwen3.5:cloud
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 from code_puppy.config import EXTRA_MODELS_FILE
@@ -229,7 +227,7 @@ After logging in, you can use the model with:
 """
 
 
-def _start_ollama_serve() -> Optional[subprocess.Popen]:
+def _start_ollama_serve() -> subprocess.Popen | None:
     """Start ``ollama serve`` as a background subprocess if not already running.
 
     Returns the Popen handle, or None if already running / on failure.
@@ -328,7 +326,7 @@ def _handle_ollama_setup(command: str, name: str) -> Any:
     return True
 
 
-def _resolve_model(user_input: str) -> Optional[str]:
+def _resolve_model(user_input: str) -> str | None:
     """Resolve user input to an exact cloud model tag.
 
     Supports exact match and unambiguous prefix matching.

@@ -4,8 +4,6 @@ Provides interactive CRUD operations for prompt templates:
     list, show, create, edit, duplicate, delete, activate, reset, help
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import shlex

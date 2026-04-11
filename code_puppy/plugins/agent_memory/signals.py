@@ -8,8 +8,6 @@ Detects user feedback patterns in messages to adjust fact confidence:
 Supports English and Chinese language patterns.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass, replace as dataclass_replace
 from enum import Enum, auto

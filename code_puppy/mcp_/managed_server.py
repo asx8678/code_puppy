@@ -67,7 +67,7 @@ class ServerConfig:
     name: str
     type: str  # "sse", "stdio", or "http"
     enabled: bool = True
-    config: Dict = field(default_factory=dict)  # Raw config from JSON
+    config: dict = field(default_factory=dict)  # Raw config from JSON
 
 
 async def process_tool_call(

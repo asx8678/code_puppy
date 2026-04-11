@@ -1,7 +1,5 @@
 """Built-in exception registrations for common error types."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 

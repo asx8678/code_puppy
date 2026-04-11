@@ -15,8 +15,6 @@ All operations go through the security boundary:
 2. Shell bridge executes git commands via security boundary
 """
 
-from __future__ import annotations
-
 import logging
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info

@@ -7,8 +7,6 @@ Covers:
 - Constants: correct values
 """
 
-from __future__ import annotations
-
 import asyncio
 import time
 

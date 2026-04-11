@@ -4,7 +4,6 @@ These helpers keep page math consistent across menus so selection and
 page navigation behave the same way everywhere.
 """
 
-from typing import Tuple
 
 
 def get_total_pages(total_items: int, page_size: int) -> int:
@@ -16,7 +15,7 @@ def get_total_pages(total_items: int, page_size: int) -> int:
     return (total_items + page_size - 1) // page_size
 
 
-def get_page_bounds(page: int, total_items: int, page_size: int) -> Tuple[int, int]:
+def get_page_bounds(page: int, total_items: int, page_size: int) -> tuple[int, int]:
     """Return the inclusive start and exclusive end index for a page."""
     start = max(0, page) * page_size
     end = min(start + page_size, max(0, total_items))

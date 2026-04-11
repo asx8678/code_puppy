@@ -113,7 +113,9 @@ class SubAgentConsoleManager:
     Thread-safe: All operations are protected by locks.
     """
 
-    _instance: "SubAgentConsoleManager" | None = None
+    # Forward reference to the enclosing class; must be stringified because
+    # the class body is still executing at annotation evaluation time.
+    _instance: "SubAgentConsoleManager | None" = None
     _lock = threading.Lock()
 
     def __init__(self, console: Console | None = None):

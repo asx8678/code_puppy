@@ -5,8 +5,6 @@ returns the most appropriate install command for the user's platform,
 detecting available package managers in priority order.
 """
 
-from __future__ import annotations
-
 import shutil
 import sys
 

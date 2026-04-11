@@ -4,8 +4,6 @@ Watches streaming events for regex trigger matches and flags matched
 rules for next-turn injection.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Any
 

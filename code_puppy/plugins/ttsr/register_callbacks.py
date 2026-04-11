@@ -8,8 +8,6 @@ Rule file locations (scanned on startup):
   - ``~/.code_puppy/rules/*.md`` — user-level rules
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 from typing import Any

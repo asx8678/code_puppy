@@ -18,8 +18,6 @@ Or as a context manager::
         pass
 """
 
-from __future__ import annotations
-
 import asyncio
 import time
 

@@ -24,7 +24,7 @@ class Event:
 
     timestamp: datetime
     event_type: str  # "started", "stopped", "error", "health_check", etc.
-    details: Dict
+    details: dict
     server_id: str
 
 
@@ -146,7 +146,7 @@ class ServerStatusTracker:
         with self._lock:
             return self._server_metadata.get(server_id, {}).get(key)
 
-    def record_event(self, server_id: str, event_type: str, details: Dict) -> None:
+    def record_event(self, server_id: str, event_type: str, details: dict) -> None:
         """
         Record an event for a server.
 

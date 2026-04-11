@@ -10,8 +10,6 @@ Usage:
     default = pick_default_editor()         # best single choice or None
 """
 
-from __future__ import annotations
-
 import os
 import shutil
 from dataclasses import dataclass

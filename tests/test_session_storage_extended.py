@@ -1,10 +1,9 @@
-from __future__ import annotations
-
+from collections.abc import Callable
 import json
 import os
 import pickle
 from pathlib import Path
-from typing import Any, Callable, List
+from typing import Any
 
 import pytest
 
@@ -20,7 +19,7 @@ class TestSessionStorageExtended:
     """Extended tests for session storage functionality."""
 
     @pytest.fixture
-    def sample_history(self) -> List[Any]:
+    def sample_history(self) -> list[Any]:
         """Sample session history for testing."""
         return [
             {"role": "user", "content": "Hello"},
@@ -36,7 +35,7 @@ class TestSessionStorageExtended:
     def test_save_and_load_session(
         self,
         tmp_path: Path,
-        sample_history: List[Any],
+        sample_history: list[Any],
         token_estimator: Callable[[Any], int],
     ):
         """Test round-trip save/load functionality."""
@@ -71,7 +70,7 @@ class TestSessionStorageExtended:
     def test_save_autosave_session(
         self,
         tmp_path: Path,
-        sample_history: List[Any],
+        sample_history: list[Any],
         token_estimator: Callable[[Any], int],
     ):
         """Test autosave functionality."""
@@ -113,7 +112,7 @@ class TestSessionStorageExtended:
     def test_overwrite_existing_session(
         self,
         tmp_path: Path,
-        sample_history: List[Any],
+        sample_history: list[Any],
         token_estimator: Callable[[Any], int],
     ):
         """Test overwriting an existing session."""
@@ -143,7 +142,7 @@ class TestSessionStorageExtended:
     def test_list_sessions(
         self,
         tmp_path: Path,
-        sample_history: List[Any],
+        sample_history: list[Any],
         token_estimator: Callable[[Any], int],
     ):
         """Test session listing functionality."""
@@ -235,7 +234,7 @@ class TestSessionStorageExtended:
     def test_permission_error_handling(
         self,
         tmp_path: Path,
-        sample_history: List[Any],
+        sample_history: list[Any],
         token_estimator: Callable[[Any], int],
     ):
         """Test handling permission errors."""
@@ -341,7 +340,7 @@ class TestSessionStorageExtended:
     def test_nested_directories(
         self,
         tmp_path: Path,
-        sample_history: List[Any],
+        sample_history: list[Any],
         token_estimator: Callable[[Any], int],
     ):
         """Test saving to and loading from nested directories."""

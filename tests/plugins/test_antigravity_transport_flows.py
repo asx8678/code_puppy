@@ -1,7 +1,5 @@
 """Additional flow-focused tests for Antigravity transport."""
 
-from __future__ import annotations
-
 from unittest.mock import AsyncMock, patch
 
 import httpx

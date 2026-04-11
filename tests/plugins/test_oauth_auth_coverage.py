@@ -9,8 +9,6 @@ Covers:
 - claude_code_oauth/test_plugin.py (in-source tests)
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 import pytest

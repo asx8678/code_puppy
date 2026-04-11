@@ -7,8 +7,6 @@ coming off a network socket – they never block and accumulate internal
 state between calls.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Generator
 from dataclasses import dataclass

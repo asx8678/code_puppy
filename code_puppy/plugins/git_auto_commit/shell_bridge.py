@@ -14,8 +14,6 @@ Key insight: signal.alarm() only works in the main thread. We need to:
 3. If no: we're in the main thread, so we can use asyncio.run() safely
 """
 
-from __future__ import annotations
-
 import asyncio
 import concurrent.futures
 import logging

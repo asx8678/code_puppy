@@ -10,13 +10,15 @@ Session History Replay:
     history. Clients can provide a session_id query parameter:
         ws://localhost:8765/ws/events?session_id=abc123
 
-    When a client reconnects with the same session_id, all events that were
-    emitted while disconnected are replayed before live streaming resumes.
-    The history buffer size is controlled by the ws_history_maxlen config
-    setting (default: 200 events per session).
+    When a client reconnects with the same session_id, events for that
+    session that were recorded via the history buffer are replayed before
+    live streaming resumes. The history buffer size is controlled by the
+    ws_history_maxlen config setting (default: 200 events per session).
 
-    Graceful degradation: If no session_id is provided, history replay is
-    skipped and the client receives only live events.
+    Isolation: Only events explicitly recorded for a session are replayed.
+    There is no cross-session or global replay: a client that supplies no
+    session_id receives live events only, and a client that supplies a
+    session_id only sees history for that session.
 """
 
 import asyncio
@@ -25,8 +27,33 @@ import logging
 import uuid
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
+
+from code_puppy.api.security import is_trusted_origin
 
 logger = logging.getLogger(__name__)
+
+
+async def _reject_untrusted_origin(websocket: WebSocket) -> bool:
+    """Close the connection if the Origin header isn't in the allow-list.
+
+    Returns True when the connection was rejected.
+    """
+    origin = websocket.headers.get("origin")
+    if not is_trusted_origin(origin):
+        logger.warning(
+            "Rejecting WebSocket from untrusted origin: %r (path=%s)",
+            origin,
+            websocket.url.path,
+        )
+        # Close with 1008 (policy violation) before accepting so the peer
+        # sees an immediate failure instead of a half-open socket.
+        try:
+            await websocket.close(code=1008)
+        except Exception:
+            pass
+        return True
+    return False
 
 
 def setup_websocket(app: FastAPI) -> None:
@@ -39,6 +66,9 @@ def setup_websocket(app: FastAPI) -> None:
         Supports session-based history replay for seamless reconnection.
         Provide session_id as query param: /ws/events?session_id=abc123
         """
+        if await _reject_untrusted_origin(websocket):
+            return
+
         await websocket.accept()
 
         # Extract session_id from query params for history replay
@@ -47,8 +77,6 @@ def setup_websocket(app: FastAPI) -> None:
 
         from code_puppy.messaging.history_buffer import get_history_buffer
         from code_puppy.plugins.frontend_emitter.emitter import (
-            get_recent_events,
-            record_event,
             subscribe,
             unsubscribe,
         )
@@ -57,7 +85,13 @@ def setup_websocket(app: FastAPI) -> None:
         history_buffer = get_history_buffer()
 
         try:
-            # Step 1: Replay session-specific history (if session_id provided)
+            # Replay session-specific history (if session_id provided).
+            #
+            # SECURITY: We deliberately do NOT replay a global "recent events"
+            # buffer here. Previously this endpoint unconditionally replayed
+            # every event that had been emitted across all sessions, which
+            # leaked prompt previews and session metadata to any new client.
+            # History is now strictly per-session.
             if session_id:
                 session_history = history_buffer.get_history(session_id)
                 for event in session_history:
@@ -66,20 +100,14 @@ def setup_websocket(app: FastAPI) -> None:
                     f"Replayed {len(session_history)} events for session {session_id}"
                 )
 
-            # Step 2: Replay global recent events (legacy behavior for backward compat)
-            recent_events = get_recent_events()
-            for event in recent_events:
-                await websocket.send_json(event)
-
-            # Step 3: Live streaming with optional session recording
+            # Live streaming. Recording of events into the per-session
+            # history buffer is the responsibility of emit_event's producer
+            # side, not this WebSocket handler: allowing any connected
+            # client to write into an arbitrary session_id's buffer was
+            # another cross-session leak vector.
             while True:
                 try:
                     event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
-
-                    # Record to session history if session_id provided
-                    if session_id:
-                        record_event(session_id, event)
-
                     await websocket.send_json(event)
                 except asyncio.TimeoutError:
                     try:
@@ -95,11 +123,14 @@ def setup_websocket(app: FastAPI) -> None:
         finally:
             unsubscribe(event_queue)
             # Note: We don't clear session history here - it's needed for
-            # reconnection scenarios. Consider adding TTL cleanup later.
+            # reconnection scenarios. TTL cleanup handles abandoned sessions.
 
     @app.websocket("/ws/terminal")
     async def websocket_terminal(websocket: WebSocket) -> None:
         """Interactive terminal WebSocket endpoint."""
+        if await _reject_untrusted_origin(websocket):
+            return
+
         await websocket.accept()
         logger.info("Terminal WebSocket client connected")
 
@@ -146,8 +177,12 @@ def setup_websocket(app: FastAPI) -> None:
                 session_id=session_id, on_output=on_output
             )
 
-            # Send session info
-            await websocket.send_json({"type": "session", "id": session_id})
+            # Send session info. Key names must match the browser template
+            # in code_puppy/api/templates/terminal.html which listens for
+            # {"type": "session_started", "session_id": "..."}.
+            await websocket.send_json(
+                {"type": "session_started", "session_id": session_id}
+            )
 
             # Start output sender task
             sender_task = asyncio.create_task(output_sender())

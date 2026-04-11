@@ -1,7 +1,5 @@
 """E2E tests for the Mana bridge — real TCP, real msgpack, no mocks."""
 
-from __future__ import annotations
-
 import os
 import queue
 import socket

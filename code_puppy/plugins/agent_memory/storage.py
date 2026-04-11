@@ -4,8 +4,6 @@ Provides thread-safe, per-agent fact storage with graceful
 handling of corrupt or missing data files.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os

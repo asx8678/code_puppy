@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -16,9 +16,9 @@ class SymbolInfo:
     end_line: int
     start_col: int = 0
     end_col: int = 0
-    parent: Optional[str] = None
-    docstring: Optional[str] = None
-    children: List[SymbolInfo] = field(default_factory=list)
+    parent: str | None = None
+    docstring: str | None = None
+    children: list[SymbolInfo] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SymbolInfo:
@@ -70,18 +70,18 @@ class FileOutline:
     """Hierarchical outline of a source file."""
 
     language: str
-    symbols: List[SymbolInfo]
+    symbols: list[SymbolInfo]
     extraction_time_ms: float = 0.0
     success: bool = True
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
     @property
-    def top_level_symbols(self) -> List[SymbolInfo]:
+    def top_level_symbols(self) -> list[SymbolInfo]:
         """Get only top-level symbols."""
         return [s for s in self.symbols if s.is_top_level]
 
     @property
-    def classes(self) -> List[SymbolInfo]:
+    def classes(self) -> list[SymbolInfo]:
         """Get all class-like symbols."""
         return [
             s
@@ -90,23 +90,23 @@ class FileOutline:
         ]
 
     @property
-    def functions(self) -> List[SymbolInfo]:
+    def functions(self) -> list[SymbolInfo]:
         """Get all function-like symbols."""
         return [s for s in self.symbols if s.kind in ("function", "method")]
 
     @property
-    def imports(self) -> List[SymbolInfo]:
+    def imports(self) -> list[SymbolInfo]:
         """Get all import symbols."""
         return [s for s in self.symbols if s.kind == "import"]
 
-    def get_symbol_by_name(self, name: str) -> Optional[SymbolInfo]:
+    def get_symbol_by_name(self, name: str) -> SymbolInfo | None:
         """Find a symbol by its name."""
         for symbol in self.symbols:
             if symbol.name == name:
                 return symbol
         return None
 
-    def get_symbols_in_range(self, start_line: int, end_line: int) -> List[SymbolInfo]:
+    def get_symbols_in_range(self, start_line: int, end_line: int) -> list[SymbolInfo]:
         """Get all symbols within a line range."""
         return [
             s
@@ -130,15 +130,15 @@ class CodeContext:
     """Complete context for a code file including symbols, content, and metadata."""
 
     file_path: str
-    content: Optional[str] = None
-    language: Optional[str] = None
-    outline: Optional[FileOutline] = None
+    content: str | None = None
+    language: str | None = None
+    outline: FileOutline | None = None
     file_size: int = 0
     num_lines: int = 0
     num_tokens: int = 0
     parse_time_ms: float = 0.0
     has_errors: bool = False
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
     @property
     def is_parsed(self) -> bool:

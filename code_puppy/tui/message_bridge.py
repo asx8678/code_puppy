@@ -13,8 +13,6 @@ TUIConsole
     set_streaming_console() so event_stream_handler writes to the TUI.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import re

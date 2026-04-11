@@ -4,8 +4,6 @@ This module provides a centralized `build_console()` helper to eliminate
 duplication of Console construction patterns throughout the codebase.
 """
 
-from __future__ import annotations
-
 import sys
 from typing import TYPE_CHECKING
 

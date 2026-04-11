@@ -9,6 +9,7 @@ privileges. A malicious plugin can perform any action the user can perform (dele
 steal credentials, install malware, etc.). Only install plugins from trusted sources.
 """
 
+from collections.abc import Callable
 import importlib
 import importlib.util
 import logging
@@ -16,7 +17,7 @@ import re
 import sys
 import threading
 from pathlib import Path
-from typing import Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from code_puppy.callbacks import PhaseType

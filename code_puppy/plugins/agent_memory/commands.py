@@ -4,8 +4,6 @@ Implements the /memory slash command with subcommands for
 showing, clearing, exporting, and getting help on memories.
 """
 
-from __future__ import annotations
-
 import json
 import uuid
 from datetime import datetime, timezone

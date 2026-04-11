@@ -9,8 +9,6 @@ Pressing Enter on a tool opens an inline source-code sub-screen.
 'd' deletes the tool (user-created tools only).
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

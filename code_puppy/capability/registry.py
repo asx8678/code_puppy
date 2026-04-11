@@ -21,11 +21,12 @@ non-async ``load_capability_sync`` helper), a new event-loop run is
 used to drive the coroutine.
 """
 
+from collections.abc import Callable
 import inspect
 import logging
 import threading
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .types import Capability, CapabilityResult, LoadContext, LoadResult, Provider
 

@@ -1,7 +1,5 @@
 """Message mapping tests for antigravity_model."""
 
-from __future__ import annotations
-
 import base64
 from datetime import datetime
 from unittest.mock import patch

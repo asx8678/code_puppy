@@ -17,7 +17,6 @@ Adding a new provider
 3. That's it — the matcher picks it up automatically.
 """
 
-from typing import FrozenSet
 
 # ---------------------------------------------------------------------------
 # Claude Code  (Anthropic)
@@ -103,7 +102,7 @@ PROVIDER_ALIASES: dict[str, dict[str, str]] = {
 # ---------------------------------------------------------------------------
 
 
-def _build_lookup() -> dict[str, FrozenSet[str]]:
+def _build_lookup() -> dict[str, frozenset[str]]:
     """
     Return a dict mapping every known name (provider *and* internal) to the
     full set of equivalent names, including itself.
@@ -123,7 +122,7 @@ def _build_lookup() -> dict[str, FrozenSet[str]]:
             groups[key].add(provider_name)
 
     # Build the final lookup: every alias points to the frozen group
-    lookup: dict[str, FrozenSet[str]] = {}
+    lookup: dict[str, frozenset[str]] = {}
     for group in groups.values():
         frozen = frozenset(group)
         for name in group:
@@ -132,10 +131,10 @@ def _build_lookup() -> dict[str, FrozenSet[str]]:
 
 
 # Module-level singleton — import this in matcher.py
-ALIAS_LOOKUP: dict[str, FrozenSet[str]] = _build_lookup()
+ALIAS_LOOKUP: dict[str, frozenset[str]] = _build_lookup()
 
 
-def get_aliases(tool_name: str) -> FrozenSet[str]:
+def get_aliases(tool_name: str) -> frozenset[str]:
     """
     Return all known equivalent names for *tool_name* (including itself).
     Returns a frozenset containing only *tool_name* when no aliases exist.

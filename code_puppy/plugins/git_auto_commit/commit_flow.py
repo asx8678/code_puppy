@@ -8,8 +8,6 @@ This module orchestrates the complete git commit workflow:
 Each phase calls check_gac_context() FIRST — safety before everything.
 """
 
-from __future__ import annotations
-
 import re
 import shlex
 from typing import Any

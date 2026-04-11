@@ -189,7 +189,7 @@ class MCPConfigWizard:
                 "Invalid type. Choose: sse, http, or stdio", message_group=group_id
             )
 
-    def prompt_sse_config(self, group_id: str = None) -> Dict | None:
+    def prompt_sse_config(self, group_id: str = None) -> dict | None:
         """Prompt for SSE server configuration."""
         emit_info("Configuring SSE server", message_group=group_id)
 
@@ -215,7 +215,7 @@ class MCPConfigWizard:
 
         return config
 
-    def prompt_http_config(self, group_id: str = None) -> Dict | None:
+    def prompt_http_config(self, group_id: str = None) -> dict | None:
         """Prompt for HTTP server configuration."""
         emit_info("Configuring HTTP server", message_group=group_id)
 
@@ -241,7 +241,7 @@ class MCPConfigWizard:
 
         return config
 
-    def prompt_stdio_config(self, group_id: str = None) -> Dict | None:
+    def prompt_stdio_config(self, group_id: str = None) -> dict | None:
         """Prompt for Stdio server configuration with security validation."""
         emit_info("Configuring Stdio server", message_group=group_id)
         emit_info("Examples:", message_group=group_id)

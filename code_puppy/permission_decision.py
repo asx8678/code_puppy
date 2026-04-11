@@ -25,8 +25,6 @@ Design notes
   directly, removing the plugin→tool import inversion.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 

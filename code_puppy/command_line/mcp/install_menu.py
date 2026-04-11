@@ -47,7 +47,7 @@ class MCPInstallMenu:
         self.catalog = None
         self.categories: list[str] = []
         self.current_category: str | None = None
-        self.current_servers: List = []
+        self.current_servers: list = []
 
         # State management
         self.view_mode = "categories"  # "categories" or "servers"
@@ -126,7 +126,7 @@ class MCPInstallMenu:
             and self.categories[0] == CUSTOM_SERVER_CATEGORY
         )
 
-    def _render_category_list(self) -> List:
+    def _render_category_list(self) -> list:
         """Render the category list panel."""
         lines = []
 
@@ -181,7 +181,7 @@ class MCPInstallMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_server_list(self) -> List:
+    def _render_server_list(self) -> list:
         """Render the server list panel."""
         lines = []
 
@@ -239,7 +239,7 @@ class MCPInstallMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_navigation_hints(self, lines: List):
+    def _render_navigation_hints(self, lines: list):
         """Render navigation hints at the bottom of the list panel."""
         lines.append(("", "\n"))
         lines.append(("fg:ansibrightblack", "  ↑/↓ "))
@@ -257,7 +257,7 @@ class MCPInstallMenu:
         lines.append(("fg:ansired", "  Ctrl+C "))
         lines.append(("", "Cancel"))
 
-    def _render_details(self) -> List:
+    def _render_details(self) -> list:
         """Render the details panel."""
         lines = []
 
@@ -403,7 +403,7 @@ class MCPInstallMenu:
 
         return lines
 
-    def _render_custom_server_details(self) -> List:
+    def _render_custom_server_details(self) -> list:
         """Render details for the custom server option."""
         lines = []
 

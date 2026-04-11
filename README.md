@@ -66,7 +66,7 @@ This fork adds significant capabilities to the original code_puppy, transforming
 ## Quick start
 
 ```bash
-uvx code-puppy -i
+uvx --from codepp code-puppy -i
 ````
 
 ## Installation
@@ -79,7 +79,9 @@ uvx code-puppy -i
 # Install UV if you don't have it
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-uvx code-puppy
+# This fork is published to PyPI as `codepp`. The installed script is still
+# called `code-puppy`, so `uvx --from codepp code-puppy` runs this build.
+uvx --from codepp code-puppy
 ```
 
 #### Windows
@@ -90,7 +92,8 @@ On Windows, we recommend installing code-puppy as a global tool for the best exp
 # Install UV if you don't have it (run in PowerShell as Admin)
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-uvx code-puppy
+# This fork is published to PyPI as `codepp`; the installed command is code-puppy.
+uvx --from codepp code-puppy
 ```
 
 ### Local Development

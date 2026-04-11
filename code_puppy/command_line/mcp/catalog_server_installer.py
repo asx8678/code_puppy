@@ -32,7 +32,7 @@ def get_env_var_hint(env_var: str) -> str:
     return ENV_VAR_HINTS.get(env_var, "")
 
 
-def prompt_for_server_config(manager, server) -> Dict | None:
+def prompt_for_server_config(manager, server) -> dict | None:
     """Prompt user for server configuration (env vars and cmd args).
 
     Args:
@@ -137,7 +137,7 @@ def prompt_for_server_config(manager, server) -> Dict | None:
     }
 
 
-def install_catalog_server(manager, server, config: Dict) -> bool:
+def install_catalog_server(manager, server, config: dict) -> bool:
     """Install a server from the catalog with the given configuration.
 
     Args:

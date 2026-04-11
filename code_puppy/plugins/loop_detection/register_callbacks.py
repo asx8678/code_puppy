@@ -15,8 +15,6 @@ Detection strategy:
   4. At hard threshold: block the tool call via fail-closed pre_tool_call hook.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 import logging

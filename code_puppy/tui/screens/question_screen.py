@@ -4,8 +4,6 @@ Replaces code_puppy/tools/ask_user_question/tui_loop.py + terminal_ui.py.
 
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from textual.app import ComposeResult

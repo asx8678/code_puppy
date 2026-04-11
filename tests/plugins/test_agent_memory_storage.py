@@ -10,8 +10,6 @@ Comprehensive coverage of FileMemoryStorage including:
 - Edge cases and error handling
 """
 
-from __future__ import annotations
-
 import json
 import os
 import shutil

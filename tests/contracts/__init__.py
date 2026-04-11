@@ -5,10 +5,9 @@ by both the core test suite and third-party plugin authors to validate their
 implementations against code_puppy's contracts.
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable
 import inspect
-from typing import Any, Callable
+from typing import Any
 
 
 class ContractViolation(Exception):

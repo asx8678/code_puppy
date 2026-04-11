@@ -8,6 +8,7 @@ is better than complex, nested side effects are worse than deliberate helpers.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import atexit
 import hashlib
 import hmac
@@ -23,7 +24,7 @@ import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import msgpack
 

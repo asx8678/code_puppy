@@ -219,9 +219,9 @@ class HooksMenu:
     # Rendering helpers
     # ------------------------------------------------------------------
 
-    def _render_list(self) -> List:
+    def _render_list(self) -> list:
         """Render the left-hand hooks list panel."""
-        lines: List = []
+        lines: list = []
 
         total = len(self.entries)
         enabled_count = sum(1 for e in self.entries if e.enabled)
@@ -282,7 +282,7 @@ class HooksMenu:
         self._render_nav_hints(lines)
         return lines
 
-    def _render_nav_hints(self, lines: List) -> None:
+    def _render_nav_hints(self, lines: list) -> None:
         """Append keyboard shortcut hints to lines."""
         lines.append(("", "\n"))
         lines.append((_C_DIM, "  ↑/↓ j/k "))
@@ -300,9 +300,9 @@ class HooksMenu:
         lines.append((_C_DISABLED, "  q/Esc   "))
         lines.append(("", "Exit"))
 
-    def _render_detail(self) -> List:
+    def _render_detail(self) -> list:
         """Render the right-hand hook detail panel."""
-        lines: List = []
+        lines: list = []
         lines.append((_C_HEADER, " HOOK DETAILS"))
         lines.append(("", "\n\n"))
 

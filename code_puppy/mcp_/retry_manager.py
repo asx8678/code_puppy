@@ -5,6 +5,7 @@ This module provides retry logic for handling transient failures in MCP server
 communication with intelligent backoff strategies to prevent overwhelming failed servers.
 """
 
+from collections.abc import Callable
 import asyncio
 import logging
 import random
@@ -12,7 +13,7 @@ import threading
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 import httpx
 

@@ -3,8 +3,6 @@
 Ported from deepagents analysis (ADOPT #3, #4, #6).
 """
 
-from __future__ import annotations
-
 import os
 from typing import overload
 

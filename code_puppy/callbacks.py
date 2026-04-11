@@ -1,9 +1,10 @@
+from collections.abc import Callable
 import asyncio
 import logging
 import threading
 import traceback
 import weakref
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 from code_puppy import _backlog
 from code_puppy.run_context import (

@@ -30,7 +30,7 @@ class SelectionMenu:
         self.result: str | None = None
         self.cancelled = False
 
-    def _render(self) -> List:
+    def _render(self) -> list:
         """Render the menu."""
         lines = []
 

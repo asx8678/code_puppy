@@ -1,3 +1,4 @@
+from collections.abc import Callable
 import configparser
 import json
 import os
@@ -7,7 +8,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
-from typing import Callable
+from pathlib import Path
 
 from code_puppy.session_storage import save_session_async
 from code_puppy import runtime_state

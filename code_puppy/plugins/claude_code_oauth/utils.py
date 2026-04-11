@@ -8,7 +8,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass
-from typing import Any, Union
+from typing import Any
 from urllib.parse import urlencode
 
 import requests
@@ -644,7 +644,7 @@ def exchange_code_for_tokens(
 
 
 def filter_latest_claude_models(
-    models: list[str], max_per_family: Union[int, dict[str, int]] = 2
+    models: list[str], max_per_family: int | dict[str, int] = 2
 ) -> list[str]:
     """Filter models to keep the top N latest haiku, sonnet, and opus.
 

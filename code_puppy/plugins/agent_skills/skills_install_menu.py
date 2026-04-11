@@ -165,7 +165,7 @@ class SkillsInstallMenu:
                 return self.current_skills[self.selected_skill_idx]
         return None
 
-    def _render_navigation_hints(self, lines: List) -> None:
+    def _render_navigation_hints(self, lines: list) -> None:
         """Render keyboard shortcut hints at the bottom."""
 
         lines.append(("", "\n"))
@@ -186,7 +186,7 @@ class SkillsInstallMenu:
         lines.append(("fg:ansired", "  Ctrl+C "))
         lines.append(("", "Cancel"))
 
-    def _render_category_list(self) -> List:
+    def _render_category_list(self) -> list:
         """Render the left panel with category navigation."""
 
         lines = []
@@ -239,7 +239,7 @@ class SkillsInstallMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_skill_list(self) -> List:
+    def _render_skill_list(self) -> list:
         """Render the middle panel with skills in the selected category."""
 
         lines = []
@@ -293,7 +293,7 @@ class SkillsInstallMenu:
         self._render_navigation_hints(lines)
         return lines
 
-    def _render_details(self) -> List:
+    def _render_details(self) -> list:
         """Render the right panel with details for the selected skill."""
 
         lines = []

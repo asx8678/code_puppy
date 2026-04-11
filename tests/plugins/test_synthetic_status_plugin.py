@@ -1,7 +1,5 @@
 """Tests for Synthetic status plugin command handling and API parsing."""
 
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 

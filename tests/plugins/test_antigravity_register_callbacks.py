@@ -1,7 +1,5 @@
 """Comprehensive test coverage for Antigravity OAuth register_callbacks."""
 
-from __future__ import annotations
-
 import threading
 import time
 from pathlib import Path

@@ -4,8 +4,6 @@ Tests end-to-end wiring: plugin discovery, callback registration,
 tool attachment, and full loop with default invoke path.
 """
 
-from __future__ import annotations
-
 import json
 
 import pytest

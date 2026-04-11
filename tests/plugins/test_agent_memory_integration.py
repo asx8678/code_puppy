@@ -7,8 +7,6 @@ End-to-end tests that verify:
 4. Callback registration and wiring
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 from datetime import datetime, timezone

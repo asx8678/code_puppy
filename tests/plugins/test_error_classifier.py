@@ -12,8 +12,6 @@ Covers:
 - Thread safety
 """
 
-from __future__ import annotations
-
 import asyncio
 import re
 import threading

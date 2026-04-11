@@ -6,8 +6,6 @@ semantically different vendors through the same underlying provider classes,
 so we need stable, distinct runtime identities.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic_ai.providers.anthropic import AnthropicProvider

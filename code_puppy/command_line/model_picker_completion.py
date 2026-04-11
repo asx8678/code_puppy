@@ -209,7 +209,7 @@ def update_model_in_input(text: str) -> str | None:
 class ModelSelectionMenu:
     """Paginated interactive model picker for the /model command."""
 
-    def __init__(self, model_names: Optional[list[str]] = None):
+    def __init__(self, model_names: list[str] | None = None):
         self.model_names = (
             list(model_names) if model_names is not None else load_model_names()
         )
@@ -217,7 +217,7 @@ class ModelSelectionMenu:
         self.selected_index = 0
         self.page = 0
         self.page_size = MODEL_PICKER_PAGE_SIZE
-        self.result: Optional[str] = None
+        self.result: str | None = None
 
         if self.current_model in self.model_names:
             self.selected_index = self.model_names.index(self.current_model)
@@ -309,7 +309,7 @@ class ModelSelectionMenu:
         lines.append(("", "Cancel\n"))
         return lines
 
-    async def run_async(self) -> Optional[str]:
+    async def run_async(self) -> str | None:
         control = FormattedTextControl(lambda: self._render())
         kb = KeyBindings()
 
@@ -381,7 +381,7 @@ def _normalize_legacy_picker_choice(choice: str) -> str:
     return choice.removesuffix(" (current)")
 
 
-async def interactive_model_picker() -> Optional[str]:
+async def interactive_model_picker() -> str | None:
     """Run the paginated interactive model picker used by /model."""
     from code_puppy.tools.command_runner import set_awaiting_user_input
 

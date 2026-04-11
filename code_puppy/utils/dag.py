@@ -7,8 +7,6 @@ an ordered list of *execution waves* where every task inside a wave can be
 run in parallel because all its predecessors finished in earlier waves.
 """
 
-from __future__ import annotations
-
 from collections import defaultdict, deque
 from typing import Hashable, TypeVar
 

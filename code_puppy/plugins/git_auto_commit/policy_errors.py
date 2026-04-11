@@ -5,8 +5,6 @@ surface those denials with actionable messages that help users understand
 WHY a command was blocked and WHAT they can do about it.
 """
 
-from __future__ import annotations
-
 
 class GACPolicyError(Exception):
     """Raised when a git command is blocked by policy."""

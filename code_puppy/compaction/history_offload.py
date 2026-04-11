@@ -6,8 +6,6 @@ to a per-session log file with section headers. Useful for debugging and audit.
 Opt-in via config key `summarization_history_offload_enabled` (default: False).
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 from datetime import datetime, timezone

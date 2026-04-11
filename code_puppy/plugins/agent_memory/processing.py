@@ -12,8 +12,6 @@ Async correctness notes (code-puppy-48p):
   or tracked with error callbacks
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import re

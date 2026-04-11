@@ -1,7 +1,5 @@
 """Tests for supervisor_review.orchestrator (bd code_puppy-79p)."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

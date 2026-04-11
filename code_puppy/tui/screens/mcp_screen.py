@@ -10,8 +10,6 @@ ID so the caller can drive the actual installation.
 Wired via: /mcp install → app.py pushes MCPScreen
 """
 
-from __future__ import annotations
-
 import os
 from typing import TYPE_CHECKING
 

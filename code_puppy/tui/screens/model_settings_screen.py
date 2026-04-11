@@ -4,8 +4,6 @@ Replaces code_puppy/command_line/model_settings_menu.py (921 lines).
 Two-level navigation: model list → settings for selected model.
 """
 
-from __future__ import annotations
-
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.reactive import reactive

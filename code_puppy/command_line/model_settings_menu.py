@@ -155,7 +155,7 @@ def _load_all_model_names() -> list[str]:
     return list(models_config.keys())
 
 
-def _get_model_display_settings(model_name: str) -> Dict:
+def _get_model_display_settings(model_name: str) -> dict:
     """Get model settings merged with global OpenAI controls for display."""
     settings = get_all_model_settings(model_name)
 
@@ -238,7 +238,7 @@ class ModelSettingsMenu:
         # Cache for selected model's settings
         self.selected_model: str | None = None
         self.supported_settings: list[str] = []
-        self.current_settings: Dict = {}
+        self.current_settings: dict = {}
 
     @property
     def total_pages(self) -> int:
@@ -313,7 +313,7 @@ class ModelSettingsMenu:
         fmt = setting_def.get("format", "{:.2f}")
         return fmt.format(value)
 
-    def _render_main_list(self) -> List:
+    def _render_main_list(self) -> list:
         """Render the main list panel (models or settings)."""
         lines = []
 
@@ -401,7 +401,7 @@ class ModelSettingsMenu:
 
         return lines
 
-    def _add_model_nav_hints(self, lines: List):
+    def _add_model_nav_hints(self, lines: list):
         """Add navigation hints for model list view."""
         lines.append(("", "\n"))
         lines.append(("fg:ansibrightblack", "  ↑/↓  "))
@@ -414,7 +414,7 @@ class ModelSettingsMenu:
         lines.append(("fg:ansiyellow", "  Esc  "))
         lines.append(("", "Exit\n"))
 
-    def _add_settings_nav_hints(self, lines: List):
+    def _add_settings_nav_hints(self, lines: list):
         """Add navigation hints for settings view."""
         lines.append(("", "\n"))
 
@@ -437,7 +437,7 @@ class ModelSettingsMenu:
             lines.append(("fg:ansiyellow", "  Esc  "))
             lines.append(("", "Back to models\n"))
 
-    def _render_details_panel(self) -> List:
+    def _render_details_panel(self) -> list:
         """Render the details/help panel."""
         lines = []
 

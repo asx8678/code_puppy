@@ -5,8 +5,7 @@ used by tools and resilience utilities that need to execute
 async code from synchronous contexts.
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable
 import asyncio
 import atexit
 import functools
@@ -14,7 +13,7 @@ import logging
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 T = TypeVar("T")
 

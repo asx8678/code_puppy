@@ -12,8 +12,6 @@ Usage:
     /fast_puppy build     → force rebuild the Rust module
 """
 
-from __future__ import annotations
-
 import importlib
 import logging
 

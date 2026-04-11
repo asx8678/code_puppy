@@ -15,8 +15,6 @@ Example usage:
     >>> final_path = verify_contained(base_dir / safe_name, base_dir)
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 from typing import Final

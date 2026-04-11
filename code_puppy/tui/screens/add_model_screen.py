@@ -7,8 +7,6 @@ Two-step flow:
   Step 2: SearchableList of models for the selected provider + model details
 """
 
-from __future__ import annotations
-
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal

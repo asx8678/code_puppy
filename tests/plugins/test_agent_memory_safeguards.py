@@ -6,8 +6,6 @@ Tests the memory poisoning fix which adds:
 - Rate limiting: Prevents rapid-fire preference signal injection
 """
 
-from __future__ import annotations
-
 import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING

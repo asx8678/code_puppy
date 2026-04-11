@@ -11,8 +11,6 @@ Verifies: import, instantiation, inheritance, key bindings, and
 helper-function contracts. No actual Textual app loop is started.
 """
 
-from __future__ import annotations
-
 import pytest
 
 

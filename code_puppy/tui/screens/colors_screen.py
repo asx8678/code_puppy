@@ -7,8 +7,6 @@ Provides a two-panel split screen:
 Access via: /colors command in the TUI.
 """
 
-from __future__ import annotations
-
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.widget import Widget

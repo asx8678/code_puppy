@@ -192,7 +192,7 @@ def _load_source_code(tool: UCToolInfo) -> tuple[list[str], str | None]:
         return [], f"Could not read source: {e}"
 
 
-def _render_menu_panel(tools: list[UCToolInfo], page: int, selected_idx: int) -> List:
+def _render_menu_panel(tools: list[UCToolInfo], page: int, selected_idx: int) -> list:
     """Render the left menu panel with pagination.
 
     Args:
@@ -260,7 +260,7 @@ def _render_menu_panel(tools: list[UCToolInfo], page: int, selected_idx: int) ->
     return lines
 
 
-def _render_preview_panel(tool: UCToolInfo | None) -> List:
+def _render_preview_panel(tool: UCToolInfo | None) -> list:
     """Render the right preview panel with tool details.
 
     Args:
@@ -360,7 +360,7 @@ def _render_source_panel(
     source_lines: list[str],
     scroll_offset: int,
     error: str | None = None,
-) -> List:
+) -> list:
     """Render source code panel with syntax highlighting.
 
     Args:

@@ -1,5 +1,6 @@
 """Agent manager for handling different agent configurations."""
 
+from collections.abc import Callable
 import dataclasses
 import importlib
 import json
@@ -10,7 +11,6 @@ import threading
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from pydantic_ai.messages import ModelMessage
 

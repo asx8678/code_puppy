@@ -1,7 +1,5 @@
 """Tests for claude_code_oauth/register_callbacks.py full coverage."""
 
-from __future__ import annotations
-
 import threading
 import time
 from contextlib import contextmanager

@@ -5,7 +5,6 @@ This module handles rendering the flow state as a Rich panel.
 
 import os
 import time
-from typing import Optional
 
 from rich.console import Console
 from rich.panel import Panel
@@ -26,7 +25,7 @@ def _supports_unicode() -> bool:
     return True
 
 
-def _format_duration(duration: Optional[float]) -> str:
+def _format_duration(duration: float | None) -> str:
     """Format duration as 'X.Ys' for <60s, 'Xm Ys' for >=60s."""
     if duration is None:
         return "—"
@@ -93,7 +92,7 @@ def _render_lane_row(lane: FlowLaneState, unicode: bool = True) -> tuple[str, st
     return name_str, status_str, detail_str, duration_str
 
 
-def render_flow_panel(flow_state: FlowState) -> Optional[str]:
+def render_flow_panel(flow_state: FlowState) -> str | None:
     """Render the flow state as a Rich panel.
     
     Returns a Rich-renderable string, or None if no active lanes.

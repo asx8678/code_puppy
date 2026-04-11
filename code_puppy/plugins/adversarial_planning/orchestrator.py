@@ -4,11 +4,12 @@ Manages the flow through all planning phases with proper
 state tracking and error handling.
 """
 
+from collections.abc import Callable
 import asyncio
 import json
 import logging
 import uuid
-from typing import Callable, Any
+from typing import Any
 
 from .models import (
     AdversarialPlanConfig,

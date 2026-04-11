@@ -4,8 +4,6 @@ Validates that centralized resource limits have correct values,
 correct types, and maintain their documented invariants.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from code_puppy.constants import (

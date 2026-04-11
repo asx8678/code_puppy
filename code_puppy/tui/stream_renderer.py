@@ -7,8 +7,6 @@ This replaces the Rich Console-based rendering in event_stream_handler.py
 for the Textual TUI context.
 """
 
-from __future__ import annotations
-
 import logging
 import time
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable

@@ -15,8 +15,6 @@ Users run `/render-check` to verify their terminal is rendering correctly.
 If anything looks wrong, they have evidence of the specific failure.
 """
 
-from __future__ import annotations
-
 import logging
 
 logger = logging.getLogger(__name__)

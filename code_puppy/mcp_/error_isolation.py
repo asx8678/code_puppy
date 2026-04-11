@@ -6,6 +6,7 @@ server errors from crashing the application. It implements quarantine
 logic with exponential backoff for failed servers.
 """
 
+from collections.abc import Callable
 import asyncio
 import functools
 import inspect
@@ -13,7 +14,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

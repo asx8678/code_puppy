@@ -1,7 +1,5 @@
 """Tests for agent_skills/register_callbacks.py full coverage."""
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 # Patch targets for lazy imports inside _get_skills_prompt_section

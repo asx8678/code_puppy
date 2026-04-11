@@ -1,7 +1,5 @@
 """Tests for the /pop custom-command plugin."""
 
-from __future__ import annotations
-
 import importlib
 import sys
 from types import SimpleNamespace

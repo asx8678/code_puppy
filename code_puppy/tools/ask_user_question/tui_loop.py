@@ -4,11 +4,12 @@ This module contains the main TUI application loop and all keyboard bindings.
 Separated from terminal_ui.py to keep files under 600 lines.
 """
 
+from collections.abc import Callable
 import asyncio
 import shutil
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 try:
     from prompt_toolkit import Application

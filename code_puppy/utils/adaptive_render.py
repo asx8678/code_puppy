@@ -18,8 +18,6 @@ The rich_renderer integration lives in a separate file and is tracked under
 bd issue code_puppy-6ig.
 """
 
-from __future__ import annotations
-
 import enum
 import json
 import re

@@ -25,12 +25,11 @@ Usage:
     ...     pass
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable
 import functools
 import inspect
 import sys
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 from code_puppy.tools.subagent_context import (
     is_subagent,

@@ -11,6 +11,7 @@ commands before execution and can block dangerous operations. The PolicyEngine
 provides additional rule-based command filtering.
 """
 
+from collections.abc import Callable
 import asyncio
 from collections import deque
 import ctypes
@@ -30,7 +31,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from functools import partial
-from typing import Callable, Literal
+from typing import Literal
 
 from pydantic import BaseModel
 from pydantic_ai import RunContext

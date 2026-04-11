@@ -13,8 +13,6 @@ Covers:
 - Missing frontmatter fields use defaults
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch

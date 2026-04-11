@@ -1,7 +1,5 @@
 """Tests for supervisor_review.models (bd code_puppy-79p)."""
 
-from __future__ import annotations
-
 import pytest
 
 from code_puppy.plugins.supervisor_review.models import (

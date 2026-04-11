@@ -1,7 +1,5 @@
 """Tests for code_puppy.utils.adaptive_render."""
 
-from __future__ import annotations
-
 import json
 
 import pytest  # noqa: F401 — imported for fixture discovery consistency

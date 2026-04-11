@@ -4,8 +4,6 @@ Tests the visual feedback system that hooks into pre_tool_call and post_tool_cal
 callbacks to provide progress notifications for turbo_execute batch operations.
 """
 
-from __future__ import annotations
-
 import json
 from unittest.mock import patch
 

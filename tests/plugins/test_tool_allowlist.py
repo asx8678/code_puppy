@@ -1,7 +1,5 @@
 """Tests for the tool_allowlist plugin."""
 
-from __future__ import annotations
-
 import pytest
 
 from code_puppy import callbacks as callbacks_module

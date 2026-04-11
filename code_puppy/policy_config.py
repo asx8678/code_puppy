@@ -23,8 +23,6 @@ Rules JSON format::
     }
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from code_puppy.policy_engine import PolicyEngine

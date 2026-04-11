@@ -7,10 +7,9 @@ previously spread across model_factory.py, routing strategies, and plugins.
 Part of the model configuration centralization effort (issues #965, #966, #967).
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable
 import logging
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

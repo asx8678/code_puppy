@@ -4,8 +4,6 @@ Uses LLM calls to extract structured facts from conversation messages.
 Designed for async, non-blocking operation with proper error handling.
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging

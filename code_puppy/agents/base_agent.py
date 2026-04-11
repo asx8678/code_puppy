@@ -1,5 +1,6 @@
 """Base agent configuration class for defining agent properties."""
 
+from collections.abc import Callable
 import asyncio
 import contextlib
 import dataclasses
@@ -11,7 +12,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from functools import lru_cache
-from typing import Any, Callable, Sequence
+from typing import Any, Sequence
 
 import mcp
 import pydantic

@@ -4,10 +4,10 @@ Now using the fixed arrow_select_async with proper HTML escaping.
 Supports cycling through all supported languages with left/right arrows!
 """
 
+from collections.abc import Callable
 import asyncio
 import io
 import sys
-from typing import Callable
 
 try:
     from prompt_toolkit import Application

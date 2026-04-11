@@ -10,8 +10,6 @@ Key benefits:
 - Provides transparent caching that falls back to full rebuild when needed
 """
 
-from __future__ import annotations
-
 import hashlib
 import logging
 import threading

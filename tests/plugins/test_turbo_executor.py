@@ -1,7 +1,5 @@
 """Unit tests for the Turbo Executor plugin."""
 
-from __future__ import annotations
-
 import json
 import os
 import tempfile

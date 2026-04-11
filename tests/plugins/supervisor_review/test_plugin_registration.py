@@ -1,7 +1,5 @@
 """Tests for supervisor_review plugin registration (bd code_puppy-79p)."""
 
-from __future__ import annotations
-
 # pytest imported for potential future use; not currently needed for these tests
 import pytest  # noqa: F401
 

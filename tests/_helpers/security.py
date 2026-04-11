@@ -17,8 +17,6 @@ Usage::
     assert_no_sensitive_data(log_text, context="agent run #42")
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 

@@ -3,8 +3,6 @@
 Based on deepagents' pattern (tests/unit_tests/smoke_tests/test_system_prompt.py).
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

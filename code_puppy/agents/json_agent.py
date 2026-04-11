@@ -23,7 +23,7 @@ class JSONAgent(BaseAgent):
         self._config = self._load_config()
         self._validate_config()
 
-    def _load_config(self) -> Dict:
+    def _load_config(self) -> dict:
         """Load configuration from JSON file."""
         try:
             with open(self.json_path, "r", encoding="utf-8") as f:
@@ -122,7 +122,7 @@ class JSONAgent(BaseAgent):
         """Get custom user prompt from JSON config."""
         return self._config.get("user_prompt")
 
-    def get_tools_config(self) -> Dict | None:
+    def get_tools_config(self) -> dict | None:
         """Get tool configuration from JSON config."""
         return self._config.get("tools_config")
 

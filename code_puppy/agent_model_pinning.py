@@ -10,8 +10,6 @@ For JSON agents, there is a single source of truth:
 For built-in agents, the existing config pinning behavior is preserved.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from pathlib import Path

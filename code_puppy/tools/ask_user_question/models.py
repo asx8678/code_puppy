@@ -1,5 +1,7 @@
 """Pydantic models for the ask_user_question tool."""
 
+from __future__ import annotations
+
 import re
 from typing import TYPE_CHECKING, Annotated, Any
 

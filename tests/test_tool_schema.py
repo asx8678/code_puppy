@@ -1,6 +1,6 @@
 """Tests for tool_schema module."""
 
-from typing import Annotated, Optional
+from typing import Annotated
 
 import pytest
 
@@ -95,9 +95,9 @@ class TestInferSchemaFromFunction:
         assert mapping_param.type == "object"
 
     def test_optional_union_type(self):
-        """Test Optional[T] handling."""
+        """Test T | None handling."""
 
-        def with_optional(name: Optional[str] = None) -> None:
+        def with_optional(name: str | None = None) -> None:
             """With optional."""
             pass
 

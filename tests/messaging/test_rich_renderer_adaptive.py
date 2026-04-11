@@ -1,7 +1,5 @@
 """Tests for adaptive rendering in rich_renderer (bd code_puppy-6ig)."""
 
-from __future__ import annotations
-
 from io import StringIO
 from unittest.mock import patch
 

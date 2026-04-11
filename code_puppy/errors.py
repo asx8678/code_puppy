@@ -20,8 +20,6 @@ Exit code mapping (matches gemini-cli):
     130 - Cancelled by user (standard SIGINT code)
 """
 
-from __future__ import annotations
-
 __all__ = [
     "FatalError",
     "FatalAuthenticationError",

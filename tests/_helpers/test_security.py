@@ -1,7 +1,5 @@
 """Tests for the security test helper itself."""
 
-from __future__ import annotations
-
 import pytest
 
 from tests._helpers.security import (

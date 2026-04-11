@@ -6,8 +6,6 @@ Covers:
 - build_execution_waves: linear, diamond, independent, cycles, complex scenarios
 """
 
-from __future__ import annotations
-
 import pytest
 
 from code_puppy.utils.dag import (

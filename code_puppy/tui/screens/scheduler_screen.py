@@ -13,8 +13,6 @@ Key bindings:
 Wired via: /scheduler → app.py pushes SchedulerScreen
 """
 
-from __future__ import annotations
-
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.widgets import Footer, RichLog, Static

@@ -9,8 +9,6 @@ Extracted from ``code_puppy.plugins.shell_safety`` so that core modules
 (e.g. ``policy_engine.py``) can use it without importing from plugins.
 """
 
-from __future__ import annotations
-
 
 def split_compound_command(command: str) -> list[str]:
     """Split a compound shell command into individual sub-commands.

@@ -8,8 +8,6 @@ This module intentionally avoids eager imports of heavy submodules
 ~0.3-0.5s for simple operations like --help and version checks.
 """
 
-from __future__ import annotations
-
 import importlib.metadata
 from typing import TYPE_CHECKING, Any
 

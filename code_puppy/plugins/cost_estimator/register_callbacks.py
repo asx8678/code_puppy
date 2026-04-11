@@ -9,8 +9,6 @@ Registers:
 Inspired by Agentless ``--mock`` flag and token counting pattern.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 

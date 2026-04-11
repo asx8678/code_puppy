@@ -29,13 +29,12 @@ Examples:
 
 import os
 from pathlib import Path
-from typing import Optional
 
 
 __all__ = ["get_first_env", "env_bool", "env_int", "env_path"]
 
 
-def get_first_env(*names: str) -> Optional[str]:
+def get_first_env(*names: str) -> str | None:
     """Return the first non-empty environment variable among names.
 
     Useful for supporting legacy names alongside new ones:

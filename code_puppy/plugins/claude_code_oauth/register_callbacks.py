@@ -9,7 +9,7 @@ import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Dict
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from code_puppy.callbacks import register_callback
@@ -302,7 +302,7 @@ def _handle_custom_command(command: str, name: str) -> bool | None:
     return None
 
 
-def _create_claude_code_model(model_name: str, model_config: Dict, config: Dict) -> Any:
+def _create_claude_code_model(model_name: str, model_config: dict, config: dict) -> Any:
     """Create a Claude Code model instance.
 
     This handler is registered via the 'register_model_type' callback to handle

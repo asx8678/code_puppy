@@ -4,12 +4,12 @@ This module provides standalone functions for building symbol hierarchies
 that work with both SymbolInfo dataclass objects and plain dictionaries.
 """
 
-from typing import Any, List, TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 
 
-def build_symbol_hierarchy(symbols: List[T]) -> List[T]:
+def build_symbol_hierarchy(symbols: list[T]) -> list[T]:
     """Build parent-child hierarchy from a flat symbol list.
 
     Supports both SymbolInfo dataclass objects and plain dictionaries.
@@ -33,8 +33,8 @@ def build_symbol_hierarchy(symbols: List[T]) -> List[T]:
 
     sorted_symbols = sorted(symbols, key=sort_key)
 
-    root_items: List[T] = []
-    stack: List[T] = []
+    root_items: list[T] = []
+    stack: list[T] = []
 
     for symbol in sorted_symbols:
         # Find parent by checking containment

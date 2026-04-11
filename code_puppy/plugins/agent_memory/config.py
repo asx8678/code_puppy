@@ -19,14 +19,8 @@ Example usage:
     ...     print(f"Debouncing for {config.debounce_seconds}s")
 """
 
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -52,7 +46,7 @@ class MemoryConfig:
     debounce_seconds: int = 30
     max_facts: int = 50
     token_budget: int = 500
-    extraction_model: Optional[str] = None
+    extraction_model: str | None = None
     min_confidence: float = 0.5
     debounce_ms: int = 30000
     extraction_enabled: bool = True

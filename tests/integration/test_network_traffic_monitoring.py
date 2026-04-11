@@ -5,8 +5,6 @@ when processing a simple message. The goal is to identify all external domains c
 so we can build proper assertions and understand the dependency chain.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import socket

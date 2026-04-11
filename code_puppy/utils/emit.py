@@ -5,8 +5,6 @@ the full messaging system may not be available or to avoid circular imports.
 All functions delegate to the main messaging module when available.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 

@@ -1,7 +1,5 @@
 """Tests for the remote-backed skill catalog adapter."""
 
-from __future__ import annotations
-
 import importlib
 
 import code_puppy.plugins.agent_skills.remote_catalog as rc

@@ -8,7 +8,6 @@ Also includes LongSpinnerWithWarning variant that flashes a warning after 3s.
 import asyncio
 import itertools
 import logging
-from typing import Optional
 
 from .console_spinner import ConsoleSpinner
 from .spinner_base import SpinnerBase
@@ -23,7 +22,7 @@ _active_spinners = []
 # determine if it's stale.
 _warning_loop_counter: itertools.count = itertools.count(1)
 _current_warning_loop: int = 0
-_current_warning_task: Optional[asyncio.Task] = None
+_current_warning_task: asyncio.Task | None = None
 
 
 def register_spinner(spinner):

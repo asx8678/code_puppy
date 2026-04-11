@@ -1,7 +1,5 @@
 """Tests for HMAC-SHA256 integrity check on session files (msgpack format)."""
 
-from __future__ import annotations
-
 import hmac
 import pickle
 import warnings

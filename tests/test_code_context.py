@@ -35,7 +35,6 @@ def sample_python_file():
     content = '''
 """Sample module for testing."""
 import os
-from typing import List
 
 class MyClass:
     """A sample class."""

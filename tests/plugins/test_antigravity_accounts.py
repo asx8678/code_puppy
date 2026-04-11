@@ -1,7 +1,5 @@
 """Comprehensive test coverage for Antigravity multi-account manager."""
 
-from __future__ import annotations
-
 import time
 
 import pytest

@@ -17,8 +17,6 @@ and returns a list of Subtask dataclasses.
 Also parses `### Remove Tasks` sections that list tasks to remove.
 """
 
-from __future__ import annotations
-
 import logging
 import re
 from dataclasses import dataclass, field

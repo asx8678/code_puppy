@@ -1,7 +1,5 @@
 """Plugin that adds /plan and /lead shortcuts for quick agent switching."""
 
-from __future__ import annotations
-
 import uuid
 from typing import Literal
 

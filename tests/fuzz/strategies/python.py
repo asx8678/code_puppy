@@ -5,8 +5,6 @@ This module provides Hypothesis strategies to generate valid Python
 source code for property-based testing of symbol extraction.
 """
 
-from __future__ import annotations
-
 from hypothesis import strategies as st
 
 from .common import python_identifiers
