@@ -8,12 +8,10 @@ When the buffer is full, push() evicts the oldest item (head) and
 unshift() evicts the newest item (tail).
 """
 
-from typing import Generic, Iterator, TypeVar, overload
-
-T = TypeVar("T")
+from typing import Iterator, overload
 
 
-class RingBuffer(Generic[T]):
+class RingBuffer[T]:
     """Fixed-capacity circular buffer with O(1) push/pop/shift/unshift.
 
     Internally the buffer is stored as a pre-allocated list together with
