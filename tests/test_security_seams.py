@@ -482,15 +482,17 @@ class TestMalformedSessionHandling:
 
     def test_tampered_hmac_rejected(self, tmp_path):
         """Test that tampered HMAC causes rejection."""
-        # Create a valid session with HMAC
+        # Create a valid session with HMAC (JSON format)
+        import json
+        from code_puppy.session_storage import _JSON_MAGIC
         data = {"messages": [], "compacted_hashes": []}
-        msgpack_data = msgpack.packb(data, use_bin_type=True)
-        hmac_sig = _compute_hmac(_get_hmac_key(), msgpack_data)
+        json_data = json.dumps(data).encode("utf-8")
+        hmac_sig = _compute_hmac(_get_hmac_key(), json_data)
 
         # Tamper with the data but keep original HMAC
         tampered_data = b"TAMPERED_DATA"
         tampered_file = tmp_path / "tampered.pkl"
-        tampered_file.write_bytes(_LEGACY_MSGPACK_MAGIC + hmac_sig + tampered_data)
+        tampered_file.write_bytes(_JSON_MAGIC + hmac_sig + tampered_data)
 
         # Move to sessions dir
         session_dir = tmp_path / "sessions"
@@ -547,7 +549,7 @@ class TestMalformedSessionHandling:
 
         # Create a file that's way larger than expected
         # (but not so large it crashes the test runner)
-        huge_data = _LEGACY_MSGPACK_MAGIC + b"\x00" * 32 + b"\x82" + b"\xa8messages" + b"\x90"
+        huge_data = _JSON_MAGIC + b"\x00" * 32 + b"\x82" + b"\xa8messages" + b"\x90"
         # Add padding to make it large
         huge_data += b"\x00" * (10 * 1024 * 1024)  # 10MB of padding
 

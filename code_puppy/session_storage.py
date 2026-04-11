@@ -215,7 +215,7 @@ def _load_raw_bytes(raw: bytes) -> Any:
             raise ValueError(
                 "Session file HMAC integrity check failed — file may be corrupted or tampered"
             )
-        return json.loads(json_view)
+        return json.loads(bytes(json_view))
 
     # Legacy msgpack format (backward compatibility)
     if raw.startswith(_LEGACY_MSGPACK_MAGIC):

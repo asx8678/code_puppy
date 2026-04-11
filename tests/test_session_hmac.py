@@ -245,6 +245,7 @@ class TestPreHmacMsgpackCompat:
 
     def test_pre_hmac_msgpack_preserves_complex_data(self) -> None:
         """Pre-HMAC fallback correctly deserializes non-trivial payloads."""
+        import msgpack
         original = {
             "messages": [
                 {"kind": "request", "parts": [{"content": "hello"}]},
@@ -270,7 +271,7 @@ class TestPreHmacMsgpackCompat:
     def test_valid_hmac_still_preferred_over_fallback(self) -> None:
         """Files with valid HMAC load via the primary path, not the fallback."""
         original = {"messages": ["new"], "compacted_hashes": []}
-        raw = _make_msgpack_data(original)
+        raw = _make_json_data(original)
 
         # Should load without any deprecation warning
         with warnings.catch_warnings(record=True) as w:
