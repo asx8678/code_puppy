@@ -117,14 +117,15 @@ def _load_session_sync(file_path: Path) -> Any:
     Delegates to :func:`code_puppy.session_storage._load_raw_bytes` so that
     the API loader stays in sync with the on-disk format actually written by
     :func:`session_storage.save_session`. That format is
-    ``MSGPACK\\x01 + HMAC + msgpack`` stored in the ``.pkl`` file itself —
+    ``JSONV\\x01\\x00\\x00 + HMAC + JSON`` stored in the ``.pkl`` file itself —
     not a ``.msgpack`` sidecar. The previous implementation only looked at a
     sidecar that save_session never creates, so freshly-saved sessions
     appeared as "legacy pickle" and failed to load.
     """
     from code_puppy.session_storage import (
+        _JSON_MAGIC,
+        _LEGACY_MSGPACK_MAGIC,
         _LEGACY_SIGNED_HEADER,
-        _MSGPACK_MAGIC,
         _load_raw_bytes,
         _parse_session_payload,
     )
@@ -134,14 +135,17 @@ def _load_session_sync(file_path: Path) -> Any:
 
     raw = file_path.read_bytes()
 
-    # Reject anything that isn't the current msgpack+HMAC format with a
-    # clear message. _load_raw_bytes already refuses legacy pickle formats
-    # for RCE safety; we just forward the error unchanged.
-    if not raw.startswith(_MSGPACK_MAGIC) and not raw.startswith(_LEGACY_SIGNED_HEADER):
+    # Accept current JSON format or legacy msgpack format for backward compatibility.
+    # Reject legacy pickle formats for RCE safety.
+    if not (
+        raw.startswith(_JSON_MAGIC)
+        or raw.startswith(_LEGACY_MSGPACK_MAGIC)
+        or raw.startswith(_LEGACY_SIGNED_HEADER)
+    ):
         # Probably a raw pickle file from a pre-migration install. Be
         # explicit about why we won't load it.
         raise ValueError(
-            "Session file is not in the expected msgpack+HMAC format. "
+            "Session file is not in the expected JSON+HMAC format. "
             "Legacy pickle sessions are no longer supported (RCE risk)."
         )
 

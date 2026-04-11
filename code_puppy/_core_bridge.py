@@ -29,7 +29,7 @@ try:
     )
 
     RUST_AVAILABLE = True
-except ImportError:
+except (ImportError, SystemError):
     RUST_AVAILABLE = False
     MessageBatch = None  # type: ignore[assignment,misc]
 
@@ -56,7 +56,7 @@ try:
     )
 
     HASHLINE_RUST_AVAILABLE = True
-except ImportError:
+except (ImportError, SystemError):
     HASHLINE_RUST_AVAILABLE = False
     compute_line_hash = None  # type: ignore[assignment]
     format_hashlines = None  # type: ignore[assignment]

@@ -1,7 +1,6 @@
 """Tests for session_storage.py corruption & edge-case paths.
 
 Covers the exception branches that the main test suite doesn't exercise:
-- _msgpack_default with unsupported type
 - _deserialize_messages exception fallback
 - save_session fallback when ModelMessagesTypeAdapter.dump_python fails
 - _parse_session_payload with legacy list format
@@ -10,6 +9,7 @@ Covers the exception branches that the main test suite doesn't exercise:
 - restore_autosave_interactively exception paths
 """
 
+import json
 import sys
 import pickle
 from datetime import datetime
@@ -17,17 +17,16 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import msgpack
 import pytest
 
 from code_puppy.session_storage import (
-    _MSGPACK_MAGIC,
+    _LEGACY_MSGPACK_MAGIC,
+    _JSON_MAGIC,
     SessionMetadata,
     _compute_hmac,
     _get_hmac_key,
     _deserialize_messages,
     _load_raw_bytes,
-    _msgpack_default,
     _parse_session_payload,
     cleanup_sessions,
     load_session,
@@ -36,21 +35,7 @@ from code_puppy.session_storage import (
 )
 
 
-# ---------------------------------------------------------------------------
-# _msgpack_default
-# ---------------------------------------------------------------------------
 
-
-class TestMsgpackDefault:
-    def test_datetime_serialized_as_isoformat(self):
-        dt = datetime(2025, 5, 17, 12, 30, 45)
-        result = _msgpack_default(dt)
-        assert result == "2025-05-17T12:30:45"
-
-    def test_unsupported_type_raises_type_error(self):
-        """Line 30: raise TypeError for non-datetime objects."""
-        with pytest.raises(TypeError, match="can not serialize 'set' object"):
-            _msgpack_default({1, 2, 3})
 
 
 # ---------------------------------------------------------------------------
@@ -99,21 +84,33 @@ class TestDeserializeMessages:
 
 
 class TestLoadRawBytes:
-    def test_msgpack_format(self, tmp_path):
-        """Loading msgpack format with valid HMAC succeeds."""
+    def test_json_format(self, tmp_path):
+        """Loading JSON format with valid HMAC succeeds."""
+        payload = {"messages": [{"kind": "request", "content": "hi"}]}
+        json_data = json.dumps(payload).encode("utf-8")
+        hmac_sig = _compute_hmac(_get_hmac_key(), json_data)
+        raw = _JSON_MAGIC + hmac_sig + json_data
+        result = _load_raw_bytes(raw)
+        assert isinstance(result, dict)
+        assert "messages" in result
+
+    def test_legacy_msgpack_format(self, tmp_path):
+        """Loading legacy msgpack format still works for backward compat."""
+        import msgpack
         payload = {"messages": [{"kind": "request", "content": "hi"}]}
         msgpack_data = msgpack.packb(payload, use_bin_type=True)
         hmac_sig = _compute_hmac(_get_hmac_key(), msgpack_data)
-        raw = _MSGPACK_MAGIC + hmac_sig + msgpack_data
+        raw = _LEGACY_MSGPACK_MAGIC + hmac_sig + msgpack_data
         result = _load_raw_bytes(raw)
         assert isinstance(result, dict)
         assert "messages" in result
 
     def test_plain_pickle(self, tmp_path):
+        """Plain pickle format is rejected for security."""
         data = {"messages": ["hello"]}
         raw = pickle.dumps(data)
-        result = _load_raw_bytes(raw)
-        assert result == data
+        with pytest.raises(ValueError, match="pickle|RCE|security|CVE"):
+            _load_raw_bytes(raw)
 
 
 # ---------------------------------------------------------------------------

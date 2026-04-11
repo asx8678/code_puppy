@@ -23,7 +23,11 @@ import httpx
 from functools import partial
 from pathlib import Path
 
-from dbos import DBOS, SetWorkflowID
+try:
+    from dbos import DBOS, SetWorkflowID
+except ImportError:
+    DBOS = None  # type: ignore[assignment,misc]
+    SetWorkflowID = None  # type: ignore[assignment,misc]
 from pydantic import BaseModel
 
 # Import Agent from pydantic_ai to create temporary agents for invocation

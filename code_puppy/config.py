@@ -400,12 +400,24 @@ DBOS_DATABASE_URL = os.environ.get(
 # Default: True (DBOS enabled) unless explicitly disabled.
 
 
-# Boolean config getters generated via factory
-get_use_dbos = _make_bool_getter(
-    "enable_dbos",
-    default=True,
-    doc="""Return True if DBOS should be used based on 'enable_dbos' (default True).""",
-)
+@_registered_cache
+def get_use_dbos() -> bool:
+    """Return True if DBOS should be used.
+
+    Returns True only when BOTH conditions are met:
+    1. 'enable_dbos' is not explicitly set to false in puppy.cfg (default: true)
+    2. The dbos package is actually installed
+
+    This allows dbos to be an optional dependency — users without it
+    installed will never hit dbos-related import errors.
+    """
+    if not _is_truthy(get_value("enable_dbos"), default=True):
+        return False
+    try:
+        import dbos as _dbos  # noqa: F811
+        return True
+    except ImportError:
+        return False
 
 get_subagent_verbose = _make_bool_getter(
     "subagent_verbose",

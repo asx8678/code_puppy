@@ -16,7 +16,11 @@ from typing import Any, Sequence
 
 import mcp
 import pydantic
-from dbos import DBOS, SetWorkflowID
+try:
+    from dbos import DBOS, SetWorkflowID
+except ImportError:
+    DBOS = None  # type: ignore[assignment,misc]
+    SetWorkflowID = None  # type: ignore[assignment,misc]
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai import (
     BinaryContent,
@@ -26,7 +30,10 @@ from pydantic_ai import (
     UsageLimitExceeded,
     UsageLimits,
 )
-from pydantic_ai.durable_exec.dbos import DBOSAgent
+try:
+    from pydantic_ai.durable_exec.dbos import DBOSAgent
+except ImportError:
+    DBOSAgent = None  # type: ignore[assignment,misc]
 
 # Rust acceleration bridge (optional - falls back to Python)
 from code_puppy import _core_bridge
@@ -2230,7 +2237,7 @@ class BaseAgent(ABC, AgentPromptMixin):
             return p_agent
 
     # It's okay to decorate it with DBOS.step even if not using DBOS; the decorator is a no-op in that case.
-    @DBOS.step()
+    @(DBOS.step() if DBOS is not None else lambda f: f)
     def message_history_accumulator(self, ctx: RunContext, messages: list[Any]):
         _message_history = self.get_message_history()
 

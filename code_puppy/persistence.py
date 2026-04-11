@@ -14,16 +14,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-import msgpack
-
-# Try to import orjson for faster JSON serialization, fallback to stdlib json
-try:
-    import orjson
-    _HAS_ORJSON = True
-except ImportError:
-    orjson = None  # type: ignore[misc,assignment]
-    _HAS_ORJSON = False
-
 logger = logging.getLogger(__name__)
 
 # Cache of directories that have already been created to avoid redundant mkdir calls
@@ -163,8 +153,6 @@ def atomic_write_json(
 ) -> None:
     """Write JSON file atomically.
 
-    Uses orjson for faster serialization if available, with fallback to stdlib json.
-
     Args:
         path: Target file path
         data: JSON-serializable data
@@ -175,22 +163,11 @@ def atomic_write_json(
         OSError: If write fails
         TypeError: If data is not JSON-serializable
     """
-    # Normalize path to Path object
     path_obj = Path(path)
-    
+
     try:
-        if _HAS_ORJSON:
-            # orjson.dumps returns bytes, with options for indentation
-            option = orjson.OPT_INDENT_2 if indent == 2 else 0
-            if default:
-                content_bytes = orjson.dumps(data, default=default, option=option)
-            else:
-                content_bytes = orjson.dumps(data, option=option)
-            atomic_write_bytes(path_obj, content_bytes)
-        else:
-            # Fallback to stdlib json
-            content = json.dumps(data, indent=indent, default=default)
-            atomic_write_text(path_obj, content)
+        content = json.dumps(data, indent=indent, default=default)
+        atomic_write_text(path_obj, content)
     except (TypeError, ValueError) as e:
         raise TypeError(f"Data is not JSON-serializable: {e}") from e
 
@@ -198,21 +175,24 @@ def atomic_write_json(
 def atomic_write_msgpack(
     path: Path, data: Any, default: Callable[[Any], Any] | None = None
 ) -> None:
-    """Write msgpack file atomically.
+    """Write JSON file atomically (binary output).
+
+    Historical name kept for API compatibility. Now uses stdlib json
+    instead of msgpack for free-threaded Python compatibility.
 
     Args:
         path: Target file path
-        data: msgpack-serializable data
+        data: JSON-serializable data
         default: Optional serializer for custom types
 
     Raises:
         OSError: If write fails
-        TypeError: If data is not msgpack-serializable
+        TypeError: If data is not JSON-serializable
     """
     try:
-        packed = msgpack.packb(data, use_bin_type=True, default=default)
+        packed = json.dumps(data, separators=(",", ":"), default=default or str).encode("utf-8")
     except (TypeError, ValueError) as e:
-        raise TypeError(f"Data is not msgpack-serializable: {e}") from e
+        raise TypeError(f"Data is not JSON-serializable: {e}") from e
 
     atomic_write_bytes(path, packed)
 
@@ -241,14 +221,17 @@ def read_json(path: Path, default: Any = None) -> Any:
 
 
 def read_msgpack(path: Path, default: Any = None) -> Any:
-    """Read msgpack file safely.
+    """Read JSON file safely.
+
+    Historical name kept for API compatibility. Now uses stdlib json
+    instead of msgpack for free-threaded Python compatibility.
 
     Args:
         path: File path to read
         default: Value to return if file doesn't exist or is invalid
 
     Returns:
-        Parsed msgpack data or default value
+        Parsed data or default value
     """
     path = safe_resolve_path(path)
 
@@ -257,9 +240,9 @@ def read_msgpack(path: Path, default: Any = None) -> Any:
 
     try:
         raw = path.read_bytes()
-        return msgpack.unpackb(raw, raw=False)
-    except (msgpack.ExtraData, msgpack.OutOfData, OSError, ValueError) as e:
-        logger.warning(f"Failed to read msgpack from {path}: {e}")
+        return json.loads(raw)
+    except (json.JSONDecodeError, OSError, ValueError) as e:
+        logger.warning(f"Failed to read data from {path}: {e}")
         return default
 
 
@@ -293,7 +276,7 @@ async def atomic_write_msgpack_async(
 
     Args:
         path: Target file path
-        data: msgpack-serializable data
+        data: JSON-serializable data
         default: Optional serializer for custom types
     """
     await asyncio.to_thread(atomic_write_msgpack, path, data, default)
@@ -320,6 +303,6 @@ async def read_msgpack_async(path: Path, default: Any = None) -> Any:
         default: Value to return if file doesn't exist or is invalid
 
     Returns:
-        Parsed msgpack data or default value
+        Parsed JSON data or default value
     """
     return await asyncio.to_thread(read_msgpack, path, default)

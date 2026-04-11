@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "turbo_parse"))
 
 try:
     import turbo_parse
-except ImportError:
+except (ImportError, SystemError):
     pytest.skip("turbo_parse module not available", allow_module_level=True)
 
 

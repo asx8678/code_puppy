@@ -1,17 +1,18 @@
-"""Tests for HMAC-SHA256 integrity check on session files (msgpack format)."""
+"""Tests for HMAC-SHA256 integrity check on session files."""
 
 import hmac
+import json
 import pickle
 import warnings
 from pathlib import Path
 
-import msgpack
 import pytest
 
 from unittest.mock import patch
 
 from code_puppy.session_storage import (
-    _MSGPACK_MAGIC,
+    _JSON_MAGIC,
+    _LEGACY_MSGPACK_MAGIC,
     _compute_hmac,
     _load_raw_bytes,
     load_session,
@@ -38,11 +39,11 @@ def _token_estimator(msg: object) -> int:
     return len(str(msg))
 
 
-def _make_msgpack_data(data: dict) -> bytes:
-    """Create properly formatted msgpack session data with HMAC."""
-    msgpack_bytes = msgpack.packb(data, use_bin_type=True)
-    hmac_sig = _compute_hmac(_TEST_HMAC_KEY, msgpack_bytes)
-    return _MSGPACK_MAGIC + hmac_sig + msgpack_bytes
+def _make_json_data(data: dict) -> bytes:
+    """Create properly formatted JSON session data with HMAC."""
+    json_bytes = json.dumps(data, separators=(",", ":")).encode("utf-8")
+    hmac_sig = _compute_hmac(_TEST_HMAC_KEY, json_bytes)
+    return _JSON_MAGIC + hmac_sig + json_bytes
 
 
 # ---------------------------------------------------------------------------
@@ -79,17 +80,17 @@ class TestComputeHmac:
 
 
 class TestLoadRawBytes:
-    def test_loads_valid_msgpack_with_hmac(self) -> None:
-        """Valid msgpack format with correct HMAC loads successfully."""
+    def test_loads_valid_json_with_hmac(self) -> None:
+        """Valid JSON format with correct HMAC loads successfully."""
         original = {"messages": [1, 2, 3], "compacted_hashes": []}
-        raw = _make_msgpack_data(original)
+        raw = _make_json_data(original)
         result = _load_raw_bytes(raw)
         assert result == original
 
     def test_rejects_tampered_payload(self) -> None:
         """Tampering with payload bytes should raise ValueError."""
         original = {"secret": "data"}
-        raw = bytearray(_make_msgpack_data(original))
+        raw = bytearray(_make_json_data(original))
         # Flip a byte in the payload area (after magic + hmac)
         raw[-1] ^= 0xFF
         with pytest.raises(ValueError, match="HMAC integrity check failed"):
@@ -98,9 +99,9 @@ class TestLoadRawBytes:
     def test_rejects_tampered_hmac(self) -> None:
         """Tampering with HMAC bytes should raise ValueError."""
         original = {"secret": "data"}
-        raw = bytearray(_make_msgpack_data(original))
+        raw = bytearray(_make_json_data(original))
         # Flip a byte in the HMAC area (after magic, before payload)
-        raw[len(_MSGPACK_MAGIC)] ^= 0xFF
+        raw[len(_JSON_MAGIC)] ^= 0xFF
         with pytest.raises(ValueError, match="HMAC integrity check failed"):
             _load_raw_bytes(bytes(raw))
 
@@ -131,8 +132,8 @@ class TestLoadRawBytes:
 
 
 class TestSaveLoadIntegration:
-    def test_saved_file_has_msgpack_magic(self, tmp_path: Path) -> None:
-        """Saved file must begin with MSGPACK magic header."""
+    def test_saved_file_has_json_magic(self, tmp_path: Path) -> None:
+        """Saved file must begin with JSON magic header."""
         history = ["msg1", "msg2"]
         save_session(
             history=history,
@@ -142,8 +143,8 @@ class TestSaveLoadIntegration:
             token_estimator=_token_estimator,
         )
         raw = (tmp_path / "test_sig.pkl").read_bytes()
-        assert raw.startswith(_MSGPACK_MAGIC), (
-            "Saved file must begin with MSGPACK magic header"
+        assert raw.startswith(_JSON_MAGIC), (
+            "Saved file must begin with JSON magic header"
         )
 
     def test_saved_file_has_valid_hmac(self, tmp_path: Path) -> None:
@@ -158,14 +159,14 @@ class TestSaveLoadIntegration:
         )
         raw = (tmp_path / "test_hmac.pkl").read_bytes()
 
-        # Verify structure: MAGIC + HMAC(32) + msgpack
-        assert raw.startswith(_MSGPACK_MAGIC)
-        offset = len(_MSGPACK_MAGIC)
+        # Verify structure: MAGIC + HMAC(32) + json
+        assert raw.startswith(_JSON_MAGIC)
+        offset = len(_JSON_MAGIC)
         stored_hmac = raw[offset : offset + 32]
-        msgpack_data = raw[offset + 32 :]
+        json_data = raw[offset + 32 :]
 
         # Verify HMAC
-        expected_hmac = _compute_hmac(_TEST_HMAC_KEY, msgpack_data)
+        expected_hmac = _compute_hmac(_TEST_HMAC_KEY, json_data)
         assert hmac.compare_digest(stored_hmac, expected_hmac)
 
     def test_load_session_round_trip(self, tmp_path: Path) -> None:
@@ -228,10 +229,11 @@ class TestPreHmacMsgpackCompat:
 
     def test_loads_pre_hmac_msgpack_with_warning(self) -> None:
         """Pre-HMAC msgpack files (MAGIC + raw msgpack, no HMAC) load with deprecation warning."""
+        import msgpack
         original = {"messages": ["old", "session"], "compacted_hashes": []}
         # Build pre-HMAC format: MAGIC + msgpack (no HMAC)
         msgpack_bytes = msgpack.packb(original, use_bin_type=True)
-        raw = _MSGPACK_MAGIC + msgpack_bytes
+        raw = _LEGACY_MSGPACK_MAGIC + msgpack_bytes
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
@@ -251,7 +253,7 @@ class TestPreHmacMsgpackCompat:
             "compacted_hashes": ["abc123", "def456"],
         }
         msgpack_bytes = msgpack.packb(original, use_bin_type=True)
-        raw = _MSGPACK_MAGIC + msgpack_bytes
+        raw = _LEGACY_MSGPACK_MAGIC + msgpack_bytes
 
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
@@ -261,7 +263,7 @@ class TestPreHmacMsgpackCompat:
     def test_rejects_corrupted_pre_hmac_msgpack(self) -> None:
         """Corrupted pre-HMAC msgpack files still raise ValueError."""
         # Build something that starts with MAGIC but has garbage after
-        raw = _MSGPACK_MAGIC + b"\xff\xfe\xfd" * 20
+        raw = _LEGACY_MSGPACK_MAGIC + b"\xff\xfe\xfd" * 20
         with pytest.raises(ValueError, match="HMAC integrity check failed"):
             _load_raw_bytes(raw)
 

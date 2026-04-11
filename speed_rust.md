@@ -754,7 +754,7 @@ fn prune_and_filter(
 | Token estimation (200 msgs) | ~50-100ms | ~2-5ms | 10-30x |
 | Message hashing (200 msgs) | ~30-60ms | ~1-3ms | 20-30x |
 | Pruning + filtering | ~15-30ms (3 passes) | ~1-2ms (1 pass) | 15x |
-| Session serialization | ~100-200ms (pickle) | ~10-20ms (msgpack) | 10x |
+| Session serialization | ~100-200ms (pickle) | ~15-30ms (json) | 5-7x |
 | **Total hot path per turn** | **~200-400ms** | **~15-30ms** | **~13x** |
 
 ---

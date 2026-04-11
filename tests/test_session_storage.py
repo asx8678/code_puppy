@@ -5,7 +5,6 @@ import pickle
 import warnings
 from pathlib import Path
 
-import msgpack
 import pytest
 
 from code_puppy.session_storage import (
@@ -144,13 +143,13 @@ def test_save_session_with_pydantic_messages(
     )
     assert metadata.message_count == 4
 
-    # Verify the on-disk bytes are valid msgpack (strip the magic header and HMAC first)
-    from code_puppy.session_storage import _MSGPACK_MAGIC
+    # Verify the on-disk bytes are valid JSON (strip the magic header and HMAC first)
+    from code_puppy.session_storage import _JSON_MAGIC
 
     raw = metadata.pickle_path.read_bytes()
-    assert raw.startswith(_MSGPACK_MAGIC), "File should start with msgpack magic header"
+    assert raw.startswith(_JSON_MAGIC), "File should start with JSON magic header"
     # Skip magic (8 bytes) + HMAC (32 bytes) = 40 bytes
-    data = msgpack.unpackb(raw[len(_MSGPACK_MAGIC) + 32 :], raw=False)
+    data = json.loads(raw[len(_JSON_MAGIC) + 32 :])
     assert len(data["messages"]) == 4
     # Each message should be a dict with 'kind' field
     assert data["messages"][0]["kind"] == "request"
@@ -204,32 +203,32 @@ def test_pydantic_messages_with_compacted_hashes(
 
 
 # ---------------------------------------------------------------------------
-# MessagePack format tests
+# JSON format tests
 # ---------------------------------------------------------------------------
 
 
-def test_save_session_writes_msgpack_format(
+def test_save_session_writes_json_format(
     tmp_path: Path, history: list[str], token_estimator
 ):
-    """Verify that save_session writes MessagePack data, not pickle."""
+    """Verify that save_session writes JSON data, not pickle."""
+    from code_puppy.session_storage import _JSON_MAGIC
+
     metadata = save_session(
         history=history,
-        session_name="msgpack_session",
+        session_name="json_session",
         base_dir=tmp_path,
         timestamp="2024-01-01T00:00:00",
         token_estimator=token_estimator,
     )
     raw = metadata.pickle_path.read_bytes()
+    assert raw.startswith(_JSON_MAGIC), "File should start with JSON magic header"
     # Skip magic header (8 bytes) + HMAC (32 bytes) = 40 bytes
-    msgpack_data = raw[40:]
-    # Should be valid MessagePack
-    data = msgpack.unpackb(msgpack_data, raw=False)
+    json_data = raw[len(_JSON_MAGIC) + 32:]
+    data = json.loads(json_data)
     assert "messages" in data
-    # Messages should be list (may be converted by ModelMessagesTypeAdapter)
     assert isinstance(data["messages"], list)
     assert len(data["messages"]) == len(history)
-    # Should NOT be a pickle (pickle files start with specific opcodes)
-    assert not raw.startswith(b"\x80")  # pickle protocol magic byte
+    assert not raw.startswith(b"\x80")  # not pickle
 
 
 def test_save_session_writes_compacted_hashes(
@@ -250,10 +249,10 @@ def test_save_session_writes_compacted_hashes(
     assert loaded_hashes == hashes
 
 
-def test_load_session_msgpack_round_trip(
+def test_load_session_json_round_trip(
     tmp_path: Path, history: list[str], token_estimator
 ):
-    """Full round-trip: save with MessagePack, load back, check equality."""
+    """Full round-trip: save with JSON, load back, check equality."""
     save_session(
         history=history,
         session_name="roundtrip_session",
@@ -282,14 +281,14 @@ def test_load_raw_bytes_rejects_pickle_for_security():
         _load_raw_bytes(legacy_bytes)
 
 
-def test_load_raw_bytes_prefers_msgpack():
-    """_load_raw_bytes() should use MessagePack without any warning for new data."""
-    from code_puppy.session_storage import _MSGPACK_MAGIC, _compute_hmac, _get_hmac_key
+def test_load_raw_bytes_reads_json_format():
+    """_load_raw_bytes() should read JSON format without any warning."""
+    from code_puppy.session_storage import _JSON_MAGIC, _compute_hmac, _get_hmac_key
 
     payload = {"messages": ["a", "b"], "compacted_hashes": ["x"]}
-    msgpack_data = msgpack.packb(payload, use_bin_type=True)
-    hmac_sig = _compute_hmac(_get_hmac_key(), msgpack_data)
-    full_data = _MSGPACK_MAGIC + hmac_sig + msgpack_data
+    json_data = json.dumps(payload).encode("utf-8")
+    hmac_sig = _compute_hmac(_get_hmac_key(), json_data)
+    full_data = _JSON_MAGIC + hmac_sig + json_data
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -302,35 +301,18 @@ def test_load_raw_bytes_prefers_msgpack():
     assert len(deprecation_warnings) == 0
 
 
-def test_load_session_legacy_pickle_file(tmp_path: Path, token_estimator):
-    """Loading a .pkl file that contains pickle bytes should work with a warning."""
-    history = ["msg1", "msg2"]
-    payload = {"messages": history, "compacted_hashes": []}
-    pkl_path = tmp_path / "legacy_session.pkl"
-    pkl_path.write_bytes(pickle.dumps(payload))
+def test_load_raw_bytes_reads_legacy_msgpack():
+    """_load_raw_bytes() should still read legacy msgpack format for backward compat."""
+    import msgpack
+    from code_puppy.session_storage import _LEGACY_MSGPACK_MAGIC, _compute_hmac, _get_hmac_key
 
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        loaded = load_session("legacy_session", tmp_path)
+    payload = {"messages": ["a", "b"], "compacted_hashes": ["x"]}
+    msgpack_data = msgpack.packb(payload, use_bin_type=True)
+    hmac_sig = _compute_hmac(_get_hmac_key(), msgpack_data)
+    full_data = _LEGACY_MSGPACK_MAGIC + hmac_sig + msgpack_data
 
-    assert loaded == history
-    deprecation_warnings = [
-        w for w in caught if issubclass(w.category, DeprecationWarning)
-    ]
-    assert len(deprecation_warnings) == 1
-
-
-def test_load_session_legacy_pickle_list_format(tmp_path: Path):
-    """Legacy sessions that stored a plain list (not dict) should also load."""
-    history = ["old_msg_1", "old_msg_2"]
-    pkl_path = tmp_path / "plain_list_session.pkl"
-    pkl_path.write_bytes(pickle.dumps(history))
-
-    with warnings.catch_warnings(record=True):
-        warnings.simplefilter("always")
-        loaded = load_session("plain_list_session", tmp_path)
-
-    assert loaded == history
+    result = _load_raw_bytes(full_data)
+    assert result == payload
 
 
 # ---------------------------------------------------------------------------

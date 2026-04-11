@@ -42,7 +42,7 @@ try:
     )
 
     _USING_RUST = True
-except ImportError:
+except (ImportError, SystemError):
     _rust_compute_line_hash = None
     _rust_format_hashlines = None
     _rust_strip_hashline_prefixes = None

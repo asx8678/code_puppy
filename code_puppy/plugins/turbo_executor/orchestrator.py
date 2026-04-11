@@ -35,7 +35,7 @@ try:
     from turbo_ops import read_file as turbo_read_file
 
     TURBO_OPS_AVAILABLE = True
-except ImportError:
+except (ImportError, SystemError):
     TURBO_OPS_AVAILABLE = False
     turbo_list_files = None  # type: ignore
     turbo_grep = None  # type: ignore

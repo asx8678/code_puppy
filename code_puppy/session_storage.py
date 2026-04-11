@@ -1,6 +1,6 @@
 """Shared helpers for persisting and restoring chat sessions.
 
-This module centralises the msgpack + metadata handling that used to live in
+This module centralises the JSON + metadata handling that used to live in
 both the CLI command handler and the auto-save feature. Keeping it here helps
 us avoid duplication while staying inside the Zen-of-Python sweet spot: simple
 is better than complex, nested side effects are worse than deliberate helpers.
@@ -18,14 +18,12 @@ from concurrent.futures import ThreadPoolExecutor
 from queue import Queue, Full
 
 # SECURITY FIX #zvx9: Pickle has been completely removed to prevent RCE attacks.
-# Session files now use only secure msgpack serialization with HMAC integrity.
+# Session files now use only secure JSON serialization with HMAC integrity.
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-
-import msgpack
 
 # ----- ThreadPoolExecutor for async autosave -----
 # Single-threaded executor for background session saves to avoid blocking the main thread
@@ -109,19 +107,15 @@ def save_session_async(
     _autosave_executor.submit(_do_save)
 
 
-# ----- msgpack helpers -----
+# ----- serialization helpers -----
 
-# Magic header that marks files written in the new msgpack format.
-_MSGPACK_MAGIC = b"MSGPACK\x01"
+# Magic header for current JSON+HMAC format.
+_JSON_MAGIC = b"JSONV\x01\x00\x00"
+
+# Legacy magic header for backward-compat reading of old msgpack sessions.
+_LEGACY_MSGPACK_MAGIC = b"MSGPACK\x01"
 
 logger = logging.getLogger(__name__)
-
-
-def _msgpack_default(obj: Any) -> Any:
-    """Handle types that msgpack can't serialize natively."""
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    raise TypeError(f"can not serialize '{type(obj).__name__}' object")
 
 
 def _deserialize_messages(raw_messages: list) -> list:
@@ -205,37 +199,50 @@ def _get_hmac_key() -> bytes:
 
 
 def _load_raw_bytes(raw: bytes) -> Any:
-    """Deserialize session file bytes, handling msgpack and legacy-signed formats.
+    """Deserialize session file bytes, handling JSON, legacy msgpack, and legacy-signed formats.
 
     SECURITY FIX #zvx9: Pickle deserialization has been removed to prevent RCE attacks.
     Legacy pickle sessions will return an error message and empty data.
     """
-    # New msgpack format: magic header followed by HMAC + msgpack payload
-    if raw.startswith(_MSGPACK_MAGIC):
-        # Format: MAGIC (8 bytes) + HMAC (32 bytes) + msgpack payload
-        # ISSUE qyj FIX: Use memoryview for zero-copy slicing to avoid 5MB+ copies.
-        offset = len(_MSGPACK_MAGIC)
+    # Current JSON+HMAC format
+    if raw.startswith(_JSON_MAGIC):
+        offset = len(_JSON_MAGIC)
         view = memoryview(raw)
-        stored_hmac = bytes(view[offset : offset + 32])  # detach HMAC only
-        msgpack_view = view[offset + 32 :]  # zero-copy view of payload
+        stored_hmac = bytes(view[offset : offset + 32])
+        json_view = view[offset + 32 :]
+        expected_hmac = _compute_hmac(_get_hmac_key(), bytes(json_view))
+        if not hmac.compare_digest(stored_hmac, expected_hmac):
+            raise ValueError(
+                "Session file HMAC integrity check failed — file may be corrupted or tampered"
+            )
+        return json.loads(json_view)
 
-        # Verify HMAC integrity using per-install secret key
-        # Convert view to bytes for HMAC computation (still copies payload once)
+    # Legacy msgpack format (backward compatibility)
+    if raw.startswith(_LEGACY_MSGPACK_MAGIC):
+        try:
+            import msgpack
+        except ImportError:
+            raise ValueError(
+                "Session file uses legacy msgpack format but msgpack is not installed. "
+                "Install msgpack to read old sessions: pip install msgpack"
+            ) from None
+        offset = len(_LEGACY_MSGPACK_MAGIC)
+        view = memoryview(raw)
+        stored_hmac = bytes(view[offset : offset + 32])
+        msgpack_view = view[offset + 32 :]
         expected_hmac = _compute_hmac(_get_hmac_key(), bytes(msgpack_view))
         if not hmac.compare_digest(stored_hmac, expected_hmac):
-            # Backward compat: files saved after msgpack migration but
-            # before HMAC was added have format MAGIC + raw msgpack (no HMAC).
-            # Try loading from offset 8 as plain msgpack.
+            # Backward compat: pre-HMAC msgpack files
             try:
                 data = msgpack.unpackb(raw[offset:], raw=False)
             except Exception:
                 raise ValueError(
                     "Session file HMAC integrity check failed — file may be corrupted or tampered"
-                )
+                ) from None
             warnings.warn(
                 "Loading session from pre-HMAC msgpack format. "
-                "Re-save this session to add integrity protection. "
-                "Pre-HMAC msgpack support will be removed in a future version.",
+                "Re-save this session to upgrade to the new format. "
+                "Legacy msgpack support will be removed in a future version.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -260,7 +267,6 @@ def _load_raw_bytes(raw: bytes) -> Any:
         )
 
     # Plain pickle (original format) - SECURITY FIX #zvx9: Removed
-    # SECURITY: This would be an RCE vulnerability if pickle.loads() was used
     logger.error(
         "Session file uses legacy pickle format. "
         "This format is no longer supported due to security vulnerabilities (RCE risk). "
@@ -281,7 +287,7 @@ TokenEstimator = Callable[[Any], int]
 
 @dataclass(slots=True)
 class SessionPaths:
-    pickle_path: Path  # Historical name; now stores msgpack data (*.pkl extension kept for compat)
+    pickle_path: Path  # Historical name; now stores JSON data (*.pkl extension kept for compat)
     metadata_path: Path
 
 
@@ -331,9 +337,9 @@ def save_session(
     ensure_directory(base_dir)
     paths = build_session_paths(base_dir, session_name)
 
-    # Convert pydantic-ai message objects to msgpack-serializable dicts.
+    # Convert pydantic-ai message objects to JSON-serializable dicts.
     # ModelMessagesTypeAdapter handles ModelRequest/ModelResponse dataclasses
-    # that msgpack cannot serialize natively.
+    # that json.dumps cannot serialize natively.
     try:
         from pydantic_ai.messages import ModelMessagesTypeAdapter
 
@@ -354,7 +360,7 @@ def save_session(
                 # Optimized path: dump to JSON then parse directly to dicts.
                 # This avoids the expensive validate_json() -> dump_python() round-trip
                 # through pydantic model objects. We go directly from JSON bytes to
-                # plain dicts which is what msgpack needs anyway.
+                # plain dicts which is what json.dumps needs anyway.
                 json_data = ModelMessagesTypeAdapter.dump_json(history)
                 serializable_history = json.loads(json_data)
             except Exception as e2:
@@ -373,14 +379,14 @@ def save_session(
         if compacted_hashes is not None
         else [],
     }
-    msgpack_data = msgpack.packb(payload, use_bin_type=True, default=_msgpack_default)
+    serialized_data = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
 
     # Compute HMAC for integrity using per-install secret key
-    hmac_signature = _compute_hmac(_get_hmac_key(), msgpack_data)
+    hmac_signature = _compute_hmac(_get_hmac_key(), serialized_data)
 
     tmp_session = paths.pickle_path.with_suffix(".tmp")
     with tmp_session.open("wb") as session_file:
-        session_file.write(_MSGPACK_MAGIC + hmac_signature + msgpack_data)
+        session_file.write(_JSON_MAGIC + hmac_signature + serialized_data)
     tmp_session.replace(paths.pickle_path)
 
     total_tokens = (

@@ -14,7 +14,7 @@ try:
     from turbo_ops import index_directory as _rust_index_directory
     from turbo_ops import FileSummary as RustFileSummary
     TURBO_INDEXER_AVAILABLE = True
-except ImportError:
+except (ImportError, SystemError):
     TURBO_INDEXER_AVAILABLE = False
     _rust_index_directory = None
     RustFileSummary = None

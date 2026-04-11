@@ -30,15 +30,14 @@ dependencies = [
     "ripgrep==15.0.0",
     "tenacity>=9.1.4",
     "playwright>=1.58.0",
-    "dbos>=2.16.0",
     "fastapi>=0.135.2",
     "uvicorn[standard]>=0.42.0",
     "websockets>=16.0",
     "Pillow>=12.1.1",
     "anthropic==0.79.0",
-    "msgpack>=1.0.0",
     "pyjwt>=2.0,<3.0",
     "pathspec>=0.12.0",
+    "msgpack>=1.0.0",
 ]
 authors = [
     {name = "Michael Pfaffenberger"}
@@ -59,6 +58,11 @@ classifiers = [
 repository = "https://github.com/mpfaffenberger/code_puppy"
 HomePage = "https://github.com/mpfaffenberger/code_puppy"
 
+[project.optional-dependencies]
+dbos = [
+    "dbos>=2.16.0",
+    "psycopg[c]>=3.3.0",
+]
 
 [project.scripts]
 code-puppy = "code_puppy.main:main_entry"
@@ -112,6 +116,9 @@ min_coverage = 85
 
 [tool.uv]
 python-preference = "only-managed"
+override-dependencies = [
+    "psycopg[c]>=3.3.0",
+]
 
 [dependency-groups]
 dev = [

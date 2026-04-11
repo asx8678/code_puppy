@@ -25,7 +25,7 @@ try:
     )
 
     TURBO_PARSE_AVAILABLE = True
-except ImportError:
+except (ImportError, SystemError):
     TURBO_PARSE_AVAILABLE = False
 
     # Provide stub functions that return fallback values
