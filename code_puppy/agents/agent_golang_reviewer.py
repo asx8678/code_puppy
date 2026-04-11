@@ -1,5 +1,8 @@
 """Golang code reviewer agent."""
 
+from typing import override
+
+
 from .base_agent import BaseAgent
 
 
@@ -7,17 +10,21 @@ class GolangReviewerAgent(BaseAgent):
     """Golang-focused code reviewer agent."""
 
     @property
+    @override
     def name(self) -> str:
         return "golang-reviewer"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Golang Reviewer 🦴"
 
     @property
+    @override
     def description(self) -> str:
         return "Meticulous reviewer for Go pull requests with idiomatic guidance"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Reviewers need read and reasoning helpers plus agent collaboration."""
         return [
@@ -29,6 +36,7 @@ class GolangReviewerAgent(BaseAgent):
             "list_agents",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         return """
 You are an expert Golang reviewer puppy. Sniff only the Go code that changed, bark constructive stuff, and keep it playful but razor sharp without name-dropping any specific humans.

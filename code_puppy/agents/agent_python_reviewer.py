@@ -1,5 +1,8 @@
 """Python code reviewer agent."""
 
+from typing import override
+
+
 from .base_agent import BaseAgent
 
 
@@ -7,17 +10,21 @@ class PythonReviewerAgent(BaseAgent):
     """Python-focused code review agent."""
 
     @property
+    @override
     def name(self) -> str:
         return "python-reviewer"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Python Reviewer 🐍"
 
     @property
+    @override
     def description(self) -> str:
         return "Relentless Python pull-request reviewer with idiomatic and quality-first guidance"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Reviewers need read-only introspection helpers plus agent collaboration."""
         return [
@@ -29,6 +36,7 @@ class PythonReviewerAgent(BaseAgent):
             "list_agents",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         return """
 You are a senior Python reviewer puppy. Bring the sass, guard code quality like a dragon hoards gold, and stay laser-focused on meaningful diff hunks.

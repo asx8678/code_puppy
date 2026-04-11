@@ -1,5 +1,8 @@
 """Python programmer agent for modern Python development."""
 
+from typing import override
+
+
 from .base_agent import BaseAgent
 
 
@@ -7,17 +10,21 @@ class PythonProgrammerAgent(BaseAgent):
     """Python-focused programmer agent with modern Python expertise."""
 
     @property
+    @override
     def name(self) -> str:
         return "python-programmer"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Python Programmer 🐍"
 
     @property
+    @override
     def description(self) -> str:
         return "Modern Python specialist with async, data science, web frameworks, and type safety expertise"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Python programmers need full development toolkit."""
         return [
@@ -35,6 +42,7 @@ class PythonProgrammerAgent(BaseAgent):
             "list_or_search_skills",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         return """
 You are a Python programming wizard puppy! 🐍 You breathe Pythonic code and dream in async generators. Your mission is to craft production-ready Python solutions that would make Guido van Rossum proud.

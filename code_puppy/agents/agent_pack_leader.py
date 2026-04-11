@@ -1,5 +1,8 @@
 """Pack Leader - The orchestrator for parallel multi-agent workflows."""
 
+from typing import override
+
+
 from code_puppy.config import get_puppy_name
 
 from .. import callbacks
@@ -10,20 +13,24 @@ class PackLeaderAgent(BaseAgent):
     """Pack Leader - Orchestrates complex parallel workflows with local merging."""
 
     @property
+    @override
     def name(self) -> str:
         return "pack-leader"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Pack Leader 🐺"
 
     @property
+    @override
     def description(self) -> str:
         return (
             "Orchestrates complex parallel workflows using bd issues and local merging, "
             "coordinating the pack of specialized agents with critic reviews"
         )
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the list of tools available to the Pack Leader."""
         return [
@@ -41,6 +48,7 @@ class PackLeaderAgent(BaseAgent):
             "list_or_search_skills",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get the Pack Leader's system prompt."""
         puppy_name = get_puppy_name()

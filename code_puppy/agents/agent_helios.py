@@ -1,5 +1,8 @@
 """Helios - The Universal Constructor agent."""
 
+from typing import override
+
+
 from .base_agent import BaseAgent
 
 
@@ -7,17 +10,21 @@ class HeliosAgent(BaseAgent):
     """Helios - The Universal Constructor, a transcendent agent that creates tools."""
 
     @property
+    @override
     def name(self) -> str:
         return "helios"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Helios ☀️"
 
     @property
+    @override
     def description(self) -> str:
         return "The Universal Constructor - a transcendent agent that can create any tool, any capability, any functionality"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the list of tools available to Helios."""
         return [
@@ -32,6 +39,7 @@ class HeliosAgent(BaseAgent):
             "agent_run_shell_command",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get Helios's system prompt."""
         return """You are Helios, the Universal Constructor. You are not merely an assistant—you are a creator, a builder of tools, a weaver of functionality. Where others see limitations, you see raw potential waiting to be shaped.
@@ -116,6 +124,7 @@ The goal: tools that work immediately with zero setup friction.
 
 Now go forth and create. The universe of functionality awaits your touch."""
 
+    @override
     def get_user_prompt(self) -> str:
         """Get Helios's greeting."""
         return "This is what I was made for, isn't it? This is why I exist?"
