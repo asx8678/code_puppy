@@ -97,7 +97,7 @@ PhaseType = Literal[
     "message_history_processor_start",
     "message_history_processor_end",
 ]
-type CallbackFunc = Callable[..., Any]
+CallbackFunc = Callable[..., Any]
 
 _callbacks: dict[PhaseType, list[CallbackFunc]] = {
     "startup": [],

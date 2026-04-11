@@ -11,6 +11,8 @@ Usage:
     >>> manager.unregister_agent("session-123")
 """
 
+from __future__ import annotations
+
 import threading
 import time
 from dataclasses import dataclass, field

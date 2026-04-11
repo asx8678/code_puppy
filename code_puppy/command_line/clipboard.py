@@ -8,6 +8,8 @@ Also provides a thread-safe ClipboardAttachmentManager for managing
 pending clipboard image attachments in the CLI.
 """
 
+from __future__ import annotations
+
 import io
 import logging
 import subprocess

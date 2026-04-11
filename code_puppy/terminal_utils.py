@@ -3,6 +3,8 @@
 Handles Windows console mode resets and Unix terminal sanity restoration.
 """
 
+from __future__ import annotations
+
 import os
 import platform
 import subprocess

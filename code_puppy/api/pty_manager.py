@@ -4,6 +4,8 @@ Provides pseudo-terminal (PTY) functionality for interactive shell sessions
 via WebSocket connections. Supports Unix (pty module) and Windows (pywinpty).
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os

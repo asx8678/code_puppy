@@ -124,9 +124,13 @@
     
     <script>
         // Terminal configuration
+        // NOTE: sessionId starts as a placeholder and is replaced by the
+        // server-assigned id once /ws/terminal sends
+        // {"type":"session_started","session_id":"..."}. The query-param
+        // "session" is intentionally ignored — the server is authoritative.
         const CONFIG = {
             wsUrl: `ws://${window.location.host}/ws/terminal`,
-            sessionId: new URLSearchParams(window.location.search).get('session') || 'default',
+            sessionId: 'connecting…',
             theme: {
                 background: '#1e1e1e',
                 foreground: '#d4d4d4',
@@ -297,6 +301,8 @@
                             terminal.writeln(`\x1b[1;31mError: ${message.message}\x1b[0m`);
                             break;
                         case 'session_started':
+                            CONFIG.sessionId = message.session_id;
+                            if (sessionIdEl) sessionIdEl.textContent = message.session_id;
                             terminal.writeln(`\x1b[90mSession started: ${message.session_id}\x1b[0m`);
                             break;
                     }

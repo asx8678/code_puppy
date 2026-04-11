@@ -91,13 +91,22 @@ def create_app() -> FastAPI:
     # Timeout middleware - added first so it wraps everything
     app.add_middleware(TimeoutMiddleware, timeout=REQUEST_TIMEOUT)
 
-    # CORS middleware for frontend access
+    # CORS middleware for frontend access.
+    #
+    # SECURITY: The API exposes a slash-command executor and PTY WebSocket.
+    # Wildcard CORS + credentials was a cross-origin command-execution risk
+    # whenever a user had the server running and visited an untrusted site.
+    # We now restrict to an explicit localhost allow-list (override via the
+    # CODE_PUPPY_ALLOWED_ORIGINS env var) and drop credentials since the
+    # API uses no cookie-based auth.
+    from code_puppy.api.security import get_allowed_origins
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Local/trusted
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=get_allowed_origins(),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"],
     )
 
     # Include routers

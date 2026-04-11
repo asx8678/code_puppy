@@ -7,6 +7,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
+from pathlib import Path
 from typing import Callable
 
 from code_puppy.session_storage import save_session_async
