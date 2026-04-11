@@ -18,6 +18,7 @@ rayon = "1.10"
 walkdir = "2"
 regex = "1"
 chrono = { version = "0.4", features = ["serde"] }
+ignore = "0.4"
 
 [dev-dependencies]
 tempfile = "3"

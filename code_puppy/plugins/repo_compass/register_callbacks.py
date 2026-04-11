@@ -8,9 +8,18 @@ from code_puppy.callbacks import register_callback
 
 from .config import load_config
 from .formatter import format_structure_map
-from .indexer import build_structure_map
+from .turbo_indexer_bridge import build_structure_map, get_indexer_status
 
 logger = logging.getLogger(__name__)
+
+
+def _log_indexer_status():
+    """Log which indexer backend is active at startup."""
+    status = get_indexer_status()
+    if status["rust_available"]:
+        logger.debug("Repo Compass using Rust acceleration (turbo_ops)")
+    else:
+        logger.debug("Repo Compass using Python backend")
 
 
 def _build_repo_context(root: Path | None = None) -> str | None:
@@ -49,3 +58,4 @@ def _inject_repo_context(
 
 
 register_callback("get_model_system_prompt", _inject_repo_context)
+register_callback("startup", _log_indexer_status)

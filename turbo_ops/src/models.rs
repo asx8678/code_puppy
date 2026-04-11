@@ -52,6 +52,60 @@ pub struct TurboOperation {
     pub priority: u32,
 }
 
+impl TurboOperation {
+    /// Create a list_files operation
+    pub fn list_files(directory: &str, recursive: bool) -> Self {
+        Self {
+            op_type: OperationType::ListFiles,
+            args: serde_json::json!({
+                "directory": directory,
+                "recursive": recursive
+            }),
+            id: None,
+            priority: 100,
+        }
+    }
+    
+    /// Create a grep operation
+    pub fn grep(search_string: &str, directory: &str) -> Self {
+        Self {
+            op_type: OperationType::Grep,
+            args: serde_json::json!({
+                "search_string": search_string,
+                "directory": directory
+            }),
+            id: None,
+            priority: 100,
+        }
+    }
+    
+    /// Create a read_files operation
+    pub fn read_files(file_paths: Vec<String>, start_line: Option<usize>, num_lines: Option<usize>) -> Self {
+        Self {
+            op_type: OperationType::ReadFiles,
+            args: serde_json::json!({
+                "file_paths": file_paths,
+                "start_line": start_line,
+                "num_lines": num_lines
+            }),
+            id: None,
+            priority: 100,
+        }
+    }
+    
+    /// Set the operation ID
+    pub fn with_id(mut self, id: String) -> Self {
+        self.id = Some(id);
+        self
+    }
+    
+    /// Set the operation priority
+    pub fn with_priority(mut self, priority: u32) -> Self {
+        self.priority = priority;
+        self
+    }
+}
+
 fn default_priority() -> u32 {
     100
 }

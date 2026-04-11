@@ -24,10 +24,12 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 mod batch_executor;
+mod indexer;
 mod models;
 mod operations;
 
 use batch_executor::{batch_execute, batch_execute_grouped};
+use indexer::{index_directory, FileSummary};
 use models::{BatchResult, TurboOperation};
 
 /// Execute a batch of file operations.
@@ -356,6 +358,10 @@ fn turbo_ops(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(read_files, m)?)?;
     m.add_function(wrap_pyfunction!(read_file, m)?)?;
     m.add_function(wrap_pyfunction!(health_check, m)?)?;
+    
+    // Indexer functions and classes
+    m.add_function(wrap_pyfunction!(index_directory, m)?)?;
+    m.add_class::<FileSummary>()?;
 
     // Add version info
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;

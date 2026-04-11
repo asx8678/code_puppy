@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .indexer import FileSummary
+from .turbo_indexer_bridge import FileSummary
 
 
 def _detect_project_name(root: Path) -> str:
