@@ -1,5 +1,8 @@
 """Quality Assurance Kitten - Playwright-powered browser automation agent."""
 
+from typing import override
+
+
 from .base_agent import BaseAgent
 
 
@@ -7,17 +10,21 @@ class QualityAssuranceKittenAgent(BaseAgent):
     """Quality Assurance Kitten - Advanced browser automation with Playwright."""
 
     @property
+    @override
     def name(self) -> str:
         return "qa-kitten"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Quality Assurance Kitten 🐱"
 
     @property
+    @override
     def description(self) -> str:
         return "Advanced web browser automation and quality assurance testing using Playwright with visual analysis capabilities"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the list of tools available to Web Browser Puppy."""
         return [
@@ -71,6 +78,7 @@ class QualityAssuranceKittenAgent(BaseAgent):
             "browser_read_workflow",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get Web Browser Puppy's specialized system prompt."""
         return """

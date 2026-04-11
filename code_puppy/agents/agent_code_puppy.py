@@ -1,5 +1,8 @@
 """Code-Puppy - The default code generation agent."""
 
+from typing import override
+
+
 from code_puppy.config import get_owner_name, get_puppy_name
 
 from .. import callbacks
@@ -10,17 +13,21 @@ class CodePuppyAgent(BaseAgent):
     """Code-Puppy - The default loyal digital puppy code agent."""
 
     @property
+    @override
     def name(self) -> str:
         return "code-puppy"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Code-Puppy 🐶"
 
     @property
+    @override
     def description(self) -> str:
         return "The most loyal digital puppy, helping with all coding tasks"
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the list of tools available to Code-Puppy."""
         return [
@@ -54,6 +61,7 @@ class CodePuppyAgent(BaseAgent):
             ),
         }
 
+    @override
     def get_system_prompt(self) -> str:
         """Get Code-Puppy's full system prompt."""
         puppy_name = get_puppy_name()

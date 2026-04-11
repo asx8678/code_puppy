@@ -1,5 +1,8 @@
 """JSON-based agent configuration system."""
 
+from typing import override
+
+
 import json
 import logging
 from pathlib import Path
@@ -56,20 +59,24 @@ class JSONAgent(BaseAgent):
             )
 
     @property
+    @override
     def name(self) -> str:
         """Get agent name from JSON config."""
         return self._config["name"]
 
     @property
+    @override
     def display_name(self) -> str:
         """Get display name from JSON config, fallback to name with emoji."""
         return self._config.get("display_name", f"{self.name.title()} 🤖")
 
     @property
+    @override
     def description(self) -> str:
         """Get description from JSON config."""
         return self._config["description"]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get system prompt from JSON config."""
         system_prompt = self._config["system_prompt"]
@@ -80,6 +87,7 @@ class JSONAgent(BaseAgent):
 
         return system_prompt
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get available tools from JSON config.
 
@@ -118,10 +126,12 @@ class JSONAgent(BaseAgent):
 
         return requested_tools
 
+    @override
     def get_user_prompt(self) -> str | None:
         """Get custom user prompt from JSON config."""
         return self._config.get("user_prompt")
 
+    @override
     def get_tools_config(self) -> dict | None:
         """Get tool configuration from JSON config."""
         return self._config.get("tools_config")

@@ -1,5 +1,8 @@
 """Prompt Reviewer Agent - Specializes in analyzing and reviewing prompt quality."""
 
+from typing import override
+
+
 from code_puppy.config import get_puppy_name
 
 from .. import callbacks
@@ -10,20 +13,24 @@ class PromptReviewerAgent(BaseAgent):
     """Prompt Reviewer Agent - Analyzes prompts for quality, clarity, and effectiveness."""
 
     @property
+    @override
     def name(self) -> str:
         return "prompt-reviewer"
 
     @property
+    @override
     def display_name(self) -> str:
         return "Prompt Reviewer 📝"
 
     @property
+    @override
     def description(self) -> str:
         return (
             "Specializes in analyzing and reviewing prompt quality. "
             "Assesses clarity, specificity, context completeness, constraint handling, and ambiguity detection."
         )
 
+    @override
     def get_available_tools(self) -> list[str]:
         """Get the list of tools available to the Prompt Reviewer Agent."""
         return [
@@ -33,6 +40,7 @@ class PromptReviewerAgent(BaseAgent):
             "agent_run_shell_command",
         ]
 
+    @override
     def get_system_prompt(self) -> str:
         """Get the optimized Prompt Reviewer Agent's system prompt."""
         puppy_name = get_puppy_name()
