@@ -351,7 +351,7 @@ def download_and_install_skill(
                             installed_path=skill_dir,
                         )
 
-                shutil.move(str(staged_skill_dir), str(skill_dir))
+                staged_skill_dir.move(skill_dir)
             except Exception as e:
                 logger.exception(f"Failed to install skill into {skill_dir}: {e}")
                 # Cleanup partial install.
