@@ -227,7 +227,7 @@ wheels = [
 
 [[package]]
 name = "codepp"
-version = "0.0.445"
+version = "0.0.448"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
