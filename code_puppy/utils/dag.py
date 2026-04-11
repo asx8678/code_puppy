@@ -8,12 +8,10 @@ run in parallel because all its predecessors finished in earlier waves.
 """
 
 from collections import defaultdict, deque
-from typing import Hashable, TypeVar
-
-T = TypeVar("T", bound=Hashable)
+from typing import Hashable
 
 
-def build_dependency_graph(
+def build_dependency_graph[T: Hashable](
     deps: dict[T, list[T]],
 ) -> dict[T, set[T]]:
     """Normalise a dependency map into a ``{node: set_of_deps}`` dict.
@@ -35,7 +33,7 @@ def build_dependency_graph(
     return graph
 
 
-def detect_cycles(graph: dict[T, set[T]]) -> list[T]:
+def detect_cycles[T: Hashable](graph: dict[T, set[T]]) -> list[T]:
     """Return the nodes that participate in a cycle (empty list if acyclic).
 
     Uses DFS colouring (white/grey/black) to find back-edges.
@@ -71,7 +69,7 @@ def detect_cycles(graph: dict[T, set[T]]) -> list[T]:
     return list(cycle_nodes)
 
 
-def build_execution_waves(graph: dict[T, set[T]]) -> list[list[T]]:
+def build_execution_waves[T: Hashable](graph: dict[T, set[T]]) -> list[list[T]]:
     """Topologically sort *graph* into parallel execution waves.
 
     Each wave contains nodes whose dependencies all appear in earlier waves,

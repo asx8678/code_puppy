@@ -50,7 +50,6 @@ Based on Orion's implementation in orion-multistep-analysis/src/research_agent/a
 
 from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import TypeVar
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -63,11 +62,8 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-# Type variable for the input message sequence
-T = TypeVar("T", bound=ModelMessage)
 
-
-def invert_conversation_roles(
+def invert_conversation_roles[T: ModelMessage](
     messages: Iterable[T],
     *,
     preserve_system: bool = True,
