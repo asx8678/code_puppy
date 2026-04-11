@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::OnceLock;
+use parking_lot::Mutex;
 use tree_sitter::Language;
 
 #[cfg(feature = "dynamic-grammars")]
@@ -140,7 +141,7 @@ impl Default for LanguageRegistry {
 static GLOBAL_REGISTRY: OnceLock<LanguageRegistry> = OnceLock::new();
 
 // Runtime-registered dynamic grammars (name -> library path)
-static DYNAMIC_GRAMMARS: OnceLock<std::sync::Mutex<HashMap<String, String>>> = OnceLock::new();
+static DYNAMIC_GRAMMARS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 
 /// Get the global language registry instance.
 ///
@@ -150,8 +151,8 @@ pub fn global_registry() -> &'static LanguageRegistry {
 }
 
 /// Get dynamic grammars registry.
-fn dynamic_grammars() -> &'static std::sync::Mutex<HashMap<String, String>> {
-    DYNAMIC_GRAMMARS.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+fn dynamic_grammars() -> &'static Mutex<HashMap<String, String>> {
+    DYNAMIC_GRAMMARS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 /// Register a dynamic grammar at runtime.
@@ -175,7 +176,7 @@ pub fn register_dynamic_grammar(name: &str, library_path: &str) -> Result<(), Re
     load_dynamic_grammar(name, &path)?;
     
     // Store the registration
-    let mut grammars = dynamic_grammars().lock().unwrap();
+    let mut grammars = dynamic_grammars().lock();
     grammars.insert(name.to_string(), library_path.to_string());
     
     Ok(())
@@ -189,7 +190,7 @@ pub fn register_dynamic_grammar(_name: &str, _library_path: &str) -> Result<(), 
 
 /// Unregister a dynamic grammar.
 pub fn unregister_dynamic_grammar(name: &str) -> bool {
-    let mut grammars = dynamic_grammars().lock().unwrap();
+    let mut grammars = dynamic_grammars().lock();
     let removed = grammars.remove(name).is_some();
 
     // Also evict from the loader cache (now safe because we return owned Language)
@@ -204,13 +205,13 @@ pub fn unregister_dynamic_grammar(name: &str) -> bool {
 
 /// Check if a dynamic grammar is registered.
 pub fn is_dynamic_grammar_registered(name: &str) -> bool {
-    let grammars = dynamic_grammars().lock().unwrap();
+    let grammars = dynamic_grammars().lock();
     grammars.contains_key(name)
 }
 
 /// List all registered dynamic grammars.
 pub fn list_registered_dynamic_grammars() -> Vec<(String, String)> {
-    let grammars = dynamic_grammars().lock().unwrap();
+    let grammars = dynamic_grammars().lock();
     grammars.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }
 
@@ -323,7 +324,7 @@ pub fn load_and_register_grammar(name: &str, path: &Path) -> Result<Language, Re
     let lang = load_dynamic_grammar(name, path)?;
     
     // Register in the path registry
-    let mut grammars = dynamic_grammars().lock().unwrap();
+    let mut grammars = dynamic_grammars().lock();
     grammars.insert(name.to_string(), path.to_string_lossy().to_string());
     
     Ok(lang)
