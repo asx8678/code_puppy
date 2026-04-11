@@ -35,7 +35,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models import ModelRequestParameters, StreamedResponse
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
-from typing_extensions import assert_never
+from typing import assert_never
 
 from code_puppy.gemini_model import GeminiModel, generate_tool_call_id
 from code_puppy.model_utils import _load_antigravity_prompt
