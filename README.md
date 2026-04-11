@@ -42,6 +42,26 @@
 
 Code Puppy is an AI-powered code generation agent, designed to understand programming tasks, generate high-quality code, and explain its reasoning similar to tools like Windsurf and Cursor.
 
+## Fork Enhancements
+
+This fork adds significant capabilities to the original code_puppy, transforming it from a coding assistant into an enterprise-grade multi-agent development platform.
+
+| Feature | Description | Speedup/Impact |
+|---------|-------------|----------------|
+| 🎯 Adversarial Planning | Multi-agent evidence-first planning with 6 specialized agents | Reduced error risk |
+| 🦀 Rust Acceleration | PyO3 crates for message processing, file ops, parsing | 10-50x faster |
+| 🐕 Pack Parallelism | 8-agent concurrent execution with intelligent queuing | 8x throughput |
+| 📚 Progressive Skills | Metadata-only skill injection until needed | Zero context cost |
+| 🔍 Supervisor Review | Quality-gated multi-agent review loops | Higher quality |
+| 📝 Session Logger | Structured archives with full audit trail | Debugging/compliance |
+| 🔐 OAuth Integration | 3 providers (Antigravity, ChatGPT, Claude) | Better UX |
+| 💾 DBOS Durability | Workflow checkpointing and recovery | Crash survival |
+| 🔄 Round Robin | Model distribution across multiple keys | Rate limit bypass |
+| 🌐 Models.dev | 65+ providers, 1000+ models | One-click setup |
+
+**48 plugins** • **18+ agents** • **150+ merged feature branches**
+
+📋 **Full changelog**: See [FORK_CHANGELOG.md](FORK_CHANGELOG.md) for complete documentation of all features, modifications, and performance benchmarks.
 
 ## Quick start
 
