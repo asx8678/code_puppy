@@ -54,9 +54,9 @@ OUTPUT (JSON):
   "overall": {{
     "base_case": "<string>",
     "fatal_flaw": "<string|null>",
-    "wrong_problem": true|false,
+    "wrong_problem": "<string|null> - if problem misframed, describe the real problem, else null",
     "score": <0-100>,
-    "ship_readiness": "unacceptable|risky|acceptable|solid",
+    "ship_readiness": "not_ready|needs_work|ready_with_caveats|ready",
     "codebase_fit": "<string>"
   }},
   "step_reviews": [
@@ -71,8 +71,8 @@ OUTPUT (JSON):
   "assumption_audit": [
     {{
       "assumption": "<string>",
-      "evidence_quality": "verified|inferred|none",
-      "risk_if_wrong": "<string>"
+      "status": "valid|invalid|untested",
+      "evidence": "<string> - what evidence confirms or contradicts"
     }}
   ],
   "constraint_violations": ["<string>"],
@@ -107,8 +107,8 @@ REVIEWER RULES:
 
     1. Start with assumption audit
        • List every assumption in the plan
-       • Classify: verified / inferred / none
-       • For each "inferred" or "none": calculate risk if wrong
+       • Classify status: valid / invalid / untested
+       • Provide evidence confirming or contradicting the assumption
     
     2. Check every step against operational readiness
        • Validation: How do we know it works before production?

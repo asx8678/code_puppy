@@ -60,8 +60,11 @@ Examples:
 
 **Modes:**
 - auto: Automatically selects based on risk triggers
-- standard: Phases 0A, 0B, 1, 2, 4, 6 (faster)
-- deep: Adds Phase 3 Rebuttal, Phase 5 Red Team (thorough)
+- standard: 0A → 0B → 1 → 2 → (3 if needed) → 4 → 6 (faster)
+- deep: Adds Phase 5 (Red Team) and Phase 7 (Change-Sets, go only)
+
+Phase 3 (Rebuttal) runs when reviews strongly disagree.
+Phase 7 (Change-Sets) only runs in deep mode with 'go' verdict.
 """)
         return True
     
@@ -76,10 +79,13 @@ Examples:
 This will:
 1. Discover environment evidence (Phase 0A)
 2. Lock scope without solution bias (Phase 0B)
-3. Generate two isolated, materially different plans
-4. Adversarially review both plans
-5. Synthesize the best surviving elements
-6. Determine go/conditional-go/no-go verdict
+3. Generate two isolated, materially different plans (Phase 1)
+4. Adversarially review both plans (Phase 2)
+5. Rebuttal round if reviews disagree (Phase 3, conditional)
+6. Synthesize the best surviving elements (Phase 4)
+7. Red Team stress test (Phase 5, deep mode only)
+8. Determine go/conditional-go/no-go verdict (Phase 6)
+9. Produce execution-ready change sets (Phase 7, deep mode + go only)
 
 Please wait...
 """)

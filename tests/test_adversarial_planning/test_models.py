@@ -304,6 +304,57 @@ class TestPlanStep:
             assert step.approval_needed == approval
 
 
+class TestMergedStepValidation:
+    """Tests for M-prefixed merged step ID validation."""
+
+    def test_plan_step_accepts_a_prefix(self, sample_plan_step_data):
+        """A-prefix IDs should validate for Plan A steps."""
+        data = sample_plan_step_data.copy()
+        data["id"] = "A1"
+        step = PlanStep(**data)
+        assert step.id == "A1"
+
+    def test_plan_step_accepts_b_prefix(self, sample_plan_step_data):
+        """B-prefix IDs should validate for Plan B steps."""
+        data = sample_plan_step_data.copy()
+        data["id"] = "B5"
+        step = PlanStep(**data)
+        assert step.id == "B5"
+
+    def test_plan_step_accepts_m_prefix(self, sample_plan_step_data):
+        """M-prefix IDs should validate for merged steps."""
+        data = sample_plan_step_data.copy()
+        data["id"] = "M1"
+        step = PlanStep(**data)
+        assert step.id == "M1"
+
+    def test_plan_step_rejects_invalid_prefix(self, sample_plan_step_data):
+        """Invalid prefixes should raise ValidationError."""
+        data = sample_plan_step_data.copy()
+        data["id"] = "X1"  # Invalid prefix
+        with pytest.raises(ValidationError):
+            PlanStep(**data)
+
+    def test_provenance_fields_optional(self, sample_plan_step_data):
+        """source_plan and survival_reason should be optional."""
+        data = sample_plan_step_data.copy()
+        data["id"] = "M1"
+        # Don't set provenance fields
+        step = PlanStep(**data)
+        assert step.source_plan is None
+        assert step.survival_reason is None
+
+    def test_provenance_fields_accepted(self, sample_plan_step_data):
+        """Provenance fields should be accepted when provided."""
+        data = sample_plan_step_data.copy()
+        data["id"] = "M1"
+        data["source_plan"] = "merged"
+        data["survival_reason"] = "Best of both worlds"
+        step = PlanStep(**data)
+        assert step.source_plan == "merged"
+        assert step.survival_reason == "Best of both worlds"
+
+
 class TestOperationalReadiness:
     """Test operational readiness model."""
 

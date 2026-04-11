@@ -14,6 +14,11 @@ class ValidationError(Exception):
     pass
 
 
+class GlobalStopCondition(Exception):
+    """Raised when a global stop condition is met (e.g., user abort)."""
+    pass
+
+
 def validate_phase_0a_output(output: Any) -> None:
     """Validate Phase 0A exit gate.
     
@@ -129,33 +134,35 @@ def validate_phase_4_output(output: Any) -> None:
         logger.warning("No dissent log - strongest rejected alternative not preserved")
 
 
-def check_global_stop_conditions(session: Any) -> str | None:
-    """Check for global stop conditions.
+def check_global_stop_conditions(session: Any) -> None:
+    """Check for global stop conditions across phases.
     
     Args:
         session: PlanningSession with current state
         
-    Returns:
-        Stop reason if found, None otherwise
+    Raises:
+        GlobalStopCondition: If any stop condition is met
     """
+    # Check for user abort first
+    if session.global_stop_reason:
+        raise GlobalStopCondition(session.global_stop_reason)
+    
     # Kill conditions from Phase 0A
     if session.phase_0a_output:
         if session.phase_0a_output.readiness == "blocked":
-            return "Environment discovery blocked - cannot proceed"
+            raise GlobalStopCondition("Environment discovery blocked - cannot proceed")
     
     # Hard access blocks
     if session.phase_0b_output:
         for constraint in session.phase_0b_output.hard_constraints:
             if "BLOCKED" in constraint.upper() or "IMPOSSIBLE" in constraint.upper():
-                return f"Hard constraint violated: {constraint}"
+                raise GlobalStopCondition(f"Hard constraint violated: {constraint}")
     
     # Unresolvable blockers from review
     if session.review_a and session.review_b:
         for blocker in session.review_a.blockers + session.review_b.blockers:
             if blocker.kill_recommendation and not blocker.repair_path:
-                return f"Unresolvable blocker: {blocker.description}"
-    
-    return None
+                raise GlobalStopCondition(f"Unresolvable blocker: {blocker.description}")
 
 
 def needs_rebuttal(session: Any) -> bool:

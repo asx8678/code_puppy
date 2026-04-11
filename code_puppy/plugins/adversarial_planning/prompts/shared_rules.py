@@ -93,6 +93,22 @@ Skill utilization:
 - Use skills to augment your analysis capabilities
 
 ═══════════════════════════════════════════════════════════════════════
+                      Step ID Conventions
+═══════════════════════════════════════════════════════════════════════
+
+Phase 1 (Planning):
+    • Plan A uses: A1, A2, A3...
+    • Plan B uses: B1, B2, B3...
+
+Phase 4 (Synthesis):
+    • Keep original IDs for unchanged steps: A1, B2, etc.
+    • Use M-prefix for merged/new steps: M1, M2, M3...
+    
+ID Dependencies:
+    • "depends_on": ["A1", "M2"] means the step requires A1 and M2 first
+    • Dependencies MUST reference valid step IDs within the same plan/phase
+
+═══════════════════════════════════════════════════════════════════════
                          OUTPUT VALIDATION
 ═══════════════════════════════════════════════════════════════════════
 

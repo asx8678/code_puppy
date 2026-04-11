@@ -11,6 +11,7 @@ from code_puppy.plugins.adversarial_planning.validators import needs_rebuttal
 from code_puppy.plugins.adversarial_planning.models import (
     AdversarialPlanConfig,
     WorkspaceContext,
+    Phase6Output,
 )
 
 
@@ -152,9 +153,15 @@ class TestPhaseExecution:
     """Test phase execution."""
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Integration test - requires full agent stack")
     async def test_full_workflow_standard_mode(self, sample_config, mock_invoke_agent, mock_emit_progress):
-        """Test full standard mode workflow completes."""
+        """Standard mode should run phases 0A, 0B, 1, 2, (3 if needed), 4, 6.
+        
+        Verifies that:
+        - Phases 0A, 0B, 1, 2, 4, 6 execute in standard mode
+        - Phase 5 (Red Team) does NOT run in standard mode
+        - Phase 7 (Change-Set) does NOT run in standard mode
+        - Workflow completes without global stop
+        """
         sample_config.mode = "standard"
 
         orchestrator = AdversarialPlanningOrchestrator(
@@ -163,11 +170,90 @@ class TestPhaseExecution:
             emit_progress_fn=mock_emit_progress,
         )
 
+        # Track which phases ran
+        phases_run = []
+
+        # Patch phase methods to record execution
+        original_0a = orchestrator._run_phase_0a
+        original_0b = orchestrator._run_phase_0b
+        original_1 = orchestrator._run_phase_1
+        original_2 = orchestrator._run_phase_2
+        original_3 = orchestrator._run_phase_3
+        original_4 = orchestrator._run_phase_4
+        original_5 = orchestrator._run_phase_5
+        original_6 = orchestrator._run_phase_6
+        original_7 = orchestrator._run_phase_7
+
+        async def tracked_0a():
+            phases_run.append("phase_0a")
+            await original_0a()
+
+        async def tracked_0b():
+            phases_run.append("phase_0b")
+            await original_0b()
+
+        async def tracked_1():
+            phases_run.append("phase_1")
+            await original_1()
+
+        async def tracked_2():
+            phases_run.append("phase_2")
+            await original_2()
+
+        async def tracked_3():
+            phases_run.append("phase_3")
+            await original_3()
+
+        async def tracked_4():
+            phases_run.append("phase_4")
+            await original_4()
+
+        async def tracked_5():
+            phases_run.append("phase_5")
+            await original_5()
+
+        async def tracked_6():
+            phases_run.append("phase_6")
+            await original_6()
+
+        async def tracked_7():
+            phases_run.append("phase_7")
+            await original_7()
+
+        orchestrator._run_phase_0a = tracked_0a
+        orchestrator._run_phase_0b = tracked_0b
+        orchestrator._run_phase_1 = tracked_1
+        orchestrator._run_phase_2 = tracked_2
+        orchestrator._run_phase_3 = tracked_3
+        orchestrator._run_phase_4 = tracked_4
+        orchestrator._run_phase_5 = tracked_5
+        orchestrator._run_phase_6 = tracked_6
+        orchestrator._run_phase_7 = tracked_7
+
         session = await orchestrator.run()
 
-        # Should complete without error
+        # Verify workflow completed without global stop
         assert session.global_stop_reason is None
-        assert session.current_phase in ("6_decision", "7_changeset", "complete")
+        assert session.current_phase == "6_decision"
+
+        # Verify expected phases ran
+        assert "phase_0a" in phases_run, "Phase 0A (Discovery) should run"
+        assert "phase_0b" in phases_run, "Phase 0B (Scope Lock) should run"
+        assert "phase_1" in phases_run, "Phase 1 (Planning) should run"
+        assert "phase_2" in phases_run, "Phase 2 (Review) should run"
+        assert "phase_4" in phases_run, "Phase 4 (Synthesis) should run"
+        assert "phase_6" in phases_run, "Phase 6 (Decision) should run"
+
+        # Verify phase ordering (0A and 0B must be before 1, etc.)
+        assert phases_run.index("phase_0a") < phases_run.index("phase_0b")
+        assert phases_run.index("phase_0b") < phases_run.index("phase_1")
+        assert phases_run.index("phase_1") < phases_run.index("phase_2")
+        assert phases_run.index("phase_2") < phases_run.index("phase_4")
+        assert phases_run.index("phase_4") < phases_run.index("phase_6")
+
+        # Verify deep-mode phases did NOT run
+        assert "phase_5" not in phases_run, "Phase 5 (Red Team) should NOT run in standard mode"
+        assert "phase_7" not in phases_run, "Phase 7 (Change-Set) should NOT run in standard mode"
 
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Integration test - requires full agent stack")
@@ -387,3 +473,168 @@ class TestApplyPenalties:
 
         result = orchestrator._apply_penalties(decision)
         assert result.plan_verdict == "conditional_go"
+
+
+class TestAbortCheck:
+    """Test abort state checking."""
+
+    def test_check_global_stop_raises_when_abort_set(self, sample_config):
+        """Test _check_global_stop raises GlobalStopCondition when abort is set."""
+        orchestrator = AdversarialPlanningOrchestrator(sample_config)
+        orchestrator.session.global_stop_reason = "User aborted"
+
+        with pytest.raises(GlobalStopCondition) as exc_info:
+            orchestrator._check_global_stop()
+
+        assert str(exc_info.value) == "User aborted"
+
+    def test_check_global_stop_does_not_raise_when_no_abort(self, sample_config):
+        """Test _check_global_stop does not raise when no abort is set."""
+        orchestrator = AdversarialPlanningOrchestrator(sample_config)
+        orchestrator.session.global_stop_reason = None
+
+        # Should not raise
+        orchestrator._check_global_stop()
+
+    def test_check_global_stop_preserves_abort_reason(self, sample_config):
+        """Test _check_global_stop preserves the abort reason in exception."""
+        orchestrator = AdversarialPlanningOrchestrator(sample_config)
+        orchestrator.session.global_stop_reason = "Custom abort message"
+
+        with pytest.raises(GlobalStopCondition) as exc_info:
+            orchestrator._check_global_stop()
+
+        assert exc_info.value.reason == "Custom abort message"
+        assert str(exc_info.value) == "Custom abort message"
+
+
+class TestPhase7ModeGating:
+    """Tests for Phase 7 mode and verdict gating."""
+
+    @pytest.fixture
+    def orchestrator_with_mocked_phases(self, sample_config):
+        """Create orchestrator with mocked phase methods."""
+        # Use deep mode in config to prevent _select_mode from overriding
+        sample_config.mode = "deep"
+        orchestrator = AdversarialPlanningOrchestrator(sample_config)
+        
+        # Mock all phase methods to do nothing (we're testing Phase 7 gating)
+        orchestrator._run_phase_0a = AsyncMock()
+        orchestrator._run_phase_0b = AsyncMock()
+        orchestrator._run_phase_1 = AsyncMock()
+        orchestrator._run_phase_2 = AsyncMock()
+        orchestrator._run_phase_3 = AsyncMock()
+        orchestrator._run_phase_4 = AsyncMock()
+        orchestrator._run_phase_5 = AsyncMock()
+        # _run_phase_6 and _run_phase_7 are mocked per-test to set decision / track calls
+        
+        return orchestrator
+
+    @pytest.mark.asyncio
+    async def test_phase7_skipped_in_standard_mode(self, sample_config):
+        """Phase 7 should NOT run in standard mode, regardless of verdict."""
+        # Setup: standard mode explicitly
+        sample_config.mode = "standard"
+        orchestrator = AdversarialPlanningOrchestrator(sample_config)
+        
+        # Mock all phase methods
+        orchestrator._run_phase_0a = AsyncMock()
+        orchestrator._run_phase_0b = AsyncMock()
+        orchestrator._run_phase_1 = AsyncMock()
+        orchestrator._run_phase_2 = AsyncMock()
+        orchestrator._run_phase_3 = AsyncMock()
+        orchestrator._run_phase_4 = AsyncMock()
+        orchestrator._run_phase_5 = AsyncMock()
+        
+        # Mock phase 6 to set decision (go verdict), phase 7 to track calls
+        async def mock_phase_6():
+            orchestrator.session.decision = Phase6Output(
+                raw_plan_score=80,
+                adjusted_plan_score=75,
+                plan_verdict="go",
+                summary="Test decision",
+            )
+        orchestrator._run_phase_6 = AsyncMock(side_effect=mock_phase_6)
+        orchestrator._run_phase_7 = AsyncMock()
+        
+        # Run orchestrator
+        await orchestrator.run()
+        
+        # Verify _run_phase_7 was NOT called (blocked by standard mode)
+        orchestrator._run_phase_7.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_phase7_skipped_with_no_go_verdict(self, orchestrator_with_mocked_phases):
+        """Phase 7 should NOT run with no_go verdict, even in deep mode."""
+        orchestrator = orchestrator_with_mocked_phases
+        
+        # Setup: deep mode, no_go verdict
+        orchestrator.session.mode_selected = "deep"
+        
+        # Mock phase 6 to set decision, phase 7 to track calls
+        async def mock_phase_6():
+            orchestrator.session.decision = Phase6Output(
+                raw_plan_score=40,
+                adjusted_plan_score=35,
+                plan_verdict="no_go",
+                summary="Test decision - no go",
+            )
+        orchestrator._run_phase_6 = AsyncMock(side_effect=mock_phase_6)
+        orchestrator._run_phase_7 = AsyncMock()
+        
+        # Run orchestrator
+        await orchestrator.run()
+        
+        # Verify _run_phase_7 was NOT called
+        orchestrator._run_phase_7.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_phase7_skipped_with_conditional_go_verdict(self, orchestrator_with_mocked_phases):
+        """Phase 7 should NOT run with conditional_go verdict."""
+        orchestrator = orchestrator_with_mocked_phases
+        
+        # Setup: deep mode, conditional_go verdict
+        orchestrator.session.mode_selected = "deep"
+        
+        # Mock phase 6 to set decision, phase 7 to track calls
+        async def mock_phase_6():
+            orchestrator.session.decision = Phase6Output(
+                raw_plan_score=65,
+                adjusted_plan_score=60,
+                plan_verdict="conditional_go",
+                plan_condition="Add more tests before proceeding",
+                summary="Test decision - conditional go",
+            )
+        orchestrator._run_phase_6 = AsyncMock(side_effect=mock_phase_6)
+        orchestrator._run_phase_7 = AsyncMock()
+        
+        # Run orchestrator
+        await orchestrator.run()
+        
+        # Verify _run_phase_7 was NOT called
+        orchestrator._run_phase_7.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_phase7_runs_in_deep_mode_with_go_verdict(self, orchestrator_with_mocked_phases):
+        """Phase 7 SHOULD run in deep mode with go verdict."""
+        orchestrator = orchestrator_with_mocked_phases
+        
+        # Setup: deep mode, go verdict
+        orchestrator.session.mode_selected = "deep"
+        
+        # Mock phase 6 to set decision, phase 7 to track calls
+        async def mock_phase_6():
+            orchestrator.session.decision = Phase6Output(
+                raw_plan_score=85,
+                adjusted_plan_score=80,
+                plan_verdict="go",
+                summary="Test decision - go",
+            )
+        orchestrator._run_phase_6 = AsyncMock(side_effect=mock_phase_6)
+        orchestrator._run_phase_7 = AsyncMock()
+        
+        # Run orchestrator
+        await orchestrator.run()
+        
+        # Verify _run_phase_7 WAS called exactly once
+        orchestrator._run_phase_7.assert_awaited_once()

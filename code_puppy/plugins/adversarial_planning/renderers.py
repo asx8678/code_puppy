@@ -279,7 +279,17 @@ class AdversarialPlanningRenderer:
         
         for step in synth.merged_steps[:10]:
             reversible = "↩️" if step.reversible else "⚠️"
-            lines.append(f"- [{step.id}] {reversible} {step.what} ({step.effort_hours_80pct}h)")
+            line = f"- [{step.id}] {reversible} {step.what} ({step.effort_hours_80pct}h)"
+            
+            # Show provenance if present
+            if step.source_plan:
+                line += f" [from: {step.source_plan}]"
+            
+            lines.append(line)
+            
+            # Show survival reason as sub-line if present
+            if step.survival_reason:
+                lines.append(f"    └─ {step.survival_reason}")
         
         if len(synth.merged_steps) > 10:
             lines.append(f"  ... and {len(synth.merged_steps) - 10} more steps")

@@ -134,8 +134,12 @@ class AdversarialPlanningOrchestrator:
             # Phase 6: Execution Decision
             await self._run_phase_6()
             
-            # Phase 7: Change-Set Synthesis (if go/conditional-go)
-            if self.session.decision and self.session.decision.plan_verdict in ("go", "conditional_go"):
+            # Phase 7: Change-Set Synthesis (Deep mode only, go verdict)
+            if (
+                self.session.mode_selected == "deep"
+                and self.session.decision
+                and self.session.decision.plan_verdict == "go"
+            ):
                 await self._run_phase_7()
             
             return self.session
@@ -264,9 +268,33 @@ class AdversarialPlanningOrchestrator:
         """Phase 2: Adversarial Review (parallel)."""
         self.session.current_phase = "2_review"
         self._emit_progress("phase_start", {"phase": "2", "name": "Adversarial Review"})
-        
-        prompt_review_a = build_review_prompt(self.session.plan_a)
-        prompt_review_b = build_review_prompt(self.session.plan_b)
+
+        # Extract Phase 0 context for reviewers
+        evidence_pack = None
+        if self.session.phase_0a_output:
+            evidence_pack = self.session.phase_0a_output.evidence
+
+        scope_lock = self.session.phase_0b_output
+
+        # Review Plan A
+        prompt_review_a = build_review_prompt(
+            self.session.plan_a,
+            "A",
+            evidence_pack=evidence_pack,
+            scope_lock=scope_lock,
+            success_criteria=self.config.success_criteria,
+            hard_constraints=self.config.hard_constraints,
+        )
+
+        # Review Plan B
+        prompt_review_b = build_review_prompt(
+            self.session.plan_b,
+            "B",
+            evidence_pack=evidence_pack,
+            scope_lock=scope_lock,
+            success_criteria=self.config.success_criteria,
+            hard_constraints=self.config.hard_constraints,
+        )
         
         review_a_task = self._invoke_agent(
             agent_name="ap-reviewer",
@@ -327,12 +355,24 @@ class AdversarialPlanningOrchestrator:
         """Phase 4: Synthesis."""
         self.session.current_phase = "4_synthesis"
         self._emit_progress("phase_start", {"phase": "4", "name": "Synthesis"})
-        
+
+        # Extract evidence from Phase 0A if available
+        evidence_pack = None
+        if self.session.phase_0a_output:
+            evidence_pack = self.session.phase_0a_output.evidence
+
+        # Extract scope from Phase 0B if available
+        scope_lock = self.session.phase_0b_output
+
         prompt = build_synthesis_prompt(
             self.session.plan_a,
             self.session.plan_b,
             self.session.review_a,
-            self.session.review_b
+            self.session.review_b,
+            evidence_pack=evidence_pack,
+            scope_lock=scope_lock,
+            success_criteria=self.config.success_criteria,
+            hard_constraints=self.config.hard_constraints,
         )
         
         result = await self._invoke_agent(
@@ -464,6 +504,10 @@ class AdversarialPlanningOrchestrator:
     
     def _check_global_stop(self) -> None:
         """Check for global stop conditions."""
+        # Check for user-requested abort first
+        if self.session.global_stop_reason:
+            raise GlobalStopCondition(self.session.global_stop_reason)
+
         stop_reason = check_global_stop_conditions(self.session)
         if stop_reason:
             raise GlobalStopCondition(stop_reason)

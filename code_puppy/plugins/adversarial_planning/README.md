@@ -2,6 +2,12 @@
 
 Evidence-first, isolated, execution-ready planning for high-stakes work.
 
+## Contract Documentation
+
+See [CONTRACT.md](CONTRACT.md) for the canonical contract ownership 
+rules. The runtime Pydantic models are the source of truth for all
+output schemas.
+
 ## Overview
 
 The Adversarial Planning system uses multiple specialized agents to:
@@ -127,8 +133,10 @@ USER INPUT: /ap <task>
 │                                                          ││
 │ Penalties:                                               ││
 │   - Same-model fallback: -15                             ││
-│   - No local evidence: -15                               ││
 │   - Production w/o rollback: -20                       ││
+│                                                          ││
+│ (Additional penalties can be added by extending        ││
+│  _apply_penalties() in orchestrator.py)                ││
 │                                                          ││
 │ Verdict:                                                 ││
 │   • go (≥75)          → Execute                          ││
@@ -140,7 +148,7 @@ USER INPUT: /ap <task>
        │                                                    │
        ▼                                                    │
 ┌──────────────────────────────────────────────────────────┐│
-│ PHASE 7: CHANGE-SET SYNTHESIS — Deep mode, go only       ││
+│ PHASE 7: CHANGE-SET SYNTHESIS (Deep mode + go only)      ││
 │                                                          ││
 │ Translate plan to reversible change sets with:           ││
 │   • Safe first change                                    ││
@@ -187,7 +195,8 @@ USER INPUT: /ap <task>
 - Every issue needs trigger + mechanism + impact
 - Blockers need repair path or kill recommendation
 
-### Phase 3: Rebuttal (Deep mode / when needed)
+### Phase 3: Rebuttal (Conditional)
+- Runs in **any mode** when reviews strongly disagree
 - Planners can rebut criticism with **new evidence**
 - Revise only affected steps
 - Accept valid criticism
@@ -214,14 +223,23 @@ USER INPUT: /ap <task>
 - Score each step (Impact 0.30, Feasibility 0.25, Risk 0.25, Urgency 0.20)
 - Apply penalties:
   - Same-model fallback: -15
-  - No local evidence: -15
   - Production without rollback: -20
+
+Additional penalties can be implemented by extending `_apply_penalties()` in `orchestrator.py`.
 - Verdict: **go** (≥75) / **conditional_go** (55-74) / **no_go** (<55)
 
-### Phase 7: Change-Set Synthesis (Deep mode, go/conditional)
+### Phase 7: Change-Set Synthesis (Deep mode + go only)
 - Translate to reversible change sets
 - Identify safe first change
 - Verification sequence
+
+## Step ID Conventions
+
+| Phase | ID Prefix | Example |
+|-------|-----------|---------|
+| Phase 1 (Plan A) | A | A1, A2, A3 |
+| Phase 1 (Plan B) | B | B1, B2, B3 |
+| Phase 4 (Merged) | M | M1, M2, M3 |
 
 ## Per-Agent Deep Dive
 
@@ -400,8 +418,9 @@ Score = (Impact × 0.30) + (Feasibility × 0.25)
 
 Penalties:
   - Same-model fallback: -15
-  - No local evidence: -15
   - Production w/o rollback: -20
+
+Additional penalties can be implemented by extending `_apply_penalties()` in `orchestrator.py`.
 
 Verdict: go (≥75) / conditional_go (55-74) / no_go (<55)
 ```
@@ -413,7 +432,7 @@ The merged GraphQL plan scores 82:
 - Risk 70 × 0.25 = 17.5 (lower risk = better)
 - Urgency 75 × 0.20 = 15
 - Total: 78
-- Penalty: -0 (we have local evidence and rollback plan)
+- Penalty: -0 (we have rollback plan)
 - Final: 78 → **go**
 
 **Phase 7 — Change-Set Synthesis:**

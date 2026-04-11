@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .models import (
         AdversarialPlanConfig,
+        Evidence,
         PlanningSession,
         Phase0AOutput,
         Phase0BOutput,
@@ -210,19 +211,90 @@ Output structured JSON matching the Phase 1 schema with plan_id="{plan_id}".
 """
 
 
-def build_review_prompt(plan: "Phase1Output") -> str:
+def _format_evidence_for_review(evidence: list) -> str:
+    """Format evidence items for reviewer prompt inclusion.
+    
+    Args:
+        evidence: List of EvidenceItem objects
+        
+    Returns:
+        Formatted string summary of evidence for reviewer context
+    """
+    lines = []
+    for ev in evidence[:10]:  # Limit to prevent prompt bloat
+        ev_class = getattr(ev, 'evidence_class', 'unknown')
+        claim = getattr(ev, 'claim', 'N/A')
+        confidence = getattr(ev, 'confidence', 0)
+        # Handle both string and enum evidence_class
+        if hasattr(ev_class, 'value'):
+            ev_class = ev_class.value
+        lines.append(f"- [{str(ev_class).upper()}] {claim} (confidence: {confidence}%)")
+    if len(evidence) > 10:
+        lines.append(f"... and {len(evidence) - 10} more evidence items")
+    return "\n".join(lines)
+
+
+def build_review_prompt(
+    plan: "Phase1Output",
+    plan_id: str,
+    *,
+    evidence_pack: list | None = None,
+    scope_lock: "Phase0BOutput | None" = None,
+    success_criteria: list[str] | None = None,
+    hard_constraints: list[str] | None = None,
+) -> str:
     """Build review prompt for a plan.
     
     Args:
         plan: The plan to review
+        plan_id: Identifier for the plan being reviewed
+        evidence_pack: Evidence items from Phase 0A discovery
+        scope_lock: Scope lock output from Phase 0B
+        success_criteria: List of success criteria to validate against
+        hard_constraints: List of hard constraints to validate against
         
     Returns:
         Prompt string for the reviewer
     """
-    return f"""## Task: Adversarial Review of Plan {plan.plan_id}
+    evidence_section = ""
+    if evidence_pack:
+        evidence_section = f"""
+## Available Evidence (from Phase 0A)
+{_format_evidence_for_review(evidence_pack)}
+"""
+
+    scope_section = ""
+    if scope_lock:
+        normalized_problem = getattr(scope_lock, 'normalized_problem', 'N/A')
+        problem_signature = getattr(scope_lock, 'problem_signature', 'N/A')
+        scope_section = f"""
+## Scope Lock (from Phase 0B)
+- Problem: {normalized_problem}
+- Signature: {problem_signature}
+"""
+
+    criteria_section = ""
+    if success_criteria:
+        criteria_section = f"""
+## Success Criteria to Validate
+{chr(10).join(f'- {c}' for c in success_criteria)}
+"""
+
+    constraints_section = ""
+    if hard_constraints:
+        constraints_section = f"""
+## Hard Constraints to Validate
+{chr(10).join(f'- {c}' for c in hard_constraints)}
+"""
+
+    return f"""## Task: Adversarial Review of Plan {plan_id}
 
 ### Plan to Review:
 {plan.model_dump_json(indent=2)}
+{evidence_section}
+{scope_section}
+{criteria_section}
+{constraints_section}
 
 ### Your Mission: FALSIFY this plan
 
@@ -270,11 +342,45 @@ Output an updated plan with the same structure (Phase 1 schema).
 """
 
 
+def _format_evidence_summary(evidence_pack: list) -> str:
+    """Format evidence pack for synthesis prompt context.
+    
+    Args:
+        evidence_pack: List of Evidence items
+        
+    Returns:
+        Formatted evidence summary string
+    """
+    if not evidence_pack:
+        return "No evidence available."
+    
+    lines = []
+    for e in evidence_pack[:15]:  # Top 15 evidence items
+        lines.append(f"- [{e.id}] ({e.evidence_class.value}): {e.claim}")
+    
+    # Add summary counts
+    from collections import Counter
+    counts = Counter(e.evidence_class.value for e in evidence_pack)
+    lines.append("")
+    lines.append(f"**Summary**: {len(evidence_pack)} items total")
+    lines.append(f"  - Verified: {counts.get('verified', 0)}")
+    lines.append(f"  - Inference: {counts.get('inference', 0)}")
+    lines.append(f"  - Assumption: {counts.get('assumption', 0)}")
+    lines.append(f"  - Unknown: {counts.get('unknown', 0)}")
+    
+    return "\n".join(lines)
+
+
 def build_synthesis_prompt(
     plan_a: "Phase1Output | None",
     plan_b: "Phase1Output | None",
     review_a: "Phase2Output | None",
-    review_b: "Phase2Output | None"
+    review_b: "Phase2Output | None",
+    *,
+    evidence_pack: list["Evidence"] | None = None,
+    scope_lock: "Phase0BOutput | None" = None,
+    success_criteria: list[str] | None = None,
+    hard_constraints: list[str] | None = None,
 ) -> str:
     """Build synthesis prompt for the arbiter.
     
@@ -283,13 +389,40 @@ def build_synthesis_prompt(
         plan_b: Plan B output
         review_a: Review of Plan A
         review_b: Review of Plan B
+        evidence_pack: Evidence items from Phase 0A Discovery
+        scope_lock: Scope lock from Phase 0B
+        success_criteria: Optional success criteria to include
+        hard_constraints: Optional hard constraints to include
         
     Returns:
         Prompt string for synthesis
     """
+    # Build context sections
+    evidence_section = ""
+    if evidence_pack:
+        evidence_section = f"""## Available Evidence (from Phase 0A Discovery)
+{_format_evidence_summary(evidence_pack)}
+"""
+
+    scope_section = ""
+    if scope_lock:
+        scope_section = f"""## Problem Scope (from Phase 0B)
+- Problem: {scope_lock.normalized_problem}
+- Type: {scope_lock.problem_type}
+- Hard Constraints: {', '.join(scope_lock.hard_constraints) or 'None'}
+"""
+
+    criteria_section = ""
+    if success_criteria:
+        criteria_section = "## Success Criteria\n" + "\n".join(f"- {c}" for c in success_criteria) + "\n"
+
+    constraints_section = ""
+    if hard_constraints:
+        constraints_section = "## Hard Constraints\n" + "\n".join(f"- {c}" for c in hard_constraints) + "\n"
+
     return f"""## Task: Synthesize Best Plan
 
-### Plan A (Conservative):
+{evidence_section}{scope_section}{criteria_section}{constraints_section}### Plan A (Conservative):
 {plan_a.model_dump_json(indent=2) if plan_a else 'N/A'}
 
 ### Review of Plan A:
@@ -383,11 +516,12 @@ def build_decision_prompt(
 - Risk-adjusted: 0.25
 - Urgency: 0.20
 
-### Verdict Bands:
+### Plan-Level Verdict Bands (plan_verdict field):
 - ≥75: go
 - 55-74: conditional_go
-- 40-54: defer
-- <40: skip
+- <55: no_go
+
+Note: `defer` and `skip` are valid only for step-level verdicts (StepEvaluation.verdict), not plan-level.
 
 Evaluate each step. Determine execution order. Identify quick wins.
 Define minimum viable plan and full plan.

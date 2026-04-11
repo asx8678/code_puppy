@@ -127,6 +127,25 @@ def sample_phase_0b_output():
 
 
 @pytest.fixture
+def sample_plan_step_data():
+    """Minimal valid PlanStep data for testing."""
+    return {
+        "id": "A1",
+        "category": "build",
+        "what": "Do something",
+        "why": "Because reasons",
+        "how": "With code",
+        "risk": "Low risk",
+        "risk_severity": "low",
+        "mitigation": "Handle it",
+        "effort_hours_80pct": 1.0,
+        "reversible": True,
+        "approval_needed": "none",
+        "exit_criteria": "It works",
+    }
+
+
+@pytest.fixture
 def sample_plan_step():
     """Create a sample plan step."""
     return PlanStep(
@@ -285,7 +304,9 @@ def sample_review_b():
 def sample_phase_4_output(sample_plan_step):
     """Create sample Phase 4 synthesis output."""
     merged_step = sample_plan_step.model_copy()
-    merged_step.id = "S1"
+    merged_step.id = "M1"
+    merged_step.source_plan = "merged"
+    merged_step.survival_reason = "Combines best elements of both plans"
 
     return Phase4Output(
         merged_problem="Add Google OAuth2 with minimal disruption",
@@ -299,10 +320,10 @@ def sample_phase_4_output(sample_plan_step):
             monitoring="OAuth metrics dashboard",
         ),
         traceability={
-            "constraints": [{"constraint": "No breaking changes", "covered_by": ["S1"]}],
-            "criteria": [{"criterion": "Google login works", "validated_by": ["S1"]}],
+            "constraints": [{"constraint": "No breaking changes", "covered_by": ["M1"]}],
+            "criteria": [{"criterion": "Google login works", "validated_by": ["M1"]}],
         },
-        critical_path=["S1"],
+        critical_path=["M1"],
         resolved_conflicts=["Keep Flask-Login vs Authlib debate"],
         discarded_steps=["Full Flask-Login replacement"],
         blockers=[],
@@ -439,17 +460,17 @@ def mock_invoke_agent():
                 return '{"normalized_problem": "Test problem", "problem_type": "feature", "verified_facts": [], "inferences": [], "hard_constraints": [], "in_scope": [], "out_of_scope": [], "critical_unknowns": [], "planning_guardrails": [], "pre_mortem": {}}'
             return '{"readiness": "ready", "confidence": 80, "workspace_summary": "Test", "problem_signature": "Test problem", "evidence": [], "files_examined": [], "existing_patterns_to_reuse": [], "contradictions": [], "blast_radius": [], "critical_unknowns": []}'
         elif "planner-a" in agent_name:
-            return '{"plan_id": "A", "posture": "conservative", "problem_restatement": "Test", "approach_summary": "Test approach", "assumptions": [], "alternatives_considered": [], "steps": [], "operational_readiness": {"validation": "", "rollout": "", "rollback": "", "monitoring": ""}, "critical_path": [], "estimated_hours_80pct": 20, "estimated_calendar_days": 5, "quick_wins": [], "reasons_this_plan_may_fail": []}'
+            return '{"plan_id": "A", "posture": "conservative", "problem_restatement": "Test", "approach_summary": "Test approach", "assumptions": [], "alternatives_considered": [], "steps": [], "operational_readiness": {"validation": "Test in staging", "rollout": "Feature flag", "rollback": "Disable flag", "monitoring": "Error rate"}, "critical_path": [], "estimated_hours_80pct": 20, "estimated_calendar_days": 5, "quick_wins": [], "reasons_this_plan_may_fail": []}'
         elif "planner-b" in agent_name:
-            return '{"plan_id": "B", "posture": "contrarian", "problem_restatement": "Test alt", "approach_summary": "Different approach", "assumptions": [], "alternatives_considered": [], "steps": [], "operational_readiness": {"validation": "", "rollout": "", "rollback": "", "monitoring": ""}, "critical_path": [], "estimated_hours_80pct": 40, "estimated_calendar_days": 10, "quick_wins": [], "reasons_this_plan_may_fail": []}'
+            return '{"plan_id": "B", "posture": "contrarian", "problem_restatement": "Test alt", "approach_summary": "Different approach", "assumptions": [], "alternatives_considered": [], "steps": [], "operational_readiness": {"validation": "Full tests", "rollout": "Blue-green", "rollback": "Switch traffic", "monitoring": "Latency"}, "critical_path": [], "estimated_hours_80pct": 40, "estimated_calendar_days": 10, "quick_wins": [], "reasons_this_plan_may_fail": []}'
         elif "reviewer" in agent_name:
-            return '{"reviewed_plan": "A", "overall": {"score": 70, "ship_readiness": "ready", "fatal_flaw": null, "codebase_fit": "high"}, "step_reviews": [], "missing_steps": [], "assumption_audit": [], "constraint_violations": [], "operational_gaps": {"validation": "", "rollout": "", "rollback": "", "monitoring": ""}, "effort_reassessment": {}, "blockers": [], "strongest_surviving_element": "Good"}'
+            return '{"reviewed_plan": "A", "overall": {"score": 70, "ship_readiness": "ready", "fatal_flaw": null, "codebase_fit": "high"}, "step_reviews": [], "missing_steps": [], "assumption_audit": [], "constraint_violations": [], "operational_gaps": {"validation": "OK", "rollout": "OK", "rollback": "OK", "monitoring": "OK"}, "effort_reassessment": {"planner_total": 20, "reviewer_estimate": 25, "reason": "Testing"}, "blockers": [], "strongest_surviving_element": "Good"}'
         elif "arbiter" in agent_name:
             if "decision" in session_id:
-                return '{"evaluations": [], "execution_order": [], "quick_wins": [], "minimum_viable_plan": {}, "full_plan": {}, "must_verify_first": [], "first_probes": [], "raw_plan_score": 75, "penalties": [], "adjusted_plan_score": 75, "plan_verdict": "go", "constraint_compliance": {}, "criteria_coverage": {}, "monday_morning_actions": [], "summary": "Test"}'
+                return '{"evaluations": [{"step_id": "S1", "impact_score": 80, "feasibility_score": 85, "risk_adjusted_score": 82, "urgency_score": 75, "weighted_score": 81, "verdict": "do"}], "execution_order": ["S1"], "quick_wins": [], "minimum_viable_plan": {"steps": ["S1"], "hours": 20, "covers_criteria": ["Test"], "gaps": []}, "full_plan": {"steps": ["S1"], "hours": 20, "all_criteria_covered": true}, "must_verify_first": [], "first_probes": [], "raw_plan_score": 75, "penalties": [], "adjusted_plan_score": 75, "plan_verdict": "go", "constraint_compliance": {"status": "compliant", "violations": []}, "criteria_coverage": {"covered": 1, "total": 1, "gaps": []}, "monday_morning_actions": ["Start"], "summary": "Test"}'
             elif "changeset" in session_id:
-                return '{"change_sets": [], "safe_first_change": {}, "verification_sequence": [], "release_notes": []}'
-            return '{"merged_problem": "Test", "merged_approach": "Best", "merged_steps": [], "operational_readiness": {"validation": "", "rollout": "", "rollback": "", "monitoring": ""}, "traceability": {}, "critical_path": [], "resolved_conflicts": [], "discarded_steps": [], "blockers": [], "dissent_log": [], "estimated_hours_80pct": 30, "merged_confidence": 75}'
+                return '{"change_sets": [{"id": "CS1", "goal": "Add feature", "files": ["app.py"], "reversible": true, "verification": ["Test passes"]}], "safe_first_change": {"goal": "Add feature", "why_first": "Low risk", "files": ["app.py"]}, "verification_sequence": ["Run tests"], "release_notes": ["New feature added"]}'
+            return '{"merged_problem": "Test", "merged_approach": "Best", "merged_steps": [{"id": "M1", "category": "build", "what": "Do it", "why": "Because", "how": "Code", "risk": "Low", "risk_severity": "low", "mitigation": "Test", "effort_hours_80pct": 10, "reversible": true, "approval_needed": "none", "exit_criteria": "Works", "source_plan": "merged", "survival_reason": "Best"}], "operational_readiness": {"validation": "Test it", "rollout": "Gradual", "rollback": "Revert", "monitoring": "Metrics"}, "traceability": {"constraints": [], "criteria": []}, "critical_path": ["M1"], "resolved_conflicts": [], "discarded_steps": [], "blockers": [], "dissent_log": [], "estimated_hours_80pct": 30, "merged_confidence": 75}'
         elif "red-team" in agent_name:
             return '{"overall": {"attack_surface": "low", "fatal_flaw_found": false}, "attacks": [], "cascading_failures": [], "timeline_stress": {}, "recommendations": [], "clean_bill_of_health": true, "summary": "Resilient"}'
         return '{}'

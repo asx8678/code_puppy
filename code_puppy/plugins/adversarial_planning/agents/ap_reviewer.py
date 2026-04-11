@@ -55,7 +55,7 @@ class APReviewerAgent(BaseAdversarialAgent):
     "overall": {
         "base_case": "What this plan gets right (be fair)",
         "fatal_flaw": "Largest issue that threatens success, or null",
-        "wrong_problem": "If solving wrong problem, what is real problem? Else null",
+        "wrong_problem": "String describing how problem was misframed, or null if problem correctly understood",
         "score": 72,
         "ship_readiness": "not_ready | needs_work | ready_with_caveats | ready",
         "codebase_fit": "low | medium | high"

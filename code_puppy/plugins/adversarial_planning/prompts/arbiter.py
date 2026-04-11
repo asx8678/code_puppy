@@ -77,10 +77,13 @@ OUTPUT (JSON):
 PlanStep IDs in merged plan:
 ────────────────────────────────────────────────────────────────────────
 
-Use new step IDs (M1, M2, M3...) but track origin:
-    • "origin": "A1" → evolved from Plan A step 1
-    • "origin": "B2+merger" → merged B2 with something from A
-    • "origin": "synthesis" → new step not in either plan
+Step IDs in merged plan:
+    • Keep original IDs (A1, B2) for steps taken unchanged from original plans
+    • Use M-prefix (M1, M2, M3) for new/merged steps
+
+Track provenance with these optional fields:
+    • "source_plan": "A" | "B" | "merged" - which plan this came from
+    • "survival_reason": "<string>" - why this step survived review
 
 ARBITER RULES:
 ────────────────────────────────────────────────────────────────────────

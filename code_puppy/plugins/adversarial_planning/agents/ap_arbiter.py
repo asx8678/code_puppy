@@ -56,14 +56,14 @@ class APArbiterAgent(BaseAdversarialAgent):
     "merged_approach": "Best combined strategy from surviving elements",
     "merged_steps": [
         {
-            "id": "A3 | B2 | etc",
+            "id": "A3 | B2 | M1 | M2 | etc",
             "category": "discovery | design | build | test | rollout | rollback | monitoring | docs",
             "what": "Concrete action",
             "why": "Why it matters",
             "how": "Implementation detail",
             "evidence_refs": ["EV1", "EV2"],
             "likely_files": ["src/file.py"],
-            "depends_on": ["A1"],
+            "depends_on": ["A1", "M1"],
             "covers_constraints": ["constraint_id"],
             "covers_criteria": ["criterion_id"],
             "risk": "What could go wrong",
@@ -73,8 +73,8 @@ class APArbiterAgent(BaseAdversarialAgent):
             "reversible": true,
             "approval_needed": "none | write_access | production_change | security_or_compliance",
             "exit_criteria": "Done when...",
-            "source_plan": "A | B | reviewer | merged",
-            "survival_reason": "Why this step survived review"
+            "source_plan": "A | B | reviewer | merged (optional, maps to PlanStep field)",
+            "survival_reason": "Why this step survived review (optional, maps to PlanStep field)"
         }
     ],
     "operational_readiness": {
@@ -120,8 +120,16 @@ class APArbiterAgent(BaseAdversarialAgent):
     "merged_confidence": 81
 }
 
+Step ID Conventions:
+    - A-prefix (A1, A2, A3...): Steps originating from Plan A (Planner A)
+    - B-prefix (B1, B2, B3...): Steps originating from Plan B (Planner B)
+    - M-prefix (M1, M2, M3...): Merged/synthesized steps created by Arbiter
+
+Provenance Fields (Optional - Added to PlanStep model in Phase 2):
+    - merged_steps[].source_plan: Origin of step. Values: "A" | "B" | "reviewer" | "merged"
+    - merged_steps[].survival_reason: Rationale for why step survived adversarial review
+
 Validation:
-    - merged_steps[].source_plan: Track origin of each step
     - resolved_conflicts: Document every decision between A and B
     - dissent_log: Preserve strongest rejected alternative
     - estimated_hours_80pct: Sum of surviving steps

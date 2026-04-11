@@ -50,8 +50,9 @@ def register_adversarial_plan_tool(agent: Any) -> None:
         """
         from .orchestrator import AdversarialPlanningOrchestrator
         from .models import AdversarialPlanConfig, WorkspaceContext
+        from .commands import register_session, unregister_session
         import os
-        
+
         config = AdversarialPlanConfig(
             mode=mode,
             context=WorkspaceContext(
@@ -61,11 +62,15 @@ def register_adversarial_plan_tool(agent: Any) -> None:
             success_criteria=success_criteria or [],
             hard_constraints=hard_constraints or [],
         )
-        
+
         orchestrator = AdversarialPlanningOrchestrator(config)
-        session = await orchestrator.run()
-        
-        return session.model_dump()
+
+        register_session(orchestrator)
+        try:
+            session = await orchestrator.run()
+            return session.model_dump()
+        finally:
+            unregister_session(orchestrator.session_id)
 
 
 # Additional tools for future implementation

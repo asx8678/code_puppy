@@ -133,11 +133,13 @@ class Phase0BOutput(BaseModel):
 
 class PlanStep(BaseModel):
     """Single step within a plan with full traceability.
-    
-    Steps are identified as A1, A2, B1, B2, etc. where the
-    letter matches the plan_id (A or B).
+
+    Steps are identified as:
+    - A1, A2, A3... for Plan A steps
+    - B1, B2, B3... for Plan B steps
+    - M1, M2, M3... for merged/synthesized steps (Phase 4)
     """
-    id: str = Field(pattern=r"^[AB]\d+")  # A1, A2, B1, B2, etc.
+    id: str = Field(pattern=r"^[ABM]\d+")  # A1, A2, B1, B2, M1, M2, etc.
     category: Literal[
         "discovery", "design", "build", "test", 
         "rollout", "rollback", "monitoring", "docs"
@@ -160,6 +162,10 @@ class PlanStep(BaseModel):
         "security_or_compliance"
     ]
     exit_criteria: str = Field(min_length=1)
+
+    # Provenance fields (optional, used in Phase 4 merged steps)
+    source_plan: Literal["A", "B", "merged"] | None = None
+    survival_reason: str | None = None
 
 
 class OperationalReadiness(BaseModel):

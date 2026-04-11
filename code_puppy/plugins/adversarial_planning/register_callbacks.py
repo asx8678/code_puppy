@@ -103,8 +103,11 @@ Use `/ap <task>` for evidence-first, multi-agent adversarial planning.
 
 ### Modes:
 - **Auto** (`/ap`): Detects task complexity, selects mode
-- **Standard** (`/ap-standard`): 0A-2B, 4, 6 (faster)
-- **Deep** (`/ap-deep`): Includes red team + change sets (high-risk tasks)
+- **Standard** (`/ap-standard`): 0A → 0B → 1 → 2 → (3 if needed) → 4 → 6 (faster)
+- **Deep** (`/ap-deep`): Adds Phase 5 (Red Team) and Phase 7 (Change-Sets, go only)
+
+Phase 3 (Rebuttal) runs when reviews strongly disagree (any mode).
+Phase 7 (Change-Sets) only runs in deep mode with 'go' verdict.
 
 ### Best for:
 - Migrations and replatforming

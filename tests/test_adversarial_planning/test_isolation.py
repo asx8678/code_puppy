@@ -32,7 +32,7 @@ class TestSessionIsolation:
                     return '{"normalized_problem": "Test problem", "problem_type": "feature", "verified_facts": [], "inferences": [], "hard_constraints": [], "in_scope": [], "out_of_scope": [], "critical_unknowns": [], "planning_guardrails": [], "pre_mortem": {"scenario": "", "causes": []}}'
                 return '{"readiness": "ready", "confidence": 80, "workspace_summary": "Test workspace", "problem_signature": "Test problem signature", "evidence": [], "files_examined": [], "existing_patterns_to_reuse": [], "contradictions": [], "blast_radius": [], "critical_unknowns": []}'
             elif "reviewer" in agent_name:
-                return '{"reviewed_plan": "A", "overall": {"score": 70, "ship_readiness": "ready", "fatal_flaw": null, "codebase_fit": "high"}, "step_reviews": [], "missing_steps": [], "assumption_audit": [], "constraint_violations": [], "operational_gaps": {"validation": "", "rollout": "", "rollback": "", "monitoring": ""}, "effort_reassessment": {}, "blockers": [], "strongest_surviving_element": "Good approach"}'
+                return '{"reviewed_plan": "A", "overall": {"score": 70, "ship_readiness": "ready", "fatal_flaw": null, "codebase_fit": "high"}, "step_reviews": [], "missing_steps": [], "assumption_audit": [], "constraint_violations": [], "operational_gaps": {"validation": "Run integration tests", "rollout": "Deploy to staging", "rollback": "Revert commit", "monitoring": "Check error rates"}, "effort_reassessment": {}, "blockers": [], "strongest_surviving_element": "Good approach"}'
             elif "arbiter" in agent_name:
                 if "decision" in session_id:
                     return '{"evaluations": [], "execution_order": [], "quick_wins": [], "minimum_viable_plan": {}, "full_plan": {}, "must_verify_first": [], "first_probes": [], "raw_plan_score": 75, "penalties": [], "adjusted_plan_score": 75, "plan_verdict": "go", "constraint_compliance": {}, "criteria_coverage": {}, "monday_morning_actions": [], "summary": "Test decision"}'
@@ -46,7 +46,6 @@ class TestSessionIsolation:
         return _invoke, calls
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Integration test - requires full agent stack")
     async def test_planners_get_different_sessions(self, sample_config, tracking_invoke):
         """Test that Planner A and B get different session IDs."""
         invoke_fn, calls = tracking_invoke
@@ -74,7 +73,6 @@ class TestSessionIsolation:
         assert "planner-b" in b_session
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Integration test - requires full agent stack")
     async def test_planners_dont_see_each_others_plans(self, sample_config, tracking_invoke):
         """Test that planners don't receive each other's plans in prompts."""
         invoke_fn, calls = tracking_invoke
@@ -93,7 +91,6 @@ class TestSessionIsolation:
         assert len(session_ids) >= 2  # At least 2 unique sessions
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Integration test - requires full agent stack")
     async def test_all_phases_get_unique_sessions(self, sample_config, tracking_invoke):
         """Test that every phase gets a unique session ID."""
         invoke_fn, calls = tracking_invoke
@@ -110,7 +107,6 @@ class TestSessionIsolation:
         assert len(session_ids) == len(set(session_ids)), "Session IDs should be unique"
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Integration test - requires full agent stack")
     async def test_reviewer_isolation(self, sample_config, tracking_invoke):
         """Test reviewers run in isolated sessions."""
         invoke_fn, calls = tracking_invoke
@@ -131,7 +127,6 @@ class TestSessionIsolation:
         assert len(set(session_ids)) == len(session_ids), "Reviewer session IDs must be unique"
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Integration test - requires full agent stack")
     async def test_arbiter_different_session_from_planners(self, sample_config, tracking_invoke):
         """Test arbiter runs in different session from planners."""
         invoke_fn, calls = tracking_invoke
@@ -156,7 +151,6 @@ class TestSessionIsolation:
         assert not arbiter_sessions & planner_sessions
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Integration test - requires full agent stack")
     async def test_session_prefix_consistency(self, sample_config, tracking_invoke):
         """Test all session IDs share common prefix from orchestrator."""
         invoke_fn, calls = tracking_invoke
