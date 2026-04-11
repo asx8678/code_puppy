@@ -13,9 +13,7 @@ import logging
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Generic, TypeVar
-
-T = TypeVar("T")
+from typing import Any, TypeVar
 
 
 # Module-level logger for warn_once
@@ -149,7 +147,7 @@ def run_async_sync(coro) -> Any:
     return future.result()
 
 
-class DebouncedQueue(Generic[T]):
+class DebouncedQueue[T]:
     """Generic thread-safe debounced batch queue with per-key deduplication.
 
     Items added within the debounce window are batched together and flushed
