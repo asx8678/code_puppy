@@ -9,7 +9,6 @@ Covers:
 - Fail-closed behavior on parse errors
 """
 
-import pytest
 
 from code_puppy.plugins.shell_safety.regex_classifier import (
     RegexClassificationResult,

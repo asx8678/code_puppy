@@ -1,7 +1,7 @@
 """Test adversarial planning orchestrator."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 from code_puppy.plugins.adversarial_planning.orchestrator import (
     AdversarialPlanningOrchestrator,
@@ -9,8 +9,6 @@ from code_puppy.plugins.adversarial_planning.orchestrator import (
 )
 from code_puppy.plugins.adversarial_planning.validators import needs_rebuttal
 from code_puppy.plugins.adversarial_planning.models import (
-    AdversarialPlanConfig,
-    WorkspaceContext,
     Phase6Output,
 )
 

@@ -6,7 +6,6 @@ behavior ported from pi-mono-main's file-mutation-queue.ts.
 
 import asyncio
 import os
-import tempfile
 import threading
 import time
 

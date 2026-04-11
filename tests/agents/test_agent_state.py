@@ -7,7 +7,6 @@ immutable agent configuration.
 
 from unittest.mock import MagicMock
 
-import pytest
 
 from code_puppy.agents.agent_state import AgentRuntimeState
 

@@ -1,7 +1,6 @@
 """Tests for the TUI completion system."""
 
 import os
-import pytest
 from code_puppy.tui.completion import (
     CompletionItem,
     get_completions,

@@ -5,7 +5,6 @@ Covers:
 - normalize_eol: CRLF→LF, orphan CR, binary passthrough, empty input
 """
 
-import pytest
 
 from code_puppy.utils.eol import looks_textish, normalize_eol
 

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from code_puppy.callbacks import register_callback
 
-from .config import load_config, MemoryConfig, is_memory_enabled
+from .config import load_config, MemoryConfig
 from .storage import FileMemoryStorage
 from .updater import MemoryUpdater
 

@@ -3,7 +3,6 @@
 import os
 import tempfile
 
-import pytest
 
 from code_puppy.plugins.file_mentions.register_callbacks import (
     extract_file_mentions,

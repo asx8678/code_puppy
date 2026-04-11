@@ -648,7 +648,6 @@ def _build_custom_gemini(model_name: str, model_config: dict, config: dict) -> A
 
 def _build_cerebras(model_name: str, model_config: dict, config: dict) -> Any:
     from pydantic_ai.models.openai import OpenAIChatModel
-    from pydantic_ai.providers.openai import OpenAIProvider
 
     # Use the cached provider class to avoid leaking types across rebuilds
     ZaiCerebrasProvider = _get_zai_cerebras_provider_class()

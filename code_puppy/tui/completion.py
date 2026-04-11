@@ -4,7 +4,6 @@ Provides slash command completion, file path completion, and model/agent
 completion. Shows results in an OptionList overlay above the input.
 """
 
-import glob
 import os
 import sys
 from dataclasses import dataclass

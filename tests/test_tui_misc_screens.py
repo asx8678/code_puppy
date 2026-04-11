@@ -7,7 +7,6 @@ Verifies:
 - Helper functions exist and behave correctly
 """
 
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -270,7 +269,6 @@ class TestUCScreen:
 class TestAppWiring:
     def test_app_handles_autosave_load_command(self) -> None:
         """app.py _handle_slash_command references AutosaveScreen for /autosave_load."""
-        import ast
         from pathlib import Path
 
         source = (

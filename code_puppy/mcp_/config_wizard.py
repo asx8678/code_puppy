@@ -14,7 +14,6 @@ from rich.text import Text
 
 from code_puppy.mcp_.manager import ServerConfig, get_mcp_manager
 from code_puppy.mcp_.mcp_security import (
-    CommandNotAllowedError,
     InvalidArgumentError,
     MCPSecurityError,
     PathTraversalError,

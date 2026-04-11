@@ -7,7 +7,6 @@ This module provides a unified API for directory indexing that:
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 # Try to import Rust indexer
 try:

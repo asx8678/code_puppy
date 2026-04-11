@@ -203,7 +203,6 @@ def test_extra_models_json_decode_error(tmp_path, monkeypatch):
     config = ModelFactory.load_config()
 
     # The config should still be loaded, just without the extra models
-    from collections.abc import Mapping
 
     assert isinstance(config, Mapping)
     assert len(config) > 0
@@ -232,7 +231,6 @@ def test_extra_models_exception_handling(tmp_path, monkeypatch, caplog):
         config = ModelFactory.load_config()
 
     # The config should still be loaded
-    from collections.abc import Mapping
 
     assert isinstance(config, Mapping)
     assert len(config) > 0

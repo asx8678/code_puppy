@@ -39,7 +39,6 @@ except ImportError:
 from code_puppy import _core_bridge
 from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
 from code_puppy._core_bridge import (
-    serialize_messages_for_rust,  # Keep for any remaining edge cases
     MessageBatchHandle,
     create_message_batch,
 )

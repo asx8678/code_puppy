@@ -8,7 +8,7 @@ class TestToolRegistry:
         from code_puppy.tools import TOOL_REGISTRY
 
         assert "list_files" in TOOL_REGISTRY
-        assert "edit_file" in TOOL_REGISTRY
+        assert "create_file" in TOOL_REGISTRY
         assert "universal_constructor" in TOOL_REGISTRY
 
     def test_get_available_tool_names(self):

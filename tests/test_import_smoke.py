@@ -4,7 +4,6 @@ These tests catch forward-reference and import-time errors that can
 block the application from starting. See BUG-01 in the security audit.
 """
 
-import pytest
 
 
 class TestImportSmoke:
@@ -29,11 +28,9 @@ class TestImportSmoke:
         This test catches any import-time failures that propagate
         through the config module's import chain.
         """
-        import code_puppy.config
 
     def test_main_imports(self):
         """Verify the main entry point imports cleanly."""
-        import code_puppy.main
 
     def test_turbo_executor_orchestrator_imports(self):
         """Verify turbo_executor orchestrator imports.

@@ -9,9 +9,7 @@ Covers:
 """
 
 import asyncio
-import logging
 import os
-from unittest.mock import patch
 
 import pytest
 
@@ -20,11 +18,9 @@ from code_puppy.callbacks import (
     _trigger_callbacks,
     _trigger_callbacks_sync,
     clear_callbacks,
-    get_callbacks,
     on_startup,
     on_shutdown,
     register_callback,
-    unregister_callback,
 )
 
 

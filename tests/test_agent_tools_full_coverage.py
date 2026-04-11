@@ -1,6 +1,5 @@
 """Full coverage tests for tools/agent_tools.py."""
 
-import json
 from unittest.mock import patch
 
 import pytest

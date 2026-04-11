@@ -9,14 +9,17 @@ Focuses on:
 """
 
 import json
-import pickle
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from code_puppy import session_storage
-from code_puppy.session_storage import _LEGACY_SIGNATURE_SIZE, _LEGACY_SIGNED_HEADER
+from code_puppy.session_storage import (
+    _JSON_MAGIC,
+    _compute_hmac,
+    _get_hmac_key,
+)
 
 
 class TestSessionPathEdgeCases:
@@ -170,13 +173,15 @@ class TestSessionLoadEdgeCases:
         with pytest.raises(Exception):  # pickle.UnpicklingError or similar
             session_storage.load_session("corrupted", tmp_path)
 
-    def test_load_session_with_empty_pickle(self, tmp_path):
-        """Test loading empty pickle file."""
-        pkl_data = pickle.dumps([])
+    def test_load_session_with_empty_history(self, tmp_path):
+        """Test loading session with empty message history."""
+        # Create valid JSON+HMAC format session file with empty messages
+        payload = {"messages": [], "compacted_hashes": []}
+        json_data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        hmac_sig = _compute_hmac(_get_hmac_key(), json_data)
+
         pickle_path = tmp_path / "empty.pkl"
-        pickle_path.write_bytes(
-            _LEGACY_SIGNED_HEADER + (b"x" * _LEGACY_SIGNATURE_SIZE) + pkl_data
-        )
+        pickle_path.write_bytes(_JSON_MAGIC + hmac_sig + json_data)
 
         loaded = session_storage.load_session("empty", tmp_path)
         assert loaded == []
@@ -190,11 +195,13 @@ class TestSessionLoadEdgeCases:
             "string",  # Test string values
         ]
 
-        pkl_data = pickle.dumps(original)
+        # Create valid JSON+HMAC format session file
+        payload = {"messages": original, "compacted_hashes": []}
+        json_data = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
+        hmac_sig = _compute_hmac(_get_hmac_key(), json_data)
+
         pickle_path = tmp_path / "test.pkl"
-        pickle_path.write_bytes(
-            _LEGACY_SIGNED_HEADER + (b"x" * _LEGACY_SIGNATURE_SIZE) + pkl_data
-        )
+        pickle_path.write_bytes(_JSON_MAGIC + hmac_sig + json_data)
 
         loaded = session_storage.load_session("test", tmp_path)
         assert loaded == original

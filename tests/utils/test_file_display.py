@@ -7,9 +7,6 @@ These tests cover:
 """
 
 import os
-import sys
-import tempfile
-from unittest import mock
 
 import pytest
 
@@ -509,7 +506,6 @@ class TestIntegrationWithTools:
         """file_operations module can import file_display utilities."""
         from code_puppy.tools.file_operations import (
             format_content_with_line_numbers,
-            truncate_with_guidance,
         )
 
         # Verify they work

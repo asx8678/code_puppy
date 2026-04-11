@@ -12,14 +12,13 @@ duplicating logic.
 
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from code_puppy.config import DATA_DIR, CACHE_DIR, get_current_autosave_id
-from code_puppy.messaging import emit_info, emit_warning, emit_success, emit_error
+from code_puppy.config import CACHE_DIR, get_current_autosave_id
+from code_puppy.messaging import emit_success, emit_error
 
 logger = logging.getLogger(__name__)
 

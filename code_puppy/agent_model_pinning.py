@@ -11,7 +11,6 @@ For built-in agents, the existing config pinning behavior is preserved.
 """
 
 import json
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 

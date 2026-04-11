@@ -4,7 +4,6 @@ Covers: imports, class hierarchy, bindings, instantiation,
 helper widgets, and data-wiring with ColorConfiguration.
 """
 
-import pytest
 
 
 # ---------------------------------------------------------------------------

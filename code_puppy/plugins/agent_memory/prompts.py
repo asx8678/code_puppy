@@ -9,7 +9,7 @@ from typing import Any, TYPE_CHECKING
 
 from code_puppy.run_context import get_current_run_context
 
-from .core import is_memory_enabled_global, get_config, _get_storage
+from .core import is_memory_enabled_global, _get_storage
 from .config import load_config
 
 if TYPE_CHECKING:

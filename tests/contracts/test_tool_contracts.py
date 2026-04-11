@@ -8,7 +8,7 @@ Tests validate that tools follow code_puppy's contracts for:
 
 import pytest
 
-from code_puppy.tools.agent_tools import register_list_agents, register_invoke_agent
+from code_puppy.tools.agent_tools import register_list_agents
 from tests.contracts import (
     ContractViolation,
     ToolContract,

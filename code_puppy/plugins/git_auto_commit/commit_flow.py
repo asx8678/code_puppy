@@ -13,7 +13,6 @@ import shlex
 from typing import Any
 
 from code_puppy.plugins.git_auto_commit.context_guard import (
-    GACContextError,
     check_gac_context,
 )
 from code_puppy.plugins.git_auto_commit.shell_bridge import execute_git_command_sync

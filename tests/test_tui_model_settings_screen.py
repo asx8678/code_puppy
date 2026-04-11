@@ -1,6 +1,5 @@
 """Tests for the ModelSettingsScreen Textual screen."""
 
-import pytest
 
 
 def test_import_screen():

@@ -7,7 +7,6 @@ and the storage layer, batching writes with a configurable debounce window.
 import logging
 import threading
 from datetime import datetime, timezone
-from typing import Any
 
 from code_puppy.async_utils import DebouncedQueue
 from code_puppy.plugins.agent_memory.storage import Fact, FileMemoryStorage

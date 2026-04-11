@@ -1,10 +1,8 @@
 import os
 from unittest.mock import patch
 
-import pytest
 
 from code_puppy.utils.editor_detect import (
-    EditorCandidate,
     MAX_EDITOR_OPTS,
     detect_editors,
     pick_default_editor,

@@ -1,6 +1,5 @@
 """Tests for adversarial planning slash commands and session lifecycle."""
 
-import pytest
 from unittest.mock import Mock, patch
 
 from code_puppy.plugins.adversarial_planning.commands import (

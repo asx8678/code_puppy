@@ -15,10 +15,6 @@ from pathlib import Path
 from code_puppy.command_line.command_registry import register_command
 from code_puppy.staged_changes import (
     get_sandbox,
-    is_staging_enabled,
-    stage_create,
-    stage_replace,
-    stage_delete_snippet,
     clear_staged,
 )
 from code_puppy.messaging import emit_info, emit_success, emit_warning, emit_error

@@ -14,10 +14,8 @@ from hypothesis import given, settings, strategies as st
 from tests.fuzz.strategies import (
     TURBO_PARSE_AVAILABLE,
     elixir_source,
-    empty_source,
     javascript_source,
     long_identifiers,
-    many_functions_python,
     python_source,
     rust_source,
     validate_symbol_outline,

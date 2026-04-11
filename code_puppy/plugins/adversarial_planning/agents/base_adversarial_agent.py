@@ -6,7 +6,6 @@ evidence-labeling requirements, and role-based tool restrictions.
 
 from abc import ABC
 
-from code_puppy import callbacks
 from code_puppy.agents.base_agent import BaseAgent
 from code_puppy.plugins.adversarial_planning.prompts.shared_rules import get_shared_rules
 

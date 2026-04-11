@@ -27,7 +27,6 @@ import logging
 import uuid
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from starlette.websockets import WebSocketState
 
 from code_puppy.api.security import is_trusted_origin
 

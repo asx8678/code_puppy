@@ -145,9 +145,9 @@ def test_pack_bloodhound():
     from code_puppy.agents.pack.bloodhound import BloodhoundAgent
 
     agent = BloodhoundAgent()
-    with patch("code_puppy.agents.pack.bloodhound.callbacks") as mock_cb:
+    with patch("code_puppy.agents.agent_prompt_mixin.callbacks") as mock_cb:
         mock_cb.on_load_prompt.return_value = ["extra prompt"]
-        prompt = agent.get_system_prompt()
+        prompt = agent.get_full_system_prompt()
         assert "extra prompt" in prompt
 
 
@@ -155,9 +155,9 @@ def test_code_puppy_prompt_allows_callback_additions():
     from code_puppy.agents.agent_code_puppy import CodePuppyAgent
 
     agent = CodePuppyAgent()
-    with patch("code_puppy.agents.agent_code_puppy.callbacks") as mock_cb:
+    with patch("code_puppy.agents.agent_prompt_mixin.callbacks") as mock_cb:
         mock_cb.on_load_prompt.return_value = ["extra"]
-        prompt = agent.get_system_prompt()
+        prompt = agent.get_full_system_prompt()
         assert "extra" in prompt
 
 
@@ -165,9 +165,9 @@ def test_pack_retriever():
     from code_puppy.agents.pack.retriever import RetrieverAgent
 
     agent = RetrieverAgent()
-    with patch("code_puppy.agents.pack.retriever.callbacks") as mock_cb:
+    with patch("code_puppy.agents.agent_prompt_mixin.callbacks") as mock_cb:
         mock_cb.on_load_prompt.return_value = ["extra"]
-        prompt = agent.get_system_prompt()
+        prompt = agent.get_full_system_prompt()
         assert "extra" in prompt
 
 
@@ -175,9 +175,9 @@ def test_pack_shepherd():
     from code_puppy.agents.pack.shepherd import ShepherdAgent
 
     agent = ShepherdAgent()
-    with patch("code_puppy.agents.pack.shepherd.callbacks") as mock_cb:
+    with patch("code_puppy.agents.agent_prompt_mixin.callbacks") as mock_cb:
         mock_cb.on_load_prompt.return_value = ["extra"]
-        prompt = agent.get_system_prompt()
+        prompt = agent.get_full_system_prompt()
         assert "extra" in prompt
 
 
@@ -185,9 +185,9 @@ def test_pack_terrier():
     from code_puppy.agents.pack.terrier import TerrierAgent
 
     agent = TerrierAgent()
-    with patch("code_puppy.agents.pack.terrier.callbacks") as mock_cb:
+    with patch("code_puppy.agents.agent_prompt_mixin.callbacks") as mock_cb:
         mock_cb.on_load_prompt.return_value = ["extra"]
-        prompt = agent.get_system_prompt()
+        prompt = agent.get_full_system_prompt()
         assert "extra" in prompt
 
 
@@ -195,9 +195,9 @@ def test_pack_watchdog():
     from code_puppy.agents.pack.watchdog import WatchdogAgent
 
     agent = WatchdogAgent()
-    with patch("code_puppy.agents.pack.watchdog.callbacks") as mock_cb:
+    with patch("code_puppy.agents.agent_prompt_mixin.callbacks") as mock_cb:
         mock_cb.on_load_prompt.return_value = ["extra"]
-        prompt = agent.get_system_prompt()
+        prompt = agent.get_full_system_prompt()
         assert "extra" in prompt
 
 
@@ -205,9 +205,9 @@ def test_pack_leader():
     from code_puppy.agents.agent_pack_leader import PackLeaderAgent
 
     agent = PackLeaderAgent()
-    with patch("code_puppy.agents.agent_pack_leader.callbacks") as mock_cb:
+    with patch("code_puppy.agents.agent_prompt_mixin.callbacks") as mock_cb:
         mock_cb.on_load_prompt.return_value = ["extra"]
-        prompt = agent.get_system_prompt()
+        prompt = agent.get_full_system_prompt()
         assert "extra" in prompt
 
 

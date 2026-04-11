@@ -1,6 +1,5 @@
 """Tests for code_puppy.utils.overflow_detect."""
 
-import pytest
 from code_puppy.utils.overflow_detect import (
     is_context_overflow,
     is_rate_limit_error,

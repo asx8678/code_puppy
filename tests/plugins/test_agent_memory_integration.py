@@ -16,15 +16,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from code_puppy.callbacks import get_callbacks
 from code_puppy.plugins.agent_memory import (
     CORRECTION_DELTA,
     REINFORCEMENT_DELTA,
-    ExtractedFact,
     FactExtractor,
     FileMemoryStorage,
     MemoryConfig,
-    MemoryUpdater,
     MockLLMClient,
     Signal,
     SignalDetector,
@@ -33,18 +30,14 @@ from code_puppy.plugins.agent_memory import (
     has_correction,
     has_preference,
     has_reinforcement,
-    load_config,
 )
 from code_puppy.plugins.agent_memory.config import _get_bool, _get_float, _get_int
-from code_puppy.plugins.agent_memory.extraction import DEFAULT_EXTRACTION_PROMPT
 from code_puppy.plugins.agent_memory.core import (
     _get_storage,
-    _get_updater,
     _on_shutdown,
     _on_startup,
 )
 from code_puppy.plugins.agent_memory.messaging import (
-    _get_conversation_messages,
     _normalize_messages,
 )
 from code_puppy.plugins.agent_memory.processing import (
@@ -58,9 +51,6 @@ from code_puppy.plugins.agent_memory.prompts import (
 from code_puppy.plugins.agent_memory.agent_run_end import _on_agent_run_end
 from code_puppy.plugins.agent_memory.signals import (
     PREFERENCE_DELTA,
-    _COMPILED_CORRECTION,
-    _COMPILED_PREFERENCE,
-    _COMPILED_REINFORCEMENT,
 )
 
 
@@ -957,7 +947,6 @@ class TestAsyncCorrectness:
     def test_schedule_fact_extraction_returns_task(self) -> None:
         """_schedule_fact_extraction returns a task when in async context."""
         import asyncio
-        from code_puppy.plugins.agent_memory.processing import _schedule_fact_extraction
 
         async def test_coro():
             # Schedule extraction in async context
@@ -972,7 +961,6 @@ class TestAsyncCorrectness:
 
     def test_schedule_fact_extraction_no_event_loop(self) -> None:
         """_schedule_fact_extraction handles no event loop gracefully."""
-        from code_puppy.plugins.agent_memory.processing import _schedule_fact_extraction
 
         # Called from sync context without event loop
         task = _schedule_fact_extraction("test-agent", [], None)
@@ -1047,24 +1035,9 @@ def test_all_public_api_exports() -> None:
     from code_puppy.plugins.agent_memory import (
         CORRECTION_DELTA,
         DEFAULT_DEBOUNCE_MS,
-        DEFAULT_EXTRACTION_PROMPT,
-        ExtractedFact,
-        Fact,
-        FactExtractor,
-        FileMemoryStorage,
-        MemoryConfig,
-        MemoryUpdater,
-        MockLLMClient,
         PREFERENCE_DELTA,
         REINFORCEMENT_DELTA,
-        Signal,
-        SignalDetector,
         SignalType,
-        detect_signals,
-        has_correction,
-        has_preference,
-        has_reinforcement,
-        load_config,
     )
 
     # Verify types

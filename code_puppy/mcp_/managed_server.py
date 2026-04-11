@@ -4,7 +4,6 @@ This module provides a managed wrapper around pydantic-ai MCP server classes
 that adds management capabilities while maintaining 100% compatibility.
 """
 
-import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta

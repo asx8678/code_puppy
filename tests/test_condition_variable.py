@@ -1,12 +1,9 @@
 """Test for condition variable replacement of asyncio.sleep(0.1)."""
 
-import asyncio
 import pytest
 
 from code_puppy.messaging import (
-    get_global_queue,
     wait_for_messages_rendered,
-    emit_info,
 )
 from code_puppy.messaging.message_queue import MessageQueue
 

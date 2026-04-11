@@ -7,7 +7,6 @@ and actions taken during the current run.
 from code_puppy.command_line.command_registry import register_command
 from code_puppy.workflow_state import (
     get_workflow_state,
-    WorkflowFlag,
     set_flag,
     reset_workflow_state,
 )

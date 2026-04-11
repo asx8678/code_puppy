@@ -11,7 +11,7 @@ from code_puppy.model_packs import (
     list_packs,
     set_current_pack,
 )
-from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
+from code_puppy.messaging import emit_info, emit_warning
 
 
 @register_command(

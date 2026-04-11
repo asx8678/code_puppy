@@ -8,11 +8,9 @@ The fixes ensure error-path ShellCommandOutput constructions don't raise Validat
 and that Popen no longer uses the invalid newline parameter.
 """
 
-import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from code_puppy.tools.command_runner import ShellCommandOutput, _run_command_inner
 

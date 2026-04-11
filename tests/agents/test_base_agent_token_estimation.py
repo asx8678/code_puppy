@@ -1,6 +1,5 @@
 """Tests for BaseAgent token estimation and message filtering functionality."""
 
-import math
 
 import pytest
 from unittest.mock import patch

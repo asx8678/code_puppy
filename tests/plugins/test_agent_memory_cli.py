@@ -100,7 +100,7 @@ class TestMemoryCommandHelp:
 
     def test_memory_help_returns_tuple_list(self) -> None:
         """_memory_help should return list of (command, description) tuples."""
-        from code_puppy.plugins.agent_memory.register_callbacks import (
+        from code_puppy.plugins.agent_memory.commands import (
             _memory_help,
         )
 
@@ -116,7 +116,7 @@ class TestMemoryCommandHandler:
 
     def test_non_memory_command_returns_none(self) -> None:
         """Handler should return None for non-memory commands."""
-        from code_puppy.plugins.agent_memory.register_callbacks import (
+        from code_puppy.plugins.agent_memory.commands import (
             _handle_memory_command,
         )
 
@@ -125,7 +125,7 @@ class TestMemoryCommandHandler:
 
     def test_memory_command_disabled_shows_warning(self) -> None:
         """When memory is disabled, should warn and return True."""
-        from code_puppy.plugins.agent_memory.register_callbacks import (
+        from code_puppy.plugins.agent_memory.commands import (
             _handle_memory_command,
         )
 
@@ -144,7 +144,7 @@ class TestMemoryCommandHandler:
     @pytest.mark.parametrize("subcommand", ["show", "clear", "export"])
     def test_memory_subcommands_when_enabled(self, subcommand: str) -> None:
         """Each subcommand should be handled when memory is enabled."""
-        from code_puppy.plugins.agent_memory.register_callbacks import (
+        from code_puppy.plugins.agent_memory.commands import (
             _handle_memory_command,
         )
 
@@ -169,7 +169,7 @@ class TestMemoryCommandHandler:
 
     def test_memory_help_subcommand(self) -> None:
         """Help subcommand should show detailed help."""
-        from code_puppy.plugins.agent_memory.register_callbacks import (
+        from code_puppy.plugins.agent_memory.commands import (
             _handle_memory_command,
         )
 
@@ -185,7 +185,7 @@ class TestMemoryCommandHandler:
 
     def test_memory_unknown_subcommand_shows_help(self) -> None:
         """Unknown subcommand should show warning and help."""
-        from code_puppy.plugins.agent_memory.register_callbacks import (
+        from code_puppy.plugins.agent_memory.commands import (
             _handle_memory_command,
         )
 
@@ -204,7 +204,7 @@ class TestMemoryCommandHandler:
 
     def test_memory_no_subcommand_shows_help(self) -> None:
         """Bare /memory command should show help."""
-        from code_puppy.plugins.agent_memory.register_callbacks import (
+        from code_puppy.plugins.agent_memory.commands import (
             _handle_memory_command,
         )
 
@@ -224,7 +224,7 @@ class TestMemoryShowCommand:
 
     def test_show_no_agent_emits_error(self) -> None:
         """Should emit error when no agent is active."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
+        from code_puppy.plugins.agent_memory.commands import _show_memories
 
         with patch(
             "code_puppy.plugins.agent_memory.commands._get_agent_name",
@@ -238,7 +238,7 @@ class TestMemoryShowCommand:
 
     def test_show_empty_memories_informs_user(self) -> None:
         """Should inform user when no memories exist."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
+        from code_puppy.plugins.agent_memory.commands import _show_memories
 
         with patch(
             "code_puppy.plugins.agent_memory.commands._get_agent_name",
@@ -257,7 +257,7 @@ class TestMemoryShowCommand:
 
     def test_show_memories_displays_table(self) -> None:
         """Should display a Rich table with memories."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
+        from code_puppy.plugins.agent_memory.commands import _show_memories
 
         mock_facts = [
             {
@@ -292,7 +292,7 @@ class TestMemoryShowCommand:
 
     def test_show_memories_handles_malformed_facts(self) -> None:
         """Should handle facts with string confidence (not crash)."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
+        from code_puppy.plugins.agent_memory.commands import _show_memories
 
         # Fact with string confidence instead of float
         mock_facts = [
@@ -320,7 +320,7 @@ class TestMemoryShowCommand:
 
     def test_show_memories_handles_non_string_created_at(self) -> None:
         """Should handle facts with non-string created_at (not crash)."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
+        from code_puppy.plugins.agent_memory.commands import _show_memories
 
         # Fact with int created_at instead of string
         mock_facts = [
@@ -348,7 +348,7 @@ class TestMemoryShowCommand:
 
     def test_show_memories_handles_non_dict_facts(self) -> None:
         """Should handle facts that are not dicts (not crash)."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _show_memories
+        from code_puppy.plugins.agent_memory.commands import _show_memories
 
         # Facts that are not dicts
         mock_facts = [
@@ -378,7 +378,7 @@ class TestMemoryClearCommand:
 
     def test_clear_no_agent_emits_warning(self) -> None:
         """Should warn when no agent is active."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _clear_memories
+        from code_puppy.plugins.agent_memory.commands import _clear_memories
 
         with patch(
             "code_puppy.plugins.agent_memory.commands._get_agent_name",
@@ -392,7 +392,7 @@ class TestMemoryClearCommand:
 
     def test_clear_empty_memories_informs_user(self) -> None:
         """Should inform user when nothing to clear."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _clear_memories
+        from code_puppy.plugins.agent_memory.commands import _clear_memories
 
         with patch(
             "code_puppy.plugins.agent_memory.commands._get_agent_name",
@@ -411,7 +411,7 @@ class TestMemoryClearCommand:
 
     def test_clear_memories_success(self) -> None:
         """Should clear memories and emit success message."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _clear_memories
+        from code_puppy.plugins.agent_memory.commands import _clear_memories
 
         with patch(
             "code_puppy.plugins.agent_memory.commands._get_agent_name",
@@ -435,7 +435,7 @@ class TestMemoryExportCommand:
 
     def test_export_no_agent_emits_error(self) -> None:
         """Should emit error when no agent is active."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _export_memories
+        from code_puppy.plugins.agent_memory.commands import _export_memories
 
         with patch(
             "code_puppy.plugins.agent_memory.commands._get_agent_name",
@@ -449,7 +449,7 @@ class TestMemoryExportCommand:
 
     def test_export_empty_memories(self) -> None:
         """Should export empty memory structure."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _export_memories
+        from code_puppy.plugins.agent_memory.commands import _export_memories
 
         with patch(
             "code_puppy.plugins.agent_memory.commands._get_agent_name",
@@ -470,7 +470,7 @@ class TestMemoryExportCommand:
 
     def test_export_with_memories(self) -> None:
         """Should export memories as JSON."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _export_memories
+        from code_puppy.plugins.agent_memory.commands import _export_memories
 
         mock_facts = [
             {
@@ -498,7 +498,7 @@ class TestMemoryExportCommand:
 
     def test_export_handles_none_facts(self) -> None:
         """Should handle storage.load() returning None (not crash)."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _export_memories
+        from code_puppy.plugins.agent_memory.commands import _export_memories
 
         with patch(
             "code_puppy.plugins.agent_memory.commands._get_agent_name",
@@ -519,7 +519,7 @@ class TestMemoryExportCommand:
 
     def test_export_handles_non_serializable_data(self) -> None:
         """Should handle facts with non-JSON-serializable data (not crash)."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _export_memories
+        from code_puppy.plugins.agent_memory.commands import _export_memories
 
         # Fact with non-serializable data
         mock_facts = [
@@ -554,7 +554,7 @@ class TestMemoryStartup:
 
     def test_startup_checks_config(self) -> None:
         """Startup should check if memory is enabled."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _on_startup
+        from code_puppy.plugins.agent_memory.core import _on_startup
 
         with patch(
             "code_puppy.plugins.agent_memory.config.is_memory_enabled",
@@ -565,7 +565,7 @@ class TestMemoryStartup:
 
     def test_startup_logs_when_disabled(self) -> None:
         """Startup should log when memory is disabled."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _on_startup
+        from code_puppy.plugins.agent_memory.core import _on_startup
 
         with patch(
             "code_puppy.plugins.agent_memory.config.is_memory_enabled",
@@ -580,7 +580,7 @@ class TestMemoryStartup:
 
     def test_startup_logs_when_enabled(self) -> None:
         """Startup should log when memory is enabled."""
-        from code_puppy.plugins.agent_memory.register_callbacks import _on_startup
+        from code_puppy.plugins.agent_memory.core import _on_startup
         from code_puppy.plugins.agent_memory.config import MemoryConfig
 
         with patch(

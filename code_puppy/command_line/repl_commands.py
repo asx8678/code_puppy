@@ -11,14 +11,13 @@ This module provides commands for managing persistent REPL sessions:
 from code_puppy.command_line.command_registry import register_command
 from code_puppy.repl_session import (
     get_current_session,
-    get_session_summary,
     reset_session,
     save_session,
     get_command_history,
     clear_loaded_files,
     import_session_from_autosave,
 )
-from code_puppy.messaging import emit_info, emit_warning, emit_success, emit_error
+from code_puppy.messaging import emit_info, emit_warning, emit_success
 
 
 @register_command(

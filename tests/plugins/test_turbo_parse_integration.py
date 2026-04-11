@@ -9,16 +9,12 @@ These tests use mocking to simulate both environments without requiring the actu
 turbo_parse Rust module to be installed.
 """
 
-import os
 import sys
-import tempfile
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 from unittest import mock
 
 import pytest
-import pytest_asyncio
 
 from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
 
@@ -546,7 +542,7 @@ class TestGracefulDegradation:
 
     def test_error_structure_consistency_across_paths(self):
         """Test that error structures are consistent between available and fallback paths."""
-        from code_puppy.turbo_parse_bridge import parse_source, TURBO_PARSE_AVAILABLE
+        from code_puppy.turbo_parse_bridge import parse_source
 
         # Test that result structure is consistent
         result = parse_source("def test(): pass", "python")
@@ -655,7 +651,6 @@ class TestPluginStartupBehavior:
     ):
         """Test startup logs appropriate message when module is available."""
         from code_puppy.plugins.turbo_parse.register_callbacks import _on_startup
-        from code_puppy.plugins.turbo_parse import is_turbo_parse_available
 
         with mock.patch(
             "code_puppy.plugins.turbo_parse.register_callbacks.is_turbo_parse_available"
@@ -779,7 +774,6 @@ class TestParseCodeToolBothPaths:
         from code_puppy.plugins.turbo_parse.register_callbacks import (
             _register_parse_code_tool,
         )
-        from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
         import asyncio
 
         mock_agent = mock.MagicMock()

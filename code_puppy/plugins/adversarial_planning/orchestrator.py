@@ -26,7 +26,6 @@ from .models import (
 )
 from .evidence import EvidenceTracker
 from .validators import (
-    ValidationError,
     validate_phase_0a_output,
     validate_phase_0b_output,
     validate_phase_1_exit,

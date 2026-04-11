@@ -1,10 +1,8 @@
 """Test session isolation for adversarial planning."""
 
 import pytest
-from unittest.mock import AsyncMock
 
 from code_puppy.plugins.adversarial_planning.orchestrator import AdversarialPlanningOrchestrator
-from code_puppy.plugins.adversarial_planning.models import AdversarialPlanConfig, WorkspaceContext
 
 
 class TestSessionIsolation:

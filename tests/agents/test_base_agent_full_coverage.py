@@ -4,7 +4,6 @@ Targets all uncovered lines to achieve 100% coverage.
 """
 
 import asyncio
-import pathlib
 import threading
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 

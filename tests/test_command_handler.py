@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock, patch
 
@@ -77,7 +78,7 @@ def test_cd_valid_change():
         ):
             result = handle_command("/cd /some/dir")
             assert result is True
-            mock_chdir.assert_called_once_with("/some/dir")
+            mock_chdir.assert_called_once_with(Path("/some/dir"))
             mock_emit_success.assert_called_with("Changed directory to: /some/dir")
             # Agent must be reloaded so the system prompt and AGENT.md rules
             # reflect the new working directory.
@@ -108,13 +109,13 @@ def test_cd_valid_change_reload_failure_is_nonfatal():
             # Should not raise even though reload raises.
             result = handle_command("/cd /some/dir")
             assert result is True
-            mock_chdir.assert_called_once_with("/some/dir")
+            mock_chdir.assert_called_once_with(Path("/some/dir"))
             mock_emit_success.assert_called_once_with("Changed directory to: /some/dir")
             mock_agent.reload_code_generation_agent.assert_called_once()
             # Reload failure should emit a warning, not silently pass
             mock_emit_warning.assert_called_once()
             warning_msg = str(mock_emit_warning.call_args)
-            assert "agent reload failed" in warning_msg
+            assert "Agent reload failed" in warning_msg
             assert "boom" in warning_msg
     finally:
         mocks["emit_success"].stop()

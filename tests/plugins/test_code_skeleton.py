@@ -1,6 +1,5 @@
 """Tests for code_skeleton plugin (ADOPT from Agentless)."""
 
-import pytest
 
 from code_puppy.plugins.code_skeleton.skeleton import (
     _skeleton_via_regex,

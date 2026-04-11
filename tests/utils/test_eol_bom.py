@@ -1,7 +1,5 @@
 """Tests for BOM handling in code_puppy.utils.eol."""
 
-import os
-import pytest
 from code_puppy.utils.eol import strip_bom, restore_bom
 
 # The UTF-8 BOM character

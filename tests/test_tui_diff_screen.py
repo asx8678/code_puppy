@@ -4,7 +4,6 @@ Covers import, instantiation, class hierarchy, bindings,
 and inner widget accessibility — all without spinning up a real TUI.
 """
 
-import pytest
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,5 @@
 """Tests for the Code Scout agent."""
 
-import pytest
 
 from code_puppy.agents.agent_code_scout import CodeScoutAgent
 from code_puppy.agents.base_agent import BaseAgent

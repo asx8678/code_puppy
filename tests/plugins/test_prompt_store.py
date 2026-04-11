@@ -511,7 +511,7 @@ class TestPromptHookContract:
         params = list(sig.parameters.keys())
 
         assert params == [], f"load_custom_prompt should take no args, got {params}"
-        assert sig.return_annotation == "str | None"
+        assert sig.return_annotation == (str | None)
 
 
 # =============================================================================

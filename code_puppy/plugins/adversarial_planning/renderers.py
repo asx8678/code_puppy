@@ -1,18 +1,9 @@
 """Rich output rendering for Adversarial Planning results."""
 
 import logging
-from typing import Any
 
 from .models import (
     PlanningSession,
-    Phase0AOutput,
-    Phase0BOutput,
-    Phase1Output,
-    Phase2Output,
-    Phase4Output,
-    Phase5Output,
-    Phase6Output,
-    Phase7Output,
     EvidenceClass,
 )
 
@@ -100,13 +91,13 @@ class AdversarialPlanningRenderer:
         
         # Quick Wins
         if self.session.decision and self.session.decision.quick_wins:
-            lines.append(f"\n**Quick Wins**:")
+            lines.append("\n**Quick Wins**:")
             for win in self.session.decision.quick_wins[:3]:
                 lines.append(f"  • {win}")
         
         # Monday Morning Actions
         if self.session.decision and self.session.decision.monday_morning_actions:
-            lines.append(f"\n**Next Actions**:")
+            lines.append("\n**Next Actions**:")
             for action in self.session.decision.monday_morning_actions[:5]:
                 lines.append(f"  1. {action}")
         

@@ -1,9 +1,7 @@
 """Tests for checkpoint utility (ADOPT from Agentless skip_existing pattern)."""
 
-import json
 import threading
 
-import pytest
 
 from code_puppy.utils.checkpoint import CheckpointStore
 

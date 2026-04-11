@@ -4,7 +4,6 @@ from typing import override
 
 from code_puppy.config import get_puppy_name
 
-from ... import callbacks
 from ..base_agent import BaseAgent
 
 

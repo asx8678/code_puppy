@@ -16,7 +16,7 @@ TUIConsole
 import asyncio
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 # OPTIMIZATION: Eager imports for high-frequency TUI callbacks
 # These are imported at module load to avoid per-message import overhead
@@ -24,11 +24,9 @@ from rich.markdown import Markdown
 from rich.text import Text
 
 if TYPE_CHECKING:
-    from code_puppy.messaging.message_queue import MessageType
     from code_puppy.tui.app import CodePuppyApp
 
     # Import MessageType at type-check time only (actual import done eagerly in functions)
-    from code_puppy.messaging.message_queue import MessageType
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +192,6 @@ class TUIMessageBridge:
             except Exception:
                 return  # Widget not yet mounted
 
-        from code_puppy.messaging.message_queue import MessageType
 
         content = message.content
         msg_type = message.type

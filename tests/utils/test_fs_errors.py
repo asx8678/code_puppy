@@ -4,7 +4,6 @@ import errno
 import os
 import tempfile
 
-import pytest
 
 from code_puppy.utils.fs_errors import (
     get_fs_code,

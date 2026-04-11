@@ -48,7 +48,7 @@ def test_removal_performance():
         # O(1) means time stays relatively constant even as size increases 20x
         ratio = last_time / first_time if first_time > 0 else 1
         print(f"\nTime ratio (largest/smallest): {ratio:.2f}x")
-        print(f"  (O(1) should be roughly constant, O(n) would be ~20x)")
+        print("  (O(1) should be roughly constant, O(n) would be ~20x)")
 
         # The ratio should be well under 10x for O(1) behavior
         assert ratio < 10, f"Removal appears to be O(n), ratio was {ratio:.2f}x"

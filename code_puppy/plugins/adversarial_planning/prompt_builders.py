@@ -3,13 +3,12 @@
 Builds structured prompts for each phase of the adversarial planning workflow.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .models import (
         AdversarialPlanConfig,
         Evidence,
-        PlanningSession,
         Phase0AOutput,
         Phase0BOutput,
         Phase1Output,

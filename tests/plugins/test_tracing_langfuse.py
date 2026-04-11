@@ -12,7 +12,6 @@ import os
 import sys
 import time
 import uuid
-from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest

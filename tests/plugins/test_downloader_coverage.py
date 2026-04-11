@@ -1,6 +1,5 @@
 """100% coverage tests for code_puppy/plugins/agent_skills/downloader.py."""
 
-import shutil
 import zipfile
 from io import BytesIO
 from pathlib import Path

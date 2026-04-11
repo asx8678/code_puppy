@@ -7,28 +7,24 @@ Instruments the actual per-turn call flow to measure:
 4. Redundant work identification
 """
 
-import sys, os
+import sys
+import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import time
-import math
 import json
 import statistics
-from collections import defaultdict
 
 from pydantic_ai.messages import (
-    ModelMessage,
     ModelRequest,
     ModelResponse,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
-    ThinkingPart,
 )
 from code_puppy._core_bridge import (
     serialize_messages_for_rust,
-    serialize_message_for_rust,
     set_rust_enabled,
 )
 from code_puppy.agents.agent_code_puppy import CodePuppyAgent
@@ -144,7 +140,7 @@ for N_MSGS in [50, 200, 500]:
 
     # ═══ 1. REDUNDANT SERIALIZATION AUDIT ═══
     # Simulate the actual per-turn flow and count serialize_messages_for_rust calls
-    print(f"\n  ┌── 1. REDUNDANT SERIALIZATION AUDIT (per-turn call count)")
+    print("\n  ┌── 1. REDUNDANT SERIALIZATION AUDIT (per-turn call count)")
 
     # In the ACTUAL code path, a single turn through message_history_accumulator triggers:
     # - message_history_accumulator → hash_message × N (Python hashing, no serialize)
@@ -174,7 +170,7 @@ for N_MSGS in [50, 200, 500]:
     print(
         f"  │  Summarization compaction:       {call_count_summarization + call_count_finally} serializations"
     )
-    print(f"  │")
+    print("  │")
 
     # Measure cost of each serialization
     t_ser = measure_ns(lambda: serialize_messages_for_rust(msgs))
@@ -182,10 +178,10 @@ for N_MSGS in [50, 200, 500]:
     print(
         f"  │  Cost for 4 redundant calls:            {statistics.median(t_ser) * 4 / 1e6:.3f}ms"
     )
-    print(f"  └──")
+    print("  └──")
 
     # ═══ 2. PHASE BREAKDOWN ═══
-    print(f"\n  ┌── 2. PHASE BREAKDOWN (where does time actually go?)")
+    print("\n  ┌── 2. PHASE BREAKDOWN (where does time actually go?)")
     serialized = serialize_messages_for_rust(msgs)
 
     # Phase A: Python bridge (serialize_messages_for_rust)
@@ -225,8 +221,8 @@ for N_MSGS in [50, 200, 500]:
     rust_total = bridge_med + rust_proc_med + rust_prune_med + rust_trunc_med
     py_total = py_tok_med + py_hash_med + py_prune_med + py_trunc_med
 
-    print(f"  │")
-    print(f"  │  RUST PATH (one full turn):")
+    print("  │")
+    print("  │  RUST PATH (one full turn):")
     print(
         f"  │    serialize_messages_for_rust:    {bridge_med / 1e6:>8.3f}ms  ({bridge_med / rust_total * 100:4.1f}%)"
     )
@@ -239,10 +235,10 @@ for N_MSGS in [50, 200, 500]:
     print(
         f"  │    truncation_indices:              {rust_trunc_med / 1e6:>8.3f}ms  ({rust_trunc_med / rust_total * 100:4.1f}%)"
     )
-    print(f"  │    ────────────────────────────────────────────")
+    print("  │    ────────────────────────────────────────────")
     print(f"  │    TOTAL:                           {rust_total / 1e6:>8.3f}ms")
-    print(f"  │")
-    print(f"  │  PYTHON PATH (one full turn):")
+    print("  │")
+    print("  │  PYTHON PATH (one full turn):")
     print(
         f"  │    estimate_tokens × {N_MSGS}:          {py_tok_med / 1e6:>8.3f}ms  ({py_tok_med / py_total * 100:4.1f}%)"
     )
@@ -255,9 +251,9 @@ for N_MSGS in [50, 200, 500]:
     print(
         f"  │    truncation:                      {py_trunc_med / 1e6:>8.3f}ms  ({py_trunc_med / py_total * 100:4.1f}%)"
     )
-    print(f"  │    ────────────────────────────────────────────")
+    print("  │    ────────────────────────────────────────────")
     print(f"  │    TOTAL:                           {py_total / 1e6:>8.3f}ms")
-    print(f"  │")
+    print("  │")
     speedup = py_total / rust_total if rust_total > 0 else float("inf")
     print(
         f"  │  Speedup (ideal, 1 serialize): {'⚡' if speedup >= 1 else '🐢'} {speedup:.2f}x"
@@ -284,10 +280,10 @@ for N_MSGS in [50, 200, 500]:
     print(
         f"  │  Speedup (compaction, 4 serializes): {'⚡' if compaction_speedup >= 1 else '🐢'} {compaction_speedup:.2f}x"
     )
-    print(f"  └──")
+    print("  └──")
 
     # ═══ 3. STRING COPY COST ═══
-    print(f"\n  ┌── 3. STRING COPY COSTS (content size vs bridge time)")
+    print("\n  ┌── 3. STRING COPY COSTS (content size vs bridge time)")
 
     # Measure bridge cost for messages of different content sizes
     sizes = [100, 500, 2000, 10000, 50000]
@@ -300,10 +296,10 @@ for N_MSGS in [50, 200, 500]:
         print(
             f"  │  {sz:>6d} chars × 10 msgs: {med / 1e6:.3f}ms total, {per_msg / 1e6:.4f}ms/msg, {per_byte:.1f}ns/byte"
         )
-    print(f"  └──")
+    print("  └──")
 
     # ═══ 4. RUST DICT PARSE vs PURE COMPUTE ═══
-    print(f"\n  ┌── 4. RUST: DICT PARSING vs PURE COMPUTATION")
+    print("\n  ┌── 4. RUST: DICT PARSING vs PURE COMPUTATION")
 
     # process_messages_batch includes: dict parse + token estimation + hashing
     # truncation_indices is pure computation (no dict parsing)
@@ -331,10 +327,10 @@ for N_MSGS in [50, 200, 500]:
     print(
         f"  │  → Dict parsing is {(dict_parse_med - pure_compute_med) / dict_parse_med * 100:.0f}% of Rust batch call"
     )
-    print(f"  └──")
+    print("  └──")
 
     # ═══ 5. PER-FIELD COST IN PYTHON BRIDGE ═══
-    print(f"\n  ┌── 5. PYTHON BRIDGE: PER-FIELD COST BREAKDOWN")
+    print("\n  ┌── 5. PYTHON BRIDGE: PER-FIELD COST BREAKDOWN")
 
     # Measure just getattr overhead
     t_getattr = measure_ns(
@@ -398,10 +394,10 @@ for N_MSGS in [50, 200, 500]:
     print(
         f"  │  remaining (json.dumps, hasattr, etc):          {(total_bridge - dict_build_med) / 1e6:.3f}ms ({(total_bridge - dict_build_med) / total_bridge * 100:.0f}%)"
     )
-    print(f"  └──")
+    print("  └──")
 
     # ═══ 6. WHAT IF: ELIMINATE BRIDGE? ═══
-    print(f"\n  ┌── 6. WHAT-IF ANALYSIS: Optimization potential")
+    print("\n  ┌── 6. WHAT-IF ANALYSIS: Optimization potential")
 
     # Scenario A: Current (with redundant serialization)
     current_rust = bridge_med * 2 + rust_proc_med + rust_prune_med + rust_trunc_med
@@ -430,7 +426,7 @@ for N_MSGS in [50, 200, 500]:
     print(
         f"  │  ✅ Optimal (no bridge + shared parse):   {optimal_rust / 1e6:>8.3f}ms  ({current_py / optimal_rust:.2f}x)"
     )
-    print(f"  └──")
+    print("  └──")
 
 
 print(f"\n{'=' * 90}")

@@ -1,7 +1,7 @@
 """Shared test fixtures for adversarial planning tests."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 from code_puppy.plugins.adversarial_planning.models import (
     AdversarialPlanConfig,
@@ -26,7 +26,6 @@ from code_puppy.plugins.adversarial_planning.models import (
     StepEvaluation,
     Attack,
     ChangeSet,
-    StepReview,
 )
 
 

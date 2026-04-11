@@ -6,12 +6,10 @@ Tests the memory poisoning fix which adds:
 - Rate limiting: Prevents rapid-fire preference signal injection
 """
 
-import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 from code_puppy.plugins.agent_memory.signal_safeguards import (
     DEFAULT_DECAY_HOURS,
@@ -26,7 +24,7 @@ from code_puppy.plugins.agent_memory.signal_safeguards import (
 )
 
 if TYPE_CHECKING:
-    from code_puppy.plugins.agent_memory.signals import Signal
+    pass
 
 
 # ============================================================================

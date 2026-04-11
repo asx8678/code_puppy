@@ -1,7 +1,6 @@
 """Tests for the TUI streaming output renderer."""
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from code_puppy.tui.stream_renderer import (
     StreamRenderer,
     TOOL_BANNER_MAP,

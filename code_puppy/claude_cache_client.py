@@ -22,7 +22,6 @@ import random
 import re
 import time
 from email.utils import parsedate_to_datetime
-from functools import lru_cache
 from typing import Any, MutableMapping
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 

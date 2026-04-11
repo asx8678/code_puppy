@@ -960,7 +960,6 @@ class TestCustomAnthropicModel:
         from types import SimpleNamespace
 
         from code_puppy.model_factory import ModelFactory
-        from code_puppy.provider_identity import AliasedAnthropicProvider
 
         config = {
             "minimax-claude": {

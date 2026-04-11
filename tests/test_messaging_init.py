@@ -168,6 +168,11 @@ class TestMessagingPackageExports:
             # Session management
             "set_session_context",
             "get_session_context",
+            # Session history buffer
+            "SessionHistoryBuffer",
+            "get_history_buffer",
+            "reset_history_buffer",
+            "wait_for_messages_rendered",
             # Shell output rendering
             "ShellLineMessage",
             "emit_shell_line",

@@ -252,7 +252,7 @@ async def test_up_arrow_moves_highlight():
 async def test_enter_in_search_selects_highlighted_item():
     """Pressing Enter while search has focus fires ItemSelected."""
     from textual.app import App, ComposeResult
-    from textual.widgets import Input, ListView
+    from textual.widgets import Input
 
     selected_items: list[str] = []
 

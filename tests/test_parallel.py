@@ -5,7 +5,6 @@ Inspired by oh-my-pi's parallel.ts.
 """
 
 import asyncio
-import time
 
 import pytest
 

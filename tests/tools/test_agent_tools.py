@@ -1,7 +1,6 @@
 """Tests for code_puppy/tools/agent_tools.py - 100% coverage."""
 
 import json
-import pickle
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -77,7 +76,6 @@ class TestSaveSessionHistory:
         msgpack_file = tmp_path / "my-session.msgpack"
         assert msgpack_file.exists()
         # JSON format stores metadata inside the file now (msgpack is now JSON)
-        import json
         data = json.loads(msgpack_file.read_bytes())
         assert data["metadata"]["session_id"] == "my-session"
         assert data["metadata"]["initial_prompt"] == "hello"
@@ -98,7 +96,6 @@ class TestSaveSessionHistory:
         ):
             _save_session_history_sync("my-session", [{"role": "user", "content": "test"}], "agent")
         # Verify update happened (check metadata updated)
-        import json
         data = json.loads((tmp_path / "my-session.msgpack").read_bytes())
         assert data["metadata"]["message_count"] == 1
         # initial_prompt preserved from first save

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from collections.abc import Callable
 """Profile diff generation performance to determine if Rust acceleration is needed.
 
 This measures:

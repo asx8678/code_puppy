@@ -7,7 +7,6 @@ This module tests the following complex methods in BaseAgent:
 - summarize_messages()
 """
 
-from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

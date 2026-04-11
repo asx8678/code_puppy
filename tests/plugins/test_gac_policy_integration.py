@@ -1,6 +1,6 @@
 """Integration tests for policy error handling in /commit flow."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 class TestPolicyIntegration:

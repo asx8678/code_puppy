@@ -4,7 +4,6 @@ Tests the state management logic without any I/O or rendering.
 """
 
 import time
-from copy import deepcopy
 
 import pytest
 

@@ -1,15 +1,11 @@
 """Tests for model packs functionality."""
 
-import pytest
 
 from code_puppy.model_packs import (
     RoleConfig,
     ModelPack,
     get_pack,
     list_packs,
-    set_current_pack,
-    get_current_pack,
-    get_model_for_role,
     create_user_pack,
     delete_user_pack,
     DEFAULT_PACKS,

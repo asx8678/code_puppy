@@ -9,7 +9,6 @@ Registers the flow visualizer with code_puppy's callback hooks:
 - custom_command_help: Provide help text
 """
 
-import asyncio
 import logging
 from typing import Any
 

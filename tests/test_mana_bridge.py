@@ -403,7 +403,6 @@ class TestPromptExecutor:
 
     def test_executor_thread_starts(self):
         """Executor thread starts and is a daemon."""
-        import importlib
         import sys
 
         # Remove cached module to get a fresh import

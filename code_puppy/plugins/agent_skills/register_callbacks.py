@@ -43,7 +43,6 @@ def _get_skills_prompt_section() -> str | None:
     from .prompt_builder import (
         build_available_skills_markdown,
         build_available_skills_xml,
-        build_progressive_disclosure_guidance,
         build_skills_guidance,
     )
 

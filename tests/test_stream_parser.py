@@ -3,7 +3,6 @@
 Covers StreamLineParser, SSEParser, and parse_jsonl_lenient.
 """
 
-import pytest
 
 from code_puppy.utils.stream_parser import (
     SSEEvent,

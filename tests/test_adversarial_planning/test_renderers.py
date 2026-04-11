@@ -1,15 +1,10 @@
 """Test renderer functionality for adversarial planning."""
 
-import pytest
 import json
 
 from code_puppy.plugins.adversarial_planning.renderers import (
     AdversarialPlanningRenderer,
     render_session,
-)
-from code_puppy.plugins.adversarial_planning.models import (
-    PlanningSession,
-    EvidenceClass,
 )
 
 

@@ -4,7 +4,6 @@ import threading
 import pytest
 from code_puppy.model_availability import (
     ModelAvailabilityService,
-    ModelAvailabilitySnapshot,
 )
 
 

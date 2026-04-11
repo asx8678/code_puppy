@@ -11,11 +11,7 @@ Covers both the public API and the pure-Python fallback, verifying:
 - Pure-Python path can be exercised by monkey-patching ``_USING_RUST``
 """
 
-from collections.abc import Callable
-import importlib
 import re
-import types
-from unittest import mock
 
 import pytest
 

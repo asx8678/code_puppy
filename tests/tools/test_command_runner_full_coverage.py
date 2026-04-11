@@ -138,7 +138,7 @@ class TestKillProcessGroup:
             # May or may not call taskkill depending on platform detection
 
     def test_exception_in_kill(self):
-        from code_puppy.tools.command_runner import _kill_process_group, emit_error
+        from code_puppy.tools.command_runner import _kill_process_group
 
         proc = MagicMock()
         proc.pid = 12345

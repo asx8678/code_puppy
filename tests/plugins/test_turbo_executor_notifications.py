@@ -7,7 +7,6 @@ callbacks to provide progress notifications for turbo_execute batch operations.
 import json
 from unittest.mock import patch
 
-import pytest
 
 from code_puppy.plugins.turbo_executor.notifications import (
     _format_brief_args,

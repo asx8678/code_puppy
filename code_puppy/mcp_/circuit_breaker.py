@@ -14,7 +14,6 @@ import functools
 import inspect
 import logging
 import time
-from enum import Enum
 from typing import Any
 
 from code_puppy.circuit_state import CircuitState

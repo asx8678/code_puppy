@@ -8,7 +8,6 @@ from unittest.mock import patch
 import pytest
 
 from code_puppy.mcp_.mcp_security import (
-    ALLOWED_COMMANDS,
     CommandInjectionError,
     CommandNotAllowedError,
     InvalidArgumentError,

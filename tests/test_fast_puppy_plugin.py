@@ -19,7 +19,6 @@ from code_puppy.plugins.fast_puppy.register_callbacks import (
 from code_puppy.plugins.fast_puppy.builder import (
     _has_maturin,
     _try_auto_build,
-    _build_crate,
 )
 
 

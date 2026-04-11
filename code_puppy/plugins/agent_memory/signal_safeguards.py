@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from code_puppy.plugins.agent_memory.signals import Signal
+    from code_puppy.plugins.agent_memory.config import MemoryConfig
 
 logger = logging.getLogger(__name__)
 

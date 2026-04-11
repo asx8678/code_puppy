@@ -4,9 +4,12 @@ Handles retrieving conversation messages from various sources and
 normalizing them to a standard format.
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from code_puppy.run_context import get_current_run_context
+
+if TYPE_CHECKING:
+    from .storage import FileMemoryStorage
 
 
 def _get_conversation_messages(

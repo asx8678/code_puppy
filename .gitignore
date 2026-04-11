@@ -68,3 +68,4 @@ evals/logs/
 .hypothesis/
 # bd worktree
 code_puppy-bqwm/
+MagicMock/

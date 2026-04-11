@@ -10,7 +10,7 @@ from typing import Any
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_error, emit_info, emit_warning
 
-from .exinfo import ErrorSeverity
+from .exinfo import ErrorSeverity, ExInfo
 from .registry import ExceptionRegistry
 
 logger = logging.getLogger(__name__)

@@ -109,7 +109,6 @@ def test_delete_snippet_relative_path_assertion(tmp_path, monkeypatch):
     os.path.abspath before calling the internal helper.  This test verifies
     the assertion catches relative paths and that absolute paths work.
     """
-    import os
     import pytest
 
     target = tmp_path / "rel_test.py"

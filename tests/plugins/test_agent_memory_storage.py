@@ -11,7 +11,6 @@ Comprehensive coverage of FileMemoryStorage including:
 """
 
 import json
-import os
 import shutil
 import threading
 import time

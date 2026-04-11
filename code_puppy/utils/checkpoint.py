@@ -20,7 +20,6 @@ Thread-safe: Multiple threads can call ``save()`` concurrently.
 
 import json
 import logging
-import os
 import threading
 from pathlib import Path
 from typing import Any, Iterator

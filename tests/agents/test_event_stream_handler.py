@@ -1099,7 +1099,6 @@ class TestStreamingDuplication:
         of content, then verifies each line appears exactly once in output.
         """
         from rich.console import Console
-        import time
 
         # Create a deterministic console with small height to force overflow
         output_buffer = StringIO()

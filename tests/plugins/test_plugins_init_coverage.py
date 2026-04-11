@@ -9,7 +9,7 @@ Tests cover lazy plugin loading functions including:
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import code_puppy.plugins as plugins_module
 from code_puppy.plugins import (
@@ -208,7 +208,7 @@ class TestDiscoverBuiltinPlugins:
             plugin_dir = tmp_path / name
             plugin_dir.mkdir()
             (plugin_dir / "register_callbacks.py").write_text(
-                f'register_callback("startup", func)'
+                'register_callback("startup", func)'
             )
 
         with patch(

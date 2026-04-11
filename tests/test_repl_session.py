@@ -2,22 +2,10 @@
 
 import json
 import os
-import tempfile
-from pathlib import Path
 
-import pytest
 
 from code_puppy.repl_session import (
     ReplSession,
-    get_current_session,
-    reset_session,
-    save_session,
-    load_session,
-    update_session,
-    record_command,
-    get_command_history,
-    add_loaded_file,
-    clear_loaded_files,
     get_session_summary,
 )
 

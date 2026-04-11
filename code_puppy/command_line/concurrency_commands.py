@@ -90,8 +90,8 @@ def _show_concurrency_status() -> None:
     if config_path.exists():
         lines.append(f"[dim]Config: {config_path}[/dim]")
     else:
-        lines.append(f"[dim]Using defaults (no config file)[/dim]")
-        lines.append(f"[dim]Run /concurrency config to see path[/dim]")
+        lines.append("[dim]Using defaults (no config file)[/dim]")
+        lines.append("[dim]Run /concurrency config to see path[/dim]")
 
     status_msg = "\n".join(lines)
     emit_info(Text.from_markup(status_msg))

@@ -1,6 +1,5 @@
 """Tests for the main CodePuppyApp shell."""
 
-import pytest
 from code_puppy.tui.app import CodePuppyApp, PuppyInput
 from code_puppy.tui.widgets.info_bar import InfoBar
 

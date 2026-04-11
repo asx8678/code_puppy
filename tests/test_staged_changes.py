@@ -1,10 +1,6 @@
 """Tests for staged changes sandbox."""
 
-import os
-import tempfile
-from pathlib import Path
 
-import pytest
 
 from code_puppy.staged_changes import (
     get_staged_count,
@@ -15,8 +11,6 @@ from code_puppy.staged_changes import (
     reset_sandbox,
     is_staging_enabled,
     stage_create,
-    stage_replace,
-    stage_delete_snippet,
     clear_staged,
 )
 

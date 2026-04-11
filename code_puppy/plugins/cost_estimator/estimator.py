@@ -9,7 +9,7 @@ Uses tiktoken when available, falls back to character-based heuristic.
 
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)

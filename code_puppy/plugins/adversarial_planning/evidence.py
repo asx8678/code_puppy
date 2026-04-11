@@ -10,7 +10,6 @@ Evidence IDs are auto-generated (EV1, EV2, ...) for cross-referencing.
 """
 
 import logging
-from typing import cast
 
 from .models import (
     Evidence,

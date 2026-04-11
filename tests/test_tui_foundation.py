@@ -1,6 +1,5 @@
 """Tests for the TUI foundation module."""
 
-import pytest
 
 
 def test_tui_imports():

@@ -4,10 +4,7 @@ Tests the complete flow: events → state updates → rendering.
 """
 
 import time
-from io import StringIO
 
-import pytest
-from rich.console import Console
 
 from code_puppy.plugins.flow_visualizer.lanes import (
     FlowState,

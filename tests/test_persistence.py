@@ -1,10 +1,8 @@
 """Tests for persistence module atomic write operations."""
 
 import json
-import tempfile
 from pathlib import Path
 
-import msgpack
 import pytest
 
 from code_puppy.persistence import (

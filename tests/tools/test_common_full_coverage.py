@@ -3,7 +3,6 @@
 Targets all uncovered lines to reach 100% coverage.
 """
 
-import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 

@@ -5,7 +5,7 @@ the SecurityBoundary can be properly mocked in tests (lazy import pattern).
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from code_puppy.security import (
     SecurityDecision,

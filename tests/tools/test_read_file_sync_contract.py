@@ -5,10 +5,7 @@ Validates that _read_file_sync always returns a 3-tuple of
 each error path produces the correct shape.
 """
 
-import os
-import tempfile
 
-import pytest
 
 from code_puppy.tools.file_operations import _read_file_sync
 

@@ -4,12 +4,10 @@ Tests for the request_cache module which provides header-only change
 optimization and request caching for HTTP clients.
 """
 
-import hashlib
 import time
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import httpx
-import pytest
 
 from code_puppy.request_cache import (
     CachedRequest,

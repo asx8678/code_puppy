@@ -24,7 +24,6 @@ Example pack configuration:
     }
 """
 
-import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,8 +32,7 @@ from code_puppy.persistence import atomic_write_json, read_json
 from typing import Any
 
 from code_puppy.config import DATA_DIR, get_global_model_name
-from code_puppy.messaging import emit_error, emit_info, emit_warning
-from code_puppy.persistence import atomic_write_json
+from code_puppy.messaging import emit_error, emit_info
 
 logger = logging.getLogger(__name__)
 

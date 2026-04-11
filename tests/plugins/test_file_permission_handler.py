@@ -64,78 +64,78 @@ class TestUserFeedbackState:
 class TestPreviewDeletion:
     """Test preview generation for delete operations."""
 
-    def test_preview_delete_snippet_basic(self):
+    async def test_preview_delete_snippet_basic(self):
         """Test basic snippet deletion preview."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             f.write("def hello():\n    print('hello')\n    pass\n")
             f.flush()
 
             try:
-                preview = _preview_delete_snippet(f.name, "    pass\n")
+                preview = await _preview_delete_snippet(f.name, "    pass\n")
                 assert preview is not None
                 assert "-" in preview  # Should have diff markers
                 assert "pass" in preview
             finally:
                 os.unlink(f.name)
 
-    def test_preview_delete_snippet_not_found(self):
+    async def test_preview_delete_snippet_not_found(self):
         """Test deletion preview when snippet doesn't exist."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             f.write("def hello():\n    print('hello')\n")
             f.flush()
 
             try:
-                preview = _preview_delete_snippet(f.name, "not_in_file")
+                preview = await _preview_delete_snippet(f.name, "not_in_file")
                 assert preview is None
             finally:
                 os.unlink(f.name)
 
-    def test_preview_delete_snippet_nonexistent_file(self):
+    async def test_preview_delete_snippet_nonexistent_file(self):
         """Test deletion preview with nonexistent file."""
-        preview = _preview_delete_snippet("/nonexistent/file.py", "snippet")
+        preview = await _preview_delete_snippet("/nonexistent/file.py", "snippet")
         assert preview is None
 
-    def test_preview_delete_file_basic(self):
+    async def test_preview_delete_file_basic(self):
         """Test basic file deletion preview."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             f.write("print('content')\n")
             f.flush()
 
             try:
-                preview = _preview_delete_file(f.name)
+                preview = await _preview_delete_file(f.name)
                 assert preview is not None
                 assert "-" in preview  # Should have diff markers
                 assert "print" in preview
             finally:
                 os.unlink(f.name)
 
-    def test_preview_delete_file_nonexistent(self):
+    async def test_preview_delete_file_nonexistent(self):
         """Test deletion preview for nonexistent file."""
-        preview = _preview_delete_file("/nonexistent/file.py")
+        preview = await _preview_delete_file("/nonexistent/file.py")
         assert preview is None
 
-    def test_preview_delete_file_directory(self):
+    async def test_preview_delete_file_directory(self):
         """Test deletion preview when path is directory."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            preview = _preview_delete_file(tmpdir)
+            preview = await _preview_delete_file(tmpdir)
             assert preview is None
 
 
 class TestPreviewWriting:
     """Test preview generation for write operations."""
 
-    def test_preview_write_new_file(self):
+    async def test_preview_write_new_file(self):
         """Test writing to a new file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             file_path = os.path.join(tmpdir, "new_file.py")
             content = "print('hello')\n"
 
-            preview = _preview_write_to_file(file_path, content, overwrite=False)
+            preview = await _preview_write_to_file(file_path, content, overwrite=False)
             assert preview is not None
             assert "print" in preview
             assert "+" in preview  # Should have diff markers
 
-    def test_preview_write_existing_file_with_overwrite(self):
+    async def test_preview_write_existing_file_with_overwrite(self):
         """Test overwriting an existing file."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             f.write("old content\n")
@@ -143,13 +143,13 @@ class TestPreviewWriting:
 
             try:
                 new_content = "new content\n"
-                preview = _preview_write_to_file(f.name, new_content, overwrite=True)
+                preview = await _preview_write_to_file(f.name, new_content, overwrite=True)
                 assert preview is not None
                 assert "new content" in preview
             finally:
                 os.unlink(f.name)
 
-    def test_preview_write_existing_file_no_overwrite(self):
+    async def test_preview_write_existing_file_no_overwrite(self):
         """Test writing to existing file without overwrite flag."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             f.write("existing content\n")
@@ -157,18 +157,18 @@ class TestPreviewWriting:
 
             try:
                 new_content = "new content\n"
-                preview = _preview_write_to_file(f.name, new_content, overwrite=False)
+                preview = await _preview_write_to_file(f.name, new_content, overwrite=False)
                 assert preview is None
             finally:
                 os.unlink(f.name)
 
-    def test_preview_write_multiline_content(self):
+    async def test_preview_write_multiline_content(self):
         """Test writing multiline content."""
         with tempfile.TemporaryDirectory() as tmpdir:
             file_path = os.path.join(tmpdir, "multi.py")
             content = "def func():\n    pass\n\nprint('done')\n"
 
-            preview = _preview_write_to_file(file_path, content)
+            preview = await _preview_write_to_file(file_path, content)
             assert preview is not None
             assert "func" in preview
             assert "done" in preview
@@ -177,7 +177,7 @@ class TestPreviewWriting:
 class TestPreviewReplacements:
     """Test preview generation for replacement operations."""
 
-    def test_preview_replace_basic(self):
+    async def test_preview_replace_basic(self):
         """Test basic text replacement preview."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             f.write("def old_name():\n    return 42\n")
@@ -185,14 +185,14 @@ class TestPreviewReplacements:
 
             try:
                 replacements = [{"old_str": "old_name", "new_str": "new_name"}]
-                preview = _preview_replace_in_file(f.name, replacements)
+                preview = await _preview_replace_in_file(f.name, replacements)
                 assert preview is not None
                 assert "new_name" in preview
                 assert "-" in preview or "+" in preview
             finally:
                 os.unlink(f.name)
 
-    def test_preview_replace_multiple(self):
+    async def test_preview_replace_multiple(self):
         """Test multiple text replacements."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             f.write("old_var = 1\nold_func()\n")
@@ -203,12 +203,12 @@ class TestPreviewReplacements:
                     {"old_str": "old_var", "new_str": "new_var"},
                     {"old_str": "old_func", "new_str": "new_func"},
                 ]
-                preview = _preview_replace_in_file(f.name, replacements)
+                preview = await _preview_replace_in_file(f.name, replacements)
                 assert preview is not None
             finally:
                 os.unlink(f.name)
 
-    def test_preview_replace_not_found(self):
+    async def test_preview_replace_not_found(self):
         """Test replacement when text doesn't exist."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             f.write("existing content\n")
@@ -216,12 +216,12 @@ class TestPreviewReplacements:
 
             try:
                 replacements = [{"old_str": "not_found", "new_str": "new"}]
-                preview = _preview_replace_in_file(f.name, replacements)
+                preview = await _preview_replace_in_file(f.name, replacements)
                 assert preview is None
             finally:
                 os.unlink(f.name)
 
-    def test_preview_replace_no_changes(self):
+    async def test_preview_replace_no_changes(self):
         """Test replacement that doesn't change content."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             f.write("content\n")
@@ -229,19 +229,19 @@ class TestPreviewReplacements:
 
             try:
                 replacements = [{"old_str": "content", "new_str": "content"}]
-                preview = _preview_replace_in_file(f.name, replacements)
+                preview = await _preview_replace_in_file(f.name, replacements)
                 assert preview is None
             finally:
                 os.unlink(f.name)
 
-    def test_preview_replace_empty_replacements(self):
+    async def test_preview_replace_empty_replacements(self):
         """Test replacement with empty list."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             f.write("content\n")
             f.flush()
 
             try:
-                preview = _preview_replace_in_file(f.name, [])
+                preview = await _preview_replace_in_file(f.name, [])
                 assert preview is None
             finally:
                 os.unlink(f.name)
@@ -336,7 +336,7 @@ class TestHandleEditFilePermission:
     @patch(
         "code_puppy.plugins.file_permission_handler.register_callbacks.prompt_for_file_permission"
     )
-    def test_handle_write_operation(self, mock_prompt):
+    async def test_handle_write_operation(self, mock_prompt):
         """Test handling write operation."""
         mock_prompt.return_value = (True, None)
 
@@ -344,7 +344,7 @@ class TestHandleEditFilePermission:
         file_path = "/tmp/file.py"
         operation_data = {"content": "print('hello')\n", "overwrite": False}
 
-        confirmed = handle_edit_file_permission(
+        confirmed = await handle_edit_file_permission(
             context, file_path, "write", operation_data
         )
 
@@ -354,7 +354,7 @@ class TestHandleEditFilePermission:
     @patch(
         "code_puppy.plugins.file_permission_handler.register_callbacks.prompt_for_file_permission"
     )
-    def test_handle_replace_operation(self, mock_prompt):
+    async def test_handle_replace_operation(self, mock_prompt):
         """Test handling replace operation."""
         mock_prompt.return_value = (True, None)
 
@@ -362,7 +362,7 @@ class TestHandleEditFilePermission:
         file_path = "/tmp/file.py"
         operation_data = {"replacements": [{"old_str": "old", "new_str": "new"}]}
 
-        confirmed = handle_edit_file_permission(
+        confirmed = await handle_edit_file_permission(
             context, file_path, "replace", operation_data
         )
 
@@ -371,7 +371,7 @@ class TestHandleEditFilePermission:
     @patch(
         "code_puppy.plugins.file_permission_handler.register_callbacks.prompt_for_file_permission"
     )
-    def test_handle_delete_snippet_operation(self, mock_prompt):
+    async def test_handle_delete_snippet_operation(self, mock_prompt):
         """Test handling delete snippet operation."""
         mock_prompt.return_value = (True, None)
 
@@ -379,7 +379,7 @@ class TestHandleEditFilePermission:
         file_path = "/tmp/file.py"
         operation_data = {"delete_snippet": "to_delete"}
 
-        confirmed = handle_edit_file_permission(
+        confirmed = await handle_edit_file_permission(
             context, file_path, "delete_snippet", operation_data
         )
 
@@ -388,7 +388,7 @@ class TestHandleEditFilePermission:
     @patch(
         "code_puppy.plugins.file_permission_handler.register_callbacks.prompt_for_file_permission"
     )
-    def test_handle_stores_user_feedback(self, mock_prompt):
+    async def test_handle_stores_user_feedback(self, mock_prompt):
         """Test that feedback is stored in thread-local storage."""
         clear_user_feedback()
         mock_prompt.return_value = (False, "Fix the code")
@@ -397,7 +397,7 @@ class TestHandleEditFilePermission:
         file_path = "/tmp/file.py"
         operation_data = {"content": "code"}
 
-        confirmed = handle_edit_file_permission(
+        confirmed = await handle_edit_file_permission(
             context, file_path, "write", operation_data
         )
 
@@ -411,14 +411,14 @@ class TestHandleDeleteFilePermission:
     @patch(
         "code_puppy.plugins.file_permission_handler.register_callbacks.prompt_for_file_permission"
     )
-    def test_handle_delete_file(self, mock_prompt):
+    async def test_handle_delete_file(self, mock_prompt):
         """Test handling delete file operation."""
         mock_prompt.return_value = (True, None)
 
         context = Mock()
         file_path = "/tmp/file.py"
 
-        confirmed = handle_delete_file_permission(context, file_path)
+        confirmed = await handle_delete_file_permission(context, file_path)
 
         assert confirmed is True
         mock_prompt.assert_called_once()
@@ -426,14 +426,14 @@ class TestHandleDeleteFilePermission:
     @patch(
         "code_puppy.plugins.file_permission_handler.register_callbacks.prompt_for_file_permission"
     )
-    def test_handle_delete_file_denied(self, mock_prompt):
+    async def test_handle_delete_file_denied(self, mock_prompt):
         """Test handling denied delete file operation."""
         mock_prompt.return_value = (False, "Keep the file")
 
         context = Mock()
         file_path = "/tmp/file.py"
 
-        confirmed = handle_delete_file_permission(context, file_path)
+        confirmed = await handle_delete_file_permission(context, file_path)
 
         assert confirmed is False
         assert get_last_user_feedback() == "Keep the file"
@@ -445,20 +445,16 @@ class TestHandleFilePermission:
     @patch(
         "code_puppy.plugins.file_permission_handler.register_callbacks.prompt_for_file_permission"
     )
-    def test_handle_with_operation_data(self, mock_prompt):
+    async def test_handle_with_operation_data(self, mock_prompt):
         """Test handler with operation data."""
-        import asyncio
-
         mock_prompt.return_value = (True, None)
 
         context = Mock()
         file_path = "/tmp/file.py"
         operation_data = {"content": "print('test')\n"}
 
-        confirmed = asyncio.run(
-            handle_file_permission(
-                context, file_path, "write", operation_data=operation_data
-            )
+        confirmed = await handle_file_permission(
+            context, file_path, "write", operation_data=operation_data
         )
 
         assert confirmed is True
@@ -466,19 +462,15 @@ class TestHandleFilePermission:
     @patch(
         "code_puppy.plugins.file_permission_handler.register_callbacks.prompt_for_file_permission"
     )
-    def test_handle_with_preview(self, mock_prompt):
+    async def test_handle_with_preview(self, mock_prompt):
         """Test handler with explicit preview."""
-        import asyncio
-
         mock_prompt.return_value = (True, None)
 
         context = Mock()
         file_path = "/tmp/file.py"
         preview = "+ added line\n"
 
-        confirmed = asyncio.run(
-            handle_file_permission(context, file_path, "edit", preview=preview)
-        )
+        confirmed = await handle_file_permission(context, file_path, "edit", preview=preview)
 
         assert confirmed is True
         mock_prompt.assert_called_once()
@@ -487,32 +479,32 @@ class TestHandleFilePermission:
 class TestGeneratePreview:
     """Test preview generation from operation data."""
 
-    def test_generate_preview_delete_operation(self):
+    async def test_generate_preview_delete_operation(self):
         """Test preview generation for delete operation."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             f.write("content\n")
             f.flush()
 
             try:
-                preview = _generate_preview_from_operation_data(f.name, "delete", {})
+                preview = await _generate_preview_from_operation_data(f.name, "delete", {})
                 assert preview is not None
             finally:
                 os.unlink(f.name)
 
-    def test_generate_preview_write_operation(self):
+    async def test_generate_preview_write_operation(self):
         """Test preview generation for write operation."""
         with tempfile.TemporaryDirectory() as tmpdir:
             file_path = os.path.join(tmpdir, "new.py")
             operation_data = {"content": "print('hello')\n", "overwrite": False}
 
-            preview = _generate_preview_from_operation_data(
+            preview = await _generate_preview_from_operation_data(
                 file_path, "write", operation_data
             )
             assert preview is not None
 
-    def test_generate_preview_unknown_operation(self):
+    async def test_generate_preview_unknown_operation(self):
         """Test preview generation for unknown operation."""
-        preview = _generate_preview_from_operation_data("/tmp/file.py", "unknown", {})
+        preview = await _generate_preview_from_operation_data("/tmp/file.py", "unknown", {})
         assert preview is None
 
 
@@ -552,7 +544,7 @@ class TestHelpFunctions:
 class TestPreviewEdgeCases:
     """Test edge cases in preview generation."""
 
-    def test_preview_with_unicode_content(self):
+    async def test_preview_with_unicode_content(self):
         """Test preview with unicode characters."""
         with tempfile.NamedTemporaryFile(
             mode="w", delete=False, suffix=".py", encoding="utf-8"
@@ -563,13 +555,13 @@ class TestPreviewEdgeCases:
 
             try:
                 replacements = [{"old_str": "你好", "new_str": "Hello"}]
-                preview = _preview_replace_in_file(f.name, replacements)
+                preview = await _preview_replace_in_file(f.name, replacements)
                 # Should handle unicode gracefully
                 assert preview is None or isinstance(preview, str)
             finally:
                 os.unlink(f.name)
 
-    def test_preview_with_large_file(self):
+    async def test_preview_with_large_file(self):
         """Test preview generation with large file."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             # Write 1000 lines
@@ -579,12 +571,12 @@ class TestPreviewEdgeCases:
 
             try:
                 replacements = [{"old_str": "line_500", "new_str": "replaced"}]
-                preview = _preview_replace_in_file(f.name, replacements)
+                preview = await _preview_replace_in_file(f.name, replacements)
                 assert preview is not None
             finally:
                 os.unlink(f.name)
 
-    def test_preview_with_binary_file_content(self):
+    async def test_preview_with_binary_file_content(self):
         """Test preview generation with binary content."""
         with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f:
             f.write(b"\x00\x01\x02\x03")
@@ -592,7 +584,7 @@ class TestPreviewEdgeCases:
 
             try:
                 # Should handle gracefully
-                preview = _preview_delete_file(f.name)
+                preview = await _preview_delete_file(f.name)
                 # Either None or a string (surrogate handling)
                 assert preview is None or isinstance(preview, str)
             finally:

@@ -3,10 +3,8 @@
 import logging
 from pathlib import Path
 
-import pytest
 
 from code_puppy.plugins.agent_skills.discovery import (
-    SkillInfo,
     discover_skills,
     _scan_directory,
 )

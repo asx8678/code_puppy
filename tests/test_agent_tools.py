@@ -1,6 +1,5 @@
 """Tests for agent tools functionality."""
 
-import json
 from datetime import datetime, timezone
 import tempfile
 from pathlib import Path
@@ -12,10 +11,8 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserProm
 from code_puppy.tools.agent_tools import (
     SESSION_ID_MAX_LENGTH,
     _generate_session_hash_suffix,
-    _load_session_history_async,
     _load_session_history_sync,
     _sanitize_session_id,
-    _save_session_history_async,
     _save_session_history_sync,
     _validate_session_id,
     register_invoke_agent,

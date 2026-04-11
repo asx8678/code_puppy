@@ -1,6 +1,5 @@
 """Tests for cost_estimator plugin (ADOPT from Agentless)."""
 
-import pytest
 
 from code_puppy.plugins.cost_estimator.estimator import (
     TokenEstimate,

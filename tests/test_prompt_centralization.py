@@ -139,8 +139,8 @@ class TestNoDuplicateLoadPromptCalls:
         
         # Should NOT directly call on_load_prompt - it goes through mixin
         assert "on_load_prompt" not in content, (
-            f"agent_code_puppy.py should not directly call on_load_prompt. "
-            f"The AgentPromptMixin.get_full_system_prompt() handles this."
+            "agent_code_puppy.py should not directly call on_load_prompt. "
+            "The AgentPromptMixin.get_full_system_prompt() handles this."
         )
 
     def test_agent_pack_leader_no_direct_load_prompt(self):
@@ -153,8 +153,8 @@ class TestNoDuplicateLoadPromptCalls:
         content = agent_file.read_text()
         
         assert "on_load_prompt" not in content, (
-            f"agent_pack_leader.py should not directly call on_load_prompt. "
-            f"The AgentPromptMixin.get_full_system_prompt() handles this."
+            "agent_pack_leader.py should not directly call on_load_prompt. "
+            "The AgentPromptMixin.get_full_system_prompt() handles this."
         )
 
     def test_all_builtin_agents_use_mixin(self):

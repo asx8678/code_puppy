@@ -12,7 +12,6 @@ Covers the exception branches that the main test suite doesn't exercise:
 import json
 import sys
 import pickle
-from datetime import datetime
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch

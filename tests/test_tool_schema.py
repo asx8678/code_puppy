@@ -2,7 +2,6 @@
 
 from typing import Annotated
 
-import pytest
 
 from code_puppy.tool_schema import (
     ToolParameter,

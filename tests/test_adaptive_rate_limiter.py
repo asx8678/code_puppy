@@ -11,13 +11,11 @@ Covers:
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from code_puppy.adaptive_rate_limiter import (
     ModelAwareLimiter,
-    ModelRateLimitState,
     configure,
     get_status,
     record_rate_limit,

@@ -4,7 +4,6 @@ import pytest
 
 from code_puppy.plugins.adversarial_planning.evidence import (
     EvidenceTracker,
-    EvidenceValidationError,
 )
 from code_puppy.plugins.adversarial_planning.models import (
     EvidenceSource,

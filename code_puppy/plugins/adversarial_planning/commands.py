@@ -1,10 +1,13 @@
 """Adversarial Planning Slash Commands."""
 
-import asyncio
 import logging
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from .orchestrator import AdversarialPlanningOrchestrator
+    from code_puppy.plugins.customizable_commands.register_callbacks import MarkdownCommandResult
 
 _COMMAND_NAMES = {"ap", "ap-standard", "ap-deep", "ap-status", "ap-abort"}
 
@@ -42,7 +45,7 @@ def handle_command(command: str, name: str) -> Literal[True] | str | None:
 def _handle_ap(parts: list[str], mode: Literal["auto", "standard", "deep"]) -> "MarkdownCommandResult | Literal[True]":
     """Handle /ap, /ap-standard, /ap-deep commands."""
     from code_puppy.plugins.customizable_commands.register_callbacks import MarkdownCommandResult
-    from code_puppy.messaging import emit_info, emit_error
+    from code_puppy.messaging import emit_info
     
     if len(parts) < 2:
         emit_info("""

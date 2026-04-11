@@ -13,7 +13,7 @@ from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
 
 if TYPE_CHECKING:
-    from .storage import FileMemoryStorage
+    pass
 
 # Import from core module - tests will patch via register_callbacks re-exports
 def _is_memory_enabled() -> bool:

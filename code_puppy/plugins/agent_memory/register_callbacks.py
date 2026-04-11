@@ -30,48 +30,15 @@ Config keys (puppy.cfg):
 
 # Re-export functions for backward compatibility (tests import these directly)
 from .core import (
-    is_memory_enabled_global as _memory_enabled,
-    get_config,
-    get_extractor,
-    get_detector,
-    _get_storage,
-    _get_updater,
-    _on_startup,
-    _on_shutdown,
     register_core_callbacks,
 )
-from .messaging import (
-    _get_conversation_messages,
-    _get_current_agent_name,
-    _get_storage_for_current_agent,
-    _normalize_messages,
-    _extract_user_messages,
-)
-from .commands import (
-    _is_memory_enabled,
-    _get_agent_name,
-    _get_agent_storage,
-)
-from .processing import (
-    _apply_signal_confidence_updates,
-    _async_extract_and_store_facts,
-    _schedule_fact_extraction,
-)
 from .prompts import (
-    _format_memory_section,
     _on_load_prompt,
 )
 from .agent_run_end import (
-    _on_agent_run_end,
     register_agent_run_end_callback,
 )
 from .commands import (
-    _memory_help,
-    _show_memories,
-    _clear_memories,
-    _export_memories,
-    _show_memory_help,
-    _handle_memory_command,
     register_command_callbacks,
 )
 

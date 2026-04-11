@@ -15,7 +15,6 @@ from code_puppy.plugins.git_auto_commit.commit_flow import (
     execute_commit,
     generate_preview,
     preflight_check,
-    run_full_flow,
 )
 from code_puppy.plugins.git_auto_commit.context_guard import is_gac_safe
 from code_puppy.plugins.git_auto_commit.shell_bridge import execute_git_command_sync
@@ -149,7 +148,7 @@ def main() -> int:
         print(f"\n📝 Auto-generated message: '{message}'")
 
     # Commit
-    print(f"\n💾 Committing...")
+    print("\n💾 Committing...")
     try:
         commit_result = execute_commit(message)
         commit_hash = commit_result.get("commit_hash", "?")

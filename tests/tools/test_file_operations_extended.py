@@ -345,7 +345,6 @@ class TestFileOperationsExtended:
     async def test_list_files_ripgrep_timeout(self, tmp_path):
         """Test handling of ripgrep timeout during recursive listing."""
         # Mock asyncio.to_thread to raise TimeoutExpired
-        import asyncio
 
         async def mock_to_thread(*args, **kwargs):
             raise subprocess.TimeoutExpired("rg", 30)

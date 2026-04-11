@@ -15,7 +15,6 @@ Run:
     python -m pytest tests/bench_rust_vs_python.py -v -s -k "end_to_end"  # key benchmark
 """
 
-import math
 import pickle
 import statistics
 import time

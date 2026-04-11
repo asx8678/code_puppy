@@ -13,7 +13,7 @@ Covers:
 - _summarize_single_batch helper
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from pydantic_ai.messages import (
@@ -319,55 +319,70 @@ class TestSummarizeMessages:
         assert summarized == []
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch(
-        "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
-        return_value=False,
+        "code_puppy.agents.base_agent.get_puppy_config"
     )
     @patch(
-        "code_puppy.agents.base_agent.get_summarization_history_offload_enabled",
-        return_value=False,
+        "code_puppy.compaction.thresholds.get_model_context_window", return_value=None
     )
+    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
     def test_successful_summarization(
-        self, mock_offload, mock_pretrunc, mock_info, mock_tokens, mock_sync, agent
+        self, mock_rust, mock_get_ctx, mock_get_config, mock_info, mock_sync, agent
     ):
+        mock_cfg = mock_get_config.return_value
+        mock_cfg.summarization_history_offload_enabled = False
+        mock_cfg.summarization_pretruncate_enabled = False
+        mock_cfg.summarization_trigger_fraction = 0.7
+        mock_cfg.summarization_keep_fraction = 0.5
+        mock_cfg.compaction_threshold = 0.5
+        mock_cfg.protected_token_count = 50
+        mock_cfg.summarization_arg_max_length = 1000
+        mock_cfg.summarization_history_dir = "/tmp"
         summary = [_make_msg("conversation summary")]
         mock_sync.return_value = summary
 
         sys_msg = _make_msg("system")
-        old_msg = _make_msg("old conversation" * 20)
-        recent_msg = _make_msg("recent")
+        old_msg = _make_msg("old conversation" * 100, token_size=600)
+        recent_msg = _make_msg("recent", token_size=10)
         msgs = [sys_msg, old_msg, recent_msg]
 
-        result, summarized = agent.summarize_messages(msgs)
-        # Result should start with system message
-        assert result[0] is sys_msg
-        # Should have summarized something
-        assert len(summarized) > 0
+        with patch.object(agent, "get_model_context_length", return_value=1000):
+            result, summarized = agent.summarize_messages(msgs)
+            # Result should start with system message
+            assert result[0] is sys_msg
+            # Should have summarized something
+            assert len(summarized) > 0
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch("code_puppy.agents.base_agent.emit_error")
     @patch(
-        "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
-        return_value=False,
+        "code_puppy.agents.base_agent.get_puppy_config"
     )
     @patch(
-        "code_puppy.agents.base_agent.get_summarization_history_offload_enabled",
-        return_value=False,
+        "code_puppy.compaction.thresholds.get_model_context_window", return_value=None
     )
+    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
     def test_summarization_error_returns_original(
         self,
-        mock_offload,
-        mock_pretrunc,
+        mock_rust,
+        mock_get_ctx,
+        mock_get_config,
         mock_error,
         mock_info,
-        mock_tokens,
         mock_sync,
         agent,
     ):
+        mock_cfg = mock_get_config.return_value
+        mock_cfg.summarization_history_offload_enabled = False
+        mock_cfg.summarization_pretruncate_enabled = False
+        mock_cfg.summarization_trigger_fraction = 0.7
+        mock_cfg.summarization_keep_fraction = 0.5
+        mock_cfg.compaction_threshold = 0.5
+        mock_cfg.protected_token_count = 50
+        mock_cfg.summarization_arg_max_length = 1000
+        mock_cfg.summarization_history_dir = "/tmp"
         from code_puppy.summarization_agent import SummarizationError
 
         mock_sync.side_effect = SummarizationError(
@@ -376,117 +391,150 @@ class TestSummarizeMessages:
 
         msgs = [
             _make_msg("system"),
-            _make_msg("old" * 100),
-            _make_msg("recent"),
+            _make_msg("old" * 100, token_size=600),
+            _make_msg("recent", token_size=10),
         ]
-        result, summarized = agent.summarize_messages(msgs)
-        assert result == msgs  # Returns original on failure
-        assert summarized == []
-        mock_error.assert_called_once()
+        with patch.object(agent, "get_model_context_length", return_value=1000):
+            result, summarized = agent.summarize_messages(msgs)
+            assert result == msgs  # Returns original on failure
+            assert summarized == []
+            mock_error.assert_called_once()
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch("code_puppy.agents.base_agent.emit_error")
     @patch(
-        "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
-        return_value=False,
+        "code_puppy.agents.base_agent.get_puppy_config"
     )
     @patch(
-        "code_puppy.agents.base_agent.get_summarization_history_offload_enabled",
-        return_value=False,
+        "code_puppy.compaction.thresholds.get_model_context_window", return_value=None
     )
+    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
     def test_unexpected_error_returns_original(
         self,
-        mock_offload,
-        mock_pretrunc,
+        mock_rust,
+        mock_get_ctx,
+        mock_get_config,
         mock_error,
         mock_info,
-        mock_tokens,
         mock_sync,
         agent,
     ):
+        mock_cfg = mock_get_config.return_value
+        mock_cfg.summarization_history_offload_enabled = False
+        mock_cfg.summarization_pretruncate_enabled = False
+        mock_cfg.summarization_trigger_fraction = 0.7
+        mock_cfg.summarization_keep_fraction = 0.5
+        mock_cfg.compaction_threshold = 0.5
+        mock_cfg.protected_token_count = 50
+        mock_cfg.summarization_arg_max_length = 1000
+        mock_cfg.summarization_history_dir = "/tmp"
         mock_sync.side_effect = Exception("unexpected boom")
 
         msgs = [
             _make_msg("system"),
-            _make_msg("old" * 100),
-            _make_msg("recent"),
+            _make_msg("old" * 100, token_size=600),
+            _make_msg("recent", token_size=10),
         ]
-        result, summarized = agent.summarize_messages(msgs)
-        assert result == msgs
-        assert summarized == []
+        with patch.object(agent, "get_model_context_length", return_value=1000):
+            result, summarized = agent.summarize_messages(msgs)
+            assert result == msgs
+            assert summarized == []
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch(
-        "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
-        return_value=False,
+        "code_puppy.agents.base_agent.get_puppy_config"
     )
     @patch(
-        "code_puppy.agents.base_agent.get_summarization_history_offload_enabled",
-        return_value=False,
+        "code_puppy.compaction.thresholds.get_model_context_window", return_value=None
     )
+    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
     def test_without_protection(
-        self, mock_offload, mock_pretrunc, mock_info, mock_tokens, mock_sync, agent
-):
+        self, mock_rust, mock_get_ctx, mock_get_config, mock_info, mock_sync, agent
+    ):
+        mock_cfg = mock_get_config.return_value
+        mock_cfg.summarization_history_offload_enabled = False
+        mock_cfg.summarization_pretruncate_enabled = False
+        mock_cfg.summarization_trigger_fraction = 0.7
+        mock_cfg.summarization_keep_fraction = 0.5
+        mock_cfg.compaction_threshold = 0.5
+        mock_cfg.protected_token_count = 50
+        mock_cfg.summarization_arg_max_length = 1000
+        mock_cfg.summarization_history_dir = "/tmp"
         summary = [_make_msg("summary")]
         mock_sync.return_value = summary
 
-        msgs = [_make_msg("system"), _make_msg("old" * 100)]
-        result, summarized = agent.summarize_messages(msgs, with_protection=False)
-        assert len(result) >= 1
-        # System message should be first
-        assert result[0] is msgs[0]
+        msgs = [_make_msg("system"), _make_msg("old" * 100, token_size=600)]
+        with patch.object(agent, "get_model_context_length", return_value=1000):
+            result, summarized = agent.summarize_messages(msgs, with_protection=False)
+            assert len(result) >= 1
+            # System message should be first
+            assert result[0] is msgs[0]
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch(
-        "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
-        return_value=False,
+        "code_puppy.agents.base_agent.get_puppy_config"
     )
     @patch(
-        "code_puppy.agents.base_agent.get_summarization_history_offload_enabled",
-        return_value=False,
+        "code_puppy.compaction.thresholds.get_model_context_window", return_value=None
     )
+    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
     def test_empty_summarization_result_returns_original(
-        self, mock_offload, mock_pretrunc, mock_info, mock_tokens, mock_sync, agent
+        self, mock_rust, mock_get_ctx, mock_get_config, mock_info, mock_sync, agent
     ):
+        mock_cfg = mock_get_config.return_value
+        mock_cfg.summarization_history_offload_enabled = False
+        mock_cfg.summarization_pretruncate_enabled = False
+        mock_cfg.summarization_trigger_fraction = 0.7
+        mock_cfg.summarization_keep_fraction = 0.5
+        mock_cfg.compaction_threshold = 0.5
+        mock_cfg.protected_token_count = 50
+        mock_cfg.summarization_arg_max_length = 1000
+        mock_cfg.summarization_history_dir = "/tmp"
         """When _binary_split_summarize returns empty, should return original."""
-        with patch.object(agent, "_binary_split_summarize", return_value=[]):
-            msgs = [
-                _make_msg("system"),
-                _make_msg("old" * 100),
-                _make_msg("recent"),
-            ]
-            result, summarized = agent.summarize_messages(msgs)
-            # Should return pruned original messages since summary was empty
-            assert len(result) > 0
+        with patch.object(agent, "get_model_context_length", return_value=1000):
+            with patch.object(agent, "_binary_split_summarize", return_value=[]):
+                msgs = [
+                    _make_msg("system", token_size=10),
+                    _make_msg("old conversation", token_size=600),  # Exceeds 500 token threshold
+                    _make_msg("recent", token_size=10),
+                ]
+                result, summarized = agent.summarize_messages(msgs)
+                # Should return pruned original messages since summary was empty
+                assert len(result) > 0
 
     @patch("code_puppy.agents.base_agent.run_summarization_sync")
-    @patch("code_puppy.config.get_protected_token_count", return_value=50)
     @patch("code_puppy.agents.base_agent.emit_info")
     @patch(
-        "code_puppy.agents.base_agent.get_summarization_pretruncate_enabled",
-        return_value=False,
+        "code_puppy.agents.base_agent.get_puppy_config"
     )
     @patch(
-        "code_puppy.agents.base_agent.get_summarization_history_offload_enabled",
-        return_value=False,
+        "code_puppy.compaction.thresholds.get_model_context_window", return_value=None
     )
+    @patch("code_puppy.agents.base_agent._rust_enabled", return_value=False)
     def test_binary_split_called_for_large_history(
-        self, mock_offload, mock_pretrunc, mock_info, mock_tokens, mock_sync, agent
+        self, mock_rust, mock_get_ctx, mock_get_config, mock_info, mock_sync, agent
     ):
+        mock_cfg = mock_get_config.return_value
+        mock_cfg.summarization_history_offload_enabled = False
+        mock_cfg.summarization_pretruncate_enabled = False
+        mock_cfg.summarization_trigger_fraction = 0.7
+        mock_cfg.summarization_keep_fraction = 0.5
+        mock_cfg.compaction_threshold = 0.5
+        mock_cfg.protected_token_count = 50
+        mock_cfg.summarization_arg_max_length = 1000
+        mock_cfg.summarization_history_dir = "/tmp"
         """Verify that _binary_split_summarize is called (not direct sync)."""
-        with patch.object(
-            agent, "_binary_split_summarize", return_value=[_make_msg("summary")]
-        ) as mock_split:
-            msgs = [
-                _make_msg("system"),
-                _make_msg("old" * 100),
-                _make_msg("recent"),
-            ]
-            agent.summarize_messages(msgs)
-            mock_split.assert_called_once()
+        with patch.object(agent, "get_model_context_length", return_value=1000):
+            with patch.object(
+                agent, "_binary_split_summarize", return_value=[_make_msg("summary")]
+            ) as mock_split:
+                msgs = [
+                    _make_msg("system", token_size=10),
+                    _make_msg("old conversation", token_size=600),
+                    _make_msg("recent", token_size=10),
+                ]
+                agent.summarize_messages(msgs)
+                mock_split.assert_called_once()

@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from code_puppy import config as cp_config
-from code_puppy.session_storage import SessionMetadata
 
 
 def _clear_config_caches():
@@ -185,7 +184,6 @@ class TestAutoSaveSessionFunctionality:
 
         # Mock datetime.datetime at the built-in level, restoring immediately after
         import datetime
-        import sys
 
         fake_now = MagicMock()
         fake_now.strftime.return_value = "20240101_010101"

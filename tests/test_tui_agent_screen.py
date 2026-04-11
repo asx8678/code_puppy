@@ -7,7 +7,6 @@ Verifies:
 - ModelPinScreen can be imported and instantiated
 """
 
-import pytest
 
 
 # ---------------------------------------------------------------------------

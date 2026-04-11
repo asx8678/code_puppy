@@ -1,8 +1,7 @@
 """Tests for the TUI message bridge (TUIMessageBridge and TUIConsole)."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 from code_puppy.tui.message_bridge import TUIConsole, TUIMessageBridge, _strip_ansi
 

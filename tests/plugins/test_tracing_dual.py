@@ -13,7 +13,6 @@ import asyncio
 import os
 import sys
 import time
-import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest

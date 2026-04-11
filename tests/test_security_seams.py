@@ -26,7 +26,6 @@ import pytest
 
 from code_puppy.session_storage import (
     _JSON_MAGIC,
-    _LEGACY_MSGPACK_MAGIC,
     _compute_hmac,
     _get_hmac_key,
     _LEGACY_SIGNED_HEADER,

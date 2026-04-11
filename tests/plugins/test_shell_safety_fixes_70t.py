@@ -14,7 +14,6 @@ import pytest
 from code_puppy.plugins.shell_safety.regex_classifier import (
     MAX_COMMAND_LENGTH,
     MAX_COMMAND_LINES,
-    RegexClassificationResult,
     classify_command,
     _HIGH_RISK_PATTERNS,
     _WHOLE_COMMAND_DANGEROUS,
