@@ -243,6 +243,26 @@ class TestExecuteGitCommandAsync:
             assert result["success"] is True
             assert "git version" in result["output"]
 
+    @pytest.mark.asyncio
+    async def test_policy_source_extracted_from_metadata(self):
+        """policy_source should come from SecurityDecision.metadata['blocked_by']."""
+        with patch(
+            "code_puppy.plugins.git_auto_commit.shell_bridge.get_security_boundary"
+        ) as mock_get_security:
+            mock_security = MagicMock()
+            mock_security.check_shell_command = AsyncMock(
+                return_value=SecurityDecision(
+                    allowed=False,
+                    reason="Blocked by policy: deny",
+                    metadata={"blocked_by": "policy_engine", "reason": "deny"},
+                )
+            )
+            mock_get_security.return_value = mock_security
+
+            result = await execute_git_command("git status")
+            assert result["blocked"] is True
+            assert result["policy_source"] == "policy_engine"
+
 
 # =============================================================================
 # Tests for register_callbacks.py

@@ -67,7 +67,7 @@ async def execute_git_command(command: str, cwd: str | None = None) -> dict[str,
         logger.warning(f"Command blocked by security: {command[:50]}...")
         # Extract policy source from decision metadata if available
         policy_source = (
-            getattr(decision, "source", None) if hasattr(decision, "source") else None
+            decision.metadata.get("blocked_by") if decision.metadata else None
         )
         return {
             "success": False,
