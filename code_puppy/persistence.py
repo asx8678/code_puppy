@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Cache of directories that have already been created to avoid redundant mkdir calls
 _created_dirs: set[Path] = set()
+_created_dirs_lock = threading.Lock()
 
 
 def safe_resolve_path(path: Path, allowed_parent: Path | None = None) -> Path:
@@ -58,12 +60,14 @@ def safe_resolve_path(path: Path, allowed_parent: Path | None = None) -> Path:
 def _ensure_parent_dir(path: Path) -> None:
     """Ensure parent directory exists, using cache to avoid redundant mkdir calls."""
     parent = path.parent
-    if parent in _created_dirs or parent.exists():
+    with _created_dirs_lock:
+        if parent in _created_dirs:
+            return
         if parent.exists():
             _created_dirs.add(parent)
-        return
-    parent.mkdir(parents=True, exist_ok=True)
-    _created_dirs.add(parent)
+            return
+        parent.mkdir(parents=True, exist_ok=True)
+        _created_dirs.add(parent)
 
 
 def _atomic_replace(tmp_path: Path, target_path: Path) -> None:
