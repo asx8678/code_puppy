@@ -15,6 +15,7 @@ from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info
 
 from .shell_bridge import execute_git_command_sync
+from .policy_errors import handle_blocked_result
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +80,14 @@ def _handle_commit_command(command: str, name: str) -> bool | str | None:
         result = execute_git_command_sync(git_command)
 
         if result.get("blocked"):
-            # Command was blocked by security
-            reason = result.get("reason", "Unknown security reason")
-            error_msg = f"🛑 Command blocked by security: {reason}"
+            # Command was blocked by security - use clean policy error formatting
+            policy_error = handle_blocked_result(git_command, result)
+            if policy_error:
+                error_msg = f"🛑 {policy_error.user_message}"
+            else:
+                # Fallback if handle_blocked_result returns None (shouldn't happen for blocked=True)
+                reason = result.get("reason", "Unknown security reason")
+                error_msg = f"🛑 Command blocked by security: {reason}"
             logger.warning(f"GAC spike: {error_msg}")
             emit_info(error_msg)
             return error_msg
