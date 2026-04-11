@@ -1,5 +1,7 @@
 /target/
 /.venv/
+Cargo.lock
+uv.lock
 *.so
 *.dylib
 *.pyd
