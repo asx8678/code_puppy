@@ -274,7 +274,7 @@ pub fn execute_read_files(args: &serde_json::Value) -> Result<serde_json::Value,
         // Apply line range if specified
         let final_content = if let Some(start) = start_line {
             let lines: Vec<&str> = content.lines().collect();
-            let start_idx = start.saturating_sub(1); // Convert to 0-indexed
+            let start_idx = start.saturating_sub(1).min(lines.len()); // Convert to 0-indexed AND clamp
             let end_idx = if let Some(num) = num_lines {
                 (start_idx + num).min(lines.len())
             } else {

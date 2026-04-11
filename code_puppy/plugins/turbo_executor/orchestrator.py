@@ -49,6 +49,7 @@ from code_puppy.tools.file_operations import (
     _grep,
     _list_files,
     _read_file_sync,
+    validate_file_path,
 )
 
 
@@ -285,6 +286,15 @@ class TurboOrchestrator:
         directory = args.get("directory", ".")
         recursive = args.get("recursive", True)
 
+        # Security gate: validate directory before Rust acceleration
+        is_valid, error_msg = validate_file_path(directory, "list")
+        if not is_valid:
+            return {
+                "content": None,
+                "error": f"Security: {error_msg}",
+                "source": "security_blocked",
+            }
+
         # Try turbo_ops first if available
         if self._turbo_ops_available and turbo_list_files is not None:
             try:
@@ -312,6 +322,16 @@ class TurboOrchestrator:
         """Execute grep operation with fallback to native Python."""
         search_string = args.get("search_string", "")
         directory = args.get("directory", ".")
+
+        # Security gate: validate directory before Rust acceleration
+        is_valid, error_msg = validate_file_path(directory, "search")
+        if not is_valid:
+            return {
+                "matches": [],
+                "total_matches": 0,
+                "error": f"Security: {error_msg}",
+                "source": "security_blocked",
+            }
 
         # Try turbo_ops first if available
         if self._turbo_ops_available and turbo_grep is not None:
@@ -359,22 +379,53 @@ class TurboOrchestrator:
         num_lines = args.get("num_lines")
 
         files_data: list[dict[str, Any]] = []
+        original_total = len(file_paths)  # Track original count for reporting
+
+        # Security gate: validate paths before Rust acceleration
+        validated_paths = []
+        for file_path in file_paths:
+            try:
+                is_valid, error_msg = validate_file_path(file_path, "read")
+                if not is_valid:
+                    # Add to results as blocked
+                    files_data.append({
+                        "file_path": file_path,
+                        "content": None,
+                        "num_tokens": 0,
+                        "error": f"Security: {error_msg}",
+                        "success": False,
+                    })
+                else:
+                    validated_paths.append(file_path)
+            except Exception as e:
+                files_data.append({
+                    "file_path": file_path,
+                    "content": None,
+                    "num_tokens": 0,
+                    "error": f"Validation error: {e}",
+                    "success": False,
+                })
+
+        # Only process validated paths through turbo_ops
+        file_paths = validated_paths
 
         # Try turbo_ops first if available
-        if self._turbo_ops_available and turbo_read_file is not None:
+        if self._turbo_ops_available and turbo_read_file is not None and file_paths:
             try:
                 for file_path in file_paths:
                     try:
-                        result = await asyncio.to_thread(
-                            turbo_read_file, file_path, start_line or 0, num_lines or 0
-                        )
+                        # Convert 0 sentinels to None (Rust expects Option<usize>)
+                        start = start_line if start_line and start_line > 0 else None
+                        num = num_lines if num_lines and num_lines > 0 else None
+                        result = await asyncio.to_thread(turbo_read_file, file_path, start, num)
+                        # Respect turbo_ops success/error fields (it returns errors, doesn't raise)
                         files_data.append(
                             {
                                 "file_path": file_path,
                                 "content": result.get("content"),
                                 "num_tokens": result.get("num_tokens", 0),
-                                "error": None,
-                                "success": True,
+                                "error": result.get("error"),
+                                "success": result.get("success", False),
                             }
                         )
                     except Exception as e:
@@ -390,13 +441,13 @@ class TurboOrchestrator:
 
                 return {
                     "files": files_data,
-                    "total_files": len(file_paths),
+                    "total_files": original_total,
                     "successful_reads": sum(1 for f in files_data if f["success"]),
                     "source": "turbo_ops",
                 }
             except Exception:
                 # Fall through to native Python on failure
-                files_data = []
+                files_data = [f for f in files_data if f["file_path"] not in file_paths]
 
         # Fallback to native Python implementation
         for file_path in file_paths:
@@ -427,7 +478,7 @@ class TurboOrchestrator:
 
         return {
             "files": files_data,
-            "total_files": len(file_paths),
+            "total_files": original_total,
             "successful_reads": sum(1 for f in files_data if f["success"]),
             "source": "native_python",
         }

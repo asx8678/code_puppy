@@ -660,7 +660,7 @@ pub fn extract_symbols(source: &str, language: &str) -> SymbolOutline {
 
     // Parse the source
     let mut parser = Parser::new();
-    if let Err(e) = parser.set_language(ts_language) {
+    if let Err(e) = parser.set_language(&ts_language) {
         return SymbolOutline::error(
             lang_name,
             format!("Failed to set language: {}", e),
@@ -678,14 +678,14 @@ pub fn extract_symbols(source: &str, language: &str) -> SymbolOutline {
     };
 
     // Build and execute query
-    let query = match build_query(ts_language, query_str) {
+    let query = match build_query(&ts_language, query_str) {
         Ok(q) => q,
         Err(e) => {
             return SymbolOutline::error(lang_name, e);
         }
     };
 
-    let symbols = execute_symbol_query(ts_language, &query, &tree, source, &lang_name);
+    let symbols = execute_symbol_query(&ts_language, &query, &tree, source, &lang_name);
     let extraction_time_ms = start.elapsed().as_secs_f64() * 1000.0;
 
     SymbolOutline::new(lang_name, symbols, extraction_time_ms, true)

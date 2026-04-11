@@ -156,7 +156,7 @@ fn extract_syntax_diagnostics<'py>(py: Python<'py>, source: &str, language: &str
 
     // Run diagnostics extraction with GIL released
     let diagnostics: SyntaxDiagnostics = py.detach(|| {
-        extract_diagnostics(source, ts_language)
+        extract_diagnostics(source, &ts_language)
     });
 
     let result = serde_json::json!({

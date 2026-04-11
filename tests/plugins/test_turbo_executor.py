@@ -441,9 +441,9 @@ class TestFallbackBehavior:
     """Test fallback to native Python operations."""
 
     def test_orchestrator_uses_native_fallback_by_default(self):
-        """Test that orchestrator uses native Python when turbo_ops unavailable."""
-        orch = TurboOrchestrator()
-        # Since turbo_ops is not installed, should use native fallback
+        """Test that orchestrator uses native Python when prefer_native_python=True."""
+        orch = TurboOrchestrator(prefer_native_python=True)
+        # When prefer_native_python is set, should use native fallback
         assert orch.using_native_ops is True
         assert orch._turbo_ops_available is False
 

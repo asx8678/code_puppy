@@ -58,16 +58,18 @@ fn batch_execute_ops<'py>(
     operations: Vec<Bound<'py, PyAny>>,
     parallel: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
-    // Convert Python dicts to TurboOperation structs
+    // Convert Python dicts to TurboOperation structs (needs GIL)
     let ops: Vec<TurboOperation> = operations
         .iter()
         .map(|obj| convert_py_op_to_rust(py, obj))
         .collect::<PyResult<Vec<_>>>()?;
 
-    // Execute batch
-    let result = batch_execute(ops, parallel);
+    // Execute batch without GIL
+    let result = py.detach(move || {
+        batch_execute(ops, parallel)
+    });
 
-    // Convert result back to Python dict
+    // Convert result back to Python dict (needs GIL)
     convert_batch_result_to_py(py, &result)
 }
 
@@ -84,13 +86,18 @@ fn batch_execute_grouped_ops<'py>(
     py: Python<'py>,
     operations: Vec<Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    // Convert Python dicts to TurboOperation structs (needs GIL)
     let ops: Vec<TurboOperation> = operations
         .iter()
         .map(|obj| convert_py_op_to_rust(py, obj))
         .collect::<PyResult<Vec<_>>>()?;
 
-    let result = batch_execute_grouped(ops);
+    // Execute batch without GIL
+    let result = py.detach(move || {
+        batch_execute_grouped(ops)
+    });
 
+    // Convert result back to Python dict (needs GIL)
     convert_batch_result_to_py(py, &result)
 }
 
@@ -108,12 +115,18 @@ fn batch_execute_grouped_ops<'py>(
 #[pyfunction]
 #[pyo3(signature = (directory = ".", recursive = true))]
 fn list_files<'py>(py: Python<'py>, directory: &str, recursive: bool) -> PyResult<Bound<'py, PyAny>> {
-    let args = serde_json::json!({
-        "directory": directory,
-        "recursive": recursive
+    let dir = directory.to_string();
+
+    // Release GIL for filesystem operations
+    let result = py.detach(move || {
+        let args = serde_json::json!({
+            "directory": dir,
+            "recursive": recursive
+        });
+        operations::execute_list_files(&args)
     });
 
-    match operations::execute_list_files(&args) {
+    match result {
         Ok(data) => convert_json_to_py(py, &data),
         Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e)),
     }
@@ -133,12 +146,19 @@ fn list_files<'py>(py: Python<'py>, directory: &str, recursive: bool) -> PyResul
 #[pyfunction]
 #[pyo3(signature = (search_string, directory = "."))]
 fn grep<'py>(py: Python<'py>, search_string: &str, directory: &str) -> PyResult<Bound<'py, PyAny>> {
-    let args = serde_json::json!({
-        "search_string": search_string,
-        "directory": directory
+    let pattern = search_string.to_string();
+    let dir = directory.to_string();
+
+    // Release GIL for grep operations
+    let result = py.detach(move || {
+        let args = serde_json::json!({
+            "search_string": pattern,
+            "directory": dir
+        });
+        operations::execute_grep(&args)
     });
 
-    match operations::execute_grep(&args) {
+    match result {
         Ok(data) => convert_json_to_py(py, &data),
         Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e)),
     }
@@ -163,16 +183,71 @@ fn read_files<'py>(
     start_line: Option<usize>,
     num_lines: Option<usize>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let args = serde_json::json!({
-        "file_paths": file_paths,
-        "start_line": start_line,
-        "num_lines": num_lines
+    let paths = file_paths;
+
+    // Release GIL for file reading
+    let result = py.detach(move || {
+        let args = serde_json::json!({
+            "file_paths": paths,
+            "start_line": start_line,
+            "num_lines": num_lines
+        });
+        operations::execute_read_files(&args)
     });
 
-    match operations::execute_read_files(&args) {
+    match result {
         Ok(data) => convert_json_to_py(py, &data),
         Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e)),
     }
+}
+
+/// Read a single file with optional line range.
+/// This is a convenience wrapper around read_files for single-file operations.
+///
+/// Args:
+///   file_path: Path to the file to read
+///   start_line: Optional starting line number (1-indexed, None means from start)
+///   num_lines: Optional number of lines to read (None means read all)
+///
+/// Returns dict with:
+///   file_path: the file path
+///   content: the file content (or None on error)
+///   num_tokens: token count approximation
+///   error: error message (or None on success)
+///   success: boolean indicating success
+#[pyfunction]
+#[pyo3(signature = (file_path, start_line = None, num_lines = None))]
+fn read_file<'py>(
+    py: Python<'py>,
+    file_path: String,
+    start_line: Option<usize>,
+    num_lines: Option<usize>,
+) -> PyResult<Bound<'py, PyAny>> {
+    use pyo3::types::PyList;
+
+    // Call read_files with a single-element vector
+    let result = read_files(py, vec![file_path.clone()], start_line, num_lines)?;
+
+    // Extract the first (and only) file result from the returned dict
+    let result_dict: &Bound<'_, PyDict> = result.cast::<PyDict>()
+        .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Expected dict from read_files"))?;
+
+    if let Some(files) = result_dict.get_item("files")? {
+        let files_list: &Bound<'_, PyList> = files.cast::<PyList>()
+            .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Expected list for 'files'"))?;
+        if !files_list.is_empty() {
+            // Return the first file's result dict
+            return Ok(files_list.get_item(0)?.into());
+        }
+    }
+
+    // Fallback: return error dict if extraction fails
+    let error_dict = PyDict::new(py);
+    error_dict.set_item("file_path", file_path)?;
+    error_dict.set_item("content", py.None())?;
+    error_dict.set_item("error", "Failed to extract file result")?;
+    error_dict.set_item("success", false)?;
+    Ok(error_dict.unbind().into_bound(py).into_any())
 }
 
 /// Check if the turbo_ops module is available and healthy.
@@ -196,6 +271,14 @@ fn health_check<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
 }
 
 // Helper functions for Python conversion
+
+// TODO(PERF-02): Replace JSON round-trip with direct PyO3 dict construction
+// Current approach: Python dict → json.dumps → serde_json::from_str → Rust struct
+//                   Rust struct → serde_json::to_string → json.loads → Python dict
+// Optimized approach: Use pythonize crate or manual PyDict construction to avoid
+// the double serialization overhead. This is a performance optimization, not a
+// correctness issue - the current approach works correctly but has extra overhead.
+// See: https://docs.rs/pythonize for direct serde ↔ PyO3 conversion
 
 fn convert_py_op_to_rust(py: Python, obj: &Bound<'_, PyAny>) -> PyResult<TurboOperation> {
     // Try to extract as a dict
@@ -271,6 +354,7 @@ fn turbo_ops(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(list_files, m)?)?;
     m.add_function(wrap_pyfunction!(grep, m)?)?;
     m.add_function(wrap_pyfunction!(read_files, m)?)?;
+    m.add_function(wrap_pyfunction!(read_file, m)?)?;
     m.add_function(wrap_pyfunction!(health_check, m)?)?;
 
     // Add version info

@@ -189,12 +189,12 @@ impl HighlightContext {
             .map_err(|e| format!("Failed to load highlights query: {}", e))?;
 
         // Parse the query (Query::new expects &Language)
-        let query = Query::new(ts_language, query_str)
+        let query = Query::new(&ts_language, query_str)
             .map_err(|e| format!("Query error: {:?}", e))?;
 
-        // Store a clone of the Language
+        // Store the Language
         Ok(Self {
-            language: ts_language.clone(),
+            language: ts_language,
             query,
             language_name: lang_name,
         })

@@ -681,7 +681,7 @@ fn get_query_based_injections(source: &str, lang_name: &str) -> Vec<InjectionRan
     };
     
     let mut parser = Parser::new();
-    if parser.set_language(ts_language).is_err() {
+    if parser.set_language(&ts_language).is_err() {
         return Vec::new();
     }
     
@@ -871,7 +871,7 @@ fn parse_single_injection(injection: &InjectionRange) -> ParsedInjection {
     
     // Create parser
     let mut parser = Parser::new();
-    if let Err(e) = parser.set_language(ts_language) {
+    if let Err(e) = parser.set_language(&ts_language) {
         return ParsedInjection {
             range: injection.clone(),
             tree: None,

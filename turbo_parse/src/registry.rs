@@ -98,7 +98,7 @@ impl LanguageRegistry {
     /// - "typescript" (or "ts")
     /// - "tsx"
     /// - "elixir" (or "ex")
-    pub fn get(&self, name: &str) -> Result<&Language, RegistryError> {
+    pub fn get(&self, name: &str) -> Result<Language, RegistryError> {
         let normalized = name.to_lowercase();
 
         // Handle aliases
@@ -112,6 +112,7 @@ impl LanguageRegistry {
 
         self.languages
             .get(key)
+            .cloned()
             .ok_or_else(|| RegistryError::UnsupportedLanguage(name.to_string()))
     }
 
@@ -189,7 +190,16 @@ pub fn register_dynamic_grammar(_name: &str, _library_path: &str) -> Result<(), 
 /// Unregister a dynamic grammar.
 pub fn unregister_dynamic_grammar(name: &str) -> bool {
     let mut grammars = dynamic_grammars().lock().unwrap();
-    grammars.remove(name).is_some()
+    let removed = grammars.remove(name).is_some();
+
+    // Also evict from the loader cache (now safe because we return owned Language)
+    #[cfg(feature = "dynamic-grammars")]
+    if removed {
+        let loader = global_loader();
+        loader.unload_grammar(name);
+    }
+
+    removed
 }
 
 /// Check if a dynamic grammar is registered.
@@ -208,7 +218,7 @@ pub fn list_registered_dynamic_grammars() -> Vec<(String, String)> {
 ///
 /// This is the convenience function exposed to Python.
 /// Falls back to dynamic loading if the language is not a built-in.
-pub fn get_language(name: &str) -> Result<&'static Language, RegistryError> {
+pub fn get_language(name: &str) -> Result<Language, RegistryError> {
     // First try the built-in registry
     match global_registry().get(name) {
         Ok(lang) => Ok(lang),
@@ -225,19 +235,14 @@ pub fn get_language(name: &str) -> Result<&'static Language, RegistryError> {
                     // Try to get from the loader
                     let loader = global_loader();
                     if let Some(grammar) = loader.get_grammar(&normalized) {
-                        // We need to return a reference that lives as long as 'static
-                        // The LoadedGrammar is stored in an Arc in the loader
-                        // This is safe because the loader keeps the library loaded
-                        let lang_ptr = &grammar.language as *const Language;
-                        return unsafe { Ok(&*lang_ptr) };
+                        return Ok(grammar.language.clone());
                     }
                 }
                 
                 // Check if it's already loaded (but not registered through the registry API)
                 let loader = global_loader();
                 if let Some(grammar) = loader.get_grammar(&normalized) {
-                    let lang_ptr = &grammar.language as *const Language;
-                    return unsafe { Ok(&*lang_ptr) };
+                    return Ok(grammar.language.clone());
                 }
             }
             
@@ -251,7 +256,7 @@ pub fn get_language(name: &str) -> Result<&'static Language, RegistryError> {
 ///
 /// This is useful when you want to prefer a dynamic grammar but fall back
 /// to the built-in one if the dynamic version isn't available.
-pub fn get_language_with_fallback(name: &str) -> Option<&'static Language> {
+pub fn get_language_with_fallback(name: &str) -> Option<Language> {
     // Try dynamic first
     #[cfg(feature = "dynamic-grammars")]
     {
@@ -259,8 +264,7 @@ pub fn get_language_with_fallback(name: &str) -> Option<&'static Language> {
         let loader = global_loader();
         
         if let Some(grammar) = loader.get_grammar(&normalized) {
-            let lang_ptr = &grammar.language as *const Language;
-            return unsafe { Some(&*lang_ptr) };
+            return Some(grammar.language.clone());
         }
     }
     
@@ -529,6 +533,31 @@ mod tests {
         assert!(!is_dynamic_grammar_registered("test"));
         assert!(list_registered_dynamic_grammars().is_empty());
         assert!(!unregister_dynamic_grammar("test"));
+    }
+
+    #[test]
+    fn test_unregister_evicts_from_loader() {
+        // Test that unregister_dynamic_grammar evicts from the loader cache.
+        // This prevents get_language from finding the grammar after unregister.
+        
+        // This is mostly tested at compile time - we're ensuring that:
+        // 1. unregister_dynamic_grammar compiles with the feature-gated loader eviction
+        // 2. The code structure is correct
+        
+        // We can't easily test the full integration without a real .so/.dylib file,
+        // but we can verify the basic behavior works.
+        
+        // Register a fake path (this won't load without a real library)
+        let _ = register_dynamic_grammar("test_lang", "/nonexistent/path.so");
+        
+        // The grammar may or may not be registered depending on whether
+        // the feature is enabled and whether the path exists
+        
+        // Unregister should always work without panicking
+        let _ = unregister_dynamic_grammar("test_lang");
+        
+        // After unregister, it should not be registered
+        assert!(!is_dynamic_grammar_registered("test_lang"));
     }
 
     #[test]

@@ -1,0 +1,69 @@
+name: code_puppy_core CI
+
+on:
+  push:
+    paths:
+      - 'code_puppy_core/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/code_puppy_core.yml'
+  pull_request:
+    paths:
+      - 'code_puppy_core/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/code_puppy_core.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: code_puppy_core
+      
+      - name: Check formatting
+        run: cargo fmt -p code_puppy_core -- --check
+      
+      - name: Clippy
+        run: cargo clippy -p code_puppy_core -- -D warnings
+      
+      - name: Build
+        run: cargo build -p code_puppy_core --release
+
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: code_puppy_core
+      
+      - name: Run tests
+        run: cargo test -p code_puppy_core --release

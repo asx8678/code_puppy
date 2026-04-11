@@ -308,7 +308,7 @@ pub fn parse_with_edits_internal(
     // Create and configure parser
     let mut parser = Parser::new();
 
-    if let Err(e) = parser.set_language(ts_language) {
+    if let Err(e) = parser.set_language(&ts_language) {
         return ParseResult::error(
             &lang_name,
             ParseError::with_message(format!("Failed to set language: {}", e))
@@ -408,19 +408,25 @@ fn serialize_tree(tree: &Tree, source: &str) -> serde_json::Value {
 }
 
 /// Python-exposed function for incremental parsing with edits.
+///
+/// NOTE: This function currently performs a fresh parse for each call.
+/// True incremental parsing with explicit old tree passing is not yet
+/// supported via Python. For incremental benefits, use `IncrementalParseContext`
+/// in Rust code or the internal caching layer in Python.
 #[cfg(feature = "python")]
 #[pyfunction]
-#[pyo3(signature = (source, language, _old_tree_json = None, edits = None))]
+#[pyo3(signature = (source, language, edits = None))]
 pub fn parse_with_edits<'py>(
     py: Python<'py>,
     source: &str,
     language: &str,
-    _old_tree_json: Option<Bound<'py, PyAny>>,
     edits: Option<Vec<InputEdit>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let edits_vec = edits.unwrap_or_default();
 
     // Release GIL during CPU-intensive parsing
+    // NOTE: Currently always passes None for old_tree. For true incremental
+    // parsing, maintain trees in memory via IncrementalParseContext.
     let result: ParseResult = py.detach(|| {
         parse_with_edits_internal(source, language, None, &edits_vec)
     });
@@ -685,7 +691,7 @@ mod tests {
 
         let ts_language = get_language(lang_name).unwrap();
         let mut parser = Parser::new();
-        parser.set_language(ts_language).unwrap();
+        parser.set_language(&ts_language).unwrap();
         let old_tree = parser.parse(source, None).unwrap();
 
         // Now do an incremental parse with edits

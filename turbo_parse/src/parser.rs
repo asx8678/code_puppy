@@ -218,7 +218,7 @@ fn parse_source_internal(source: &str, language: &str) -> ParseResult {
     // Create and configure parser
     let mut parser = Parser::new();
     
-    if let Err(e) = parser.set_language(ts_language) {
+    if let Err(e) = parser.set_language(&ts_language) {
         return ParseResult::error(
             &lang_name,
             ParseError::with_message(format!("Failed to set language: {}", e))
