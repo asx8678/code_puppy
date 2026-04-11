@@ -56,6 +56,7 @@ from .config_resolve import (
     clear_config_value_cache,
 )
 from .peek_file import peek_file_sync, peek_file, reset_pools
+from .thread_safe_cache import thread_safe_lru_cache, thread_safe_cache
 
 __all__ = [
     # Agent helpers
@@ -142,4 +143,7 @@ __all__ = [
     "peek_file_sync",
     "peek_file",
     "reset_pools",
+    # Thread-safe cache decorators (for Python 3.14t free-threading)
+    "thread_safe_lru_cache",
+    "thread_safe_cache",
 ]
