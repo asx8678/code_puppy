@@ -28,6 +28,7 @@ from .commit_flow import (
     preflight_check,
 )
 from .context_guard import GACContextError, is_gac_safe
+from .policy_errors import handle_blocked_result
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +187,19 @@ def _handle_commit_command(command: str, name: str) -> bool | str | None:
         emit_info(f'🔒 Phase 3: Executing commit with message: "{message}"')
 
         result = execute_commit(message)
+
+        if result.get("blocked"):
+            # Command was blocked by security - use clean policy error formatting
+            policy_error = handle_blocked_result("git commit", result)
+            if policy_error:
+                error_msg = f"🛑 {policy_error.user_message}"
+            else:
+                # Fallback if handle_blocked_result returns None
+                reason = result.get("reason", "Unknown security reason")
+                error_msg = f"🛑 Command blocked by security: {reason}"
+            logger.warning(f"GAC: {error_msg}")
+            emit_info(error_msg)
+            return error_msg
 
         if result["success"]:
             commit_hash = result.get("commit_hash", "unknown")

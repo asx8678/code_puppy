@@ -65,6 +65,14 @@ from code_puppy.plugins.git_auto_commit.commit_flow import (
     run_full_flow,
 )
 
+# Policy error exports from 7db.7
+from code_puppy.plugins.git_auto_commit.policy_errors import (
+    DENIAL_SUGGESTIONS,
+    GACPolicyError,
+    classify_policy_denial,
+    handle_blocked_result,
+)
+
 __version__ = "0.2.0"
 __all__ = [
     # Context guard exports
@@ -84,4 +92,9 @@ __all__ = [
     "generate_preview",
     "execute_commit",
     "run_full_flow",
+    # Policy error exports
+    "GACPolicyError",
+    "classify_policy_denial",
+    "handle_blocked_result",
+    "DENIAL_SUGGESTIONS",
 ]
