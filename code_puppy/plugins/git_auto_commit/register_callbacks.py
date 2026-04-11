@@ -1,11 +1,18 @@
-"""Register callbacks for the Git Auto Commit (GAC) spike.
+"""Register callbacks for the Git Auto Commit (GAC) plugin.
 
 This module registers:
 - `custom_command` handler for `/commit` slash command
 - `custom_command_help` to add entry to `/help` menu
 
-The `/commit` command proves that we can bridge sync callback execution
-to async shell execution through the security boundary.
+The `/commit` command orchestrates the full commit flow:
+- `/commit` (no args) → runs preflight, shows preview
+- `/commit status` → runs preflight only
+- `/commit preview` → shows what would be committed
+- `/commit -m "message"` → runs full flow with given message
+
+All operations go through the security boundary:
+1. Context guard ensures safe execution context
+2. Shell bridge executes git commands via security boundary
 """
 
 from __future__ import annotations
@@ -14,7 +21,13 @@ import logging
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info
 
-from .shell_bridge import execute_git_command_sync
+from .commit_flow import (
+    CommitFlowError,
+    execute_commit,
+    generate_preview,
+    preflight_check,
+)
+from .context_guard import GACContextError, is_gac_safe
 
 logger = logging.getLogger(__name__)
 
@@ -28,23 +41,76 @@ def _commit_help() -> list[tuple[str, str]]:
     return [
         (
             "commit",
-            "Git auto-commit (GAC spike) - Execute git status through security boundary",
-        )
+            "Git auto-commit - preflight → preview → execute through security boundary",
+        ),
+        ("commit status", "Run preflight check only (git status --porcelain)"),
+        ("commit preview", "Show what would be committed (git diff --cached --stat)"),
+        ('commit -m "msg"', "Execute commit with message through security boundary"),
     ]
+
+
+def _parse_commit_args(command: str) -> dict:
+    """Parse /commit command arguments.
+
+    Args:
+        command: Full command string (e.g., "/commit -m 'message'")
+
+    Returns:
+        Dict with parsed arguments:
+            - subcommand: 'default', 'status', 'preview', or 'execute'
+            - message: commit message if -m flag provided
+            - dry_run: True for status/preview subcommands
+    """
+    parts = command.split()
+
+    # Remove the '/commit' prefix
+    if parts and parts[0] in ("/commit", "commit"):
+        parts = parts[1:]
+
+    if not parts:
+        return {"subcommand": "default", "message": None, "dry_run": False}
+
+    # Check for subcommands
+    first = parts[0].lower()
+    if first == "status":
+        return {"subcommand": "status", "message": None, "dry_run": True}
+    if first == "preview":
+        return {"subcommand": "preview", "message": None, "dry_run": True}
+
+    # Check for -m flag (execute with message)
+    message = None
+    i = 0
+    while i < len(parts):
+        if parts[i] == "-m" and i + 1 < len(parts):
+            # Take everything after -m as the message
+            message = " ".join(parts[i + 1 :])
+            # Remove surrounding quotes if present
+            if (message.startswith('"') and message.endswith('"')) or (
+                message.startswith("'") and message.endswith("'")
+            ):
+                message = message[1:-1]
+            break
+        i += 1
+
+    if message:
+        return {"subcommand": "execute", "message": message, "dry_run": False}
+
+    # Unknown args - treat as default
+    return {"subcommand": "default", "message": None, "dry_run": False}
 
 
 def _handle_commit_command(command: str, name: str) -> bool | str | None:
     """Handle the /commit slash command.
 
-    This handler is invoked via the sync `custom_command` callback mechanism,
-    but it bridges to async shell execution through the security boundary.
+    Orchestrates the commit flow through three phases:
+    1. Preflight: Check git status, detect staged/unstaged changes
+    2. Preview: Generate commit message preview, show what will be committed
+    3. Execute: Run git commit through security boundary (if message provided)
 
-    The bridging works via `run_async_sync()` which executes the async
-    `execute_git_command()` function in a background thread with its own
-    event loop, avoiding deadlock issues when called from sync contexts.
+    Each phase calls check_gac_context() FIRST — safety before everything.
 
     Args:
-        command: The full command string (e.g., "/commit" or "/commit status")
+        command: The full command string (e.g., "/commit -m 'feat: add stuff'")
         name: The command name (always "commit" for this handler)
 
     Returns:
@@ -54,65 +120,102 @@ def _handle_commit_command(command: str, name: str) -> bool | str | None:
         # Not our command - let other handlers try
         return None  # type: ignore[return-value]
 
-    logger.info(f"GAC spike: Executing /{command}")
-    emit_info("🐕 GAC spike: Bridging sync callback to async shell execution...")
+    logger.info(f"GAC: Executing /{command}")
+    emit_info("🐕 GAC: Starting commit flow through security boundary...")
 
-    # Parse subcommand (default to "status" for this spike)
-    parts = command.split()
-    subcommand = parts[1] if len(parts) > 1 else "status"
-
-    # Validate subcommand for security (whitelist approach)
-    allowed_subcommands = {"status", "branch", "log", "diff", "show"}
-    if subcommand not in allowed_subcommands:
-        error_msg = f"❌ Unknown subcommand: {subcommand}. Allowed: {', '.join(sorted(allowed_subcommands))}"
-        logger.warning(error_msg)
+    # Check context safety FIRST (before any git operations)
+    is_safe, reason = is_gac_safe()
+    if not is_safe:
+        error_msg = f"🛑 GAC refused: {reason}"
+        logger.warning(f"GAC: {error_msg}")
+        emit_info(error_msg)
         return error_msg
 
-    # Build the git command
-    git_command = f"git {subcommand}"
-
-    # Execute through the security boundary bridge
-    # This is the key proof point: sync callback → async shell execution
-    emit_info(f"🔒 Checking security boundary for: {git_command}")
+    # Parse arguments
+    args = _parse_commit_args(command)
+    subcommand = args["subcommand"]
+    message = args["message"]
 
     try:
-        result = execute_git_command_sync(git_command)
+        # === PHASE 1: Preflight ===
+        emit_info("🔍 Phase 1: Preflight check...")
+        preflight = preflight_check()
 
-        if result.get("blocked"):
-            # Command was blocked by security
-            reason = result.get("reason", "Unknown security reason")
-            error_msg = f"🛑 Command blocked by security: {reason}"
-            logger.warning(f"GAC spike: {error_msg}")
+        if preflight["clean"]:
+            emit_info("📭 Working tree is clean - nothing to commit")
+            return "Working tree clean - nothing to commit"
+
+        if not preflight["has_staged"]:
+            unstaged_count = len(preflight["unstaged_files"])
+            untracked_count = len(preflight["untracked_files"])
+            emit_info(
+                f"⚠️ No staged changes. {unstaged_count} unstaged, {untracked_count} untracked. "
+                "Run 'git add' first."
+            )
+            return f"No staged changes. {unstaged_count} modified, {untracked_count} untracked. Run 'git add' first."
+
+        staged_count = len(preflight["staged_files"])
+        emit_info(f"✅ Found {staged_count} staged file(s)")
+
+        # If only status requested, we're done
+        if subcommand == "status":
+            return True
+
+        # === PHASE 2: Preview ===
+        emit_info("📋 Phase 2: Generating preview...")
+        preview = generate_preview()
+
+        emit_info(f"   Summary: {preview['summary']}")
+        if preview["diff"]:
+            lines = preview["diff"].split("\n")[:15]  # Show first 15 lines
+            diff_preview = "\n".join(lines)
+            if len(preview["diff"].split("\n")) > 15:
+                diff_preview += f"\n... ({len(preview['diff'].split(chr(10))) - 15} more lines)"
+            emit_info(f"   Diff:\n{diff_preview}")
+
+        # If only preview requested, we're done
+        if subcommand == "preview":
+            return True
+
+        # === PHASE 3: Execute (if message provided) ===
+        if not message:
+            # Default mode without -m flag: show what's ready and ask for confirmation
+            emit_info("💡 Use '/commit -m \"your message\"' to execute the commit")
+            return True
+
+        emit_info(f'🔒 Phase 3: Executing commit with message: "{message}"')
+
+        result = execute_commit(message)
+
+        if result["success"]:
+            commit_hash = result.get("commit_hash", "unknown")
+            branch = result.get("branch", "unknown")
+            emit_info(f"✅ Successfully committed [{commit_hash}] on {branch}")
+            logger.info(f"GAC: Committed {commit_hash} on {branch}")
+            return True
+        else:
+            error_msg = f"❌ Commit failed: {result.get('output', 'Unknown error')}"
+            logger.error(f"GAC: {error_msg}")
             emit_info(error_msg)
             return error_msg
 
-        if not result.get("success"):
-            # Command execution failed
-            error = result.get("error", "Unknown error")
-            error_msg = f"❌ Command failed: {error}"
-            logger.error(f"GAC spike: {error_msg}")
-            emit_info(error_msg)
-            return error_msg
+    except GACContextError as e:
+        error_msg = f"🛑 Security check failed: {e}"
+        logger.warning(f"GAC: Context error - {e}")
+        emit_info(error_msg)
+        return error_msg
 
-        # Success!
-        output = result.get("output", "")
-        logger.info(f"GAC spike: Successfully executed {git_command}")
-        emit_info(f"✅ Successfully executed: {git_command}")
-
-        # Show output preview (truncated for large outputs)
-        if output:
-            lines = output.strip().split("\n")
-            preview_lines = lines[:20]  # Show first 20 lines
-            preview = "\n".join(preview_lines)
-            if len(lines) > 20:
-                preview += f"\n... ({len(lines) - 20} more lines)"
-            emit_info(f"Output:\n{preview}")
-
-        return True
+    except CommitFlowError as e:
+        error_msg = f"❌ Commit flow failed in {e.phase} phase: {e}"
+        if e.details:
+            error_msg += f" (Details: {e.details})"
+        logger.error(f"GAC: Flow error - {e}")
+        emit_info(error_msg)
+        return error_msg
 
     except Exception as e:
-        error_msg = f"💥 Bridge execution failed: {type(e).__name__}: {e}"
-        logger.exception(f"GAC spike: {error_msg}")
+        error_msg = f"💥 Unexpected error: {type(e).__name__}: {e}"
+        logger.exception(f"GAC: Unexpected error - {e}")
         emit_info(error_msg)
         return error_msg
 
@@ -124,10 +227,11 @@ def _handle_commit_command(command: str, name: str) -> bool | str | None:
 register_callback("custom_command_help", _commit_help)
 register_callback("custom_command", _handle_commit_command)
 
-logger.debug("Git Auto Commit (GAC) spike callbacks registered")
+logger.debug("Git Auto Commit (GAC) callbacks registered (v0.2.0)")
 
 
 __all__ = [
     "_commit_help",
     "_handle_commit_command",
+    "_parse_commit_args",
 ]
