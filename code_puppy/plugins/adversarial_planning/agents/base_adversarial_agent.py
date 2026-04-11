@@ -154,13 +154,4 @@ Before planning, check what's available:
 2. Use existing skills rather than reinventing solutions
 3. Skills may provide additional tools or context for your analysis
 """
-        
-        # Integrate with standard prompt system
-        # This includes file mentions, agent memory, and other plugin additions
-        prompt_additions = callbacks.on_load_prompt()
-        # Filter None values — callbacks may return None or fail gracefully
-        prompt_additions = [p for p in prompt_additions if p is not None]
-        if prompt_additions:
-            result += "\n" + "\n".join(prompt_additions)
-        
         return result

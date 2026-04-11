@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 from typing import Any
 
-from code_puppy.agents.agent_manager import get_current_agent_name
+from code_puppy.agents.agent_manager import get_current_agent, get_current_agent_name
 from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
 
 from .store import PromptStore
@@ -22,6 +22,35 @@ logger = logging.getLogger(__name__)
 
 # Global store instance - lazily initialized
 _store: PromptStore | None = None
+
+
+def _invalidate_system_prompt_cache(agent_name: str) -> None:
+    """Invalidate system prompt cache for the current agent if it matches.
+
+    Called when prompt templates are activated/reset to ensure the next
+    agent invocation picks up the new prompt.
+
+    Args:
+        agent_name: Name of the agent whose prompt changed
+    """
+    try:
+        agent = get_current_agent()
+    except Exception:
+        # No active agent or other error - cache invalidation is best-effort
+        return
+
+    if agent is None:
+        return
+
+    try:
+        # Only invalidate if the current agent matches the affected agent
+        if hasattr(agent, "name") and agent.name == agent_name:
+            if hasattr(agent, "_state") and hasattr(agent._state, "cached_system_prompt"):
+                agent._state.cached_system_prompt = None
+                logger.debug(f"Invalidated system prompt cache for {agent_name}")
+    except Exception:
+        # Best-effort: never crash slash commands due to cache invalidation
+        logger.debug("prompt_store: cache invalidation failed (non-critical)", exc_info=True)
 
 
 def _get_store() -> PromptStore:
@@ -381,6 +410,7 @@ def _handle_activate(args: list[str]) -> None:
 
     try:
         store.set_active_for_agent(agent_name, template_id)
+        _invalidate_system_prompt_cache(agent_name)
         emit_success(f"✅ Activated template for {agent_name}: {tmpl.name}")
         emit_info(f"   ID: {template_id}")
         emit_info(
@@ -400,6 +430,7 @@ def _handle_reset(args: list[str]) -> None:
     store = _get_store()
 
     store.clear_active_for_agent(agent_name)
+    _invalidate_system_prompt_cache(agent_name)
     emit_success(f"✅ Reset prompt for {agent_name}")
     emit_info("Next run will use the default built-in prompt without this addition.")
 

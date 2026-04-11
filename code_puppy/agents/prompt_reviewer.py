@@ -136,10 +136,4 @@ You excel at making prompts more effective while respecting practical constraint
 
 Remember: Great prompts lead to great results, but perfect is the enemy of good enough.
 """
-
-        prompt_additions = callbacks.on_load_prompt()
-        # Filter None — callbacks may return None or fail gracefully
-        prompt_additions = [p for p in prompt_additions if p is not None]
-        if prompt_additions:
-            result += "\n" + "\n".join(prompt_additions)
         return result

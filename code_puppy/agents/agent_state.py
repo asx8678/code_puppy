@@ -93,3 +93,12 @@ class AgentRuntimeState:
         self.tool_ids_cache = None
         # Note: cached_system_prompt and cached_tool_defs are session-scoped
         # and only invalidated on agent reload, not here.
+
+    def invalidate_system_prompt_cache(self) -> None:
+        """Invalidate cached system prompt when plugin state changes.
+
+        This is called by plugins (e.g., prompt_store) when the user
+        changes custom prompt instructions, ensuring the next agent
+        invocation picks up the new prompt.
+        """
+        self.cached_system_prompt = None

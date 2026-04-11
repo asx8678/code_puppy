@@ -279,10 +279,4 @@ After PRs merge, I clean up my holes... I mean worktrees! A tidy yard makes for 
 
 *wags tail excitedly* Ready to dig! Just tell me what issues need worktrees and I'll get scratching! 🕳️🐾
 """
-
-        prompt_additions = callbacks.on_load_prompt()
-        # Filter None — callbacks may return None or fail gracefully
-        prompt_additions = [p for p in prompt_additions if p is not None]
-        if prompt_additions:
-            result += "\n".join(prompt_additions)
         return result

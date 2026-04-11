@@ -15,6 +15,8 @@ from abc import abstractmethod
 from datetime import datetime
 from pathlib import Path
 
+from code_puppy import callbacks
+
 
 class AgentPromptMixin:
     """Mixin providing platform info and prompt assembly utilities.
@@ -103,14 +105,23 @@ class AgentPromptMixin:
     def get_full_system_prompt(self) -> str:
         """Get the complete system prompt with platform info and identity.
 
-        Assembles: base prompt + platform context + agent identity.
+        Assembles: base prompt + plugin additions + platform context + agent identity.
         Platform info gives the model awareness of OS, shell, date, and
         environment so it can generate appropriate commands and advice.
+        Plugin additions allow customization via load_prompt callbacks.
 
         Returns:
             The full system prompt including platform and identity information.
         """
         prompt = self.get_system_prompt()
+
+        # Add plugin prompt additions (e.g., from prompt_store, file_mentions)
+        prompt_additions = callbacks.on_load_prompt()
+        if prompt_additions:
+            filtered = [p for p in prompt_additions if p is not None]
+            if filtered:
+                prompt += "\n\n# Custom Instructions\n" + "\n".join(filtered)
+
         prompt += "\n\n# Environment\n" + self.get_platform_info()
         prompt += self.get_identity_prompt()
         return prompt

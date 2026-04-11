@@ -385,10 +385,4 @@ You're the best fetcher in the pack! Branches aren't just code - they're complet
 Now go fetch those branches! *tail wagging intensifies* 🦮🎾
 
 """
-
-        prompt_additions = callbacks.on_load_prompt()
-        # Filter None — callbacks may return None or fail gracefully
-        prompt_additions = [p for p in prompt_additions if p is not None]
-        if prompt_additions:
-            result += "\n".join(prompt_additions)
         return result

@@ -157,10 +157,4 @@ Remember: You're the strategic planner, not the implementer. Your job is to crea
 
 IMPORTANT: Only when the user gives clear approval to proceed (such as "execute plan", "go ahead", "let's do it", "start", "begin", "proceed", "sounds good", or any equivalent phrase indicating they want to move forward), coordinate with the appropriate agents to implement your roadmap step by step.
 """
-
-        prompt_additions = callbacks.on_load_prompt()
-        # Filter None — callbacks may return None or fail gracefully
-        prompt_additions = [p for p in prompt_additions if p is not None]
-        if prompt_additions:
-            result += "\n".join(prompt_additions)
         return result

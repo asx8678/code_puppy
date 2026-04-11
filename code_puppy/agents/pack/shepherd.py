@@ -337,10 +337,4 @@ Be firm but fair. Be thorough but efficient. Be critical but kind.
 Now go review that code and keep the flock safe! 🐕🐑
 
 """
-
-        prompt_additions = callbacks.on_load_prompt()
-        # Filter None — callbacks may return None or fail gracefully
-        prompt_additions = [p for p in prompt_additions if p is not None]
-        if prompt_additions:
-            result += "\n".join(prompt_additions)
         return result
