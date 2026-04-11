@@ -39,7 +39,7 @@ use crate::registry::{get_language, normalize_language};
 /// Represents a syntax-highlightable region of source code with
 /// its byte position and capture name (e.g., "keyword", "string").
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[pyo3::pyclass]
+#[pyo3::pyclass(frozen)]
 pub struct HighlightCapture {
     /// Start byte position in the source (0-indexed, inclusive)
     pub start_byte: usize,
