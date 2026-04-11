@@ -146,7 +146,7 @@ def interactive_server_selection(group_id: str):
             emit_info(f"    {server.description[:80]}...", message_group=group_id)
 
         choice = emit_prompt(
-            "Enter number (1-{}) or 'q' to quit: ".format(len(servers))
+            f"Enter number (1-{len(servers)}) or 'q' to quit: "
         )
 
         if choice.lower() == "q":
@@ -317,7 +317,7 @@ def install_server_from_catalog(
             message_group=group_id,
         )
         emit_info(
-            "Use '/mcp start {}' to start the server".format(server_name),
+            f"Use '/mcp start {server_name}' to start the server",
             message_group=group_id,
         )
 
