@@ -232,77 +232,86 @@ fn collect_candidates(
     candidates
 }
 
-/// Index a directory and return file summaries
+/// Index a directory and return file summaries.
+///
+/// Releases the GIL during filesystem traversal and rayon parallel processing
+/// for free-threading compatibility (PEP 703 / Python 3.13+).
 #[pyfunction]
 #[pyo3(signature = (root, max_files=40, max_symbols_per_file=8, ignored_dirs=None))]
-pub fn index_directory(
+pub fn index_directory<'py>(
+    py: Python<'py>,
     root: &str,
     max_files: usize,
     max_symbols_per_file: usize,
     ignored_dirs: Option<Vec<String>>,
 ) -> PyResult<Vec<FileSummary>> {
     let root_path = PathBuf::from(root);
-    
+
     if !root_path.exists() {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             format!("Directory does not exist: {}", root)
         ));
     }
-    
+
     if !root_path.is_dir() {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             format!("Path is not a directory: {}", root)
         ));
     }
-    
+
     // Build ignored set with defaults
     let ignored: HashSet<&str> = IGNORED_DIRS.iter().copied().collect();
-    
+
     // Note: extra_ignored_dirs from the parameter are not used in the HashSet
     // because HashSet<&str> can't store owned Strings with local lifetime.
     // For now, the comprehensive default IGNORED_DIRS covers most cases.
-    // TODO: If custom ignored dirs are needed, convert to HashSet<String>
+    // TODO(turbo-ops): If custom ignored dirs are needed, convert to HashSet<String>
     let _extra_ignored = ignored_dirs.unwrap_or_default();
-    
-    // Collect all candidate files (sorted by depth, then path)
-    let candidates = collect_candidates(&root_path, &ignored);
-    
-    // Take enough candidates to have good coverage after filtering
-    let candidates: Vec<(PathBuf, usize)> = candidates
-        .into_iter()
-        .take(max_files * 3)
-        .collect();
-    
-    // Process files in parallel
-    let mut summaries: Vec<FileSummary> = candidates
-        .into_par_iter()
-        .filter_map(|(path, _depth)| {
-            let rel_path = path.strip_prefix(&root_path).ok()?;
-            let rel_str = rel_path.to_str()?;
-            
-            let (kind, extract_symbols) = categorize_file(&path)?;
-            
-            let symbols = if extract_symbols && kind == "python" {
-                // Read file and extract symbols
-                std::fs::read_to_string(&path)
-                    .ok()
-                    .map(|content| extract_python_symbols_simple(&content, max_symbols_per_file))
-                    .unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-            
-            Some(FileSummary {
-                path: rel_str.to_string(),
-                kind: kind.to_string(),
-                symbols,
+
+    // Release GIL for heavy filesystem + rayon work (free-threading safe)
+    let mut summaries: Vec<FileSummary> = py.detach(move || {
+        // Collect all candidate files (sorted by depth, then path)
+        let candidates = collect_candidates(&root_path, &ignored);
+
+        // Take enough candidates to have good coverage after filtering
+        let candidates: Vec<(PathBuf, usize)> = candidates
+            .into_iter()
+            .take(max_files * 3)
+            .collect();
+
+        // Process files in parallel (no Python access needed)
+        let results: Vec<FileSummary> = candidates
+            .into_par_iter()
+            .filter_map(|(path, _depth)| {
+                let rel_path = path.strip_prefix(&root_path).ok()?;
+                let rel_str = rel_path.to_str()?;
+
+                let (kind, extract_symbols) = categorize_file(&path)?;
+
+                let symbols = if extract_symbols && kind == "python" {
+                    // Read file and extract symbols
+                    std::fs::read_to_string(&path)
+                        .ok()
+                        .map(|content| extract_python_symbols_simple(&content, max_symbols_per_file))
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+
+                Some(FileSummary {
+                    path: rel_str.to_string(),
+                    kind: kind.to_string(),
+                    symbols,
+                })
             })
-        })
-        .collect();
-    
+            .collect();
+
+        results
+    });
+
     // Limit to max_files (sequential after parallel processing)
     summaries.truncate(max_files);
-    
+
     Ok(summaries)
 }
 
@@ -377,41 +386,45 @@ async def async_func(a, b, c):
 
     #[test]
     fn test_index_directory_basic() {
-        let temp_dir = TempDir::new().unwrap();
-        let root = temp_dir.path();
-        
-        // Create some test files
-        std::fs::write(root.join("main.py"), "def main():\n    pass\n").unwrap();
-        std::fs::write(root.join("README.md"), "# Test").unwrap();
-        std::fs::write(root.join("utils.rs"), "fn helper() {}").unwrap();
-        
-        // Create a subdirectory
-        std::fs::create_dir(root.join("src")).unwrap();
-        std::fs::write(root.join("src/lib.py"), "class Lib:\n    pass\n").unwrap();
-        
-        // Create a hidden directory that should be ignored
-        std::fs::create_dir(root.join(".hidden")).unwrap();
-        std::fs::write(root.join(".hidden/secret.py"), "def secret(): pass").unwrap();
-        
-        let summaries = index_directory(
-            root.to_str().unwrap(),
-            100,
-            8,
-            None,
-        ).unwrap();
-        
-        // Should find main.py, README.md, utils.rs, src/lib.py
-        // Should NOT find .hidden/secret.py
-        let paths: Vec<&str> = summaries.iter().map(|s| s.path.as_str()).collect();
-        assert!(paths.contains(&"main.py"));
-        assert!(paths.contains(&"README.md"));
-        assert!(paths.contains(&"utils.rs"));
-        assert!(paths.contains(&"src/lib.py"));
-        assert!(!paths.contains(&".hidden/secret.py"));
-        
-        // Check symbols were extracted from Python files
-        let main_py = summaries.iter().find(|s| s.path == "main.py").unwrap();
-        assert!(!main_py.symbols.is_empty());
-        assert!(main_py.symbols.iter().any(|s| s.contains("main")));
+        pyo3::Python::initialize();
+        pyo3::Python::attach(|py| {
+            let temp_dir = TempDir::new().unwrap();
+            let root = temp_dir.path();
+            
+            // Create some test files
+            std::fs::write(root.join("main.py"), "def main():\n    pass\n").unwrap();
+            std::fs::write(root.join("README.md"), "# Test").unwrap();
+            std::fs::write(root.join("utils.rs"), "fn helper() {}").unwrap();
+            
+            // Create a subdirectory
+            std::fs::create_dir(root.join("src")).unwrap();
+            std::fs::write(root.join("src/lib.py"), "class Lib:\n    pass\n").unwrap();
+            
+            // Create a hidden directory that should be ignored
+            std::fs::create_dir(root.join(".hidden")).unwrap();
+            std::fs::write(root.join(".hidden/secret.py"), "def secret(): pass").unwrap();
+            
+            let summaries = index_directory(
+                py,
+                root.to_str().unwrap(),
+                100,
+                8,
+                None,
+            ).unwrap();
+            
+            // Should find main.py, README.md, utils.rs, src/lib.py
+            // Should NOT find .hidden/secret.py
+            let paths: Vec<&str> = summaries.iter().map(|s| s.path.as_str()).collect();
+            assert!(paths.contains(&"main.py"));
+            assert!(paths.contains(&"README.md"));
+            assert!(paths.contains(&"utils.rs"));
+            assert!(paths.contains(&"src/lib.py"));
+            assert!(!paths.contains(&".hidden/secret.py"));
+            
+            // Check symbols were extracted from Python files
+            let main_py = summaries.iter().find(|s| s.path == "main.py").unwrap();
+            assert!(!main_py.symbols.is_empty());
+            assert!(main_py.symbols.iter().any(|s| s.contains("main")));
+        });
     }
 }
