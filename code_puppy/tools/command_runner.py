@@ -124,9 +124,6 @@ MAX_COMMAND_LENGTH = 8192
 # Dangerous patterns that should be blocked even if upstream checks pass
 # These patterns could indicate command injection attempts
 DANGEROUS_PATTERNS = [
-    # Command substitution that could execute arbitrary code
-    r"`[^`]*`",  # Backtick command substitution: `rm -rf /`
-    r"\$\([^)]*\)",  # $() command substitution: $(rm -rf /)
     # Process substitution (bash-specific, can be dangerous)
     r"<\s*\(",  # Input process substitution: <(command)
     r">\s*\(",  # Output process substitution: >(command)
