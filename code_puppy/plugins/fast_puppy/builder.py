@@ -443,6 +443,11 @@ def _build_env() -> dict[str, str]:
                 )
                 break
 
+    if not env.get("VIRTUAL_ENV"):
+        logger.warning(
+            "No virtual environment detected. Rust builds may fail to find Python."
+        )
+
     return env
 
 
