@@ -712,6 +712,33 @@ class TestBuildCrateWarningFiltering:
         assert error_msg == "error: pure error"
 
 
+class TestBuildCratePassesEnvToSubprocess:
+    """Verify _build_crate() passes env=_build_env() to subprocess.Popen."""
+
+    def test_popen_receives_build_env(self, tmp_path):
+        """_build_crate must forward _build_env() to its subprocess.Popen call."""
+        crate_dir = tmp_path / "fake_crate"
+        crate_dir.mkdir()
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate.return_value = ("", "")
+
+        with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
+            with patch(
+                "code_puppy.plugins.fast_puppy.builder._get_maturin_command",
+                return_value=["maturin"],
+            ):
+                _build_crate(crate_dir, "test_crate")
+
+        mock_popen.assert_called_once()
+        call_kwargs = mock_popen.call_args.kwargs
+        assert "env" in call_kwargs, "Popen was called without an 'env' parameter"
+        # Verify the env came from _build_env (spot-check a key it always sets)
+        expected_env = _build_env()
+        assert call_kwargs["env"] == expected_env
+
+
 class TestReloadAndPatchCrateRebind:
     """Tests for the reload+rebind logic that prevents stale function references."""
 
