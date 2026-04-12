@@ -7,7 +7,9 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from functools import cache, lru_cache
+from functools import cache
+
+from code_puppy.utils.thread_safe_cache import thread_safe_lru_cache
 from pathlib import Path
 
 from code_puppy.session_storage import save_session_async
@@ -113,7 +115,7 @@ class ConfigState:
 _state = ConfigState()
 
 
-@lru_cache(maxsize=4)
+@thread_safe_lru_cache(maxsize=4)
 def _get_xdg_dir_cached(env_var: str, fallback: str) -> str:
     """
     Get directory for code_puppy files (lru_cached - computed once per unique args).
@@ -553,7 +555,7 @@ def _get_supported_settings_cache():
     """Return the LRU cache function for supported settings, creating it if needed."""
     if _state.supported_settings_cache is None:
 
-        @lru_cache(maxsize=128)
+        @thread_safe_lru_cache(maxsize=128)
         def _cached_supported_settings(model_name: str) -> frozenset:
             """Get supported settings for a model - cached to avoid repeated config loads."""
             from code_puppy.model_factory import ModelFactory
@@ -1550,7 +1552,7 @@ get_grep_output_verbose = _make_bool_getter(
 )
 
 
-@lru_cache(maxsize=256)
+@thread_safe_lru_cache(maxsize=256)
 def get_protected_token_count():
     """
     Returns the user-configured protected token count for message history compaction.
