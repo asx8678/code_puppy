@@ -68,6 +68,7 @@ class SecurityBoundary:
     """
 
     def __init__(self):
+        self._stats_lock = threading.Lock()
         self._check_count = 0
         self._block_count = 0
 
@@ -94,7 +95,8 @@ class SecurityBoundary:
         Returns:
             SecurityDecision: allowed=True if command can proceed, False otherwise
         """
-        self._check_count += 1
+        with self._stats_lock:
+            self._check_count += 1
         
         if not command or not command.strip():
             return SecurityDecision(
@@ -112,7 +114,8 @@ class SecurityBoundary:
             policy_result = engine.check_shell_command_explicit(command, cwd)
 
             if isinstance(policy_result, Deny):
-                self._block_count += 1
+                with self._stats_lock:
+                    self._block_count += 1
                 logger.info(f"Command blocked by PolicyEngine: {command[:50]}...")
                 return SecurityDecision(
                     allowed=False,
@@ -140,7 +143,8 @@ class SecurityBoundary:
         # Check if any callback blocked the command
         for result in callback_results:
             if isinstance(result, dict) and result.get("blocked"):
-                self._block_count += 1
+                with self._stats_lock:
+                    self._block_count += 1
                 reason = result.get("reasoning") or result.get("error_message", "Blocked by security plugin")
                 logger.info(f"Command blocked by plugin: {command[:50]}...")
                 return SecurityDecision(
@@ -187,7 +191,8 @@ class SecurityBoundary:
         Returns:
             SecurityDecision: allowed=True if access can proceed, False otherwise
         """
-        self._check_count += 1
+        with self._stats_lock:
+            self._check_count += 1
         
         if not path:
             return SecurityDecision(
@@ -201,7 +206,8 @@ class SecurityBoundary:
             from code_puppy.tools.file_operations import _is_sensitive_path
 
             if _is_sensitive_path(path):
-                self._block_count += 1
+                with self._stats_lock:
+                    self._block_count += 1
                 logger.warning(f"Access to sensitive path blocked: {path}")
                 return SecurityDecision(
                     allowed=False,
@@ -223,7 +229,8 @@ class SecurityBoundary:
             )
 
             if isinstance(policy_result, Deny):
-                self._block_count += 1
+                with self._stats_lock:
+                    self._block_count += 1
                 logger.info(f"File access blocked by PolicyEngine: {path}")
                 return SecurityDecision(
                     allowed=False,
@@ -259,7 +266,8 @@ class SecurityBoundary:
         # file_permission callbacks return bool (True = allowed, False = denied)
         for result in callback_results:
             if result is False:
-                self._block_count += 1
+                with self._stats_lock:
+                    self._block_count += 1
                 logger.info(f"File access denied by plugin: {path}")
                 return SecurityDecision(
                     allowed=False,
@@ -280,15 +288,17 @@ class SecurityBoundary:
         Returns:
             Dictionary with check_count and block_count
         """
-        return {
-            "check_count": self._check_count,
-            "block_count": self._block_count,
-        }
+        with self._stats_lock:
+            return {
+                "check_count": self._check_count,
+                "block_count": self._block_count,
+            }
 
     def reset_stats(self) -> None:
         """Reset security check statistics."""
-        self._check_count = 0
-        self._block_count = 0
+        with self._stats_lock:
+            self._check_count = 0
+            self._block_count = 0
 
 
 # Global singleton instance (thread-safe via double-checked locking)
