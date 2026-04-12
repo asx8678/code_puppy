@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from code_puppy.plugins.repo_compass.decision_markers import (
     DecisionMarker,
     _get_context_lines,

@@ -160,3 +160,92 @@ def test_prepare_prompt_for_claude_code_preserves_repo_compass_augmentation(
     )
     assert "Repo Compass" in result.user_prompt
     assert result.user_prompt.endswith("hello")
+
+
+def test_build_repo_context_includes_tech_stack_build_commands_and_decisions(
+    tmp_path: Path, monkeypatch
+):
+    """Test that _build_repo_context includes tech stack, build commands, and key decisions sections."""
+    # Enable repo compass for this test
+    monkeypatch.setattr(
+        "code_puppy.plugins.repo_compass.register_callbacks.load_config",
+        lambda: type(
+            "Cfg",
+            (),
+            {
+                "enabled": True,
+                "max_files": 10,
+                "max_symbols_per_file": 5,
+                "max_prompt_chars": 500,
+            },
+        )(),
+    )
+
+    # Create a temp repo structure that triggers all sections
+    # Python project with pyproject.toml for tech stack detection
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "test"\nrequires-python = ">=3.11"\ndependencies = ["fastapi"]\n',
+        encoding="utf-8",
+    )
+
+    # Makefile for build commands
+    (tmp_path / "Makefile").write_text(
+        "test:\n\tpytest\n\nlint:\n\truff check .\n",
+        encoding="utf-8",
+    )
+
+    # Python file with decision markers
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text(
+        "# WHY: Using FastAPI for performance\ndef main(): pass\n",
+        encoding="utf-8",
+    )
+
+    result = _build_repo_context(tmp_path)
+
+    assert result is not None
+    assert "Tech stack:" in result
+    assert "Build commands:" in result
+    assert "Key decisions:" in result
+
+
+def test_build_repo_context_graceful_failure_when_detect_tech_stack_raises(
+    tmp_path: Path, monkeypatch
+):
+    """Test that _build_repo_context still returns useful context when detect_tech_stack raises."""
+    # Enable repo compass for this test
+    monkeypatch.setattr(
+        "code_puppy.plugins.repo_compass.register_callbacks.load_config",
+        lambda: type(
+            "Cfg",
+            (),
+            {
+                "enabled": True,
+                "max_files": 10,
+                "max_symbols_per_file": 5,
+                "max_prompt_chars": 500,
+            },
+        )(),
+    )
+
+    # Create a basic repo structure
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text(
+        "def main(): pass\n",
+        encoding="utf-8",
+    )
+
+    # Mock detect_tech_stack to raise an exception
+    def raise_exception(*args, **kwargs):
+        raise RuntimeError("Tech stack detection failed!")
+
+    monkeypatch.setattr(
+        "code_puppy.plugins.repo_compass.register_callbacks.detect_tech_stack",
+        raise_exception,
+    )
+
+    # Should still return context (structure map) even if tech stack fails
+    result = _build_repo_context(tmp_path)
+
+    assert result is not None
+    assert "Repo Compass" in result  # The structure map should still be present

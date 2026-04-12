@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from code_puppy.plugins.repo_compass.tech_stack import (
     TechStackItem,
     detect_build_commands,
