@@ -195,35 +195,80 @@ def _has_rust_toolchain() -> bool:
 
 
 def _has_maturin() -> bool:
-    """Check if maturin is available (in PATH, as uv module, or as Python module)."""
+    """Check if maturin is available (in PATH, via uv run, or as Python module)."""
+    # Direct PATH lookup
     if shutil.which("maturin"):
         return True
+
+    # Check uv can run maturin (works in uvx environments with [rust] extra)
     if shutil.which("uv"):
-        # Check if uv can run maturin
+        # Try 'uv run maturin' (uses project/uvx environment)
         try:
             result = subprocess.run(
                 ["uv", "run", "maturin", "--version"],
                 capture_output=True,
                 timeout=10,
             )
-            return result.returncode == 0
+            if result.returncode == 0:
+                return True
         except Exception:
             pass
-    # Try as Python module
+
+        # Try 'uv tool run maturin' (uses uv tool directory)
+        try:
+            result = subprocess.run(
+                ["uv", "tool", "run", "maturin", "--version"],
+                capture_output=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                return True
+        except Exception:
+            pass
+
+    # Try as Python module (pip-installed maturin)
     try:
         result = subprocess.run(
             [sys.executable, "-m", "maturin", "--version"],
             capture_output=True,
             timeout=10,
         )
-        return result.returncode == 0
+        if result.returncode == 0:
+            return True
     except Exception:
-        return False
+        pass
+
+    return False
 
 
-def _install_maturin() -> bool:
-    """Try to install maturin using uv or pip."""
-    # Try uv first (works in uvx environments)
+def _install_maturin() -> tuple[bool, str]:
+    """Try to install maturin using uv or pip.
+
+    Returns (success, error_message). If successful, error_message is empty.
+    """
+    errors: list[str] = []
+
+    # Try uv tool install first (works best in uvx environments)
+    if shutil.which("uv"):
+        try:
+            result = subprocess.run(
+                ["uv", "tool", "install", "maturin"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                logger.debug("Installed maturin via uv tool install")
+                return True, ""
+            else:
+                err = result.stderr.strip() if result.stderr else "(no output)"
+                errors.append(f"uv tool install: {err[:200]}")
+                logger.debug("uv tool install maturin failed: %s", err)
+        except Exception as exc:
+            errors.append(f"uv tool install: {exc}")
+            logger.debug("uv tool install maturin failed: %s", exc)
+
+    # Try uv pip install (fallback for virtualenv users)
     if shutil.which("uv"):
         try:
             result = subprocess.run(
@@ -234,8 +279,13 @@ def _install_maturin() -> bool:
             )
             if result.returncode == 0:
                 logger.debug("Installed maturin via uv pip")
-                return True
+                return True, ""
+            else:
+                err = result.stderr.strip() if result.stderr else "(no output)"
+                errors.append(f"uv pip install: {err[:200]}")
+                logger.debug("uv pip install maturin failed: %s", err)
         except Exception as exc:
+            errors.append(f"uv pip install: {exc}")
             logger.debug("uv pip install maturin failed: %s", exc)
 
     # Fall back to pip
@@ -248,19 +298,58 @@ def _install_maturin() -> bool:
         )
         if result.returncode == 0:
             logger.debug("Installed maturin via pip")
-            return True
+            return True, ""
+        else:
+            err = result.stderr.strip() if result.stderr else "(no output)"
+            errors.append(f"pip install: {err[:200]}")
+            logger.debug("pip install maturin failed: %s", err)
     except Exception as exc:
+        errors.append(f"pip install: {exc}")
         logger.debug("pip install maturin failed: %s", exc)
 
-    return False
+    error_summary = " | ".join(errors) if errors else "all methods failed"
+    return False, error_summary
 
 
 def _get_maturin_command() -> list[str]:
-    """Get the appropriate maturin command as a list."""
+    """Get the appropriate maturin command as a list.
+
+    Priority:
+    1. Direct maturin in PATH
+    2. 'uv run maturin' (uses project/uvx environment - works with [rust] extra)
+    3. 'uv tool run maturin' (uses uv tool directory - works after 'uv tool install')
+    4. Python module fallback
+    """
+    # Direct PATH lookup
     if shutil.which("maturin"):
         return ["maturin"]
+
     if shutil.which("uv"):
-        return ["uv", "run", "maturin"]
+        # Try 'uv run maturin' first (works in uvx with [rust] extra)
+        try:
+            result = subprocess.run(
+                ["uv", "run", "maturin", "--version"],
+                capture_output=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                return ["uv", "run", "maturin"]
+        except Exception:
+            pass
+
+        # Try 'uv tool run maturin' (works after 'uv tool install maturin')
+        try:
+            result = subprocess.run(
+                ["uv", "tool", "run", "maturin", "--version"],
+                capture_output=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                return ["uv", "tool", "run", "maturin"]
+        except Exception:
+            pass
+
+    # Fallback to Python module
     return [sys.executable, "-m", "maturin"]
 
 
@@ -519,10 +608,13 @@ def _try_auto_build_all() -> dict[str, bool]:
     # Check maturin availability, install if missing
     if not _has_maturin():
         emit_info("🐕⚡ Fast Puppy: Installing maturin…")
-        if not _install_maturin():
+        install_ok, install_error = _install_maturin()
+        if not install_ok:
             emit_info(
                 "🐕 Fast Puppy: Could not install maturin — skipping Rust builds\n"
-                "   To enable Rust acceleration, install maturin manually:\n"
+                f"   Error: {install_error[:150]}\n"
+                "   To enable Rust acceleration:\n"
+                "   • With uvx: uvx --from 'codepp[rust]' code-puppy\n"
                 "   • With uv: uv pip install maturin\n"
                 "   • With pip: pip install maturin\n"
                 "   Then restart code-puppy or run /fast_puppy build"
@@ -661,7 +753,8 @@ def build_single_crate(crate_name: str) -> bool:
         return False
 
     if not _has_maturin():
-        if not _install_maturin():
+        install_ok, _ = _install_maturin()
+        if not install_ok:
             logger.debug("Could not install maturin for building %s", crate_name)
             return False
 

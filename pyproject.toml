@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "codepp"
-version = "0.0.451"
+version = "0.0.452"
 description = "Code generation agent"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -61,6 +61,7 @@ repository = "https://github.com/mpfaffenberger/code_puppy"
 HomePage = "https://github.com/mpfaffenberger/code_puppy"
 
 [project.optional-dependencies]
+rust = ["maturin>=1.12.6"]
 dbos = [
     "dbos>=2.16.0",
     "psycopg[c]>=3.3.0",

@@ -263,6 +263,20 @@ On first startup, if a Rust toolchain is present, the `fast_puppy` plugin will a
 - **First build**: ~2-5 minutes (`turbo_parse` pulls in ~5 tree-sitter grammars)
 - **No Rust? No problem**: Gracefully degrades to pure Python — no errors, no fuss
 
+### Using uvx with Rust Acceleration
+
+To run code-puppy via `uvx` **with** Rust acceleration enabled, use the `[rust]` extra which ensures the build dependencies are available:
+
+```bash
+# Run with Rust acceleration (recommended for speed)
+uvx --from 'codepp[rust]' code-puppy
+
+# Run pure-Python mode (no Rust build overhead)
+uvx --from codepp code-puppy
+```
+
+> **Note:** The `[rust]` extra includes `maturin` for building the Rust crates. The first startup will build the extensions (~2-5 minutes). Subsequent launches use cached builds.
+
 ### Manual Build (For Developers)
 
 ```bash

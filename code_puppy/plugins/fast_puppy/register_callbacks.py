@@ -95,9 +95,8 @@ def _on_startup():
 
         # Default: enable
         set_rust_enabled(True)
-        if saved is None:
-            # First run — persist default
-            _write_persisted_preference(True)
+        # Persist whenever we enable (first run or ensuring preference is recorded)
+        _write_persisted_preference(True)
 
         # Emit summary banner based on results
         active_count = sum(1 for v in results.values() if v)
@@ -246,6 +245,7 @@ def _handle_fast_puppy(command: str, name: str):
                 "   Need: Rust toolchain (rustc) + maturin\n"
                 "   Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh\n"
                 "   Install maturin:\n"
+                "   • With uvx: uvx --from 'codepp[rust]' code-puppy\n"
                 "   • With uv: uv pip install maturin\n"
                 "   • With pip: pip install maturin\n"
                 "   Then retry: /fast_puppy enable"

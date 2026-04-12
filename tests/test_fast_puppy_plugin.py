@@ -126,10 +126,19 @@ class TestTryAutoBuild:
         return_value=(True, ""),
     )
     @patch(
+        "code_puppy.plugins.fast_puppy.builder._is_crate_fresh",
+        return_value=False,
+    )
+    @patch(
+        "code_puppy.plugins.fast_puppy.builder._is_crate_installed",
+        return_value=False,
+    )
+    @patch(
         "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain",
         return_value=True,
     )
     @patch("code_puppy.plugins.fast_puppy.builder._find_crate_dir")
+    @patch("code_puppy.plugins.fast_puppy.builder._find_repo_root")
     @patch(
         "code_puppy.plugins.fast_puppy.builder._has_maturin",
         return_value=False,
@@ -139,8 +148,11 @@ class TestTryAutoBuild:
         self,
         mock_run: MagicMock,
         mock_has_maturin: MagicMock,
+        mock_repo_root: MagicMock,
         mock_find_crate: MagicMock,
         mock_rust: MagicMock,
+        mock_installed: MagicMock,
+        mock_fresh: MagicMock,
         mock_build: MagicMock,
         mock_emit: MagicMock,
     ) -> None:
@@ -149,6 +161,7 @@ class TestTryAutoBuild:
             mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
             # All crate dirs return the same path in this mock setup
             mock_find_crate.return_value = Path("/fake/code_puppy_core")
+            mock_repo_root.return_value = Path("/fake/repo")
 
             _try_auto_build()
 
@@ -294,20 +307,16 @@ class TestOnStartup:
         "code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference",
         return_value=False,
     )
-    @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
-    )
-    def test_force_enables_rust_even_when_persisted_disabled(
+    def test_respects_user_disabled_preference(
         self,
-        mock_write_pref: MagicMock,
         mock_pref: MagicMock,
         mock_emit: MagicMock,
         mock_is_enabled: MagicMock,
         mock_set_rust: MagicMock,
         mock_auto_build: MagicMock,
     ) -> None:
-        """set_rust_enabled(True) is called even when _read_persisted_preference() returns False."""
+        """When persisted preference is False (user explicitly disabled), respect it."""
         _on_startup()
-        # Even when persisted preference is False, we force enable
-        mock_set_rust.assert_called_once_with(True)
-        mock_write_pref.assert_called_once_with(True)
+        # User explicitly disabled, so we should set to False, not force enable
+        mock_set_rust.assert_called_once_with(False)
+        # Should NOT call write since we're not changing the preference

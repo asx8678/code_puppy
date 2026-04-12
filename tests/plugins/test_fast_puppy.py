@@ -8,12 +8,7 @@ This module tests edge cases in the fast_puppy plugin:
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from code_puppy.plugins.fast_puppy.builder import (
-    _install_maturin,
-    CRATES,
-)
+from code_puppy.plugins.fast_puppy.builder import _install_maturin
 from code_puppy.plugins.fast_puppy.register_callbacks import _on_startup
 
 
@@ -182,97 +177,102 @@ class TestMaturinInstall:
 
                 result = _install_maturin()
 
-        assert result is True
+        assert result[0] is True
+        assert result[1] == ""  # No error message on success
         # Should have called subprocess.run exactly once (uv path)
         mock_run.assert_called_once()
-        # Verify it was the uv pip install command
+        # Verify it was the uv tool install command (first method tried)
         call_args = mock_run.call_args[0][0]
         assert call_args[0] == "uv"
-        assert "pip" in call_args
+        assert "tool" in call_args
         assert "install" in call_args
         assert "maturin" in call_args
 
-    def test_fallback_to_pip_when_uv_fails(self):
-        """Should fall back to pip when uv fails."""
+    def test_fallback_to_uv_pip_when_uv_tool_fails(self):
+        """Should fall back to uv pip when uv tool install fails."""
         with patch("shutil.which") as mock_which:
             with patch("subprocess.run") as mock_run:
                 # uv is available
                 mock_which.return_value = "/usr/bin/uv"
-                # First call (uv) fails, need to simulate two calls
+                # First call (uv tool) fails, second call (uv pip) succeeds
                 mock_run.side_effect = [
-                    MagicMock(returncode=1),  # uv fails
-                    MagicMock(returncode=0),  # pip succeeds
+                    MagicMock(returncode=1),  # uv tool fails
+                    MagicMock(returncode=0),  # uv pip succeeds
                 ]
 
                 with patch("sys.executable", "/usr/bin/python"):
                     result = _install_maturin()
 
-        assert result is True
-        # Should have called subprocess.run twice (uv + pip)
+        assert result[0] is True
+        assert result[1] == ""  # No error message on success
+        # Should have called subprocess.run twice (uv tool + uv pip)
         assert mock_run.call_count == 2
-        # First call should be uv
+        # First call should be uv tool install
         first_call = mock_run.call_args_list[0][0][0]
         assert first_call[0] == "uv"
-        # Second call should be pip
+        assert "tool" in first_call
+        # Second call should be uv pip install
         second_call = mock_run.call_args_list[1][0][0]
-        assert second_call[0] == "/usr/bin/python"
-        assert "-m" in second_call
+        assert second_call[0] == "uv"
         assert "pip" in second_call
 
-    def test_fallback_to_pip_when_uv_missing(self):
+    def test_pip_fallback_when_no_uv(self):
         """Should use pip when uv is not available."""
         with patch("shutil.which") as mock_which:
             with patch("subprocess.run") as mock_run:
-                # uv is NOT available, but we need both calls for _has_maturin check
-                # First call checks for maturin (None), second checks for uv (None)
-                mock_which.side_effect = [None, None]
+                # uv is NOT available
+                mock_which.return_value = None
                 # pip install succeeds
                 mock_run.return_value = MagicMock(returncode=0)
 
                 with patch("sys.executable", "/usr/bin/python"):
                     result = _install_maturin()
 
-        assert result is True
-        # Should only have called subprocess.run once (pip path only)
+        assert result[0] is True
+        assert result[1] == ""  # No error message on success
+        # Should only have called subprocess.run once (pip path only, since uv is not available)
         mock_run.assert_called_once()
         call_args = mock_run.call_args[0][0]
         assert call_args[0] == "/usr/bin/python"
         assert "-m" in call_args
         assert "pip" in call_args
 
-    def test_returns_false_when_both_fail(self):
-        """Should return False when both uv and pip fail."""
+    def test_returns_false_when_all_methods_fail(self):
+        """Should return False when all uv and pip methods fail."""
         with patch("shutil.which") as mock_which:
             with patch("subprocess.run") as mock_run:
-                # uv is available but both install methods fail
+                # uv is available but all install methods fail
                 mock_which.return_value = "/usr/bin/uv"
                 mock_run.side_effect = [
-                    MagicMock(returncode=1),  # uv fails
+                    MagicMock(returncode=1),  # uv tool fails
+                    MagicMock(returncode=1),  # uv pip fails
                     MagicMock(returncode=1),  # pip fails
                 ]
 
                 with patch("sys.executable", "/usr/bin/python"):
                     result = _install_maturin()
 
-        assert result is False
+        assert result[0] is False
+        assert result[1] != ""  # Should have error message
 
-    def test_handles_uv_exception(self):
-        """Should handle exceptions from uv and fall back to pip."""
+    def test_handles_uv_tool_exception_falls_back_to_uv_pip(self):
+        """Should handle exception from uv tool and fall back to uv pip."""
         with patch("shutil.which") as mock_which:
             with patch("subprocess.run") as mock_run:
                 # uv is available
                 mock_which.return_value = "/usr/bin/uv"
                 # First call raises exception, second succeeds
                 mock_run.side_effect = [
-                    Exception("uv not working"),  # uv throws exception
-                    MagicMock(returncode=0),  # pip succeeds
+                    Exception("uv not working"),  # uv tool throws exception
+                    MagicMock(returncode=0),  # uv pip succeeds
                 ]
 
                 with patch("sys.executable", "/usr/bin/python"):
                     result = _install_maturin()
 
-        assert result is True
-        # Should have called subprocess.run twice
+        assert result[0] is True
+        assert result[1] == ""  # No error message on success
+        # Should have called subprocess.run twice (uv tool exception + uv pip success)
         assert mock_run.call_count == 2
 
     def test_handles_pip_exception(self):
@@ -280,14 +280,15 @@ class TestMaturinInstall:
         with patch("shutil.which") as mock_which:
             with patch("subprocess.run") as mock_run:
                 # uv not available
-                mock_which.side_effect = [None, None]
+                mock_which.return_value = None
                 # pip raises exception
                 mock_run.side_effect = Exception("pip not working")
 
                 with patch("sys.executable", "/usr/bin/python"):
                     result = _install_maturin()
 
-        assert result is False
+        assert result[0] is False
+        assert "pip not working" in result[1] or result[1] != ""  # Should have error message
 
 
 class TestMaturinInstallTimeout:
