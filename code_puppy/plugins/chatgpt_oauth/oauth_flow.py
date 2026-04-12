@@ -132,16 +132,9 @@ class _OAuthServer(HTTPServer):
             api_key=api_key, token_data=token_data, last_refresh=last_refresh
         )
 
-        # Build success URL with all the token info
-        success_query = {
-            "id_token": token_data.id_token,
-            "access_token": token_data.access_token,
-            "refresh_token": token_data.refresh_token,
-            "org_id": org_id or "",
-            "plan_type": access_token_claims.get("chatgpt_plan_type"),
-            "platform_url": "https://platform.openai.com",
-        }
-        success_url = f"{URL_BASE}/success?{urllib.parse.urlencode(success_query)}"
+        # Redirect to bare success URL - tokens are stored server-side only
+        # DO NOT pass tokens in URL to avoid leaking to browser history/logs/referrer
+        success_url = f"{URL_BASE}/success"
         return bundle, success_url
 
 
