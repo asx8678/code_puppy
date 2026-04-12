@@ -228,6 +228,7 @@ def _has_maturin() -> bool:
                 ["uv", "run", "maturin", "--version"],
                 capture_output=True,
                 timeout=10,
+                env=_build_env(),
             )
             if result.returncode == 0:
                 return True
@@ -240,6 +241,7 @@ def _has_maturin() -> bool:
                 ["uv", "tool", "run", "maturin", "--version"],
                 capture_output=True,
                 timeout=10,
+                env=_build_env(),
             )
             if result.returncode == 0:
                 return True
@@ -252,6 +254,7 @@ def _has_maturin() -> bool:
             [sys.executable, "-m", "maturin", "--version"],
             capture_output=True,
             timeout=10,
+            env=_build_env(),
         )
         if result.returncode == 0:
             return True
@@ -276,6 +279,7 @@ def _install_maturin() -> tuple[bool, str]:
                 capture_output=True,
                 text=True,
                 timeout=120,
+                env=_build_env(),
             )
             if result.returncode == 0:
                 logger.debug("Installed maturin via uv tool install")
@@ -296,6 +300,7 @@ def _install_maturin() -> tuple[bool, str]:
                 capture_output=True,
                 text=True,
                 timeout=120,
+                env=_build_env(),
             )
             if result.returncode == 0:
                 logger.debug("Installed maturin via uv pip")
@@ -315,6 +320,7 @@ def _install_maturin() -> tuple[bool, str]:
             capture_output=True,
             text=True,
             timeout=120,
+            env=_build_env(),
         )
         if result.returncode == 0:
             logger.debug("Installed maturin via pip")
@@ -351,6 +357,7 @@ def _get_maturin_command() -> list[str]:
                 ["uv", "run", "maturin", "--version"],
                 capture_output=True,
                 timeout=5,
+                env=_build_env(),
             )
             if result.returncode == 0:
                 return ["uv", "run", "maturin"]
@@ -363,6 +370,7 @@ def _get_maturin_command() -> list[str]:
                 ["uv", "tool", "run", "maturin", "--version"],
                 capture_output=True,
                 timeout=5,
+                env=_build_env(),
             )
             if result.returncode == 0:
                 return ["uv", "tool", "run", "maturin"]
@@ -371,43 +379,6 @@ def _get_maturin_command() -> list[str]:
 
     # Fallback to Python module
     return [sys.executable, "-m", "maturin"]
-
-
-def _build_env() -> dict[str, str]:
-    """Construct environment dict for subprocess calls.
-
-    Ensures the venv's bin directory is on PATH so that subprocesses
-    (cargo, maturin, etc.) can find the right Python interpreter.
-
-    Strategy:
-    1. Start with os.environ.copy()
-    2. If VIRTUAL_ENV already set in the environment, use as-is
-    3. Else derive venv path from sys.prefix
-    4. Validate derived path has pyvenv.cfg
-    5. Prepend venv/bin to PATH
-    6. Return the constructed env dict
-    """
-    env = os.environ.copy()
-
-    # If VIRTUAL_ENV is already set, assume the caller knows what they're doing
-    if env.get("VIRTUAL_ENV"):
-        return env
-
-    # Derive venv path from sys.prefix
-    venv_path = Path(sys.prefix)
-    bin_dir = venv_path / "bin"
-    pyvenv_cfg = venv_path / "pyvenv.cfg"
-
-    # Only patch if this looks like a real venv
-    if not pyvenv_cfg.is_file():
-        return env
-
-    # Prepend venv/bin to PATH
-    existing_path = env.get("PATH", "")
-    env["PATH"] = f"{bin_dir}{os.pathsep}{existing_path}" if existing_path else str(bin_dir)
-    env["VIRTUAL_ENV"] = str(venv_path)
-
-    return env
 
 
 def _emit_build_heartbeat(
@@ -572,6 +543,7 @@ def _prewarm_workspace(repo_root: Path) -> None:
             text=True,
             timeout=300,  # 5 min for prewarm
             cwd=str(repo_root),
+            env=_build_env(),
         )
         if result.returncode == 0:
             logger.debug("Workspace prewarm completed successfully")
