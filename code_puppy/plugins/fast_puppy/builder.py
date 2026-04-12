@@ -414,6 +414,7 @@ def _build_env() -> dict[str, str]:
 
     # If VIRTUAL_ENV is already set, trust it.
     if env.get("VIRTUAL_ENV"):
+        logger.debug("VIRTUAL_ENV already set: %s", env.get("VIRTUAL_ENV"))
         return env
 
     # Detect active venv via sys.prefix vs sys.base_prefix.
@@ -421,11 +422,12 @@ def _build_env() -> dict[str, str]:
     # sys.base_prefix points to the system Python.
     if sys.prefix != sys.base_prefix:
         env["VIRTUAL_ENV"] = sys.prefix
-        logger.debug("Set VIRTUAL_ENV=%s for maturin subprocess", sys.prefix)
+        logger.debug("Deriving VIRTUAL_ENV from sys.prefix: %s", sys.prefix)
     else:
         # Not in a venv — check for a .venv next to the repo root
         # or cwd.  This handles cases where the user activated a
         # venv in a parent shell but the env var didn't propagate.
+        logger.debug("Falling back to .venv detection (sys.prefix == sys.base_prefix)")
         if sys.platform == "win32":
             python_rel = Path("Scripts") / "python.exe"
         else:
@@ -442,6 +444,12 @@ def _build_env() -> dict[str, str]:
                     candidate,
                 )
                 break
+
+    # Log the final VIRTUAL_ENV value or indicate none was found
+    if env.get("VIRTUAL_ENV"):
+        logger.debug("Final VIRTUAL_ENV value: %s", env.get("VIRTUAL_ENV"))
+    else:
+        logger.debug("No VIRTUAL_ENV found (none will be set for maturin subprocess)")
 
     return env
 
