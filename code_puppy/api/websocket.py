@@ -80,7 +80,8 @@ def setup_websocket(app: FastAPI) -> None:
             unsubscribe,
         )
 
-        event_queue = subscribe()
+        # Subscribe with session_id filtering - only receive events for this session
+        event_queue = subscribe(session_id=session_id)
         history_buffer = get_history_buffer()
 
         try:

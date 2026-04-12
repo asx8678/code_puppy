@@ -88,10 +88,10 @@ async def on_stream_event(
             {
                 "event_type": event_type,
                 "event_data": _sanitize_event_data(event_data),
-                "agent_session_id": agent_session_id,
             },
+            session_id=agent_session_id,
         )
-        logger.debug(f"Emitted stream_event: {event_type}")
+        logger.debug(f"Emitted stream_event: {event_type} (session_id={agent_session_id})")
     except Exception as e:
         logger.error(f"Failed to emit stream_event: {e}")
 
@@ -104,17 +104,19 @@ async def on_invoke_agent(*args: Any, **kwargs: Any) -> None:
         **kwargs: Keyword arguments from the invoke_agent callback
     """
     try:
+        # Extract session_id from kwargs
+        session_id = kwargs.get("session_id")
+
         # Extract relevant info from args/kwargs
         agent_info = {
             "agent_name": kwargs.get("agent_name") or (args[0] if args else None),
-            "session_id": kwargs.get("session_id"),
             "prompt_preview": _truncate_string(
                 kwargs.get("prompt") or (args[1] if len(args) > 1 else None),
                 max_length=200,
             ),
         }
-        emit_event("agent_invoked", agent_info)
-        logger.debug(f"Emitted agent_invoked: {agent_info.get('agent_name')}")
+        emit_event("agent_invoked", agent_info, session_id=session_id)
+        logger.debug(f"Emitted agent_invoked: {agent_info.get('agent_name')} (session_id={session_id})")
     except Exception as e:
         logger.error(f"Failed to emit invoke_agent event: {e}")
 
