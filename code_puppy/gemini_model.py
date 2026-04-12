@@ -9,6 +9,7 @@ import base64
 import copy
 import json
 import logging
+import threading
 import uuid
 
 # Use orjson for faster JSON parsing if available, with stdlib fallback
@@ -52,6 +53,7 @@ logger = logging.getLogger(__name__)
 BYPASS_THOUGHT_SIGNATURE = "context_engineering_is_the_way_to_go"
 
 # Cache for sanitized schemas to avoid repeated deepcopy overhead
+_schema_cache_lock = threading.Lock()
 _SCHEMA_SANITIZE_CACHE: dict[int, dict] = {}
 
 
@@ -128,10 +130,11 @@ def _sanitize_schema_for_gemini(schema: dict) -> dict:
 
     # Check cache to avoid repeated deepcopy for the same schema
     schema_id = id(schema)
-    if schema_id in _SCHEMA_SANITIZE_CACHE:
-        return _SCHEMA_SANITIZE_CACHE[schema_id]
+    with _schema_cache_lock:
+        if schema_id in _SCHEMA_SANITIZE_CACHE:
+            return _SCHEMA_SANITIZE_CACHE[schema_id]
 
-    # Make a deep copy to avoid modifying original
+    # Make a deep copy to avoid modifying original (expensive, outside lock)
     schema = copy.deepcopy(schema)
 
     # Extract $defs for reference resolution
@@ -243,7 +246,8 @@ def _sanitize_schema_for_gemini(schema: dict) -> dict:
             return obj
 
     result = resolve_refs(schema)
-    _SCHEMA_SANITIZE_CACHE[schema_id] = result
+    with _schema_cache_lock:
+        _SCHEMA_SANITIZE_CACHE[schema_id] = result
     return result
 
 
