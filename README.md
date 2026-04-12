@@ -6,7 +6,7 @@
 
 [![Version](https://img.shields.io/pypi/v/code-puppy?style=for-the-badge&logo=python&label=Version&color=purple)](https://pypi.org/project/code-puppy/)
 [![Downloads](https://img.shields.io/badge/Downloads-170k%2B-brightgreen?style=for-the-badge&logo=download)](https://pypi.org/project/code-puppy/)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.11--3.14-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
 [![100% Open Source](https://img.shields.io/badge/100%25-Open%20Source-blue?style=for-the-badge)](https://github.com/mpfaffenberger/code_puppy)
@@ -25,6 +25,17 @@
 *"Who needs an IDE when you have 1024 angry puppies?"* - Someone, probably.
 
 </div>
+
+```
+    ███████╗ █████╗ ███████╗████████╗    ██████╗ ██╗   ██╗██████╗ ██████╗ ██╗   ██╗
+    ██╔════╝██╔══██╗██╔════╝╚══██╔══╝    ██╔══██╗██║   ██║██╔══██╗██╔══██╗╚██╗ ██╔╝
+    █████╗  ███████║███████╗   ██║       ██████╔╝██║   ██║██████╔╝██████╔╝ ╚████╔╝ 
+    ██╔══╝  ██╔══██║╚════██║   ██║       ██╔═══╝ ██║   ██║██╔═══╝ ██╔═══╝   ╚██╔╝  
+    ██║     ██║  ██║███████║   ██║       ██║     ╚██████╔╝██║     ██║        ██║   
+    ╚═╝     ╚═╝  ╚═╝╚══════╝   ╚═╝       ╚═╝      ╚═════╝ ╚═╝     ╚═╝        ╚═╝   
+```
+
+**🚀 Now with Python 3.14 Free-Threading Support! 🚀**
 
 ---
 
@@ -311,18 +322,22 @@ To disable auto-build, set in `~/.code_puppy/puppy.cfg`:
 disable_rust_autobuild=true
 ```
 
-### Free-Threaded Python (No-GIL)
+### 🚀 Python 3.14 Free-Threaded Support (No-GIL)
 
-Code Puppy works on **both regular Python and free-threaded Python** (PEP 703).
+**Code Puppy is Python 3.14 ready!** Take advantage of the new free-threaded mode for true parallelism.
+
 The Rust accelerators automatically adapt to your Python build:
 
-- **Regular Python 3.11+**: Full functionality with standard GIL behavior
-- **Free-threaded Python 3.13+**: Enhanced parallelism with GIL disabled
+| Python Version | GIL Status | Parallelism |
+|----------------|------------|-------------|
+| Python 3.11-3.12 | Standard GIL | Full functionality, standard concurrency |
+| Python 3.13t | Experimental free-threading | Enhanced parallelism (experimental) |
+| **Python 3.14t** | **Production free-threading** | **True parallel execution across cores** |
 
-To use free-threaded mode for maximum performance:
+#### Running with Free-Threading
 
 ```bash
-# Option 1: Use the free-threaded Python interpreter directly
+# Option 1: Use the free-threaded Python 3.14 interpreter directly
 python3.14t -m code_puppy
 
 # Option 2: Set the environment variable before launch
@@ -332,9 +347,22 @@ PYTHON_GIL=0 pup
 free_threading=true
 ```
 
-All three Rust accelerator crates (`code_puppy_core`, `turbo_ops`,
-`turbo_parse`) are built with PyO3's `free-threaded` feature and work
-correctly in both GIL and no-GIL modes.
+#### What You Get with Python 3.14 Free-Threading
+
+- **True Parallelism**: Multiple threads can execute Python bytecode simultaneously
+- **Rust Acceleration Synergy**: All three Rust crates (`code_puppy_core`, `turbo_ops`, `turbo_parse`) are built with PyO3's `free-threaded` feature
+- **Pack Parallelism Boost**: Run 8+ agents truly in parallel, not just concurrently
+- **No Code Changes Required**: Works transparently with existing Code Puppy features
+
+#### Checking Your Setup
+
+```bash
+# Verify free-threading is active
+python3.14t -c "import sys; print(f'Free-threading: {not sys._is_gil_enabled()}')"
+
+# Check Code Puppy's Rust stack status
+/fast_puppy status
+```
 
 ## Requirements
 
