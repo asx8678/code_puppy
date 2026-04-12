@@ -36,7 +36,7 @@ class TestEmitEvent:
         _subscribers.clear()
 
         q: asyncio.Queue = asyncio.Queue(maxsize=10)
-        _subscribers.add(q)
+        _subscribers.add((q, None))  # Global subscriber (no session filter)
 
         with (
             patch(
@@ -116,7 +116,7 @@ class TestEmitEvent:
         _subscribers.clear()
         q: asyncio.Queue = asyncio.Queue(maxsize=1)
         q.put_nowait({"dummy": True})  # fill it
-        _subscribers.add(q)
+        _subscribers.add((q, None))  # Global subscriber
         with (
             patch(
                 "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_enabled",
@@ -142,7 +142,7 @@ class TestEmitEvent:
         _subscribers.clear()
         bad_q = MagicMock()
         bad_q.put_nowait.side_effect = RuntimeError("boom")
-        _subscribers.add(bad_q)
+        _subscribers.add((bad_q, None))  # Tuple format with session_id=None
         with (
             patch(
                 "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_enabled",
@@ -154,6 +154,113 @@ class TestEmitEvent:
             ),
         ):
             emit_event("err_event")
+        _subscribers.clear()
+        _recent_events.clear()
+
+    def test_session_filtering_matching_session(self):
+        """Events with session_id are received by subscribers with matching session."""
+        from code_puppy.plugins.frontend_emitter.emitter import (
+            _recent_events,
+            _subscribers,
+            emit_event,
+        )
+
+        _recent_events.clear()
+        _subscribers.clear()
+
+        q1: asyncio.Queue = asyncio.Queue(maxsize=10)
+        q2: asyncio.Queue = asyncio.Queue(maxsize=10)
+        _subscribers.add((q1, "session-1"))
+        _subscribers.add((q2, "session-2"))
+
+        with (
+            patch(
+                "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_enabled",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_max_recent_events",
+                return_value=10,
+            ),
+        ):
+            emit_event("test", {"k": "v"}, session_id="session-1")
+
+        # Only session-1 subscriber should receive
+        assert not q1.empty()
+        assert q2.empty()
+
+        evt = q1.get_nowait()
+        assert evt["session_id"] == "session-1"
+
+        _subscribers.clear()
+        _recent_events.clear()
+
+    def test_session_filtering_global_subscriber(self):
+        """Global subscribers (no session_id) receive all events."""
+        from code_puppy.plugins.frontend_emitter.emitter import (
+            _recent_events,
+            _subscribers,
+            emit_event,
+        )
+
+        _recent_events.clear()
+        _subscribers.clear()
+
+        q: asyncio.Queue = asyncio.Queue(maxsize=10)
+        _subscribers.add((q, None))  # Global subscriber
+
+        with (
+            patch(
+                "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_enabled",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_max_recent_events",
+                return_value=10,
+            ),
+        ):
+            emit_event("test", {"k": "v"}, session_id="any-session")
+
+        # Global subscriber should receive session-scoped event
+        assert not q.empty()
+        evt = q.get_nowait()
+        assert evt["session_id"] == "any-session"
+
+        _subscribers.clear()
+        _recent_events.clear()
+
+    def test_session_filtering_no_session_in_event(self):
+        """Events without session_id are received by all subscribers."""
+        from code_puppy.plugins.frontend_emitter.emitter import (
+            _recent_events,
+            _subscribers,
+            emit_event,
+        )
+
+        _recent_events.clear()
+        _subscribers.clear()
+
+        q1: asyncio.Queue = asyncio.Queue(maxsize=10)
+        q2: asyncio.Queue = asyncio.Queue(maxsize=10)
+        _subscribers.add((q1, "session-1"))
+        _subscribers.add((q2, "session-2"))
+
+        with (
+            patch(
+                "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_enabled",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_max_recent_events",
+                return_value=10,
+            ),
+        ):
+            emit_event("test", {"k": "v"})  # No session_id
+
+        # Both subscribers should receive (event has no session filter)
+        assert not q1.empty()
+        assert not q2.empty()
+
         _subscribers.clear()
         _recent_events.clear()
 
@@ -176,6 +283,27 @@ class TestSubscribeUnsubscribe:
         assert get_subscriber_count() == 1
         unsubscribe(q)
         assert get_subscriber_count() == 0
+
+    def test_subscribe_with_session_id(self):
+        from code_puppy.plugins.frontend_emitter.emitter import (
+            _subscribers,
+            subscribe,
+            unsubscribe,
+        )
+
+        _subscribers.clear()
+        with patch(
+            "code_puppy.plugins.frontend_emitter.emitter.get_frontend_emitter_queue_size",
+            return_value=10,
+        ):
+            q = subscribe(session_id="my-session")
+
+        # Verify the subscriber tuple is correctly stored
+        subscriber_tuple = next(iter(_subscribers))
+        assert subscriber_tuple[1] == "my-session"
+
+        unsubscribe(q)
+        _subscribers.clear()
 
     def test_unsubscribe_nonexistent(self):
         from code_puppy.plugins.frontend_emitter.emitter import (
@@ -608,3 +736,35 @@ class TestRegister:
             "code_puppy.plugins.frontend_emitter.register_callbacks.register_callback"
         ):
             register()  # should not raise
+
+
+class TestSessionFilteringCallbacks:
+    """Test that callbacks pass session_id correctly to emit_event."""
+
+    @pytest.mark.asyncio
+    async def test_on_stream_event_passes_session_id(self):
+        from code_puppy.plugins.frontend_emitter.register_callbacks import (
+            on_stream_event,
+        )
+
+        with patch(
+            "code_puppy.plugins.frontend_emitter.register_callbacks.emit_event"
+        ) as mock_emit:
+            await on_stream_event("text_delta", "hello", "sess-123")
+            mock_emit.assert_called_once()
+            call_kwargs = mock_emit.call_args
+            assert call_kwargs.kwargs.get("session_id") == "sess-123"
+
+    @pytest.mark.asyncio
+    async def test_on_invoke_agent_passes_session_id(self):
+        from code_puppy.plugins.frontend_emitter.register_callbacks import (
+            on_invoke_agent,
+        )
+
+        with patch(
+            "code_puppy.plugins.frontend_emitter.register_callbacks.emit_event"
+        ) as mock_emit:
+            await on_invoke_agent(agent_name="test", session_id="sess-456", prompt="hi")
+            mock_emit.assert_called_once()
+            call_kwargs = mock_emit.call_args
+            assert call_kwargs.kwargs.get("session_id") == "sess-456"
