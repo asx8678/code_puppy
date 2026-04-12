@@ -1,8 +1,10 @@
-"""Tests for PTYSession.is_alive() in pty_manager.py."""
+"""Tests for PTYSession.is_alive() and singleton thread-safety in pty_manager.py."""
 
+import threading
 from unittest.mock import MagicMock, patch
 
-from code_puppy.api.pty_manager import PTYSession
+import code_puppy.api.pty_manager as pty_mod
+from code_puppy.api.pty_manager import PTYManager, PTYSession, get_pty_manager
 
 
 class TestPTYSessionIsAlive:
@@ -63,3 +65,54 @@ class TestPTYSessionIsAlive:
         """is_alive() returns False on Windows when winpty_process is None."""
         session = PTYSession(session_id="test-6", winpty_process=None)
         assert session.is_alive() is False
+
+
+class TestGetPTYManagerThreadSafety:
+    """Regression test: get_pty_manager() must return the same singleton
+    even when called concurrently from multiple threads.
+    """
+
+    def test_get_pty_manager_thread_safety(self) -> None:
+        """All threads racing through get_pty_manager() get the same instance."""
+        # Reset singleton so we start from a clean state
+        pty_mod._pty_manager = None
+
+        num_threads = 20
+        barrier = threading.Barrier(num_threads)
+        results: list[PTYManager] = [None] * num_threads  # type: ignore[assignment]
+        init_count = 0
+        init_lock = threading.Lock()
+
+        original_init = PTYManager.__init__
+
+        def _counting_init(self: PTYManager) -> None:
+            nonlocal init_count
+            with init_lock:
+                init_count += 1
+            original_init(self)
+
+        with patch.object(PTYManager, "__init__", _counting_init):
+            def worker(idx: int) -> None:
+                barrier.wait(timeout=5)
+                results[idx] = get_pty_manager()
+
+            threads = [
+                threading.Thread(target=worker, args=(i,)) for i in range(num_threads)
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=10)
+
+        # Every thread must have received the exact same object
+        assert all(r is results[0] for r in results), (
+            "Not all threads got the same PTYManager instance"
+        )
+
+        # PTYManager.__init__ should have been called exactly once
+        assert init_count == 1, (
+            f"Expected exactly 1 PTYManager init, got {init_count}"
+        )
+
+        # Clean up so other tests aren't affected
+        pty_mod._pty_manager = None
