@@ -342,8 +342,8 @@ def _get_maturin_command() -> list[str]:
 
     Priority:
     1. 'uv run maturin' (preferred - uses project/uvx environment, managed by uv)
-    2. Direct maturin in PATH (fallback if uv is unavailable)
-    3. 'uv tool run maturin' (uses uv tool directory - works after 'uv tool install')
+    2. 'uv tool run maturin' (uses uv tool directory - works after 'uv tool install')
+    3. Direct maturin in PATH (fallback if uv is unavailable)
     4. Python module fallback
     """
     if shutil.which("uv"):
