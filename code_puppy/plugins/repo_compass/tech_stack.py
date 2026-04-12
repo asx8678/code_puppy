@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -171,66 +172,147 @@ def _detect_from_package_json(root: Path) -> list[TechStackItem]:
     return items
 
 
+def _parse_pyproject_toml(path: Path) -> dict[str, Any] | None:
+    """Parse pyproject.toml file, returning None on any error."""
+    try:
+        text = path.read_text(encoding="utf-8")
+        return tomllib.loads(text)
+    except (OSError, UnicodeDecodeError, ValueError, tomllib.TOMLDecodeError):
+        return None
+
+
+def _extract_deps_from_pyproject(data: dict[str, Any]) -> list[str]:
+    """Extract all dependency names from parsed pyproject.toml data.
+
+    Parses [project.dependencies] and [project.optional-dependencies].
+    Returns a list of lowercase dependency names for case-insensitive matching.
+    """
+    deps: set[str] = set()
+
+    project = data.get("project", {})
+    if not isinstance(project, dict):
+        return []
+
+    # Main dependencies from [project.dependencies]
+    main_deps = project.get("dependencies", [])
+    if isinstance(main_deps, list):
+        for dep in main_deps:
+            if isinstance(dep, str):
+                # Extract package name from dependency string
+                # Handles formats like: "fastapi>=0.100", "pydantic[email]", "typer >= 0.24"
+                dep_name = _extract_package_name(dep)
+                if dep_name:
+                    deps.add(dep_name.lower())
+
+    # Optional dependencies from [project.optional-dependencies]
+    optional_deps = project.get("optional-dependencies", {})
+    if isinstance(optional_deps, dict):
+        for group_name, group_deps in optional_deps.items():
+            if isinstance(group_deps, list):
+                for dep in group_deps:
+                    if isinstance(dep, str):
+                        dep_name = _extract_package_name(dep)
+                        if dep_name:
+                            deps.add(dep_name.lower())
+
+    return list(deps)
+
+
+def _extract_package_name(dep_string: str) -> str | None:
+    """Extract package name from a dependency string.
+
+    Handles various formats:
+    - "fastapi>=0.100" -> "fastapi"
+    - "pydantic[email]" -> "pydantic"
+    - "typer >= 0.24" -> "typer"
+    - "some-package_name" -> "some-package_name"
+    """
+    if not dep_string:
+        return None
+
+    # Strip whitespace and extract the name part (before version specifiers)
+    dep = dep_string.strip()
+
+    # Find where the package name ends (first special character)
+    # Package names can contain letters, digits, hyphens, underscores, dots
+    match = re.match(r'^([a-zA-Z0-9][-a-zA-Z0-9._]*)', dep)
+    if match:
+        return match.group(1).lower()
+
+    return None
+
+
+def _has_tool_section(data: dict[str, Any], tool_name: str) -> bool:
+    """Check if a [tool.{tool_name}] section exists in pyproject.toml."""
+    tool = data.get("tool", {})
+    if not isinstance(tool, dict):
+        return False
+    return tool_name in tool
+
+
 def _detect_from_pyproject_toml(root: Path) -> list[TechStackItem]:
-    """Detect tech stack from pyproject.toml."""
+    """Detect tech stack from pyproject.toml using proper TOML parsing."""
     items: list[TechStackItem] = []
     pyproject = root / "pyproject.toml"
-    text = _safe_read_text(pyproject)
-    if text is None:
+
+    data = _parse_pyproject_toml(pyproject)
+    if data is None:
         return items
 
-    # Try to extract Python version from requires-python
-    python_match = re.search(r'requires-python\s*=\s*["\']([^"\']+)["\']', text)
-    if python_match:
-        python_ver = _extract_version(python_match.group(1))
-        items.append(TechStackItem("Python", python_ver, "language"))
-    else:
+    project = data.get("project", {})
+    if not isinstance(project, dict):
+        # Still detect Python if file exists but has no [project] section
         items.append(TechStackItem("Python", None, "language"))
+    else:
+        # Extract Python version from requires-python
+        requires_python = project.get("requires-python")
+        if requires_python:
+            python_ver = _extract_version(requires_python)
+            items.append(TechStackItem("Python", python_ver, "language"))
+        else:
+            items.append(TechStackItem("Python", None, "language"))
+
+    # Get all dependencies for framework detection
+    all_deps = _extract_deps_from_pyproject(data)
+    all_deps_set = set(all_deps)  # For O(1) lookups
 
     # Detect frameworks from dependencies
-    framework_patterns = [
-        (r'"django', "Django"),
-        (r'"flask', "Flask"),
-        (r'"fastapi', "FastAPI"),
-        (r'"tornado', "Tornado"),
-        (r'"pyramid', "Pyramid"),
-        (r'"starlette', "Starlette"),
-        (r'"trio', "Trio"),
-        (r'"aiohttp', "AIOHTTP"),
-        (r'"bottle', "Bottle"),
-    ]
+    framework_patterns: dict[str, str] = {
+        "django": "Django",
+        "flask": "Flask",
+        "fastapi": "FastAPI",
+        "tornado": "Tornado",
+        "pyramid": "Pyramid",
+        "starlette": "Starlette",
+        "trio": "Trio",
+        "aiohttp": "AIOHTTP",
+        "bottle": "Bottle",
+    }
 
     detected: set[str] = set()
-    for pattern, name in framework_patterns:
-        if re.search(pattern, text, re.IGNORECASE) and name not in detected:
-            items.append(TechStackItem(name, None, "framework"))
-            detected.add(name)
+    for dep_name, framework_name in framework_patterns.items():
+        if dep_name in all_deps_set and framework_name not in detected:
+            items.append(TechStackItem(framework_name, None, "framework"))
+            detected.add(framework_name)
 
     # Detect testing frameworks
-    test_patterns = [
-        (r'"pytest', "pytest"),
-        (r'"unittest', "unittest"),
-        (r'tool\.pytest', "pytest"),
-    ]
-    for pattern, name in test_patterns:
-        if re.search(pattern, text, re.IGNORECASE):
-            items.append(TechStackItem(name, None, "infra"))
-            break
+    test_deps = {"pytest", "unittest", "nose", "nose2", "trial"}
+    if any(dep in all_deps_set for dep in test_deps) or _has_tool_section(data, "pytest"):
+        items.append(TechStackItem("pytest", None, "infra"))
 
     # Detect linting/formatting tools
-    lint_patterns = [
-        (r'tool\.ruff', "ruff"),
-        (r'"ruff', "ruff"),
-        (r'"black', "Black"),
-        (r'"isort', "isort"),
-        (r'"mypy', "mypy"),
-        (r'"flake8', "flake8"),
-        (r'"pylint', "Pylint"),
+    lint_tools = [
+        ("ruff", "ruff"),
+        ("black", "Black"),
+        ("isort", "isort"),
+        ("mypy", "mypy"),
+        ("flake8", "flake8"),
+        ("pylint", "Pylint"),
     ]
-    for pattern, name in lint_patterns:
-        if re.search(pattern, text, re.IGNORECASE):
-            items.append(TechStackItem(name, None, "infra"))
-            break
+    for dep_name, tool_name in lint_tools:
+        if dep_name in all_deps_set or _has_tool_section(data, dep_name):
+            items.append(TechStackItem(tool_name, None, "infra"))
+            break  # Only add first detected lint tool
 
     return items
 
@@ -471,22 +553,26 @@ def detect_build_commands(root: Path) -> dict[str, str]:
                     commands[cmd_type] = f"npm run {key}"
                     break
 
-    # Check pyproject.toml
+    # Check pyproject.toml using proper TOML parsing
     pyproject = root / "pyproject.toml"
-    text = _safe_read_text(pyproject)
-    if text:
+    pp_data = _parse_pyproject_toml(pyproject)
+    if pp_data is not None:
+        # Get all dependencies for detection
+        all_deps_set = set(_extract_deps_from_pyproject(pp_data))
+
         # Detect pytest
-        if "[tool.pytest" in text or '"pytest"' in text:
+        if "pytest" in all_deps_set or _has_tool_section(pp_data, "pytest"):
             commands.setdefault("test", "pytest")
         # Detect ruff
-        if "[tool.ruff" in text or '"ruff"' in text:
+        if "ruff" in all_deps_set or _has_tool_section(pp_data, "ruff"):
             commands.setdefault("lint", "ruff check")
             commands.setdefault("format", "ruff format")
         # Detect mypy
-        if "[tool.mypy" in text or '"mypy"' in text:
+        if "mypy" in all_deps_set or _has_tool_section(pp_data, "mypy"):
             commands.setdefault("typecheck", "mypy")
-        # Detect hatch/maturation (build)
-        if re.search(r'"hatchling"|"maturin"|"setuptools"|"poetry"', text):
+        # Detect build tools from dependencies
+        build_tools = {"hatchling", "maturin", "setuptools", "poetry", "flit", "hatch"}
+        if any(tool in all_deps_set for tool in build_tools):
             commands.setdefault("build", "pip build")
 
     # Check Makefile
