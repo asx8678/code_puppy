@@ -5,9 +5,45 @@ from pathlib import Path
 from code_puppy.plugins.repo_compass.decision_markers import (
     DecisionMarker,
     _get_context_lines,
+    _is_inside_string,
     _scan_file,
     scan_decision_markers,
 )
+
+
+class TestIsInsideString:
+    """Tests for _is_inside_string helper."""
+
+    def test_not_inside_string(self):
+        """Should return False for position not in string."""
+        line = '# WHY: This is a real comment'
+        # Match starts at position 0 (the #)
+        assert _is_inside_string(line, 0) is False
+
+    def test_inside_double_quoted_string(self):
+        """Should return True for position inside double-quoted string."""
+        line = 'comment = "# WHY: this should not match"'
+        # Match starts at position 12 (the # inside the string)
+        assert _is_inside_string(line, 12) is True
+
+    def test_inside_single_quoted_string(self):
+        """Should return True for position inside single-quoted string."""
+        line = "comment = '# WHY: this should not match'"
+        # Match starts at position 12 (the # inside the string)
+        assert _is_inside_string(line, 12) is True
+
+    def test_escaped_quotes(self):
+        """Should handle escaped quotes correctly."""
+        # The escaped quote doesn't end the string, so # is still inside
+        line = 'example = "not a string \\"# WHY: still in string"'
+        # Match starts at position 28 (the # after the escaped quote)
+        assert _is_inside_string(line, 28) is True
+
+    def test_quote_before_string(self):
+        """Should return False for position after closing quote."""
+        line = '"closed" # WHY: real comment'
+        # Match starts at position 11 (the # after the string)
+        assert _is_inside_string(line, 11) is False
 
 
 class TestDecisionMarker:
@@ -203,6 +239,67 @@ class TestScanFile:
         markers = _scan_file(file, tmp_path)
 
         assert markers == []
+
+    def test_skips_marker_in_double_quoted_string(self, tmp_path: Path):
+        """Should skip markers inside double-quoted strings."""
+        file = tmp_path / "test.py"
+        file.write_text(
+            'comment = "# WHY: this is documentation, not a real marker"\n'
+            "# WHY: This is a real marker\n"
+        )
+
+        markers = _scan_file(file, tmp_path)
+
+        # Should only find the real comment, not the one in the string
+        assert len(markers) == 1
+        assert markers[0].marker_type == "WHY"
+        assert "real marker" in markers[0].text
+
+    def test_skips_marker_in_single_quoted_string(self, tmp_path: Path):
+        """Should skip markers inside single-quoted strings."""
+        file = tmp_path / "test.py"
+        file.write_text(
+            "comment = '# DECISION: this is documentation'\n"
+            "# DECISION: This is a real marker\n"
+        )
+
+        markers = _scan_file(file, tmp_path)
+
+        # Should only find the real comment
+        assert len(markers) == 1
+        assert markers[0].marker_type == "DECISION"
+        assert "real marker" in markers[0].text
+
+    def test_skips_cstyle_marker_in_string(self, tmp_path: Path):
+        """Should skip C-style markers inside strings."""
+        file = tmp_path / "test.js"
+        file.write_text(
+            'const msg = "// WHY: documented reason";\n'
+            "// WHY: Real JavaScript comment\n"
+        )
+
+        markers = _scan_file(file, tmp_path)
+
+        # Should only find the real comment, not the one in the string
+        assert len(markers) == 1
+        assert markers[0].marker_type == "WHY"
+        assert "Real JavaScript" in markers[0].text
+
+    def test_handles_escaped_quotes_in_strings(self, tmp_path: Path):
+        """Should correctly handle escaped quotes when detecting strings."""
+        # Escaped quote doesn't end string, so markers inside are skipped
+        file = tmp_path / "test.py"
+        file.write_text(
+            'example = "not ended \\"# WHY: still in string"\n'
+            "# WHY: Real marker after\n"
+        )
+
+        markers = _scan_file(file, tmp_path)
+
+        # Should only find the real marker after the string
+        # The marker with escaped quote is still inside the string
+        assert len(markers) == 1
+        assert "Real marker" in markers[0].text
 
 
 class TestScanDecisionMarkers:

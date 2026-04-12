@@ -137,6 +137,47 @@ def _get_patterns_for_file(path: Path) -> list[tuple[str, str]]:
     return _HASH_MARKER_PATTERNS
 
 
+def _is_inside_string(line: str, pos: int) -> bool:
+    """Check if position `pos` in `line` is inside a string literal.
+
+    Handles single and double quotes, including escaped quotes.
+    Note: Does not handle triple-quoted strings (rare edge case).
+
+    Args:
+        line: The line of text to check
+        pos: The position (0-indexed) to check
+
+    Returns:
+        True if the position is inside a string literal, False otherwise
+    """
+    in_string = False
+    string_char = None
+    escaped = False
+
+    for i, char in enumerate(line):
+        if i >= pos:
+            break
+
+        if escaped:
+            escaped = False
+            continue
+
+        if char == "\\":
+            escaped = True
+            continue
+
+        if in_string:
+            if char == string_char:
+                in_string = False
+                string_char = None
+        else:
+            if char in ('"', "'"):
+                in_string = True
+                string_char = char
+
+    return in_string
+
+
 def _scan_file(path: Path, root: Path) -> list[DecisionMarker]:
     """Scan a single file for decision markers.
 
@@ -160,7 +201,11 @@ def _scan_file(path: Path, root: Path) -> list[DecisionMarker]:
 
     for line_idx, line in enumerate(lines):
         for pattern, marker_type in patterns:
-            if re.search(pattern, line):
+            match = re.search(pattern, line)
+            if match:
+                # Skip matches inside string literals
+                if _is_inside_string(line, match.start()):
+                    continue
                 context = _get_context_lines(lines, line_idx)
                 marker = DecisionMarker(
                     path=rel_path,
