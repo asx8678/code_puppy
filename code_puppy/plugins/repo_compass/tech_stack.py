@@ -370,19 +370,16 @@ def _detect_from_dockerfile(root: Path) -> list[TechStackItem]:
     if compose.exists() or compose_yaml.exists():
         has_docker = True
         compose_path = compose if compose.exists() else compose_yaml
-        data = _parse_json(compose_path) if compose_path.suffix == ".json" else None
-        if data is None and compose_path.exists():
-            # Try YAML parsing by looking for common patterns
-            text = _safe_read_text(compose_path)
-            if text:
-                # Simple pattern matching for common services
-                services_match = re.search(r'postgres', text, re.IGNORECASE)
-                if services_match:
-                    items.append(TechStackItem("PostgreSQL", None, "database"))
-                if re.search(r'redis', text, re.IGNORECASE):
-                    items.append(TechStackItem("Redis", None, "database"))
-                if re.search(r'mongo', text, re.IGNORECASE):
-                    items.append(TechStackItem("MongoDB", None, "database"))
+        text = _safe_read_text(compose_path)
+        if text:
+            # Simple pattern matching for common services
+            services_match = re.search(r'postgres', text, re.IGNORECASE)
+            if services_match:
+                items.append(TechStackItem("PostgreSQL", None, "database"))
+            if re.search(r'redis', text, re.IGNORECASE):
+                items.append(TechStackItem("Redis", None, "database"))
+            if re.search(r'mongo', text, re.IGNORECASE):
+                items.append(TechStackItem("MongoDB", None, "database"))
 
     if has_docker:
         items.append(TechStackItem("Docker", None, "infra"))
