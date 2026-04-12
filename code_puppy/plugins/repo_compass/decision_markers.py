@@ -51,7 +51,23 @@ _CSTYLE_MARKER_PATTERNS = [
 ]
 
 # Source file extensions to scan
-_SOURCE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".rs", ".go", ".rb", ".java", ".kt", ".swift", ".c", ".cpp", ".h", ".hpp"}
+_SOURCE_EXTENSIONS = {
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".rs",
+    ".go",
+    ".rb",
+    ".java",
+    ".kt",
+    ".swift",
+    ".c",
+    ".cpp",
+    ".h",
+    ".hpp",
+}
 
 # Directories to ignore (same as indexer)
 _IGNORED_DIRS = {
@@ -106,7 +122,9 @@ def _iter_source_files(root: Path, max_files: int) -> list[Path]:
     return candidates
 
 
-def _get_context_lines(lines: list[str], marker_line: int, context_radius: int = 3) -> str:
+def _get_context_lines(
+    lines: list[str], marker_line: int, context_radius: int = 3
+) -> str:
     """Extract context lines around the marker.
 
     Args:
@@ -131,7 +149,21 @@ def _get_context_lines(lines: list[str], marker_line: int, context_radius: int =
 
 def _get_patterns_for_file(path: Path) -> list[tuple[str, str]]:
     """Get appropriate marker patterns for a file based on extension."""
-    cstyle_exts = {".js", ".ts", ".tsx", ".jsx", ".rs", ".go", ".java", ".kt", ".swift", ".c", ".cpp", ".h", ".hpp"}
+    cstyle_exts = {
+        ".js",
+        ".ts",
+        ".tsx",
+        ".jsx",
+        ".rs",
+        ".go",
+        ".java",
+        ".kt",
+        ".swift",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+    }
     if path.suffix in cstyle_exts:
         return _CSTYLE_MARKER_PATTERNS
     return _HASH_MARKER_PATTERNS

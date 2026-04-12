@@ -16,7 +16,7 @@ class TestIsInsideString:
 
     def test_not_inside_string(self):
         """Should return False for position not in string."""
-        line = '# WHY: This is a real comment'
+        line = "# WHY: This is a real comment"
         # Match starts at position 0 (the #)
         assert _is_inside_string(line, 0) is False
 
@@ -120,7 +120,9 @@ class TestScanFile:
     def test_detect_why_marker(self, tmp_path: Path):
         """Should detect # WHY: marker."""
         file = tmp_path / "test.py"
-        file.write_text("# WHY: Using singleton for caching\ndef foo(): pass\n", encoding="utf-8")
+        file.write_text(
+            "# WHY: Using singleton for caching\ndef foo(): pass\n", encoding="utf-8"
+        )
 
         markers = _scan_file(file, tmp_path)
 
@@ -157,7 +159,9 @@ class TestScanFile:
     def test_detect_adr_marker(self, tmp_path: Path):
         """Should detect # ADR: marker."""
         file = tmp_path / "test.py"
-        file.write_text("# ADR: Using Postgres for main store\ndef qux(): pass\n", encoding="utf-8")
+        file.write_text(
+            "# ADR: Using Postgres for main store\ndef qux(): pass\n", encoding="utf-8"
+        )
 
         markers = _scan_file(file, tmp_path)
 
@@ -198,9 +202,7 @@ class TestScanFile:
         """Should include context in marker."""
         file = tmp_path / "test.py"
         file.write_text(
-            "# Context before\n"
-            "# WHY: Important decision\n"
-            "# Context after\n",
+            "# Context before\n# WHY: Important decision\n# Context after\n",
             encoding="utf-8",
         )
 
@@ -403,9 +405,7 @@ class TestScanDecisionMarkers:
     def test_python_marker_variations(self, tmp_path: Path):
         """Should detect various Python comment styles."""
         (tmp_path / "test.py").write_text(
-            "#WHY: no space\n"
-            "# WHY: normal\n"
-            "#  WHY: extra space\n",
+            "#WHY: no space\n# WHY: normal\n#  WHY: extra space\n",
             encoding="utf-8",
         )
 
