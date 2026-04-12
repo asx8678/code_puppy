@@ -151,10 +151,10 @@ class TestOAuthServer:
             assert bundle.token_data.account_id == "account_789"
             assert bundle.api_key == mock_tokens_data["access_token"]
 
-            # Verify success URL contains expected parameters
-            assert "success" in success_url
-            assert mock_tokens_data["access_token"] in success_url
-            assert "org_123" in success_url  # Should use the default org
+            # Verify success URL does NOT contain tokens (security fix)
+            assert success_url.endswith("/success")  # No query params
+            assert "access_token" not in success_url
+            assert "id_token" not in success_url
 
             # Verify request was made correctly
             mock_post.assert_called_once()
@@ -273,8 +273,10 @@ class TestOAuthServer:
 
             bundle, success_url = server.exchange_code("test_auth_code")
 
-            # Should fallback to top-level organization_id
-            assert "org_fallback_123" in success_url
+            # Verify success URL does NOT contain tokens (security fix)
+            assert success_url.endswith("/success")  # No query params
+            assert "access_token" not in success_url
+            assert "id_token" not in success_url
 
             server.server_close()
 

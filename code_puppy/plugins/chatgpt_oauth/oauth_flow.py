@@ -95,7 +95,6 @@ class _OAuthServer(HTTPServer):
         refresh_token = payload.get("refresh_token", "")
 
         id_token_claims = parse_jwt_claims(id_token) or {}
-        access_token_claims = parse_jwt_claims(access_token) or {}
 
         auth_claims = id_token_claims.get("https://api.openai.com/auth") or {}
         chatgpt_account_id = auth_claims.get("chatgpt_account_id", "")
