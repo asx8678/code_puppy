@@ -16,7 +16,6 @@ import httpx
 
 from code_puppy.config import get_http2
 from code_puppy.config_package import env_bool, get_first_env
-from code_puppy.mcp_.mcp_security import safe_expand_env_vars
 
 from .request_cache import RequestCacheMixin
 
@@ -340,6 +339,9 @@ def create_auth_headers(
 
 
 def resolve_env_var_in_header(headers: dict[str, str]) -> dict[str, str]:
+    # Lazy import to avoid circular dependency with mcp_ package
+    from code_puppy.mcp_.mcp_security import safe_expand_env_vars
+
     resolved_headers = {}
 
     for key, value in headers.items():

@@ -420,12 +420,21 @@ class TestAuthHeaders:
 
 
 class TestResolveEnvVarInHeader:
-    def test_resolves_env_vars(self):
+    def test_resolves_safe_env_vars(self):
+        """Only allowlisted vars (HOME, USER, etc.) are expanded."""
+        with patch.dict(os.environ, {"HOME": "/home/testuser"}):
+            from code_puppy.http_utils import resolve_env_var_in_header
+
+            result = resolve_env_var_in_header({"X-Path": "$HOME/.config"})
+            assert result["X-Path"] == "/home/testuser/.config"
+
+    def test_arbitrary_vars_not_expanded(self):
+        """Arbitrary env vars are NOT expanded (security fix)."""
         with patch.dict(os.environ, {"MY_KEY": "secret"}):
             from code_puppy.http_utils import resolve_env_var_in_header
 
             result = resolve_env_var_in_header({"Authorization": "Bearer $MY_KEY"})
-            assert result["Authorization"] == "Bearer secret"
+            assert result["Authorization"] == "Bearer $MY_KEY"
 
     def test_passthrough_non_string(self):
         from code_puppy.http_utils import resolve_env_var_in_header
