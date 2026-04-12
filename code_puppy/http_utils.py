@@ -16,6 +16,7 @@ import httpx
 
 from code_puppy.config import get_http2
 from code_puppy.config_package import env_bool, get_first_env
+from code_puppy.mcp_.mcp_security import safe_expand_env_vars
 
 from .request_cache import RequestCacheMixin
 
@@ -344,7 +345,7 @@ def resolve_env_var_in_header(headers: dict[str, str]) -> dict[str, str]:
     for key, value in headers.items():
         if isinstance(value, str):
             try:
-                expanded = os.path.expandvars(value)
+                expanded = safe_expand_env_vars(value)
                 resolved_headers[key] = expanded
             except Exception:
                 resolved_headers[key] = value
