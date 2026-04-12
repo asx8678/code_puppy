@@ -1,10 +1,14 @@
 """Regression tests for validate_shell_command and DANGEROUS_PATTERNS.
 
 These tests guard the fix that narrowed DANGEROUS_PATTERNS to only block
-process substitution and null bytes, while allowing:
+process substitution, null bytes, and multiple fd redirections, while allowing:
   - Command substitution with $()
   - Backtick substitution
   - Normal shell operations
+  - Single fd redirections (e.g. ``2>&1``)
+
+Note: Multiple fd redirections like ``echo hi 2>&1 3>&1`` are still blocked
+by the ``\d*>&\d*\s*\d*>&`` pattern in DANGEROUS_PATTERNS.
 
 See: code_puppy-d6s (watchdog fix for over-broad pattern matching)
 """
@@ -153,3 +157,50 @@ class TestBasicValidation:
 
     def test_and_allowed(self) -> None:
         assert validate_shell_command("mkdir dir && cd dir") == "mkdir dir && cd dir"
+
+
+# ===================================================================
+# Blocked: multiple fd redirections
+# ===================================================================
+class TestMultipleFdRedirectionBlocked:
+    """Multiple fd redirections (e.g. ``2>&1 3>&1``) must be blocked.
+
+    The pattern ``\d*>&\d*\s*\d*>&`` in DANGEROUS_PATTERNS catches chained
+    fd-to-fd redirections, which can be abused to cloak command output.
+    """
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo hi 2>&1 3>&1",
+            "some_cmd 1>&2 2>&1",
+            "cat file 3>&1 4>&1",
+            "echo x 2>&1  3>&1",  # extra whitespace between redirections
+        ],
+    )
+    def test_multiple_fd_redirection_blocked(self, command: str) -> None:
+        """Commands with multiple fd redirections must raise CommandValidationError."""
+        with pytest.raises(CommandValidationError, match="dangerous pattern"):
+            validate_shell_command(command)
+
+
+# ===================================================================
+# Allowed: single fd redirection
+# ===================================================================
+class TestSingleFdRedirectionAllowed:
+    """Single fd redirections (e.g. ``2>&1``) are normal shell and must pass."""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo hi 2>&1",
+            "some_cmd 1>&2",
+            "cat file 2>/dev/null",
+            "make 2>&1",
+            "python script.py 2>&1",
+        ],
+    )
+    def test_single_fd_redirection_allowed(self, command: str) -> None:
+        """Single fd redirection must pass validation."""
+        result = validate_shell_command(command)
+        assert result == command
