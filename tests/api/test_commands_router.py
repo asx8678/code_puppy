@@ -132,7 +132,9 @@ async def test_execute_command_timeout(client: AsyncClient) -> None:
 async def test_execute_command_error(client: AsyncClient) -> None:
     # Test that errors in subprocess are properly returned
     # Using a nonexistent custom command that will cause an error to be emitted
-    resp = await client.post("/api/commands/execute", json={"command": "/nonexistent_command_xyz"})
+    resp = await client.post(
+        "/api/commands/execute", json={"command": "/nonexistent_command_xyz"}
+    )
     assert resp.status_code == 200
     # Command is still "handled" (returns True for unknown commands) so success=True
     # But it returns the error message from the command execution

@@ -9,16 +9,13 @@ This router provides REST endpoints for:
 
 import asyncio
 import os
-import signal
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-# Thread pool for blocking command execution
-_executor = ThreadPoolExecutor(max_workers=4)
+from code_puppy.tools.command_runner import _kill_process_group
 
 # Timeout for command execution (seconds)
 COMMAND_TIMEOUT = 30.0
@@ -68,48 +65,9 @@ class AutocompleteResponse(BaseModel):
     suggestions: list[str]
 
 
-# =============================================================================
-# Subprocess-based command execution with proper timeout handling
-# =============================================================================
-
-
-def _kill_process_tree(pid: int) -> None:
-    """Kill a process and all its children.
-
-    Sends SIGTERM first (graceful), then SIGKILL if needed.
-
-    Args:
-        pid: Process ID to kill.
-    """
-    try:
-        # Try to kill the entire process group
-        try:
-            pgid = os.getpgid(pid)
-            os.killpg(pgid, signal.SIGTERM)
-        except (ProcessLookupError, OSError):
-            # Process already gone, or no process group
-            pass
-
-        # Kill the main process
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except (ProcessLookupError, OSError):
-            pass  # Already gone
-
-    except Exception:
-        # Last resort - try SIGKILL on process group
-        try:
-            pgid = os.getpgid(pid)
-            os.killpg(pgid, signal.SIGKILL)
-        except (ProcessLookupError, OSError):
-            pass
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except (ProcessLookupError, OSError):
-            pass
-
-
-async def _execute_command_in_subprocess(command: str, timeout: float) -> tuple[bool, Any, str | None]:
+async def _execute_command_in_subprocess(
+    command: str, timeout: float
+) -> tuple[bool, Any, str | None]:
     """Execute a command in a separate subprocess with proper timeout and kill support.
 
     This runs the command handler in a subprocess using asyncio.create_subprocess_exec,
@@ -124,7 +82,7 @@ async def _execute_command_in_subprocess(command: str, timeout: float) -> tuple[
         Tuple of (success, result, error).
     """
     # Create a Python script that runs the command and outputs JSON result
-    script = f'''
+    script = f"""
 import json
 import sys
 sys.path.insert(0, {repr(os.getcwd())})
@@ -136,11 +94,13 @@ try:
     print(json.dumps({{"status": "success", "result": result, "error": None}}))
 except Exception as e:
     print(json.dumps({{"status": "error", "result": None, "error": str(e)}}))
-'''
+"""
 
     # Run the script in a subprocess with its own process group
     proc = await asyncio.create_subprocess_exec(
-        sys.executable, "-c", script,
+        sys.executable,
+        "-c",
+        script,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         start_new_session=True,  # Create new process group for clean termination
@@ -154,13 +114,16 @@ except Exception as e:
         )
 
         if proc.returncode != 0:
-            error_msg = stderr.decode().strip() or f"Process exited with code {proc.returncode}"
+            error_msg = (
+                stderr.decode().strip() or f"Process exited with code {proc.returncode}"
+            )
             return (False, None, error_msg)
 
         # Parse the JSON result
         import json
+
         try:
-            output = stdout.decode().strip().split('\n')[-1]  # Last line has JSON
+            output = stdout.decode().strip().split("\n")[-1]  # Last line has JSON
             data = json.loads(output)
             if data["status"] == "success":
                 return (True, data["result"], None)
@@ -171,7 +134,7 @@ except Exception as e:
 
     except asyncio.TimeoutError:
         # Kill the process tree on timeout
-        _kill_process_tree(proc.pid)
+        _kill_process_group(proc)
         try:
             proc.kill()
         except ProcessLookupError:
@@ -181,7 +144,7 @@ except Exception as e:
 
     except asyncio.CancelledError:
         # Parent task cancelled - also kill the process
-        _kill_process_tree(proc.pid)
+        _kill_process_group(proc)
         try:
             proc.kill()
         except ProcessLookupError:
