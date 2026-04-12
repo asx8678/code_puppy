@@ -11,7 +11,8 @@ import threading
 import time
 import uuid
 from abc import ABC, abstractmethod
-from functools import lru_cache
+
+from code_puppy.utils.thread_safe_cache import thread_safe_lru_cache
 from typing import Any, Sequence
 
 import mcp
@@ -118,7 +119,7 @@ logger = logging.getLogger(__name__)
 # LRU cache for JSON schema serialization to avoid redundant work
 # in estimate_context_overhead_tokens(). Schemas are static, so caching
 # provides significant performance benefits for repeated token estimations.
-@lru_cache(maxsize=128)
+@thread_safe_lru_cache(maxsize=128)
 def _serialize_schema_to_json(schema_tuple: tuple[tuple[str, Any], ...]) -> str:
     """Serialize a tool schema (as sorted tuple) to JSON string.
 
