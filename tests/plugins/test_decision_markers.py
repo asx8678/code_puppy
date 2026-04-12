@@ -87,7 +87,9 @@ class TestScanFile:
     def test_detect_why_marker(self, tmp_path: Path):
         """Should detect # WHY: marker."""
         file = tmp_path / "test.py"
-        file.write_text("# WHY: Using singleton for caching\ndef foo(): pass\n", encoding="utf-8")
+        file.write_text(
+            "# WHY: Using singleton for caching\ndef foo(): pass\n", encoding="utf-8"
+        )
 
         markers = _scan_file(file, tmp_path)
 
@@ -130,7 +132,9 @@ class TestScanFile:
     def test_detect_adr_marker(self, tmp_path: Path):
         """Should detect # ADR: marker."""
         file = tmp_path / "test.py"
-        file.write_text("# ADR: Using Postgres for main store\ndef qux(): pass\n", encoding="utf-8")
+        file.write_text(
+            "# ADR: Using Postgres for main store\ndef qux(): pass\n", encoding="utf-8"
+        )
 
         markers = _scan_file(file, tmp_path)
 
@@ -175,9 +179,7 @@ class TestScanFile:
         """Should include context in marker."""
         file = tmp_path / "test.py"
         file.write_text(
-            "# Context before\n"
-            "# WHY: Important decision\n"
-            "# Context after\n",
+            "# Context before\n# WHY: Important decision\n# Context after\n",
             encoding="utf-8",
         )
 
@@ -310,7 +312,9 @@ class TestScanDecisionMarkers:
         by_path = {m.path: m for m in markers}
         for cstyle in ["test.js", "test.ts", "test.rs", "test.go"]:
             assert cstyle in by_path, f"Missing marker for {cstyle}"
-            assert "// WHY:" in by_path[cstyle].text, f"C-style pattern not matched in {cstyle}"
+            assert "// WHY:" in by_path[cstyle].text, (
+                f"C-style pattern not matched in {cstyle}"
+            )
             assert "#" not in by_path[cstyle].text or "//" in by_path[cstyle].text
         assert "test.rb" in by_path
         assert "# WHY:" in by_path["test.rb"].text
@@ -329,9 +333,7 @@ class TestScanDecisionMarkers:
     def test_python_marker_variations(self, tmp_path: Path):
         """Should detect various Python comment styles."""
         (tmp_path / "test.py").write_text(
-            "#WHY: no space\n"
-            "# WHY: normal\n"
-            "#  WHY: extra space\n",
+            "#WHY: no space\n# WHY: normal\n#  WHY: extra space\n",
             encoding="utf-8",
         )
 
@@ -414,7 +416,9 @@ class TestPatternCrossRejection:
     def test_cstyle_markers_rejected_in_hash_files(self, tmp_path: Path):
         """C-style markers must NOT be detected in hash-style files."""
         file = tmp_path / "app.py"
-        file.write_text("// WHY: this is a c-style comment in Python\n", encoding="utf-8")
+        file.write_text(
+            "// WHY: this is a c-style comment in Python\n", encoding="utf-8"
+        )
 
         markers = _scan_file(file, tmp_path)
         assert markers == [], "C-style pattern must not match in .py files"
@@ -453,8 +457,7 @@ class TestPatternCrossRejection:
         """C-style DECISION and TRADEOFF patterns must match in Rust files."""
         file = tmp_path / "lib.rs"
         file.write_text(
-            "// DECISION: using tokio runtime\n"
-            "// TRADEOFF: latency vs throughput\n",
+            "// DECISION: using tokio runtime\n// TRADEOFF: latency vs throughput\n",
             encoding="utf-8",
         )
 
