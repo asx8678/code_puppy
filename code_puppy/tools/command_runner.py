@@ -1373,9 +1373,25 @@ async def run_shell_command(
     # Handle background execution - runs command detached and returns immediately
     # This happens BEFORE user confirmation since we don't wait for the command
     if background:
+        # SECURITY: Validate command BEFORE creating temp file to avoid resource leak
+        # for invalid commands (defense-in-depth)
+        try:
+            validate_shell_command(command)
+        except CommandValidationError as e:
+            return ShellCommandOutput(
+                success=False,
+                command=command,
+                error=f"Command validation failed: {e}",
+                stdout=None,
+                stderr=None,
+                exit_code=None,
+                execution_time=None,
+                background=True,
+            )
+
         # Respect centralized concurrency controls for background process spawning
         async with ToolCallsLimiter():
-            # Create temp log file for output
+            # Create temp log file for output (only after validation passes)
             log_file = tempfile.NamedTemporaryFile(
                 mode="w",
                 prefix="shell_bg_",
@@ -1385,8 +1401,6 @@ async def run_shell_command(
             log_file_path = log_file.name
 
             try:
-                # SECURITY: Validate command before execution (defense-in-depth)
-                validate_shell_command(command)
 
                 # Platform-specific process detachment
                 if sys.platform.startswith("win"):
