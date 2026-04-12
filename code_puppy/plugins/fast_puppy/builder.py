@@ -7,6 +7,7 @@ in the code_puppy workspace: code_puppy_core, turbo_ops, turbo_parse.
 import importlib
 import importlib.util
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -370,6 +371,43 @@ def _get_maturin_command() -> list[str]:
 
     # Fallback to Python module
     return [sys.executable, "-m", "maturin"]
+
+
+def _build_env() -> dict[str, str]:
+    """Construct environment dict for subprocess calls.
+
+    Ensures the venv's bin directory is on PATH so that subprocesses
+    (cargo, maturin, etc.) can find the right Python interpreter.
+
+    Strategy:
+    1. Start with os.environ.copy()
+    2. If VIRTUAL_ENV already set in the environment, use as-is
+    3. Else derive venv path from sys.prefix
+    4. Validate derived path has pyvenv.cfg
+    5. Prepend venv/bin to PATH
+    6. Return the constructed env dict
+    """
+    env = os.environ.copy()
+
+    # If VIRTUAL_ENV is already set, assume the caller knows what they're doing
+    if env.get("VIRTUAL_ENV"):
+        return env
+
+    # Derive venv path from sys.prefix
+    venv_path = Path(sys.prefix)
+    bin_dir = venv_path / "bin"
+    pyvenv_cfg = venv_path / "pyvenv.cfg"
+
+    # Only patch if this looks like a real venv
+    if not pyvenv_cfg.is_file():
+        return env
+
+    # Prepend venv/bin to PATH
+    existing_path = env.get("PATH", "")
+    env["PATH"] = f"{bin_dir}{os.pathsep}{existing_path}" if existing_path else str(bin_dir)
+    env["VIRTUAL_ENV"] = str(venv_path)
+
+    return env
 
 
 def _emit_build_heartbeat(
