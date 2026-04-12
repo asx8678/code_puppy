@@ -134,7 +134,7 @@ class TestPTYManager:
 
         with (
             patch("os.close"),
-            patch("os.kill"),
+            patch("os.killpg"),
             patch("os.waitpid", return_value=(123, 0)),
         ):
             result = await mgr.close_session("c")
@@ -169,7 +169,7 @@ class TestPTYManager:
 
         with (
             patch("os.close", side_effect=OSError),
-            patch("os.kill", side_effect=OSError),
+            patch("os.killpg", side_effect=OSError),
             patch("os.waitpid", side_effect=ChildProcessError),
         ):
             result = await mgr.close_session("e")

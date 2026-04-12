@@ -150,7 +150,8 @@ class PTYManager:
         pid, master_fd = pty.fork()
 
         if pid == 0:
-            # Child process - exec the shell
+            # Child process - pty.fork() already created a new session and process group.
+            # The child becomes session leader; pid == process group id for clean termination.
             os.execlp(shell, shell, "-i")  # noqa: S606
         else:
             # Parent process
@@ -397,15 +398,25 @@ class PTYManager:
                 except OSError:
                     pass
 
-            # Terminate child process
+            # Terminate the entire process group (session leader + all children)
+            # The child process called setsid(), so pid == process group id
             if session.pid is not None:
                 try:
-                    os.kill(session.pid, signal.SIGTERM)
-                    # Use WNOHANG to avoid blocking the event loop
-                    try:
-                        os.waitpid(session.pid, os.WNOHANG)
-                    except ChildProcessError:
-                        pass
+                    os.killpg(session.pid, signal.SIGTERM)
+                except (OSError, ProcessLookupError):
+                    pass  # Process group already exited
+
+                # Give processes a moment to exit gracefully, then SIGKILL if needed
+                await asyncio.sleep(0.1)
+
+                try:
+                    os.killpg(session.pid, signal.SIGKILL)
+                except (OSError, ProcessLookupError):
+                    pass  # Process group already exited
+
+                # Reap the session leader to prevent zombie
+                try:
+                    os.waitpid(session.pid, os.WNOHANG)
                 except (OSError, ChildProcessError):
                     pass
 
