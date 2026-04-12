@@ -341,17 +341,13 @@ def _get_maturin_command() -> list[str]:
     """Get the appropriate maturin command as a list.
 
     Priority:
-    1. Direct maturin in PATH
-    2. 'uv run maturin' (uses project/uvx environment - works with [rust] extra)
+    1. 'uv run maturin' (preferred - uses project/uvx environment, managed by uv)
+    2. Direct maturin in PATH (fallback if uv is unavailable)
     3. 'uv tool run maturin' (uses uv tool directory - works after 'uv tool install')
     4. Python module fallback
     """
-    # Direct PATH lookup
-    if shutil.which("maturin"):
-        return ["maturin"]
-
     if shutil.which("uv"):
-        # Try 'uv run maturin' first (works in uvx with [rust] extra)
+        # Prefer 'uv run maturin' for reliable environment management
         try:
             result = subprocess.run(
                 ["uv", "run", "maturin", "--version"],
@@ -376,6 +372,10 @@ def _get_maturin_command() -> list[str]:
                 return ["uv", "tool", "run", "maturin"]
         except Exception:
             pass
+
+    # Direct PATH lookup as fallback
+    if shutil.which("maturin"):
+        return ["maturin"]
 
     # Fallback to Python module
     return [sys.executable, "-m", "maturin"]
