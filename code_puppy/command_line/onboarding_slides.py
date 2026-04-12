@@ -45,7 +45,7 @@ def get_gradient_banner() -> str:
     try:
         import pyfiglet
 
-        lines = pyfiglet.figlet_format("CODE PUPPY", font="ansi_shadow").split("\n")
+        lines = pyfiglet.figlet_format("FAST PUPPY", font="ansi_shadow").split("\n")
         colors = ["bright_blue", "bright_cyan", "bright_green"]
         result = []
         for i, line in enumerate(lines):
@@ -54,7 +54,7 @@ def get_gradient_banner() -> str:
                 result.append(f"[{color}]{line}[/{color}]")
         return "\n".join(result)
     except ImportError:
-        return "[bold bright_cyan]═══ CODE PUPPY 🐶 ═══[/bold bright_cyan]"
+        return "[bold bright_cyan]═══ FAST PUPPY 🐶 ═══[/bold bright_cyan]"
 
 
 # ============================================================================
