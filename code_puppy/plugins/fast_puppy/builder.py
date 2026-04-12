@@ -455,11 +455,16 @@ def _build_env() -> dict[str, str]:
         # Not in a venv — check for a .venv next to the repo root
         # or cwd.  This handles cases where the user activated a
         # venv in a parent shell but the env var didn't propagate.
+        if sys.platform == "win32":
+            python_rel = Path("Scripts") / "python.exe"
+        else:
+            python_rel = Path("bin") / "python"
+
         for candidate in (
             Path(sys.prefix).parent / ".venv",
             Path.cwd() / ".venv",
         ):
-            if candidate.is_dir() and (candidate / "bin" / "python").exists():
+            if candidate.is_dir() and (candidate / python_rel).exists():
                 env["VIRTUAL_ENV"] = str(candidate)
                 logger.debug(
                     "Auto-detected VIRTUAL_ENV=%s for maturin subprocess",

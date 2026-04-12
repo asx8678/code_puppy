@@ -549,7 +549,10 @@ class TestBuildEnv:
             with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
                 mock_sys.prefix = "/usr"
                 mock_sys.base_prefix = "/usr"
-                with patch("code_puppy.plugins.fast_puppy.builder.Path.cwd", return_value=tmp_path):
+                with patch(
+                    "code_puppy.plugins.fast_puppy.builder.Path.cwd",
+                    return_value=tmp_path,
+                ):
                     env = _build_env()
         assert "VIRTUAL_ENV" not in env
 
@@ -565,9 +568,53 @@ class TestBuildEnv:
             with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
                 mock_sys.prefix = "/usr"
                 mock_sys.base_prefix = "/usr"
-                with patch("code_puppy.plugins.fast_puppy.builder.Path.cwd", return_value=tmp_path):
+                mock_sys.platform = "darwin"
+                with patch(
+                    "code_puppy.plugins.fast_puppy.builder.Path.cwd",
+                    return_value=tmp_path,
+                ):
                     env = _build_env()
         assert env["VIRTUAL_ENV"] == str(venv_dir)
+
+    def test_auto_detects_dot_venv_windows(self, tmp_path):
+        """On Windows, detects .venv with Scripts/python.exe instead of bin/python."""
+        venv_dir = tmp_path / ".venv"
+        venv_dir.mkdir()
+        scripts_dir = venv_dir / "Scripts"
+        scripts_dir.mkdir()
+        (scripts_dir / "python.exe").touch()
+
+        with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
+            with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
+                mock_sys.prefix = "C:\\Python311"
+                mock_sys.base_prefix = "C:\\Python311"
+                mock_sys.platform = "win32"
+                with patch(
+                    "code_puppy.plugins.fast_puppy.builder.Path.cwd",
+                    return_value=tmp_path,
+                ):
+                    env = _build_env()
+        assert env["VIRTUAL_ENV"] == str(venv_dir)
+
+    def test_windows_ignores_unix_venv(self, tmp_path):
+        """On Windows, a .venv with only bin/python (unix layout) is NOT detected."""
+        venv_dir = tmp_path / ".venv"
+        venv_dir.mkdir()
+        bin_dir = venv_dir / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "python").touch()
+
+        with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
+            with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
+                mock_sys.prefix = "C:\\Python311"
+                mock_sys.base_prefix = "C:\\Python311"
+                mock_sys.platform = "win32"
+                with patch(
+                    "code_puppy.plugins.fast_puppy.builder.Path.cwd",
+                    return_value=tmp_path,
+                ):
+                    env = _build_env()
+        assert "VIRTUAL_ENV" not in env
 
 
 class TestBuildCrateWarningFiltering:
