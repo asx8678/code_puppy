@@ -945,3 +945,103 @@ class TestRunCommandSync:
 
         assert result.success is True
         assert "hi" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Regression test for confirmation lock release on exception
+# ---------------------------------------------------------------------------
+
+
+class TestConfirmationLockRegression:
+    """Regression tests for _CONFIRMATION_LOCK handling."""
+
+    @pytest.mark.asyncio
+    async def test_confirmation_lock_released_on_exception(self):
+        """Test that _CONFIRMATION_LOCK is released when get_user_approval_async raises.
+
+        This is a regression test for a bug where the lock would remain held
+        if an exception occurred during user confirmation, blocking all
+        subsequent commands.
+        """
+        import code_puppy.tools.command_runner as cr_module
+
+        ctx = MagicMock(spec=RunContext)
+
+        # Ensure lock is free before test
+        if cr_module._CONFIRMATION_LOCK.locked():
+            cr_module._CONFIRMATION_LOCK.release()
+
+        # Mock get_user_approval_async to raise an exception
+        async def raise_exception(*args, **kwargs):
+            raise RuntimeError("test exception")
+
+        with patch.object(cr_module, "get_yolo_mode", return_value=False):
+            with patch.object(cr_module, "is_subagent", return_value=False):
+                with patch.object(cr_module.sys, "stdin") as mock_stdin:
+                    mock_stdin.isatty.return_value = True
+                    with patch.object(
+                        cr_module, "get_user_approval_async", side_effect=raise_exception
+                    ):
+                        # The exception should propagate but lock should be released
+                        with pytest.raises(RuntimeError, match="test exception"):
+                            await cr_module.run_shell_command(ctx, "echo hi", timeout=10)
+
+        # CRITICAL: Lock must be released after the exception
+        assert not cr_module._CONFIRMATION_LOCK.locked(), (
+            "_CONFIRMATION_LOCK should be released after exception"
+        )
+
+    @pytest.mark.asyncio
+    async def test_subsequent_command_not_blocked_after_exception(self):
+        """Test that subsequent commands can acquire lock after an exception.
+
+        Verifies the fix for the deadlock scenario where an exception during
+        confirmation would permanently block the lock.
+        """
+        import code_puppy.tools.command_runner as cr_module
+
+        ctx = MagicMock(spec=RunContext)
+
+        # Ensure lock is free before test
+        if cr_module._CONFIRMATION_LOCK.locked():
+            cr_module._CONFIRMATION_LOCK.release()
+
+        # First call: exception during confirmation
+        async def raise_exception(*args, **kwargs):
+            raise RuntimeError("first exception")
+
+        with patch.object(cr_module, "get_yolo_mode", return_value=False):
+            with patch.object(cr_module, "is_subagent", return_value=False):
+                with patch.object(cr_module.sys, "stdin") as mock_stdin:
+                    mock_stdin.isatty.return_value = True
+                    with patch.object(
+                        cr_module, "get_user_approval_async", side_effect=raise_exception
+                    ):
+                        try:
+                            await cr_module.run_shell_command(ctx, "echo first", timeout=10)
+                        except RuntimeError:
+                            pass  # Expected
+
+        # Second call: should be able to acquire lock (not blocked by first exception)
+        async_mock = AsyncMock(return_value=(True, None))
+
+        with patch.object(cr_module, "get_yolo_mode", return_value=False):
+            with patch.object(cr_module, "is_subagent", return_value=False):
+                with patch.object(cr_module.sys, "stdin") as mock_stdin:
+                    mock_stdin.isatty.return_value = True
+                    with patch.object(
+                        cr_module, "get_user_approval_async", new=async_mock
+                    ):
+                        with patch.object(
+                            cr_module, "_execute_shell_command", new=AsyncMock()
+                        ) as mock_execute:
+                            mock_execute.return_value = MagicMock(success=True)
+                            # This should NOT be blocked by the previous exception
+                            result = await cr_module.run_shell_command(
+                                ctx, "echo second", timeout=10
+                            )
+
+        # Verify the second command was not blocked
+        assert async_mock.called, (
+            "Second command should have been able to get user approval"
+        )
