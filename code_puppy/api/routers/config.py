@@ -1,9 +1,24 @@
 """Configuration management API endpoints."""
 
+import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+# Patterns that indicate a sensitive key whose value should be redacted.
+_SENSITIVE_PATTERNS = re.compile(
+    r"(api_key|token|secret|password|credential|auth_key|private_key)",
+    re.IGNORECASE,
+)
+_REDACTED = "********"
+
+
+def _redact(key: str, value: Any) -> Any:
+    """Return ``********`` for values whose key name looks sensitive."""
+    if isinstance(key, str) and _SENSITIVE_PATTERNS.search(key):
+        return _REDACTED
+    return value
 
 router = APIRouter()
 
@@ -24,7 +39,7 @@ async def list_config() -> dict[str, Any]:
 
     config = {}
     for key in get_config_keys():
-        config[key] = get_value(key)
+        config[key] = _redact(key, get_value(key))
     return {"config": config}
 
 
@@ -48,7 +63,7 @@ async def get_config_value(key: str) -> ConfigValue:
         )
 
     value = get_value(key)
-    return ConfigValue(key=key, value=value)
+    return ConfigValue(key=key, value=_redact(key, value))
 
 
 @router.put("/{key}")
@@ -63,7 +78,7 @@ async def set_config_value(key: str, update: ConfigUpdate) -> ConfigValue:
         )
 
     set_value(key, str(update.value))
-    return ConfigValue(key=key, value=get_value(key))
+    return ConfigValue(key=key, value=_redact(key, get_value(key)))
 
 
 @router.delete("/{key}")
