@@ -1,10 +1,12 @@
 import os
+import threading
+import time
 from collections.abc import Mapping
 from unittest.mock import patch
 
 import pytest
 
-from code_puppy.model_factory import ModelFactory
+from code_puppy.model_factory import ModelFactory, invalidate_model_config_cache
 
 TEST_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "../code_puppy/models.json")
 
@@ -237,3 +239,64 @@ def test_extra_models_exception_handling(tmp_path, monkeypatch, caplog):
 
     # Check that warning was logged
     assert "Failed to load extra models config" in caplog.text
+
+
+def test_load_config_concurrent_with_invalidation():
+    """Regression test for race condition: load_config + invalidate_model_config_cache.
+
+    Verifies that _model_config_cache is never read outside the lock.
+    Prior to the fix, the return statement accessed the global cache
+    after releasing the lock, creating a race window where another thread
+    could invalidate the cache, returning None or stale data.
+    """
+    results = []
+    errors = []
+    results_lock = threading.Lock()
+    barrier = threading.Barrier(10)  # 5 loaders + 5 invalidators
+
+    def loader():
+        try:
+            barrier.wait(timeout=5)
+            for _ in range(20):
+                config = ModelFactory.load_config()
+                with results_lock:
+                    results.append(("load", config is not None))
+                time.sleep(0.001)  # Small delay to increase interleaving
+        except Exception as e:
+            with results_lock:
+                errors.append(("loader", e))
+
+    def invalidator():
+        try:
+            barrier.wait(timeout=5)
+            for _ in range(20):
+                invalidate_model_config_cache()
+                with results_lock:
+                    results.append(("invalidate", True))
+                time.sleep(0.001)
+        except Exception as e:
+            with results_lock:
+                errors.append(("invalidator", e))
+
+    threads = []
+    for _ in range(5):
+        threads.append(threading.Thread(target=loader))
+        threads.append(threading.Thread(target=invalidator))
+
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # No errors should have occurred
+    assert not errors, f"Thread errors occurred: {errors}"
+
+    # All loads should have returned non-None configs
+    load_results = [r[1] for r in results if r[0] == "load"]
+    assert all(load_results), "Some load_config calls returned None (race condition bug!)"
+
+    # Should have had both loads and invalidations
+    load_count = len([r for r in results if r[0] == "load"])
+    invalidate_count = len([r for r in results if r[0] == "invalidate"])
+    assert load_count == 100, f"Expected 100 loads, got {load_count}"
+    assert invalidate_count == 100, f"Expected 100 invalidations, got {invalidate_count}"
