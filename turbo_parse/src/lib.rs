@@ -1073,7 +1073,7 @@ fn parse_injections_py<'py>(py: Python<'py>, injection_result: Bound<'py, PyAny>
 }
 
 /// Helper to convert serde_json::Value to Python object.
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn turbo_parse(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(health_check, m)?)?;
     m.add_function(wrap_pyfunction!(get_stats_py, m)?)?;
