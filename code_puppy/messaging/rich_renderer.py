@@ -10,7 +10,7 @@ only structured data with no formatting hints.
 import os
 import re
 from collections import defaultdict
-from functools import cache, lru_cache
+from code_puppy.utils.thread_safe_cache import thread_safe_cache, thread_safe_lru_cache
 from typing import Protocol, runtime_checkable
 
 from code_puppy.config_package import get_first_env
@@ -202,7 +202,7 @@ _FILE_ICONS: dict[str, str] = {
 }
 
 
-@lru_cache(maxsize=128)
+@thread_safe_lru_cache(maxsize=128)
 def _get_file_icon_cached(file_path: str) -> str:
     """Get an emoji icon for a file based on its extension (cached)."""
     ext = os.path.splitext(file_path)[1].lower()
@@ -250,7 +250,7 @@ class RichConsoleRenderer:
         return self._console
 
     @staticmethod
-    @cache
+    @thread_safe_cache
     def _get_banner_color(banner_name: str) -> str:
         """Get the configured color for a banner.
 
