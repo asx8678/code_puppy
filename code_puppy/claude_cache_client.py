@@ -16,6 +16,7 @@ This module also handles:
 from collections.abc import Callable
 import asyncio
 import hashlib
+import threading
 import json
 import logging
 import random
@@ -145,6 +146,7 @@ CLOCK_SKEW_TOLERANCE_SECONDS = 60
 # Hash-based JWT claims cache to avoid storing raw bearer tokens (~49KB secrets)
 # Uses truncated SHA256 hash (16 bytes) as key instead of full token string
 _jwt_claims_cache: dict[bytes, tuple[int, int]] = {}
+_jwt_cache_lock = threading.Lock()
 _JWT_CACHE_MAX_SIZE = 16
 
 
@@ -164,11 +166,12 @@ def _get_jwt_claims(token: str) -> tuple[int, int] | None:
     # Use hash-based cache key (16 bytes) instead of full token (~49KB)
     cache_key = hashlib.sha256(token.encode()).digest()[:16]
 
-    # Check cache first
-    if cache_key in _jwt_claims_cache:
-        return _jwt_claims_cache[cache_key]
+    # Check cache first (under lock)
+    with _jwt_cache_lock:
+        if cache_key in _jwt_claims_cache:
+            return _jwt_claims_cache[cache_key]
 
-    # Decode and validate
+    # Decode and validate (no lock needed for pure computation)
     try:
         payload = _jwt.decode(token, options={"verify_signature": False})
 
@@ -192,12 +195,13 @@ def _get_jwt_claims(token: str) -> tuple[int, int] | None:
 
         result = (int(iat), int(exp))
 
-        # Store in cache with hash key (not full token)
-        if len(_jwt_claims_cache) >= _JWT_CACHE_MAX_SIZE:
-            # Simple LRU: clear oldest entry
-            oldest = next(iter(_jwt_claims_cache))
-            del _jwt_claims_cache[oldest]
-        _jwt_claims_cache[cache_key] = result
+        # Store in cache with hash key (under lock)
+        with _jwt_cache_lock:
+            if len(_jwt_claims_cache) >= _JWT_CACHE_MAX_SIZE:
+                # Simple LRU: clear oldest entry
+                oldest = next(iter(_jwt_claims_cache))
+                del _jwt_claims_cache[oldest]
+            _jwt_claims_cache[cache_key] = result
 
         return result
     except Exception:
