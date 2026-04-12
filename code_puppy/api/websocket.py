@@ -221,6 +221,9 @@ def setup_websocket(app: FastAPI) -> None:
     @app.websocket("/ws/health")
     async def websocket_health(websocket: WebSocket) -> None:
         """Simple WebSocket health check - echoes messages back."""
+        if await _reject_untrusted_origin(websocket):
+            return
+
         await websocket.accept()
         try:
             while True:
