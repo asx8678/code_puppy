@@ -450,6 +450,9 @@ def _build_env() -> dict[str, str]:
         logger.debug("Final VIRTUAL_ENV value: %s", env.get("VIRTUAL_ENV"))
     else:
         logger.debug("No VIRTUAL_ENV found (none will be set for maturin subprocess)")
+        logger.warning(
+            "No virtual environment detected. Rust builds may fail to find Python."
+        )
 
     return env
 
