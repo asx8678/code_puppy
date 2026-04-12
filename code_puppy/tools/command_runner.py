@@ -1519,57 +1519,58 @@ async def run_shell_command(
                 execution_time=None,
             )
 
-        # Get puppy name for personalized messages
-        # get_puppy_name is imported at module level for performance
-        puppy_name = get_puppy_name().title()
+        try:
+            # Get puppy name for personalized messages
+            # get_puppy_name is imported at module level for performance
+            puppy_name = get_puppy_name().title()
 
-        # Build panel content
-        panel_content = Text()
-        panel_content.append("⚡ Requesting permission to run:\n", style="bold yellow")
-        panel_content.append("$ ", style="bold green")
-        panel_content.append(command, style="bold white")
+            # Build panel content
+            panel_content = Text()
+            panel_content.append("⚡ Requesting permission to run:\n", style="bold yellow")
+            panel_content.append("$ ", style="bold green")
+            panel_content.append(command, style="bold white")
 
-        if cwd:
-            panel_content.append("\n\n", style="")
-            panel_content.append("📂 Working directory: ", style="dim")
-            panel_content.append(cwd, style="dim cyan")
+            if cwd:
+                panel_content.append("\n\n", style="")
+                panel_content.append("📂 Working directory: ", style="dim")
+                panel_content.append(cwd, style="dim cyan")
 
-        # Use the common approval function (async version)
-        confirmed, user_feedback = await get_user_approval_async(
-            title="Shell Command",
-            content=panel_content,
-            preview=None,
-            border_style="dim white",
-            puppy_name=puppy_name,
-        )
+            # Use the common approval function (async version)
+            confirmed, user_feedback = await get_user_approval_async(
+                title="Shell Command",
+                content=panel_content,
+                preview=None,
+                border_style="dim white",
+                puppy_name=puppy_name,
+            )
 
-        # Release lock after approval
-        if confirmation_lock_acquired:
-            _CONFIRMATION_LOCK.release()
-
-        if not confirmed:
-            if user_feedback:
-                result = ShellCommandOutput(
-                    success=False,
-                    command=command,
-                    error=f"USER REJECTED: {user_feedback}",
-                    user_feedback=user_feedback,
-                    stdout=None,
-                    stderr=None,
-                    exit_code=None,
-                    execution_time=None,
-                )
-            else:
-                result = ShellCommandOutput(
-                    success=False,
-                    command=command,
-                    error="User rejected the command!",
-                    stdout=None,
-                    stderr=None,
-                    exit_code=None,
-                    execution_time=None,
-                )
-            return result
+            if not confirmed:
+                if user_feedback:
+                    result = ShellCommandOutput(
+                        success=False,
+                        command=command,
+                        error=f"USER REJECTED: {user_feedback}",
+                        user_feedback=user_feedback,
+                        stdout=None,
+                        stderr=None,
+                        exit_code=None,
+                        execution_time=None,
+                    )
+                else:
+                    result = ShellCommandOutput(
+                        success=False,
+                        command=command,
+                        error="User rejected the command!",
+                        stdout=None,
+                        stderr=None,
+                        exit_code=None,
+                        execution_time=None,
+                    )
+                return result
+        finally:
+            # Always release the lock to prevent deadlocks on exception
+            if confirmation_lock_acquired:
+                _CONFIRMATION_LOCK.release()
 
     # Execute the command - sub-agents run silently without keyboard context
     return await _execute_shell_command(
