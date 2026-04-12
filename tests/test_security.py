@@ -4,6 +4,8 @@ These tests verify the core security decision logic and ensure that
 the SecurityBoundary can be properly mocked in tests (lazy import pattern).
 """
 
+import threading
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -314,6 +316,92 @@ class TestSecurityBoundarySingleton:
         # Should be different instance with clean state
         assert fresh is not initial
         assert fresh._check_count == 0
+
+
+class TestStatsCounterThreadSafety:
+    """Regression tests for thread-safe stats counter increments.
+
+    These tests verify that _stats_lock correctly serialises concurrent
+    counter mutations from multiple threads using threading.Barrier
+    to maximise contention.
+    """
+
+    def test_stats_counters_thread_safe(self):
+        """All threads hit check_file_access concurrently; final counters must be exact."""
+        N_THREADS = 8
+        CALLS_PER_THREAD = 100
+        EXPECTED_CHECKS = N_THREADS * CALLS_PER_THREAD
+        EXPECTED_BLOCKS = N_THREADS * CALLS_PER_THREAD
+
+        boundary = SecurityBoundary()
+        barrier = threading.Barrier(N_THREADS)
+        errors: list[Exception] = []
+
+        def worker():
+            try:
+                barrier.wait(timeout=10)
+                for _ in range(CALLS_PER_THREAD):
+                    # Sensitive path: increments check_count AND block_count
+                    result = boundary.check_file_access("~/.ssh/id_rsa", "read")
+                    assert not result.allowed, "Sensitive path should always be denied"
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker) for _ in range(N_THREADS)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        assert not errors, f"Worker threads raised: {errors}"
+        stats = boundary.get_stats()
+        assert stats["check_count"] == EXPECTED_CHECKS, (
+            f"check_count: expected {EXPECTED_CHECKS}, got {stats['check_count']}"
+        )
+        assert stats["block_count"] == EXPECTED_BLOCKS, (
+            f"block_count: expected {EXPECTED_BLOCKS}, got {stats['block_count']}"
+        )
+
+    def test_stats_counters_mixed_operations_thread_safe(self):
+        """Mix of blocking and allowed calls; block_count < check_count."""
+        N_THREADS = 6
+        BLOCKING_PER_THREAD = 50   # sensitive path → blocked
+        ALLOWED_PER_THREAD = 50    # normal path → allowed (mocked callbacks)
+        EXPECTED_CHECKS = N_THREADS * (BLOCKING_PER_THREAD + ALLOWED_PER_THREAD)
+        EXPECTED_BLOCKS = N_THREADS * BLOCKING_PER_THREAD
+
+        boundary = SecurityBoundary()
+        barrier = threading.Barrier(N_THREADS)
+        errors: list[Exception] = []
+
+        def worker():
+            try:
+                barrier.wait(timeout=10)
+                for _ in range(BLOCKING_PER_THREAD):
+                    # Sensitive path: increments check_count AND block_count
+                    boundary.check_file_access("~/.aws/credentials", "read")
+                with patch("code_puppy.callbacks.on_file_permission") as mock:
+                    mock.return_value = [True]
+                    for _ in range(ALLOWED_PER_THREAD):
+                        # Normal path: increments check_count only
+                        boundary.check_file_access("/tmp/safe.txt", "read")
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker) for _ in range(N_THREADS)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        assert not errors, f"Worker threads raised: {errors}"
+        stats = boundary.get_stats()
+        assert stats["check_count"] == EXPECTED_CHECKS, (
+            f"check_count: expected {EXPECTED_CHECKS}, got {stats['check_count']}"
+        )
+        assert stats["block_count"] == EXPECTED_BLOCKS, (
+            f"block_count: expected {EXPECTED_BLOCKS}, got {stats['block_count']}"
+        )
 
 
 class TestLazyImportPatchability:
