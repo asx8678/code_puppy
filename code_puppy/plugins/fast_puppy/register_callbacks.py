@@ -102,7 +102,8 @@ def _on_startup():
         # Emit summary banner based on results
         active_count = sum(1 for v in results.values() if v)
         total_count = len(results)
-        if active_count == total_count:
+        expected_count = len(CRATES)  # Should be 3
+        if results and active_count == expected_count:
             emit_info("🐕⚡ Fast Puppy: All Rust accelerators active — zoom! zoom! 🚀")
         elif active_count > 0:
             missing = [k for k, v in results.items() if not v]
@@ -244,6 +245,9 @@ def _handle_fast_puppy(command: str, name: str):
                 "🐕 Fast Puppy: Could not build Rust module\n"
                 "   Need: Rust toolchain (rustc) + maturin\n"
                 "   Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh\n"
+                "   Install maturin:\n"
+                "   • With uv: uv pip install maturin\n"
+                "   • With pip: pip install maturin\n"
                 "   Then retry: /fast_puppy enable"
             )
             return True

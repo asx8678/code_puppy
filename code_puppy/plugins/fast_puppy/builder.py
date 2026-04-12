@@ -222,18 +222,37 @@ def _has_maturin() -> bool:
 
 
 def _install_maturin() -> bool:
-    """Try to install maturin using pip."""
+    """Try to install maturin using uv or pip."""
+    # Try uv first (works in uvx environments)
+    if shutil.which("uv"):
+        try:
+            result = subprocess.run(
+                ["uv", "pip", "install", "maturin"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                logger.debug("Installed maturin via uv pip")
+                return True
+        except Exception as exc:
+            logger.debug("uv pip install maturin failed: %s", exc)
+
+    # Fall back to pip
     try:
-        install_result = subprocess.run(
+        result = subprocess.run(
             [sys.executable, "-m", "pip", "install", "maturin"],
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=120,
         )
-        return install_result.returncode == 0
+        if result.returncode == 0:
+            logger.debug("Installed maturin via pip")
+            return True
     except Exception as exc:
-        logger.debug("Could not install maturin: %s", exc)
-        return False
+        logger.debug("pip install maturin failed: %s", exc)
+
+    return False
 
 
 def _get_maturin_command() -> list[str]:
@@ -501,7 +520,13 @@ def _try_auto_build_all() -> dict[str, bool]:
     if not _has_maturin():
         emit_info("🐕⚡ Fast Puppy: Installing maturin…")
         if not _install_maturin():
-            emit_info("🐕 Fast Puppy: Could not install maturin — skipping Rust builds")
+            emit_info(
+                "🐕 Fast Puppy: Could not install maturin — skipping Rust builds\n"
+                "   To enable Rust acceleration, install maturin manually:\n"
+                "   • With uv: uv pip install maturin\n"
+                "   • With pip: pip install maturin\n"
+                "   Then restart code-puppy or run /fast_puppy build"
+            )
             return results
 
     # Find repo root
