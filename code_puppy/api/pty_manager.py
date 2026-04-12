@@ -150,9 +150,8 @@ class PTYManager:
         pid, master_fd = pty.fork()
 
         if pid == 0:
-            # Child process - create new session and process group
-            # This ensures all child processes are in the same group for clean termination
-            os.setsid()
+            # Child process - pty.fork() already created a new session and process group.
+            # The child becomes session leader; pid == process group id for clean termination.
             os.execlp(shell, shell, "-i")  # noqa: S606
         else:
             # Parent process
