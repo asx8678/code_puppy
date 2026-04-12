@@ -489,7 +489,6 @@ class TestBuildEnv:
         (venv_dir / "bin").mkdir()
         (venv_dir / "pyvenv.cfg").write_text("home = /usr/bin\n")
 
-        original_path = os.environ.get("PATH", "")
         with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
             with patch("sys.prefix", str(venv_dir)):
                 env = _build_env()
