@@ -158,7 +158,7 @@ class ContentPayload(BaseModel):
     overwrite: bool = False
 
 
-EditFilePayload = DeleteSnippetPayload | ReplacementsPayload, ContentPayload
+EditFilePayload = DeleteSnippetPayload | ReplacementsPayload | ContentPayload
 
 
 def _parse_diff_lines(diff_text: str) -> list[DiffLine]:
