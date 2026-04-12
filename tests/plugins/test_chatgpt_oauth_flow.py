@@ -59,8 +59,13 @@ def mock_tokens_data():
     }
 
 
+@pytest.mark.serial
 class TestOAuthServer:
-    """Test cases for _OAuthServer class."""
+    """Test cases for _OAuthServer class.
+
+    These tests use a fixed OAuth callback port and must run serially
+    to avoid parallel test conflicts.
+    """
 
     def test_oauth_server_initialization(self):
         """Test OAuth server initialization with proper parameters."""
@@ -241,8 +246,8 @@ class TestOAuthServer:
             server.server_close()
 
     @patch("requests.post")
-    def test_exchange_code_org_fallback(self, mock_post, mock_context):
-        """Test organization ID fallback logic."""
+    def test_exchange_code_success_url_security(self, mock_post, mock_context):
+        """Test that tokens are not exposed in the success URL (security fix)."""
         mock_response = Mock()
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {
@@ -281,8 +286,13 @@ class TestOAuthServer:
             server.server_close()
 
 
+@pytest.mark.serial
 class TestCallbackHandler:
-    """Test cases for _CallbackHandler class."""
+    """Test cases for _CallbackHandler class.
+
+    These tests use a fixed OAuth callback port and must run serially
+    to avoid parallel test conflicts.
+    """
 
     @pytest.fixture
     def mock_server(self):
@@ -560,8 +570,13 @@ class TestCallbackHandler:
             assert mock_thread.call_args[1]["daemon"] is True
 
 
+@pytest.mark.serial
 class TestRunOAuthFlow:
-    """Test cases for run_oauth_flow function."""
+    """Test cases for run_oauth_flow function.
+
+    These tests use a fixed OAuth callback port and must run serially
+    to avoid parallel test conflicts.
+    """
 
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.load_stored_tokens")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow._OAuthServer")
@@ -876,8 +891,13 @@ class TestTokenDataAndAuthBundle:
         assert bundle.last_refresh == "2023-01-01T00:00:00Z"
 
 
+@pytest.mark.serial
 class TestShutdownAfterDelay:
-    """Test _shutdown_after_delay inner function."""
+    """Test _shutdown_after_delay inner function.
+
+    These tests are part of the OAuth flow and must run serially
+    to avoid parallel test conflicts.
+    """
 
     def test_shutdown_after_delay_calls_shutdown(self):
         """Test that _shutdown_after_delay spawns a thread that calls _shutdown."""
@@ -905,8 +925,13 @@ class TestShutdownAfterDelay:
         handler._shutdown.assert_called_once()
 
 
+@pytest.mark.serial
 class TestRunOAuthFlowBrowserPaths:
-    """Test browser-related paths in run_oauth_flow."""
+    """Test browser-related paths in run_oauth_flow.
+
+    These tests use a fixed OAuth callback port and must run serially
+    to avoid parallel test conflicts.
+    """
 
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow.load_stored_tokens")
     @patch("code_puppy.plugins.chatgpt_oauth.oauth_flow._OAuthServer")

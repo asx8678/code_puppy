@@ -86,8 +86,13 @@ def sample_claude_tokens():
     }
 
 
+@pytest.mark.serial
 class TestOAuthFlowIntegration:
-    """Integration tests for OAuth flow components."""
+    """Integration tests for OAuth flow components.
+
+    These tests use a fixed OAuth callback port and must run serially
+    to avoid parallel test conflicts.
+    """
 
     @patch("requests.post")
     @patch("webbrowser.open")
@@ -595,8 +600,13 @@ class TestOAuthErrorRecovery:
         assert "refresh_token" in tokens
 
 
+@pytest.mark.serial
 class TestOAuthConcurrencyAndThreading:
-    """Test OAuth behavior under concurrent access."""
+    """Test OAuth behavior under concurrent access.
+
+    These tests use threading and must run serially
+    to avoid parallel test conflicts.
+    """
 
     def test_concurrent_oauth_context_generation(self):
         """Test that OAuth context generation is thread-safe."""
