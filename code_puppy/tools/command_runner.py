@@ -59,6 +59,7 @@ from code_puppy.config import get_yolo_mode, get_puppy_name
 # Lazy import for atexit - only used in _get_shell_executor (CR-M4)
 try:
     import atexit
+
     _HAS_ATEXIT = True
 except ImportError:
     _HAS_ATEXIT = False
@@ -76,6 +77,7 @@ def _get_spinner_func(name: str) -> Callable | None:
     if _spinner_module_cache[name] is None:
         try:
             from code_puppy.messaging import spinner
+
             _spinner_module_cache["pause_all_spinners"] = spinner.pause_all_spinners
             _spinner_module_cache["resume_all_spinners"] = spinner.resume_all_spinners
         except ImportError:
@@ -92,7 +94,9 @@ MAX_LINE_LENGTH = 256
 
 # Hint appended when a line is truncated (used by _truncate_line)
 # This is exported for test assertions to avoid hardcoding the hint text
-LINE_TRUNCATION_HINT = "... [line truncated, command output too long, try filtering with grep]"
+LINE_TRUNCATION_HINT = (
+    "... [line truncated, command output too long, try filtering with grep]"
+)
 
 # Batch size for shell output emissions to reduce bus overhead
 # Collects multiple lines and emits them together rather than one at a time
@@ -104,9 +108,7 @@ def _truncate_line(line: str) -> str:
     if len(line) > MAX_LINE_LENGTH:
         # ADOPT #6: Better truncation guidance for shell output
         return truncate_with_guidance(
-            line,
-            limit_chars=MAX_LINE_LENGTH,
-            hint=LINE_TRUNCATION_HINT
+            line, limit_chars=MAX_LINE_LENGTH, hint=LINE_TRUNCATION_HINT
         )
     return line
 
@@ -185,8 +187,7 @@ def _validate_forbidden_chars(command: str) -> None:
         ]
         # Format position info clearly
         found_chars = [
-            f"0x{ord(m.group()):02x} at position {m.start()}"
-            for m in matches[:5]
+            f"0x{ord(m.group()):02x} at position {m.start()}" for m in matches[:5]
         ]
         raise CommandValidationError(
             f"Command contains forbidden control characters: {', '.join(found_chars)}"
@@ -236,9 +237,13 @@ def _validate_shlex_parse(command: str) -> None:
         tokens = shlex.split(command, posix=True)
         # shlex.split() already drops whitespace-only tokens, so just check if empty
         if not tokens:
-            raise CommandValidationError("Command contains no valid tokens after parsing")
+            raise CommandValidationError(
+                "Command contains no valid tokens after parsing"
+            )
     except ValueError as e:
-        raise CommandValidationError(f"Command parsing failed (possible malformed input): {e}")
+        raise CommandValidationError(
+            f"Command parsing failed (possible malformed input): {e}"
+        )
 
 
 def validate_shell_command(command: str) -> str:
@@ -964,8 +969,8 @@ def run_shell_command_streaming(
 
     def _emit_stdout_batch():
         """Emit accumulated stdout lines as a batch.
-        
-        CR-L2 fix: Collect lines into buffer, acquire lock once, 
+
+        CR-L2 fix: Collect lines into buffer, acquire lock once,
         emit all buffered lines, release lock.
         """
         if silent:
@@ -983,8 +988,8 @@ def run_shell_command_streaming(
 
     def _emit_stderr_batch():
         """Emit accumulated stderr lines as a batch.
-        
-        CR-L2 fix: Collect lines into buffer, acquire lock once, 
+
+        CR-L2 fix: Collect lines into buffer, acquire lock once,
         emit all buffered lines, release lock.
         """
         if silent:
@@ -1373,9 +1378,25 @@ async def run_shell_command(
     # Handle background execution - runs command detached and returns immediately
     # This happens BEFORE user confirmation since we don't wait for the command
     if background:
+        # SECURITY: Validate command BEFORE creating temp file to avoid resource leak
+        # for invalid commands (defense-in-depth)
+        try:
+            validate_shell_command(command)
+        except CommandValidationError as e:
+            return ShellCommandOutput(
+                success=False,
+                command=command,
+                error=f"Command validation failed: {e}",
+                stdout=None,
+                stderr=None,
+                exit_code=None,
+                execution_time=None,
+                background=True,
+            )
+
         # Respect centralized concurrency controls for background process spawning
         async with ToolCallsLimiter():
-            # Create temp log file for output
+            # Create temp log file for output (only after validation passes)
             log_file = tempfile.NamedTemporaryFile(
                 mode="w",
                 prefix="shell_bg_",
@@ -1385,9 +1406,6 @@ async def run_shell_command(
             log_file_path = log_file.name
 
             try:
-                # SECURITY: Validate command before execution (defense-in-depth)
-                validate_shell_command(command)
-
                 # Platform-specific process detachment
                 if sys.platform.startswith("win"):
                     creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
@@ -1523,7 +1541,9 @@ async def run_shell_command(
 
             # Build panel content
             panel_content = Text()
-            panel_content.append("⚡ Requesting permission to run:\n", style="bold yellow")
+            panel_content.append(
+                "⚡ Requesting permission to run:\n", style="bold yellow"
+            )
             panel_content.append("$ ", style="bold green")
             panel_content.append(command, style="bold white")
 
