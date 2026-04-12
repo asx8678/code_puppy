@@ -19,6 +19,7 @@ from code_puppy.plugins.fast_puppy.builder import (
     _check_disable_autobuild,
     _find_crate_dir,
     _find_repo_root,
+    _get_maturin_command,
     _has_maturin,
     _has_rust_toolchain,
     _is_crate_fresh,
@@ -192,6 +193,85 @@ class TestHasRustToolchain:
         with patch("shutil.which", return_value=None):
             result = _has_rust_toolchain()
             assert result is False
+
+
+class TestGetMaturinCommand:
+    """Tests for _get_maturin_command() uv-priority logic."""
+
+    def test_prefers_uv_run_maturin_when_both_available(self):
+        """When uv and maturin are both in PATH, uv run maturin wins."""
+        with patch(
+            "shutil.which",
+            side_effect=lambda cmd: (
+                f"/usr/local/bin/{cmd}" if cmd in ("uv", "maturin") else None
+            ),
+        ), patch("subprocess.run") as mock_run:
+            # uv run maturin --version succeeds
+            mock_run.return_value = MagicMock(returncode=0)
+            result = _get_maturin_command()
+
+        assert result == ["uv", "run", "maturin"], (
+            f"Expected ['uv', 'run', 'maturin'] when uv works, got {result}"
+        )
+
+    def test_uv_run_fails_falls_back_to_uv_tool_run(self):
+        """When uv run maturin fails but uv tool run maturin works, use that."""
+        uv_run_fail = MagicMock(returncode=1)
+        uv_tool_run_ok = MagicMock(returncode=0)
+
+        with patch(
+            "shutil.which",
+            side_effect=lambda cmd: (
+                f"/usr/local/bin/{cmd}" if cmd == "uv" else None
+            ),
+        ), patch("subprocess.run") as mock_run:
+            mock_run.side_effect = [uv_run_fail, uv_tool_run_ok]
+            result = _get_maturin_command()
+
+        assert result == ["uv", "tool", "run", "maturin"], (
+            f"Expected ['uv', 'tool', 'run', 'maturin'] fallback, got {result}"
+        )
+
+    def test_no_uv_falls_back_to_bare_maturin(self):
+        """When uv is not in PATH, use bare maturin."""
+        with patch(
+            "shutil.which",
+            side_effect=lambda cmd: (
+                "/usr/local/bin/maturin" if cmd == "maturin" else None
+            ),
+        ) as mock_which:
+            result = _get_maturin_command()
+
+        # uv.which("uv") returned None, so shutil.which should've been called
+        assert mock_which.call_count >= 1
+        assert result == ["maturin"], (
+            f"Expected ['maturin'] when only maturin is available, got {result}"
+        )
+
+    def test_nothing_available_falls_back_to_python_module(self):
+        """When neither uv nor maturin is available, use python -m maturin."""
+        with patch("shutil.which", return_value=None):
+            result = _get_maturin_command()
+
+        assert result[1:] == ["-m", "maturin"], (
+            f"Expected [sys.executable, '-m', 'maturin'] as last resort, got {result}"
+        )
+
+    def test_uv_available_but_maturin_not_in_uv_uses_uv_tool_run(self):
+        """When uv is available but 'uv run maturin' fails, try uv tool run."""
+        with patch(
+            "shutil.which",
+            side_effect=lambda cmd: f"/usr/local/bin/{cmd}" if cmd == "uv" else None,
+        ), patch("subprocess.run") as mock_run:
+            # Both uv run and uv tool run fail
+            mock_run.return_value = MagicMock(returncode=1)
+            result = _get_maturin_command()
+
+        # Falls through to bare maturin, which isn't in PATH either,
+        # so falls to python module fallback
+        assert result[1:] == ["-m", "maturin"], (
+            f"Expected python module fallback, got {result}"
+        )
 
 
 class TestHasMaturin:
