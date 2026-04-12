@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "codepp"
-version = "0.0.452"
+version = "0.0.455"
 description = "Code generation agent"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -79,7 +79,21 @@ ignore_no_config = true
 packages = ["code_puppy"]
 
 [tool.hatch.build.targets.wheel]
-include = ["code_puppy/**"]
+# Force-include Rust source directories into the wheel
+# These will be placed at the wheel root alongside code_puppy/
+[tool.hatch.build.targets.wheel.force-include]
+"Cargo.toml" = "Cargo.toml"
+"Cargo.lock" = "Cargo.lock"
+"code_puppy_core/Cargo.toml" = "code_puppy_core/Cargo.toml"
+"code_puppy_core/pyproject.toml" = "code_puppy_core/pyproject.toml"
+"code_puppy_core/src" = "code_puppy_core/src"
+"turbo_ops/Cargo.toml" = "turbo_ops/Cargo.toml"
+"turbo_ops/pyproject.toml" = "turbo_ops/pyproject.toml"
+"turbo_ops/src" = "turbo_ops/src"
+"turbo_parse/Cargo.toml" = "turbo_parse/Cargo.toml"
+"turbo_parse/pyproject.toml" = "turbo_parse/pyproject.toml"
+"turbo_parse/src" = "turbo_parse/src"
+"turbo_parse/queries" = "turbo_parse/queries"
 
 [tool.ruff]
 target-version = "py311"

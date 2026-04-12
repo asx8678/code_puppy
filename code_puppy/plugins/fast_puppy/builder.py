@@ -102,12 +102,16 @@ CRATES = [
 
 
 def _find_repo_root() -> Path | None:
-    """Find the repo root containing Cargo.toml workspace file."""
-    # Start from this file's location and traverse up
+    """Find the repo root containing Cargo.toml workspace file.
+
+    Searches in order:
+    1. Development mode: traverse up from this file to find git checkout
+    2. Wheel install: check if Cargo.toml is bundled with the package
+    """
+    # Strategy 1: Dev mode - traverse up from this file
     current = Path(__file__).resolve().parent
-    for _ in range(5):  # Don't search too far
+    for _ in range(5):
         if (current / "Cargo.toml").exists():
-            # Verify it's a workspace by reading it
             try:
                 content = (current / "Cargo.toml").read_text()
                 if "[workspace]" in content:
@@ -118,6 +122,21 @@ def _find_repo_root() -> Path | None:
         if parent == current:
             break
         current = parent
+
+    # Strategy 2: Wheel install - Rust source bundled with package
+    # The wheel includes Cargo.toml at the package root level
+    try:
+        import code_puppy
+
+        pkg_root = Path(code_puppy.__file__).resolve().parent.parent
+        cargo_path = pkg_root / "Cargo.toml"
+        if cargo_path.exists():
+            content = cargo_path.read_text()
+            if "[workspace]" in content:
+                return pkg_root
+    except Exception:
+        pass
+
     return None
 
 
