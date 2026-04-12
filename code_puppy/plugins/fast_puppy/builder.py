@@ -430,6 +430,51 @@ def _emit_build_heartbeat(
         time.sleep(1.0)
 
 
+def _build_env() -> dict[str, str]:
+    """Build the environment dict for maturin subprocesses.
+
+    Ensures VIRTUAL_ENV is set so maturin can locate the target venv.
+    When running via ``uv run`` or certain entry-points, the parent
+    process may not have VIRTUAL_ENV in its own env even though
+    ``sys.prefix`` points inside a venv.  Maturin relies on this variable
+    to decide where to install the compiled extension.
+    """
+    env = os.environ.copy()
+
+    # If VIRTUAL_ENV is already set, trust it.
+    if env.get("VIRTUAL_ENV"):
+        return env
+
+    # Detect active venv via sys.prefix vs sys.base_prefix.
+    # Inside a venv, sys.prefix points to the venv root while
+    # sys.base_prefix points to the system Python.
+    if sys.prefix != sys.base_prefix:
+        env["VIRTUAL_ENV"] = sys.prefix
+        logger.debug("Set VIRTUAL_ENV=%s for maturin subprocess", sys.prefix)
+    else:
+        # Not in a venv — check for a .venv next to the repo root
+        # or cwd.  This handles cases where the user activated a
+        # venv in a parent shell but the env var didn't propagate.
+        if sys.platform == "win32":
+            python_rel = Path("Scripts") / "python.exe"
+        else:
+            python_rel = Path("bin") / "python"
+
+        for candidate in (
+            Path(sys.prefix).parent / ".venv",
+            Path.cwd() / ".venv",
+        ):
+            if candidate.is_dir() and (candidate / python_rel).exists():
+                env["VIRTUAL_ENV"] = str(candidate)
+                logger.debug(
+                    "Auto-detected VIRTUAL_ENV=%s for maturin subprocess",
+                    candidate,
+                )
+                break
+
+    return env
+
+
 def _build_crate(crate_dir: Path, crate_name: str) -> tuple[bool, str]:
     """Build and install a Rust crate into the current environment.
 
@@ -454,6 +499,8 @@ def _build_crate(crate_dir: Path, crate_name: str) -> tuple[bool, str]:
         str(crate_dir / "Cargo.toml"),
     ]
 
+    build_env = _build_env()
+
     try:
         # Use Popen for heartbeat support on long builds
         proc = subprocess.Popen(
@@ -462,6 +509,7 @@ def _build_crate(crate_dir: Path, crate_name: str) -> tuple[bool, str]:
             stderr=subprocess.PIPE,
             text=True,
             cwd=str(crate_dir),
+            env=build_env,
         )
 
         # Start heartbeat thread for builds >30s

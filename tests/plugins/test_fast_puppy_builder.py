@@ -525,6 +525,98 @@ class TestFullBuildCycle:
             assert isinstance(results[crate_spec["name"]], bool)
 
 
+class TestBuildEnv:
+    """Tests for _build_env() helper — ensures VIRTUAL_ENV is set for maturin."""
+
+    def test_existing_virtual_env_is_preserved(self):
+        """If VIRTUAL_ENV is already in os.environ, _build_env keeps it."""
+        with patch.dict("os.environ", {"VIRTUAL_ENV": "/my/venv", "PATH": "/usr/bin"}):
+            env = _build_env()
+        assert env["VIRTUAL_ENV"] == "/my/venv"
+
+    def test_sets_virtual_env_from_sys_prefix(self):
+        """When sys.prefix != sys.base_prefix (in a venv), sets VIRTUAL_ENV."""
+        with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
+            with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
+                mock_sys.prefix = "/some/.venv"
+                mock_sys.base_prefix = "/usr"
+                env = _build_env()
+        assert env["VIRTUAL_ENV"] == "/some/.venv"
+
+    def test_no_virtual_env_when_not_in_venv(self, tmp_path):
+        """When sys.prefix == sys.base_prefix and no .venv dir, VIRTUAL_ENV is not set."""
+        with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
+            with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
+                mock_sys.prefix = "/usr"
+                mock_sys.base_prefix = "/usr"
+                with patch(
+                    "code_puppy.plugins.fast_puppy.builder.Path.cwd",
+                    return_value=tmp_path,
+                ):
+                    env = _build_env()
+        assert "VIRTUAL_ENV" not in env
+
+    def test_auto_detects_dot_venv_near_cwd(self, tmp_path):
+        """Falls back to detecting .venv in cwd when not in a detected venv."""
+        venv_dir = tmp_path / ".venv"
+        venv_dir.mkdir()
+        bin_dir = venv_dir / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "python").touch()
+
+        with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
+            with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
+                mock_sys.prefix = "/usr"
+                mock_sys.base_prefix = "/usr"
+                mock_sys.platform = "darwin"
+                with patch(
+                    "code_puppy.plugins.fast_puppy.builder.Path.cwd",
+                    return_value=tmp_path,
+                ):
+                    env = _build_env()
+        assert env["VIRTUAL_ENV"] == str(venv_dir)
+
+    def test_auto_detects_dot_venv_windows(self, tmp_path):
+        """On Windows, detects .venv with Scripts/python.exe instead of bin/python."""
+        venv_dir = tmp_path / ".venv"
+        venv_dir.mkdir()
+        scripts_dir = venv_dir / "Scripts"
+        scripts_dir.mkdir()
+        (scripts_dir / "python.exe").touch()
+
+        with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
+            with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
+                mock_sys.prefix = "C:\\Python311"
+                mock_sys.base_prefix = "C:\\Python311"
+                mock_sys.platform = "win32"
+                with patch(
+                    "code_puppy.plugins.fast_puppy.builder.Path.cwd",
+                    return_value=tmp_path,
+                ):
+                    env = _build_env()
+        assert env["VIRTUAL_ENV"] == str(venv_dir)
+
+    def test_windows_ignores_unix_venv(self, tmp_path):
+        """On Windows, a .venv with only bin/python (unix layout) is NOT detected."""
+        venv_dir = tmp_path / ".venv"
+        venv_dir.mkdir()
+        bin_dir = venv_dir / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "python").touch()
+
+        with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
+            with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
+                mock_sys.prefix = "C:\\Python311"
+                mock_sys.base_prefix = "C:\\Python311"
+                mock_sys.platform = "win32"
+                with patch(
+                    "code_puppy.plugins.fast_puppy.builder.Path.cwd",
+                    return_value=tmp_path,
+                ):
+                    env = _build_env()
+        assert "VIRTUAL_ENV" not in env
+
+
 class TestBuildCrateWarningFiltering:
     """Tests for _build_crate() warning filtering behavior.
 
