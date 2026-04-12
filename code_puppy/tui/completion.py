@@ -7,7 +7,7 @@ completion. Shows results in an OptionList overlay above the input.
 import os
 import sys
 from dataclasses import dataclass
-from functools import lru_cache
+from code_puppy.utils.thread_safe_cache import thread_safe_lru_cache
 
 
 # COMP-L1 fix: Add __slots__ for memory efficiency
@@ -46,7 +46,7 @@ else:
 # ---------------------------------------------------------------------------
 
 
-@lru_cache(maxsize=1)
+@thread_safe_lru_cache(maxsize=1)
 def _get_cached_commands():
     """Get commands from registry - cached to avoid per-keystroke lookup."""
     try:
@@ -56,7 +56,7 @@ def _get_cached_commands():
         return []
 
 
-@lru_cache(maxsize=1)
+@thread_safe_lru_cache(maxsize=1)
 def _get_cached_models_config():
     """Get models config from ModelFactory - cached to avoid per-keystroke lookup."""
     try:
@@ -66,7 +66,7 @@ def _get_cached_models_config():
         return {}
 
 
-@lru_cache(maxsize=1)
+@thread_safe_lru_cache(maxsize=1)
 def _get_cached_agents():
     """Get available agents - cached to avoid per-keystroke lookup."""
     try:
@@ -76,7 +76,7 @@ def _get_cached_agents():
         return {}
 
 
-@lru_cache(maxsize=1)
+@thread_safe_lru_cache(maxsize=1)
 def _get_cached_config_keys():
     """Get config keys - cached to avoid per-keystroke lookup."""
     try:

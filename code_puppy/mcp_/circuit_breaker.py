@@ -10,7 +10,7 @@ failures when MCP servers become unhealthy. The circuit breaker has three states
 
 from collections.abc import Callable
 import asyncio
-import functools
+from code_puppy.utils.thread_safe_cache import thread_safe_lru_cache
 import inspect
 import logging
 import time
@@ -21,7 +21,7 @@ from code_puppy.circuit_state import CircuitState
 logger = logging.getLogger(__name__)
 
 # Cache for coroutine function checks (avoids repeated introspection on hot paths)
-@functools.lru_cache(maxsize=128)
+@thread_safe_lru_cache(maxsize=128)
 def _is_coro_func(func: Callable) -> bool:
     """Cached check if a function is a coroutine function."""
     return inspect.iscoroutinefunction(func)
