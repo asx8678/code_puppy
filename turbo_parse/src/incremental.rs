@@ -19,7 +19,7 @@ use pyo3::prelude::*;
 
 /// Describes a text edit for incremental parsing.
 #[cfg(feature = "python")]
-#[pyclass]
+#[pyclass(frozen)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InputEdit {
     /// Byte offset where the edit starts in the old document
@@ -155,7 +155,7 @@ mod python_impl {
 
 /// Serialized tree data used to reconstruct a Tree for incremental parsing.
 #[cfg(feature = "python")]
-#[pyclass]
+#[pyclass(frozen)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializedTree {
     /// The language identifier

@@ -15,7 +15,8 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
+use parking_lot::{Mutex, RwLock};
 
 #[cfg(feature = "dynamic-grammars")]
 use libloading::{Library, Symbol};
@@ -157,13 +158,13 @@ impl DynamicGrammarLoader {
     ///
     /// If set, grammars can only be loaded from these directories and their subdirectories.
     pub fn set_allowed_directories(&self, dirs: Vec<PathBuf>) {
-        let mut allowed = self.allowed_directories.lock().unwrap();
+        let mut allowed = self.allowed_directories.lock();
         *allowed = dirs;
     }
 
     /// Add an allowed directory.
     pub fn add_allowed_directory(&self, dir: PathBuf) {
-        let mut allowed = self.allowed_directories.lock().unwrap();
+        let mut allowed = self.allowed_directories.lock();
         allowed.push(dir);
     }
 
@@ -172,7 +173,7 @@ impl DynamicGrammarLoader {
     /// When true (default), grammars can be loaded from any directory
     /// as long as they pass path traversal validation.
     pub fn set_allow_any_directory(&self, allow: bool) {
-        let mut allow_any = self.allow_any_directory.lock().unwrap();
+        let mut allow_any = self.allow_any_directory.lock();
         *allow_any = allow;
     }
 
@@ -216,8 +217,8 @@ impl DynamicGrammarLoader {
             return false;
         }
 
-        let allowed_dirs = self.allowed_directories.lock().unwrap();
-        let allow_any = self.allow_any_directory.lock().unwrap();
+        let allowed_dirs = self.allowed_directories.lock();
+        let allow_any = self.allow_any_directory.lock();
 
         if *allow_any && allowed_dirs.is_empty() {
             // Allow any directory that passes traversal checks
@@ -298,7 +299,7 @@ impl DynamicGrammarLoader {
 
         // Check if already loaded
         {
-            let grammars = self.grammars.read().unwrap();
+            let grammars = self.grammars.read();
             if grammars.contains_key(name) {
                 return Err(DynamicLoadError::AlreadyRegistered(name.to_string()));
             }
@@ -361,7 +362,7 @@ impl DynamicGrammarLoader {
         };
 
         {
-            let mut grammars = self.grammars.write().unwrap();
+            let mut grammars = self.grammars.write();
             grammars.insert(name.to_string(), Arc::new(loaded));
         }
 
@@ -385,7 +386,7 @@ impl DynamicGrammarLoader {
 
         // Check if already loaded
         {
-            let grammars = self.grammars.read().unwrap();
+            let grammars = self.grammars.read();
             if grammars.contains_key(name) {
                 return Err(DynamicLoadError::AlreadyRegistered(name.to_string()));
             }
@@ -472,7 +473,7 @@ impl DynamicGrammarLoader {
         };
 
         {
-            let mut grammars = self.grammars.write().unwrap();
+            let mut grammars = self.grammars.write();
             grammars.insert(name.to_string(), Arc::new(loaded));
         }
 
@@ -502,7 +503,7 @@ impl DynamicGrammarLoader {
 
     /// Get a loaded grammar by name.
     pub fn get_grammar(&self, name: &str) -> Option<Arc<LoadedGrammar>> {
-        let grammars = self.grammars.read().unwrap();
+        let grammars = self.grammars.read();
         grammars.get(name).cloned()
     }
 
@@ -513,31 +514,31 @@ impl DynamicGrammarLoader {
 
     /// Check if a grammar is loaded.
     pub fn is_loaded(&self, name: &str) -> bool {
-        let grammars = self.grammars.read().unwrap();
+        let grammars = self.grammars.read();
         grammars.contains_key(name)
     }
 
     /// Remove a loaded grammar.
     pub fn unload_grammar(&self, name: &str) -> bool {
-        let mut grammars = self.grammars.write().unwrap();
+        let mut grammars = self.grammars.write();
         grammars.remove(name).is_some()
     }
 
     /// List all loaded dynamic grammars.
     pub fn list_loaded(&self) -> Vec<DynamicGrammarInfo> {
-        let grammars = self.grammars.read().unwrap();
+        let grammars = self.grammars.read();
         grammars.values().map(|g| g.info.clone()).collect()
     }
 
     /// Clear all loaded grammars.
     pub fn clear(&self) {
-        let mut grammars = self.grammars.write().unwrap();
+        let mut grammars = self.grammars.write();
         grammars.clear();
     }
 
     /// Get the number of loaded grammars.
     pub fn count(&self) -> usize {
-        let grammars = self.grammars.read().unwrap();
+        let grammars = self.grammars.read();
         grammars.len()
     }
 }

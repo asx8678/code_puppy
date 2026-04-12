@@ -23,7 +23,7 @@ use crate::registry::{get_language, normalize_language, is_language_supported};
 /// An injection range identifies a region of source code that contains
 /// embedded content in a different language (e.g., SQL inside a Python string).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[pyo3::pyclass]
+#[pyo3::pyclass(frozen)]
 pub struct InjectionRange {
     /// The parent/host language (e.g., "python", "elixir")
     pub parent_language: String,

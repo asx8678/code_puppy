@@ -8,7 +8,8 @@ import re as _re
 import secrets
 import sys
 import time
-from functools import lru_cache
+
+from code_puppy.utils.thread_safe_cache import thread_safe_lru_cache
 from pathlib import Path
 
 from code_puppy.async_utils import run_async_sync
@@ -557,7 +558,7 @@ EXTENSION_TO_LEXER_NAME = {
 }
 
 
-@lru_cache(maxsize=64)
+@thread_safe_lru_cache(maxsize=64)
 def _get_lexer_for_extension(extension: str):
     """Get the appropriate Pygments lexer for a file extension.
 
@@ -584,7 +585,7 @@ def _get_lexer_for_extension(extension: str):
         return TextLexer()
 
 
-@lru_cache(maxsize=256)
+@thread_safe_lru_cache(maxsize=256)
 def _get_token_color(token_type) -> str:
     """Get color for a token type from our Monokai scheme.
 

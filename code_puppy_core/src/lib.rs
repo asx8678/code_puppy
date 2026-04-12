@@ -167,14 +167,16 @@ fn validate_hashline_anchor(idx: u32, line: &str, expected_hash: &str) -> bool {
 
 // ── MessageBatch pyclass ───────────────────────────────────────────────────
 
-#[pyclass]
+use std::sync::Mutex;
+
+#[pyclass(frozen)]
 pub struct MessageBatch {
     messages: Vec<Message>,
-    /// Cached after first process() call
-    per_message_tokens: Option<Vec<i64>>,
-    total_tokens: Option<i64>,
-    message_hashes: Option<Vec<i64>>,
-    context_overhead_tokens: Option<i64>,
+    /// Cached after first process() call — protected by Mutex for thread-safety
+    per_message_tokens: Mutex<Option<Vec<i64>>>,
+    total_tokens: Mutex<Option<i64>>,
+    message_hashes: Mutex<Option<Vec<i64>>>,
+    context_overhead_tokens: Mutex<Option<i64>>,
 }
 
 #[pymethods]
@@ -189,10 +191,10 @@ impl MessageBatch {
 
         Ok(MessageBatch {
             messages: msgs,
-            per_message_tokens: None,
-            total_tokens: None,
-            message_hashes: None,
-            context_overhead_tokens: None,
+            per_message_tokens: Mutex::new(None),
+            total_tokens: Mutex::new(None),
+            message_hashes: Mutex::new(None),
+            context_overhead_tokens: Mutex::new(None),
         })
     }
 
@@ -209,7 +211,7 @@ impl MessageBatch {
     /// Process messages and cache token counts (wraps process_messages_batch logic)
     #[pyo3(signature = (tool_definitions, mcp_tool_definitions, system_prompt))]
     fn process(
-        &mut self,
+        &self,
         tool_definitions: &Bound<'_, PyList>,
         mcp_tool_definitions: &Bound<'_, PyList>,
         system_prompt: &str,
@@ -231,11 +233,11 @@ impl MessageBatch {
                 system_prompt,
             );
 
-        // Cache the results
-        self.per_message_tokens = Some(per_message_tokens.clone());
-        self.total_tokens = Some(total_message_tokens);
-        self.message_hashes = Some(message_hashes.clone());
-        self.context_overhead_tokens = Some(context_overhead);
+        // Cache the results (thread-safe via Mutex)
+        *self.per_message_tokens.lock().unwrap() = Some(per_message_tokens.clone());
+        *self.total_tokens.lock().unwrap() = Some(total_message_tokens);
+        *self.message_hashes.lock().unwrap() = Some(message_hashes.clone());
+        *self.context_overhead_tokens.lock().unwrap() = Some(context_overhead);
 
         Ok(ProcessResult {
             per_message_tokens,
@@ -260,13 +262,15 @@ impl MessageBatch {
     ) -> PyResult<Vec<usize>> {
         let per_message_tokens = self
             .per_message_tokens
-            .as_ref()
+            .lock()
+            .unwrap()
+            .clone()
             .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err(
                 "process() must be called before truncation_indices()"
             ))?;
 
         Ok(truncation_indices_impl(
-            per_message_tokens,
+            &per_message_tokens,
             protected_tokens,
             second_has_thinking,
         ))
@@ -276,13 +280,15 @@ impl MessageBatch {
     fn split_for_summarization(&self, protected_tokens_limit: i64) -> PyResult<SplitResult> {
         let per_message_tokens = self
             .per_message_tokens
-            .as_ref()
+            .lock()
+            .unwrap()
+            .clone()
             .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err(
                 "process() must be called before split_for_summarization()"
             ))?;
 
         Ok(split_for_summarization_core(
-            per_message_tokens,
+            &per_message_tokens,
             &self.messages,
             protected_tokens_limit,
         ))
@@ -290,28 +296,28 @@ impl MessageBatch {
 
     /// Get cached per-message tokens (None if process() not called yet)
     fn get_per_message_tokens(&self) -> Option<Vec<i64>> {
-        self.per_message_tokens.clone()
+        self.per_message_tokens.lock().unwrap().clone()
     }
 
     /// Get cached total tokens (None if process() not called yet)
     fn get_total_tokens(&self) -> Option<i64> {
-        self.total_tokens
+        *self.total_tokens.lock().unwrap()
     }
 
     /// Get cached message hashes (None if process() not called yet)
     fn get_message_hashes(&self) -> Option<Vec<i64>> {
-        self.message_hashes.clone()
+        self.message_hashes.lock().unwrap().clone()
     }
 
     /// Get cached context overhead tokens (None if process() not called yet)
     fn get_context_overhead_tokens(&self) -> Option<i64> {
-        self.context_overhead_tokens
+        *self.context_overhead_tokens.lock().unwrap()
     }
 }
 
 // ── Module registration ─────────────────────────────────────────────────────
 
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ProcessResult>()?;
     m.add_class::<PruneResult>()?;

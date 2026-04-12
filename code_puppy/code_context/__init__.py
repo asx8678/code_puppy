@@ -20,11 +20,14 @@ print(format_outline(outline))
 ```
 """
 
+import threading
+
 from code_puppy.code_context.models import CodeContext, FileOutline, SymbolInfo
 from code_puppy.code_context.explorer import CodeExplorer
 
-# Global explorer instance for module-level functions
-_global_explorer = CodeExplorer(enable_cache=True)
+# Global explorer instance for module-level functions (lazy-init singleton)
+_global_explorer: CodeExplorer | None = None
+_explorer_lock = threading.Lock()
 
 
 def get_code_context(
@@ -66,7 +69,7 @@ def get_code_context(
             error_message=error,
         )
 
-    return _global_explorer.explore_file(file_path, include_content=include_content)
+    return get_explorer_instance().explore_file(file_path, include_content=include_content)
 
 
 def get_file_outline(file_path: str, max_depth: int | None = None) -> FileOutline:
@@ -79,7 +82,7 @@ def get_file_outline(file_path: str, max_depth: int | None = None) -> FileOutlin
     Returns:
         FileOutline with hierarchical symbol structure
     """
-    return _global_explorer.get_outline(file_path, max_depth)
+    return get_explorer_instance().get_outline(file_path, max_depth)
 
 
 def explore_directory(
@@ -99,7 +102,7 @@ def explore_directory(
     Returns:
         List of CodeContext objects
     """
-    return _global_explorer.explore_directory(directory, pattern, recursive, max_files)
+    return get_explorer_instance().explore_directory(directory, pattern, recursive, max_files)
 
 
 def format_outline(outline: FileOutline, show_lines: bool = True) -> str:
@@ -187,7 +190,12 @@ def enhance_read_file_result(
 
 
 def get_explorer_instance() -> CodeExplorer:
-    """Get the global CodeExplorer instance."""
+    """Get the global CodeExplorer singleton (double-checked locking)."""
+    global _global_explorer
+    if _global_explorer is None:
+        with _explorer_lock:
+            if _global_explorer is None:
+                _global_explorer = CodeExplorer(enable_cache=True)
     return _global_explorer
 
 

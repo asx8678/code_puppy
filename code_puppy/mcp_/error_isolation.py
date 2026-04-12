@@ -11,6 +11,7 @@ import asyncio
 import functools
 import inspect
 import logging
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -401,6 +402,7 @@ class QuarantinedServerError(Exception):
 
 
 # Global isolator instance
+_isolator_lock = threading.Lock()
 _isolator_instance: MCPErrorIsolator | None = None
 
 
@@ -413,5 +415,7 @@ def get_error_isolator() -> MCPErrorIsolator:
     """
     global _isolator_instance
     if _isolator_instance is None:
-        _isolator_instance = MCPErrorIsolator()
+        with _isolator_lock:
+            if _isolator_instance is None:
+                _isolator_instance = MCPErrorIsolator()
     return _isolator_instance

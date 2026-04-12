@@ -6,10 +6,12 @@ Tests focus on:
 - get_mcp_manager() singleton pattern
 - Server lifecycle (start/stop)
 - Error handling for server failures
+- Thread safety for singleton initialization
 
 Uses simple mocking to keep tests focused and maintainable.
 """
 
+import threading
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -756,3 +758,138 @@ class TestMCPManagerExtended:
 
             assert server_config.name == "server1"
             assert server_config.type == "stdio"
+
+
+class TestMCPManagerThreadSafety:
+    """Thread safety tests for MCPManager singleton."""
+
+    def setup_method(self):
+        """Reset singleton before each test."""
+        import code_puppy.mcp_.manager
+
+        code_puppy.mcp_.manager._manager_instance = None
+
+    def test_get_mcp_manager_thread_safe(self):
+        """
+        Test that get_mcp_manager() is thread-safe.
+
+        Creates 8 threads that all call get_mcp_manager() simultaneously
+        and verifies they all receive the same instance.
+        """
+        import code_puppy.mcp_.manager
+
+        # Reset singleton to ensure test is valid
+        code_puppy.mcp_.manager._manager_instance = None
+
+        results = []
+        errors = []
+        barrier = threading.Barrier(8)  # Synchronize thread starts
+
+        def get_manager_and_record():
+            try:
+                # Wait for all threads to be ready
+                barrier.wait(timeout=5)
+                # All threads call get_mcp_manager() simultaneously
+                mgr = get_mcp_manager()
+                results.append((threading.current_thread().name, id(mgr)))
+            except Exception as e:
+                errors.append((threading.current_thread().name, str(e)))
+
+        # Create 8 threads
+        threads = []
+        for i in range(8):
+            t = threading.Thread(
+                target=get_manager_and_record, name=f"test-thread-{i}"
+            )
+            threads.append(t)
+
+        # Start all threads
+        for t in threads:
+            t.start()
+
+        # Wait for all to complete
+        for t in threads:
+            t.join(timeout=10)
+
+        # Assert no errors occurred
+        assert len(errors) == 0, f"Thread errors occurred: {errors}"
+
+        # Assert we got 8 results
+        assert len(results) == 8, f"Expected 8 results, got {len(results)}"
+
+        # All threads must have received the same instance (same id)
+        first_id = results[0][1]
+        for thread_name, instance_id in results:
+            assert instance_id == first_id, (
+                f"Thread {thread_name} got different instance id: {instance_id} "
+                f"vs expected {first_id}. Singleton pattern is not thread-safe!"
+            )
+
+        # Verify the singleton is the same as what threads got
+        assert id(get_mcp_manager()) == first_id
+
+    def test_get_mcp_manager_concurrent_with_mock(self):
+        """
+        Concurrency test with mocked MCPManager to avoid side effects.
+
+        Uses threading.Event to synchronize threads as an alternative to Barrier.
+        """
+        import code_puppy.mcp_.manager
+
+        # Reset singleton
+        code_puppy.mcp_.manager._manager_instance = None
+
+        # Mock the initialization to track calls
+        init_calls = []
+        original_init = MCPManager.__init__
+
+        def mock_init(self):
+            init_calls.append(threading.current_thread().name)
+            # Don't call original to avoid side effects
+            # Just set minimal required attributes
+            self.registry = Mock()
+            self.status_tracker = Mock()
+            self._managed_servers = {}
+            self._pending_start_tasks = {}
+            self._pending_stop_tasks = {}
+
+        # Replace __init__ temporarily
+        with patch.object(MCPManager, "__init__", mock_init):
+            results = []
+            start_event = threading.Event()
+
+            def get_and_record():
+                # Wait for signal to start
+                start_event.wait(timeout=5)
+                mgr = get_mcp_manager()
+                results.append(id(mgr))
+
+            # Create threads
+            threads = [threading.Thread(target=get_and_record) for _ in range(10)]
+
+            # Start threads (they'll wait on the event)
+            for t in threads:
+                t.start()
+
+            # Let some time pass to ensure threads are waiting
+            import time
+            time.sleep(0.05)
+
+            # Signal all threads to proceed simultaneously
+            start_event.set()
+
+            # Wait for completion
+            for t in threads:
+                t.join(timeout=10)
+
+            # All results should be the same (singleton)
+            assert len(results) == 10
+            assert len(set(results)) == 1, (
+                f"Expected all threads to get same instance, got {set(results)}"
+            )
+
+            # The singleton should have been initialized only once
+            assert len(init_calls) == 1, (
+                f"Expected MCPManager.__init__ to be called once, "
+                f"but was called {len(init_calls)} times by: {init_calls}"
+            )

@@ -30,6 +30,7 @@ This is part of an epic to move security enforcement into the core (code_puppy-v
 """
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -290,36 +291,44 @@ class SecurityBoundary:
         self._block_count = 0
 
 
-# Global singleton instance
+# Global singleton instance (thread-safe via double-checked locking)
+_security_lock = threading.Lock()
 _security_boundary: SecurityBoundary | None = None
 
 
 def get_security_boundary() -> SecurityBoundary:
     """Get the global SecurityBoundary instance.
-    
+
+    Uses double-checked locking to prevent race conditions that could
+    create duplicate boundaries with inconsistent policies.
+
     Returns:
         The singleton SecurityBoundary instance
     """
     global _security_boundary
     if _security_boundary is None:
-        _security_boundary = SecurityBoundary()
+        with _security_lock:
+            if _security_boundary is None:
+                _security_boundary = SecurityBoundary()
     return _security_boundary
 
 
 def set_security_boundary(boundary: SecurityBoundary) -> None:
     """Set a custom SecurityBoundary instance (mainly for testing).
-    
+
     Args:
         boundary: The SecurityBoundary instance to use
     """
     global _security_boundary
-    _security_boundary = boundary
+    with _security_lock:
+        _security_boundary = boundary
 
 
 def reset_security_boundary() -> None:
     """Reset the global SecurityBoundary instance.
-    
+
     This is mainly useful for testing to ensure clean state.
     """
     global _security_boundary
-    _security_boundary = None
+    with _security_lock:
+        _security_boundary = None
