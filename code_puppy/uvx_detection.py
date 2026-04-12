@@ -183,6 +183,9 @@ def _is_uvx_in_chain(chain: list[str]) -> bool:
     return any(name in uvx_names for name in chain)
 
 
+# NOTE: Uses standard @lru_cache (not thread-safe version) because this is
+# called exactly once at startup, before any threads are spawned. Safe because
+# the result is computed and stored before concurrent access can occur.
 @lru_cache(maxsize=1)
 def is_launched_via_uvx() -> bool:
     """Detect if code-puppy was launched via uvx.
