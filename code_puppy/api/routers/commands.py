@@ -8,6 +8,9 @@ This router provides REST endpoints for:
 """
 
 import asyncio
+import os
+import signal
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -63,6 +66,128 @@ class AutocompleteResponse(BaseModel):
     """Response with autocomplete suggestions."""
 
     suggestions: list[str]
+
+
+# =============================================================================
+# Subprocess-based command execution with proper timeout handling
+# =============================================================================
+
+
+def _kill_process_tree(pid: int) -> None:
+    """Kill a process and all its children.
+
+    Sends SIGTERM first (graceful), then SIGKILL if needed.
+
+    Args:
+        pid: Process ID to kill.
+    """
+    try:
+        # Try to kill the entire process group
+        try:
+            pgid = os.getpgid(pid)
+            os.killpg(pgid, signal.SIGTERM)
+        except (ProcessLookupError, OSError):
+            # Process already gone, or no process group
+            pass
+
+        # Kill the main process
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except (ProcessLookupError, OSError):
+            pass  # Already gone
+
+    except Exception:
+        # Last resort - try SIGKILL on process group
+        try:
+            pgid = os.getpgid(pid)
+            os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            pass
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            pass
+
+
+async def _execute_command_in_subprocess(command: str, timeout: float) -> tuple[bool, Any, str | None]:
+    """Execute a command in a separate subprocess with proper timeout and kill support.
+
+    This runs the command handler in a subprocess using asyncio.create_subprocess_exec,
+    which allows us to properly terminate the subprocess on timeout. This solves
+    the issue where asyncio.wait_for with run_in_executor leaves threads running.
+
+    Args:
+        command: The command string to execute (e.g., "/help").
+        timeout: Maximum time to wait in seconds.
+
+    Returns:
+        Tuple of (success, result, error).
+    """
+    # Create a Python script that runs the command and outputs JSON result
+    script = f'''
+import json
+import sys
+sys.path.insert(0, {repr(os.getcwd())})
+
+from code_puppy.command_line.command_handler import handle_command
+
+try:
+    result = handle_command({repr(command)})
+    print(json.dumps({{"status": "success", "result": result, "error": None}}))
+except Exception as e:
+    print(json.dumps({{"status": "error", "result": None, "error": str(e)}}))
+'''
+
+    # Run the script in a subprocess with its own process group
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable, "-c", script,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        start_new_session=True,  # Create new process group for clean termination
+    )
+
+    try:
+        # Wait for completion with timeout
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(),
+            timeout=timeout,
+        )
+
+        if proc.returncode != 0:
+            error_msg = stderr.decode().strip() or f"Process exited with code {proc.returncode}"
+            return (False, None, error_msg)
+
+        # Parse the JSON result
+        import json
+        try:
+            output = stdout.decode().strip().split('\n')[-1]  # Last line has JSON
+            data = json.loads(output)
+            if data["status"] == "success":
+                return (True, data["result"], None)
+            else:
+                return (False, None, data["error"])
+        except (json.JSONDecodeError, IndexError, KeyError) as e:
+            return (False, None, f"Failed to parse command output: {e}")
+
+    except asyncio.TimeoutError:
+        # Kill the process tree on timeout
+        _kill_process_tree(proc.pid)
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        await proc.wait()
+        return (False, None, f"Command timed out after {timeout}s")
+
+    except asyncio.CancelledError:
+        # Parent task cancelled - also kill the process
+        _kill_process_tree(proc.pid)
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        await proc.wait()
+        raise
 
 
 # =============================================================================
@@ -134,8 +259,9 @@ async def execute_command(request: CommandExecuteRequest) -> CommandExecuteRespo
     """Execute a slash command.
 
     Takes a command string (with or without leading /) and executes it
-    using the command handler. Runs in a thread pool to avoid blocking
-    the event loop, with a timeout to prevent hangs.
+    using the command handler. Runs in a subprocess (not thread) to enable
+    proper cancellation on timeout - the process is killed if it exceeds
+    the timeout.
 
     Args:
         request: CommandExecuteRequest with the command to execute.
@@ -143,27 +269,14 @@ async def execute_command(request: CommandExecuteRequest) -> CommandExecuteRespo
     Returns:
         CommandExecuteResponse: Result of command execution.
     """
-    from code_puppy.command_line.command_handler import handle_command
-
     command = request.command
     if not command.startswith("/"):
         command = "/" + command
 
-    loop = asyncio.get_running_loop()
-
-    try:
-        # Run blocking command in thread pool with timeout
-        result = await asyncio.wait_for(
-            loop.run_in_executor(_executor, handle_command, command),
-            timeout=COMMAND_TIMEOUT,
-        )
-        return CommandExecuteResponse(success=True, result=result)
-    except asyncio.TimeoutError:
-        return CommandExecuteResponse(
-            success=False, error=f"Command timed out after {COMMAND_TIMEOUT}s"
-        )
-    except Exception as e:
-        return CommandExecuteResponse(success=False, error=str(e))
+    success, result, error = await _execute_command_in_subprocess(
+        command, COMMAND_TIMEOUT
+    )
+    return CommandExecuteResponse(success=success, result=result, error=error)
 
 
 @router.post("/autocomplete")
