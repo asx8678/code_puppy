@@ -91,7 +91,9 @@ async def on_stream_event(
             },
             session_id=agent_session_id,
         )
-        logger.debug(f"Emitted stream_event: {event_type} (session_id={agent_session_id})")
+        logger.debug(
+            f"Emitted stream_event: {event_type} (session_id={agent_session_id})"
+        )
     except Exception as e:
         logger.error(f"Failed to emit stream_event: {e}")
 
@@ -116,7 +118,9 @@ async def on_invoke_agent(*args: Any, **kwargs: Any) -> None:
             ),
         }
         emit_event("agent_invoked", agent_info, session_id=session_id)
-        logger.debug(f"Emitted agent_invoked: {agent_info.get('agent_name')} (session_id={session_id})")
+        logger.debug(
+            f"Emitted agent_invoked: {agent_info.get('agent_name')} (session_id={session_id})"
+        )
     except Exception as e:
         logger.error(f"Failed to emit invoke_agent event: {e}")
 
