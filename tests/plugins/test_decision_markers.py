@@ -3,8 +3,11 @@
 from pathlib import Path
 
 from code_puppy.plugins.repo_compass.decision_markers import (
+    _CSTYLE_MARKER_PATTERNS,
+    _HASH_MARKER_PATTERNS,
     DecisionMarker,
     _get_context_lines,
+    _get_patterns_for_file,
     _is_inside_string,
     _scan_file,
     scan_decision_markers,
@@ -129,6 +132,8 @@ class TestScanFile:
         assert len(markers) == 1
         assert markers[0].marker_type == "WHY"
         assert markers[0].line_number == 1
+        assert "# WHY:" in markers[0].text
+        assert "//" not in markers[0].text  # Must be hash-style, not c-style
 
     def test_detect_decision_marker(self, tmp_path: Path):
         """Should detect # DECISION: marker."""
@@ -142,6 +147,8 @@ class TestScanFile:
 
         assert len(markers) == 1
         assert markers[0].marker_type == "DECISION"
+        assert "# DECISION:" in markers[0].text
+        assert "//" not in markers[0].text  # Must be hash-style
 
     def test_detect_tradeoff_marker(self, tmp_path: Path):
         """Should detect # TRADEOFF: marker."""
@@ -155,6 +162,8 @@ class TestScanFile:
 
         assert len(markers) == 1
         assert markers[0].marker_type == "TRADEOFF"
+        assert "# TRADEOFF:" in markers[0].text
+        assert "//" not in markers[0].text  # Must be hash-style
 
     def test_detect_adr_marker(self, tmp_path: Path):
         """Should detect # ADR: marker."""
@@ -167,6 +176,8 @@ class TestScanFile:
 
         assert len(markers) == 1
         assert markers[0].marker_type == "ADR"
+        assert "# ADR:" in markers[0].text
+        assert "//" not in markers[0].text  # Must be hash-style
 
     def test_detect_hack_marker(self, tmp_path: Path):
         """Should detect # HACK(...) marker."""
@@ -180,6 +191,8 @@ class TestScanFile:
 
         assert len(markers) == 1
         assert markers[0].marker_type == "HACK"
+        assert "# HACK(" in markers[0].text
+        assert "//" not in markers[0].text  # Must be hash-style
 
     def test_multiple_markers(self, tmp_path: Path):
         """Should detect multiple markers in same file."""
@@ -380,7 +393,7 @@ class TestScanDecisionMarkers:
         assert markers[0].path == "code.py"
 
     def test_scans_various_extensions(self, tmp_path: Path):
-        """Should scan various source file extensions."""
+        """Should scan various source file extensions with correct pattern."""
         (tmp_path / "test.js").write_text("// WHY: javascript\n", encoding="utf-8")
         (tmp_path / "test.ts").write_text("// WHY: typescript\n", encoding="utf-8")
         (tmp_path / "test.rs").write_text("// WHY: rust\n", encoding="utf-8")
@@ -391,6 +404,18 @@ class TestScanDecisionMarkers:
 
         # Should find all source files (they all contain markers)
         assert len(markers) == 5
+
+        # Verify correct pattern style matched per file extension
+        by_path = {m.path: m for m in markers}
+        for cstyle in ["test.js", "test.ts", "test.rs", "test.go"]:
+            assert cstyle in by_path, f"Missing marker for {cstyle}"
+            assert "// WHY:" in by_path[cstyle].text, (
+                f"C-style pattern not matched in {cstyle}"
+            )
+            assert "#" not in by_path[cstyle].text or "//" in by_path[cstyle].text
+        assert "test.rb" in by_path
+        assert "# WHY:" in by_path["test.rb"].text
+        assert "//" not in by_path["test.rb"].text  # Ruby uses hash-style
 
     def test_handles_permission_error_gracefully(self, tmp_path: Path):
         """Should handle permission errors gracefully."""
@@ -414,3 +439,153 @@ class TestScanDecisionMarkers:
         # All three variations should match
         assert len(markers) == 3
         assert all(m.marker_type == "WHY" for m in markers)
+
+
+class TestGetPatternsForFile:
+    """Tests verifying _get_patterns_for_file selects the correct pattern set."""
+
+    def test_python_gets_hash_patterns(self, tmp_path: Path):
+        """Python files must use hash-style patterns."""
+        patterns = _get_patterns_for_file(tmp_path / "app.py")
+        assert patterns is _HASH_MARKER_PATTERNS
+        assert patterns is not _CSTYLE_MARKER_PATTERNS
+
+    def test_ruby_gets_hash_patterns(self, tmp_path: Path):
+        """Ruby files must use hash-style patterns."""
+        patterns = _get_patterns_for_file(tmp_path / "app.rb")
+        assert patterns is _HASH_MARKER_PATTERNS
+        assert patterns is not _CSTYLE_MARKER_PATTERNS
+
+    def test_javascript_gets_cstyle_patterns(self, tmp_path: Path):
+        """JavaScript files must use c-style patterns."""
+        patterns = _get_patterns_for_file(tmp_path / "app.js")
+        assert patterns is _CSTYLE_MARKER_PATTERNS
+        assert patterns is not _HASH_MARKER_PATTERNS
+
+    def test_typescript_gets_cstyle_patterns(self, tmp_path: Path):
+        """TypeScript files must use c-style patterns."""
+        patterns = _get_patterns_for_file(tmp_path / "app.ts")
+        assert patterns is _CSTYLE_MARKER_PATTERNS
+
+    def test_rust_gets_cstyle_patterns(self, tmp_path: Path):
+        """Rust files must use c-style patterns."""
+        patterns = _get_patterns_for_file(tmp_path / "app.rs")
+        assert patterns is _CSTYLE_MARKER_PATTERNS
+
+    def test_go_gets_cstyle_patterns(self, tmp_path: Path):
+        """Go files must use c-style patterns."""
+        patterns = _get_patterns_for_file(tmp_path / "app.go")
+        assert patterns is _CSTYLE_MARKER_PATTERNS
+
+    def test_java_gets_cstyle_patterns(self, tmp_path: Path):
+        """Java files must use c-style patterns."""
+        patterns = _get_patterns_for_file(tmp_path / "App.java")
+        assert patterns is _CSTYLE_MARKER_PATTERNS
+
+    def test_c_gets_cstyle_patterns(self, tmp_path: Path):
+        """C files must use c-style patterns."""
+        patterns = _get_patterns_for_file(tmp_path / "main.c")
+        assert patterns is _CSTYLE_MARKER_PATTERNS
+
+    def test_cpp_gets_cstyle_patterns(self, tmp_path: Path):
+        """C++ files must use c-style patterns."""
+        patterns = _get_patterns_for_file(tmp_path / "main.cpp")
+        assert patterns is _CSTYLE_MARKER_PATTERNS
+
+    def test_header_gets_cstyle_patterns(self, tmp_path: Path):
+        """C/C++ header files must use c-style patterns."""
+        for ext in [".h", ".hpp"]:
+            patterns = _get_patterns_for_file(tmp_path / f"header{ext}")
+            assert patterns is _CSTYLE_MARKER_PATTERNS
+
+
+class TestPatternCrossRejection:
+    """Tests verifying that wrong comment style does NOT match."""
+
+    def test_hash_markers_rejected_in_cstyle_files(self, tmp_path: Path):
+        """Hash-style markers must NOT be detected in c-style files."""
+        file = tmp_path / "app.js"
+        file.write_text("# WHY: this is a hash comment in JS\n", encoding="utf-8")
+
+        markers = _scan_file(file, tmp_path)
+        assert markers == [], "Hash-style pattern must not match in .js files"
+
+    def test_cstyle_markers_rejected_in_hash_files(self, tmp_path: Path):
+        """C-style markers must NOT be detected in hash-style files."""
+        file = tmp_path / "app.py"
+        file.write_text(
+            "// WHY: this is a c-style comment in Python\n", encoding="utf-8"
+        )
+
+        markers = _scan_file(file, tmp_path)
+        assert markers == [], "C-style pattern must not match in .py files"
+
+    def test_all_hash_marker_types_rejected_in_js(self, tmp_path: Path):
+        """All hash-style marker types must be rejected in JS files."""
+        file = tmp_path / "app.js"
+        file.write_text(
+            "# WHY: nope\n"
+            "# DECISION: nope\n"
+            "# TRADEOFF: nope\n"
+            "# ADR: nope\n"
+            "# HACK(x): nope\n",
+            encoding="utf-8",
+        )
+
+        markers = _scan_file(file, tmp_path)
+        assert markers == [], "All hash-style markers must be rejected in .js"
+
+    def test_all_cstyle_marker_types_rejected_in_py(self, tmp_path: Path):
+        """All c-style marker types must be rejected in Python files."""
+        file = tmp_path / "app.py"
+        file.write_text(
+            "// WHY: nope\n"
+            "// DECISION: nope\n"
+            "// TRADEOFF: nope\n"
+            "// ADR: nope\n"
+            "// HACK(x): nope\n",
+            encoding="utf-8",
+        )
+
+        markers = _scan_file(file, tmp_path)
+        assert markers == [], "All c-style markers must be rejected in .py"
+
+    def test_cstyle_decisions_match_in_rust(self, tmp_path: Path):
+        """C-style DECISION and TRADEOFF patterns must match in Rust files."""
+        file = tmp_path / "lib.rs"
+        file.write_text(
+            "// DECISION: using tokio runtime\n// TRADEOFF: latency vs throughput\n",
+            encoding="utf-8",
+        )
+
+        markers = _scan_file(file, tmp_path)
+        assert len(markers) == 2
+        assert all("//" in m.text for m in markers)
+        assert all("#" not in m.text for m in markers)
+
+    def test_hash_hack_rejected_in_go(self, tmp_path: Path):
+        """Hash-style HACK must be rejected in Go files."""
+        file = tmp_path / "main.go"
+        file.write_text("# HACK(quick): temp fix\n", encoding="utf-8")
+
+        markers = _scan_file(file, tmp_path)
+        assert markers == []
+
+    def test_cstyle_adr_rejected_in_ruby(self, tmp_path: Path):
+        """C-style ADR must be rejected in Ruby files."""
+        file = tmp_path / "app.rb"
+        file.write_text("// ADR: postgres choice\n", encoding="utf-8")
+
+        markers = _scan_file(file, tmp_path)
+        assert markers == []
+
+    def test_pattern_set_sizes_match(self):
+        """Hash and c-style pattern sets must cover the same marker types."""
+        hash_types = {t for _, t in _HASH_MARKER_PATTERNS}
+        cstyle_types = {t for _, t in _CSTYLE_MARKER_PATTERNS}
+        assert hash_types == cstyle_types, (
+            f"Pattern type mismatch: hash={hash_types} vs cstyle={cstyle_types}"
+        )
+        assert len(_HASH_MARKER_PATTERNS) == len(_CSTYLE_MARKER_PATTERNS), (
+            "Both pattern sets must have the same number of entries"
+        )
