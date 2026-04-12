@@ -163,13 +163,17 @@ class TestSecurityBoundaryFileAccess:
             ".env.staging",
             ".env.test",
             ".env.ci",
-            ".env.example",
             ".env.backup",
         ]
         for variant in env_variants:
             assert _is_sensitive_path(f"/myproject/{variant}"), f"{variant} should be blocked"
             assert _is_sensitive_path(f"./{variant}"), f"{variant} in current dir should be blocked"
             assert _is_sensitive_path(f"/var/www/app/{variant}"), f"{variant} in web dir should be blocked"
+
+        # Test .env documentation files are ALLOWED (not sensitive)
+        allowed_docs = [".env.example", ".env.sample", ".env.template"]
+        for doc in allowed_docs:
+            assert not _is_sensitive_path(f"/myproject/{doc}"), f"{doc} should be ALLOWED"
 
         # Case-insensitive check for .env variants
         assert _is_sensitive_path("/app/.ENV.LOCAL"), ".ENV.LOCAL should be blocked (case-insensitive)"

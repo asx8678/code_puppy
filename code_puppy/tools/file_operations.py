@@ -140,10 +140,11 @@ _SENSITIVE_EXACT_FILES = frozenset(
 
 # SECURITY FIX b26: Also block project-local .env files anywhere
 # Block .env and .env.* variants (.env.local, .env.production, etc.)
+# BUT allow .env.example, .env.sample, .env.template (safe documentation files)
 _SENSITIVE_FILENAMES = frozenset({".env"})
-_SENSITIVE_FILENAME_PREFIXES = frozenset(
-    {".env."}
-)  # Catches .env.local, .env.production, etc.
+# Catches .env.local, .env.production, etc. but allows .env.example/.sample/.template
+_ALLOWED_ENV_PATTERNS = frozenset({".env.example", ".env.sample", ".env.template"})
+_SENSITIVE_FILENAME_PREFIXES = frozenset({".env."})
 
 _SENSITIVE_EXTENSIONS = frozenset({".pem", ".key", ".p12", ".pfx", ".keystore"})
 
@@ -604,7 +605,10 @@ def _is_sensitive_path(file_path: str) -> bool:
     if basename in _SENSITIVE_FILENAMES:
         return True
     # Block .env.* variants (lowercase comparison for case-insensitive match)
+    # BUT allow .env.example, .env.sample, .env.template (safe documentation)
     basename_lower = basename.lower()
+    if basename_lower in _ALLOWED_ENV_PATTERNS:
+        return False  # Explicitly allow these safe documentation files
     if any(
         basename_lower.startswith(prefix) for prefix in _SENSITIVE_FILENAME_PREFIXES
     ):
