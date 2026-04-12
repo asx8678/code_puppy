@@ -86,7 +86,7 @@ def sample_claude_tokens():
     }
 
 
-@pytest.mark.serial
+@pytest.mark.xdist_group("oauth-server")
 class TestOAuthFlowIntegration:
     """Integration tests for OAuth flow components.
 
@@ -600,7 +600,7 @@ class TestOAuthErrorRecovery:
         assert "refresh_token" in tokens
 
 
-@pytest.mark.serial
+@pytest.mark.xdist_group("oauth-server")
 class TestOAuthConcurrencyAndThreading:
     """Test OAuth behavior under concurrent access.
 

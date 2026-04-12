@@ -59,7 +59,7 @@ def mock_tokens_data():
     }
 
 
-@pytest.mark.serial
+@pytest.mark.xdist_group("oauth-server")
 class TestOAuthServer:
     """Test cases for _OAuthServer class.
 
@@ -286,7 +286,7 @@ class TestOAuthServer:
             server.server_close()
 
 
-@pytest.mark.serial
+@pytest.mark.xdist_group("oauth-server")
 class TestCallbackHandler:
     """Test cases for _CallbackHandler class.
 
@@ -570,7 +570,7 @@ class TestCallbackHandler:
             assert mock_thread.call_args[1]["daemon"] is True
 
 
-@pytest.mark.serial
+@pytest.mark.xdist_group("oauth-server")
 class TestRunOAuthFlow:
     """Test cases for run_oauth_flow function.
 
@@ -891,7 +891,7 @@ class TestTokenDataAndAuthBundle:
         assert bundle.last_refresh == "2023-01-01T00:00:00Z"
 
 
-@pytest.mark.serial
+@pytest.mark.xdist_group("oauth-server")
 class TestShutdownAfterDelay:
     """Test _shutdown_after_delay inner function.
 
@@ -925,7 +925,7 @@ class TestShutdownAfterDelay:
         handler._shutdown.assert_called_once()
 
 
-@pytest.mark.serial
+@pytest.mark.xdist_group("oauth-server")
 class TestRunOAuthFlowBrowserPaths:
     """Test browser-related paths in run_oauth_flow.
 

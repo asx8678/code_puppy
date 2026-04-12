@@ -63,7 +63,7 @@ def sample_token_data():
 # ============================================================================
 
 
-@pytest.mark.serial
+@pytest.mark.xdist_group("oauth-server")
 class TestOAuthFlow:
     """Test OAuth flow URL generation and code exchange."""
 
@@ -203,7 +203,7 @@ class TestOAuthFlow:
 # ============================================================================
 
 
-@pytest.mark.serial
+@pytest.mark.xdist_group("oauth-server")
 class TestOAuthServer:
     """Test OAuth server initialization and operations."""
 
@@ -312,7 +312,7 @@ class TestOAuthServer:
 # ============================================================================
 
 
-@pytest.mark.serial
+@pytest.mark.xdist_group("oauth-server")
 class TestCallbackHandler:
     """Test OAuth callback HTTP handling."""
 
