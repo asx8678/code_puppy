@@ -317,7 +317,7 @@ impl MessageBatch {
 
 // ── Module registration ─────────────────────────────────────────────────────
 
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ProcessResult>()?;
     m.add_class::<PruneResult>()?;
