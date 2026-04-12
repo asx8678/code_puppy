@@ -10,6 +10,7 @@ import os
 import signal
 import struct
 import sys
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -441,11 +442,26 @@ class PTYManager:
 
 # Global PTY manager instance
 _pty_manager: PTYManager | None = None
+_pty_manager_lock = threading.Lock()
 
 
 def get_pty_manager() -> PTYManager:
-    """Get or create the global PTY manager instance."""
+    """Get or create the global PTY manager singleton.
+
+    Thread-safe. Creates the manager on first call.
+
+    Uses double-checked locking pattern to minimize contention:
+    - First check (no lock): Fast path for already-initialized manager
+    - Second check (with lock): Thread-safe initialization
+
+    Returns:
+        The global PTYManager instance.
+    """
     global _pty_manager
-    if _pty_manager is None:
-        _pty_manager = PTYManager()
+
+    if _pty_manager is None:  # First check (no lock)
+        with _pty_manager_lock:
+            if _pty_manager is None:  # Second check (with lock)
+                _pty_manager = PTYManager()
+
     return _pty_manager
