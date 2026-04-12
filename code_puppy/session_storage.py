@@ -15,7 +15,6 @@ import json
 import os
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from queue import Queue, Full
 
 # SECURITY FIX #zvx9: Pickle has been completely removed to prevent RCE attacks.
 # Session files now use only secure JSON serialization with HMAC integrity.
@@ -26,12 +25,9 @@ from pathlib import Path
 from typing import Any
 
 # ----- ThreadPoolExecutor for async autosave -----
-# Single-threaded executor for background session saves to avoid blocking the main thread
-# ISSUE zn8 FIX: Bounded pending queue (maxsize=4) with coalescing to prevent unbounded growth.
+# Single-threaded executor for background session saves to avoid blocking the main thread.
+# The executor's internal work queue provides sufficient backpressure with max_workers=1.
 _autosave_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="autosave")
-
-# Pending save queue with maxsize=4 for bounded memory usage
-_pending_save_queue: Queue = Queue(maxsize=4)
 
 
 def _autosave_shutdown():
@@ -62,10 +58,9 @@ def save_session_async(
 ) -> None:
     """Non-blocking version of save_session that submits to thread pool.
 
-    ISSUE zn8 FIXES:
+    FIXES:
     1. Snapshot list(history) at submit to prevent closure pinning mutable history.
-    2. Bounded pending queue (maxsize=4) with coalescing - oldest dropped if full.
-    3. atexit.register(_autosave_shutdown) ensures data is flushed on exit.
+    2. atexit.register(_autosave_shutdown) ensures data is flushed on exit.
 
     This function immediately returns and performs the actual save operation
     in a background thread, preventing file I/O from blocking the main thread.
@@ -76,18 +71,6 @@ def save_session_async(
     # caller modifies the history list after calling this function.
     history_snapshot = list(history)
     compacted_hashes_snapshot = list(compacted_hashes) if compacted_hashes is not None else None
-
-    # Try to add to bounded queue; if full, drop oldest (coalescing strategy).
-    # This prevents unbounded memory growth during rapid auto-save bursts.
-    try:
-        _pending_save_queue.put_nowait((session_name, timestamp))
-    except Full:
-        # Queue is full, drop oldest item to make room (coalescing).
-        try:
-            _pending_save_queue.get_nowait()
-            _pending_save_queue.put_nowait((session_name, timestamp))
-        except Exception:
-            pass  # Best effort; continue even if queue operations fail
 
     def _do_save():
         try:
