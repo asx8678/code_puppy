@@ -1,4 +1,5 @@
 import ast
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,22 +33,20 @@ class FileSummary:
     kind: str
     symbols: tuple[str, ...] = ()
 
-
-def _is_hidden(path: Path) -> bool:
-    return any(part.startswith(".") for part in path.parts if part not in {".", ".."})
-
-
 def _iter_candidate_files(root: Path) -> list[Path]:
     candidates: list[Path] = []
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(root)
-        if any(part in IGNORED_DIRS for part in rel.parts):
-            continue
-        if _is_hidden(rel):
-            continue
-        candidates.append(path)
+    for dirpath, dirnames, filenames in os.walk(root):
+        # Early pruning: remove ignored/hidden dirs so os.walk skips them
+        dirnames[:] = [
+            d for d in dirnames
+            if d not in IGNORED_DIRS and not d.startswith(".")
+        ]
+        current = Path(dirpath)
+        for filename in filenames:
+            path = current / filename
+            if not path.is_file():
+                continue
+            candidates.append(path)
     return sorted(
         candidates,
         key=lambda p: (len(p.relative_to(root).parts), str(p.relative_to(root))),
