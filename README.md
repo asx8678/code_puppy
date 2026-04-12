@@ -299,8 +299,13 @@ disable_rust_autobuild=true
 
 ### Free-Threaded Python (No-GIL)
 
-Code Puppy fully supports Python's free-threaded mode (PEP 703), which
-disables the Global Interpreter Lock for true multi-core parallelism.
+Code Puppy works on **both regular Python and free-threaded Python** (PEP 703).
+The Rust accelerators automatically adapt to your Python build:
+
+- **Regular Python 3.11+**: Full functionality with standard GIL behavior
+- **Free-threaded Python 3.13+**: Enhanced parallelism with GIL disabled
+
+To use free-threaded mode for maximum performance:
 
 ```bash
 # Option 1: Use the free-threaded Python interpreter directly

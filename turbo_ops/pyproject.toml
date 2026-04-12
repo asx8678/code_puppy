@@ -13,4 +13,5 @@ requires-python = ">=3.11"
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-packages = ["turbo_ops"]
-free-threaded = true
+# Supports both regular and free-threaded Python builds
+# Rust code uses cfg_attr to adapt gil_used at compile time

@@ -317,7 +317,8 @@ impl MessageBatch {
 
 // ── Module registration ─────────────────────────────────────────────────────
 
-#[pymodule(gil_used = false)]
+#[cfg_attr(Py_GIL_DISABLED, pymodule(gil_used = false))]
+#[cfg_attr(not(Py_GIL_DISABLED), pymodule)]
 fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ProcessResult>()?;
     m.add_class::<PruneResult>()?;

@@ -349,7 +349,8 @@ fn convert_json_to_py<'py>(py: Python<'py>, value: &serde_json::Value) -> PyResu
 }
 
 /// The turbo_ops Python module.
-#[pymodule(gil_used = false)]
+#[cfg_attr(Py_GIL_DISABLED, pymodule(gil_used = false))]
+#[cfg_attr(not(Py_GIL_DISABLED), pymodule)]
 fn turbo_ops(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(batch_execute_ops, m)?)?;
     m.add_function(wrap_pyfunction!(batch_execute_grouped_ops, m)?)?;

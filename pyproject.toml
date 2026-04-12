@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "codepp"
-version = "0.0.448"
+version = "0.0.450"
 description = "Code generation agent"
 readme = "README.md"
-requires-python = ">=3.14,<3.15"
+requires-python = ">=3.11"
 # Minimum version constraints. Exact versions are pinned in uv.lock.
 # CI MUST use `uv sync --frozen` to enforce the lockfile.
 # To update: `uv lock --upgrade-package <pkg>` then commit uv.lock.
@@ -45,6 +45,9 @@ license = {text = "MIT"}
 keywords = ["ai", "agent", "coding", "llm", "cli", "mcp", "terminal"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -78,7 +81,7 @@ packages = ["code_puppy"]
 include = ["code_puppy/**"]
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py311"
 
 [tool.ruff.lint.per-file-ignores]
 "code_puppy/main.py" = ["E402"]

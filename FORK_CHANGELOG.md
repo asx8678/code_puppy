@@ -1,8 +1,22 @@
 # Fork Changelog: code_puppy
 
 **Fork Origin:** `mpfaffenberger/code_puppy` → `asx8678/code_puppy`  
-**Current Version:** 0.0.445  
+**Current Version:** 0.0.450  
 **Feature Branches Merged:** 150+
+
+---
+
+## 0.0.450
+
+### Fixed
+- **Python 3.14 GIL Crash**: Rust extensions now work on both regular Python 3.14 AND free-threaded Python 3.14t
+  - Changed `#[pymodule(gil_used = false)]` to use `cfg_attr(Py_GIL_DISABLED, ...)` for conditional compilation
+  - Users can now run `uvx --python 3.14 --from codepp code-puppy` without the "Disabling the GIL is not supported" crash
+  - Affected crates: code_puppy_core, turbo_ops, turbo_parse
+
+### Changed
+- Expanded Python version support from `>=3.14,<3.15` to `>=3.11`
+- Updated documentation to clarify dual GIL/no-GIL support
 
 ---
 
