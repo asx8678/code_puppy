@@ -182,7 +182,6 @@ Unified authentication without manual API key management.
 
 | Provider | Features |
 |----------|----------|
-| **antigravity_oauth** | Antigravity with v1.15.8 transport |
 | **chatgpt_oauth** | ChatGPT/OpenAI OAuth flow |
 | **claude_code_oauth** | Claude Code with PKCE, auto model discovery, token refresh |
 

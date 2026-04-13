@@ -18,9 +18,6 @@ Reminder that Code Puppy supports three different OAuth subscriptions:
 
 ### ChatGPT Pro/Plus - `/chatgpt-auth`
 - gpt-5.2 and gpt-5.2 codex
-
-### Google Antigravity - `/antigravity-auth`
-- Gemini 3 Pro, Flash, and Anthropic models including Opus and Sonnet.
 """
 MOTD_TRACK_FILE = Path(CONFIG_DIR) / "motd.txt"
 

@@ -383,10 +383,8 @@ CONTEXTS_DIR = pathlib.Path(DATA_DIR) / "contexts"
 _DEFAULT_SQLITE_FILE = pathlib.Path(DATA_DIR) / "dbos_store.sqlite"
 
 # OAuth plugin model files (XDG_DATA_HOME)
-GEMINI_MODELS_FILE = pathlib.Path(DATA_DIR) / "gemini_models.json"
 CHATGPT_MODELS_FILE = pathlib.Path(DATA_DIR) / "chatgpt_models.json"
 CLAUDE_MODELS_FILE = pathlib.Path(DATA_DIR) / "claude_models.json"
-ANTIGRAVITY_MODELS_FILE = pathlib.Path(DATA_DIR) / "antigravity_models.json"
 
 # Cache files (XDG_CACHE_HOME)
 AUTOSAVE_DIR = pathlib.Path(CACHE_DIR) / "autosaves"

@@ -399,15 +399,6 @@ def _require_api_key(env_var: str, model_config: dict) -> str | None:
     return key
 
 
-def _build_gemini(model_name: str, model_config: dict, config: dict) -> Any:
-    from code_puppy.gemini_model import GeminiModel
-
-    api_key = _require_api_key("GEMINI_API_KEY", model_config)
-    if not api_key:
-        return None
-    return GeminiModel(model_name=model_config["name"], api_key=api_key)
-
-
 def _build_openai(model_name: str, model_config: dict, config: dict) -> Any:
     from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
     from pydantic_ai.providers.openai import OpenAIProvider
@@ -623,60 +614,6 @@ def _build_zai_api(model_name: str, model_config: dict, config: dict) -> Any:
     return zai_model
 
 
-# NOTE: 'antigravity' model type is now handled by the antigravity_oauth plugin
-# via the register_model_type callback. See plugins/antigravity_oauth/register_callbacks.py
-
-
-def _build_custom_gemini(model_name: str, model_config: dict, config: dict) -> Any:
-    from code_puppy.gemini_model import GeminiModel
-
-    # Backwards compatibility: delegate to antigravity plugin if antigravity flag is set
-    # New configs use type="antigravity" directly, but old configs may have
-    # type="custom_gemini" with antigravity=True
-    if model_config.get("antigravity"):
-        registered_handlers = callbacks.on_register_model_types()
-        for handler_info in registered_handlers:
-            handlers = (
-                handler_info
-                if isinstance(handler_info, list)
-                else [handler_info]
-                if handler_info
-                else []
-            )
-            for handler_entry in handlers:
-                if (
-                    isinstance(handler_entry, dict)
-                    and handler_entry.get("type") == "antigravity"
-                ):
-                    handler = handler_entry.get("handler")
-                    if callable(handler):
-                        try:
-                            return handler(model_name, model_config, config)
-                        except Exception as e:
-                            logger.error(f"Antigravity handler failed: {e}")
-                            return None
-        # If no antigravity handler found, warn and return None
-        emit_warning(
-            f"Model '{model_config.get('name')}' has antigravity=True but antigravity plugin not loaded."
-        )
-        return None
-
-    url, headers, verify, api_key = get_custom_config(model_config)
-    if not api_key:
-        emit_warning(
-            f"API key is not set for custom Gemini endpoint; skipping model '{model_config.get('name')}'."
-        )
-        return None
-
-    client = create_async_client(headers=headers, verify=verify)
-    return GeminiModel(
-        model_name=model_config["name"],
-        api_key=api_key,
-        base_url=url,
-        http_client=client,
-    )
-
-
 def _build_cerebras(model_name: str, model_config: dict, config: dict) -> Any:
     from pydantic_ai.models.openai import OpenAIChatModel
 
@@ -732,56 +669,6 @@ def _build_openrouter(model_name: str, model_config: dict, config: dict) -> Any:
     return model
 
 
-def _build_gemini_oauth(model_name: str, model_config: dict, config: dict) -> Any:
-    # Gemini OAuth models use the Code Assist API (cloudcode-pa.googleapis.com)
-    try:
-        try:
-            from gemini_oauth.config import GEMINI_OAUTH_CONFIG
-            from gemini_oauth.utils import get_project_id, get_valid_access_token
-        except ImportError:
-            from code_puppy.plugins.gemini_oauth.config import GEMINI_OAUTH_CONFIG
-            from code_puppy.plugins.gemini_oauth.utils import (
-                get_project_id,
-                get_valid_access_token,
-            )
-    except ImportError as exc:
-        emit_warning(
-            f"Gemini OAuth plugin not available; skipping model '{model_config.get('name')}'. "
-            f"Error: {exc}"
-        )
-        return None
-
-    access_token = get_valid_access_token()
-    if not access_token:
-        emit_warning(
-            f"Failed to get valid Gemini OAuth token; skipping model '{model_config.get('name')}'. "
-            "Run /gemini-auth to re-authenticate."
-        )
-        return None
-
-    project_id = get_project_id()
-    if not project_id:
-        emit_warning(
-            f"No Code Assist project ID found; skipping model '{model_config.get('name')}'. "
-            "Run /gemini-auth to re-authenticate."
-        )
-        return None
-
-    from code_puppy.gemini_code_assist import GeminiCodeAssistModel
-
-    return GeminiCodeAssistModel(
-        model_name=model_config["name"],
-        access_token=access_token,
-        project_id=project_id,
-        api_base_url=GEMINI_OAUTH_CONFIG["api_base_url"],
-        api_version=GEMINI_OAUTH_CONFIG["api_version"],
-    )
-
-
-# NOTE: 'chatgpt_oauth' model type is now handled by the chatgpt_oauth plugin
-# via the register_model_type callback. See plugins/chatgpt_oauth/register_callbacks.py
-
-
 def _build_round_robin(model_name: str, model_config: dict, config: dict) -> Any:
     from code_puppy.round_robin_model import RoundRobinModel
 
@@ -801,7 +688,6 @@ def _build_round_robin(model_name: str, model_config: dict, config: dict) -> Any
 # Register all built-in builders at module load
 # ---------------------------------------------------------------------------
 _BUILTIN_MODEL_BUILDERS: dict[str, Callable] = {
-    "gemini": _build_gemini,
     "openai": _build_openai,
     "anthropic": _build_anthropic,
     "custom_anthropic": _build_custom_anthropic,
@@ -809,10 +695,8 @@ _BUILTIN_MODEL_BUILDERS: dict[str, Callable] = {
     "custom_openai": _build_custom_openai,
     "zai_coding": _build_zai_coding,
     "zai_api": _build_zai_api,
-    "custom_gemini": _build_custom_gemini,
     "cerebras": _build_cerebras,
     "openrouter": _build_openrouter,
-    "gemini_oauth": _build_gemini_oauth,
     "round_robin": _build_round_robin,
 }
 
@@ -937,8 +821,6 @@ class ModelFactory:
             pathlib.Path(EXTRA_MODELS_FILE),
             pathlib.Path(_config_module.CHATGPT_MODELS_FILE),
             pathlib.Path(_config_module.CLAUDE_MODELS_FILE),
-            pathlib.Path(_config_module.GEMINI_MODELS_FILE),
-            pathlib.Path(_config_module.ANTIGRAVITY_MODELS_FILE),
         ]
 
         # Build current mtimes for existing files
@@ -981,16 +863,6 @@ class ModelFactory:
                 pathlib.Path(_config_module.CLAUDE_MODELS_FILE),
                 "Claude Code OAuth models",
                 True,
-            ),
-            (
-                pathlib.Path(_config_module.GEMINI_MODELS_FILE),
-                "Gemini OAuth models",
-                False,
-            ),
-            (
-                pathlib.Path(_config_module.ANTIGRAVITY_MODELS_FILE),
-                "Antigravity OAuth models",
-                False,
             ),
         ]
 

@@ -63,7 +63,7 @@ This fork adds significant capabilities to the original code_puppy, transforming
 | 📚 Progressive Skills | Metadata-only skill injection until needed | Zero context cost |
 | 🔍 Supervisor Review | Quality-gated multi-agent review loops | Higher quality |
 | 📝 Session Logger | Structured archives with full audit trail | Debugging/compliance |
-| 🔐 OAuth Integration | 3 providers (Antigravity, ChatGPT, Claude) | Better UX |
+| 🔐 OAuth Integration | 2 providers (ChatGPT, Claude) | Better UX |
 | 💾 DBOS Durability | Workflow checkpointing and recovery | Crash survival |
 | 🔄 Round Robin | Model distribution across multiple keys | Rate limit bypass |
 | 🌐 Models.dev | 65+ providers, 1000+ models | One-click setup |
@@ -366,7 +366,6 @@ python3.14t -c "import sys; print(f'Free-threading: {not sys._is_gil_enabled()}'
 
 - Python 3.11+
 - OpenAI API key (for GPT models)
-- Gemini API key (for Google's Gemini models)
 - Cerebras API key (for Cerebras models)
 - Anthropic key (for Claude models)
 - Ollama endpoint available

@@ -9,10 +9,6 @@ JSON embedded in natural language text or markdown code blocks.
 Migration candidates (code_puppy/ files that could use this utility):
 - code_puppy/chatgpt_codex_client.py:287 - SSE event data parsing with
   json.loads(data_str) inside try/except JSONDecodeError
-- code_puppy/gemini_code_assist.py:338 - SSE stream data parsing with
-  json.loads(data_str) that silently continues on parse errors
-- code_puppy/gemini_model.py:720 - Streaming response chunk parsing with
-  json.loads(json_str) that silently continues on parse errors
 - code_puppy/utils/stream_parser.py:186 - lenient JSONL parsing that could
   benefit from fenced JSON extraction before falling back to line parsing
 """
