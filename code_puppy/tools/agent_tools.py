@@ -34,7 +34,8 @@ from pydantic_ai import Agent, RunContext, UsageLimits
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.exceptions import ModelHTTPError
 
-from code_puppy.config import DATA_DIR, get_message_limit, get_use_dbos, get_value
+from code_puppy.config import DATA_DIR, get_use_dbos, get_value
+from code_puppy.config_package import get_puppy_config
 from code_puppy.dbos_utils import initialize_dbos_if_needed
 from code_puppy.messaging import (
     SubAgentInvocationMessage,
@@ -822,7 +823,7 @@ def register_invoke_agent(agent):
                                             prompt,
                                             message_history=message_history,
                                             usage_limits=UsageLimits(
-                                                request_limit=get_message_limit()
+                                                request_limit=get_puppy_config().message_limit
                                             ),
                                             event_stream_handler=stream_handler,
                                         )
@@ -836,7 +837,7 @@ def register_invoke_agent(agent):
                                         prompt,
                                         message_history=message_history,
                                         usage_limits=UsageLimits(
-                                            request_limit=get_message_limit()
+                                            request_limit=get_puppy_config().message_limit
                                         ),
                                         event_stream_handler=stream_handler,
                                     )
@@ -1017,7 +1018,7 @@ async def invoke_agent_headless(
     try:
         result = await temp_agent.run(
             prompt,
-            usage_limits=UsageLimits(request_limit=get_message_limit()),
+            usage_limits=UsageLimits(request_limit=get_puppy_config().message_limit),
         )
         return str(result.output)
     finally:
