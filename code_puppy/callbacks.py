@@ -782,7 +782,7 @@ async def on_post_tool_call(
         and ctx.component_type == "tool"
         and ctx.component_name == tool_name
     ):
-        ctx.close()
+        ctx.end(success=True)
         ctx.metadata["duration_ms"] = duration_ms
         # Restore the parent context that was stashed by on_pre_tool_call.
         token = ctx.metadata.pop("_context_token", None)
@@ -1047,7 +1047,7 @@ async def on_agent_run_end(
     # Close and enrich the current run context (if one exists).
     ctx = get_current_run_context()
     if ctx is not None:
-        ctx.close()
+        ctx.end(success=success, error=error)
         ctx.metadata["success"] = success
         if error is not None:
             ctx.metadata["error"] = str(error)

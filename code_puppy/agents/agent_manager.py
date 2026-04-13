@@ -80,15 +80,17 @@ def _get_session_file_path() -> Path:
 def get_terminal_session_id() -> str:
     """Get a unique identifier for the current terminal session.
 
-    Uses parent process ID (PPID) as the session identifier.
-    This works across all platforms and provides session isolation.
+    Includes both parent PID (for terminal grouping) and current PID
+    (for process isolation) to prevent collisions between multiple
+    Code Puppy processes under the same shell.
 
     Returns:
-        str: Unique session identifier (e.g., "session_12345")
+        str: Unique session identifier (e.g., "session_12345_12346")
     """
     try:
         ppid = os.getppid()
-        return f"session_{ppid}"
+        pid = os.getpid()
+        return f"session_{ppid}_{pid}"
     except (OSError, AttributeError):
         # Fallback to current process ID if PPID unavailable
         return f"fallback_{os.getpid()}"
@@ -161,6 +163,11 @@ def _cleanup_dead_sessions(sessions: dict[str, str]) -> dict[str, str]:
         if session_id.startswith("session_"):
             try:
                 pid_str = session_id.replace("session_", "")
+                # Handle both formats: "session_{ppid}_{pid}" (new) and "session_{pid}" (legacy)
+                if "_" in pid_str:
+                    # New format: extract the current PID (second part after underscore)
+                    _, pid_str = pid_str.rsplit("_", 1)
+                # Legacy format: pid_str is already just the PID
                 pid = int(pid_str)
                 if _is_process_alive(pid):
                     cleaned[session_id] = agent_name

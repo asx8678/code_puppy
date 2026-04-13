@@ -121,10 +121,11 @@ class TestAgentManagerBasics:
         session_id = get_terminal_session_id()
         assert isinstance(session_id, str)
         assert session_id.startswith("session_")
-        # Should contain a process ID
+        # Should contain parent PID and current PID (new format: session_{ppid}_{pid})
         parts = session_id.split("_")
-        assert len(parts) == 2
-        assert parts[1].isdigit()
+        assert len(parts) == 3
+        assert parts[1].isdigit()  # Parent PID
+        assert parts[2].isdigit()  # Current PID
 
     def test_get_terminal_session_id_fallback(self):
         """Test fallback when PPID is not available."""

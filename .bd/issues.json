@@ -115,7 +115,182 @@
       "created_at": "2026-04-13T22:25:45.480592",
       "updated_at": "2026-04-13T22:25:49.080785",
       "comments": []
+    },
+    "bd-8": {
+      "id": "bd-8",
+      "title": "Fix ctx.close() bug - callbacks.py calls ctx.close() but RunContext only has end()",
+      "description": "",
+      "status": "closed",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "bug",
+        "callbacks"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.148700",
+      "updated_at": "2026-04-13T23:02:27.254792",
+      "comments": []
+    },
+    "bd-9": {
+      "id": "bd-9",
+      "title": "Add config cache invalidation - typed config stays stale after set_value()",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "config"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.154891",
+      "updated_at": "2026-04-13T23:02:27.284064",
+      "comments": [
+        "Claimed: adding typed config cache invalidation via lazy import of reset_puppy_config_for_tests() in set_config_value() and reset_value()"
+      ]
+    },
+    "bd-10": {
+      "id": "bd-10",
+      "title": "Integrate provider-reported usage into TokenLedger from all model clients",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "token-ledger",
+        "observability"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.158934",
+      "updated_at": "2026-04-13T23:14:32.416717",
+      "comments": []
+    },
+    "bd-11": {
+      "id": "bd-11",
+      "title": "Unify protected_token_count defaults - 50000 in config.py vs 4000 in config_package",
+      "description": "",
+      "status": "closed",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "config",
+        "breaking-change"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.163380",
+      "updated_at": "2026-04-13T23:02:27.225971",
+      "comments": []
+    },
+    "bd-12": {
+      "id": "bd-12",
+      "title": "Fix compaction strategy default - docstring says summarization but code returns truncation",
+      "description": "",
+      "status": "closed",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "config",
+        "bug"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.167121",
+      "updated_at": "2026-04-13T23:02:27.195002",
+      "comments": []
+    },
+    "bd-13": {
+      "id": "bd-13",
+      "title": "Fix Rust/Python system prompt double-counting for Claude Code and Antigravity models",
+      "description": "",
+      "status": "closed",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "rust",
+        "token-counting"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.169740",
+      "updated_at": "2026-04-13T23:10:58.289504",
+      "comments": []
+    },
+    "bd-14": {
+      "id": "bd-14",
+      "title": "Make TokenLedger thread-safe with proper locking",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "token-ledger"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.172377",
+      "updated_at": "2026-04-13T23:10:58.320813",
+      "comments": []
+    },
+    "bd-15": {
+      "id": "bd-15",
+      "title": "Create unified config interface for compaction settings",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "config",
+        "refactor"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.174884",
+      "updated_at": "2026-04-13T23:14:32.428444",
+      "comments": []
+    },
+    "bd-16": {
+      "id": "bd-16",
+      "title": "Track retry costs separately in TokenLedger",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "token-ledger"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.273555",
+      "updated_at": "2026-04-13T23:10:58.351712",
+      "comments": []
+    },
+    "bd-17": {
+      "id": "bd-17",
+      "title": "Fix tool-schema LRU cache unhashable key causing silent overhead undercounting",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "bug",
+        "token-counting"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.280129",
+      "updated_at": "2026-04-13T23:10:58.382162",
+      "comments": []
+    },
+    "bd-18": {
+      "id": "bd-18",
+      "title": "Add pre-send context assertion to prevent context overflow",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "token-counting",
+        "safety"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T22:56:50.286186",
+      "updated_at": "2026-04-13T23:14:32.419669",
+      "comments": []
     }
   },
-  "counter": 7
+  "counter": 18
 }

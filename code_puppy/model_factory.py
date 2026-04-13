@@ -50,7 +50,7 @@ def resolve_max_output_tokens(
     Priority order:
     1. Explicit requested value (if provided)
     2. Model-specific max_output_tokens from config
-    3. Default calculation: max(512, min(context * 0.15, 4096))
+    3. Default calculation: max(_MIN_OUTPUT_TOKENS, min(context * 0.15, _MAX_OUTPUT_TOKENS))
     
     Always caps at provider limit if known.
     
@@ -65,8 +65,8 @@ def resolve_max_output_tokens(
     context_length = int(model_config.get("context_length", 128000))
     provider_limit = model_config.get("max_output_tokens")
     
-    # Calculate default cap - conservative but reasonable
-    default_cap = max(512, min(int(context_length * 0.15), 4096))
+    # Calculate default cap using module constants
+    default_cap = max(_MIN_OUTPUT_TOKENS, min(int(context_length * _OUTPUT_TOKEN_RATIO), _MAX_OUTPUT_TOKENS))
     
     # Use requested if provided, else default
     cap = requested if requested is not None else default_cap

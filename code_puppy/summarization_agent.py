@@ -5,7 +5,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 from pydantic_ai import Agent
 
-from code_puppy.config import get_global_model_name
 from code_puppy.model_factory import ModelFactory, make_model_settings
 from code_puppy.model_packs import get_model_for_role
 

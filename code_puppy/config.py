@@ -823,6 +823,13 @@ def set_config_value(key: str, value: str):
     # Write atomically without re-reading (cache already invalidated)
     atomic_write_text(Path(CONFIG_FILE), content)
     _invalidate_config()  # Invalidate cache after write - no re-read needed
+    # Also invalidate the typed config singleton (config_package.loader)
+    # Lazy import to avoid circular imports at module load time
+    try:
+        from code_puppy.config_package.loader import reset_puppy_config_for_tests
+        reset_puppy_config_for_tests()
+    except Exception:
+        pass  # Typed config layer not loaded yet - safe to skip
 
 
 # Alias for API compatibility
@@ -846,6 +853,12 @@ def reset_value(key: str) -> None:
         content = buffer.getvalue()
         atomic_write_text(Path(CONFIG_FILE), content)
     _invalidate_config()  # Invalidate cache after write
+    # Also invalidate the typed config singleton (config_package.loader)
+    try:
+        from code_puppy.config_package.loader import reset_puppy_config_for_tests
+        reset_puppy_config_for_tests()
+    except Exception:
+        pass  # Typed config layer not loaded yet - safe to skip
 
 
 # --- MODEL STICKY EXTENSION STARTS HERE ---
@@ -1633,7 +1646,7 @@ def get_compaction_strategy() -> str:
     if val and val.lower() in ["summarization", "truncation"]:
         return val.lower()
     # Default to summarization
-    return "truncation"
+    return "summarization"
 
 
 # --- Enhanced Summarization Config (deepagents port) ---

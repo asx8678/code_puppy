@@ -1,6 +1,5 @@
 """Tests for the central token ledger."""
 
-import time
 from code_puppy.token_ledger import TokenAttempt, TokenLedger
 
 
@@ -241,3 +240,107 @@ class TestTokenLedger:
         ledger = TokenLedger()
         ledger.record(TokenAttempt(model="test", provider_output_tokens=None))
         assert ledger.total_provider_output is None
+
+    def test_wasted_tokens_by_retry_empty(self):
+        """Test wasted_tokens_by_retry with no failed attempts."""
+        ledger = TokenLedger()
+        ledger.record(TokenAttempt(model="test", success=True))
+        assert ledger.wasted_tokens_by_retry == {}
+
+    def test_wasted_tokens_by_retry(self):
+        """Test wasted_tokens_by_retry with failures at different retry levels."""
+        ledger = TokenLedger()
+        # Failed first attempt (retry_number=0)
+        ledger.record(TokenAttempt(
+            model="test", estimated_input_tokens=1000,
+            estimated_output_tokens=500, success=False, retry_number=0,
+        ))
+        # Failed first retry (retry_number=1)
+        ledger.record(TokenAttempt(
+            model="test", estimated_input_tokens=1200,
+            estimated_output_tokens=600, success=False, retry_number=1,
+        ))
+        # Failed second retry (retry_number=2)
+        ledger.record(TokenAttempt(
+            model="test", estimated_input_tokens=1400,
+            estimated_output_tokens=700, success=False, retry_number=2,
+        ))
+        # Successful attempt should NOT appear
+        ledger.record(TokenAttempt(
+            model="test", estimated_input_tokens=2000,
+            success=True, retry_number=2,
+        ))
+
+        breakdown = ledger.wasted_tokens_by_retry
+        assert breakdown[0] == 1500  # 1000 + 500
+        assert breakdown[1] == 1800  # 1200 + 600
+        assert breakdown[2] == 2100  # 1400 + 700
+        assert len(breakdown) == 3
+
+    def test_wasted_tokens_by_retry_aggregates(self):
+        """Test that multiple failures at the same retry level are summed."""
+        ledger = TokenLedger()
+        ledger.record(TokenAttempt(
+            model="test", estimated_input_tokens=1000,
+            success=False, retry_number=1,
+        ))
+        ledger.record(TokenAttempt(
+            model="test", estimated_input_tokens=2000,
+            success=False, retry_number=1,
+        ))
+        assert ledger.wasted_tokens_by_retry[1] == 3000
+
+    def test_provider_wasted_tokens_none(self):
+        """Test provider_wasted_tokens returns None when no data."""
+        ledger = TokenLedger()
+        ledger.record(TokenAttempt(model="test", success=True))
+        assert ledger.provider_wasted_tokens is None
+
+    def test_provider_wasted_tokens(self):
+        """Test provider_wasted_tokens sums failed attempts."""
+        ledger = TokenLedger()
+        ledger.record(TokenAttempt(
+            model="test", provider_input_tokens=1000,
+            provider_output_tokens=500, success=False,
+        ))
+        ledger.record(TokenAttempt(
+            model="test", provider_input_tokens=2000,
+            provider_output_tokens=1000, success=False,
+        ))
+        # Successful attempt should NOT count
+        ledger.record(TokenAttempt(
+            model="test", provider_input_tokens=9999,
+            success=True,
+        ))
+        assert ledger.provider_wasted_tokens == 4500  # 1500 + 3000
+
+    def test_provider_wasted_tokens_partial(self):
+        """Test provider_wasted_tokens handles partial data."""
+        ledger = TokenLedger()
+        ledger.record(TokenAttempt(
+            model="test", provider_input_tokens=1000,
+            provider_output_tokens=None, success=False,
+        ))
+        assert ledger.provider_wasted_tokens == 1000  # 1000 + 0
+
+    def test_summary_includes_new_fields(self):
+        """Test that summary includes the new retry tracking fields."""
+        ledger = TokenLedger()
+        ledger.record(TokenAttempt(
+            model="test", estimated_input_tokens=1000,
+            success=False, retry_number=1,
+        ))
+        s = ledger.summary()
+        assert "wasted_tokens_by_retry" in s
+        assert "provider_wasted_tokens" in s
+        assert s["wasted_tokens_by_retry"] == {1: 1000}
+
+    def test_retry_count_with_actual_retries(self):
+        """Test retry_count property with retry_number > 0."""
+        ledger = TokenLedger()
+        ledger.record(TokenAttempt(model="test", retry_number=0))  # First
+        ledger.record(TokenAttempt(model="test", retry_number=0))  # Also first
+        ledger.record(TokenAttempt(model="test", retry_number=1))  # Retry
+        ledger.record(TokenAttempt(model="test", retry_number=2))  # Retry
+        assert ledger.retry_count == 2
+

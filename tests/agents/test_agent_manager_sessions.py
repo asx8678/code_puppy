@@ -30,11 +30,12 @@ from code_puppy.agents.agent_manager import (
 class TestTerminalSessionID:
     """Test terminal session ID generation."""
 
-    def test_get_terminal_session_id_uses_ppid(self):
-        """Test that get_terminal_session_id uses parent process ID."""
+    def test_get_terminal_session_id_uses_ppid_and_pid(self):
+        """Test that get_terminal_session_id uses both parent and current process ID."""
         with patch("os.getppid", return_value=12345):
-            session_id = get_terminal_session_id()
-            assert session_id == "session_12345"
+            with patch("os.getpid", return_value=67890):
+                session_id = get_terminal_session_id()
+                assert session_id == "session_12345_67890"
 
     def test_get_terminal_session_id_fallback_to_pid(self):
         """Test fallback to PID when PPID not available."""
@@ -44,11 +45,12 @@ class TestTerminalSessionID:
                 assert session_id == "fallback_54321"
 
     def test_get_terminal_session_id_format(self):
-        """Test that session ID format is consistent."""
+        """Test that session ID format is consistent with 3-part format."""
         with patch("os.getppid", return_value=99999):
-            session_id = get_terminal_session_id()
-            assert session_id.startswith("session_")
-            assert session_id == "session_99999"
+            with patch("os.getpid", return_value=11111):
+                session_id = get_terminal_session_id()
+                assert session_id.startswith("session_")
+                assert session_id == "session_99999_11111"
 
     def test_get_terminal_session_id_handles_attribute_error(self):
         """Test handling of AttributeError when getting PPID."""
@@ -57,12 +59,14 @@ class TestTerminalSessionID:
                 session_id = get_terminal_session_id()
                 assert session_id == "fallback_11111"
 
-    def test_get_terminal_session_id_different_calls_same_ppid(self):
-        """Test that same PPID produces same session ID across calls."""
+    def test_get_terminal_session_id_different_calls_same_process(self):
+        """Test that same PPID and PID produce same session ID across calls."""
         with patch("os.getppid", return_value=12345):
-            session_id1 = get_terminal_session_id()
-            session_id2 = get_terminal_session_id()
-            assert session_id1 == session_id2
+            with patch("os.getpid", return_value=67890):
+                session_id1 = get_terminal_session_id()
+                session_id2 = get_terminal_session_id()
+                assert session_id1 == session_id2
+                assert session_id1 == "session_12345_67890"
 
 
 class TestProcessLiveness:

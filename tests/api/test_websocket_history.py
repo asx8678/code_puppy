@@ -178,7 +178,7 @@ async def test_ws_empty_history_replay(app) -> None:
     ):
         with TestClient(app) as client:
             # Connect with new session_id
-            with client.websocket_connect("/ws/events?session_id=new-session") as ws:
+            with client.websocket_connect("/ws/events?session_id=new-session", headers={"origin": "http://localhost:8765"}) as ws:
                 # Should receive live event immediately
                 data = ws.receive_json()
                 assert data["type"] == "live_event"
@@ -212,7 +212,7 @@ async def test_ws_basic_history_replay(app) -> None:
         ),
     ):
         with TestClient(app) as client:
-            with client.websocket_connect("/ws/events?session_id=my-session") as ws:
+            with client.websocket_connect("/ws/events?session_id=my-session", headers={"origin": "http://localhost:8765"}) as ws:
                 # Receive 3 history events first
                 events = []
                 for _ in range(3):
@@ -248,7 +248,7 @@ async def test_ws_history_plus_live(app) -> None:
         ),
     ):
         with TestClient(app) as client:
-            with client.websocket_connect("/ws/events?session_id=mixed-session") as ws:
+            with client.websocket_connect("/ws/events?session_id=mixed-session", headers={"origin": "http://localhost:8765"}) as ws:
                 # History first
                 h1 = ws.receive_json()
                 assert h1["type"] == "pre"
@@ -296,7 +296,8 @@ async def test_ws_maxlen_eviction(app) -> None:
         ):
             with TestClient(app) as client:
                 with client.websocket_connect(
-                    "/ws/events?session_id=evict-session"
+                    "/ws/events?session_id=evict-session",
+                    headers={"origin": "http://localhost:8765"},
                 ) as ws:
                     events = []
                     for _ in range(200):
@@ -334,12 +335,12 @@ async def test_ws_multi_session_isolation(app) -> None:
     ):
         with TestClient(app) as client:
             # Connect as session-a
-            with client.websocket_connect("/ws/events?session_id=session-a") as ws:
+            with client.websocket_connect("/ws/events?session_id=session-a", headers={"origin": "http://localhost:8765"}) as ws:
                 data = ws.receive_json()
                 assert data["type"] == "a-event"
 
             # Connect as session-b
-            with client.websocket_connect("/ws/events?session_id=session-b") as ws:
+            with client.websocket_connect("/ws/events?session_id=session-b", headers={"origin": "http://localhost:8765"}) as ws:
                 data = ws.receive_json()
                 assert data["type"] == "b-event"
 
@@ -370,7 +371,7 @@ async def test_ws_graceful_no_session_id(app) -> None:
     ):
         with TestClient(app) as client:
             # No session_id - should just get live events
-            with client.websocket_connect("/ws/events") as ws:
+            with client.websocket_connect("/ws/events", headers={"origin": "http://localhost:8765"}) as ws:
                 data = ws.receive_json()
                 assert data["type"] == "live"
 
@@ -400,7 +401,8 @@ async def test_ws_records_live_events(app) -> None:
     ):
         with TestClient(app) as client:
             with client.websocket_connect(
-                "/ws/events?session_id=recorder-session"
+                "/ws/events?session_id=recorder-session",
+                headers={"origin": "http://localhost:8765"},
             ) as ws:
                 # Simulate incoming live event
                 await event_queue.put({"type": "live-recorded", "data": "yep"})
@@ -439,7 +441,7 @@ async def test_ws_reconnect_scenario(app) -> None:
         ),
     ):
         with TestClient(app) as client:
-            with client.websocket_connect("/ws/events?session_id=reconnect-test") as ws:
+            with client.websocket_connect("/ws/events?session_id=reconnect-test", headers={"origin": "http://localhost:8765"}) as ws:
                 # Live event while connected
                 await event_queue_1.put({"type": "during-first"})
                 ws.receive_json()
@@ -465,7 +467,7 @@ async def test_ws_reconnect_scenario(app) -> None:
         ),
     ):
         with TestClient(app) as client:
-            with client.websocket_connect("/ws/events?session_id=reconnect-test") as ws:
+            with client.websocket_connect("/ws/events?session_id=reconnect-test", headers={"origin": "http://localhost:8765"}) as ws:
                 # Should receive history (during-first + while-disconnected)
                 events = []
                 for _ in range(3):

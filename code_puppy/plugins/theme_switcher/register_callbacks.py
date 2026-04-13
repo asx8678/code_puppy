@@ -13,10 +13,10 @@ at render time. Persists only for the current session.
 import logging
 
 logger = logging.getLogger(__name__)
-import os
+import os  # noqa: E402
 
-from code_puppy.callbacks import register_callback
-from code_puppy.console import build_console
+from code_puppy.callbacks import register_callback  # noqa: E402
+from code_puppy.console import build_console  # noqa: E402
 
 COMMAND_NAME = "theme"
 DEFAULT_THEME = "monokai"

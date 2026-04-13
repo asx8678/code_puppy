@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -9,6 +10,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 _VALID_SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
 
@@ -55,20 +58,6 @@ class SessionInfo(BaseModel):
     created_at: str | None = None
     last_updated: str | None = None
     message_count: int = 0
-
-
-class MessageContent(BaseModel):
-    """Message content with role and optional timestamp."""
-
-    role: str
-    content: Any
-    timestamp: str | None = None
-
-
-class SessionDetail(SessionInfo):
-    """Session info with full message history."""
-
-    messages: list[dict[str, Any]] = []
 
 
 def _get_sessions_dir() -> Path:
@@ -166,34 +155,43 @@ async def list_sessions() -> list[SessionInfo]:
         return []
 
     loop = asyncio.get_running_loop()
-    sessions = []
+    txt_files = list(sessions_dir.glob("*.txt"))
 
-    for txt_file in sessions_dir.glob("*.txt"):
+    if not txt_files:
+        return []
+
+    async def load_session_metadata(txt_file: Path) -> SessionInfo | None:
+        """Load metadata for a single session file."""
         session_id = txt_file.stem
+        # Validate session_id to skip files with invalid names
+        try:
+            _validate_session_id(session_id)
+        except HTTPException:
+            return None  # Skip files with invalid session ID names
         try:
             # Run blocking I/O in thread pool with timeout
             metadata = await asyncio.wait_for(
                 loop.run_in_executor(_executor, _load_json_sync, txt_file),
                 timeout=FILE_IO_TIMEOUT,
             )
-            sessions.append(
-                SessionInfo(
-                    session_id=session_id,
-                    agent_name=metadata.get("agent_name"),
-                    initial_prompt=metadata.get("initial_prompt"),
-                    created_at=metadata.get("created_at"),
-                    last_updated=metadata.get("last_updated"),
-                    message_count=metadata.get("message_count", 0),
-                )
+            return SessionInfo(
+                session_id=session_id,
+                agent_name=metadata.get("agent_name"),
+                initial_prompt=metadata.get("initial_prompt"),
+                created_at=metadata.get("created_at"),
+                last_updated=metadata.get("last_updated"),
+                message_count=metadata.get("message_count", 0),
             )
         except asyncio.TimeoutError:
             # Timed out reading file, include basic info
-            sessions.append(SessionInfo(session_id=session_id))
+            return SessionInfo(session_id=session_id)
         except Exception:
             # If we can't parse metadata, still include basic session info
-            sessions.append(SessionInfo(session_id=session_id))
+            return SessionInfo(session_id=session_id)
 
-    return sessions
+    # Run all loads in parallel and filter out invalid sessions
+    results = await asyncio.gather(*[load_session_metadata(f) for f in txt_files])
+    return [s for s in results if s is not None]
 
 
 @router.get("/{session_id}")
@@ -269,7 +267,8 @@ async def get_session_messages(session_id: str) -> list[dict[str, Any]]:
             504, f"Timeout loading session '{session_id}' messages"
         ) from None
     except Exception as e:
-        raise HTTPException(500, f"Error loading session messages: {e}") from e
+        logger.error("Error loading session '%s' messages: %s", session_id, e)
+        raise HTTPException(500, "Error loading session messages") from e
 
 
 @router.delete("/{session_id}")

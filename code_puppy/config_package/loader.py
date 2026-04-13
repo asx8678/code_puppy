@@ -35,6 +35,7 @@ from code_puppy.config_package._resolvers import (
     resolve_int,
     resolve_float,
 )
+from code_puppy.constants import SUMMARIZATION_ABSOLUTE_PROTECTED_DEFAULT
 
 
 # Singleton cache
@@ -287,10 +288,13 @@ def load_puppy_config() -> PuppyConfig:
             max_val=2.0,
             **resolver_ctx,
         ),
+        # UNIFIED: Use constants.SUMMARIZATION_ABSOLUTE_PROTECTED_DEFAULT (50_000)
+        # This aligns with config.py get_protected_token_count() default.
+        # See bd-11 for unification rationale.
         protected_token_count=resolve_int(
             ("PUPPY_PROTECTED_TOKEN_COUNT",),
             "protected_token_count",
-            4000,
+            SUMMARIZATION_ABSOLUTE_PROTECTED_DEFAULT,
             min_val=0,
             max_val=100000,
             **resolver_ctx,

@@ -18,12 +18,12 @@ If anything looks wrong, they have evidence of the specific failure.
 import logging
 
 logger = logging.getLogger(__name__)
-import os
-import sys
-import time
+import os  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
 
-from code_puppy.callbacks import register_callback
-from code_puppy.console import build_console
+from code_puppy.callbacks import register_callback  # noqa: E402
+from code_puppy.console import build_console  # noqa: E402
 
 COMMAND_NAME = "render-check"
 COMMAND_ALIASES = ("rendercheck", "check-render")

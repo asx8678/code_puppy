@@ -17,6 +17,10 @@ from pydantic import BaseModel
 
 from code_puppy.tools.command_runner import _kill_process_group
 
+# Ensure commands are registered by importing command_handler
+# This triggers the @register_command decorator side effects
+import code_puppy.command_line.command_handler  # noqa: F401
+
 # Timeout for command execution (seconds)
 COMMAND_TIMEOUT = 30.0
 
@@ -164,14 +168,18 @@ async def list_commands() -> list[CommandInfo]:
 
     Returns a sorted list of all unique commands (no alias duplicates),
     with their metadata including name, description, usage, aliases,
-    category, and detailed help.
+    category, and detailed help. Also includes custom commands from plugins.
 
     Returns:
         list[CommandInfo]: Sorted list of command information.
     """
     from code_puppy.command_line.command_registry import get_unique_commands
+    from code_puppy import callbacks
 
     commands = []
+    seen_names = set()
+
+    # Get registered commands
     for cmd in get_unique_commands():
         commands.append(
             CommandInfo(
@@ -183,6 +191,72 @@ async def list_commands() -> list[CommandInfo]:
                 detailed_help=cmd.detailed_help,
             )
         )
+        seen_names.add(cmd.name)
+
+    # Also include custom commands from plugins (matches /help behavior)
+    try:
+        custom_help = callbacks.on_custom_command_help()
+        for res in custom_help:
+            if not res:
+                continue
+            # Format 1: Tuple with (command_name, description)
+            if isinstance(res, tuple) and len(res) == 2:
+                cmd_name = str(res[0])
+                if cmd_name not in seen_names:
+                    commands.append(
+                        CommandInfo(
+                            name=cmd_name,
+                            description=str(res[1]),
+                            usage=f"/{cmd_name}",
+                            aliases=[],
+                            category="custom",
+                            detailed_help=None,
+                        )
+                    )
+                    seen_names.add(cmd_name)
+            # Format 2: List of tuples or strings
+            elif isinstance(res, list):
+                # Check if it's a list of tuples (preferred format)
+                if res and isinstance(res[0], tuple) and len(res[0]) == 2:
+                    for item in res:
+                        if isinstance(item, tuple) and len(item) == 2:
+                            cmd_name = str(item[0])
+                            if cmd_name not in seen_names:
+                                commands.append(
+                                    CommandInfo(
+                                        name=cmd_name,
+                                        description=str(item[1]),
+                                        usage=f"/{cmd_name}",
+                                        aliases=[],
+                                        category="custom",
+                                        detailed_help=None,
+                                    )
+                                )
+                                seen_names.add(cmd_name)
+                # Format 3: List of strings (legacy format)
+                # Extract command from first line like "/command_name - Description"
+                elif res and isinstance(res[0], str) and res[0].startswith("/"):
+                    first_line = res[0]
+                    if " - " in first_line:
+                        parts = first_line.split(" - ", 1)
+                        cmd_name = parts[0].lstrip("/").strip()
+                        if cmd_name not in seen_names:
+                            description = parts[1].strip()
+                            commands.append(
+                                CommandInfo(
+                                    name=cmd_name,
+                                    description=description,
+                                    usage=f"/{cmd_name}",
+                                    aliases=[],
+                                    category="custom",
+                                    detailed_help=None,
+                                )
+                            )
+                            seen_names.add(cmd_name)
+    except Exception:
+        # Silently skip custom commands if callback fails
+        pass
+
     return sorted(commands, key=lambda c: c.name)
 
 

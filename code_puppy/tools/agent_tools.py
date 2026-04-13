@@ -17,27 +17,27 @@ except ImportError:
     ModelMessagesTypeAdapter = None  # type: ignore[misc,assignment]
 
 # Imports for streaming retry logic (transient HTTP error handling)
-import httpcore
-import httpx
-from functools import partial
-from pathlib import Path
+import httpcore  # noqa: E402
+import httpx  # noqa: E402
+from functools import partial  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 try:
-    from dbos import DBOS, SetWorkflowID
+    from dbos import DBOS, SetWorkflowID  # noqa: E402
 except ImportError:
     DBOS = None  # type: ignore[assignment,misc]
     SetWorkflowID = None  # type: ignore[assignment,misc]
-from pydantic import BaseModel
+from pydantic import BaseModel  # noqa: E402
 
 # Import Agent from pydantic_ai to create temporary agents for invocation
-from pydantic_ai import Agent, RunContext, UsageLimits
-from pydantic_ai.messages import ModelMessage
-from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai import Agent, RunContext, UsageLimits  # noqa: E402
+from pydantic_ai.messages import ModelMessage  # noqa: E402
+from pydantic_ai.exceptions import ModelHTTPError  # noqa: E402
 
-from code_puppy.config import DATA_DIR, get_use_dbos, get_value
-from code_puppy.config_package import get_puppy_config
-from code_puppy.dbos_utils import initialize_dbos_if_needed
-from code_puppy.messaging import (
+from code_puppy.config import DATA_DIR, get_use_dbos, get_value  # noqa: E402
+from code_puppy.config_package import get_puppy_config  # noqa: E402
+from code_puppy.dbos_utils import initialize_dbos_if_needed  # noqa: E402
+from code_puppy.messaging import (  # noqa: E402
     SubAgentInvocationMessage,
     SubAgentResponseMessage,
     emit_error,
@@ -47,9 +47,9 @@ from code_puppy.messaging import (
     get_session_context,
     set_session_context,
 )
-from code_puppy.persistence import atomic_write_msgpack, read_msgpack
-from code_puppy.tools.common import generate_group_id
-from code_puppy.tools.subagent_context import subagent_context
+from code_puppy.persistence import atomic_write_msgpack, read_msgpack  # noqa: E402
+from code_puppy.tools.common import generate_group_id  # noqa: E402
+from code_puppy.tools.subagent_context import subagent_context  # noqa: E402
 
 # RunLimiter import with graceful degradation
 try:

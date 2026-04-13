@@ -26,6 +26,7 @@ See also: token flow audit recommendations.
 
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -76,17 +77,21 @@ class TokenLedger:
 
     attempts: list[TokenAttempt] = field(default_factory=list)
     _max_attempts: int = field(default=10_000, repr=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def record(self, attempt: TokenAttempt) -> None:
         """Record a token attempt.
 
         Silently drops oldest entries if max_attempts is exceeded
         to prevent unbounded memory growth in long sessions.
+
+        Thread-safe: uses internal lock for mutation.
         """
-        self.attempts.append(attempt)
-        if len(self.attempts) > self._max_attempts:
-            # Keep the most recent entries
-            self.attempts = self.attempts[-self._max_attempts:]
+        with self._lock:
+            self.attempts.append(attempt)
+            if len(self.attempts) > self._max_attempts:
+                # Keep the most recent entries
+                self.attempts = self.attempts[-self._max_attempts:]
 
     @property
     def total_estimated_input(self) -> int:
@@ -159,6 +164,37 @@ class TokenLedger:
             if not a.success
         )
 
+    @property
+    def wasted_tokens_by_retry(self) -> dict[int, int]:
+        """Wasted tokens broken down by retry number.
+
+        Returns:
+            Dict mapping retry_number -> total wasted estimated tokens.
+            Only includes failed attempts.
+        """
+        breakdown: dict[int, int] = {}
+        for a in self.attempts:
+            if not a.success:
+                wasted = a.estimated_input_tokens + a.estimated_output_tokens
+                breakdown[a.retry_number] = breakdown.get(a.retry_number, 0) + wasted
+        return breakdown
+
+    @property
+    def provider_wasted_tokens(self) -> int | None:
+        """Provider-reported tokens wasted on failed attempts and retries.
+
+        Returns the sum of provider-reported tokens for failed attempts,
+        or None if no provider data is available.
+        """
+        values: list[int] = []
+        for a in self.attempts:
+            if not a.success:
+                inp = a.provider_input_tokens or 0
+                out = a.provider_output_tokens or 0
+                if a.provider_input_tokens is not None or a.provider_output_tokens is not None:
+                    values.append(inp + out)
+        return sum(values) if values else None
+
     def summary(self) -> dict[str, Any]:
         """Return a summary dict suitable for logging or UI display.
 
@@ -178,11 +214,17 @@ class TokenLedger:
             "cache_read_tokens": self.total_cache_read,
             "drift_ratio": self.drift_ratio,
             "wasted_tokens": self.wasted_tokens,
+            "wasted_tokens_by_retry": self.wasted_tokens_by_retry,
+            "provider_wasted_tokens": self.provider_wasted_tokens,
         }
 
     def clear(self) -> None:
-        """Clear all recorded attempts."""
-        self.attempts.clear()
+        """Clear all recorded attempts.
+
+        Thread-safe: uses internal lock for mutation.
+        """
+        with self._lock:
+            self.attempts.clear()
 
     def to_serializable(self) -> list[dict[str, Any]]:
         """Convert to a JSON-serializable list of dicts for persistence.
@@ -202,12 +244,16 @@ class TokenLedger:
 
         Returns:
             Restored TokenLedger instance.
+
+        Note: Construction is thread-safe, but the returned ledger's
+        methods follow the normal thread-safety guarantees.
         """
         ledger = cls()
-        for item in data:
-            try:
-                ledger.attempts.append(TokenAttempt(**item))
-            except (TypeError, ValueError):
-                # Skip malformed entries gracefully
-                continue
+        with ledger._lock:
+            for item in data:
+                try:
+                    ledger.attempts.append(TokenAttempt(**item))
+                except (TypeError, ValueError):
+                    # Skip malformed entries gracefully
+                    continue
         return ledger

@@ -143,13 +143,15 @@ def setup_websocket(app: FastAPI) -> None:
         # Get the current event loop for thread-safe scheduling
         loop = asyncio.get_running_loop()
 
-        # Queue to receive PTY output in a thread-safe way
-        output_queue: asyncio.Queue[bytes] = asyncio.Queue()
+        # Queue to receive PTY output in a thread-safe way with backpressure
+        output_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=1000)
 
         # Output callback - called from thread pool, puts data in queue
         def on_output(data: bytes) -> None:
             try:
                 loop.call_soon_threadsafe(output_queue.put_nowait, data)
+            except asyncio.QueueFull:
+                logger.warning("Terminal output queue full, dropping data")
             except Exception as e:
                 logger.error(f"on_output error: {e}")
 

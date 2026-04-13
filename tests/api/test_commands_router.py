@@ -67,9 +67,15 @@ async def test_list_commands(client: AsyncClient) -> None:
     resp = await client.get("/api/commands/")
     assert resp.status_code == 200
     cmds = resp.json()
-    assert len(cmds) == 2
+    # Commands are now actually registered via the import side-effect
+    # We expect at least the mocked commands plus potentially real commands
     names = [c["name"] for c in cmds]
     assert "help" in names
+    assert "set" in names
+    # Verify the response contains CommandInfo structure
+    help_cmd = next(c for c in cmds if c["name"] == "help")
+    assert "description" in help_cmd
+    assert "usage" in help_cmd
 
 
 @pytest.mark.asyncio
@@ -148,7 +154,10 @@ async def test_autocomplete_empty(client: AsyncClient) -> None:
     resp = await client.post("/api/commands/autocomplete", json={"partial": ""})
     assert resp.status_code == 200
     suggestions = resp.json()["suggestions"]
-    assert len(suggestions) == 2
+    # Commands are now actually registered via import side-effects
+    # We expect at least the mocked commands to be in suggestions
+    assert "/help" in suggestions
+    assert "/set" in suggestions
 
 
 @pytest.mark.asyncio

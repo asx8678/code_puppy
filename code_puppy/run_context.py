@@ -5,6 +5,7 @@ in agent runs, tool calls, and other operations. It integrates with contextvars
 for safe async context propagation.
 """
 
+from __future__ import annotations
 
 import contextvars
 import time

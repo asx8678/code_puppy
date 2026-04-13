@@ -26,6 +26,7 @@ except ImportError:
     DBOS = None  # type: ignore[assignment,misc]
     SetWorkflowID = None  # type: ignore[assignment,misc]
 from pydantic_ai import Agent as PydanticAgent
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai import (
     BinaryContent,
     DocumentUrl,
@@ -96,7 +97,7 @@ from code_puppy.keymap import cancel_agent_uses_signal, get_cancel_agent_char_co
 from code_puppy.mcp_ import get_mcp_manager
 from code_puppy.messaging import emit_error, emit_info, emit_warning
 from code_puppy.messaging.spinner import SpinnerBase, update_spinner_context
-from code_puppy.model_factory import ModelFactory, make_model_settings
+from code_puppy.model_factory import ModelFactory, make_model_settings, resolve_max_output_tokens
 from code_puppy.summarization_agent import run_summarization_sync, SummarizationError
 from code_puppy.token_utils import estimate_token_count as _estimate_token_count
 from code_puppy.tools.agent_tools import _active_subagent_tasks
@@ -720,10 +721,14 @@ class BaseAgent(ABC, AgentPromptMixin):
                                 total_tokens += self.estimate_token_count(
                                     str(annotations)
                                 )
-                    except Exception:
-                        logger.debug(
-                            "Failed to process tool for token counting", exc_info=True
+                    except Exception as e:
+                        # Log at warning level for visibility; don't silently undercount
+                        logger.warning(
+                            "Failed to process tool %r for token counting: %s",
+                            tool_name, e, exc_info=logger.isEnabledFor(logging.DEBUG)
                         )
+                        # Fallback: estimate minimum tokens for tool name to avoid undercounting
+                        total_tokens += self.estimate_token_count(tool_name) + 10
                         continue
 
         # 3. Estimate tokens for MCP tool definitions from cache
@@ -756,10 +761,15 @@ class BaseAgent(ABC, AgentPromptMixin):
                         else:
                             schema_str = str(input_schema)
                         total_tokens += self.estimate_token_count(schema_str)
-                except Exception:
-                    logger.debug(
-                        "Failed to process tool for token counting", exc_info=True
+                except Exception as e:
+                    # Log at warning level for visibility; don't silently undercount
+                    tool_name = tool_def.get("name", "unknown")
+                    logger.warning(
+                        "Failed to process MCP tool %r for token counting: %s",
+                        tool_name, e, exc_info=logger.isEnabledFor(logging.DEBUG)
                     )
+                    # Fallback: estimate minimum tokens to avoid undercounting
+                    total_tokens += self.estimate_token_count(tool_name) + 10
                     continue
 
         self._state.cached_context_overhead = total_tokens
@@ -843,6 +853,67 @@ class BaseAgent(ABC, AgentPromptMixin):
         has_content = getattr(part, "content", None) is not None
         has_content_delta = getattr(part, "content_delta", None) is not None
         return bool(has_content or has_content_delta)
+
+    def _check_context_budget_before_send(self, prompt_payload: str | list[Any]) -> None:
+        """Pre-send assertion: validate context fits within model token budget.
+
+        Raises RuntimeError if estimated tokens exceed the model's output limit,
+        giving early warning before API call rather than mid-generation failure.
+
+        This is part of bd-18: context budget enforcement.
+        """
+        try:
+            model_name = self.get_model_name()
+            max_tokens = resolve_max_output_tokens(model_name)
+        except Exception:
+            # Fallback if resolve_max_output_tokens unavailable or fails
+            logger.debug("Could not resolve max_output_tokens, skipping budget check")
+            return
+
+        if max_tokens is None:
+            return
+
+        try:
+            # Calculate current context size
+            estimated_input = self.estimate_tokens_for_context()
+
+            # Estimate prompt payload tokens
+            if isinstance(prompt_payload, str):
+                prompt_text = prompt_payload
+            elif isinstance(prompt_payload, list):
+                # Extract text from list payloads (attachments, etc)
+                text_parts = []
+                for item in prompt_payload:
+                    if isinstance(item, str):
+                        text_parts.append(item)
+                    elif hasattr(item, "content"):
+                        text_parts.append(str(getattr(item, "content", "")))
+                prompt_text = "\n".join(text_parts)
+            else:
+                prompt_text = str(prompt_payload)
+
+            estimated_prompt = self.estimate_token_count(prompt_text)
+            total_estimated = estimated_input + estimated_prompt
+
+            # Safety margin: allow 10% buffer for estimation error
+            safe_limit = int(max_tokens * 0.9)
+
+            if total_estimated > safe_limit:
+                raise RuntimeError(
+                    f"Context budget exceeded for {model_name}: "
+                    f"estimated {total_estimated} tokens "
+                    f"(limit: {max_tokens}, safe: {safe_limit}). "
+                    f"Consider summarizing or clearing message history."
+                )
+
+            logger.debug(
+                "Context budget check passed: %d/%d tokens", total_estimated, max_tokens
+            )
+        except Exception as exc:
+            # Don't let budget check failures block the send
+            if isinstance(exc, RuntimeError) and "budget exceeded" in str(exc):
+                raise
+            logger.debug("Context budget check failed silently: %s", exc)
 
     def filter_huge_messages(
         self,
@@ -2677,32 +2748,75 @@ class BaseAgent(ABC, AgentPromptMixin):
                 )
 
                 with _mcp_injection(), workflow_ctx:
-                    result_ = await pydantic_agent_instance.run(
-                        prompt_payload,
-                        message_history=self.get_message_history(),
-                        usage_limits=usage_limits,
-                        event_stream_handler=event_stream_handler,
-                        **kwargs,
-                    )
-                    # Record token usage in the session ledger (best-effort)
-                    try:
-                        usage = result_.usage()
-                        # Extract cache tokens from usage details if available
-                        details = getattr(usage, 'details', None)
-                        cache_read = None
-                        if details and isinstance(details, dict):
-                            cache_read = details.get('cached_content_tokens')
-                        self._state.get_token_ledger().record(TokenAttempt(
-                            model=self.get_model_name(),
-                            provider_input_tokens=getattr(usage, 'request_tokens', None),
-                            provider_output_tokens=getattr(usage, 'response_tokens', None),
-                            cache_read_tokens=cache_read,
-                            success=True,
-                            agent_name=self.name,
-                        ))
-                    except Exception:
-                        logger.debug("Failed to record token usage", exc_info=True)
-                    return result_
+                    # Pre-send context budget check (bd-18)
+                    self._check_context_budget_before_send(prompt_payload)
+
+                    # Code Puppy retry loop: wraps pydantic-ai's run() to track
+                    # retry costs in the token ledger. Pydantic-ai's internal
+                    # retries=3 handles output validation retries, but those are
+                    # invisible to us. This outer loop catches
+                    # UnexpectedModelBehavior (when pydantic-ai exhausts its
+                    # retries) and records each failed attempt with retry_number.
+                    _max_outer_retries = 3
+                    _last_error: Exception | None = None
+
+                    for _retry_number in range(_max_outer_retries + 1):
+                        try:
+                            result_ = await pydantic_agent_instance.run(
+                                prompt_payload,
+                                message_history=self.get_message_history(),
+                                usage_limits=usage_limits,
+                                event_stream_handler=event_stream_handler,
+                                **kwargs,
+                            )
+                            # Record successful token usage in the session ledger
+                            try:
+                                usage = result_.usage()
+                                details = getattr(usage, 'details', None)
+                                cache_read = None
+                                if details and isinstance(details, dict):
+                                    cache_read = details.get('cached_content_tokens')
+                                self._state.get_token_ledger().record(TokenAttempt(
+                                    model=self.get_model_name(),
+                                    provider_input_tokens=getattr(usage, 'input_tokens', None),
+                                    provider_output_tokens=getattr(usage, 'output_tokens', None),
+                                    cache_read_tokens=getattr(usage, 'cache_read_tokens', None) or cache_read,
+                                    cache_write_tokens=getattr(usage, 'cache_write_tokens', None),
+                                    success=True,
+                                    retry_number=_retry_number,
+                                    agent_name=self.name,
+                                ))
+                            except Exception:
+                                logger.debug("Failed to record token usage", exc_info=True)
+                            return result_
+                        except UnexpectedModelBehavior as _umb:
+                            _last_error = _umb
+                            _error_msg = str(_umb)[:200]
+                            # Record the failed attempt
+                            try:
+                                self._state.get_token_ledger().record(TokenAttempt(
+                                    model=self.get_model_name(),
+                                    success=False,
+                                    error=_error_msg,
+                                    retry_number=_retry_number,
+                                    agent_name=self.name,
+                                ))
+                            except Exception:
+                                pass
+
+                            if _retry_number < _max_outer_retries:
+                                logger.warning(
+                                    "Retry %d/%d after UnexpectedModelBehavior: %s",
+                                    _retry_number + 1,
+                                    _max_outer_retries,
+                                    _error_msg,
+                                )
+                                # Brief backoff before retrying
+                                await asyncio.sleep(1.0 * (_retry_number + 1))
+                                continue
+                            # Exhausted outer retries - let it propagate to the
+                            # existing error handling below
+                            raise _last_error
             except* UsageLimitExceeded as ule:
                 emit_info(f"Usage limit exceeded: {str(ule)}", group_id=group_id)
                 emit_info(
@@ -2762,6 +2876,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                                     success=False,
                                     error=error_msg[:200],
                                     is_overflow=True,
+                                    retry_number=0,
                                     agent_name=self.name,
                                 ))
                             except Exception:

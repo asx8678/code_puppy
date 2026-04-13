@@ -19,7 +19,7 @@ async def test_ws_health(app) -> None:
     from starlette.testclient import TestClient
 
     with TestClient(app) as client:
-        with client.websocket_connect("/ws/health") as ws:
+        with client.websocket_connect("/ws/health", headers={"origin": "http://localhost:8765"}) as ws:
             ws.send_text("hello")
             data = ws.receive_text()
             assert data == "echo: hello"
@@ -51,7 +51,7 @@ async def test_ws_events(app) -> None:
         ),
     ):
         with TestClient(app) as client:
-            with client.websocket_connect("/ws/events") as ws:
+            with client.websocket_connect("/ws/events", headers={"origin": "http://localhost:8765"}) as ws:
                 # First receives recent events
                 data = ws.receive_json()
                 assert data["type"] == "recent"
@@ -79,7 +79,7 @@ async def test_ws_terminal(app) -> None:
         create=True,
     ):
         with TestClient(app) as client:
-            with client.websocket_connect("/ws/terminal") as ws:
+            with client.websocket_connect("/ws/terminal", headers={"origin": "http://localhost:8765"}) as ws:
                 # Should receive session info
                 data = ws.receive_json()
                 assert data["type"] == "session"
@@ -122,7 +122,7 @@ async def test_ws_events_ping_on_timeout(app) -> None:
     ):
         with TestClient(app) as client:
             try:
-                with client.websocket_connect("/ws/events") as ws:
+                with client.websocket_connect("/ws/events", headers={"origin": "http://localhost:8765"}) as ws:
                     data = ws.receive_json()
                     assert data["type"] == "ping"
             except Exception:
