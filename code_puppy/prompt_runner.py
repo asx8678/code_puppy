@@ -131,10 +131,17 @@ async def execute_single_prompt(prompt: str, message_renderer) -> None:
         agent_response = result.output
 
         # Emit structured message for proper markdown rendering
+        from code_puppy.agents.event_stream_handler import get_stream_state
         from code_puppy.messaging import get_message_bus
         from code_puppy.messaging.messages import AgentResponseMessage
 
-        response_msg = AgentResponseMessage(content=agent_response, is_markdown=True)
+        did_stream, line_count = get_stream_state()
+        response_msg = AgentResponseMessage(
+            content=agent_response,
+            is_markdown=True,
+            was_streamed=did_stream,
+            streamed_line_count=line_count,
+        )
         get_message_bus().emit(response_msg)
 
     except asyncio.CancelledError:

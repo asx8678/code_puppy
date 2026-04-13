@@ -29,6 +29,36 @@ logger = logging.getLogger(__name__)
 _pending_stream_events: list[tuple[str, Any, Any]] = []
 _STREAM_FLUSH_INTERVAL = 50
 
+# Module-level state for stream-to-render coordination
+# Tracks whether text was streamed AND how many terminal lines were printed
+_streamed_line_count: int = 0  # Lines printed during streaming (including banner)
+_did_stream_text: bool = False  # Whether text content was streamed
+
+
+def get_stream_state() -> tuple[bool, int]:
+    """Return (did_stream, line_count) and reset state.
+
+    This is used to coordinate between the streaming handler and the
+    message renderer. The streaming handler tracks how many lines were
+    printed, and the renderer uses this to erase them before re-rendering
+    as markdown.
+
+    Returns:
+        Tuple of (whether text was streamed, number of terminal lines printed)
+    """
+    global _did_stream_text, _streamed_line_count
+    result = (_did_stream_text, _streamed_line_count)
+    _did_stream_text = False
+    _streamed_line_count = 0
+    return result
+
+
+def _reset_stream_state() -> None:
+    """Reset the stream state at the start of a new handler invocation."""
+    global _did_stream_text, _streamed_line_count
+    _did_stream_text = False
+    _streamed_line_count = 0
+
 # Track active flush tasks to prevent garbage collection and ensure completion
 _active_flush_tasks: set[asyncio.Task] = set()
 
@@ -168,6 +198,10 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
         ctx: The run context.
         events: Async iterable of streaming events (PartStartEvent, PartDeltaEvent, etc.).
     """
+    global _did_stream_text, _streamed_line_count
+
+    # Reset stream state at the start of each handler invocation
+    _reset_stream_state()
 
     try:
         # If we're in a sub-agent and verbose mode is disabled, silently consume events
@@ -207,7 +241,7 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
             thinking_color = get_banner_color("thinking")
             console.print(
                 Text.from_markup(
-                    f"[bold white on {thinking_color}] THINKING [/bold white on {thinking_color}] [dim]\u26a1 "
+                    f"[bold white on {thinking_color}] THINKING [/bold white on {thinking_color}] [dim]\\u26a1 "
                 ),
                 end="",
             )
@@ -216,6 +250,7 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
         async def _print_response_banner() -> None:
             """Print the AGENT RESPONSE banner with spinner pause and line clear."""
             nonlocal did_stream_anything
+            global _did_stream_text, _streamed_line_count
 
             pause_all_spinners()
             await asyncio.sleep(0.1)  # Delay to let spinner fully clear
@@ -229,6 +264,10 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
                 )
             )
             did_stream_anything = True
+            # Track that we streamed content and count lines
+            # Banner takes 2 lines: the blank line before it + the banner itself
+            _did_stream_text = True
+            _streamed_line_count += 2
 
         async for event in events:
             # PartStartEvent - register the part but defer banner until content arrives
@@ -304,6 +343,8 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
                                 buf = "".join(text_buffers[event.index])
                                 if "\n" in buf or len(buf) > _TEXT_FLUSH_CHAR_THRESHOLD:
                                     console.print(buf, end="", markup=False)
+                                    # Count newlines in the flushed buffer
+                                    _streamed_line_count += buf.count("\n")
                                     text_buffers[event.index] = []
                             else:
                                 # For thinking parts, stream immediately (dim)
@@ -367,9 +408,12 @@ async def event_stream_handler(ctx: RunContext, events: AsyncIterable[Any]) -> N
                                 buf = "".join(remaining)
                                 if buf:
                                     console.print(buf, end="", markup=False)
+                                    # Count remaining newlines in the final buffer
+                                    _streamed_line_count += buf.count("\n")
                         # Print trailing newline only if banner was printed (i.e., we had content)
                         if event.index in banner_printed:
                             console.print()  # Final newline after text streaming
+                            _streamed_line_count += 1  # Count the final newline
                     # For tool parts, clear the chunk counter line
                     elif event.index in tool_parts:
                         # Clear the chunk counter line by printing spaces and returning

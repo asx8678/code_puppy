@@ -868,12 +868,17 @@ def register_invoke_agent(agent):
                     )
 
                     # Emit structured response message via MessageBus
+                    from code_puppy.agents.event_stream_handler import get_stream_state
+
+                    did_stream, line_count = get_stream_state()
                     bus.emit(
                         SubAgentResponseMessage(
                             agent_name=agent_name,
                             session_id=session_id,
                             response=response,
                             message_count=len(updated_history),
+                            was_streamed=did_stream,
+                            streamed_line_count=line_count,
                         )
                     )
 

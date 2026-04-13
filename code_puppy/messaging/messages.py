@@ -262,6 +262,12 @@ class AgentResponseMessage(BaseMessage):
     is_markdown: bool = Field(
         default=False, description="Whether content should be rendered as markdown"
     )
+    was_streamed: bool = Field(
+        default=False, description="Whether this content was already streamed to the terminal"
+    )
+    streamed_line_count: int = Field(
+        default=0, description="Number of terminal lines occupied by streamed output (for erasure)"
+    )
 
 
 class SubAgentInvocationMessage(BaseMessage):
@@ -288,6 +294,12 @@ class SubAgentResponseMessage(BaseMessage):
     response: str = Field(description="The agent's response content")
     message_count: int = Field(
         default=0, description="Number of messages now in session history"
+    )
+    was_streamed: bool = Field(
+        default=False, description="Whether this content was already streamed to the terminal"
+    )
+    streamed_line_count: int = Field(
+        default=0, description="Number of terminal lines occupied by streamed output (for erasure)"
     )
 
 

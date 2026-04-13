@@ -586,18 +586,10 @@ class RichConsoleRenderer:
         elif isinstance(message, AgentReasoningMessage):
             self._render_agent_reasoning(message)
         elif isinstance(message, AgentResponseMessage):
-            # TODO(bd:code_puppy-nv4): Streaming prints plain text chunks; this re-renders
-            # as markdown after completion. Causes visible duplication but restores
-            # markdown rendering broken by wmq3 fix. Follow-up: suppress streamed
-            # lines before re-rendering, OR implement inline markup streaming.
             self._render_agent_response(message)
         elif isinstance(message, SubAgentInvocationMessage):
             self._render_subagent_invocation(message)
         elif isinstance(message, SubAgentResponseMessage):
-            # TODO(bd:code_puppy-nv4): Streaming prints plain text chunks; this re-renders
-            # as markdown after completion. Causes visible duplication but restores
-            # markdown rendering broken by wmq3 fix. Follow-up: suppress streamed
-            # lines before re-rendering, OR implement inline markup streaming.
             self._render_subagent_response(message)
         elif isinstance(message, UniversalConstructorMessage):
             self._render_universal_constructor(message)
@@ -1104,6 +1096,17 @@ class RichConsoleRenderer:
 
     def _render_agent_response(self, msg: AgentResponseMessage) -> None:
         """Render agent response with header and markdown formatting."""
+        # If content was already streamed, erase it before re-rendering as markdown
+        if msg.was_streamed and msg.streamed_line_count > 0:
+            # Erase the previously-streamed plain text output
+            # Move cursor up N lines and clear each line
+            import sys
+
+            for _ in range(msg.streamed_line_count):
+                sys.stdout.write("\033[A\033[2K")  # Move up + clear line
+            sys.stdout.write("\033[G")  # Move cursor to column 0
+            sys.stdout.flush()
+
         # Header
         banner = self._format_banner("agent_response", "AGENT RESPONSE")
         self._console.print(f"\n{banner}\n")
@@ -1147,6 +1150,17 @@ class RichConsoleRenderer:
 
     def _render_subagent_response(self, msg: SubAgentResponseMessage) -> None:
         """Render sub-agent response with markdown formatting."""
+        # If content was already streamed, erase it before re-rendering as markdown
+        if msg.was_streamed and msg.streamed_line_count > 0:
+            # Erase the previously-streamed plain text output
+            # Move cursor up N lines and clear each line
+            import sys
+
+            for _ in range(msg.streamed_line_count):
+                sys.stdout.write("\033[A\033[2K")  # Move up + clear line
+            sys.stdout.write("\033[G")  # Move cursor to column 0
+            sys.stdout.flush()
+
         # Response header
         banner = self._format_banner("subagent_response", "✓ AGENT RESPONSE")
         self._console.print(f"\n{banner} [bold cyan]{msg.agent_name}[/bold cyan]")

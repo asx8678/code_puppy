@@ -128,11 +128,16 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 _sync_history_from_result(agent, response)
 
                 # Emit structured message for proper markdown rendering
+                from code_puppy.agents.event_stream_handler import get_stream_state
                 from code_puppy.messaging import get_message_bus
                 from code_puppy.messaging.messages import AgentResponseMessage
 
+                did_stream, line_count = get_stream_state()
                 response_msg = AgentResponseMessage(
-                    content=agent_response, is_markdown=True
+                    content=agent_response,
+                    is_markdown=True,
+                    was_streamed=did_stream,
+                    streamed_line_count=line_count,
                 )
                 get_message_bus().emit(response_msg)
 
@@ -485,11 +490,16 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                 agent_response = result.output
 
                 # Emit structured message for proper markdown rendering
+                from code_puppy.agents.event_stream_handler import get_stream_state
                 from code_puppy.messaging import get_message_bus
                 from code_puppy.messaging.messages import AgentResponseMessage
 
+                did_stream, line_count = get_stream_state()
                 response_msg = AgentResponseMessage(
-                    content=agent_response, is_markdown=True
+                    content=agent_response,
+                    is_markdown=True,
+                    was_streamed=did_stream,
+                    streamed_line_count=line_count,
                 )
                 get_message_bus().emit(response_msg)
 
@@ -579,8 +589,14 @@ async def interactive_mode(message_renderer, initial_command: str = None) -> Non
                     agent_response = result.output
 
                     # Emit structured message for proper markdown rendering
+                    from code_puppy.agents.event_stream_handler import get_stream_state
+
+                    did_stream, line_count = get_stream_state()
                     response_msg = AgentResponseMessage(
-                        content=agent_response, is_markdown=True
+                        content=agent_response,
+                        is_markdown=True,
+                        was_streamed=did_stream,
+                        streamed_line_count=line_count,
                     )
                     get_message_bus().emit(response_msg)
 
