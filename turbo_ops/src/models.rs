@@ -238,6 +238,7 @@ pub struct FileReadResult {
 }
 
 /// Calculate token count using the same logic as Code Puppy
+/// Uses 4.0 chars/token to align with token_utils.py and code_puppy_core
 pub fn estimate_tokens(text: &str) -> usize {
-    std::cmp::max(1, (text.len() as f64 / 2.5).floor() as usize)
+    std::cmp::max(1, (text.len() as f64 / 4.0).floor() as usize)
 }
