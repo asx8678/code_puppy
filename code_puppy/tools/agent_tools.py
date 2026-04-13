@@ -152,7 +152,10 @@ def _generate_dbos_workflow_id(base_id: str) -> str:
 
 # Constants for streaming retry logic
 # These match the test constants in tests/agents/test_streaming_retry.py
-MAX_STREAMING_RETRIES = 3
+# NOTE: MAX_STREAMING_RETRIES is set to 1 because the HTTP layer (http_utils.py)
+# already handles retries (default 5 retries). Setting this higher would cause
+# retry multiplication: streaming_layer(3) × http_layer(5) = 15 total retries!
+MAX_STREAMING_RETRIES = 1
 STREAMING_RETRY_DELAYS = [1, 2, 4]
 _RETRYABLE_STREAMING_EXCEPTIONS = (
     httpx.RemoteProtocolError,
@@ -173,7 +176,7 @@ def _is_transient_model_error(error: ModelHTTPError) -> bool:
     return False
 
 
-async def _run_with_streaming_retry(run_coro_factory):
+async def _run_with_streaming_retry(run_coro_factory, *, model_name: str | None = None):
     """Wrap agent run with retry logic for transient HTTP errors during streaming.
 
     Catches and retries transient network errors from LLM providers:
@@ -185,11 +188,19 @@ async def _run_with_streaming_retry(run_coro_factory):
     the connection during a streamed response. They are always safe to retry
     since no application state has been mutated.
 
-    The retry uses exponential backoff (1s, 2s, 4s) with up to 3 attempts
-    before propagating the error.
+    **Circuit Breaker Integration:**
+    Before each retry, checks if the circuit breaker is open for the model.
+    If the circuit is open (rate limit active), the retry is aborted to
+    prevent wasted API calls against a throttled endpoint.
+
+    **Retry Budget Awareness:**
+    This layer only performs 1 retry because the HTTP layer (http_utils.py)
+    already handles retries. Multiple retry layers would multiply:
+    streaming_layer(3) × http_layer(5) = 15 total retries.
 
     Args:
         run_coro_factory: A callable that returns a coroutine to run.
+        model_name: Optional model name for circuit breaker awareness.
 
     Returns:
         The result of the coroutine.
@@ -197,6 +208,8 @@ async def _run_with_streaming_retry(run_coro_factory):
     Raises:
         The last retryable exception if all retries are exhausted.
     """
+    from code_puppy.adaptive_rate_limiter import is_circuit_open
+
     last_error = None
     for attempt in range(MAX_STREAMING_RETRIES):
         try:
@@ -204,12 +217,26 @@ async def _run_with_streaming_retry(run_coro_factory):
         except _RETRYABLE_STREAMING_EXCEPTIONS as e:
             last_error = e
             if attempt < MAX_STREAMING_RETRIES - 1:
+                # Check circuit breaker before retrying (issue bd-3)
+                if model_name and is_circuit_open(model_name):
+                    logger.warning(
+                        f"Circuit open for {model_name}, aborting retry after "
+                        f"transient error: {e}"
+                    )
+                    raise last_error
                 delay = STREAMING_RETRY_DELAYS[attempt]
                 await asyncio.sleep(delay)
         except ModelHTTPError as e:
             if _is_transient_model_error(e):
                 last_error = e
                 if attempt < MAX_STREAMING_RETRIES - 1:
+                    # Check circuit breaker before retrying (issue bd-3)
+                    if model_name and is_circuit_open(model_name):
+                        logger.warning(
+                            f"Circuit open for {model_name}, aborting retry after "
+                            f"transient ModelHTTPError: status={e.status_code}"
+                        )
+                        raise last_error
                     delay = STREAMING_RETRY_DELAYS[attempt]
                     logger.warning(
                         f"Transient ModelHTTPError (attempt {attempt + 1}/{MAX_STREAMING_RETRIES}): "
@@ -826,7 +853,8 @@ def register_invoke_agent(agent):
                                                 request_limit=get_puppy_config().message_limit
                                             ),
                                             event_stream_handler=stream_handler,
-                                        )
+                                        ),
+                                        model_name=model_name,
                                     )
                                 )
                                 _active_subagent_tasks.add(task)
@@ -840,7 +868,8 @@ def register_invoke_agent(agent):
                                             request_limit=get_puppy_config().message_limit
                                         ),
                                         event_stream_handler=stream_handler,
-                                    )
+                                    ),
+                                    model_name=model_name,
                                 )
                             )
                             _active_subagent_tasks.add(task)

@@ -749,6 +749,31 @@ def release_model_slot(model_name: str) -> None:
             pass
 
 
+def is_circuit_open(model_name: str) -> bool:
+    """Check whether the circuit breaker is OPEN for *model_name*.
+
+    Used to prevent wasted retry attempts against rate-limited endpoints.
+    If the circuit is open, requests are queued until the cooldown elapses
+    and the circuit transitions to HALF_OPEN.
+
+    Args:
+        model_name: The model to check circuit state for.
+
+    Returns:
+        ``True`` if the circuit is OPEN and requests would be queued.
+        ``False`` if circuit is CLOSED or HALF_OPEN (requests allowed).
+    """
+    key = _normalize_model_name(model_name)
+    if key is None:
+        return False  # Unknown model = no throttling
+
+    state = _state.model_states.get(key)
+    if state is None:
+        return False  # No state = no circuit yet
+
+    return _state.cfg_circuit_breaker_enabled and state.circuit_state == CircuitState.OPEN
+
+
 def check_model_slot(model_name: str) -> bool:
     """Check whether a concurrency slot is available for *model_name* **without acquiring it**.
 
