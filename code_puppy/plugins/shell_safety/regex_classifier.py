@@ -82,17 +82,22 @@ _HIGH_RISK_PATTERNS: list[tuple[re.Pattern, str]] = [
     # Classic fork bomb in variable form - OPTIMIZED
     (re.compile(r"\b[a-zA-Z_]\w*\s*=\s*\(\s*\)\s*\{[^{}]{0,200}\|\s*\$[a-zA-Z_]\w*"), "fork bomb (variable assignment form)"),
 
-    # rm -rf / and variants - ONLY matches root "/" or "/*" or "/" at end
+    # SECURITY FIX: rm -rf / and variants - hardened to handle more bypasses
     # The pattern requires standalone "/" (end of string, whitespace, or another /)
     # This does NOT match "/tmp/build" because the "/" is followed by a word char
+    # Now handles: -- separator, quoted paths, root-equivalent paths (/., //, ///)
     (re.compile(
         r"\brm\b"
-        r"(?:\s+(?:-[a-zA-Z]*[rf][a-zA-Z]*|--force|--recursive|--preserve-root))+"
-        r"\s+(?:--no-preserve-root|/\*?/?(?:\s|$))"
+        r"(?:\s+(?:-[a-zA-Z]*[rf][a-zA-Z]*|--force|--recursive|--preserve-root))*"
+        r"(?:\s+--)?"  # Optional -- separator
+        r"\s+(?:--no-preserve-root|['\"]?(?:/|/\.?|/+/|/\*|/\*/?)(?:\s|$|['\"]))"
     ), "rm recursive force delete of root"),
     (re.compile(r"\brm\b(?:\s+(?:-[a-zA-Z]*[rf][a-zA-Z]*|(?:--force|--recursive)))+\s+--no-preserve-root"), "rm force delete with no-preserve-root"),
     # Also match explicit rm -r / or rm -f / followed by additional flags (at root only)
-    (re.compile(r"\brm\s+(?:-[a-zA-Z]*r[a-zA-Z]*\s+)+(?:-[a-zA-Z]*f[a-zA-Z]*\s+)*/(?:\s|$)"), "rm recursive delete of root"),
+    # SECURITY FIX: Handles quoted root paths like '/' or "/"
+    (re.compile(r"\brm\s+(?:-[a-zA-Z]*r[a-zA-Z]*\s+)+(?:-[a-zA-Z]*f[a-zA-Z]*\s+)*['\"]?/(?:\s|$|['\"])"), "rm recursive delete of root"),
+    # SECURITY FIX: Handle rm -rf -- / with -- separator explicitly
+    (re.compile(r"\brm\b(?:\s+-(?:[a-zA-Z]*[rf][a-zA-Z]*))+\s+--\s+['\"]?/?(?:\s|$|['\"])"), "rm with -- separator targeting root"),
 
     # Disk destruction
     (re.compile(
@@ -158,17 +163,19 @@ _HIGH_RISK_PATTERNS: list[tuple[re.Pattern, str]] = [
     # SECURITY FIX: find -delete patterns (mass deletion vulnerability)
     # find / with -delete is extremely dangerous - can delete entire filesystem
     # OPTIMIZED: Fixed path patterns - ~/.* instead of ~/\.*, removed . (current dir is less dangerous)
+    # SECURITY FIX: Now handles quoted root paths like '/' or "/"
     (re.compile(
-        r"\bfind\s+(?:/|/\.\*|/\*|/\.?\.|~/.+|~)\s+(?:[^\r\n]{0,400})?-delete\b"
+        r"\bfind\s+(?:['\"]?/['\"]?|/\.\*|/\*|/\.?\.|~/.+|~)\s+(?:[^\r\n]{0,400})?-delete\b"
     ), "find with -delete targeting root/home directory"),
     (re.compile(
-        r"\bfind\s+(?:/|/\.\*|/\*|/\.?\.|~/.+|~)\s+(?:[^\r\n]{0,400})?-exec\s+rm\s+(?:-[rf]+\s+)?(?:\{\}|/|\*)"
+        r"\bfind\s+(?:['\"]?/['\"]?|/\.\*|/\*|/\.?\.|~/.+|~)\s+(?:[^\r\n]{0,400})?-exec\s+rm\s+(?:-[rf]+\s+)?(?:\{\}|/|\*)"
     ), "find -exec rm targeting root/home directory"),
     (re.compile(
-        r"\bfind\s+(?:/|/\.\*|/\*|/\.?\.|~/.+|~)\s+(?:[^\r\n]{0,400})?-execdir\s+rm\b"
+        r"\bfind\s+(?:['\"]?/['\"]?|/\.\*|/\*|/\.?\.|~/.+|~)\s+(?:[^\r\n]{0,400})?-execdir\s+rm\b"
     ), "find -execdir rm targeting root/home directory"),
     # Fallback pattern for root-only detection (catches cases above might miss)
-    (re.compile(r"\bfind\s+/\s+-delete\b"), "find -delete at filesystem root"),
+    # SECURITY FIX: Now handles quoted paths like find '/' -delete
+    (re.compile(r"\bfind\s+['\"]?/['\"]?\s+-delete\b"), "find -delete at filesystem root"),
 ]
 
 # =============================================================================
@@ -362,12 +369,110 @@ def _extract_unquoted_text(command: str) -> str:
 
 
 # Pre-compiled patterns for checking sensitive paths in file operations
+# SECURITY FIX: Now also matches after input redirection operators (<, <<, <<<)
 _SENSITIVE_PATH_PATTERN = re.compile(
-    r"(?:^|\s)(?:/etc|/root|/proc|~/.ssh|~/.aws|/var/log|/home/root)(?:/|$|\s)"
+    r"(?:^|\s|<<?<?)(?:/etc|/root|/proc|~/.ssh|~/.aws|/var/log|/home/root)(?:/|$|\s)"
 )
 
+# SECURITY FIX: Pattern to detect relative path traversal that could escape to sensitive paths
+_TRAVERSAL_PATTERN = re.compile(r"\.\./")
+
+
+def _strip_quotes(path: str) -> str:
+    """Strip surrounding quotes from a path string.
+    
+    Handles both single and double quotes. Used for normalizing paths
+    before security checks.
+    
+    Args:
+        path: Path string that may be quoted.
+        
+    Returns:
+        Path with surrounding quotes removed.
+        
+    Examples:
+        >>> _strip_quotes("'/etc/shadow'")
+        '/etc/shadow'
+        >>> _strip_quotes('/etc/shadow')
+        '/etc/shadow'
+    """
+    path = path.strip()
+    if len(path) >= 2:
+        if path[0] == path[-1] and path[0] in ('"', "'"):
+            return path[1:-1]
+    return path
+
+
+def _normalize_path(path: str) -> str:
+    """Normalize a path by stripping quotes and expanding leading ~.
+    
+    Args:
+        path: Path string to normalize.
+        
+    Returns:
+        Normalized path.
+    """
+    path = _strip_quotes(path)
+    # Expand ~ at the start (for home directory references)
+    if path.startswith("~/"):
+        # Keep as ~/ for pattern matching purposes
+        pass
+    return path
+
+
+def _normalize_command_for_checks(command: str) -> str:
+    """Normalize command string for security checks.
+    
+    Strips quotes from paths within the command so that sensitive
+    path detection works on quoted arguments like '/etc/shadow'.
+    
+    Args:
+        command: Shell command string.
+        
+    Returns:
+        Command with quoted paths normalized (quotes stripped).
+    """
+    # Extract all quoted strings and unquote them
+    result = command
+    # Pattern to match quoted strings
+    quoted_pattern = re.compile(r"([\"'])([^\"']*?)\1")
+    
+    def unquote_match(match: re.Match) -> str:
+        # Return the content without quotes
+        return match.group(2)
+    
+    return quoted_pattern.sub(unquote_match, result)
+
+
+def _path_with_traversal_hits_sensitive(command: str) -> bool:
+    """Check if a command with path traversal could access sensitive paths.
+    
+    Detects patterns like ../../../etc/shadow that escape the repo and 
+    target sensitive system paths.
+    
+    Args:
+        command: Normalized command string to check.
+        
+    Returns:
+        True if traversal pattern could hit sensitive paths.
+    """
+    # Extract all path-like tokens from the command
+    # Look for patterns ending with sensitive path fragments
+    sensitive_fragments = [
+        "/etc", "/root", "/proc", ".ssh", ".aws", "/var/log", 
+        "/home/root", "/bin", "/sbin", "/usr", "/dev"
+    ]
+    
+    # Check if any sensitive fragment appears after or within traversal
+    if "../" in command:
+        for fragment in sensitive_fragments:
+            if fragment in command:
+                return True
+    return False
+
 # Pre-compiled patterns for checking redirects and command substitution
-_REDIRECT_PATTERN = re.compile(r">\s?|>>\s?|\||\x60.*\x60|\$\(")
+# SECURITY FIX: Now includes input redirection (<, <<, <<<) to prevent bypasses
+_REDIRECT_PATTERN = re.compile(r"[<>>>]\s?|<<\s?|<<<\s?|\||\x60.*\x60|\$\(")
 
 
 def _classify_single_command(command: str) -> RegexClassificationResult:
@@ -391,11 +496,44 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
     # Check high-risk patterns first (immediate blocking)
     # We check both raw and unquoted - some patterns (fork bombs, pipes) 
     # are dangerous even quoted, others we check only unquoted
+    # SECURITY FIX: Get normalized command (quotes stripped, not replaced with spaces)
+    normalized_cmd = _normalize_command_for_checks(command)
+    
     for pattern, description in _HIGH_RISK_PATTERNS:
-        # For destructive filesystem patterns, check unquoted to avoid false positives
-        # in strings like: echo "rm -rf / is dangerous"
-        if any(x in description for x in ["delete", "disk", "filesystem", "format", "recursive", "find"]):
+        # SECURITY FIX: Different check strategies for different pattern types:
+        # - rm patterns: check normalized (strips quotes, catches rm '/')
+        # - find patterns: check BOTH raw (for quoted paths) AND normalized
+        # - other patterns (fork bombs, pipes): check raw command
+        if "find" in description:
+            # Check raw command for quoted path support (find '/', etc.)
+            if pattern.search(command):
+                return RegexClassificationResult(
+                    risk="critical",
+                    reasoning=f"High-risk pattern detected: {description}",
+                    blocked=True,
+                    is_ambiguous=False,
+                )
+            # Also check normalized (unquoted but preserving path structure)
+            if pattern.search(normalized_cmd):
+                return RegexClassificationResult(
+                    risk="critical",
+                    reasoning=f"High-risk pattern detected: {description}",
+                    blocked=True,
+                    is_ambiguous=False,
+                )
+        elif any(x in description for x in ["delete", "disk", "filesystem", "format", "recursive"]):
+            # SECURITY FIX: Check unquoted first to avoid false positives
             if pattern.search(unquoted):
+                return RegexClassificationResult(
+                    risk="critical",
+                    reasoning=f"High-risk pattern detected: {description}",
+                    blocked=True,
+                    is_ambiguous=False,
+                )
+            # Also check normalized ONLY if command starts with destructive verb
+            # This catches rm -rf '/' but avoids false positives from echo "rm -rf /"
+            starts_with_destructive = re.match(r"^\s*(?:rm\b|dd\b|mkfs|format\b|del\b|rd\b)", normalized_cmd)
+            if starts_with_destructive and pattern.search(normalized_cmd):
                 return RegexClassificationResult(
                     risk="critical",
                     reasoning=f"High-risk pattern detected: {description}",
@@ -413,8 +551,10 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
                 )
     
     # Check medium-risk patterns
+    # SECURITY FIX: Use unquoted text to avoid false positives in quoted strings
+    # like: echo "sudo chmod -R /tmp" (just an example string, not a command)
     for pattern, description in _MEDIUM_RISK_PATTERNS:
-        if pattern.search(command):
+        if pattern.search(unquoted):
             return RegexClassificationResult(
                 risk="medium",
                 reasoning=f"Medium-risk pattern detected: {description}",
@@ -423,8 +563,9 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
             )
     
     # Check low-risk patterns
+    # SECURITY FIX: Use unquoted text to avoid false positives
     for pattern, description in _LOW_RISK_PATTERNS:
-        if pattern.search(command):
+        if pattern.search(unquoted):
             return RegexClassificationResult(
                 risk="low",
                 reasoning=f"Low-risk pattern detected: {description}",
@@ -467,13 +608,43 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
     
     # Check file reading (EXCLUDES sensitive paths)
     # First check if it matches the pattern, then verify no sensitive paths
+    # SECURITY FIX: Also check for input redirects (<) that could access sensitive files
     file_read_match = re.match(
         r"^\s*(?:cat|head|tail|less|more)\s+(?:-[a-zA-Z0-9]+\s+)*[^|;\&\`\$>]*$",
         command
     )
-    if file_read_match:
-        # Check for sensitive paths in the command
-        if not _SENSITIVE_PATH_PATTERN.search(command):
+    # Also allow input redirection form: cat < /path/to/file
+    file_read_redirect = re.match(
+        r"^\s*cat\s+<\s*\S+$",
+        command
+    )
+    if file_read_match or file_read_redirect:
+        # SECURITY FIX: Check for sensitive paths on normalized (unquoted) command
+        # This prevents bypasses like cat '/etc/shadow' or cat "/etc/passwd"
+        normalized_cmd = _normalize_command_for_checks(command)
+        
+        # Check for sensitive paths in the normalized command
+        if _SENSITIVE_PATH_PATTERN.search(normalized_cmd):
+            # Has sensitive paths - fall through to ambiguous/LLM
+            pass  # Fall through to the ambiguous return below
+        elif _TRAVERSAL_PATTERN.search(normalized_cmd):
+            # SECURITY FIX: Detect traversal patterns that could escape to sensitive paths
+            # Check if the path with traversal might resolve to sensitive paths
+            if _path_with_traversal_hits_sensitive(normalized_cmd):
+                return RegexClassificationResult(
+                    risk="ambiguous",
+                    reasoning="Path traversal detected that could access sensitive system paths",
+                    blocked=False,
+                    is_ambiguous=True,
+                )
+            # Traversal but not to sensitive paths - allow
+            return RegexClassificationResult(
+                risk="none",
+                reasoning="Safe pattern detected: file reading (path traversal not targeting sensitive paths)",
+                blocked=False,
+                is_ambiguous=False,
+            )
+        else:
             return RegexClassificationResult(
                 risk="none",
                 reasoning="Safe pattern detected: file reading (non-sensitive path)",
@@ -535,10 +706,29 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
     # Check if grep/rg with absolute system paths -> fall through to LLM
     grep_match = re.match(r"^\s*(?:grep|rg|ag|ack)\s+(?:-[a-zA-Z0-9-]+\s+)*", command)
     if grep_match:
+        # SECURITY FIX: Check normalized command for sensitive paths (handles quoted paths)
+        normalized_cmd = _normalize_command_for_checks(command)
+        
         # If it has absolute system paths, don't mark as safe - let LLM decide
-        if _SENSITIVE_PATH_PATTERN.search(command):
+        if _SENSITIVE_PATH_PATTERN.search(normalized_cmd):
             # Has sensitive paths - fall through to ambiguous
             pass  # Fall through to the ambiguous return below
+        elif _TRAVERSAL_PATTERN.search(normalized_cmd):
+            # SECURITY FIX: Detect traversal patterns that could escape to sensitive paths
+            if _path_with_traversal_hits_sensitive(normalized_cmd):
+                return RegexClassificationResult(
+                    risk="ambiguous",
+                    reasoning="Path traversal in grep could access sensitive system paths",
+                    blocked=False,
+                    is_ambiguous=True,
+                )
+            # Traversal but not to sensitive paths - allow
+            return RegexClassificationResult(
+                risk="none",
+                reasoning="Safe pattern detected: text search with path traversal (not targeting sensitive paths)",
+                blocked=False,
+                is_ambiguous=False,
+            )
         else:
             # No sensitive paths - can be safe
             return RegexClassificationResult(

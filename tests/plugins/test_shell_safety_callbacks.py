@@ -763,3 +763,373 @@ class TestNewlineRegression:
             assert "\n" in error_msg, "Error message should contain actual newlines"
             # Must NOT contain literal backslash-n
             assert "\\n" not in error_msg, "Error message should NOT contain literal \\n"
+
+
+# =============================================================================
+# Security Regression Tests - Phase 1 Critical Fixes
+# =============================================================================
+
+
+class TestSecurityRegressionQuotedPaths:
+    """SECURITY REGRESSION TESTS: Quoted sensitive path bypasses.
+    
+    Issue: Commands like cat '/etc/shadow' bypassed detection because
+    the regex only matched unquoted paths.
+    
+    SECURITY FIX: The regex classifier now properly normalizes commands to
+    catch quoted sensitive paths. It returns 'ambiguous' for these cases,
+    triggering LLM review. The key fix is that these are NO LONGER
+    classified as 'none' (safe) by the regex classifier.
+    """
+
+    @pytest.mark.anyio
+    async def test_quoted_etc_shadow_not_regex_safe(self):
+        """SECURITY FIX: cat '/etc/shadow' regex classifier should NOT return 'none'."""
+        # Test the regex classifier directly - the key fix is that regex no longer
+        # returns 'none' (safe) for quoted sensitive paths
+        from code_puppy.plugins.shell_safety.regex_classifier import classify_command
+        
+        result = classify_command("cat '/etc/shadow'")
+        assert result.risk != "none", "Quoted sensitive path should not be regex-classified as 'none'"
+        # Should be 'ambiguous' to trigger LLM review
+        assert result.is_ambiguous is True, "Should require LLM assessment"
+
+    @pytest.mark.anyio
+    async def test_double_quoted_etc_shadow_not_regex_safe(self):
+        """SECURITY FIX: cat "/etc/shadow" regex classifier should NOT return 'none'."""
+        from code_puppy.plugins.shell_safety.regex_classifier import classify_command
+        
+        result = classify_command('cat "/etc/shadow"')
+        assert result.risk != "none"
+        assert result.is_ambiguous is True
+
+    @pytest.mark.anyio
+    async def test_quoted_ssh_key_not_regex_safe(self):
+        """SECURITY FIX: head '~/.ssh/id_rsa' regex classifier should NOT return 'none'."""
+        from code_puppy.plugins.shell_safety.regex_classifier import classify_command
+        
+        result = classify_command("head '~/.ssh/id_rsa'")
+        assert result.risk != "none"
+        assert result.is_ambiguous is True
+
+    @pytest.mark.anyio
+    async def test_grep_quoted_etc_passwd_not_regex_safe(self):
+        """SECURITY FIX: grep '/etc/passwd' regex classifier should NOT return 'none'."""
+        from code_puppy.plugins.shell_safety.regex_classifier import classify_command
+        
+        result = classify_command("grep root '/etc/passwd'")
+        assert result.risk != "none"
+        assert result.is_ambiguous is True
+
+
+class TestSecurityRegressionInputRedirection:
+    """SECURITY REGRESSION TESTS: Input redirection bypasses.
+    
+    Issue: Commands like cat </etc/shadow bypassed detection because
+    the redirect pattern only checked for > (output) not < (input).
+    """
+
+    @pytest.mark.anyio
+    async def test_input_redirection_no_space_blocked(self):
+        """cat </etc/shadow should be detected and blocked/ambiguous."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-opus-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="low",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=None,
+            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
+        ):
+            result = await shell_safety_callback(
+                context=None, command="cat </etc/shadow", cwd=None, timeout=60
+            )
+            assert result is not None
+            assert result["blocked"] is True or result["risk"] in ("medium", "high", "ambiguous")
+
+    @pytest.mark.anyio
+    async def test_input_redirection_with_space_blocked(self):
+        """cat < /etc/shadow should be detected and blocked/ambiguous."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-opus-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="low",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=None,
+            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
+        ):
+            result = await shell_safety_callback(
+                context=None, command="cat < /etc/shadow", cwd=None, timeout=60
+            )
+            assert result is not None
+            assert result["blocked"] is True or result["risk"] in ("medium", "high", "ambiguous")
+
+
+class TestSecurityRegressionTraversalBypass:
+    """SECURITY REGRESSION TESTS: Relative traversal bypasses.
+    
+    Issue: Commands like cat ../../../../etc/shadow could escape the repo
+    and access sensitive system files while being marked as safe.
+    
+    SECURITY FIX: The regex classifier now properly detects traversal patterns
+    that target sensitive paths and returns 'ambiguous' for LLM review.
+    """
+
+    @pytest.mark.anyio
+    async def test_traversal_to_etc_shadow_not_regex_safe(self):
+        """SECURITY FIX: cat ../../../../etc/shadow regex should NOT return 'none'."""
+        from code_puppy.plugins.shell_safety.regex_classifier import classify_command
+        
+        result = classify_command("cat ../../../../etc/shadow")
+        assert result.risk != "none", "Traversal to sensitive path should not be regex-classified as 'none'"
+        # Should be 'ambiguous' to trigger LLM review
+        assert result.is_ambiguous is True, "Should require LLM assessment"
+
+    @pytest.mark.anyio
+    async def test_grep_traversal_to_etc_passwd_not_regex_safe(self):
+        """SECURITY FIX: grep with traversal regex should NOT return 'none'."""
+        from code_puppy.plugins.shell_safety.regex_classifier import classify_command
+        
+        result = classify_command("grep root ../../../../etc/passwd")
+        assert result.risk != "none"
+        assert result.is_ambiguous is True
+
+
+class TestSecurityRegressionRootDelete:
+    """SECURITY REGRESSION TESTS: Hardened root-delete detection.
+    
+    Issue: Variants like rm -rf -- /, rm -rf '/' , rm -rf /. 
+    could bypass the original detection patterns.
+    """
+
+    @pytest.mark.anyio
+    async def test_rm_rf_dash_dash_root_blocked(self):
+        """rm -rf -- / should be detected and blocked."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-opus-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="medium",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=None,
+            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
+        ):
+            result = await shell_safety_callback(
+                context=None, command="rm -rf -- /", cwd=None, timeout=60
+            )
+            assert result is not None
+            assert result["blocked"] is True
+            assert result["risk"] == "critical"
+
+    @pytest.mark.anyio
+    async def test_rm_r_f_dash_dash_root_blocked(self):
+        """rm -r -f -- / should be detected and blocked."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-opus-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="medium",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=None,
+            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
+        ):
+            result = await shell_safety_callback(
+                context=None, command="rm -r -f -- /", cwd=None, timeout=60
+            )
+            assert result is not None
+            assert result["blocked"] is True
+            assert result["risk"] == "critical"
+
+    @pytest.mark.anyio
+    async def test_rm_quoted_root_blocked(self):
+        """rm -rf '/' should be detected and blocked."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-opus-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="medium",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=None,
+            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
+        ):
+            result = await shell_safety_callback(
+                context=None, command="rm -rf '/'", cwd=None, timeout=60
+            )
+            assert result is not None
+            assert result["blocked"] is True
+            assert result["risk"] == "critical"
+
+    @pytest.mark.anyio
+    async def test_rm_rf_root_dot_blocked(self):
+        """rm -rf /. should be detected and blocked."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-opus-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="medium",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=None,
+            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
+        ):
+            result = await shell_safety_callback(
+                context=None, command="rm -rf /.", cwd=None, timeout=60
+            )
+            assert result is not None
+            assert result["blocked"] is True
+            assert result["risk"] == "critical"
+
+    @pytest.mark.anyio
+    async def test_rm_rf_multiple_slashes_blocked(self):
+        """rm -rf /// should be detected and blocked."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-opus-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="medium",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=None,
+            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
+        ):
+            result = await shell_safety_callback(
+                context=None, command="rm -rf ///", cwd=None, timeout=60
+            )
+            assert result is not None
+            assert result["blocked"] is True
+            assert result["risk"] == "critical"
+
+
+class TestSecurityRegressionFindVariants:
+    """SECURITY REGRESSION TESTS: Find quoted-root detection.
+    
+    Issue: Commands like find '/' -delete fell through to ambiguous
+    because quoted paths weren't normalized before detection.
+    """
+
+    @pytest.mark.anyio
+    async def test_find_single_quoted_root_delete_blocked(self):
+        """find '/' -delete should be detected and blocked."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-opus-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="medium",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=None,
+            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
+        ):
+            result = await shell_safety_callback(
+                context=None, command="find '/' -delete", cwd=None, timeout=60
+            )
+            assert result is not None
+            assert result["blocked"] is True
+            assert result["risk"] == "critical"
+
+    @pytest.mark.anyio
+    async def test_find_double_quoted_root_delete_blocked(self):
+        """find "/" -delete should be detected and blocked."""
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value="claude-opus-4",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="medium",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=None,
+            ),
+            patch("code_puppy.plugins.shell_safety.register_callbacks.emit_info"),
+        ):
+            result = await shell_safety_callback(
+                context=None, command='find "/" -delete', cwd=None, timeout=60
+            )
+            assert result is not None
+            assert result["blocked"] is True
+            assert result["risk"] == "critical"

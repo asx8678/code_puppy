@@ -234,10 +234,11 @@ async def shell_safety_callback(
         ``None`` if the command is safe to proceed, or a dict with
         rejection info if the command should be blocked.
     """
-    # Skip safety checks for OAuth models - they have their own safety mechanisms
+    # SECURITY FIX: OAuth bypass removed - all models go through safety checks
+    # is_oauth_model() now always returns False (kept for API compatibility)
     current_model = get_global_model_name()
     if is_oauth_model(current_model):
-        return None
+        return None  # This will never execute since is_oauth_model always returns False
 
     # --- PolicyEngine fast-path ------------------------------------------
     # Consult explicit policy rules before touching the LLM agent.

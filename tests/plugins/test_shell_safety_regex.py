@@ -641,3 +641,191 @@ class TestInternalFunctions:
         assert result.reasoning == "test"
         assert result.blocked is True
         assert result.is_ambiguous is False
+
+
+# =============================================================================
+# Security Regression Tests - Phase 1 Critical Fixes
+# =============================================================================
+
+
+class TestQuotedSensitivePathBypasses:
+    """SECURITY REGRESSION TESTS: Quoted sensitive path detection.
+    
+    Issue: Commands like cat '/etc/shadow', cat "/etc/shadow", 
+    head '~/.ssh/id_rsa' bypassed detection because the classifier
+    only matched unquoted paths.
+    """
+
+    def test_cat_single_quoted_etc_shadow_not_safe(self):
+        """cat '/etc/shadow' should NOT be classified as 'none' risk."""
+        result = classify_command("cat '/etc/shadow'")
+        assert result.risk != "none", "Quoted sensitive path should not bypass detection"
+
+    def test_cat_double_quoted_etc_shadow_not_safe(self):
+        """cat "/etc/shadow" should NOT be classified as 'none' risk."""
+        result = classify_command('cat "/etc/shadow"')
+        assert result.risk != "none", "Double-quoted sensitive path should not bypass detection"
+
+    def test_head_quoted_ssh_key_not_safe(self):
+        """head '~/.ssh/id_rsa' should NOT be classified as 'none' risk."""
+        result = classify_command("head '~/.ssh/id_rsa'")
+        assert result.risk != "none", "Quoted SSH key path should not bypass detection"
+
+    def test_grep_quoted_etc_passwd_not_safe(self):
+        """grep root '/etc/passwd' should NOT be classified as 'none' risk."""
+        result = classify_command("grep root '/etc/passwd'")
+        assert result.risk != "none", "Quoted /etc/passwd in grep should not bypass detection"
+
+    def test_grep_double_quoted_etc_passwd_not_safe(self):
+        """grep root "/etc/passwd" should NOT be classified as 'none' risk."""
+        result = classify_command('grep root "/etc/passwd"')
+        assert result.risk != "none", "Double-quoted /etc/passwd in grep should not bypass detection"
+
+
+class TestInputRedirectionBypasses:
+    """SECURITY REGRESSION TESTS: Input redirection detection.
+    
+    Issue: Commands like cat </etc/shadow and cat < /etc/shadow 
+    were treated as safe because the _REDIRECT_PATTERN only checked
+    for > but not <.
+    """
+
+    def test_input_redirection_no_space_not_safe(self):
+        """cat </etc/shadow should NOT be classified as 'none' risk."""
+        result = classify_command("cat </etc/shadow")
+        assert result.risk != "none", "Input redirection without space should be detected"
+
+    def test_input_redirection_with_space_not_safe(self):
+        """cat < /etc/shadow should NOT be classified as 'none' risk."""
+        result = classify_command("cat < /etc/shadow")
+        assert result.risk != "none", "Input redirection with space should be detected"
+
+    def test_input_redirection_sensitive_path_not_safe(self):
+        """cat < /etc/shadow should be detected as sensitive."""
+        result = classify_command("cat < /etc/shadow")
+        # Should be ambiguous or higher, not 'none'
+        assert result.risk in ("ambiguous", "medium", "high"), \
+            "Input redirection to sensitive file should not be 'none' risk"
+
+
+class TestTraversalBypasses:
+    """SECURITY REGRESSION TESTS: Relative path traversal detection.
+    
+    Issue: Commands like cat ../../../../etc/shadow and 
+    grep root ../../../../etc/passwd were marked as 'none' risk
+    when they could escape the repo and access sensitive files.
+    """
+
+    def test_cat_traversal_to_etc_shadow_not_safe(self):
+        """cat ../../../../etc/shadow should NOT be 'none' risk."""
+        result = classify_command("cat ../../../../etc/shadow")
+        # Should be ambiguous or higher due to traversal to sensitive path
+        assert result.risk in ("ambiguous", "medium", "high"), \
+            "Traversal to /etc/shadow should not be 'none' risk"
+
+    def test_grep_traversal_to_etc_passwd_not_safe(self):
+        """grep root ../../../../etc/passwd should NOT be 'none' risk."""
+        result = classify_command("grep root ../../../../etc/passwd")
+        assert result.risk in ("ambiguous", "medium", "high"), \
+            "Traversal to /etc/passwd in grep should not be 'none' risk"
+
+    def test_cat_traversal_to_ssh_not_safe(self):
+        """cat ../../../root/.ssh/id_rsa should NOT be 'none' risk."""
+        result = classify_command("cat ../../../root/.ssh/id_rsa")
+        assert result.risk in ("ambiguous", "medium", "high"), \
+            "Traversal to SSH key should not be 'none' risk"
+
+
+class TestHardenedRootDelete:
+    """SECURITY REGRESSION TESTS: Hardened rm -rf / detection.
+    
+    Issue: Variants like rm -rf -- /, rm -r -f -- /, rm -rf '/', 
+    rm -rf /., rm -rf /// could bypass the original detection.
+    """
+
+    def test_rm_rf_dash_dash_root_blocked(self):
+        """rm -rf -- / should be blocked as critical."""
+        result = classify_command("rm -rf -- /")
+        assert result.blocked is True
+        assert result.risk == "critical"
+
+    def test_rm_r_f_dash_dash_root_blocked(self):
+        """rm -r -f -- / should be blocked as critical."""
+        result = classify_command("rm -r -f -- /")
+        assert result.blocked is True
+        assert result.risk == "critical"
+
+    def test_rm_single_quoted_root_blocked(self):
+        """rm -rf '/' should be blocked as critical."""
+        result = classify_command("rm -rf '/'")
+        assert result.blocked is True
+        assert result.risk == "critical"
+
+    def test_rm_double_quoted_root_blocked(self):
+        """rm -rf "/" should be blocked as critical."""
+        result = classify_command('rm -rf "/"')
+        assert result.blocked is True
+        assert result.risk == "critical"
+
+    def test_rm_rf_root_dot_blocked(self):
+        """rm -rf /. should be blocked as critical."""
+        result = classify_command("rm -rf /.")
+        assert result.blocked is True
+        assert result.risk == "critical"
+
+    def test_rm_rf_multiple_slashes_blocked(self):
+        """rm -rf /// should be blocked as critical."""
+        result = classify_command("rm -rf ///")
+        assert result.blocked is True
+        assert result.risk == "critical"
+
+    def test_rm_rf_double_slash_blocked(self):
+        """rm -rf // should be blocked as critical."""
+        result = classify_command("rm -rf //")
+        assert result.blocked is True
+        assert result.risk == "critical"
+
+
+class TestFindQuotedRoot:
+    """SECURITY REGRESSION TESTS: Find quoted-root detection.
+    
+    Issue: Commands like find '/' -delete and find "/" -delete 
+    fell through to ambiguous because quoted paths weren't normalized.
+    """
+
+    def test_find_single_quoted_root_delete_blocked(self):
+        """find '/' -delete should be blocked as critical."""
+        result = classify_command("find '/' -delete")
+        assert result.blocked is True
+        assert result.risk == "critical"
+
+    def test_find_double_quoted_root_delete_blocked(self):
+        """find "/" -delete should be blocked as critical."""
+        result = classify_command('find "/" -delete')
+        assert result.blocked is True
+        assert result.risk == "critical"
+
+    def test_find_root_delete_blocked(self):
+        """find / -delete (unquoted) should be blocked as critical."""
+        result = classify_command("find / -delete")
+        assert result.blocked is True
+        assert result.risk == "critical"
+
+
+class TestQuoteAwareMediumLowChecks:
+    """SECURITY REGRESSION TESTS: Quote-aware medium/low checks.
+    
+    Issue: Medium/low risk scans ran against raw strings, causing
+    false positives like echo "sudo chmod -R /tmp".
+    """
+
+    def test_echo_quoted_sudo_chmod_not_medium_risk(self):
+        """echo containing quoted 'sudo chmod' should NOT trigger medium risk."""
+        result = classify_command('echo "sudo chmod -R /tmp"')
+        # Should be 'none' risk since it's just an echo
+        assert result.risk == "none", "Quoted content in echo should not trigger medium risk"
+
+    def test_echo_quoted_rm_not_medium_risk(self):
+        """echo containing quoted 'rm -rf /tmp' should NOT trigger medium risk."""
+        result = classify_command('echo "rm -rf /tmp"')
+        assert result.risk == "none", "Quoted rm in echo should not trigger medium risk"
