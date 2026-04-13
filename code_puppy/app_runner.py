@@ -315,7 +315,7 @@ class AppRunner:
 
         args = self.parse_args()
 
-        # --bridge-mode sets CODE_PUPPY_BRIDGE=1 for the mana_bridge plugin
+        # --bridge-mode sets CODE_PUPPY_BRIDGE=1
         if getattr(args, "bridge_mode", False):
             os.environ.setdefault("CODE_PUPPY_BRIDGE", "1")
 

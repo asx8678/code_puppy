@@ -297,7 +297,6 @@ One-click access to any model from any provider.
 |--------|---------|
 | `flow_visualizer` | Visual workflow representation |
 | `frontend_emitter` | Frontend event emission |
-| `mana_bridge` | Integration with Mana system |
 | `tracing_langfuse` | Langfuse tracing integration |
 | `tracing_langsmith` | LangSmith tracing integration |
 | `session_logger` | Session archival (see §6) |
