@@ -42,7 +42,7 @@ __all__ = [
     "on_post_tool_call",
     "on_register_tools",
     "on_register_agents",
-    "on_register_model_type",
+    "on_register_model_types",
     "on_file_permission",
     "on_file_permission_async",
     "on_register_mcp_catalog_servers",
@@ -971,8 +971,12 @@ def on_get_model_system_prompt(
 
 
 async def on_agent_run_start(
-    agent_name: str, model_name: str, session_id: str | None = None
-) -> list[Any]:
+    agent_name: str,
+    model_name: str,
+    session_id: str | None = None,
+    tags: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> tuple[list[Any], RunContext]:
     """Trigger callbacks when an agent run starts.
 
     This fires at the beginning of run_with_mcp, before the agent task is created.
@@ -989,22 +993,31 @@ async def on_agent_run_start(
         agent_name: Name of the agent starting
         model_name: Name of the model being used
         session_id: Optional session identifier
+        tags: Optional list of tags for the run context
+        metadata: Optional dict with additional metadata (merged with model_name)
 
     Returns:
-        List of results from registered callbacks.
+        Tuple of (callback_results, run_context) for downstream use.
     """
     # Create and activate a root run context for hierarchical tracing.
+    # Merge provided metadata with model_name.
+    merged_metadata = {"model_name": model_name}
+    if metadata:
+        merged_metadata.update(metadata)
+
     ctx = create_root_run_context(
         component_type="agent",
         component_name=agent_name,
         session_id=session_id,
-        metadata={"model_name": model_name},
+        tags=tags or [],
+        metadata=merged_metadata,
     )
     set_current_run_context(ctx)
 
-    return await _trigger_callbacks(
+    results = await _trigger_callbacks(
         "agent_run_start", agent_name, model_name, session_id
     )
+    return results, ctx
 
 
 async def on_agent_run_end(
@@ -1015,6 +1028,7 @@ async def on_agent_run_end(
     error: Exception | None = None,
     response_text: str | None = None,
     metadata: dict | None = None,
+    run_context: RunContext | None = None,
 ) -> list[Any]:
     """Trigger callbacks when an agent run ends.
 
@@ -1040,12 +1054,15 @@ async def on_agent_run_end(
         error: Exception if the run failed, None otherwise
         response_text: The final text response from the agent (if successful)
         metadata: Optional dict with additional context (tokens used, etc.)
+        run_context: Optional RunContext passed from caller (for API consistency).
+            If not provided, uses the current context from get_current_run_context().
 
     Returns:
         List of results from registered callbacks.
     """
-    # Close and enrich the current run context (if one exists).
-    ctx = get_current_run_context()
+    # Close and enrich the run context (if one exists).
+    # Prefer the explicitly passed run_context, fall back to current context.
+    ctx = run_context if run_context is not None else get_current_run_context()
     if ctx is not None:
         ctx.end(success=success, error=error)
         ctx.metadata["success"] = success

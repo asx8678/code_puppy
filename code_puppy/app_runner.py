@@ -25,7 +25,6 @@ from code_puppy.config import (
 )
 from code_puppy.config_package import env_bool
 from code_puppy.console import build_console
-from code_puppy.http_utils import find_available_port
 from code_puppy.keymap import KeymapError, validate_cancel_agent_key
 from code_puppy.terminal_utils import reset_windows_terminal_full
 from code_puppy.version_checker import default_version_mismatch_behavior
@@ -336,11 +335,6 @@ class AppRunner:
 
         initialize_command_history_file()
         from code_puppy.messaging import emit_error, emit_system_message
-
-        available_port = find_available_port()
-        if available_port is None:
-            emit_error("No available ports in range 8090-9010!")
-            return
 
         ensure_config_exists()
 

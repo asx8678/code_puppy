@@ -416,7 +416,7 @@ def get_use_dbos() -> bool:
     if not _is_truthy(get_value("enable_dbos"), default=True):
         return False
     try:
-        import dbos as _dbos  # noqa: F811
+        import dbos as _dbos  # noqa: F401
         return True
     except ImportError:
         return False
@@ -2227,6 +2227,87 @@ def set_api_key(key_name: str, value: str):
     set_config_value(key_name, value)
 
 
+# Code Puppy environment variable allowlist
+# These are the ONLY env vars that will be loaded from .env files
+# Security: Prevents arbitrary project .env variables from being loaded
+_CODEPUPPY_ENV_ALLOWLIST: set[str] = {
+    # API Keys
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "CEREBRAS_API_KEY",
+    "SYN_API_KEY",
+    "AZURE_OPENAI_API_KEY",
+    "AZURE_OPENAI_ENDPOINT",
+    "OPENROUTER_API_KEY",
+    "ZAI_API_KEY",
+    "GITHUB_TOKEN",
+    "FIREWORKS_API_KEY",
+    "GROQ_API_KEY",
+    "MISTRAL_API_KEY",
+    "MOONSHOT_API_KEY",
+    # Runtime configuration
+    "PUP_DEBUG",
+    "PUP_MODEL",
+    "PUP_AGENT",
+    "PUPPY_DEFAULT_AGENT",
+    "PUPPY_DEFAULT_MODEL",
+    "PUPPY_TEMPERATURE",
+    "PUPPY_MESSAGE_LIMIT",
+    "PUPPY_PROTECTED_TOKEN_COUNT",
+    # Feature toggles
+    "PUP_DISABLE_CALLBACK_PLUGIN_LOADING",
+    "PUPPY_DISABLE_RUST_AUTOBUILD",
+    "CODE_PUPPY_SKIP_TUTORIAL",
+    "CODE_PUPPY_NO_TUI",
+    "CODE_PUPPY_NO_COLOR",
+    "CODE_PUPPY_FORCE_COLOR",
+    "CODE_PUPPY_CODE_THEME",
+    "CODE_PUPPY_ALLOWED_ORIGINS",
+    "CODE_PUPPY_DISABLE_RETRY_TRANSPORT",
+    "CODE_PUPPY_BRIDGE",
+    # Rendering/validation settings
+    "PUPPY_ADAPTIVE_RENDERING",
+    "PUPPY_POST_EDIT_VALIDATION",
+    # WebSocket history settings
+    "PUPPY_WS_HISTORY_TTL_SECONDS",
+    "PUPPY_WS_HISTORY_MAXLEN",
+    # Bridge settings
+    "CODE_PUPPY_BRIDGE_HOST",
+    # Version check control
+    "NO_VERSION_UPDATE",
+}
+
+
+def _load_env_allowlisted(env_file: Path, allowlist: set[str]) -> None:
+    """Load only allowlisted keys from .env file into os.environ.
+
+    Security: Prevents arbitrary project .env variables from being
+    loaded into the process environment and inherited by subprocesses.
+
+    Args:
+        env_file: Path to the .env file
+        allowlist: Set of environment variable names that are allowed to be loaded
+    """
+    if not env_file.exists():
+        return
+
+    try:
+        from dotenv import dotenv_values
+    except ImportError:
+        # python-dotenv not installed, skip .env loading
+        return
+
+    # Read .env without modifying os.environ
+    values = dotenv_values(env_file)
+
+    # Only load allowlisted keys that aren't already set
+    for key in allowlist:
+        if key in values and key not in os.environ:
+            os.environ[key] = values[key]
+
+
 def load_api_keys_to_environment():
     """Load all API keys from .env and puppy.cfg into environment variables.
 
@@ -2234,6 +2315,9 @@ def load_api_keys_to_environment():
     1. .env file (highest priority) - if present in current directory
     2. puppy.cfg - fallback if not in .env
     3. Existing environment variables - preserved if already set
+
+    Security: Only allowlisted Code Puppy env vars are loaded from .env
+    to prevent arbitrary project secrets from being exposed to subprocesses.
 
     This should be called on startup to ensure API keys are available.
     """
@@ -2252,17 +2336,9 @@ def load_api_keys_to_environment():
     ]
 
     # Step 1: Load from .env file if it exists (highest priority)
-    # Look for .env in current working directory
+    # Only allowlisted keys are loaded to prevent secret exposure
     env_file = Path.cwd() / ".env"
-    if env_file.exists():
-        try:
-            from dotenv import load_dotenv
-
-            # override=False: .env should not override system env vars which may contain security settings
-            load_dotenv(env_file, override=False)
-        except ImportError:
-            # python-dotenv not installed, skip .env loading
-            pass
+    _load_env_allowlisted(env_file, _CODEPUPPY_ENV_ALLOWLIST)
 
     # Step 2: Load from puppy.cfg, but only if not already set
     # This ensures .env has priority over puppy.cfg

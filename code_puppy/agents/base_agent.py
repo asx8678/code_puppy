@@ -2906,17 +2906,16 @@ class BaseAgent(ABC, AgentPromptMixin):
                     except Exception:
                         logger.debug("agent_exception callback failed", exc_info=True)
 
-                # If there are CancelledError exceptions in the group, re-raise them
-                cancelled_exceptions = []
-
-                def collect_cancelled_exceptions(exc):
-                    if isinstance(exc, ExceptionGroup):
-                        for sub_exc in exc.exceptions:
-                            collect_cancelled_exceptions(sub_exc)
-                    elif isinstance(exc, asyncio.CancelledError):
-                        cancelled_exceptions.append(exc)
-
-                collect_cancelled_exceptions(other_error)
+                # Re-raise remaining exceptions so they propagate and signal
+                # actual failure. This prevents _run_success = True from being
+                # set when real errors occurred.
+                if remaining_exceptions:
+                    if len(remaining_exceptions) == 1:
+                        raise remaining_exceptions[0]
+                    raise ExceptionGroup(
+                        "Agent run failed with multiple exceptions",
+                        remaining_exceptions,
+                    )
             finally:
                 self.set_message_history(
                     self.prune_interrupted_tool_calls(self.get_message_history())
