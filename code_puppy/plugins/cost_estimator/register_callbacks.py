@@ -11,6 +11,7 @@ Inspired by Agentless ``--mock`` flag and token counting pattern.
 
 import logging
 import os
+from typing import Any
 
 from code_puppy.callbacks import register_callback
 
@@ -18,6 +19,38 @@ logger = logging.getLogger(__name__)
 
 # Dry-run mode: set PUP_DRY_RUN=1 to intercept LLM calls
 _DRY_RUN = os.environ.get("PUP_DRY_RUN", "").strip() in ("1", "true", "yes")
+
+
+def _get_ledger_provider_totals() -> dict[str, Any]:
+    """Try to get provider-reported token totals from the token ledger.
+
+    Best-effort: returns empty dict if ledger is unavailable or has
+    no provider data. Never raises — falls back gracefully.
+
+    Returns:
+        Dict with optional 'total_provider_input' and 'total_provider_output' keys,
+        or empty dict if no provider data is available.
+    """
+    try:
+        from code_puppy.agents.agent_manager import get_current_agent
+        agent = get_current_agent()
+        if agent is None:
+            return {}
+        # Access the ledger via the agent's runtime state
+        if not hasattr(agent, "_state"):
+            return {}
+        ledger = agent._state.get_token_ledger()
+        result: dict[str, Any] = {}
+        provider_input = ledger.total_provider_input
+        if provider_input is not None:
+            result["total_provider_input"] = provider_input
+        provider_output = ledger.total_provider_output
+        if provider_output is not None:
+            result["total_provider_output"] = provider_output
+        return result
+    except Exception:
+        # Fall back to heuristic — this is best-effort
+        return {}
 
 
 def _handle_cost_command(command: str, name: str) -> str | None:
@@ -38,6 +71,21 @@ def _handle_cost_command(command: str, name: str) -> str | None:
         lines.append(
             f"\n  **Total estimated cost**: ${summary['total_estimated_cost_usd']:.4f} USD"
         )
+
+        # TODO(token-audit-5.1): Show per-model provider actuals when available
+        # Try to augment with provider-reported counts from the token ledger
+        provider_totals = _get_ledger_provider_totals()
+        if provider_totals:
+            lines.append("")
+            lines.append("  **Provider-reported usage**:")
+            total_in = provider_totals.get("total_provider_input")
+            total_out = provider_totals.get("total_provider_output")
+            if total_in is not None:
+                lines.append(f"    - Input tokens: {total_in:,}")
+            if total_out is not None:
+                lines.append(f"    - Output tokens: {total_out:,}")
+
+        lines.append("\n  ⚠️ _estimate — actual provider usage may differ_")
         return "\n".join(lines)
 
     if name == "estimate":
@@ -48,14 +96,37 @@ def _handle_cost_command(command: str, name: str) -> str | None:
         from .estimator import estimate_cost
 
         text = parts[1].strip()
-        est = estimate_cost(text)
-        return (
-            f"📊 **Token Estimate**\n"
-            f"  - Input tokens: ~{est.input_tokens:,} ({est.method})\n"
-            f"  - Expected output: ~{est.output_tokens:,} tokens\n"
-            f"  - Estimated cost: ~${est.estimated_cost_usd:.4f} USD\n"
-            f"  - Model: {est.model}"
+
+        # Try to get provider counts from the ledger for the current model
+        provider_totals = _get_ledger_provider_totals()
+        provider_in = provider_totals.get("total_provider_input")
+        provider_out = provider_totals.get("total_provider_output")
+
+        est = estimate_cost(
+            text,
+            provider_input_tokens=provider_in,
+            provider_output_tokens=provider_out,
         )
+        result_lines = [
+            "📊 **Token Estimate**",
+            f"  - Input tokens: ~{est.input_tokens:,} ({est.method})",
+        ]
+        if est.provider_input_tokens is not None:
+            result_lines.append(
+                f"  - Provider-reported input: {est.provider_input_tokens:,}"
+            )
+        result_lines.append(f"  - Expected output: ~{est.output_tokens:,} tokens")
+        if est.provider_output_tokens is not None:
+            result_lines.append(
+                f"  - Provider-reported output: {est.provider_output_tokens:,}"
+            )
+        result_lines.extend([
+            f"  - Estimated cost: ~${est.estimated_cost_usd:.4f} USD",
+            f"  - Model: {est.model}",
+            "",
+            "⚠️ _estimate — actual provider usage may differ_",
+        ])
+        return "\n".join(result_lines)
 
     return None
 
@@ -103,7 +174,7 @@ def _on_shutdown() -> None:
     summary = get_session_summary()
     if summary["models"]:
         total = summary["total_estimated_cost_usd"]
-        logger.info("Session cost estimate: ~$%.4f USD", total)
+        logger.info("Session cost estimate: ~$%.4f USD (estimate — actual provider usage may differ)", total)
 
 
 # Register callbacks at module scope

@@ -191,14 +191,21 @@ class TestStringifyMessagePart:
         assert '"a"' in result
 
     def test_list_content_with_binary(self, agent):
-        binary = BinaryContent(data=b"x", media_type="image/png")
-        part = MagicMock()
-        part.part_kind = "text"
-        part.content = ["line1", binary]
-        part.tool_name = None
-        result = agent.stringify_message_part(part)
+        """Binary content in list produces placeholder proportional to token estimate."""
+        binary = BinaryContent(data=b"PNG" + b"0" * 10_000, media_type="image/png")
+
+        mock_part = MagicMock()
+        mock_part.part_kind = "user-prompt"
+        mock_part.content = ["line1", binary]
+        mock_part.tool_name = None
+        mock_part.args = None
+
+        result = agent.stringify_message_part(mock_part)
+
+        # Should contain the text content
         assert "line1" in result
-        assert "BinaryContent" in result
+        # Placeholder should be substantial for an image (>= 100 tokens * 4 chars = 400 chars)
+        assert len(result) >= 400, f"Image placeholder should be >= 400 chars, got {len(result)}"
 
     def test_other_content_type(self, agent):
         part = MagicMock()
@@ -229,7 +236,7 @@ class TestStringifyMessagePart:
 class TestEstimateContextOverhead:
     """Tests for estimate_context_overhead_tokens branches (lines 576-608)."""
 
-    def test_with_pydantic_agent_tools(self, agent):
+    def test_with_code_generation_agent_tools(self, agent):
         mock_tool = MagicMock()
         mock_tool.__doc__ = "A tool description"
         mock_tool.schema = {"type": "object"}
@@ -237,12 +244,25 @@ class TestEstimateContextOverhead:
 
         mock_agent = MagicMock()
         mock_agent._tools = {"my_tool": mock_tool}
-        agent.pydantic_agent = mock_agent
 
+        # Get baseline without tools
+        agent._state.code_generation_agent = None
+        agent._state.cached_context_overhead = None
         with patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep:
             mock_prep.return_value = MagicMock(instructions="test instructions")
-            tokens = agent.estimate_context_overhead_tokens()
-        assert tokens > 0
+            baseline_tokens = agent.estimate_context_overhead_tokens()
+
+        # Set up tools and measure again
+        agent._state.cached_context_overhead = None
+        agent._state.code_generation_agent = mock_agent
+        with patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep:
+            mock_prep.return_value = MagicMock(instructions="test instructions")
+            tokens_with_tools = agent.estimate_context_overhead_tokens()
+
+        # Tool definitions should add tokens above the baseline
+        assert tokens_with_tools > baseline_tokens, (
+            f"Tool definitions should add tokens: {tokens_with_tools} should be > {baseline_tokens}"
+        )
 
     def test_with_tool_no_schema_but_annotations(self, agent):
         mock_tool = MagicMock()
@@ -252,7 +272,7 @@ class TestEstimateContextOverhead:
 
         mock_agent = MagicMock()
         mock_agent._tools = {"annotated_tool": mock_tool}
-        agent.pydantic_agent = mock_agent
+        agent._state.code_generation_agent = mock_agent
 
         with patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep:
             mock_prep.return_value = MagicMock(instructions="")
@@ -266,7 +286,7 @@ class TestEstimateContextOverhead:
 
         mock_agent = MagicMock()
         mock_agent._tools = {"bad_tool": mock_tool}
-        agent.pydantic_agent = mock_agent
+        agent._state.code_generation_agent = mock_agent
 
         with patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep:
             mock_prep.return_value = MagicMock(instructions="")
@@ -321,7 +341,7 @@ class TestEstimateContextOverhead:
 
         mock_agent = MagicMock()
         mock_agent._tools = {"tool": mock_tool}
-        agent.pydantic_agent = mock_agent
+        agent._state.code_generation_agent = mock_agent
 
         with patch("code_puppy.model_utils.prepare_prompt_for_model") as mock_prep:
             mock_prep.return_value = MagicMock(instructions="")

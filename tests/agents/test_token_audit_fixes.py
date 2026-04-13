@@ -239,16 +239,26 @@ class TestCodeGenerationAgentLookup:
         mock_pydantic_agent = MagicMock()
         mock_pydantic_agent._tools = {"test_tool": mock_tool}
 
-        agent._state.code_generation_agent = mock_pydantic_agent
-
-        # Patch get_full_system_prompt to return a simple string
+        # Get baseline without tools
+        agent._state.code_generation_agent = None
+        agent._state.cached_context_overhead = None
         with patch.object(
             type(agent), "get_full_system_prompt", return_value="test system prompt"
         ):
-            tokens = agent.estimate_context_overhead_tokens()
+            baseline_tokens = agent.estimate_context_overhead_tokens()
 
-        # Should include tool definition tokens (> just the system prompt)
-        assert tokens > 0, "Should count tool definition tokens"
+        # Set up tools and measure again
+        agent._state.cached_context_overhead = None
+        agent._state.code_generation_agent = mock_pydantic_agent
+        with patch.object(
+            type(agent), "get_full_system_prompt", return_value="test system prompt"
+        ):
+            tokens_with_tools = agent.estimate_context_overhead_tokens()
+
+        # Tool definitions should add tokens above the baseline
+        assert tokens_with_tools > baseline_tokens, (
+            f"Tool definitions should add tokens: {tokens_with_tools} should be > {baseline_tokens}"
+        )
         # Cache should be set
         assert agent._state.cached_context_overhead is not None
 

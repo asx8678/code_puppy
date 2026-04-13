@@ -1,0 +1,102 @@
+{
+  "issues": {
+    "bd-1": {
+      "id": "bd-1",
+      "title": "Use model packs for summarization (cost waste fix)",
+      "description": "summarization_agent.py uses get_global_model_name() instead of get_model_for_role('summarizer'). This causes expensive main model (e.g. claude-opus) to be used for summarization instead of cheap model (gemini-2.5-flash). The infrastructure exists but isn't being used.",
+      "status": "closed",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "bug",
+        "token-efficiency",
+        "cost"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T21:45:21.372710",
+      "updated_at": "2026-04-13T21:46:19.359548",
+      "comments": []
+    },
+    "bd-2": {
+      "id": "bd-2",
+      "title": "Cost estimator uses wrong model for sub-agents",
+      "description": "Cost estimator defaults to gpt-4o for invoke_agent calls instead of looking up actual sub-agent model. Makes /cost inaccurate.",
+      "status": "open",
+      "priority": 1,
+      "type": "bug",
+      "labels": [
+        "bug",
+        "cost-estimator"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T21:45:21.376985",
+      "updated_at": "2026-04-13T21:45:24.609770",
+      "comments": []
+    },
+    "bd-3": {
+      "id": "bd-3",
+      "title": "Prevent retry stacking (3 streaming \u00d7 5 HTTP = 15 retries)",
+      "description": "Multiple retry layers can stack causing up to 15 retries per request. Add shared retry budget awareness.",
+      "status": "open",
+      "priority": 2,
+      "type": "enhancement",
+      "labels": [
+        "enhancement",
+        "performance"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T21:45:21.380950",
+      "updated_at": "2026-04-13T21:45:24.637956",
+      "comments": []
+    },
+    "bd-4": {
+      "id": "bd-4",
+      "title": "Replace heuristic token counting with provider-accurate counting",
+      "description": "Current 4.0-4.5 chars/token heuristic has 10-30% error. Affects compaction decisions, read-file gating, cost estimation. Need provider-specific tokenizers.",
+      "status": "open",
+      "priority": 1,
+      "type": "enhancement",
+      "labels": [
+        "enhancement",
+        "token-efficiency"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T21:45:21.392176",
+      "updated_at": "2026-04-13T21:45:24.617968",
+      "comments": []
+    },
+    "bd-5": {
+      "id": "bd-5",
+      "title": "Unify message_limit defaults (10x sub-agent budget fix)",
+      "description": "Sub-agents use get_message_limit() with default=1000 while main agent uses cfg.message_limit with default=100. This allows sub-agents 10x more request budget than intended. Fix: Change get_message_limit default to 100 and make agent_tools.py use cfg.message_limit.",
+      "status": "open",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "bug",
+        "token-efficiency"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T21:45:21.400537",
+      "updated_at": "2026-04-13T21:45:24.625705",
+      "comments": []
+    },
+    "bd-6": {
+      "id": "bd-6",
+      "title": "Create centralized resolve_max_output_tokens() function",
+      "description": "Output caps are inconsistent: auto-calc (15% context), Antigravity (64k-128k), Codex (none). Create single function to resolve caps consistently.",
+      "status": "open",
+      "priority": 1,
+      "type": "enhancement",
+      "labels": [
+        "enhancement",
+        "token-efficiency"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-13T21:45:21.409052",
+      "updated_at": "2026-04-13T21:45:24.629745",
+      "comments": []
+    }
+  },
+  "counter": 6
+}

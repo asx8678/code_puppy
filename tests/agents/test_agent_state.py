@@ -45,6 +45,9 @@ class TestAgentRuntimeStateInitialization:
         assert state.mcp_servers == []
         assert state.rust_per_message_tokens is None
 
+        # Token accounting
+        assert state.token_ledger is None
+
 
 class TestAgentRuntimeStateClearHistory:
     """Test the clear_history() method."""
@@ -239,3 +242,34 @@ class TestAgentRuntimeStateInvalidateCaches:
         # Only ephemeral caches should be reset
         assert state.cached_context_overhead is None
         assert state.tool_ids_cache is None
+
+
+class TestAgentRuntimeStateGetTokenLedger:
+    """Test the get_token_ledger() lazy initialization."""
+
+    def test_token_ledger_starts_as_none(self):
+        """Token ledger starts as None on fresh state."""
+        state = AgentRuntimeState()
+        assert state.token_ledger is None
+
+    def test_get_token_ledger_creates_on_first_access(self):
+        """get_token_ledger() creates a TokenLedger on first access."""
+        from code_puppy.token_ledger import TokenLedger
+
+        state = AgentRuntimeState()
+        ledger = state.get_token_ledger()
+        assert isinstance(ledger, TokenLedger)
+        # The ledger is stored back on the state
+        assert state.token_ledger is ledger
+
+    def test_get_token_ledger_returns_same_instance(self):
+        """Repeated calls return the same TokenLedger instance."""
+        state = AgentRuntimeState()
+        ledger1 = state.get_token_ledger()
+        ledger2 = state.get_token_ledger()
+        assert ledger1 is ledger2
+
+    def test_token_ledger_default_none_in_all_fields_test(self):
+        """Token ledger field is None in default initialization."""
+        state = AgentRuntimeState()
+        assert state.token_ledger is None

@@ -43,7 +43,11 @@ def _invalidate_system_prompt_cache(agent_name: str) -> None:
     try:
         # Only invalidate if the current agent matches the affected agent
         if hasattr(agent, "name") and agent.name == agent_name:
-            if hasattr(agent, "_state") and hasattr(agent._state, "cached_system_prompt"):
+            if hasattr(agent, "_state") and hasattr(agent._state, "invalidate_system_prompt_cache"):
+                agent._state.invalidate_system_prompt_cache()
+                logger.debug(f"Invalidated system prompt + overhead cache for {agent_name}")
+            elif hasattr(agent, "_state") and hasattr(agent._state, "cached_system_prompt"):
+                # Fallback for older state objects
                 agent._state.cached_system_prompt = None
                 logger.debug(f"Invalidated system prompt cache for {agent_name}")
     except Exception:

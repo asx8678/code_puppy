@@ -8,6 +8,10 @@ objects directly.
 import json
 from typing import Any
 
+from code_puppy.utils.binary_token_estimation import (
+    estimate_binary_content_tokens as _estimate_binary_tokens_simple,
+)
+
 try:
     from pydantic_ai.messages import ModelRequest
 except ImportError:
@@ -44,6 +48,7 @@ except (ImportError, SystemError):
     serialize_session = None  # type: ignore[assignment]
     deserialize_session = None  # type: ignore[assignment]
     serialize_session_incremental = None  # type: ignore[assignment]
+
 
 
 # --- Hashline acceleration --------------------------------------------------
@@ -148,10 +153,16 @@ def serialize_message_for_rust(message: Any) -> dict:
             # OPTIMIZATION: Local append binding for text extraction loop
             text_parts: list[str] = []
             text_append = text_parts.append
+            binary_tokens = 0
             for item in content:
                 if isinstance(item, str):
                     text_append(item)
+                elif hasattr(item, "data"):
+                    # BinaryContent: pass metadata for Rust token estimation
+                    binary_tokens += _estimate_binary_tokens_simple(item)
             part_dict["content"] = "\n".join(text_parts) if text_parts else None
+            if binary_tokens > 0:
+                part_dict["binary_token_estimate"] = binary_tokens
         elif hasattr(content, "model_dump_json"):
             # Pydantic model path - try/except for safety
             try:

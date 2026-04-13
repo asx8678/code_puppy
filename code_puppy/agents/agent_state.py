@@ -6,9 +6,12 @@ from immutable configuration.
 """
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pydantic_ai.models
+
+if TYPE_CHECKING:
+    from code_puppy.token_ledger import TokenLedger
 
 
 @dataclass
@@ -71,6 +74,10 @@ class AgentRuntimeState:
     mcp_servers: list[Any] = field(default_factory=list)
     rust_per_message_tokens: list[int] | None = None
 
+    # Token accounting (lazy-initialized, provider-reported actuals)
+    # Lazily created via get_token_ledger() to avoid import cost at instantiation
+    token_ledger: Any = field(default=None, repr=False)
+
     def clear_history(self) -> None:
         """Clear message history and associated hashes."""
         self.message_history = []
@@ -88,11 +95,33 @@ class AgentRuntimeState:
         self.message_history_hashes.update(message_hashes)
 
     def invalidate_caches(self) -> None:
-        """Invalidate all ephemeral caches. Call when model/tool config changes."""
+        """Invalidate ephemeral caches. Call when model/tool config changes.
+
+        Clears context overhead and tool ID caches. For a full reset
+        including session-scoped caches, use :meth:`invalidate_all_token_caches`.
+        """
         self.cached_context_overhead = None
         self.tool_ids_cache = None
-        # Note: cached_system_prompt and cached_tool_defs are session-scoped
-        # and only invalidated on agent reload, not here.
+
+    def invalidate_all_token_caches(self) -> None:
+        """Invalidate ALL token-related caches as a group.
+
+        Must be called when any of these change:
+        - System prompt (custom prompts, /prompts command)
+        - Tool definitions (agent reload, MCP changes)
+        - Model (model switch)
+
+        This prevents stale token estimates from causing incorrect
+        context budgeting or premature/missed compaction.
+
+        See: token-audit finding — cache invalidation was fragmented
+        across multiple call sites with incomplete coverage.
+        """
+        self.cached_context_overhead = None
+        self.cached_system_prompt = None
+        self.cached_tool_defs = None
+        self.tool_ids_cache = None
+        self.rust_per_message_tokens = None
 
     def invalidate_system_prompt_cache(self) -> None:
         """Invalidate cached system prompt when plugin state changes.
@@ -100,5 +129,25 @@ class AgentRuntimeState:
         This is called by plugins (e.g., prompt_store) when the user
         changes custom prompt instructions, ensuring the next agent
         invocation picks up the new prompt.
+
+        Also invalidates context overhead since the system prompt
+        contributes to overhead estimation.
         """
         self.cached_system_prompt = None
+        # System prompt is part of context overhead — must invalidate together
+        self.cached_context_overhead = None
+
+    def get_token_ledger(self) -> "TokenLedger":
+        """Get the token ledger, lazily creating it if needed.
+
+        The token ledger records per-attempt provider-reported token counts
+        for drift detection and cost reconciliation with the cost estimator.
+
+        Returns:
+            The TokenLedger instance for this agent session.
+        """
+        if self.token_ledger is None:
+            # TODO(token-audit-5.1): Consider global ledger for cross-agent accounting
+            from code_puppy.token_ledger import TokenLedger
+            self.token_ledger = TokenLedger()
+        return self.token_ledger

@@ -7,6 +7,7 @@ from pydantic_ai import Agent
 
 from code_puppy.config import get_global_model_name
 from code_puppy.model_factory import ModelFactory, make_model_settings
+from code_puppy.model_packs import get_model_for_role
 
 # Keep a module-level agent reference to avoid rebuilding per call
 _summarization_agent = None
@@ -73,7 +74,7 @@ def run_summarization_sync(prompt: str, message_history: list) -> list:
     # Handle claude-code models: prepend system prompt to user prompt
     from code_puppy.model_utils import prepare_prompt_for_model
 
-    model_name = get_global_model_name()
+    model_name = get_model_for_role("summarizer")
     prepared = prepare_prompt_for_model(
         model_name, _get_summarization_instructions(), prompt
     )
@@ -140,7 +141,7 @@ def reload_summarization_agent():
     from code_puppy.model_utils import prepare_prompt_for_model
 
     models_config = ModelFactory.load_config()
-    model_name = get_global_model_name()
+    model_name = get_model_for_role("summarizer")
     model = ModelFactory.get_model(model_name, models_config)
 
     # Handle claude-code models: swap instructions (prompt prepending happens in run_summarization_sync)

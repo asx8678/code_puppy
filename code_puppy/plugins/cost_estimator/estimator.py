@@ -52,7 +52,9 @@ class TokenEstimate:
         output_tokens: Estimated output/completion tokens (0 if not estimatable).
         model: Model name used for pricing lookup.
         estimated_cost_usd: Estimated cost in USD.
-        method: How tokens were counted ('tiktoken', 'heuristic').
+        method: How tokens were counted ('tiktoken', 'heuristic', 'provider').
+        provider_input_tokens: Actual input tokens from provider (None if unavailable).
+        provider_output_tokens: Actual output tokens from provider (None if unavailable).
     """
 
     input_tokens: int = 0
@@ -60,12 +62,18 @@ class TokenEstimate:
     model: str = ""
     estimated_cost_usd: float = 0.0
     method: str = "unknown"
+    provider_input_tokens: int | None = None
+    provider_output_tokens: int | None = None
 
     def __str__(self) -> str:
         """Human-readable summary."""
         parts = [f"~{self.input_tokens:,} input tokens"]
+        if self.provider_input_tokens is not None:
+            parts.append(f"(provider: {self.provider_input_tokens:,})")
         if self.output_tokens > 0:
             parts.append(f"~{self.output_tokens:,} output tokens")
+        if self.provider_output_tokens is not None:
+            parts.append(f"(provider: {self.provider_output_tokens:,})")
         parts.append(f"~${self.estimated_cost_usd:.4f} USD")
         parts.append(f"({self.method})")
         return " | ".join(parts)
@@ -137,14 +145,26 @@ def estimate_cost(
     *,
     model: str = "gpt-4o",
     expected_output_tokens: int = 1024,
+    provider_input_tokens: int | None = None,
+    provider_output_tokens: int | None = None,
 ) -> TokenEstimate:
     """Estimate the cost of an LLM API call without making it.
+
+    When provider-reported token counts are available, they are preferred
+    over heuristic/tiktoken estimates for accuracy. The ``method`` field
+    reflects which counting approach was used:
+
+    * ``"provider"`` — provider-reported actuals (most accurate)
+    * ``"tiktoken"`` — tiktoken-based estimate
+    * ``"heuristic"`` — len/4 character-based estimate (least accurate)
 
     Args:
         prompt: Either a string prompt or a list of message dicts
             (each with 'role' and 'content' keys).
         model: Model name for pricing and tokenizer selection.
         expected_output_tokens: Expected output tokens (default: 1024).
+        provider_input_tokens: Actual input tokens from provider (preferred when available).
+        provider_output_tokens: Actual output tokens from provider (preferred when available).
 
     Returns:
         TokenEstimate with input tokens, cost, and method used.
@@ -166,25 +186,35 @@ def estimate_cost(
     else:
         text = prompt
 
-    # Count tokens
-    tiktoken_count = _count_tokens_tiktoken(text, model)
-    if tiktoken_count is not None:
-        input_tokens = tiktoken_count
-        method = "tiktoken"
+    # Prefer provider-reported counts when available
+    if provider_input_tokens is not None:
+        input_tokens = provider_input_tokens
+        method = "provider"
     else:
-        input_tokens = _count_tokens_heuristic(text)
-        method = "heuristic"
+        # Count tokens via heuristic or tiktoken
+        tiktoken_count = _count_tokens_tiktoken(text, model)
+        if tiktoken_count is not None:
+            input_tokens = tiktoken_count
+            method = "tiktoken"
+        else:
+            input_tokens = _count_tokens_heuristic(text)
+            method = "heuristic"
+
+    # Determine output token count — prefer provider data when available
+    output_tokens = provider_output_tokens if provider_output_tokens is not None else expected_output_tokens
 
     # Calculate cost
     input_price, output_price = _lookup_pricing(model)
-    cost = (input_tokens * input_price + expected_output_tokens * output_price) / 1_000_000
+    cost = (input_tokens * input_price + output_tokens * output_price) / 1_000_000
 
     return TokenEstimate(
         input_tokens=input_tokens,
-        output_tokens=expected_output_tokens,
+        output_tokens=output_tokens,
         model=model,
         estimated_cost_usd=cost,
         method=method,
+        provider_input_tokens=provider_input_tokens,
+        provider_output_tokens=provider_output_tokens,
     )
 
 

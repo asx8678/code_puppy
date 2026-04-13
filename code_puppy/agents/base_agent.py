@@ -4,6 +4,7 @@ from collections.abc import Callable
 import asyncio
 import contextlib
 import dataclasses
+import hashlib
 import json
 import logging
 import signal
@@ -12,6 +13,8 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 
+from code_puppy.utils.overflow_detect import is_context_overflow
+from code_puppy.token_ledger import TokenAttempt
 from code_puppy.utils.thread_safe_cache import thread_safe_lru_cache
 from typing import Any, Sequence
 
@@ -98,6 +101,11 @@ from code_puppy.summarization_agent import run_summarization_sync, Summarization
 from code_puppy.token_utils import estimate_token_count as _estimate_token_count
 from code_puppy.tools.agent_tools import _active_subagent_tasks
 from code_puppy.tools.command_runner import is_awaiting_user_input
+
+
+from code_puppy.utils.binary_token_estimation import (
+    estimate_binary_content_tokens as _estimate_binary_content_tokens,
+)
 
 
 def _rust_enabled() -> bool:
@@ -489,12 +497,14 @@ class BaseAgent(ABC, AgentPromptMixin):
         elif isinstance(content, dict):
             attributes.append(f"content={json.dumps(content, sort_keys=True)}")
         elif isinstance(content, list):
-            # Use list comprehension + generator for content items
             for item in content:
                 if isinstance(item, str):
                     attributes.append(f"content={item}")
                 elif isinstance(item, BinaryContent):
-                    attributes.append(f"BinaryContent={hash(item.data)}")
+                    # Use SHA-256 of full content for stable cross-process dedup
+                    data = item.data if isinstance(item.data, bytes) else bytes(item.data) if isinstance(item.data, (bytearray, memoryview)) else str(item.data).encode()
+                    digest = hashlib.sha256(data).hexdigest()[:16]
+                    attributes.append(f"BinaryContent={digest}:{len(data)}")
         else:
             attributes.append(f"content={content!r}")
 
@@ -508,8 +518,6 @@ class BaseAgent(ABC, AgentPromptMixin):
         hashes are stable across process restarts, which matters because
         _compacted_message_hashes is persisted to disk.
         """
-        import hashlib
-
         role = getattr(message, "role", None)
         instructions = getattr(message, "instructions", None)
         header_bits: list[str] = []
@@ -552,14 +560,19 @@ class BaseAgent(ABC, AgentPromptMixin):
             elif isinstance(content, dict):
                 result = json.dumps(content)
             elif isinstance(content, list):
-                # Use list comprehension for faster string building
-                result_parts = [
-                    item
-                    if isinstance(item, str)
-                    else f"BinaryContent={hash(item.data)}"
-                    for item in content
-                    if isinstance(item, str) or isinstance(item, BinaryContent)
-                ]
+                result_parts = []
+                for item in content:
+                    if isinstance(item, str):
+                        result_parts.append(item)
+                    elif isinstance(item, BinaryContent):
+                        # Estimate tokens based on actual binary size and media type
+                        token_estimate = _estimate_binary_content_tokens(item)
+                        # Cap to prevent absurd memory allocation
+                        # 500K tokens ≈ max context window of any current model
+                        token_estimate = min(token_estimate, 500_000)
+                        # Create a placeholder string whose token count matches the estimate
+                        placeholder = "X" * (token_estimate * 4)
+                        result_parts.append(placeholder)
                 result = "\n".join(result_parts)
             else:
                 result = str(content)
@@ -644,8 +657,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                 "Failed to get system prompt for token estimation", exc_info=True
             )
 
-        # 2. Estimate tokens for pydantic_agent tool definitions
-        pydantic_agent = getattr(self, "pydantic_agent", None)
+        # 2. Estimate tokens for code_generation_agent tool definitions
+        pydantic_agent = self._state.code_generation_agent
         if pydantic_agent:
             tools = getattr(pydantic_agent, "_tools", None)
             if tools and isinstance(tools, dict):
@@ -1572,9 +1585,10 @@ class BaseAgent(ABC, AgentPromptMixin):
                 _message_batch = self._get_or_create_batch(messages)
                 # Extract actual tool definitions for accurate context overhead
                 # Use cached tool_defs (only computed once per agent lifecycle)
+                # Uses _state.code_generation_agent for tool lookup
                 if self._state.cached_tool_defs is None:
                     _build_tool_defs = []
-                    pydantic_agent = getattr(self, "pydantic_agent", None)
+                    pydantic_agent = self._state.code_generation_agent
                     if pydantic_agent:
                         _tools = getattr(pydantic_agent, "_tools", None)
                         if _tools and isinstance(_tools, dict):
@@ -1915,6 +1929,10 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         # Clear the MCP tool cache when servers are reloaded
         self._state.mcp_tool_definitions_cache = []
+        # MCP tools are part of context overhead — invalidate token caches
+        # to prevent stale estimates after tool changes
+        self._state.cached_context_overhead = None
+        self._state.cached_tool_defs = None
 
         # Force re-sync from mcp_servers.json
         manager = get_mcp_manager()
@@ -2067,8 +2085,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         # call.  This is critical for /cd: the user may have switched to a
         # different project that has its own AGENT.md (or none at all).
         self._state.puppy_rules = None
-        # Invalidate context overhead cache since tools/prompt may change
-        self._state.cached_context_overhead = None
+        # Invalidate ALL token caches since agent reload changes tools/prompt
+        self._state.invalidate_all_token_caches()
         # Invalidate resolved model components cache since model/tools may change
         self._state.resolved_model_components_cache = None
 
@@ -2628,6 +2646,18 @@ class BaseAgent(ABC, AgentPromptMixin):
                         event_stream_handler=event_stream_handler,
                         **kwargs,
                     )
+                    # Record token usage in the session ledger (best-effort)
+                    try:
+                        usage = result_.usage()
+                        self._state.get_token_ledger().record(TokenAttempt(
+                            model=self.get_model_name(),
+                            provider_input_tokens=getattr(usage, 'request_tokens', None),
+                            provider_output_tokens=getattr(usage, 'response_tokens', None),
+                            success=True,
+                            agent_name=self.name,
+                        ))
+                    except Exception:
+                        logger.debug("Failed to record token usage", exc_info=True)
                     return result_
             except* UsageLimitExceeded as ule:
                 emit_info(f"Usage limit exceeded: {str(ule)}", group_id=group_id)
@@ -2661,9 +2691,45 @@ class BaseAgent(ABC, AgentPromptMixin):
                         exc, (asyncio.CancelledError, UsageLimitExceeded)
                     ):
                         remaining_exceptions.append(exc)
-                        emit_info(f"Unexpected error: {str(exc)}", group_id=group_id)
-                        emit_info(f"{str(exc.args)}", group_id=group_id)
-                        # Log to file for debugging
+                        error_msg = str(exc)
+
+                        # Detect context overflow and provide actionable guidance
+                        if is_context_overflow(error_msg):
+                            emit_info(
+                                "⚠️ Context window overflow detected. "
+                                "The conversation history is too large for the model.",
+                                group_id=group_id,
+                            )
+                            emit_info(
+                                "Try: /compact to manually compact history, "
+                                "or start a new conversation with /reset",
+                                group_id=group_id,
+                            )
+                            # Request compaction for the next turn
+                            self._state.delayed_compaction_requested = True
+                            logger.warning(
+                                "Context overflow detected, requesting compaction: %s",
+                                error_msg[:200],
+                            )
+                            # Record overflow in token ledger (best-effort)
+                            try:
+                                self._state.get_token_ledger().record(TokenAttempt(
+                                    model=self.get_model_name(),
+                                    success=False,
+                                    error=error_msg[:200],
+                                    is_overflow=True,
+                                    agent_name=self.name,
+                                ))
+                            except Exception:
+                                pass
+                        else:
+                            emit_info(
+                                f"Unexpected error: {error_msg}",
+                                group_id=group_id,
+                            )
+                            emit_info(f"{str(exc.args)}", group_id=group_id)
+
+                        # Always log to file for debugging
                         log_error(
                             exc,
                             context=f"Agent run (group_id={group_id})",

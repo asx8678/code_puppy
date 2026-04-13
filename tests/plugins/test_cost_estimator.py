@@ -1,5 +1,15 @@
-"""Tests for cost_estimator plugin (ADOPT from Agentless)."""
+"""Tests for cost_estimator plugin (ADOPT from Agentless).
 
+Covers:
+- Heuristic token counting
+- Model pricing lookup
+- estimate_cost with and without provider tokens
+- Session tracking
+- /cost and /estimate slash commands (estimate labeling + ledger augmentation)
+- _get_ledger_provider_totals helper
+"""
+
+from unittest.mock import MagicMock, patch
 
 from code_puppy.plugins.cost_estimator.estimator import (
     TokenEstimate,
@@ -114,6 +124,83 @@ class TestEstimateCost:
         assert "500" in s
         assert "$0.0075" in s
 
+    def test_provider_input_tokens_overrides_heuristic(self):
+        """When provider_input_tokens is given, it's used instead of heuristic."""
+        est = estimate_cost(
+            "Hello, world!",
+            model="gpt-4o",
+            provider_input_tokens=5000,
+            provider_output_tokens=1000,
+        )
+        assert est.input_tokens == 5000
+        assert est.method == "provider"
+        assert est.output_tokens == 1000
+        assert est.provider_input_tokens == 5000
+        assert est.provider_output_tokens == 1000
+
+    def test_provider_input_only(self):
+        """Provider input without output uses expected_output_tokens default."""
+        est = estimate_cost(
+            "Hello, world!",
+            model="gpt-4o",
+            provider_input_tokens=3000,
+        )
+        assert est.input_tokens == 3000
+        assert est.method == "provider"
+        assert est.output_tokens == 1024  # default expected_output_tokens
+        assert est.provider_input_tokens == 3000
+        assert est.provider_output_tokens is None
+
+    def test_provider_output_only_still_uses_heuristic_input(self):
+        """Provider output without input uses heuristic for input count."""
+        est = estimate_cost(
+            "Hello, world!",
+            model="gpt-4o",
+            provider_output_tokens=2000,
+        )
+        # Input should still come from tiktoken or heuristic
+        assert est.input_tokens > 0
+        assert est.method in ("tiktoken", "heuristic")  # NOT "provider"
+        assert est.output_tokens == 2000
+        assert est.provider_output_tokens == 2000
+        assert est.provider_input_tokens is None
+
+    def test_estimate_cost_backward_compatible(self):
+        """estimate_cost works without new keyword params (backward compat)."""
+        est = estimate_cost("Test", model="gpt-4o")
+        assert est.provider_input_tokens is None
+        assert est.provider_output_tokens is None
+        assert est.method in ("tiktoken", "heuristic")
+
+    def test_token_estimate_str_with_provider(self):
+        """TokenEstimate.__str__ includes provider data when available."""
+        est = TokenEstimate(
+            input_tokens=1000,
+            output_tokens=500,
+            model="gpt-4o",
+            estimated_cost_usd=0.0075,
+            method="provider",
+            provider_input_tokens=5123,
+            provider_output_tokens=450,
+        )
+        s = str(est)
+        assert "1,000" in s
+        assert "5,123" in s
+        assert "450" in s
+        assert "provider" in s
+
+    def test_estimate_cost_with_provider_uses_provider_pricing(self):
+        """Cost calculation uses provider token counts when provided."""
+        est_heuristic = estimate_cost("Hello!", model="gpt-4o")
+        est_provider = estimate_cost(
+            "Hello!",
+            model="gpt-4o",
+            provider_input_tokens=10000,
+            provider_output_tokens=2000,
+        )
+        # Provider-based estimate should be more expensive because 10k input > heuristic
+        assert est_provider.estimated_cost_usd > est_heuristic.estimated_cost_usd
+
 
 class TestSessionTracking:
     """Test session-level token accumulation."""
@@ -147,3 +234,204 @@ class TestSessionTracking:
         reset_session()
         summary = get_session_summary()
         assert summary["models"] == []
+
+
+class TestGetLedgerProviderTotals:
+    """Test the _get_ledger_provider_totals helper function."""
+
+    def test_returns_empty_when_no_agent(self):
+        """Returns empty dict when get_current_agent raises."""
+        from code_puppy.plugins.cost_estimator.register_callbacks import (
+            _get_ledger_provider_totals,
+        )
+
+        # get_current_agent may raise in test context
+        result = _get_ledger_provider_totals()
+        assert isinstance(result, dict)
+
+    def test_returns_empty_when_agent_has_state_with_empty_ledger(self):
+        """Returns empty dict when ledger has no provider data."""
+        from code_puppy.plugins.cost_estimator.register_callbacks import (
+            _get_ledger_provider_totals,
+        )
+        from code_puppy.token_ledger import TokenLedger
+
+        mock_agent = MagicMock()
+        mock_state = MagicMock()
+        mock_state.get_token_ledger.return_value = TokenLedger()
+        mock_agent._state = mock_state
+
+        with patch(
+            "code_puppy.agents.agent_manager.get_current_agent",
+            return_value=mock_agent,
+        ):
+            result = _get_ledger_provider_totals()
+        # No provider data → empty dict
+        assert result == {}
+
+    def test_returns_provider_totals_when_available(self):
+        """Returns provider totals when ledger has provider data."""
+        from code_puppy.plugins.cost_estimator.register_callbacks import (
+            _get_ledger_provider_totals,
+        )
+        from code_puppy.token_ledger import TokenAttempt, TokenLedger
+
+        ledger = TokenLedger()
+        ledger.record(
+            TokenAttempt(
+                model="gpt-4o",
+                estimated_input_tokens=1000,
+                provider_input_tokens=950,
+                provider_output_tokens=200,
+            )
+        )
+
+        mock_agent = MagicMock()
+        mock_state = MagicMock()
+        mock_state.get_token_ledger.return_value = ledger
+        mock_agent._state = mock_state
+
+        with patch(
+            "code_puppy.agents.agent_manager.get_current_agent",
+            return_value=mock_agent,
+        ):
+            result = _get_ledger_provider_totals()
+
+        assert result["total_provider_input"] == 950
+        assert result["total_provider_output"] == 200
+
+    def test_graceful_fallback_on_exception(self):
+        """Returns empty dict on any exception (best-effort)."""
+        from code_puppy.plugins.cost_estimator.register_callbacks import (
+            _get_ledger_provider_totals,
+        )
+
+        with patch(
+            "code_puppy.agents.agent_manager.get_current_agent",
+            side_effect=RuntimeError("no agent"),
+        ):
+            result = _get_ledger_provider_totals()
+        assert result == {}
+
+
+class TestCostCommandDisplay:
+    """Test /cost and /estimate command output includes estimate label."""
+
+    def test_cost_shows_estimate_label(self):
+        """The /cost command output includes 'estimate' disclaimer."""
+        from code_puppy.plugins.cost_estimator.register_callbacks import (
+            _handle_cost_command,
+        )
+        from code_puppy.plugins.cost_estimator.estimator import (
+            reset_session,
+            track_session_tokens,
+        )
+
+        reset_session()
+        track_session_tokens("gpt-4o", 1000)
+
+        result = _handle_cost_command("/cost", "cost")
+        assert "estimate" in result.lower()
+        assert "actual provider usage may differ" in result.lower()
+        reset_session()
+
+    def test_cost_empty_session_no_label_crash(self):
+        """Empty session returns early message without crashing."""
+        from code_puppy.plugins.cost_estimator.register_callbacks import (
+            _handle_cost_command,
+        )
+        from code_puppy.plugins.cost_estimator.estimator import reset_session
+
+        reset_session()
+        result = _handle_cost_command("/cost", "cost")
+        assert "No token usage tracked" in result
+
+    def test_estimate_shows_estimate_label(self):
+        """The /estimate command output includes 'estimate' disclaimer."""
+        from code_puppy.plugins.cost_estimator.register_callbacks import (
+            _handle_cost_command,
+        )
+
+        result = _handle_cost_command("/estimate Hello world", "estimate")
+        assert "estimate" in result.lower()
+        assert "actual provider usage may differ" in result.lower()
+
+    def test_estimate_no_text_returns_usage(self):
+        """/estimate without text returns usage message."""
+        from code_puppy.plugins.cost_estimator.register_callbacks import (
+            _handle_cost_command,
+        )
+
+        result = _handle_cost_command("/estimate", "estimate")
+        assert "Usage" in result
+
+    def test_cost_shows_provider_data_when_available(self):
+        """/cost shows provider-reported data when ledger has it."""
+        from code_puppy.plugins.cost_estimator.register_callbacks import (
+            _handle_cost_command,
+        )
+        from code_puppy.plugins.cost_estimator.estimator import (
+            reset_session,
+            track_session_tokens,
+        )
+        from code_puppy.token_ledger import TokenAttempt, TokenLedger
+
+        reset_session()
+        track_session_tokens("gpt-4o", 1000)
+
+        ledger = TokenLedger()
+        ledger.record(
+            TokenAttempt(
+                model="gpt-4o",
+                estimated_input_tokens=1000,
+                provider_input_tokens=950,
+                provider_output_tokens=200,
+            )
+        )
+
+        mock_agent = MagicMock()
+        mock_state = MagicMock()
+        mock_state.get_token_ledger.return_value = ledger
+        mock_agent._state = mock_state
+
+        with patch(
+            "code_puppy.agents.agent_manager.get_current_agent",
+            return_value=mock_agent,
+        ):
+            result = _handle_cost_command("/cost", "cost")
+
+        assert "Provider-reported usage" in result
+        assert "950" in result  # provider input
+        assert "200" in result  # provider output
+        reset_session()
+
+    def test_estimate_with_provider_data(self):
+        """/estimate shows provider data when available."""
+        from code_puppy.plugins.cost_estimator.register_callbacks import (
+            _handle_cost_command,
+        )
+        from code_puppy.token_ledger import TokenAttempt, TokenLedger
+
+        ledger = TokenLedger()
+        ledger.record(
+            TokenAttempt(
+                model="gpt-4o",
+                estimated_input_tokens=1000,
+                provider_input_tokens=950,
+                provider_output_tokens=200,
+            )
+        )
+
+        mock_agent = MagicMock()
+        mock_state = MagicMock()
+        mock_state.get_token_ledger.return_value = ledger
+        mock_agent._state = mock_state
+
+        with patch(
+            "code_puppy.agents.agent_manager.get_current_agent",
+            return_value=mock_agent,
+        ):
+            result = _handle_cost_command("/estimate Hello world", "estimate")
+
+        assert "950" in result  # provider input
+        assert "200" in result  # provider output
