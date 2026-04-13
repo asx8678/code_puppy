@@ -136,6 +136,7 @@ async def on_agent_run_end_hook(
     error: Exception | None = None,
     response_text: str | None = None,
     metadata: dict | None = None,
+    **kwargs,
 ) -> None:
     """agent_run_end callback — fires Stop or SubagentStop hooks."""
     if not _hook_engine:

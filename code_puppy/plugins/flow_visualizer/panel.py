@@ -4,6 +4,7 @@ This module handles rendering the flow state as a Rich panel.
 """
 
 import os
+import sys
 import time
 
 from rich.console import Console
@@ -14,21 +15,26 @@ from rich.text import Text
 from code_puppy.plugins.flow_visualizer.lanes import FlowState, FlowLaneState
 
 
-def _supports_unicode() -> bool:
-    """Check if the terminal supports unicode characters."""
-    # Check environment variables commonly set when unicode isn't supported
-    if os.environ.get("LANG", "").lower().endswith("ascii"):
+def _is_terminal_color_supported() -> bool:
+    """Check if terminal supports ANSI colors."""
+    # Disable colors if NO_COLOR is set (respect user preference)
+    if os.environ.get("NO_COLOR"):
         return False
-    if os.environ.get("TERM") == "dumb":
+    # Check if output is a tty
+    if not sys.stdout.isatty():
         return False
-    # Assume unicode support in most modern terminals
+    # Check TERM environment variable
+    term = os.environ.get("TERM", "")
+    if term == "dumb":
+        return False
+    # Assume color support for most modern terminals
     return True
 
 
 def _format_duration(duration: float | None) -> str:
     """Format duration as 'X.Ys' for <60s, 'Xm Ys' for >=60s."""
     if duration is None:
-        return "—"
+        return "-"
     
     if duration < 60:
         return f"{duration:.1f}s"
@@ -38,56 +44,46 @@ def _format_duration(duration: float | None) -> str:
     return f"{minutes}m {seconds:.0f}s"
 
 
-def _get_status_emoji(status: str, unicode: bool = True) -> str:
-    """Get status indicator (emoji or ASCII fallback)."""
-    if unicode:
-        return {
-            "running": "🔄",
-            "done": "✅",
-            "failed": "❌",
-        }.get(status, "❓")
-    else:
-        return {
-            "running": "[RUN]",
-            "done": "[OK]",
-            "failed": "[ERR]",
-        }.get(status, "[?]")
+def _get_status_indicator(status: str) -> str:
+    """Get compact status indicator."""
+    return {
+        "running": "◐",
+        "done": "✓",
+        "failed": "✗",
+    }.get(status, "?")
 
 
-def _truncate_detail(detail: str, max_length: int = 30) -> str:
+def _truncate_detail(detail: str, max_length: int = 28) -> str:
     """Truncate detail string to max_length, adding ellipsis if needed."""
     if len(detail) <= max_length:
         return detail
     return detail[: max_length - 3] + "..."
 
 
-def _render_lane_row(lane: FlowLaneState, unicode: bool = True) -> tuple[str, str, str, str]:
+def _render_lane_row(lane: FlowLaneState) -> tuple[str, str, str, str]:
     """Render a single lane as table row components.
     
     Returns:
         Tuple of (agent_name, status, detail, duration) strings
     """
-    # Agent name (left-aligned, fixed width conceptually)
-    name_str = lane.agent_name[:20]  # Truncate long names
+    # Agent name (compact)
+    name_str = lane.agent_name[:18]
     
-    # Status with emoji/text indicator
-    status_indicator = _get_status_emoji(lane.status, unicode)
-    if unicode:
-        status_str = f"[{status_indicator} {lane.status}]"
-    else:
-        status_str = f"{status_indicator} {lane.status}"
+    # Compact status indicator
+    indicator = _get_status_indicator(lane.status)
+    status_str = f"{indicator} {lane.status[:7]}"  # truncate 'running' to 'running'
     
     # Detail (current activity)
-    detail_str = _truncate_detail(lane.detail) if lane.detail else "—"
+    detail_str = _truncate_detail(lane.detail) if lane.detail else "-"
     
-    # Duration (calculated for running lanes, stored for ended ones)
+    # Duration
     if lane.status == "running":
         current_duration = time.time() - lane.started_at
         duration_str = _format_duration(current_duration)
     elif lane.duration is not None:
         duration_str = _format_duration(lane.duration)
     else:
-        duration_str = "—"
+        duration_str = "-"
     
     return name_str, status_str, detail_str, duration_str
 
@@ -109,10 +105,16 @@ def render_flow_panel(flow_state: FlowState) -> str | None:
     if not flow_state.lanes:
         return None
     
-    # Check unicode support
-    unicode = _supports_unicode()
+    # Check color support
+    color_supported = _is_terminal_color_supported()
     
-    # Create a table for the lanes
+    # Sort lanes: running first, then by start time
+    sorted_lanes = sorted(
+        flow_state.lanes.values(),
+        key=lambda lane: (0 if lane.status == "running" else 1, lane.started_at),
+    )
+    
+    # Build compact table
     table = Table(
         show_header=False,
         box=None,
@@ -120,38 +122,28 @@ def render_flow_panel(flow_state: FlowState) -> str | None:
         collapse_padding=True,
     )
     
-    # Add columns: agent name, status, detail, duration
-    table.add_column("agent", style="bold", width=18)
-    table.add_column("status", width=15)
-    table.add_column("detail", style="italic", min_width=20)
-    table.add_column("duration", justify="right", width=8)
+    table.add_column("agent", style="bold", width=16)
+    table.add_column("status", width=10)
+    table.add_column("detail", style="italic", min_width=20, max_width=28)
+    table.add_column("time", justify="right", width=7)
     
-    # Sort lanes: running first, then by start time
-    sorted_lanes = sorted(
-        flow_state.lanes.values(),
-        key=lambda l: (0 if l.status == "running" else 1, l.started_at),
-    )
-    
-    # Add each lane as a row
     for lane in sorted_lanes:
-        name, status, detail, duration = _render_lane_row(lane, unicode)
+        name, status, detail, duration = _render_lane_row(lane)
         
-        # Apply color to agent name
-        name_text = Text(name, style=lane.color)
-        
-        # Status with appropriate styling
-        if lane.status == "running":
-            status_style = "yellow"
-        elif lane.status == "done":
-            status_style = "green"
-        else:  # failed
-            status_style = "red"
-        status_text = Text(status, style=status_style)
+        # Apply color styling
+        if color_supported:
+            name_text = Text(name, style=lane.color)
+            status_style = {"running": "yellow", "done": "green", "failed": "red"}.get(lane.status, "white")
+            status_text = Text(status, style=status_style)
+        else:
+            # No color fallback
+            name_text = Text(name)
+            status_text = Text(status)
         
         table.add_row(name_text, status_text, detail, duration)
     
-    # Create the panel
-    title = "🐕 Pack Status" if unicode else "[ Pack Status ]"
+    # Create panel
+    title = "🐕 Pack Status"
     panel = Panel(
         table,
         title=title,
@@ -160,8 +152,19 @@ def render_flow_panel(flow_state: FlowState) -> str | None:
         padding=(0, 1),
     )
     
-    # Render to string using a console
-    console = Console(width=80, force_terminal=True)
+    # Render to plain string with ANSI codes
+    if color_supported:
+        # Use a console that outputs ANSI codes properly
+        console = Console(
+            width=78,
+            force_terminal=True,
+            color_system="standard",
+            legacy_windows=False,
+        )
+    else:
+        # No color mode
+        console = Console(width=78, force_terminal=False, no_color=True)
+    
     with console.capture() as capture:
         console.print(panel)
     

@@ -40,6 +40,7 @@ def _on_agent_run_end(
     error=None,
     response_text=None,
     metadata=None,
+    **kwargs,
 ):
     if success or error is None:
         return

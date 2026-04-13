@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 _DEFAULT_SKILLS_DIR = Path.home() / ".code_puppy" / "skills"
 _MAX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024  # 50MB
 
+# Maximum compressed download size (50MB - same as uncompressed limit)
+MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
+
 
 def _zip_entry_parts(name: str) -> list[str]:
     """Return safe-ish path parts for a zip entry.
@@ -50,13 +53,17 @@ def _safe_rmtree(path: Path) -> bool:
         return False
 
 
-def _download_to_file(url: str, dest: Path) -> bool:
-    """Download a URL to a local file path with streaming."""
+def _download_to_file(url: str, dest: Path, headers: dict | None = None) -> bool:
+    """Download a file from URL to destination with streaming size limit.
 
-    headers = {
+    SECURITY: Enforces MAX_DOWNLOAD_BYTES limit during download
+    to prevent disk exhaustion attacks.
+    """
+    headers = headers or {
         "Accept": "application/zip, application/octet-stream, */*",
         "User-Agent": "code-puppy/skill-downloader",
     }
+    logger.info(f"Downloading skill from {url}")
 
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -65,12 +72,27 @@ def _download_to_file(url: str, dest: Path) -> bool:
             with client.stream("GET", url) as response:
                 response.raise_for_status()
 
+                # Optional: Check content-type
+                content_type = response.headers.get("content-type", "")
+                if content_type and "text/html" in content_type.lower():
+                    logger.warning(f"Unexpected content-type: {content_type}")
+                    return False
+
+                downloaded = 0
                 with dest.open("wb") as f:
                     for chunk in response.iter_bytes():
                         if chunk:
+                            downloaded += len(chunk)
+                            if downloaded > MAX_DOWNLOAD_BYTES:
+                                logger.error(
+                                    f"Download exceeds {MAX_DOWNLOAD_BYTES} byte limit, aborting"
+                                )
+                                f.close()
+                                dest.unlink(missing_ok=True)
+                                return False
                             f.write(chunk)
 
-        logger.info(f"Downloaded skill zip to {dest}")
+        logger.info(f"Downloaded skill zip to {dest} ({downloaded} bytes)")
         return True
 
     except httpx.HTTPStatusError as e:
@@ -351,7 +373,7 @@ def download_and_install_skill(
                             installed_path=skill_dir,
                         )
 
-                staged_skill_dir.move(skill_dir)
+                shutil.move(str(staged_skill_dir), str(skill_dir))
             except Exception as e:
                 logger.exception(f"Failed to install skill into {skill_dir}: {e}")
                 # Cleanup partial install.

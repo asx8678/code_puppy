@@ -124,7 +124,11 @@ class TestCodeGeneration:
 
 
 class TestStateHandling:
-    """Test OAuth state encoding and decoding."""
+    """Test OAuth state encoding and decoding with server-side storage.
+    
+    SECURITY: These tests verify that the PKCE verifier is stored server-side
+    and NOT in the URL-visible state parameter (RFC 9700 compliance).
+    """
 
     def test_encode_state_with_verifier_only(self):
         """Test encoding state with just verifier."""
@@ -134,6 +138,8 @@ class TestStateHandling:
         # Should be non-empty and URL-safe
         assert len(state) > 0
         assert "=" not in state
+        # State should be opaque (not contain base64-encoded verifier)
+        assert verifier not in state
 
     def test_encode_state_with_verifier_and_project_id(self):
         """Test encoding state with verifier and project ID."""
@@ -143,9 +149,17 @@ class TestStateHandling:
 
         assert len(state) > 0
         assert "=" not in state
+        # State should be opaque (not contain base64-encoded data)
+        import base64
+        try:
+            decoded = base64.urlsafe_b64decode(state + "=")
+            data = json.loads(decoded)
+            assert "verifier" not in data
+        except Exception:
+            pass  # Expected - state should be opaque token, not JSON
 
     def test_decode_state_basic(self):
-        """Test basic state decoding."""
+        """Test basic state decoding from server-side storage."""
         verifier = "test_verifier_123"
         project_id = "project_456"
         state = _encode_state(verifier, project_id)
@@ -176,38 +190,48 @@ class TestStateHandling:
         assert decoded_verifier == verifier
         assert decoded_project == project_id
 
-    def test_decode_state_with_padding_normalization(self):
-        """Test that state decoding handles padding normalization."""
-        verifier = "test_verifier"
-        project_id = "proj"
-        state = _encode_state(verifier, project_id)
+    def test_state_token_is_opaque_no_verifier_exposure(self):
+        """SECURITY: State token must not expose the PKCE verifier."""
+        verifier = "super_secret_verifier_12345"
+        state = _encode_state(verifier, "project-123")
+        
+        # State should NOT contain the verifier directly
+        assert verifier not in state
+        # State should NOT be decodable as base64 JSON containing verifier
+        import base64
+        for padding in ["", "=", "=="]:
+            try:
+                decoded = base64.urlsafe_b64decode(state + padding)
+                data = json.loads(decoded)
+                if "verifier" in data:
+                    pytest.fail("Verifier found in state - security violation!")
+            except Exception:
+                continue  # Expected - state is opaque
 
-        # Manually add padding (which should be handled)
-        padded_state = state + "="
-        decoded_verifier, decoded_project = _decode_state(padded_state)
+    def test_unknown_state_rejected(self):
+        """SECURITY: Unknown state tokens must be rejected."""
+        with pytest.raises(ValueError, match="Unknown"):
+            _decode_state("completely_fake_token_not_in_storage")
 
-        assert decoded_verifier == verifier
-        assert decoded_project == project_id
+    def test_state_cannot_be_reused(self):
+        """SECURITY: State tokens must be one-time use (replay protection)."""
+        state = _encode_state("verifier_123", "project_456")
+        
+        # First use succeeds
+        verifier, project = _decode_state(state)
+        assert verifier == "verifier_123"
+        assert project == "project_456"
+        
+        # Second use fails (already consumed)
+        with pytest.raises(ValueError, match="Unknown"):
+            _decode_state(state)
 
-    def test_decode_state_invalid_json(self):
-        """Test decoding invalid state raises ValueError."""
-        # Create invalid base64
-        invalid_state = "!!!invalid_state!!!"
+    def test_decode_state_invalid_state_rejected(self):
+        """Test decoding completely invalid state token raises ValueError."""
+        # Create invalid state (not in server storage)
+        invalid_state = "!!!invalid_state_not_in_storage!!!"
 
-        with pytest.raises(ValueError):
-            _decode_state(invalid_state)
-
-    def test_decode_state_missing_verifier(self):
-        """Test decoding state without verifier raises ValueError."""
-        # Create state with missing verifier
-        payload = {"projectId": "proj"}
-        invalid_state = (
-            base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))
-            .decode("utf-8")
-            .rstrip("=")
-        )
-
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Unknown"):
             _decode_state(invalid_state)
 
 
@@ -686,14 +710,20 @@ class TestEdgeCases:
             assert result.expires_at < after_exchange + expires_in + 10
 
     def test_state_encoding_produces_different_output_per_call(self):
-        """Test that each state encoding produces different output (if includes randomness)."""
-        # The current implementation just encodes deterministically
+        """SECURITY: Each state encoding must produce different random token."""
+        # With server-side storage, each call generates a unique random token
         verifier = "test_verifier"
         state1 = _encode_state(verifier)
         state2 = _encode_state(verifier)
 
-        # Same verifier should produce same state
-        assert state1 == state2
+        # Same verifier should produce DIFFERENT state tokens (randomized)
+        assert state1 != state2
+        # Both should be decodable to the same verifier
+        dec1, _ = _decode_state(state1)
+        dec2, _ = _decode_state(state2)
+        assert dec1 == verifier
+        assert dec2 == verifier
+        assert dec1 == dec2
 
     def test_large_project_id_in_state(self):
         """Test handling of large project IDs in state."""

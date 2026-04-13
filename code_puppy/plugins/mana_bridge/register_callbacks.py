@@ -707,6 +707,7 @@ async def _on_agent_run_end(
     error: Exception | None = None,
     response_text: str | None = None,
     metadata: dict | None = None,
+    **kwargs,
 ) -> None:
     """Forward agent run end to Mana."""
     if _client is None:

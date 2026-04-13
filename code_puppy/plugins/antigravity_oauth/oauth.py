@@ -5,8 +5,10 @@ import hashlib
 import json
 import logging
 import secrets
+import threading
 import time
 from dataclasses import dataclass, field
+from typing import Optional
 from urllib.parse import urlencode
 
 import requests
@@ -21,6 +23,45 @@ from .constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# SERVER-SIDE OAUTH CONTEXT STORAGE (SECURITY FIX)
+# ============================================================================
+# PKCE verifier is stored server-side, not in the URL-visible state parameter.
+# This prevents the verifier from being exposed in browser history, logs, and
+# network traces, and prevents attackers from crafting callbacks with their
+# own verifier (RFC 9700 compliance).
+
+# Pending OAuth contexts keyed by state token
+_pending_contexts: dict[str, "PendingOAuthContext"] = {}
+_contexts_lock = threading.Lock()
+
+# Context TTL in seconds (10 minutes)
+_CONTEXT_TTL = 600
+
+
+@dataclass
+class PendingOAuthContext:
+    """Server-side storage for pending OAuth flow.
+    
+    SECURITY: This keeps the PKCE verifier server-side, not in the URL.
+    """
+    verifier: str
+    project_id: str
+    created_at: float = field(default_factory=time.time)
+    
+    def is_expired(self) -> bool:
+        """Check if this context has exceeded its TTL."""
+        return (time.time() - self.created_at) > _CONTEXT_TTL
+
+
+def _cleanup_expired_contexts() -> None:
+    """Remove expired pending OAuth contexts. Must hold _contexts_lock."""
+    expired = [k for k, v in _pending_contexts.items() if v.is_expired()]
+    for k in expired:
+        del _pending_contexts[k]
+    if expired:
+        logger.debug("Cleaned up %d expired OAuth contexts", len(expired))
 
 
 @dataclass
@@ -80,38 +121,64 @@ def _compute_code_challenge(code_verifier: str) -> str:
 
 
 def _encode_state(verifier: str, project_id: str = "") -> str:
-    """Encode OAuth state as URL-safe base64."""
-    payload = {"verifier": verifier, "projectId": project_id}
-    return (
-        base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))
-        .decode("utf-8")
-        .rstrip("=")
-    )
+    """Create opaque state token and store context server-side.
+    
+    SECURITY: The verifier is stored server-side, not in the URL.
+    The state token is just a random identifier for lookup.
+    
+    Args:
+        verifier: The PKCE code verifier (stored server-side, not in state)
+        project_id: Optional project ID to associate with this flow
+        
+    Returns:
+        An opaque state token (not containing the verifier)
+    """
+    state_token = secrets.token_urlsafe(32)
+    
+    with _contexts_lock:
+        # Cleanup expired contexts while we have the lock
+        _cleanup_expired_contexts()
+        
+        # Store the context
+        _pending_contexts[state_token] = PendingOAuthContext(
+            verifier=verifier,
+            project_id=project_id
+        )
+    
+    logger.debug("Stored OAuth context for state token (server-side)")
+    return state_token
 
 
 def _decode_state(state: str) -> tuple[str, str]:
-    """Decode OAuth state back to verifier and project ID."""
-    # Normalize base64 encoding
-    normalized = state.replace("-", "+").replace("_", "/")
-    padding = (4 - len(normalized) % 4) % 4
-    padded = normalized + "=" * padding
-
-    try:
-        json_str = base64.b64decode(padded).decode("utf-8")
-        parsed = json.loads(json_str)
-
-        verifier = parsed.get("verifier", "")
-        if not isinstance(verifier, str) or not verifier:
-            raise ValueError("Missing PKCE verifier in state")
-
-        project_id = parsed.get("projectId", "")
-        if not isinstance(project_id, str):
-            project_id = ""
-
-        return verifier, project_id
-    except Exception as e:
-        logger.error("Failed to decode OAuth state: %s", e)
-        raise ValueError(f"Invalid OAuth state: {e}") from e
+    """Retrieve and consume stored OAuth context.
+    
+    Returns (verifier, project_id) or raises ValueError.
+    
+    SECURITY: One-time use - context is deleted after retrieval.
+    This prevents replay attacks using the same state token.
+    
+    Args:
+        state: The opaque state token from the OAuth callback
+        
+    Returns:
+        Tuple of (verifier, project_id)
+        
+    Raises:
+        ValueError: If state token is unknown, expired, or already used
+    """
+    with _contexts_lock:
+        context = _pending_contexts.pop(state, None)
+    
+    if context is None:
+        logger.warning("Unknown or already-used OAuth state token")
+        raise ValueError("Unknown or expired OAuth state token")
+    
+    if context.is_expired():
+        logger.warning("Expired OAuth state token used")
+        raise ValueError("OAuth state token has expired")
+    
+    logger.debug("Retrieved OAuth context for state token (server-side)")
+    return context.verifier, context.project_id
 
 
 def prepare_oauth_context() -> OAuthContext:

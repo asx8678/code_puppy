@@ -15,8 +15,8 @@ from code_puppy.plugins.flow_visualizer.lanes import (
 from code_puppy.plugins.flow_visualizer.panel import (
     render_flow_panel,
     _format_duration,
-    _get_status_emoji,
-    _supports_unicode,
+    _get_status_indicator,
+    _is_terminal_color_supported,
 )
 
 
@@ -126,29 +126,22 @@ class TestFormatDuration:
         assert _format_duration(3600.0) == "60m 0s"
 
     def test_handles_none(self):
-        """Test that None duration returns em dash."""
-        assert _format_duration(None) == "—"
+        """Test that None duration returns dash."""
+        assert _format_duration(None) == "-"
 
 
-class TestStatusEmoji:
-    """Tests for the _get_status_emoji helper."""
+class TestStatusIndicator:
+    """Tests for the _get_status_indicator helper."""
 
-    def test_unicode_statuses(self):
-        """Test unicode emoji status indicators."""
-        assert _get_status_emoji("running", unicode=True) == "🔄"
-        assert _get_status_emoji("done", unicode=True) == "✅"
-        assert _get_status_emoji("failed", unicode=True) == "❌"
-
-    def test_ascii_statuses(self):
-        """Test ASCII fallback status indicators."""
-        assert _get_status_emoji("running", unicode=False) == "[RUN]"
-        assert _get_status_emoji("done", unicode=False) == "[OK]"
-        assert _get_status_emoji("failed", unicode=False) == "[ERR]"
+    def test_status_indicators(self):
+        """Test compact status indicators."""
+        assert _get_status_indicator("running") == "◐"
+        assert _get_status_indicator("done") == "✓"
+        assert _get_status_indicator("failed") == "✗"
 
     def test_unknown_status(self):
         """Test that unknown status returns a default indicator."""
-        assert _get_status_emoji("unknown", unicode=True) == "❓"
-        assert _get_status_emoji("unknown", unicode=False) == "[?]"
+        assert _get_status_indicator("unknown") == "?"
 
 
 class TestEventSequence:
@@ -306,24 +299,20 @@ class TestEdgeCases:
         assert new_state.lanes["s1"].detail == "failed"
 
 
-class TestUnicodeSupport:
-    """Tests for unicode/ASCII detection."""
+class TestColorSupport:
+    """Tests for terminal color detection."""
 
-    def test_unicode_detection_no_crash(self):
-        """Test that unicode detection doesn't crash."""
+    def test_color_detection_no_crash(self):
+        """Test that color detection doesn't crash."""
         # This should not raise
-        result = _supports_unicode()
+        result = _is_terminal_color_supported()
         assert isinstance(result, bool)
 
-    def test_status_emoji_handles_all_statuses(self):
-        """Test that all statuses have both unicode and ASCII representations."""
+    def test_status_indicator_handles_all_statuses(self):
+        """Test that all statuses have indicators."""
         statuses = ["running", "done", "failed", "unknown"]
         
         for status in statuses:
-            unicode = _get_status_emoji(status, unicode=True)
-            ascii = _get_status_emoji(status, unicode=False)
-            
-            assert isinstance(unicode, str)
-            assert isinstance(ascii, str)
-            assert len(unicode) > 0
-            assert len(ascii) > 0
+            indicator = _get_status_indicator(status)
+            assert isinstance(indicator, str)
+            assert len(indicator) > 0

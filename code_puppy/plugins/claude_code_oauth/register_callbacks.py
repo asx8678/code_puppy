@@ -441,6 +441,7 @@ async def _on_agent_run_end(
     error: Exception | None = None,
     response_text: str | None = None,
     metadata: dict[str, Any] | None = None,
+    **kwargs,
 ) -> None:
     """Stop token refresh heartbeat when agent run ends.
 

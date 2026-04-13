@@ -162,6 +162,7 @@ async def _on_agent_run_end(
     error: Exception | None = None,
     response_text: str | None = None,
     metadata: dict | None = None,
+    **kwargs,
 ) -> None:
     """Finalize session logging when an agent run ends.
 

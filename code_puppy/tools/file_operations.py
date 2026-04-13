@@ -32,6 +32,10 @@ from code_puppy.messaging import (  # New structured messaging types
 )
 from code_puppy.token_counting import count_tokens
 from code_puppy.utils.eol import normalize_eol, strip_bom
+
+# Maximum files to collect in list_files before early exit
+# This prevents memory exhaustion on huge repos
+MAX_LIST_FILES_ENTRIES = 10000
 from code_puppy.utils.file_display import (
     format_content_with_line_numbers,
     truncate_with_guidance,
@@ -295,6 +299,11 @@ async def _list_files(
     seen_dirs = set()  # Track seen directories for O(1) duplicate check
     directory = os.path.abspath(os.path.expanduser(directory))
 
+    # SECURITY: Validate directory path before listing
+    is_valid, error_msg = validate_file_path(directory, "list")
+    if not is_valid:
+        return ListFileOutput(content=f"Security: {error_msg}", error=f"Security: {error_msg}")
+
     # Plain text output for LLM consumption
     output_lines = []
     output_lines.append(f"DIRECTORY LISTING: {directory} (recursive={recursive})")
@@ -314,6 +323,9 @@ async def _list_files(
                 "Warning: Detected home directory - limiting to non-recursive listing for performance"
             )
             recursive = False
+
+    # PERFORMANCE: Track whether we truncated due to too many files
+    truncated_early = False
 
     try:
         # Find ripgrep executable - first check system PATH, then virtual environment
@@ -356,6 +368,11 @@ async def _list_files(
 
             # Process the output lines
             files = result.stdout.strip().split("\n") if result.stdout.strip() else []
+
+            # PERFORMANCE: Early exit if too many files
+            if len(files) > MAX_LIST_FILES_ENTRIES:
+                files = files[:MAX_LIST_FILES_ENTRIES]
+                truncated_early = True
 
             # Create ListedFile objects with metadata
             for full_path in files:
@@ -477,6 +494,10 @@ async def _list_files(
         return ListFileOutput(content=error_msg, error=error_msg)
     # Note: Ignore file cleanup is handled by _cleanup_ignore_file atexit handler
 
+    # PERFORMANCE: Warn if we truncated the file list
+    if truncated_early:
+        output_lines.append(f"\n⚠️  TRUNCATED: Listing limited to first {MAX_LIST_FILES_ENTRIES} files for performance.")
+
     # Gitignore filtering (HIGHER-RISK: bd code_puppy-31a.9)
     # Only filter if explicitly enabled in config (defaults to OFF for safety)
     from code_puppy.config import get_enable_gitignore_filtering
@@ -535,6 +556,10 @@ async def _list_files(
             size_str = format_size(item.size)
             output_lines.append(f"{indent}{name} ({size_str})")
 
+    # PERFORMANCE: Cap file_entries to prevent huge structured messages
+    if len(file_entries) > MAX_LIST_FILES_ENTRIES:
+        file_entries = file_entries[:MAX_LIST_FILES_ENTRIES]
+
     # Emit structured message for the UI
     file_listing_msg = FileListingMessage(
         directory=directory,
@@ -592,8 +617,13 @@ def _is_sensitive_path(file_path: str) -> bool:
 
     # Check directory prefixes (with trailing separator to avoid
     # "/home/user/.sshfoo" matching "/home/user/.ssh")
+    # SECURITY FIX: Also check exact directory match (e.g., "/home/user/.ssh")
     for prefix in _SENSITIVE_DIR_PREFIXES:
         if resolved.startswith(prefix):
+            return True
+        # Check exact directory match (prefix without trailing slash)
+        exact_dir = prefix.rstrip(os.sep)
+        if resolved == exact_dir:
             return True
 
     # Check exact-match files
@@ -834,6 +864,12 @@ async def _grep(
     search_string = _sanitize_string(search_string)
 
     directory = os.path.abspath(os.path.expanduser(directory))
+
+    # SECURITY: Validate directory path before searching
+    is_valid, error_msg = validate_file_path(directory, "search")
+    if not is_valid:
+        return GrepOutput(matches=[], error=f"Security: {error_msg}")
+
     matches: list[MatchInfo] = []
     error_message: str | None = None
 
@@ -946,6 +982,14 @@ async def _grep(
     except Exception as e:
         error_message = f"Error during grep operation: {e}"
     # Note: Ignore file cleanup is handled by _cleanup_ignore_file atexit handler
+
+    # SECURITY: Filter out matches from sensitive files
+    filtered_matches = []
+    for match in matches:
+        match_valid, _ = validate_file_path(match.file_path, "search-result")
+        if match_valid:
+            filtered_matches.append(match)
+    matches = filtered_matches
 
     # Build structured GrepMatch objects for the UI
     grep_matches = [

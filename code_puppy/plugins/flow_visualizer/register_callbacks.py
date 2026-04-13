@@ -3,16 +3,16 @@
 Registers the flow visualizer with code_puppy's callback hooks:
 - startup: Emit info that plugin loaded
 - agent_run_start: Track agent start
-- stream_event: Update lane detail
+- stream_event: Update lane detail (throttled)
 - agent_run_end: Mark lane done/failed
 - custom_command: Handle /flow on|off|status
 - custom_command_help: Provide help text
 """
 
 import logging
+import sys
+import time
 from typing import Any
-
-from rich.console import Console
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info, emit_success, emit_warning
@@ -30,19 +30,48 @@ logger = logging.getLogger(__name__)
 # Module-level FlowState instance
 _flow_state = FlowState()
 
+# Rendering state for terminal management
+_last_render_lines = 0
+_last_render_time = 0.0
+_RENDER_THROTTLE_SEC = 0.5  # Min seconds between renders
+
+
+def _clear_previous_output(lines: int) -> None:
+    """Clear previous panel output by moving cursor up and clearing lines."""
+    if lines <= 0 or not sys.stdout.isatty():
+        return
+    # Move up N lines and clear from cursor to end
+    sys.stdout.write(f"\033[{lines}A\033[J")
+    sys.stdout.flush()
+
 
 def _safe_render_panel() -> None:
-    """Safely render the flow panel, catching any errors."""
-    global _flow_state
+    """Safely render the flow panel with terminal-aware clearing."""
+    global _flow_state, _last_render_lines, _last_render_time
     
     if not _flow_state.enabled:
         return
     
     try:
         output = render_flow_panel(_flow_state)
-        if output:
-            console = Console(force_terminal=True)
-            console.print(output)
+        if not output:
+            return
+        
+        # Count lines in output for next clear
+        lines = output.count("\n") + 1
+        
+        # Clear previous output if we rendered before
+        if _last_render_lines > 0:
+            _clear_previous_output(_last_render_lines)
+        
+        # Write new output
+        sys.stdout.write(output)
+        if not output.endswith("\n"):
+            sys.stdout.write("\n")
+        sys.stdout.flush()
+        
+        _last_render_lines = lines
+        _last_render_time = time.time()
     except Exception as e:
         # Never crash the host app
         logger.debug(f"Flow visualizer render error: {e}")
@@ -57,14 +86,20 @@ async def _on_agent_run_start(
     agent_name: str,
     model_name: str,
     session_id: str | None = None,
+    **kwargs,
 ) -> None:
     """Track agent start — create a new lane."""
-    global _flow_state
+    global _flow_state, _last_render_lines
     
     try:
+        # Clear any previous output first
+        if _last_render_lines > 0:
+            _clear_previous_output(_last_render_lines)
+            _last_render_lines = 0
+        
         _flow_state = reduce_agent_start(_flow_state, agent_name, model_name, session_id)
         
-        # Render if enabled
+        # Render initial state
         if _flow_state.enabled:
             _safe_render_panel()
     except Exception as e:
@@ -75,22 +110,24 @@ async def _on_stream_event(
     event_type: str,
     event_data: Any,
     agent_session_id: str | None = None,
+    **kwargs,
 ) -> None:
-    """Update lane detail based on stream event."""
-    global _flow_state
+    """Update lane detail based on stream event (throttled rendering)."""
+    global _flow_state, _last_render_time
     
     try:
         _flow_state = reduce_stream_event(
             _flow_state, event_type, event_data, agent_session_id
         )
         
-        # Render live updates when enabled
+        # Throttled render updates (max once per RENDER_THROTTLE_SEC)
         if _flow_state.enabled:
-            _safe_render_panel()
+            now = time.time()
+            if now - _last_render_time >= _RENDER_THROTTLE_SEC:
+                _safe_render_panel()
             
-            # Also expire old lanes periodically (simple approach: every update)
-            import time
-            _flow_state = expire_lanes(_flow_state, time.time(), ttl=10.0)
+            # Expire old lanes periodically
+            _flow_state = expire_lanes(_flow_state, now, ttl=10.0)
     except Exception as e:
         logger.debug(f"Flow visualizer error in stream_event: {e}")
 
@@ -103,6 +140,7 @@ async def _on_agent_run_end(
     error: Exception | None = None,
     response_text: str | None = None,
     metadata: dict | None = None,
+    **kwargs,
 ) -> None:
     """Mark lane as done or failed when agent ends."""
     global _flow_state

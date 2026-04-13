@@ -125,6 +125,7 @@ def _on_agent_run_end(
     error: Any = None,
     response_text: str | None = None,
     metadata: Any = None,
+    **kwargs: Any,
 ) -> None:
     """Increment the watcher turn counter after each agent run.
 

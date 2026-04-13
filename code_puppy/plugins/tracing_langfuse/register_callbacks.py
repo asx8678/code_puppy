@@ -194,6 +194,7 @@ async def _on_agent_run_end(
     error: Exception | None = None,
     response_text: str | None = None,
     metadata: dict | None = None,
+    **kwargs,
 ) -> None:
     """Close the LangFuse trace for the agent run.
 
