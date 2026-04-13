@@ -110,6 +110,7 @@ class AgentRuntimeState:
         - System prompt (custom prompts, /prompts command)
         - Tool definitions (agent reload, MCP changes)
         - Model (model switch)
+        - Puppy rules file (AGENTS.md changes)
 
         This prevents stale token estimates from causing incorrect
         context budgeting or premature/missed compaction.
@@ -122,6 +123,7 @@ class AgentRuntimeState:
         self.cached_tool_defs = None
         self.tool_ids_cache = None
         self.rust_per_message_tokens = None
+        self.puppy_rules = None
 
     def invalidate_system_prompt_cache(self) -> None:
         """Invalidate cached system prompt when plugin state changes.

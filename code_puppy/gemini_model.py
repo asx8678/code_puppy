@@ -657,9 +657,18 @@ class GeminiModel(Model):
 
         # Extract usage
         usage_meta = data.get("usageMetadata", {})
+        details = {
+            k: v for k, v in {
+                "cached_content_tokens": usage_meta.get("cachedContentTokenCount"),
+                "tool_use_prompt_tokens": usage_meta.get("toolUsePromptTokenCount"),
+                "thoughts_tokens": usage_meta.get("thoughtsTokenCount"),
+                "total_tokens": usage_meta.get("totalTokenCount"),
+            }.items() if v is not None
+        }
         usage = RequestUsage(
             input_tokens=usage_meta.get("promptTokenCount", 0),
             output_tokens=usage_meta.get("candidatesTokenCount", 0),
+            details=details if details else None,
         )
 
         return ModelResponse(
@@ -750,9 +759,18 @@ class GeminiStreamingResponse(StreamedResponse):
             # Extract usage
             usage_meta = chunk.get("usageMetadata", {})
             if usage_meta:
+                details = {
+                    k: v for k, v in {
+                        "cached_content_tokens": usage_meta.get("cachedContentTokenCount"),
+                        "tool_use_prompt_tokens": usage_meta.get("toolUsePromptTokenCount"),
+                        "thoughts_tokens": usage_meta.get("thoughtsTokenCount"),
+                        "total_tokens": usage_meta.get("totalTokenCount"),
+                    }.items() if v is not None
+                }
                 self._usage = RequestUsage(
                     input_tokens=usage_meta.get("promptTokenCount", 0),
                     output_tokens=usage_meta.get("candidatesTokenCount", 0),
+                    details=details if details else None,
                 )
 
             # Extract response ID

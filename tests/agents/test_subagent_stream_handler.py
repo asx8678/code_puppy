@@ -173,9 +173,13 @@ class TestHandleEvent:
                 active_tool_parts=set(),
             )
 
-            mock_manager.update_agent.assert_called_once_with(
-                "session-123", status="thinking"
-            )
+            # Should update with status AND token_count (initial content counted)
+            mock_manager.update_agent.assert_called_once()
+            call_kwargs = mock_manager.update_agent.call_args[1]
+            assert call_kwargs["status"] == "thinking"
+            assert "token_count" in call_kwargs
+            # Token count should include initial content (10 + ~8 tokens for "thinking content")
+            assert call_kwargs["token_count"] > 10
             mock_fire.assert_called_once()
             call_args = mock_fire.call_args
             assert call_args[0][0] == "part_start"
@@ -200,9 +204,13 @@ class TestHandleEvent:
                 active_tool_parts=set(),
             )
 
-            mock_manager.update_agent.assert_called_once_with(
-                "session-123", status="running"
-            )
+            # Should update with status AND token_count (initial content counted)
+            mock_manager.update_agent.assert_called_once()
+            call_kwargs = mock_manager.update_agent.call_args[1]
+            assert call_kwargs["status"] == "running"
+            assert "token_count" in call_kwargs
+            # Token count should include initial content (10 + ~3 tokens for "text content")
+            assert call_kwargs["token_count"] > 10
             mock_fire.assert_called_once()
             call_args = mock_fire.call_args
             assert call_args[0][0] == "part_start"
@@ -338,8 +346,13 @@ class TestHandleEvent:
                 active_tool_parts={0},
             )
 
-            # ToolCallPartDelta doesn't update manager
-            mock_manager.update_agent.assert_not_called()
+            # ToolCallPartDelta SHOULD update manager with token_count for args_delta
+            # This was the bug fix - previously args_delta tokens were counted but not propagated
+            mock_manager.update_agent.assert_called_once()
+            call_kwargs = mock_manager.update_agent.call_args[1]
+            assert "token_count" in call_kwargs
+            # Token count should include args_delta content (10 + ~4 tokens for the JSON)
+            assert call_kwargs["token_count"] > 10
             mock_fire.assert_called_once()
             call_args = mock_fire.call_args
             assert call_args[0][1]["args_delta"] == '{"key": "value"}'
@@ -530,8 +543,9 @@ class TestSubagentStreamHandler:
     @pytest.mark.asyncio
     async def test_stream_handler_tracks_tokens(self, mock_ctx, mock_manager):
         """Test stream handler accumulates token count."""
+        # Use non-empty initial content to trigger token counting on PartStart
         events = [
-            PartStartEvent(index=0, part=TextPart(content="")),
+            PartStartEvent(index=0, part=TextPart(content="initial")),
             PartDeltaEvent(index=0, delta=TextPartDelta(content_delta="hello")),
             PartDeltaEvent(index=0, delta=TextPartDelta(content_delta="world")),
         ]
@@ -550,13 +564,16 @@ class TestSubagentStreamHandler:
                         self._create_async_events(events),
                     )
 
-                    # Token counts should be updated for each delta
+                    # Token counts should be updated for:
+                    # 1. PartStartEvent with TextPart (initial content)
+                    # 2. First PartDeltaEvent with content_delta="hello"
+                    # 3. Second PartDeltaEvent with content_delta="world"
                     delta_calls = [
                         c
                         for c in mock_manager.update_agent.call_args_list
                         if "token_count" in c[1]
                     ]
-                    assert len(delta_calls) == 2
+                    assert len(delta_calls) == 3
 
     @pytest.mark.asyncio
     async def test_stream_handler_handles_event_error(self, mock_ctx, mock_manager):

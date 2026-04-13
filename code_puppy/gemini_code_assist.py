@@ -97,7 +97,7 @@ class GeminiCodeAssistModel(Model):
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
-    ) -> AsyncIterator[StreamedResponse]:
+    ) -> AsyncIterator["StreamedResponse"]:
         """Make a streaming request to the Code Assist API."""
         request_body = self._build_request(
             messages, model_settings, model_request_parameters
@@ -300,9 +300,19 @@ class GeminiCodeAssistModel(Model):
 
         # Extract usage metadata
         usage_meta = inner_response.get("usageMetadata", {})
+        # Capture extended usage details for accurate token accounting
+        details = {
+            k: v for k, v in {
+                "cached_content_tokens": usage_meta.get("cachedContentTokenCount"),
+                "tool_use_prompt_tokens": usage_meta.get("toolUsePromptTokenCount"),
+                "thoughts_tokens": usage_meta.get("thoughtsTokenCount"),
+                "total_tokens": usage_meta.get("totalTokenCount"),
+            }.items() if v is not None
+        }
         usage = RequestUsage(
             input_tokens=usage_meta.get("promptTokenCount", 0),
             output_tokens=usage_meta.get("candidatesTokenCount", 0),
+            details=details if details else None,
         )
 
         return ModelResponse(
@@ -343,9 +353,19 @@ class StreamedResponse:
                     # Extract usage if available
                     if "usageMetadata" in inner:
                         meta = inner["usageMetadata"]
+                        # Capture extended usage details for accurate token accounting
+                        details = {
+                            k: v for k, v in {
+                                "cached_content_tokens": meta.get("cachedContentTokenCount"),
+                                "tool_use_prompt_tokens": meta.get("toolUsePromptTokenCount"),
+                                "thoughts_tokens": meta.get("thoughtsTokenCount"),
+                                "total_tokens": meta.get("totalTokenCount"),
+                            }.items() if v is not None
+                        }
                         self._usage = RequestUsage(
                             input_tokens=meta.get("promptTokenCount", 0),
                             output_tokens=meta.get("candidatesTokenCount", 0),
+                            details=details if details else None,
                         )
 
                     # Extract parts from candidates (both text and function calls)

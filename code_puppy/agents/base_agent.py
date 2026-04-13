@@ -128,17 +128,20 @@ logger = logging.getLogger(__name__)
 # in estimate_context_overhead_tokens(). Schemas are static, so caching
 # provides significant performance benefits for repeated token estimations.
 @thread_safe_lru_cache(maxsize=128)
-def _serialize_schema_to_json(schema_tuple: tuple[tuple[str, Any], ...]) -> str:
-    """Serialize a tool schema (as sorted tuple) to JSON string.
+def _serialize_schema_to_json(schema_json: str) -> str:
+    """Return canonical JSON for a schema.
+
+    The input is already a canonical JSON string; caching avoids
+    redundant re-serialization when the same schema appears multiple times.
+    This approach handles nested dicts correctly (unlike tuple-based keys).
 
     Args:
-        schema_tuple: Schema dict converted to sorted tuple for hashability.
+        schema_json: Canonical JSON string representation of the schema.
 
     Returns:
-        JSON string representation of the schema with sorted keys.
+        The same JSON string (cached for performance).
     """
-    schema_dict = dict(schema_tuple)
-    return json.dumps(schema_dict, sort_keys=True)
+    return schema_json
 
 
 class BaseAgent(ABC, AgentPromptMixin):
@@ -295,6 +298,26 @@ class BaseAgent(ABC, AgentPromptMixin):
     def _code_generation_agent(self, value: Any) -> None:
         """Backward-compatible setter delegating to _state.code_generation_agent."""
         self._state.code_generation_agent = value
+
+    def _invalidate_token_caches(self) -> None:
+        """Invalidate all token-related caches.
+
+        Call this when prompt/tool topology changes:
+        - MCP tools added/removed
+        - Working directory changes
+        - Project rules reload
+        """
+        self._state.invalidate_all_token_caches()
+
+    @property
+    def _cached_context_overhead(self) -> int | None:
+        """Backward-compatible property delegating to _state.cached_context_overhead."""
+        return self._state.cached_context_overhead
+
+    @_cached_context_overhead.setter
+    def _cached_context_overhead(self, value: int | None) -> None:
+        """Backward-compatible setter delegating to _state.cached_context_overhead."""
+        self._state.cached_context_overhead = value
 
     @property
     @abstractmethod
@@ -642,6 +665,11 @@ class BaseAgent(ABC, AgentPromptMixin):
             )
             system_prompt = self.get_full_system_prompt()
 
+            # Include puppy rules in estimation - they ARE included in actual requests
+            puppy_rules = self.load_puppy_rules()
+            if puppy_rules:
+                system_prompt += f"\n{puppy_rules}"
+
             # Get the instructions that will be used (handles model-specific logic via hooks)
             prepared = prepare_prompt_for_model(
                 model_name=model_name,
@@ -679,8 +707,9 @@ class BaseAgent(ABC, AgentPromptMixin):
                             # Use LRU cached serialization to avoid redundant JSON encoding
                             # Schemas are static, so caching eliminates repeated work
                             if isinstance(schema, dict):
-                                schema_tuple = tuple(sorted(schema.items()))
-                                schema_str = _serialize_schema_to_json(schema_tuple)
+                                schema_str = _serialize_schema_to_json(
+                                    json.dumps(schema, sort_keys=True, separators=(',', ':'))
+                                )
                             else:
                                 schema_str = str(schema)
                             total_tokens += self.estimate_token_count(schema_str)
@@ -721,8 +750,9 @@ class BaseAgent(ABC, AgentPromptMixin):
                     if input_schema:
                         # Use LRU cached serialization for MCP tool schemas too
                         if isinstance(input_schema, dict):
-                            schema_tuple = tuple(sorted(input_schema.items()))
-                            schema_str = _serialize_schema_to_json(schema_tuple)
+                            schema_str = _serialize_schema_to_json(
+                                json.dumps(input_schema, sort_keys=True, separators=(',', ':'))
+                            )
                         else:
                             schema_str = str(input_schema)
                         total_tokens += self.estimate_token_count(schema_str)
@@ -765,6 +795,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                 continue
 
         self._state.mcp_tool_definitions_cache = tool_definitions
+        # Invalidate context overhead cache when MCP tools change
+        self._invalidate_token_caches()
 
     def update_mcp_tool_cache_sync(self) -> None:
         """
@@ -780,6 +812,8 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Simply clear the cache - it will be repopulated on the next agent run
         # This is safer than trying to call async methods from sync context
         self._state.mcp_tool_definitions_cache = []
+        # Invalidate context overhead cache when MCP tools are cleared
+        self._invalidate_token_caches()
 
     def _is_tool_call_part(self, part: Any) -> bool:
         if isinstance(part, (ToolCallPart, ToolCallPartDelta)):
@@ -1607,12 +1641,17 @@ class BaseAgent(ABC, AgentPromptMixin):
                 tool_defs = self._state.cached_tool_defs
                 mcp_defs = self._state.mcp_tool_definitions_cache or []
                 # Use cached system prompt (only computed once per agent lifecycle)
+                # Include puppy rules to match actual request path in _init_pydantic_agent()
                 if self._state.cached_system_prompt is None:
-                    self._state.cached_system_prompt = (
+                    _sp = (
                         self.get_full_system_prompt()
                         if hasattr(self, "get_full_system_prompt")
                         else ""
                     )
+                    _pr = self.load_puppy_rules()
+                    if _pr:
+                        _sp += f"\n{_pr}"
+                    self._state.cached_system_prompt = _sp
                 system_prompt = self._state.cached_system_prompt
                 batch_result = _message_batch.process(tool_defs, mcp_defs, system_prompt)
                 message_tokens = batch_result.total_message_tokens
@@ -1663,7 +1702,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                     # Request delayed compaction for when tool calls complete
                     self.request_delayed_compaction()
                     # Return original messages without compaction
-                    return messages, []
+                    return messages
 
             if compaction_strategy == "truncation":
                 # Use truncation instead of summarization
@@ -1931,8 +1970,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         self._state.mcp_tool_definitions_cache = []
         # MCP tools are part of context overhead — invalidate token caches
         # to prevent stale estimates after tool changes
-        self._state.cached_context_overhead = None
-        self._state.cached_tool_defs = None
+        self._invalidate_token_caches()
 
         # Force re-sync from mcp_servers.json
         manager = get_mcp_manager()
@@ -2649,10 +2687,16 @@ class BaseAgent(ABC, AgentPromptMixin):
                     # Record token usage in the session ledger (best-effort)
                     try:
                         usage = result_.usage()
+                        # Extract cache tokens from usage details if available
+                        details = getattr(usage, 'details', None)
+                        cache_read = None
+                        if details and isinstance(details, dict):
+                            cache_read = details.get('cached_content_tokens')
                         self._state.get_token_ledger().record(TokenAttempt(
                             model=self.get_model_name(),
                             provider_input_tokens=getattr(usage, 'request_tokens', None),
                             provider_output_tokens=getattr(usage, 'response_tokens', None),
+                            cache_read_tokens=cache_read,
                             success=True,
                             agent_name=self.name,
                         ))

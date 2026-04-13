@@ -122,7 +122,9 @@ async def subagent_stream_handler(
 
     async for event in events:
         try:
-            await _handle_event(
+            # _handle_event now handles ALL token counting and manager updates
+            # It returns the updated metrics so we can track state
+            token_count, tool_call_count = await _handle_event(
                 event=event,
                 manager=manager,
                 session_id=effective_session_id,
@@ -130,22 +132,6 @@ async def subagent_stream_handler(
                 tool_call_count=tool_call_count,
                 active_tool_parts=active_tool_parts,
             )
-
-            # Update metrics from returned values
-            # (we need to track these at this level since they're modified in _handle_event)
-            if isinstance(event, PartStartEvent):
-                if isinstance(event.part, ToolCallPart):
-                    tool_call_count += 1
-                    active_tool_parts.add(event.index)
-
-            elif isinstance(event, PartDeltaEvent):
-                delta = event.delta
-                if isinstance(delta, (TextPartDelta, ThinkingPartDelta)):
-                    if delta.content_delta:
-                        token_count += _estimate_tokens(delta.content_delta)
-
-            elif isinstance(event, PartEndEvent):
-                active_tool_parts.discard(event.index)
 
         except Exception as e:
             # Log but don't crash on event handling errors
@@ -160,10 +146,11 @@ async def _handle_event(
     token_count: int,
     tool_call_count: int,
     active_tool_parts: set[int],
-) -> None:
+) -> tuple[int, int]:
     """Handle a single streaming event.
 
-    Updates the console manager and fires callbacks for each event type.
+    Updates the console manager with token counts, status, and metrics.
+    Handles ALL token counting internally to ensure consistency.
 
     Args:
         event: The streaming event to handle
@@ -171,15 +158,18 @@ async def _handle_event(
         session_id: Session ID for updates
         token_count: Current token count
         tool_call_count: Current tool call count
-        active_tool_parts: Set of active tool call indices
+        active_tool_parts: Set of active tool call indices (modified in-place)
+
+    Returns:
+        Tuple of (updated_token_count, updated_tool_call_count)
     """
     if session_id is None:
         # Can't update manager without session_id
         logger.debug("No session_id available for stream event")
-        return
+        return token_count, tool_call_count
 
     # -------------------------------------------------------------------------
-    # PartStartEvent - Track new parts and update status
+    # PartStartEvent - Track new parts, count initial content, update status
     # -------------------------------------------------------------------------
     if isinstance(event, PartStartEvent):
         part = event.part
@@ -189,19 +179,29 @@ async def _handle_event(
         }
 
         if isinstance(part, ThinkingPart):
-            manager.update_agent(session_id, status="thinking")
-            event_data["content"] = getattr(part, "content", None)
+            # Count initial content tokens for thinking parts
+            initial_content = getattr(part, "content", None)
+            if initial_content:
+                token_count += _estimate_tokens(initial_content)
+            manager.update_agent(session_id, status="thinking", token_count=token_count)
+            event_data["content"] = initial_content
 
         elif isinstance(part, TextPart):
-            manager.update_agent(session_id, status="running")
-            event_data["content"] = getattr(part, "content", None)
+            # Count initial content tokens for text parts
+            initial_content = getattr(part, "content", None)
+            if initial_content:
+                token_count += _estimate_tokens(initial_content)
+            manager.update_agent(session_id, status="running", token_count=token_count)
+            event_data["content"] = initial_content
 
         elif isinstance(part, ToolCallPart):
-            # tool_call_count is updated in the main handler
+            # Increment tool call count for new tool calls
+            tool_call_count += 1
+            active_tool_parts.add(event.index)
             manager.update_agent(
                 session_id,
                 status="tool_calling",
-                tool_call_count=tool_call_count + 1,  # +1 for this new one
+                tool_call_count=tool_call_count,
                 current_tool=part.tool_name,
             )
             event_data["tool_name"] = part.tool_name
@@ -210,7 +210,7 @@ async def _handle_event(
         _fire_callback("part_start", event_data, session_id)
 
     # -------------------------------------------------------------------------
-    # PartDeltaEvent - Track content deltas and update metrics
+    # PartDeltaEvent - Track content deltas and update token counts
     # -------------------------------------------------------------------------
     elif isinstance(event, PartDeltaEvent):
         delta = event.delta
@@ -222,21 +222,24 @@ async def _handle_event(
         if isinstance(delta, TextPartDelta):
             content_delta = delta.content_delta
             if content_delta:
-                # Token count is updated in main handler
-                new_token_count = token_count + _estimate_tokens(content_delta)
-                manager.update_agent(session_id, token_count=new_token_count)
+                token_count += _estimate_tokens(content_delta)
+                manager.update_agent(session_id, token_count=token_count)
                 event_data["content_delta"] = content_delta
 
         elif isinstance(delta, ThinkingPartDelta):
             content_delta = delta.content_delta
             if content_delta:
-                new_token_count = token_count + _estimate_tokens(content_delta)
-                manager.update_agent(session_id, token_count=new_token_count)
+                token_count += _estimate_tokens(content_delta)
+                manager.update_agent(session_id, token_count=token_count)
                 event_data["content_delta"] = content_delta
 
         elif isinstance(delta, ToolCallPartDelta):
-            # Tool call deltas might have partial args
-            event_data["args_delta"] = getattr(delta, "args_delta", None)
+            # Count tool call argument deltas - THIS WAS THE MISSING PIECE!
+            args_delta = getattr(delta, "args_delta", None)
+            if args_delta:
+                token_count += _estimate_tokens(args_delta)
+                manager.update_agent(session_id, token_count=token_count)
+            event_data["args_delta"] = args_delta
             event_data["tool_name_delta"] = getattr(delta, "tool_name_delta", None)
 
         _fire_callback("part_delta", event_data, session_id)
@@ -252,13 +255,14 @@ async def _handle_event(
 
         # If this was a tool call part ending, check if we should reset status
         if event.index in active_tool_parts:
-            # Remove this index from active parts (done in main handler)
+            active_tool_parts.discard(event.index)
             # If no more active tool parts after removal, reset to running
-            remaining_active = active_tool_parts - {event.index}
-            if not remaining_active:
+            if not active_tool_parts:
                 manager.update_agent(session_id, current_tool=None, status="running")
 
         _fire_callback("part_end", event_data, session_id)
+
+    return token_count, tool_call_count
 
 
 # =============================================================================
