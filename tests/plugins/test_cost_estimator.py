@@ -24,22 +24,26 @@ from code_puppy.plugins.cost_estimator.estimator import (
 
 
 class TestCountTokensHeuristic:
-    """Test character-based heuristic token counting."""
+    """Test token counting (now using accurate tiktoken-based counting)."""
 
     def test_empty_string(self):
-        """Empty string → 1 token minimum."""
-        assert _count_tokens_heuristic("") == 1
+        """Empty string → 0 tokens (accurate tiktoken count)."""
+        # With accurate counting, empty string is 0 tokens
+        # (previously heuristic returned 1 as minimum)
+        assert _count_tokens_heuristic("") == 0
 
     def test_short_text(self):
-        """Short text → roughly len/4."""
+        """Short text uses accurate tiktoken encoding."""
         result = _count_tokens_heuristic("Hello, world!")
-        assert result == max(1, len("Hello, world!") // 4)
+        # tiktoken tokenizes "Hello, world!" as 4 tokens (not len/4 = 3)
+        assert result == 4
 
     def test_long_text(self):
-        """Longer text → proportional estimate."""
+        """Longer text with accurate counting (repeated chars encode efficiently)."""
         text = "a" * 1000
         result = _count_tokens_heuristic(text)
-        assert result == 250
+        # tiktoken encodes repeated chars efficiently (~8 chars per token)
+        assert result == 125  # 1000 / 8 = 125, not 250 from old heuristic
 
 
 class TestLookupPricing:

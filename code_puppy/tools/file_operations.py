@@ -30,7 +30,7 @@ from code_puppy.messaging import (  # New structured messaging types
     GrepResultMessage,
     get_message_bus,
 )
-from code_puppy.token_utils import estimate_token_count as _etc
+from code_puppy.token_counting import count_tokens
 from code_puppy.utils.eol import normalize_eol, strip_bom
 from code_puppy.utils.file_display import (
     format_content_with_line_numbers,
@@ -755,8 +755,9 @@ def _read_file_sync(
             # (the model should see clean content without encoding markers)
             content, _ = strip_bom(content)  # Discard BOM on read — LLM shouldn't see it
 
-            # Use shared token estimation (content-aware, sampling for large texts)
-            num_tokens = _etc(content)
+            # Use accurate token counting via tiktoken (provider-aware)
+            # gpt-4o is a good middle-ground tokenizer for estimation
+            num_tokens = count_tokens(content, model_name="gpt-4o")
             if num_tokens > MAX_READ_FILE_TOKENS:
                 return (
                     None,

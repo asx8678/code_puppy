@@ -79,34 +79,13 @@ class TokenEstimate:
         return " | ".join(parts)
 
 
-def _count_tokens_tiktoken(text: str, model: str = "gpt-4o") -> int | None:
-    """Count tokens using tiktoken. Returns None if unavailable."""
-    try:
-        import tiktoken
-    except ImportError:
-        return None
+from code_puppy.token_counting import count_tokens as _count_tokens_accurate
 
-    try:
-        encoding = tiktoken.encoding_for_model(model)
-    except KeyError:
-        try:
-            encoding = tiktoken.get_encoding("cl100k_base")
-        except Exception:
-            return None
-
-    try:
-        return len(encoding.encode(text))
-    except Exception:
-        return None
-
-
-def _count_tokens_heuristic(text: str) -> int:
-    """Estimate tokens using character-based heuristic.
-
-    Uses ~4 characters per token as a rough approximation.
-    This is intentionally conservative (overestimates slightly).
-    """
-    return max(1, len(text) // 4)
+# Re-export for backward compatibility (tests may import these)
+# These functions are now implemented via the centralized token_counting module
+# but kept here for API compatibility
+_count_tokens_tiktoken = _count_tokens_accurate
+_count_tokens_heuristic = _count_tokens_accurate
 
 
 def _lookup_pricing(model: str) -> tuple[float, float]:
@@ -125,7 +104,7 @@ def count_tokens(
     *,
     model: str = "gpt-4o",
 ) -> int:
-    """Count tokens in text, using tiktoken if available.
+    """Count tokens in text, using provider-aware accurate counting.
 
     Args:
         text: Text to count tokens for.
@@ -134,10 +113,7 @@ def count_tokens(
     Returns:
         Token count (exact if tiktoken available, heuristic otherwise).
     """
-    result = _count_tokens_tiktoken(text, model)
-    if result is not None:
-        return result
-    return _count_tokens_heuristic(text)
+    return _count_tokens_accurate(text, model_name=model)
 
 
 def estimate_cost(
@@ -191,13 +167,13 @@ def estimate_cost(
         input_tokens = provider_input_tokens
         method = "provider"
     else:
-        # Count tokens via heuristic or tiktoken
-        tiktoken_count = _count_tokens_tiktoken(text, model)
-        if tiktoken_count is not None:
-            input_tokens = tiktoken_count
+        # Use provider-aware accurate token counting
+        input_tokens = _count_tokens_accurate(text, model_name=model)
+        # Detect which method was used based on tiktoken availability
+        try:
+            import tiktoken
             method = "tiktoken"
-        else:
-            input_tokens = _count_tokens_heuristic(text)
+        except ImportError:
             method = "heuristic"
 
     # Determine output token count — prefer provider data when available

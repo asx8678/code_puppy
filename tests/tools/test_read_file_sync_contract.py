@@ -80,7 +80,11 @@ class TestOversizedFile:
         assert "10,000 tokens" in error
 
     def test_oversized_error_message_is_string(self, tmp_path):
-        big_content = "x" * 50000
+        # Note: tiktoken encodes repeated chars efficiently (~8 chars/token)
+        # Need ~80,000+ varied chars to exceed 10,000 tokens
+        import random
+        random.seed(42)
+        big_content = ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ', k=85000))
         f = tmp_path / "huge2.txt"
         f.write_text(big_content, encoding="utf-8")
 
@@ -191,9 +195,9 @@ class TestLineRange:
 
         assert error is None
         assert content == ""
-        assert (
-            num_tokens > 0
-        )  # empty string still has ~0 tokens but estimation may vary
+        # With accurate tiktoken counting, empty string is 0 tokens
+        # (previously heuristic had a minimum of 1)
+        assert num_tokens == 0
 
     def test_line_range_invalid_start_line(self, tmp_path):
         f = tmp_path / "inv.txt"

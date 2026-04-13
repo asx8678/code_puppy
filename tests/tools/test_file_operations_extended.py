@@ -105,8 +105,10 @@ class TestFileOperationsExtended:
     async def test_read_file_large_file_token_limit(self, tmp_path):
         """Test handling of files that exceed token limits."""
         test_file = tmp_path / "large.txt"
-        # Create content that would exceed 10,000 tokens (40,000+ characters)
-        large_content = "A" * 50000  # Should exceed the token limit
+        # Create content that exceeds 10,000 tokens
+        # Note: tiktoken encodes repeated chars efficiently (~8 chars/token for 'A's)
+        # so we need ~80,000+ characters to exceed 10,000 tokens
+        large_content = "A" * 85000  # Should exceed the 10,000 token limit
         test_file.write_text(large_content)
 
         result = await _read_file(None, str(test_file))
