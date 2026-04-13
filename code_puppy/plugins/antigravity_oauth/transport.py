@@ -560,11 +560,12 @@ class AntigravityClient(httpx.AsyncClient):
                     if "topP" not in gen_config:
                         gen_config["topP"] = 0.95
 
-                    # Set maxOutputTokens: 128K for Claude Opus, 64K for others
-                    if "claude" in model and "opus" in model:
-                        gen_config["maxOutputTokens"] = 128000
-                    else:
-                        gen_config["maxOutputTokens"] = 64000
+                    # Only set default maxOutputTokens if not already configured
+                    if "maxOutputTokens" not in gen_config:
+                        from code_puppy.model_factory import resolve_max_output_tokens
+                        gen_config["maxOutputTokens"] = resolve_max_output_tokens(
+                            model, {"context_length": 128000}
+                        )
 
                     original_body["generationConfig"] = gen_config
 

@@ -39,6 +39,44 @@ _MAX_OUTPUT_TOKENS = 65536
 
 logger = logging.getLogger(__name__)
 
+
+def resolve_max_output_tokens(
+    model_name: str,
+    model_config: dict[str, Any],
+    requested: int | None = None,
+) -> int:
+    """Resolve the max output tokens for a model request.
+    
+    Priority order:
+    1. Explicit requested value (if provided)
+    2. Model-specific max_output_tokens from config
+    3. Default calculation: max(512, min(context * 0.15, 4096))
+    
+    Always caps at provider limit if known.
+    
+    Args:
+        model_name: Name of the model
+        model_config: Model configuration dict
+        requested: Explicitly requested output token limit
+        
+    Returns:
+        Resolved max output tokens value
+    """
+    context_length = int(model_config.get("context_length", 128000))
+    provider_limit = model_config.get("max_output_tokens")
+    
+    # Calculate default cap - conservative but reasonable
+    default_cap = max(512, min(int(context_length * 0.15), 4096))
+    
+    # Use requested if provided, else default
+    cap = requested if requested is not None else default_cap
+    
+    # Never exceed provider limit if known
+    if provider_limit is not None:
+        cap = min(cap, int(provider_limit))
+    
+    return max(1, cap)
+
 # Pre-compiled regex pattern for environment variable substitution (e.g., ${VAR_NAME} or $VAR_NAME)
 _ENV_VAR_RE = re.compile(r"\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
 
@@ -135,23 +173,15 @@ def make_model_settings(
     """
     model_settings_dict: dict = {}
 
-    # Calculate max_tokens if not explicitly provided
-    model_config: dict[str, Any] = {}
-    if max_tokens is None:
-        # Load model config to get context length
-        try:
-            models_config = ModelFactory.load_config()
-            model_config = models_config.get(model_name, {})
-            context_length = model_config.get("context_length", 128000)
-        except Exception:
-            # Fallback if config loading fails (e.g., in CI environments)
-            context_length = 128000
-        # min _MIN_OUTPUT_TOKENS, _OUTPUT_TOKEN_RATIO of context, max _MAX_OUTPUT_TOKENS
-        max_tokens = max(
-            _MIN_OUTPUT_TOKENS,
-            min(int(_OUTPUT_TOKEN_RATIO * context_length), _MAX_OUTPUT_TOKENS),
-        )
-
+    # Calculate max_tokens using centralized resolver
+    try:
+        models_config = ModelFactory.load_config()
+        model_config = models_config.get(model_name, {})
+    except Exception:
+        # Fallback if config loading fails (e.g., in CI environments)
+        model_config = {}
+    
+    max_tokens = resolve_max_output_tokens(model_name, model_config, requested=max_tokens)
     model_settings_dict["max_tokens"] = max_tokens
     effective_settings = _config_module.get_effective_model_settings(model_name)
     model_settings_dict.update(effective_settings)
