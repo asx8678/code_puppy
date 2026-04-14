@@ -26,7 +26,7 @@ defmodule CodePuppyControl.Application do
       {Phoenix.PubSub, name: CodePuppyControl.PubSub},
       CodePuppyControl.EventStore,
       CodePuppyControl.Run.Registry,
-      {DynamicSupervisor, strategy: :one_for_one, name: CodePuppyControl.Run.Supervisor},
+      {CodePuppyControl.Run.Supervisor, []},
       CodePuppyControl.PythonWorker.Supervisor,
       # MCP Server supervision
       {Registry, keys: :unique, name: CodePuppyControl.MCP.Registry},
