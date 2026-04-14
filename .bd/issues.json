@@ -757,7 +757,7 @@
       "id": "bd-42",
       "title": "P0: Unsafe String.to_atom/1 - External strings converted to atoms",
       "description": "CRITICAL SECURITY BUG: External strings (from Python, MCP clients) are converted to atoms using String.to_atom/1, causing atom table exhaustion (VM crash vulnerability).\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex:322\n- elixir/code_puppy_control/lib/code_puppy_control/run/state.ex:370\n\n**Impact:** \n- Denial of service via atom table exhaustion\n- VM crash after ~1M unique strings\n- No input validation on external data\n\n**Fix:** \n- Use String.to_existing_atom/1 with fallback\n- Or use binary keys for external data\n- Add input validation layer\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "bug",
       "labels": [
@@ -765,7 +765,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:25.558839",
-      "updated_at": "2026-04-14T10:37:25.558847",
+      "updated_at": "2026-04-14T10:59:36.609111",
       "comments": []
     },
     "bd-43": {
