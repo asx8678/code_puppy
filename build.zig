@@ -172,6 +172,13 @@ pub fn build(b: *std.Build) void {
         built_count += 1;
     }
 
+    // Build Process Runner executable (always included unless explicitly skipped)
+    const skip_process_runner = b.option(bool, "no-process-runner", "Skip building process_runner executable") orelse false;
+    if (!skip_process_runner) {
+        buildProcessRunner(b, target, optimize);
+        built_count += 1;
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // Build Steps
     // ═════════════════════════════════════════════════════════════════════════
@@ -425,4 +432,94 @@ pub fn getTargetName(target: std.Target) []const u8 {
         },
         else => "unknown",
     };
+}
+
+/// Build the process_runner executable for Erlang Port communication
+fn buildProcessRunner(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) void {
+    // Create modules first for imports
+    const protocol_mod = b.createModule(.{
+        .root_source_file = b.path("zig_src/process_runner/protocol.zig"),
+    });
+
+    const process_mod = b.createModule(.{
+        .root_source_file = b.path("zig_src/process_runner/process.zig"),
+        .imports = &.{.{ .name = "protocol", .module = protocol_mod }},
+    });
+
+    const exe = b.addExecutable(.{
+        .name = "process_runner",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("zig_src/process_runner/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "protocol", .module = protocol_mod },
+                .{ .name = "process", .module = process_mod },
+            },
+        }),
+    });
+
+    // Link against C library for POSIX APIs
+    exe.linkLibC();
+
+    // Install to bin/ directory
+    const install_exe = b.addInstallArtifact(exe, .{
+        .dest_dir = .{ .override = .bin },
+    });
+
+    // Create a dedicated step
+    const process_runner_step = b.step("process_runner", "Build process_runner executable (Erlang Port)");
+    process_runner_step.dependOn(&install_exe.step);
+
+    // Also add to default step
+    b.getInstallStep().dependOn(&install_exe.step);
+
+    // Test step for process_runner
+    const test_protocol_mod = b.createModule(.{
+        .root_source_file = b.path("zig_src/process_runner/protocol.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const test_process_mod = b.createModule(.{
+        .root_source_file = b.path("zig_src/process_runner/process.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "protocol", .module = test_protocol_mod }},
+    });
+
+    const test_main_mod = b.createModule(.{
+        .root_source_file = b.path("zig_src/process_runner/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "protocol", .module = test_protocol_mod },
+            .{ .name = "process", .module = test_process_mod },
+        },
+    });
+
+    const test_protocol = b.addTest(.{
+        .root_module = test_protocol_mod,
+    });
+
+    const test_process = b.addTest(.{
+        .root_module = test_process_mod,
+    });
+
+    const test_main = b.addTest(.{
+        .root_module = test_main_mod,
+    });
+
+    const run_protocol_tests = b.addRunArtifact(test_protocol);
+    const run_process_tests = b.addRunArtifact(test_process);
+    const run_main_tests = b.addRunArtifact(test_main);
+
+    const test_runner_step = b.step("test-process-runner", "Run process_runner tests");
+    test_runner_step.dependOn(&run_protocol_tests.step);
+    test_runner_step.dependOn(&run_process_tests.step);
+    test_runner_step.dependOn(&run_main_tests.step);
 }

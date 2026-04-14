@@ -432,7 +432,250 @@
         "Claimed by @code-puppy-019d8a - ready to start implementation \ud83d\udc36",
         "Phase 3 complete: Token budget analysis, run comparison, outlier detection, export formats (json/otel/csv). Auto-summary at run end. Commit: 1a90a1c5"
       ]
+    },
+    "bd-26": {
+      "id": "bd-26",
+      "title": "Epic: Hybrid Elixir/Zig Control Plane Migration",
+      "description": "Strategic migration: Elixir control plane, Zig process plane, Python agent brain. See docs/adr/ADR-001 and ADR-002.",
+      "status": "open",
+      "priority": 2,
+      "type": "epic",
+      "labels": [
+        "elixir",
+        "zig"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T08:14:43.396200",
+      "updated_at": "2026-04-14T08:17:05.641984",
+      "comments": [
+        "Phase 0 complete: Singleton audit done (docs/architecture/python-singleton-audit.md). ADRs complete (docs/adr/ADR-001, ADR-002)."
+      ]
+    },
+    "bd-27": {
+      "id": "bd-27",
+      "title": "Phase 0: Python Cleanup Prerequisites",
+      "description": "Fix Python issues before Elixir: extract interfaces, normalize events. Singleton audit complete in docs/architecture/python-singleton-audit.md",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "phase-0",
+        "python"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-26"
+        ]
+      },
+      "created_at": "2026-04-14T08:14:47.124130",
+      "updated_at": "2026-04-14T08:26:54.283881",
+      "comments": []
+    },
+    "bd-28": {
+      "id": "bd-28",
+      "title": "Phase 1A: Elixir Project Bootstrap",
+      "description": "Init mix project with Phoenix, Oban, Registry, PubSub. Blocked by: ADRs (complete). See ADR-001.",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-1",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-26"
+        ]
+      },
+      "created_at": "2026-04-14T08:14:50.914947",
+      "updated_at": "2026-04-14T08:26:54.284634",
+      "comments": [
+        "Ready to start: ADRs complete. Next step: mix phx.new code_puppy_control"
+      ]
+    },
+    "bd-29": {
+      "id": "bd-29",
+      "title": "Phase 1B: Wire Protocol Implementation",
+      "description": "Implement JSON-RPC 2.0 over stdio per ADR-001. Content-Length framing. Python worker Port wrapper.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-1",
+        "protocol"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-26"
+        ]
+      },
+      "created_at": "2026-04-14T08:14:56.142674",
+      "updated_at": "2026-04-14T08:14:56.142681",
+      "comments": []
+    },
+    "bd-30": {
+      "id": "bd-30",
+      "title": "Phase 2A: Session/Run Registry",
+      "description": "Move session/run tracking from Python to Elixir Registry + GenServer. Blocked by: Phase 1A.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-2",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-28"
+        ]
+      },
+      "created_at": "2026-04-14T08:14:59.307138",
+      "updated_at": "2026-04-14T08:14:59.307145",
+      "comments": []
+    },
+    "bd-31": {
+      "id": "bd-31",
+      "title": "Phase 2B: Event Bus to PubSub",
+      "description": "Replace Python MessageBus with Phoenix.PubSub. Blocked by: Phase 2A.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-2",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-30"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:02.385943",
+      "updated_at": "2026-04-14T08:15:02.385954",
+      "comments": []
+    },
+    "bd-32": {
+      "id": "bd-32",
+      "title": "Phase 2C: Scheduler to Oban",
+      "description": "Migrate Python scheduler daemon to Oban. Blocked by: Phase 1A.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-2",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-28"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:08.817092",
+      "updated_at": "2026-04-14T08:15:08.817102",
+      "comments": []
+    },
+    "bd-33": {
+      "id": "bd-33",
+      "title": "Phase 2D: MCP Supervision",
+      "description": "Move MCP server lifecycle to Elixir DynamicSupervisor. Blocked by: Phase 2A, Phase 3A.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-2",
+        "elixir",
+        "mcp"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-30",
+          "bd-33",
+          "bd-34"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:14.168487",
+      "updated_at": "2026-04-14T08:15:45.472414",
+      "comments": []
+    },
+    "bd-34": {
+      "id": "bd-34",
+      "title": "Phase 3A: Zig Process Runner",
+      "description": "Implement Zig subprocess/PTY runner as Erlang Port. See ADR-002. Blocked by: ADRs (complete).",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-3",
+        "zig"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-26"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:19.791040",
+      "updated_at": "2026-04-14T08:26:54.282847",
+      "comments": []
+    },
+    "bd-35": {
+      "id": "bd-35",
+      "title": "Phase 3B: MCP Stdio Bridge",
+      "description": "Handle MCP server stdio in Zig. JSON-RPC framing. Blocked by: Phase 3A.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "phase-3",
+        "zig",
+        "mcp"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-34"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:25.225004",
+      "updated_at": "2026-04-14T08:15:25.225014",
+      "comments": []
+    },
+    "bd-36": {
+      "id": "bd-36",
+      "title": "Milestone: Hybrid MVP",
+      "description": "MVP: Elixir registry running, Python workers report to Elixir, one Zig operation works. ~10-14 weeks.",
+      "status": "open",
+      "priority": 2,
+      "type": "milestone",
+      "labels": [
+        "mvp"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-26"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:28.918046",
+      "updated_at": "2026-04-14T08:15:28.918057",
+      "comments": []
+    },
+    "bd-37": {
+      "id": "bd-37",
+      "title": "Risk Register: Migration Risks",
+      "description": "Key risks: protocol complexity, performance regression, skill gap, partial migration limbo. See epic for mitigations.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "risks",
+        "planning"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-26"
+        ]
+      },
+      "created_at": "2026-04-14T08:15:32.290483",
+      "updated_at": "2026-04-14T08:15:32.290492",
+      "comments": []
     }
   },
-  "counter": 25
+  "counter": 37
 }
