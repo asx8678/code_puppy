@@ -787,7 +787,7 @@
       "id": "bd-44",
       "title": "P0: Run.Supervisor bypassed - App starts raw DynamicSupervisor",
       "description": "CRITICAL SUPERVISION BUG: Application starts a raw DynamicSupervisor instead of the custom CodePuppyControl.Run.Supervisor module, breaking restart strategies and run isolation.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/application.ex:24-39\n\n**Impact:** \n- Run isolation broken - runs can interfere with each other\n- Restart strategies not applied\n- No proper supervision tree for run processes\n- Potential cascade failures\n\n**Fix:** Change Application.start to use CodePuppyControl.Run.Supervisor instead of raw DynamicSupervisor with :simple_one_for_one strategy.\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "bug",
       "labels": [
@@ -795,7 +795,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:31.097032",
-      "updated_at": "2026-04-14T10:37:31.097043",
+      "updated_at": "2026-04-14T11:01:33.244563",
       "comments": []
     },
     "bd-45": {
