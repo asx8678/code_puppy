@@ -697,7 +697,7 @@
       "id": "bd-38",
       "title": "P0: run_id vs worker_pid bug - Run.Manager passes wrong ID to PythonWorker",
       "description": "CRITICAL BUG: Run.Manager.start_run/3 passes worker_pid to PythonWorker.Port.start_run/2 which expects run_id.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/run/manager.ex:55-71\n- elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex:82-85\n\n**Impact:** Run tracking completely broken - Python worker receives wrong identifier causing mismatched state updates and orphaned runs.\n\n**Fix:** Change Run.Manager to pass run_id (UUID) instead of worker_pid to PythonWorker.Port.start_run/2.\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "bug",
       "labels": [
@@ -705,14 +705,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:25.543013",
-      "updated_at": "2026-04-14T10:37:25.543021",
+      "updated_at": "2026-04-14T10:52:37.003160",
       "comments": []
     },
     "bd-39": {
       "id": "bd-39",
       "title": "P0: RequestTracker race condition - Fast responses lost before registration",
       "description": "CRITICAL RACE CONDITION: Request is sent to Python worker BEFORE registering in RequestTracker. Fast responses arrive before registration completes, causing lost responses and hanging requests.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex:175-195\n\n**Impact:** Requests can hang indefinitely if Python responds faster than Elixir can register the request in RequestTracker. Under load, this causes cascading failures.\n\n**Fix:** Register request in RequestTracker BEFORE sending to Python. Use a 'pending' state that transitions to 'waiting' after send.\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "bug",
       "labels": [
@@ -720,14 +720,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:25.544034",
-      "updated_at": "2026-04-14T10:37:25.544041",
+      "updated_at": "2026-04-14T10:57:00.343548",
       "comments": []
     },
     "bd-40": {
       "id": "bd-40",
       "title": "P0: Protocol mismatch - Python newline-JSON vs Elixir Content-Length framing",
       "description": "CRITICAL PROTOCOL MISMATCH: Python bridge uses newline-delimited JSON, but Elixir expects Content-Length framing. Messages are truncated or concatenated incorrectly.\n\n**Files:**\n- code_puppy/plugins/elixir_bridge/register_callbacks.py:146-150,170-172\n- elixir/code_puppy_control/lib/code_puppy_control/protocol.ex\n\n**Impact:** Protocol corruption, message parsing failures, truncated or concatenated frames causing undefined behavior.\n\n**Fix:** Align both sides to use the SAME framing:\n- Option A: Add Content-Length framing to Python side\n- Option B: Use newline-delimited JSON on Elixir side\n- Document the chosen protocol explicitly\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "bug",
       "labels": [
@@ -735,7 +735,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:25.551666",
-      "updated_at": "2026-04-14T10:37:25.551674",
+      "updated_at": "2026-04-14T10:48:31.936952",
       "comments": []
     },
     "bd-41": {
@@ -772,7 +772,7 @@
       "id": "bd-43",
       "title": "P0: stderr merged into protocol stream - Corrupts frame parser",
       "description": "CRITICAL BUG: Python worker uses :stderr_to_stdout option which merges stderr into stdout, corrupting the protocol stream and causing frame parsing failures.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex:150-156\n\n**Impact:** Any Python warning/error (including deprecation warnings, stack traces) corrupts the protocol stream, causing cascading parse failures and system instability.\n\n**Fix:** \n- Remove :stderr_to_stdout from Port.open\n- Capture stderr separately via :stderr or logging\n- Add protocol stream sanitization\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "bug",
       "labels": [
@@ -780,7 +780,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:25.566579",
-      "updated_at": "2026-04-14T10:37:25.566586",
+      "updated_at": "2026-04-14T10:51:12.547582",
       "comments": []
     },
     "bd-44": {

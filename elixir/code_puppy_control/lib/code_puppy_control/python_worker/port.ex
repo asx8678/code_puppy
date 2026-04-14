@@ -176,14 +176,17 @@ defmodule CodePuppyControl.PythonWorker.Port do
   def handle_call({:call, method, params, timeout}, from, state) do
     request_id = generate_request_id(state)
 
+    # Register FIRST, before sending (fixes race condition)
+    :ok = CodePuppyControl.RequestTracker.register_request(request_id, method, timeout)
+
+    # Now send the request
     message = Protocol.encode_request(method, params, request_id)
     framed = Protocol.frame(message)
-
     Port.command(state.port, framed)
 
-    # Register with RequestTracker for async response handling
+    # Await response in a separate process
     Task.start(fn ->
-      case CodePuppyControl.RequestTracker.await_request(request_id, method, timeout) do
+      case CodePuppyControl.RequestTracker.await_response(request_id, timeout) do
         {:ok, result} ->
           GenServer.reply(from, {:ok, result})
 
