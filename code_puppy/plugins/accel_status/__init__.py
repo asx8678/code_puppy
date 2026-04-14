@@ -1,1 +1,0 @@
-"""Acceleration status command plugin."""

@@ -2,7 +2,7 @@
 
 This module defines the protocol/abstract interface that can be implemented by:
 - Current Python subprocess (default)
-- Future Zig process runner (via Elixir Port)
+- Elixir Port runner for native process management
 - Any other process execution backend
 
 Design Goals:
@@ -139,7 +139,7 @@ class ProcessRunner(Protocol):
     
     Implementations:
         - SubprocessRunner: Python subprocess.Popen backend (current)
-        - ElixirPortRunner: Zig runner via Elixir Port (future)
+        - ElixirPortRunner: Native runner via Elixir Port
     
     All methods are async to support both sync and async backends uniformly.
     
