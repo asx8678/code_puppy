@@ -53,6 +53,8 @@ class NativeBackend:
     with automatic fallback to Python implementations when native modules
     are unavailable.
 
+    bd-63: Per-capability enable/disable profiles replace global toggle.
+
     Example:
         # Check what's available
         status = NativeBackend.get_status()
@@ -84,6 +86,148 @@ class NativeBackend:
 
     # bd-62: Backend preference for routing decisions
     _backend_preference: BackendPreference = BackendPreference.RUST_FIRST
+
+    # bd-63: Per-capability enabled state (user can disable even if available)
+    _capability_enabled: dict[str, bool] = {
+        Capabilities.MESSAGE_CORE: True,
+        Capabilities.FILE_OPS: True,
+        Capabilities.REPO_INDEX: True,
+        Capabilities.PARSE: True,
+    }
+
+    # bd-63: Legacy global toggle for backward compatibility
+    _legacy_global_enabled: bool | None = None
+
+    # -------------------------------------------------------------------------
+    # Elixir Bridge Integration (bd-62)
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+    # Per-Capability Enable/Disable (bd-63)
+    # -------------------------------------------------------------------------
+
+    @classmethod
+    def enable_capability(cls, capability: str) -> bool:
+        """Enable a capability (will use native if available).
+
+        Args:
+            capability: One of the Capability constants.
+
+        Returns:
+            True if capability exists and was enabled, False if unknown.
+        """
+        if capability in cls._capability_enabled:
+            cls._capability_enabled[capability] = True
+            logger.debug(f"Enabled capability: {capability}")
+            return True
+        return False
+
+    @classmethod
+    def disable_capability(cls, capability: str) -> bool:
+        """Disable a capability (will use Python fallback).
+
+        Args:
+            capability: One of the Capability constants.
+
+        Returns:
+            True if capability exists and was disabled, False if unknown.
+        """
+        if capability in cls._capability_enabled:
+            cls._capability_enabled[capability] = False
+            logger.debug(f"Disabled capability: {capability}")
+            return True
+        return False
+
+    @classmethod
+    def is_enabled(cls, capability: str) -> bool:
+        """Check if capability is enabled by user preference.
+
+        Args:
+            capability: One of the Capability constants.
+
+        Returns:
+            True if capability is enabled (may still be unavailable).
+        """
+        return cls._capability_enabled.get(capability, False)
+
+    @classmethod
+    def is_active(cls, capability: str) -> bool:
+        """Check if capability is both available AND enabled.
+
+        Args:
+            capability: One of the Capability constants.
+
+        Returns:
+            True if capability is available and user has enabled it.
+        """
+        return cls.is_available(capability) and cls.is_enabled(capability)
+
+    @classmethod
+    def enable_all(cls) -> None:
+        """Enable all capabilities."""
+        for cap in cls._capability_enabled:
+            cls._capability_enabled[cap] = True
+        logger.debug("Enabled all capabilities")
+
+    @classmethod
+    def disable_all(cls) -> None:
+        """Disable all capabilities (Python-only mode)."""
+        for cap in cls._capability_enabled:
+            cls._capability_enabled[cap] = False
+        logger.debug("Disabled all capabilities")
+
+    @classmethod
+    def load_preferences(cls) -> None:
+        """Load capability preferences from config.
+
+        bd-63: Supports both legacy global toggle and per-capability settings.
+        """
+        from code_puppy.config import get_value
+
+        # Check legacy global toggle first (for backward compatibility)
+        legacy = get_value("enable_fast_puppy")
+        if legacy is not None:
+            enabled = str(legacy).strip().lower() in ("true", "1", "yes", "on")
+            cls._legacy_global_enabled = enabled
+            for cap in cls._capability_enabled:
+                cls._capability_enabled[cap] = enabled
+            logger.debug(f"Loaded legacy enable_fast_puppy={enabled}")
+            return
+
+        # Load per-capability preferences
+        for cap in cls._capability_enabled:
+            key = f"fast_puppy.{cap}"
+            value = get_value(key)
+            if value is not None:
+                cls._capability_enabled[cap] = str(value).strip().lower() in ("true", "1", "yes", "on")
+                logger.debug(f"Loaded preference {key}={cls._capability_enabled[cap]}")
+
+    @classmethod
+    def save_preferences(cls) -> None:
+        """Save capability preferences to config.
+
+        bd-63: Saves per-capability settings (not legacy global toggle).
+        """
+        from code_puppy.config import set_config_value
+
+        for cap, enabled in cls._capability_enabled.items():
+            key = f"fast_puppy.{cap}"
+            set_config_value(key, "true" if enabled else "false")
+            logger.debug(f"Saved preference {key}={enabled}")
+
+    @classmethod
+    def set_capabilities_from_legacy(cls, enabled: bool) -> None:
+        """Set all capabilities from legacy global toggle.
+
+        bd-63: Used when migrating from old enable_fast_puppy config.
+
+        Args:
+            enabled: True to enable all, False to disable all.
+        """
+        cls._legacy_global_enabled = enabled
+        for cap in cls._capability_enabled:
+            cls._capability_enabled[cap] = enabled
+        logger.debug(f"Set all capabilities from legacy toggle: {enabled}")
 
     # -------------------------------------------------------------------------
     # Elixir Bridge Integration (bd-62)
@@ -236,6 +380,8 @@ class NativeBackend:
     def get_status(cls) -> dict[str, CapabilityInfo]:
         """Return status of all capabilities.
 
+        bd-63: Now includes user enable/disable preferences.
+
         Returns:
             Dict mapping capability names to CapabilityInfo objects.
         """
@@ -246,47 +392,60 @@ class NativeBackend:
         from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE, is_turbo_parse_enabled
 
         turbo_ops = cls._get_turbo_ops()
-        turbo_parse = cls._get_turbo_parse()
+        _ = cls._get_turbo_parse()  # Ensure lazy-load happens for status
 
         # bd-62: Check Elixir availability
         elixir_available = cls._is_elixir_available()
 
-        # Determine file_ops source based on availability and preference
-        file_ops_available = turbo_ops["available"] or elixir_available
-        file_ops_active = turbo_ops["available"] or elixir_available
+        # Determine file_ops technical availability (before user preference)
+        file_ops_tech_available = turbo_ops["available"] or elixir_available
+        file_ops_user_enabled = cls.is_enabled(cls.Capabilities.FILE_OPS)
+        file_ops_active = file_ops_tech_available and file_ops_user_enabled
+
+        # Determine repo_index technical availability
+        repo_index_tech_available = turbo_ops["available"] and turbo_ops.get("index_directory") is not None
+        repo_index_user_enabled = cls.is_enabled(cls.Capabilities.REPO_INDEX)
+        repo_index_active = repo_index_tech_available and repo_index_user_enabled
+
+        # Determine message_core technical availability
+        msg_core_tech_available = RUST_AVAILABLE
+        msg_core_user_enabled = cls.is_enabled(cls.Capabilities.MESSAGE_CORE)
+        # Legacy: also respect _core_bridge.is_rust_enabled() for backward compat
+        msg_core_active = msg_core_tech_available and msg_core_user_enabled and is_rust_enabled()
+
+        # Determine parse technical availability
+        parse_tech_available = TURBO_PARSE_AVAILABLE
+        parse_user_enabled = cls.is_enabled(cls.Capabilities.PARSE)
+        parse_active = parse_tech_available and parse_user_enabled and is_turbo_parse_enabled()
 
         return {
             cls.Capabilities.MESSAGE_CORE: CapabilityInfo(
                 name=cls.Capabilities.MESSAGE_CORE,
                 configured=config.get("puppy_core", "python"),
-                available=RUST_AVAILABLE,
-                active=RUST_AVAILABLE and is_rust_enabled(),
-                status="active" if (RUST_AVAILABLE and is_rust_enabled()) else "disabled",
+                available=msg_core_tech_available,
+                active=msg_core_active,
+                status="active" if msg_core_active else ("disabled" if not msg_core_user_enabled else "unavailable"),
             ),
             cls.Capabilities.FILE_OPS: CapabilityInfo(
                 name=cls.Capabilities.FILE_OPS,
                 configured=config.get("turbo_ops", "python"),
-                available=file_ops_available,
+                available=file_ops_tech_available,
                 active=file_ops_active,
-                status="active" if file_ops_active else "unavailable",
+                status="active" if file_ops_active else ("disabled" if not file_ops_user_enabled else "unavailable"),
             ),
             cls.Capabilities.REPO_INDEX: CapabilityInfo(
                 name=cls.Capabilities.REPO_INDEX,
                 configured=config.get("turbo_ops", "python"),
-                available=turbo_ops["available"] and turbo_ops.get("index_directory") is not None,
-                active=turbo_ops["available"] and turbo_ops.get("index_directory") is not None,
-                status=(
-                    "active"
-                    if turbo_ops["available"] and turbo_ops.get("index_directory") is not None
-                    else "unavailable"
-                ),
+                available=repo_index_tech_available,
+                active=repo_index_active,
+                status="active" if repo_index_active else ("disabled" if not repo_index_user_enabled else "unavailable"),
             ),
             cls.Capabilities.PARSE: CapabilityInfo(
                 name=cls.Capabilities.PARSE,
                 configured=config.get("turbo_parse", "python"),
-                available=TURBO_PARSE_AVAILABLE,
-                active=turbo_parse.get("available", False) and is_turbo_parse_enabled(),
-                status="active" if (turbo_parse.get("available", False) and is_turbo_parse_enabled()) else "disabled",
+                available=parse_tech_available,
+                active=parse_active,
+                status="active" if parse_active else ("disabled" if not parse_user_enabled else "unavailable"),
             ),
         }
 
@@ -447,6 +606,10 @@ class NativeBackend:
             Dict with "files" key containing list of file paths,
             or "error" key if listing failed.
         """
+        # bd-63: Check if capability is enabled first
+        if not cls.is_active(cls.Capabilities.FILE_OPS):
+            _prefer_native = False
+
         # bd-62: Try Elixir first if preferred and available
         if _prefer_native and cls._should_use_elixir("file_ops"):
             try:
@@ -536,6 +699,10 @@ class NativeBackend:
             Dict with "matches" key containing list of match dicts,
             or "error" key if search failed.
         """
+        # bd-63: Check if capability is enabled first
+        if not cls.is_active(cls.Capabilities.FILE_OPS):
+            _prefer_native = False
+
         # bd-62: Try Elixir first if preferred and available
         if _prefer_native and cls._should_use_elixir("file_ops"):
             try:
@@ -626,6 +793,10 @@ class NativeBackend:
             "num_tokens" with token estimate, or "error" key if read failed.
         """
         import os
+
+        # bd-63: Check if capability is enabled first
+        if not cls.is_active(cls.Capabilities.FILE_OPS):
+            _prefer_native = False
 
         # bd-62: Try Elixir first if preferred and available
         if _prefer_native and cls._should_use_elixir("file_ops"):
@@ -721,6 +892,10 @@ class NativeBackend:
             Dict with "files" key containing list of file result dicts,
             each with "file_path", "content", "num_tokens", "error", "success" keys.
         """
+        # bd-63: Check if capability is enabled first
+        if not cls.is_active(cls.Capabilities.FILE_OPS):
+            _prefer_native = False
+
         # bd-62: Try Elixir batch read if preferred and available
         if _prefer_native and cls._should_use_elixir("file_ops"):
             try:
@@ -825,6 +1000,10 @@ class NativeBackend:
         Returns:
             List of file summary dicts with "path", "kind", "symbols" keys.
         """
+        # bd-63: Check if capability is enabled first
+        if not cls.is_active(cls.Capabilities.REPO_INDEX):
+            _prefer_native = False
+
         turbo_ops = cls._get_turbo_ops()
         native_index = turbo_ops.get("index_directory") if (_prefer_native and turbo_ops["available"]) else None
 
@@ -885,6 +1064,10 @@ class NativeBackend:
         Returns:
             Dict with parse results or error.
         """
+        # bd-63: Check if capability is enabled first
+        if not cls.is_active(cls.Capabilities.PARSE):
+            _prefer_native = False
+
         turbo_parse = cls._get_turbo_parse()
         native_func = turbo_parse["parse_file"] if (_prefer_native and turbo_parse["available"]) else None
 
@@ -920,6 +1103,10 @@ class NativeBackend:
         Returns:
             Dict with parse results or error.
         """
+        # bd-63: Check if capability is enabled first
+        if not cls.is_active(cls.Capabilities.PARSE):
+            _prefer_native = False
+
         turbo_parse = cls._get_turbo_parse()
         native_func = turbo_parse["parse_source"] if (_prefer_native and turbo_parse["available"]) else None
 

@@ -1075,7 +1075,7 @@
       "id": "bd-62",
       "title": "Fast Puppy Phase 2 - Port turbo_ops file operations to Elixir",
       "description": "Port turbo_ops file operations to native Elixir. The Elixir codebase already has DirectoryIndexer/DirectoryWalker for repo indexing but is missing the core file ops:\n\nMissing operations:\n- list_files - Simple directory listing with filters\n- grep - Text search across files  \n- read_file - Read single file content\n- read_files - Batch file reading\n\nImplementation tasks:\n1. Create CodePuppyControl.FileOps module with all 4 operations\n2. Add JSON-RPC handlers in port.ex for file_list, grep_search, file_read, file_read_batch\n3. Update NativeBackend to route through Elixir when control plane is connected\n4. Add comprehensive tests\n\nPer fast_puppy_elixir_rewrite_plan.md Phase 2. Do NOT route hot file ops through Phoenix HTTP - use Port/stdio for low latency.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1086,9 +1086,24 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T16:33:54.503350",
-      "updated_at": "2026-04-14T16:33:54.503360",
+      "updated_at": "2026-04-14T16:43:05.530841",
+      "comments": []
+    },
+    "bd-63": {
+      "id": "bd-63",
+      "title": "Fast Puppy Phase 3 - Simplify activation to capability-based profiles",
+      "description": "Remove monkey-patching from Fast Puppy and switch to capability-based profiles via NativeBackend.\n\nCurrent problems:\n- builder.py uses _reload_and_patch_crate() to setattr() on consumer modules\n- Single enable_fast_puppy bool doesn't match per-capability reality\n- Consumers check RUST_AVAILABLE flags instead of querying NativeBackend\n\nPhase 3 tasks:\n1. Remove patch_targets and _reload_and_patch_crate() from builder.py\n2. Add per-capability config keys (fast_puppy.message_core, fast_puppy.file_ops, etc.)\n3. Rewrite /fast_puppy commands to operate on NativeBackend capabilities\n4. Update any remaining consumers to use NativeBackend instead of module flags\n5. Builder should only build - no patching, no module reloading\n\nExit criteria:\n- /fast_puppy enable|disable affects capability profiles, not just _core_bridge\n- No import-time monkey-patching in steady-state operation",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "fast-puppy,architecture,refactor"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T16:45:52.393469",
+      "updated_at": "2026-04-14T16:45:52.393478",
       "comments": []
     }
   },
-  "counter": 62
+  "counter": 63
 }

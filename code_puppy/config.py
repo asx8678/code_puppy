@@ -778,6 +778,11 @@ def get_default_config_keys():
         "resume_message_count",
         # Add fast puppy (Rust acceleration) control key
         "enable_fast_puppy",
+        # bd-63: Per-capability Fast Puppy control keys
+        "fast_puppy.message_core",
+        "fast_puppy.file_ops",
+        "fast_puppy.repo_index",
+        "fast_puppy.parse",
         # SECURITY FIX c9z0: User plugin security settings
         "enable_user_plugins",
         "allowed_user_plugins",

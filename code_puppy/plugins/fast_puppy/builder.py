@@ -21,83 +21,28 @@ from code_puppy.messaging import emit_info
 logger = logging.getLogger(__name__)
 
 # Registry of all Rust crates to auto-build
+# bd-63: Removed patch_targets - NativeBackend handles capability routing
 CRATES = [
     {
         "name": "code_puppy_core",
         "dir": "code_puppy_core",
         "probe": "_code_puppy_core",
         "bridges": ["code_puppy._core_bridge"],
-        "patch_targets": [
-            {
-                "module": "code_puppy.agents.base_agent",
-                "flags": {"RUST_AVAILABLE": "available"},
-                "rebind_from": "code_puppy._core_bridge",
-                "rebind_names": [],  # base_agent uses module-attribute lookup
-            },
-        ],
+        # No patch_targets - NativeBackend handles routing
     },
     {
         "name": "turbo_ops",
         "dir": "turbo_ops",
         "probe": "turbo_ops",
         "bridges": [],
-        "patch_targets": [
-            {
-                "module": "code_puppy.plugins.turbo_executor.orchestrator",
-                "flags": {"TURBO_OPS_AVAILABLE": "available"},
-                "rebind_from": "turbo_ops",
-                "rebind_names": ["list_files", "grep", "read_file"],
-                "rebind_as": {
-                    "list_files": "turbo_list_files",
-                    "grep": "turbo_grep",
-                    "read_file": "turbo_read_file",
-                },
-            },
-        ],
+        # No patch_targets - NativeBackend handles routing
     },
     {
         "name": "turbo_parse",
         "dir": "turbo_parse",
         "probe": "turbo_parse",
         "bridges": ["code_puppy.turbo_parse_bridge"],
-        "patch_targets": [
-            {
-                "module": "code_puppy.code_context.explorer",
-                "flags": {"TURBO_PARSE_AVAILABLE": "available"},
-                "rebind_from": "code_puppy.turbo_parse_bridge",
-                "rebind_names": [
-                    "is_language_supported",
-                    "extract_symbols_from_file",
-                ],
-            },
-            {
-                "module": "code_puppy.plugins.turbo_parse.register_callbacks",
-                "flags": {"TURBO_PARSE_AVAILABLE": "available"},
-                "rebind_from": "code_puppy.turbo_parse_bridge",
-                "rebind_names": [
-                    "parse_source",
-                    "parse_file",
-                    "parse_files_batch",
-                    "extract_symbols",
-                    "extract_syntax_diagnostics",
-                    "get_folds",
-                    "get_highlights",
-                    "is_language_supported",
-                    "supported_languages",
-                    "health_check",
-                    "stats",
-                ],
-                "rebind_as": {
-                    "parse_source": "_parse_source",
-                    "parse_file": "_parse_file",
-                    "parse_files_batch": "_parse_files_batch",
-                    "extract_symbols": "_extract_symbols",
-                    "extract_syntax_diagnostics": "_extract_diagnostics",
-                    "get_folds": "_get_folds",
-                    "get_highlights": "_get_highlights",
-                },
-            },
-        ],
+        # No patch_targets - NativeBackend handles routing
     },
 ]
 
@@ -562,20 +507,23 @@ def _prewarm_workspace(repo_root: Path) -> None:
         logger.debug("Workspace prewarm failed (non-fatal): %s", e)
 
 
-def _reload_and_patch_crate(crate_spec: dict) -> bool:
-    """Reload bridge modules and patch consumer flags/function references.
+def _notify_crate_ready(crate_spec: dict) -> bool:
+    """Notify NativeBackend that a crate is ready for use.
+
+    bd-63: Replaces _reload_and_patch_crate - no more monkey-patching.
+    NativeBackend will lazy-load on next use.
 
     Args:
         crate_spec: The crate specification dict from CRATES.
 
     Returns:
-        True if the probe module is now importable after reload.
+        True if the probe module is now importable.
     """
     import importlib
     import importlib.util
     import sys
 
-    # 1. Reload all bridge modules
+    # 1. Reload all bridge modules (for fresh imports)
     for bridge_name in crate_spec.get("bridges", []):
         if bridge_name in sys.modules:
             try:
@@ -612,57 +560,9 @@ def _reload_and_patch_crate(crate_spec: dict) -> bool:
     except Exception:
         is_available = False
 
-    # 3. Patch each consumer module
-    for target in crate_spec.get("patch_targets", []):
-        module_name = target["module"]
-        if module_name not in sys.modules:
-            continue  # consumer not yet imported, nothing to patch
-        consumer = sys.modules[module_name]
-
-        # 3a. Patch flags
-        for flag_name, value_source in target.get("flags", {}).items():
-            if value_source == "available":
-                value = is_available
-            else:
-                value = value_source
-            try:
-                setattr(consumer, flag_name, value)
-                logger.debug("Patched %s.%s = %r", module_name, flag_name, value)
-            except Exception as e:
-                logger.warning("Failed to patch %s.%s: %s", module_name, flag_name, e)
-
-        # 3b. Rebind function references from the fresh module
-        rebind_from = target.get("rebind_from")
-        rebind_names = target.get("rebind_names", [])
-        rebind_as = target.get("rebind_as", {})
-
-        if rebind_from and rebind_names and is_available:
-            try:
-                fresh_module = importlib.import_module(rebind_from)
-            except ImportError as e:
-                logger.warning("Cannot import %s for rebinding: %s", rebind_from, e)
-                continue
-
-            for fresh_name in rebind_names:
-                local_name = rebind_as.get(fresh_name, fresh_name)
-                try:
-                    fresh_value = getattr(fresh_module, fresh_name)
-                    setattr(consumer, local_name, fresh_value)
-                    logger.debug(
-                        "Rebound %s.%s = %s.%s",
-                        module_name,
-                        local_name,
-                        rebind_from,
-                        fresh_name,
-                    )
-                except AttributeError as e:
-                    logger.warning(
-                        "Cannot rebind %s.%s from %s: %s",
-                        module_name,
-                        local_name,
-                        rebind_from,
-                        e,
-                    )
+    # bd-63: No more monkey-patching! NativeBackend will lazy-load.
+    if is_available:
+        logger.info(f"Crate {crate_spec['name']} built and ready")
 
     return is_available
 
@@ -753,8 +653,8 @@ def _try_auto_build_all() -> dict[str, bool]:
         success, error_msg = _build_crate(crate_dir, crate_name)
 
         if success:
-            # Reload and patch
-            is_available = _reload_and_patch_crate(crate_spec)
+            # Notify NativeBackend crate is ready (bd-63: no more patching)
+            is_available = _notify_crate_ready(crate_spec)
             if is_available:
                 emit_info(f"🐕⚡ Fast Puppy: ✅ {crate_name}: built and ready")
                 results[crate_name] = True
@@ -855,8 +755,8 @@ def build_single_crate(crate_name: str) -> bool:
     success, error_msg = _build_crate(crate_dir, crate_name)
 
     if success:
-        # Reload and patch
-        is_available = _reload_and_patch_crate(crate_spec)
+        # Notify NativeBackend crate is ready (bd-63: no more patching)
+        is_available = _notify_crate_ready(crate_spec)
         if is_available:
             logger.debug("Crate %s built and is now available", crate_name)
             return True

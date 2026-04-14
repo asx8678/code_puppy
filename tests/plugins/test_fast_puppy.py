@@ -418,3 +418,176 @@ class TestStartupEdgeCases:
         all_output = " ".join(emit_calls)
         # Should show fallback message about startup hiccup
         assert "hiccup" in all_output.lower() or "startup error" in all_output.lower()
+
+
+class TestCapabilityManagement:
+    """bd-63: Tests for capability-based profiles."""
+
+    def test_enable_all_capabilities(self):
+        """Enable all capabilities via _handle_enable with no args."""
+        from code_puppy.plugins.fast_puppy.register_callbacks import _handle_enable
+        from code_puppy.native_backend import NativeBackend
+
+        # Reset to known state (disabled)
+        NativeBackend.disable_all()
+
+        with patch("code_puppy.native_backend.NativeBackend.save_preferences"):
+            result = _handle_enable([])
+
+        assert "All native acceleration enabled" in result
+        assert NativeBackend.is_enabled(NativeBackend.Capabilities.MESSAGE_CORE)
+        assert NativeBackend.is_enabled(NativeBackend.Capabilities.FILE_OPS)
+        assert NativeBackend.is_enabled(NativeBackend.Capabilities.REPO_INDEX)
+        assert NativeBackend.is_enabled(NativeBackend.Capabilities.PARSE)
+
+    def test_disable_all_capabilities(self):
+        """Disable all capabilities via _handle_disable with no args."""
+        from code_puppy.plugins.fast_puppy.register_callbacks import _handle_disable
+        from code_puppy.native_backend import NativeBackend
+
+        # Reset to known state (enabled)
+        NativeBackend.enable_all()
+
+        with patch("code_puppy.native_backend.NativeBackend.save_preferences"):
+            result = _handle_disable([])
+
+        assert "All native acceleration disabled" in result
+        assert not NativeBackend.is_enabled(NativeBackend.Capabilities.MESSAGE_CORE)
+        assert not NativeBackend.is_enabled(NativeBackend.Capabilities.FILE_OPS)
+        assert not NativeBackend.is_enabled(NativeBackend.Capabilities.REPO_INDEX)
+        assert not NativeBackend.is_enabled(NativeBackend.Capabilities.PARSE)
+
+    def test_enable_specific_capability(self):
+        """Enable a specific capability."""
+        from code_puppy.plugins.fast_puppy.register_callbacks import _handle_enable
+        from code_puppy.native_backend import NativeBackend
+
+        # Reset to disabled
+        NativeBackend.disable_all()
+
+        with patch("code_puppy.native_backend.NativeBackend.save_preferences"):
+            result = _handle_enable(["file_ops"])
+
+        assert "file_ops enabled" in result
+        assert NativeBackend.is_enabled(NativeBackend.Capabilities.FILE_OPS)
+        assert not NativeBackend.is_enabled(NativeBackend.Capabilities.MESSAGE_CORE)
+
+    def test_disable_specific_capability(self):
+        """Disable a specific capability."""
+        from code_puppy.plugins.fast_puppy.register_callbacks import _handle_disable
+        from code_puppy.native_backend import NativeBackend
+
+        # Reset to enabled
+        NativeBackend.enable_all()
+
+        with patch("code_puppy.native_backend.NativeBackend.save_preferences"):
+            result = _handle_disable(["parse"])
+
+        assert "parse disabled" in result
+        assert not NativeBackend.is_enabled(NativeBackend.Capabilities.PARSE)
+        assert NativeBackend.is_enabled(NativeBackend.Capabilities.MESSAGE_CORE)
+
+    def test_enable_unknown_capability(self):
+        """Enable should return error for unknown capability."""
+        from code_puppy.plugins.fast_puppy.register_callbacks import _handle_enable
+
+        result = _handle_enable(["unknown_cap"])
+
+        assert "Unknown capability" in result
+
+    def test_disable_unknown_capability(self):
+        """Disable should return error for unknown capability."""
+        from code_puppy.plugins.fast_puppy.register_callbacks import _handle_disable
+
+        result = _handle_disable(["unknown_cap"])
+
+        assert "Unknown capability" in result
+
+    def test_status_shows_capabilities(self):
+        """Status should show capability information."""
+        from code_puppy.plugins.fast_puppy.register_callbacks import _handle_status
+        from code_puppy.native_backend import NativeBackend
+
+        # Set known state
+        NativeBackend.enable_all()
+
+        result = _handle_status()
+
+        # Should contain capability status info
+        assert "Fast Puppy Status" in result
+        assert "message_core" in result
+        assert "file_ops" in result
+
+
+class TestCapabilityPreferences:
+    """bd-63: Tests for capability preference persistence."""
+
+    def test_load_preferences_from_legacy_global(self):
+        """Load legacy global enable_fast_puppy preference."""
+        from code_puppy.native_backend import NativeBackend
+
+        with patch("code_puppy.config.get_value") as mock_get:
+            mock_get.return_value = "false"
+            NativeBackend.load_preferences()
+
+        # All should be disabled
+        assert not NativeBackend.is_enabled(NativeBackend.Capabilities.MESSAGE_CORE)
+        assert not NativeBackend.is_enabled(NativeBackend.Capabilities.FILE_OPS)
+
+    def test_load_preferences_per_capability(self):
+        """Load per-capability preferences."""
+        from code_puppy.native_backend import NativeBackend
+
+        def mock_get_value(key):
+            if key == "fast_puppy.file_ops":
+                return "true"
+            if key == "fast_puppy.message_core":
+                return "false"
+            return None
+
+        with patch("code_puppy.config.get_value", side_effect=mock_get_value):
+            NativeBackend.load_preferences()
+
+        assert NativeBackend.is_enabled(NativeBackend.Capabilities.FILE_OPS)
+        assert not NativeBackend.is_enabled(NativeBackend.Capabilities.MESSAGE_CORE)
+
+    def test_save_preferences(self):
+        """Save preferences calls set_config_value for each capability."""
+        from code_puppy.native_backend import NativeBackend
+
+        set_calls = []
+
+        def mock_set(key, value):
+            set_calls.append((key, value))
+
+        # Set known state
+        NativeBackend.enable_all()
+
+        with patch("code_puppy.config.set_config_value", side_effect=mock_set):
+            NativeBackend.save_preferences()
+
+        # Should have saved all 4 capabilities
+        keys = [call[0] for call in set_calls]
+        assert "fast_puppy.message_core" in keys
+        assert "fast_puppy.file_ops" in keys
+        assert "fast_puppy.repo_index" in keys
+        assert "fast_puppy.parse" in keys
+
+
+class TestCapabilityActiveCheck:
+    """bd-63: Tests for is_active() combining availability and enable state."""
+
+    def test_is_active_checks_enabled(self):
+        """is_active should be False when capability is disabled."""
+        from code_puppy.native_backend import NativeBackend
+
+        # Disable all first
+        NativeBackend.disable_all()
+
+        # Even if technically available, should not be active
+        is_active = NativeBackend.is_active(NativeBackend.Capabilities.MESSAGE_CORE)
+
+        # Note: actual availability depends on whether Rust is installed
+        # But if not enabled, is_active should be False regardless
+        if not NativeBackend.is_enabled(NativeBackend.Capabilities.MESSAGE_CORE):
+            assert not is_active

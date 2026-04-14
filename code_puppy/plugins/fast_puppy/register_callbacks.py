@@ -2,14 +2,18 @@
 
 Auto-builds all Rust modules (code_puppy_core, turbo_ops, turbo_parse)
 on first startup if toolchain is available.
-Persists the setting to puppy.cfg so it survives restarts.
+Persists capability preferences to puppy.cfg so they survive restarts.
+
+bd-63: Rewritten for capability-based profiles.
 
 Usage:
-    /fast_puppy           → show current status
-    /fast_puppy enable    → turn Rust acceleration ON  (saved to puppy.cfg)
-    /fast_puppy disable   → turn Rust acceleration OFF (saved to puppy.cfg)
-    /fast_puppy status    → detailed diagnostics
-    /fast_puppy build     → force rebuild the Rust module
+    /fast_puppy                     → show current status
+    /fast_puppy enable [cap]      → enable all or specific capability
+    /fast_puppy disable [cap]     → disable all or specific capability
+    /fast_puppy status              → detailed diagnostics
+    /fast_puppy build [name|--all] → rebuild Rust crate(s)
+
+Capabilities: message_core, file_ops, repo_index, parse
 """
 
 import importlib
@@ -44,11 +48,22 @@ __all__ = [
     "_on_startup",
     "_read_persisted_preference",
     "_write_persisted_preference",
+    "_handle_enable",
+    "_handle_disable",
+    "_handle_status",
 ]
 
 logger = logging.getLogger(__name__)
 
 CONFIG_KEY = "enable_fast_puppy"
+
+# bd-63: Capability name mapping for user commands
+CAPABILITY_MAP = {
+    "message_core": "message_core",
+    "file_ops": "file_ops",
+    "repo_index": "repo_index",
+    "parse": "parse",
+}
 
 
 def _read_persisted_preference() -> bool | None:
@@ -65,7 +80,7 @@ def _read_persisted_preference() -> bool | None:
 
 
 def _write_persisted_preference(enabled: bool) -> None:
-    """Save the preference to puppy.cfg."""
+    """Save the legacy preference to puppy.cfg (for backward compat)."""
     try:
         from code_puppy.config import set_config_value
 
@@ -74,29 +89,133 @@ def _write_persisted_preference(enabled: bool) -> None:
         logger.warning("Failed to persist fast_puppy preference to config")
 
 
+# bd-63: New capability-based handlers
+
+def _handle_enable(args: list[str]) -> str:
+    """Enable all capabilities or a specific capability.
+
+    Args:
+        args: List of command arguments (may contain capability name).
+
+    Returns:
+        Status message string.
+    """
+    from code_puppy.native_backend import NativeBackend
+
+    if not args:
+        # Enable all
+        NativeBackend.enable_all()
+        NativeBackend.save_preferences()
+        return "✅ All native acceleration enabled"
+
+    # Enable specific capability
+    cap = args[0].lower()
+    cap_map = {
+        "message_core": NativeBackend.Capabilities.MESSAGE_CORE,
+        "file_ops": NativeBackend.Capabilities.FILE_OPS,
+        "repo_index": NativeBackend.Capabilities.REPO_INDEX,
+        "parse": NativeBackend.Capabilities.PARSE,
+    }
+    if cap in cap_map:
+        NativeBackend.enable_capability(cap_map[cap])
+        NativeBackend.save_preferences()
+        return f"✅ {cap} enabled"
+    return f"❌ Unknown capability: {cap}. Use: message_core, file_ops, repo_index, parse"
+
+
+def _handle_disable(args: list[str]) -> str:
+    """Disable all capabilities or a specific capability.
+
+    Args:
+        args: List of command arguments (may contain capability name).
+
+    Returns:
+        Status message string.
+    """
+    from code_puppy.native_backend import NativeBackend
+
+    if not args:
+        # Disable all
+        NativeBackend.disable_all()
+        NativeBackend.save_preferences()
+        return "✅ All native acceleration disabled (Python-only mode)"
+
+    # Disable specific capability
+    cap = args[0].lower()
+    cap_map = {
+        "message_core": NativeBackend.Capabilities.MESSAGE_CORE,
+        "file_ops": NativeBackend.Capabilities.FILE_OPS,
+        "repo_index": NativeBackend.Capabilities.REPO_INDEX,
+        "parse": NativeBackend.Capabilities.PARSE,
+    }
+    if cap in cap_map:
+        NativeBackend.disable_capability(cap_map[cap])
+        NativeBackend.save_preferences()
+        return f"✅ {cap} disabled"
+    return f"❌ Unknown capability: {cap}. Use: message_core, file_ops, repo_index, parse"
+
+
+def _handle_status() -> str:
+    """Get detailed status for all capabilities.
+
+    Returns:
+        Formatted status string.
+    """
+    from code_puppy.native_backend import NativeBackend
+    from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
+
+    lines = ["⚡ Fast Puppy Status", ""]
+
+    # Get NativeBackend capability status
+    cap_status = NativeBackend.get_status()
+
+    for cap, info in cap_status.items():
+        if info.active:
+            icon = "✅"
+            status = "active"
+        elif info.status == "disabled":
+            icon = "💤"
+            status = "disabled"
+        else:
+            icon = "❌"
+            status = "unavailable"
+
+        lines.append(f"  {icon} {cap}: {info.configured} ({status})")
+
+    # Legacy bridge status
+    lines.append("")
+    lines.append(f"  message_core bridge: {'✅' if RUST_AVAILABLE else '❌'} available, {'✅' if is_rust_enabled() else '💤'} enabled")
+
+    return "\n".join(lines)
+
+
 def _on_startup():
-    """Auto-build Rust modules if needed, then respect user preference."""
+    """Auto-build Rust modules if needed, then respect user preferences."""
     try:
+        # bd-63: Load capability preferences first
+        from code_puppy.native_backend import NativeBackend
+
+        NativeBackend.load_preferences()
+
         results = _try_auto_build_all()
 
-        from code_puppy._core_bridge import (
-            set_rust_enabled,
+        # Check if any capabilities are enabled by user
+        any_enabled = any(
+            NativeBackend.is_enabled(cap)
+            for cap in [
+                NativeBackend.Capabilities.MESSAGE_CORE,
+                NativeBackend.Capabilities.FILE_OPS,
+                NativeBackend.Capabilities.REPO_INDEX,
+                NativeBackend.Capabilities.PARSE,
+            ]
         )
 
-        saved = _read_persisted_preference()
-        if saved is False:
-            # Respect explicit user opt-out
-            set_rust_enabled(False)
+        if not any_enabled:
             emit_info(
-                "🐕💤 Fast Puppy: Rust acceleration disabled by puppy.cfg "
+                "🐕💤 Fast Puppy: All native acceleration disabled by puppy.cfg "
                 "— run /fast_puppy enable to re-enable"
             )
             return
-
-        # Default: enable
-        set_rust_enabled(True)
-        # Persist whenever we enable (first run or ensuring preference is recorded)
-        _write_persisted_preference(True)
 
         # Emit summary banner based on results
         active_count = sum(1 for v in results.values() if v)
@@ -126,9 +245,9 @@ def _custom_help():
     return [
         ("fast_puppy", "Toggle Rust acceleration / show status"),
         ("fast_puppy build [name|--all]", "Rebuild Rust crate(s)"),
-        ("fast_puppy status", "Show detailed status for all 3 Rust crates"),
-        ("fast_puppy enable", "Enable Rust message-processing acceleration"),
-        ("fast_puppy disable", "Disable Rust message-processing acceleration"),
+        ("fast_puppy status", "Show detailed capability status"),
+        ("fast_puppy enable [cap]", "Enable all or specific capability (message_core, file_ops, repo_index, parse)"),
+        ("fast_puppy disable [cap]", "Disable all or specific capability"),
     ]
 
 
@@ -137,13 +256,13 @@ def _handle_fast_puppy(command: str, name: str):
         return None
 
     from code_puppy._core_bridge import (
-        RUST_AVAILABLE,
         get_rust_status,
         set_rust_enabled,
     )
 
     parts = command.strip().split()
     subcommand = parts[1] if len(parts) > 1 else "status"
+    args = parts[2:] if len(parts) > 2 else []
 
     if subcommand == "build":
         # Parse crate name or --all
@@ -224,71 +343,67 @@ def _handle_fast_puppy(command: str, name: str):
                 emit_info(f"🐕 Fast Puppy: ❌ {crate_name} build failed")
             return True
 
+    # bd-63: Use capability-based handlers for enable/disable/status
     if subcommand == "enable":
-        if not RUST_AVAILABLE:
-            # Try to build first
-            results = _try_auto_build_all()
-            if results.get("code_puppy_core", False):
-                import code_puppy._core_bridge as bridge
-
-                importlib.reload(bridge)
-                if bridge.RUST_AVAILABLE:
-                    bridge.set_rust_enabled(True)
-                    _write_persisted_preference(True)
-                    emit_info(
-                        "🐕⚡ Fast Puppy: Rust module built and ENABLED — zoom zoom!\n"
-                        "   Saved to puppy.cfg — will stay enabled across restarts."
-                    )
-                    return True
-            emit_info(
-                "🐕 Fast Puppy: Could not build Rust module\n"
-                "   Need: Rust toolchain (rustc) + maturin\n"
-                "   Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh\n"
-                "   Install maturin:\n"
-                "   • With uvx: uvx --from 'codepp[rust]' code-puppy\n"
-                "   • With uv: uv pip install maturin\n"
-                "   • With pip: pip install maturin\n"
-                "   Then retry: /fast_puppy enable"
-            )
-            return True
-        set_rust_enabled(True)
-        _write_persisted_preference(True)
-        emit_info(
-            "🐕⚡ Fast Puppy: Rust acceleration ENABLED — zoom zoom!\n"
-            "   Saved to puppy.cfg — will stay enabled across restarts."
-        )
+        result = _handle_enable(args)
+        emit_info(result)
         return True
 
     if subcommand == "disable":
-        set_rust_enabled(False)
-        _write_persisted_preference(False)
-        emit_info(
-            "🐕 Fast Puppy: Rust acceleration DISABLED — pure Python mode\n"
-            "   Saved to puppy.cfg — will stay disabled across restarts."
-        )
+        result = _handle_disable(args)
+        emit_info(result)
         return True
 
-    # status (default)
-    # Get comprehensive status for all crates
+    if subcommand == "status":
+        result = _handle_status()
+        emit_info(result)
+        return True
+
+    # Default: show comprehensive status (bd-63: combined old + new status)
+    from code_puppy.native_backend import NativeBackend
+
+    # Get crate build status
     crate_statuses = get_all_crate_status()
 
     # Get runtime status from core bridge
     rust_status = get_rust_status()
-    saved = _read_persisted_preference()
+    _ = _read_persisted_preference()  # Legacy: kept for reference but not used (bd-63 uses per-capability)
 
     # Check config values for status display
     try:
         cfg = get_puppy_config()
-        disable_autobuild = cfg.rust_autobuild_disabled
+        _ = cfg.rust_autobuild_disabled  # Kept for future use
     except Exception:
-        disable_autobuild = False
+        pass
 
     repo_root = _find_repo_root()
 
     # Header
     emit_info("🐕⚡ Fast Puppy Status:")
+    emit_info("")
 
-    # Per-crate status
+    # bd-63: New capability status section
+    emit_info("Capabilities (bd-63):")
+    cap_status = NativeBackend.get_status()
+    for cap, info in cap_status.items():
+        if info.active:
+            icon = "✅"
+            status = "active"
+        elif info.status == "disabled":
+            icon = "💤"
+            status = "disabled"
+        else:
+            icon = "❌"
+            status = "unavailable"
+
+        # Show capability + config source + user preference
+        enabled_str = "enabled" if NativeBackend.is_enabled(cap) else "disabled"
+        emit_info(f"   {icon} {cap}: {info.configured} ({status}, user: {enabled_str})")
+
+    emit_info("")
+
+    # Per-crate build status
+    emit_info("Crate Build Status:")
     for status in crate_statuses:
         name = status["name"]
         if status["active"]:
@@ -310,6 +425,8 @@ def _handle_fast_puppy(command: str, name: str):
         emit_info(f"   {name_padded:16} {state}")
 
     # Toolchain and infrastructure
+    emit_info("")
+    emit_info("Infrastructure:")
     emit_info(
         f"   {'Rust toolchain:':16} {'✅ rustc found' if _has_rust_toolchain() else '❌ not found'}"
     )
@@ -318,32 +435,28 @@ def _handle_fast_puppy(command: str, name: str):
         f"   {'Crate source:':16} {'✅ workspace found at ' + str(repo_root) if repo_root else '❌ not found'}"
     )
 
-    # Runtime status for code_puppy_core (message processing)
+    # Legacy bridge status for backward compatibility
+    emit_info("")
+    emit_info("Legacy bridge:")
     emit_info(
-        f"   {'User enabled:':16} {'✅ (code_puppy_core toggle)' if rust_status['enabled'] else '❌ disabled'}"
-    )
-
-    # Config file values
-    saved_str = str(saved).lower() if saved is not None else "<not set>"
-    disable_str = "true" if disable_autobuild else "<not set>"
-    emit_info(
-        f"   {'puppy.cfg:':16} enable_fast_puppy={saved_str}, disable_rust_autobuild={disable_str}"
+        f"   {'code_puppy_core:':16} {'✅ available' if rust_status['installed'] else '❌ not installed'}, {'✅ enabled' if rust_status['enabled'] else '💤 disabled'}"
     )
 
     # Summary line
+    emit_info("")
     if all(s["active"] for s in crate_statuses):
-        emit_info("   → ALL SYSTEMS GO — full Rust acceleration active! 🚀")
+        emit_info("→ ALL SYSTEMS GO — full Rust acceleration active! 🚀")
     elif any(s["active"] for s in crate_statuses):
         active_count = sum(1 for s in crate_statuses if s["active"])
-        emit_info(f"   → {active_count}/3 Rust accelerators active (see details above)")
+        emit_info(f"→ {active_count}/3 Rust accelerators active")
     else:
         if not _has_rust_toolchain():
             emit_info(
-                "   → Pure Python mode — install Rust toolchain to enable acceleration"
+                "→ Pure Python mode — install Rust toolchain to enable acceleration"
             )
         else:
             emit_info(
-                "   → Rust toolchain found but no accelerators active — run /fast_puppy build"
+                "→ Rust toolchain found but no accelerators active — run /fast_puppy build"
             )
 
     return True
