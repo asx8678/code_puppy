@@ -34,17 +34,29 @@
 
 | Python Emits | Elixir Expects | Status | Impact |
 |--------------|----------------|--------|--------|
-| `event` (generic) | `run.event` | 🔴 **WRONG NAME** | Events ignored |
-| `event` (generic) | `run.status` | 🔴 **WRONG NAME** | Status not updated |
-| `event` (generic) | `run.completed` | 🔴 **WRONG NAME** | Runs never complete |
-| `event` (generic) | `run.failed` | 🔴 **WRONG NAME** | Failures not reported |
-| `event` (generic) | `run.text` | 🔴 **WRONG NAME** | Text not streamed |
-| `event` (generic) | `run.tool_result` | 🔴 **WRONG NAME** | Tool results lost |
-| `event` (generic) | `run.prompt` | 🔴 **WRONG NAME** | Prompts not forwarded |
-| `bridge_ready` | ❌ Not expected | 🔴 **UNKNOWN** | Lifecycle not handled |
-| `bridge_closing` | ❌ Not expected | 🔴 **UNKNOWN** | Lifecycle not handled |
+| `event` (generic) | `event` | ✅ **SUPPORTED** | Elixir handles generic "event" at `port.ex:298` |
+| `event` (generic) | `run.event` | ✅ **ALSO SUPPORTED** | Structured events at `port.ex:340` |
+| `event` (generic) | `run.status` | ✅ **SUPPORTED** | Status updates handled |
+| `bridge_ready` | `event` with `event_type: "bridge_ready"` | ✅ **SUPPORTED** | Lifecycle handled |
+| `bridge_closing` | `event` with `event_type: "bridge_closing"` | ✅ **SUPPORTED** | Lifecycle handled |
 
-**Summary**: 100% event method mismatch - NO events will be processed by Elixir
+**Summary**: ✅ Elixir adapted to Python's generic event format
+
+## Event Type Mapping
+
+| Python `event_type` | Elixir Handler | Status | Notes |
+|---------------------|----------------|--------|-------|
+| `agent_response` | `handle_agent_response_event` | ✅ Supported | Text streaming |
+| `tool_call` | `handle_tool_call_event` | ✅ Supported | Tool invocation |
+| `tool_result` | `handle_tool_result_event` | ✅ Supported | Tool output |
+| `run_started` | `handle_run_started_event` | ✅ Supported | Run lifecycle |
+| `run_completed` | `handle_run_completed_event` | ✅ Supported | Run lifecycle |
+| `run_failed` | `handle_run_failed_event` | ✅ Supported | Error handling |
+| `status_update` | `handle_status_event` | ✅ Supported | Status changes |
+| `bridge_ready` | Direct handler | ✅ Supported | Bridge lifecycle |
+| `bridge_closing` | Direct handler | ✅ Supported | Bridge lifecycle |
+
+**Supported event_types**: `agent_response`, `tool_call`, `tool_result`, `run_started`, `run_completed`, `run_failed`, `status_update`, `bridge_ready`, `bridge_closing`
 
 ---
 
@@ -89,7 +101,7 @@
 | Timestamp | Required | Optional | Different |
 | Required fields | `event_type` | Varies by method | Different |
 
-**Summary**: Structure incompatible even if method names matched
+**Summary**: Elixir extracts nested payload structure correctly
 
 ---
 
@@ -97,17 +109,17 @@
 
 | Python Emits | Elixir Handles | Status |
 |--------------|----------------|--------|
-| `bridge_ready` | ❌ No | 🔴 Not implemented |
-| `bridge_closing` | ❌ No | 🔴 Not implemented |
+| `bridge_ready` | ✅ Yes | Handled at `port.ex:324` |
+| `bridge_closing` | ✅ Yes | Handled at `port.ex:327` |
 
-| Elixir Sends | Python Handles | Status |
-|--------------|----------------|--------|
-| `initialize` | ❌ No | 🔴 Not implemented |
-| `run/start` | ❌ No | 🔴 Not implemented |
-| `run/cancel` | ❌ No | 🔴 Not implemented |
-| `exit` | ❌ No | 🔴 Not implemented |
+| Elixir Sends | Python Handles | Status | Notes |
+|--------------|----------------|--------|-------|
+| `initialize` | ❌ No | 🔴 Missing | Worker won't initialize properly |
+| `run/start` | ❌ No | 🔴 Missing | Cannot start runs via Elixir |
+| `run/cancel` | ❌ No | 🔴 Missing | Cannot cancel runs via Elixir |
+| `exit` | ❌ No | 🔴 Missing | Cannot shutdown gracefully via Elixir |
 
-**Summary**: Lifecycle completely disconnected
+**Summary**: Python → Elixir lifecycle works; Elixir → Python lifecycle still missing
 
 ---
 
@@ -135,21 +147,22 @@
 | `prompt_request` | `event` | `run.prompt` | 🔴 Mismatch |
 | `run_complete` | `event` | `run.completed` | 🔴 Mismatch |
 
-**Summary**: 0% event type compatibility
+**Summary**: Event types fully mapped - Python's format supported
 
 ---
 
 ## Severity Matrix
 
-| Issue | Severity | Blocks | Scope |
+| Issue | Severity | Status | Notes |
 |-------|----------|--------|-------|
-| Event method mismatch | 🔴 CRITICAL | All events | 100% of event flow |
-| Missing run lifecycle | 🔴 CRITICAL | Run management | Core functionality |
-| Structure mismatch | 🔴 CRITICAL | All events | Data parsing |
-| Test mock mismatch | 🟡 HIGH | Testing | Quality assurance |
-| Lifecycle events | 🟡 HIGH | Bridge management | Operations |
+| Event method handling | ✅ **RESOLVED** | Events flow correctly | Elixir adapted at `port.ex:298` |
+| Event structure | ✅ **RESOLVED** | Payload extraction works | Nested `payload` parsed correctly |
+| Event type mapping | ✅ **RESOLVED** | 9 types supported | See mapping table above |
+| Lifecycle (Python → Elixir) | ✅ **RESOLVED** | Bridge ready/closing handled | `port.ex:324-329` |
+| Lifecycle (Elixir → Python) | 🔴 **PENDING** | Still missing | `run/start`, `run/cancel`, `exit` |
+| Test mock alignment | ✅ **RESOLVED** | Tests updated | `port_protocol_test.exs` validates |
 
-**Overall**: 🔴 **CRITICAL - BRIDGE NON-FUNCTIONAL**
+**Overall**: ✅ **FUNCTIONAL - Events Working, Some Gaps Remain**
 
 ---
 
@@ -165,49 +178,54 @@
 - Content-Length framing
 - JSON-RPC 2.0 structure
 
-❌ **Broken**:
-- All event streaming
-- Run lifecycle management
-- Status updates
-- Progress reporting
+✅ **Working**:
+- All event streaming (Python → Elixir)
+- Status updates via `event` method
 - Tool result forwarding
-- Text streaming
-- Prompt handling
-- Graceful shutdown
+- Text streaming via `agent_response`
+- Bridge ready/closing lifecycle
+- Progress reporting
 
-**Bottom Line**: Basic tool execution works, but all run management and event streaming is broken.
+❌ **Still Broken**:
+- Elixir → Python run lifecycle (`run/start`, `run/cancel`, `exit`)
+- `run.prompt` notification
+- `initialize` protocol handshake
+
+**Bottom Line**: Python → Elixir event flow works correctly. Elixir → Python lifecycle methods still need implementation.
 
 ---
 
 ## Fix Priority
 
-| Priority | Issue | Effort | Impact |
-|----------|-------|--------|--------|
-| P0 | Event method names | Medium | Unblocks all events |
-| P0 | Run lifecycle handlers | Medium | Unblocks run management |
-| P1 | Event structure alignment | Low | Ensures data parses |
-| P2 | Test mock alignment | Low | Ensures tests valid |
-| P3 | Lifecycle events | Low | Better operations |
+| Priority | Issue | Effort | Impact | Status |
+|----------|-------|--------|--------|--------|
+| P0 | Event method names | Medium | Unblocks all events | ✅ **DONE** |
+| P0 | Run lifecycle handlers | Medium | Unblocks run management | 🔴 **PENDING** |
+| P1 | Event structure alignment | Low | Ensures data parses | ✅ **DONE** |
+| P2 | Test mock alignment | Low | Ensures tests valid | ✅ **DONE** |
+| P3 | Lifecycle events (Python→Elixir) | Low | Better operations | ✅ **DONE** |
 
-**Estimated Fix Effort**: 2-3 days for complete resolution
+**Estimated Fix Effort**: 1 day for remaining lifecycle work
 
 ---
 
-## Recommended Approach
+## Resolution
 
-**Option B: Make Elixir accept Python's format** (recommended)
+**What Was Done**: Elixir was adapted to accept Python's generic event format.
 
-Why:
-- Python's generic event model is more flexible
-- Less Python refactoring (fewer users affected)
-- Can add specific method routing in Elixir
-- Preserves Python's current architecture
+**Implementation**: Generic `"event"` handler added at `port.ex:298` that:
+1. Extracts `event_type` from `params.event_type`
+2. Routes to appropriate internal handler based on `event_type`
+3. Extracts nested `payload` data correctly
+4. Handles all 9 supported event types plus lifecycle events
 
-Changes needed:
-1. Add generic `"event"` handler in Elixir port.ex
-2. Map `event_type` to appropriate actions
-3. Add lifecycle event handlers
-4. Extract data from nested payload
+**References**:
+- `elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex:298` - Generic event handler
+- `elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex:340` - Also handles `run.event`
+- `elixir/code_puppy_control/test/python_worker/port_protocol_test.exs` - Test validation
+- **Closed Issues**: bd-26 through bd-33 (Elixir migration epic)
+
+**Remaining Work**: Python still needs handlers for `run/start`, `run/cancel`, `exit` from Elixir (future work)
 
 ---
 

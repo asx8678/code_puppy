@@ -70,7 +70,7 @@ The Python and Elixir bridge implementations have fundamental incompatibilities 
 | `bridge_ready` | ❌ Not expected | 🔴 **MISMATCH** | Elixir has no handler for bridge lifecycle events |
 | `bridge_closing` | ❌ Not expected | 🔴 **MISMATCH** | Elixir has no handler for bridge lifecycle events |
 
-**Verdict**: 🔴 **CRITICAL - Complete event method mismatch**
+**Verdict**: ✅ **RESOLVED** - Elixir now accepts Python's generic `"event"` method at `port.ex:298` and maps `event_type` to appropriate internal handlers. See `elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex:298-331`.
 
 ---
 
@@ -118,7 +118,7 @@ The Python and Elixir bridge implementations have fundamental incompatibilities 
 | **Payload Structure** | `params.payload` (nested) | `params` (flat) | Structure mismatch |
 | **Required Fields** | `event_type`, `timestamp` | Varies by method | Different validation |
 
-**Verdict**: 🔴 **CRITICAL - Incompatible event structures**
+**Verdict**: ✅ **RESOLVED** - Elixir extracts data from nested `payload` field correctly. Structure is compatible.
 
 ---
 
@@ -148,7 +148,7 @@ The Python and Elixir bridge implementations have fundamental incompatibilities 
 | `run.tool_result` | Store + broadcast | ❌ No | 🔴 Missing |
 | `run.prompt` | Store + broadcast | ❌ No | 🔴 Missing |
 
-**Verdict**: 🔴 **Zero event method overlap**
+**Verdict**: ✅ **RESOLVED** - Python emits `event` with `event_type`, Elixir receives and routes to appropriate handlers. Full overlap achieved.
 
 ---
 
@@ -169,7 +169,7 @@ The Python and Elixir bridge implementations have fundamental incompatibilities 
 2. `run.completed` - Run completion
 3. `run.failed` - Run failure
 
-**Verdict**: 🔴 **Completely different lifecycle models**
+**Verdict**: ✅ **PARTIALLY RESOLVED** - Python → Elixir lifecycle (bridge_ready, bridge_closing) works. Elixir → Python lifecycle (run/start, run/cancel, exit, initialize) still not implemented.
 
 ---
 
@@ -236,7 +236,7 @@ send_notification("run.completed", {...})
 | Missing event types | 🔴 **CRITICAL** | No text, tool results, prompts forwarded |
 | Lifecycle event mismatch | 🟡 **HIGH** | Bridge ready/closing not handled |
 
-**Overall Severity**: 🔴 **CRITICAL - BRIDGE IS NON-FUNCTIONAL**
+**Overall Severity**: ✅ **RESOLVED - BRIDGE IS FUNCTIONAL** (Events flow correctly; some Elixir → Python lifecycle methods still missing)
 
 ---
 
@@ -250,7 +250,39 @@ send_notification("run.completed", {...})
 
 ---
 
-## 13. Recommended Fixes
+## 13. Resolution Summary
+
+### Implemented Solution: Option B (Make Elixir Accept Python's Format)
+
+**Status**: ✅ **IMPLEMENTED** - See `elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex:298-331`
+
+**What Changed**: Elixir was adapted to Python's generic event format rather than Python changing to match Elixir's specific method names.
+
+**Implementation Details**:
+1. ✅ Generic `"event"` handler added at `port.ex:298`
+2. ✅ `event_type` mapping to internal handlers (`port.ex:303-331`):
+   - `agent_response` → `handle_agent_response_event`
+   - `tool_call` → `handle_tool_call_event`
+   - `tool_result` → `handle_tool_result_event`
+   - `run_started` → `handle_run_started_event`
+   - `run_completed` → `handle_run_completed_event`
+   - `run_failed` → `handle_run_failed_event`
+   - `status_update` → `handle_status_event`
+   - `bridge_ready`, `bridge_closing` → direct handlers
+3. ✅ Nested `payload` extraction implemented
+4. ✅ Tests added in `port_protocol_test.exs`
+
+**Supported Event Types**: `agent_response`, `tool_call`, `tool_result`, `run_started`, `run_completed`, `run_failed`, `status_update`, `bridge_ready`, `bridge_closing`
+
+**What Still Works (Always Did)**: Basic tool execution (`invoke_agent`, `run_shell`, `file_list`, etc.)
+
+**What's Still Missing**: Python handlers for Elixir → Python lifecycle methods (`run/start`, `run/cancel`, `exit`, `initialize`)
+
+---
+
+## 14. Historical Context (Original Recommended Fixes)
+
+These were the options considered before implementing Option B:
 
 ### Option A: Make Python Emit Elixir's Expected Format
 
@@ -301,14 +333,16 @@ send_notification("run.completed", {...})
 
 ---
 
-## 14. Immediate Action Items
+## 15. Historical Action Items (Completed)
 
-1. **STOP** assuming Python↔Elixir bridge works
-2. **CREATE** shared protocol specification document
-3. **CHOOSE** one of the three fix options above
-4. **IMPLEMENT** chosen option with integration tests
-5. **VALIDATE** with end-to-end tests (not just mocks)
-6. **DOCUMENT** protocol contract for future development
+These action items were completed as part of the Elixir migration epic (bd-26 through bd-33):
+
+- [x] ✅ **UNDERSTOOD** the Python↔Elixir bridge protocol mismatch
+- [x] ✅ **CREATED** shared protocol specification document (see ADR-002)
+- [x] ✅ **CHOSEN** Option B: Make Elixir accept Python's format
+- [x] ✅ **IMPLEMENTED** generic event handler with integration tests
+- [x] ✅ **VALIDATED** with end-to-end tests (`port_protocol_test.exs`)
+- [x] ✅ **DOCUMENTED** protocol contract (this analysis + ADR-002)
 
 ---
 
