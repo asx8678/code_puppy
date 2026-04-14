@@ -183,37 +183,143 @@ def _get_tool_calls_semaphore() -> TrackedSemaphore:
 
 
 async def acquire_file_ops_slot() -> None:
-    """Acquire a slot for file operations."""
+    """Acquire a slot for file operations.
+
+    bd-77: Bridge-aware - tries Elixir bridge first if connected,
+    falls back to local semaphore.
+    """
+    # Try Elixir bridge first if connected
+    try:
+        from code_puppy.plugins.elixir_bridge import is_connected, call_elixir_concurrency
+        if is_connected():
+            result = await call_elixir_concurrency(
+                "concurrency.acquire",
+                {"type": "file_ops"}
+            )
+            if result.get("status") == "ok":
+                return
+    except ImportError:
+        pass
+
+    # Fallback to local semaphore
     sem = _get_file_ops_semaphore()
     await sem.acquire()
 
 
 def release_file_ops_slot() -> None:
-    """Release a file operations slot."""
+    """Release a file operations slot.
+
+    bd-77: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
+    """
+    # Notify Elixir bridge if connected (fire-and-forget)
+    try:
+        from code_puppy.plugins.elixir_bridge import is_connected, call_elixir_concurrency
+        if is_connected():
+            # Fire-and-forget: don't wait for response, ignore errors
+            import asyncio
+            try:
+                asyncio.create_task(
+                    call_elixir_concurrency("concurrency.release", {"type": "file_ops"}, timeout=1.0)
+                )
+            except Exception:
+                pass  # Ignore errors for fire-and-forget
+    except ImportError:
+        pass
+
     sem = _get_file_ops_semaphore()
     sem.release()
 
 
 async def acquire_api_call_slot() -> None:
-    """Acquire a slot for API calls."""
+    """Acquire a slot for API calls.
+
+    bd-77: Bridge-aware - tries Elixir bridge first if connected,
+    falls back to local semaphore.
+    """
+    # Try Elixir bridge first if connected
+    try:
+        from code_puppy.plugins.elixir_bridge import is_connected, call_elixir_concurrency
+        if is_connected():
+            result = await call_elixir_concurrency(
+                "concurrency.acquire",
+                {"type": "api_calls"}
+            )
+            if result.get("status") == "ok":
+                return
+    except ImportError:
+        pass
+
+    # Fallback to local semaphore
     sem = _get_api_calls_semaphore()
     await sem.acquire()
 
 
 def release_api_call_slot() -> None:
-    """Release an API call slot."""
+    """Release an API call slot.
+
+    bd-77: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
+    """
+    # Notify Elixir bridge if connected (fire-and-forget)
+    try:
+        from code_puppy.plugins.elixir_bridge import is_connected, call_elixir_concurrency
+        if is_connected():
+            import asyncio
+            try:
+                asyncio.create_task(
+                    call_elixir_concurrency("concurrency.release", {"type": "api_calls"}, timeout=1.0)
+                )
+            except Exception:
+                pass
+    except ImportError:
+        pass
+
     sem = _get_api_calls_semaphore()
     sem.release()
 
 
 async def acquire_tool_call_slot() -> None:
-    """Acquire a slot for tool calls."""
+    """Acquire a slot for tool calls.
+
+    bd-77: Bridge-aware - tries Elixir bridge first if connected,
+    falls back to local semaphore.
+    """
+    # Try Elixir bridge first if connected
+    try:
+        from code_puppy.plugins.elixir_bridge import is_connected, call_elixir_concurrency
+        if is_connected():
+            result = await call_elixir_concurrency(
+                "concurrency.acquire",
+                {"type": "tool_calls"}
+            )
+            if result.get("status") == "ok":
+                return
+    except ImportError:
+        pass
+
+    # Fallback to local semaphore
     sem = _get_tool_calls_semaphore()
     await sem.acquire()
 
 
 def release_tool_call_slot() -> None:
-    """Release a tool call slot."""
+    """Release a tool call slot.
+
+    bd-77: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
+    """
+    # Notify Elixir bridge if connected (fire-and-forget)
+    try:
+        from code_puppy.plugins.elixir_bridge import is_connected, call_elixir_concurrency
+        if is_connected():
+            import asyncio
+            try:
+                asyncio.create_task(
+                    call_elixir_concurrency("concurrency.release", {"type": "tool_calls"}, timeout=1.0)
+                )
+            except Exception:
+                pass
+    except ImportError:
+        pass
+
     sem = _get_tool_calls_semaphore()
     sem.release()
 

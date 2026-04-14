@@ -73,23 +73,23 @@ defmodule CodePuppyControl.FileOps do
                           ])
 
   @sensitive_exact_files MapSet.new([
-                         Path.join(System.user_home!(), ".netrc"),
-                         Path.join(System.user_home!(), ".pgpass"),
-                         Path.join(System.user_home!(), ".my.cnf"),
-                         Path.join(System.user_home!(), ".env"),
-                         Path.join(System.user_home!(), ".bash_history"),
-                         Path.join(System.user_home!(), ".npmrc"),
-                         Path.join(System.user_home!(), ".pypirc"),
-                         Path.join(System.user_home!(), ".gitconfig"),
-                         "/etc/shadow",
-                         "/etc/sudoers",
-                         "/etc/passwd",
-                         "/etc/master.passwd",
-                         "/private/etc/shadow",
-                         "/private/etc/sudoers",
-                         "/private/etc/passwd",
-                         "/private/etc/master.passwd"
-                       ])
+                           Path.join(System.user_home!(), ".netrc"),
+                           Path.join(System.user_home!(), ".pgpass"),
+                           Path.join(System.user_home!(), ".my.cnf"),
+                           Path.join(System.user_home!(), ".env"),
+                           Path.join(System.user_home!(), ".bash_history"),
+                           Path.join(System.user_home!(), ".npmrc"),
+                           Path.join(System.user_home!(), ".pypirc"),
+                           Path.join(System.user_home!(), ".gitconfig"),
+                           "/etc/shadow",
+                           "/etc/sudoers",
+                           "/etc/passwd",
+                           "/etc/master.passwd",
+                           "/private/etc/shadow",
+                           "/private/etc/sudoers",
+                           "/private/etc/passwd",
+                           "/private/etc/master.passwd"
+                         ])
 
   @sensitive_filenames MapSet.new([".env"])
 
@@ -139,16 +139,19 @@ defmodule CodePuppyControl.FileOps do
       sensitive_filename =
         cond do
           # Exact match for .env file (not .env.example, etc.)
-          basename == ".env" -> true
+          basename == ".env" ->
+            true
 
           # .env.* files are sensitive except allowed patterns
           String.starts_with?(basename_lower, ".env.") ->
             not MapSet.member?(@allowed_env_patterns, basename_lower)
 
           # Other filenames in the sensitive list
-          MapSet.member?(@sensitive_filenames, basename) -> true
+          MapSet.member?(@sensitive_filenames, basename) ->
+            true
 
-          true -> false
+          true ->
+            false
         end
 
       # Check for private key files by extension
@@ -473,7 +476,11 @@ defmodule CodePuppyControl.FileOps do
             [{start, len} | _] ->
               # Strip line for display
               stripped = String.trim(line)
-              truncated = if String.length(stripped) > 512, do: String.slice(stripped, 0, 512), else: stripped
+
+              truncated =
+                if String.length(stripped) > 512,
+                  do: String.slice(stripped, 0, 512),
+                  else: stripped
 
               [
                 %{
@@ -622,8 +629,15 @@ defmodule CodePuppyControl.FileOps do
     {valid_paths, invalid_results} =
       Enum.reduce(paths, {[], []}, fn path, {valid, invalid} ->
         case validate_path(path, "read") do
-          {:ok, normalized} -> {[normalized | valid], invalid}
-          {:error, reason} -> {valid, [%{path: path, content: nil, num_lines: 0, size: 0, truncated: false, error: reason} | invalid]}
+          {:ok, normalized} ->
+            {[normalized | valid], invalid}
+
+          {:error, reason} ->
+            {valid,
+             [
+               %{path: path, content: nil, num_lines: 0, size: 0, truncated: false, error: reason}
+               | invalid
+             ]}
         end
       end)
 
@@ -637,8 +651,18 @@ defmodule CodePuppyControl.FileOps do
         |> Task.async_stream(
           fn path ->
             case read_file(path, read_opts) do
-              {:ok, result} -> result
-              {:error, reason} -> %{path: path, content: nil, num_lines: 0, size: 0, truncated: false, error: reason}
+              {:ok, result} ->
+                result
+
+              {:error, reason} ->
+                %{
+                  path: path,
+                  content: nil,
+                  num_lines: 0,
+                  size: 0,
+                  truncated: false,
+                  error: reason
+                }
             end
           end,
           max_concurrency: max_concurrency,
@@ -647,8 +671,18 @@ defmodule CodePuppyControl.FileOps do
         )
         |> Enum.to_list()
         |> Enum.map(fn
-          {:ok, result} -> result
-          {:exit, reason} -> %{path: "", content: nil, num_lines: 0, size: 0, truncated: false, error: "Task failed: #{inspect(reason)}"}
+          {:ok, result} ->
+            result
+
+          {:exit, reason} ->
+            %{
+              path: "",
+              content: nil,
+              num_lines: 0,
+              size: 0,
+              truncated: false,
+              error: "Task failed: #{inspect(reason)}"
+            }
         end)
 
       # Combine valid and invalid results

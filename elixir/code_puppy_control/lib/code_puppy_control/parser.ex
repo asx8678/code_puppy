@@ -48,13 +48,14 @@ defmodule CodePuppyControl.Parser do
 
       true ->
         # Unsupported language - return empty result
-        {:ok, %{
-          "language" => language,
-          "symbols" => [],
-          "extraction_time_ms" => 0.0,
-          "success" => false,
-          "errors" => ["Unsupported language: #{language}"]
-        }}
+        {:ok,
+         %{
+           "language" => language,
+           "symbols" => [],
+           "extraction_time_ms" => 0.0,
+           "success" => false,
+           "errors" => ["Unsupported language: #{language}"]
+         }}
     end
   end
 

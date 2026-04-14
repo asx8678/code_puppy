@@ -288,7 +288,11 @@ defmodule CodePuppyControl.PythonWorker.Port do
   # Private functions
 
   # Handle incoming messages - detect if it's a request (needs response) or response/notification
-  defp handle_incoming_message(%{"id" => id, "method" => method, "params" => params}, _run_id, port) do
+  defp handle_incoming_message(
+         %{"id" => id, "method" => method, "params" => params},
+         _run_id,
+         port
+       ) do
     # This is a request FROM Python that needs a response back
     response = handle_file_request(method, params)
 
@@ -500,8 +504,15 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
   defp params_to_read_opts(params) do
     opts = []
-    opts = if params["start_line"], do: Keyword.put(opts, :start_line, params["start_line"]), else: opts
-    opts = if params["num_lines"], do: Keyword.put(opts, :num_lines, params["num_lines"]), else: opts
+
+    opts =
+      if params["start_line"],
+        do: Keyword.put(opts, :start_line, params["start_line"]),
+        else: opts
+
+    opts =
+      if params["num_lines"], do: Keyword.put(opts, :num_lines, params["num_lines"]), else: opts
+
     opts
   end
 

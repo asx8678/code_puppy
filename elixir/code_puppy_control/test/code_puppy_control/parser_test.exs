@@ -52,8 +52,8 @@ defmodule CodePuppyControl.ParserTest do
 
       # Verify we at least got the module
       assert Enum.any?(outline["symbols"], fn s ->
-        s["kind"] == "module" and s["name"] == "MyApp"
-      end)
+               s["kind"] == "module" and s["name"] == "MyApp"
+             end)
     end
 
     test "returns error for unsupported language" do

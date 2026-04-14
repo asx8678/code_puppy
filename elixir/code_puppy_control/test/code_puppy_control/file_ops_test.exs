@@ -16,13 +16,22 @@ defmodule CodePuppyControl.FileOpsTest do
 
     # Create test files
     File.write!(Path.join(@test_dir, "file1.txt"), "Line 1\nLine 2\nLine 3\nLine 4\nLine 5")
-    File.write!(Path.join(@test_dir, "file2.ex"), "defmodule Test do\n  def hello do\n    :world\n  end\nend")
+
+    File.write!(
+      Path.join(@test_dir, "file2.ex"),
+      "defmodule Test do\n  def hello do\n    :world\n  end\nend"
+    )
+
     File.write!(Path.join(@test_dir, "file3.py"), "# TODO: implement this\ndef main():\n    pass")
 
     # Create subdirectory with more files
     subdir = Path.join(@test_dir, "subdir")
     File.mkdir_p!(subdir)
-    File.write!(Path.join(subdir, "nested.ex"), "defmodule Nested do\n  # FIXME: fix this\n  def run do\n    :ok\n  end\nend")
+
+    File.write!(
+      Path.join(subdir, "nested.ex"),
+      "defmodule Nested do\n  # FIXME: fix this\n  def run do\n    :ok\n  end\nend"
+    )
 
     # Create hidden file (should be excluded by default)
     File.write!(Path.join(@test_dir, ".hidden"), "secret content")
@@ -54,7 +63,8 @@ defmodule CodePuppyControl.FileOpsTest do
       # Check structure
       file1 = Enum.find(files, &(&1.path == "file1.txt"))
       assert file1.type == :file
-      assert file1.size >= 29  # "Line 1\nLine 2\nLine 3\nLine 4\nLine 5" (may have trailing newline)
+      # "Line 1\nLine 2\nLine 3\nLine 4\nLine 5" (may have trailing newline)
+      assert file1.size >= 29
       assert %DateTime{} = file1.modified
     end
 
@@ -161,7 +171,8 @@ defmodule CodePuppyControl.FileOpsTest do
       assert result.path == file_path
       assert result.content == "Line 1\nLine 2\nLine 3\nLine 4\nLine 5"
       assert result.num_lines == 5
-      assert result.size >= 29  # File may have trailing newline
+      # File may have trailing newline
+      assert result.size >= 29
       assert result.truncated == false
       assert result.error == nil
     end
@@ -343,18 +354,23 @@ defmodule CodePuppyControl.FileOpsTest do
     end
 
     test "rejects paths with null bytes" do
-      assert {:error, "File path contains null byte"} = FileOps.validate_path("/path/with\0null", "read")
+      assert {:error, "File path contains null byte"} =
+               FileOps.validate_path("/path/with\0null", "read")
     end
 
     test "rejects sensitive paths with appropriate message" do
-      assert {:error, msg} = FileOps.validate_path(Path.join(System.user_home!(), ".ssh/id_rsa"), "read")
+      assert {:error, msg} =
+               FileOps.validate_path(Path.join(System.user_home!(), ".ssh/id_rsa"), "read")
+
       assert msg =~ "sensitive path blocked"
       assert msg =~ "read"
     end
 
     test "normalizes paths", %{test_dir: dir} do
       # Path with .. should be normalized
-      assert {:ok, normalized} = FileOps.validate_path(Path.join(dir, "../#{Path.basename(dir)}/file1.txt"), "read")
+      assert {:ok, normalized} =
+               FileOps.validate_path(Path.join(dir, "../#{Path.basename(dir)}/file1.txt"), "read")
+
       assert normalized == Path.join(dir, "file1.txt")
     end
   end

@@ -7,6 +7,7 @@ and returns results in JSON-RPC format.
 Implements BRIDGE_PROTOCOL_V1 with canonical method names:
 - run.start, run.cancel, initialize, exit
 - invoke_agent, run_shell, file_list, file_read, file_write, grep_search
+- mcp.register, mcp.unregister, mcp.list, mcp.status, mcp.call_tool, mcp.health_check
 
 Architecture:
     ┌─────────────┐     JSON-RPC      ┌──────────────────┐
@@ -29,6 +30,23 @@ import asyncio
 from typing import Any
 
 from .wire_protocol import from_wire_params, WireMethodError
+
+# MessageBus import for EventBus routing (bd-79)
+from code_puppy.messaging import get_message_bus
+
+# MCP imports (bd-81)
+from code_puppy.mcp_ import get_mcp_manager
+
+# Concurrency limit imports
+from code_puppy.concurrency_limits import (
+    acquire_file_ops_slot,
+    acquire_api_call_slot,
+    acquire_tool_call_slot,
+    release_file_ops_slot,
+    release_api_call_slot,
+    release_tool_call_slot,
+    get_concurrency_status,
+)
 
 
 class BridgeController:
@@ -113,6 +131,19 @@ class BridgeController:
             "grep_search": self._handle_grep_search,
             "get_status": self._handle_get_status,
             "ping": self._handle_ping,
+            # Concurrency control methods (bd-77)
+            "concurrency.acquire": self._handle_concurrency_acquire,
+            "concurrency.release": self._handle_concurrency_release,
+            "concurrency.status": self._handle_concurrency_status,
+            # MCP bridge methods (bd-81)
+            "mcp.register": self._handle_mcp_register,
+            "mcp.unregister": self._handle_mcp_unregister,
+            "mcp.list": self._handle_mcp_list,
+            "mcp.status": self._handle_mcp_status,
+            "mcp.call_tool": self._handle_mcp_call_tool,
+            "mcp.health_check": self._handle_mcp_health_check,
+            # EventBus bridge methods (bd-79)
+            "eventbus.event": self._handle_eventbus_event,
         }
 
         handler = handlers.get(normalized_method)
@@ -583,3 +614,313 @@ class BridgeController:
             "pong": True,
             "timestamp": asyncio.get_event_loop().time(),
         }
+
+    async def _handle_concurrency_acquire(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle concurrency.acquire method (bd-77).
+
+        Acquires a slot from the local semaphore when Elixir requests it.
+
+        Args:
+            params: {"type": str, "timeout": float | None}
+
+        Returns:
+            {"status": "ok"} on success, raises error on failure
+        """
+        limiter_type = params.get("type", "file_ops")
+        _timeout = params.get("timeout")  # Reserved for future use (timeout support)
+
+        # Map limiter type to appropriate semaphore
+        if limiter_type == "file_ops":
+            await acquire_file_ops_slot()
+        elif limiter_type == "api_calls":
+            await acquire_api_call_slot()
+        elif limiter_type == "tool_calls":
+            await acquire_tool_call_slot()
+        else:
+            raise WireMethodError(
+                f"Unknown limiter type: {limiter_type}",
+                code=-32602  # Invalid params
+            )
+
+        return {"status": "ok", "type": limiter_type}
+
+    async def _handle_concurrency_release(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle concurrency.release method (bd-77).
+
+        Releases a slot back to the local semaphore.
+
+        Args:
+            params: {"type": str}
+
+        Returns:
+            {"status": "ok"}
+        """
+        limiter_type = params.get("type", "file_ops")
+
+        # Map limiter type to appropriate release function
+        if limiter_type == "file_ops":
+            release_file_ops_slot()
+        elif limiter_type == "api_calls":
+            release_api_call_slot()
+        elif limiter_type == "tool_calls":
+            release_tool_call_slot()
+        else:
+            raise WireMethodError(
+                f"Unknown limiter type: {limiter_type}",
+                code=-32602  # Invalid params
+            )
+
+        return {"status": "ok", "type": limiter_type}
+
+    async def _handle_concurrency_status(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle concurrency.status method (bd-77).
+
+        Returns current concurrency status from local semaphores.
+
+        Returns:
+            Concurrency status dict from get_concurrency_status()
+        """
+        status = get_concurrency_status()
+        return {"status": "ok", "concurrency": status}
+
+    # MCP Bridge Handlers (bd-81)
+
+    async def _handle_mcp_register(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle mcp.register method (bd-81).
+
+        Args:
+            params: {"name": str, "command": str, "args": list, "env": dict | None, "opts": dict | None}
+
+        Returns:
+            {"status": "registered", "server_id": str}
+        """
+        from code_puppy.mcp_ import ServerConfig
+
+        name = params["name"]
+        command = params["command"]
+        args = params["args"]
+        env = params.get("env", {})
+        opts = params.get("opts", {})
+
+        try:
+            manager = get_mcp_manager()
+
+            # Build server config from params
+            config = ServerConfig(
+                id="",  # Auto-generated
+                name=name,
+                type="stdio",
+                enabled=True,
+                config={
+                    "command": command,
+                    "args": args,
+                    **env,  # Merge env vars into config
+                    **opts,  # Merge additional opts
+                },
+            )
+
+            server_id = manager.register_server(config)
+
+            return {
+                "status": "registered",
+                "server_id": server_id,
+                "name": name,
+            }
+        except Exception as e:
+            raise WireMethodError(f"Failed to register MCP server: {e}", code=-32000)
+
+    async def _handle_mcp_unregister(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle mcp.unregister method (bd-81).
+
+        Args:
+            params: {"server_id": str}
+
+        Returns:
+            {"status": "unregistered", "server_id": str}
+        """
+        server_id = params["server_id"]
+
+        try:
+            manager = get_mcp_manager()
+            removed = manager.remove_server(server_id)
+
+            if not removed:
+                raise WireMethodError(
+                    f"Server not found: {server_id}",
+                    code=-32001,  # Server not found
+                )
+
+            return {
+                "status": "unregistered",
+                "server_id": server_id,
+            }
+        except WireMethodError:
+            raise
+        except Exception as e:
+            raise WireMethodError(f"Failed to unregister MCP server: {e}", code=-32000)
+
+    async def _handle_mcp_list(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle mcp.list method (bd-81).
+
+        Returns:
+            {"servers": [...], "count": int}
+        """
+        try:
+            manager = get_mcp_manager()
+            servers = manager.list_servers()
+
+            # Serialize ServerInfo to dict
+            server_list = []
+            for info in servers:
+                server_list.append({
+                    "id": info.id,
+                    "name": info.name,
+                    "type": info.type,
+                    "enabled": info.enabled,
+                    "state": info.state.value if hasattr(info.state, "value") else str(info.state),
+                    "quarantined": info.quarantined,
+                    "uptime_seconds": info.uptime_seconds,
+                    "error_message": info.error_message,
+                    "health": info.health,
+                    "latency_ms": info.latency_ms,
+                })
+
+            return {
+                "status": "ok",
+                "servers": server_list,
+                "count": len(server_list),
+            }
+        except Exception as e:
+            raise WireMethodError(f"Failed to list MCP servers: {e}", code=-32000)
+
+    async def _handle_mcp_status(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle mcp.status method (bd-81).
+
+        Args:
+            params: {"server_id": str}
+
+        Returns:
+            Comprehensive server status dict
+        """
+        server_id = params["server_id"]
+
+        try:
+            manager = get_mcp_manager()
+            status = manager.get_server_status(server_id)
+
+            if not status.get("exists", False):
+                raise WireMethodError(
+                    f"Server not found: {server_id}",
+                    code=-32001,  # Server not found
+                )
+
+            return {
+                "status": "ok",
+                **status,
+            }
+        except WireMethodError:
+            raise
+        except Exception as e:
+            raise WireMethodError(f"Failed to get MCP server status: {e}", code=-32000)
+
+    async def _handle_mcp_call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle mcp.call_tool method (bd-81).
+
+        Args:
+            params: {"server_id": str, "method": str, "params": dict, "timeout": float}
+
+        Returns:
+            Error response directing user to use local MCP
+        """
+        # For now, tool calls through the bridge are not supported
+        # due to complex lifecycle requirements
+        return {
+            "status": "error",
+            "error": "mcp.call_tool through bridge not supported",
+            "message": "Use local MCP manager for tool calls. Direct Elixir -> Python tool calls have complex lifecycle requirements.",
+            "fallback": "local",
+        }
+
+    async def _handle_mcp_health_check(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle mcp.health_check method (bd-81).
+
+        Returns:
+            Health status for all MCP servers with health data
+        """
+        try:
+            manager = get_mcp_manager()
+            servers = manager.list_servers()
+
+            # Build health check response
+            health_data = []
+            for info in servers:
+                health_info = info.health or {}
+                health_data.append({
+                    "id": info.id,
+                    "name": info.name,
+                    "state": info.state.value if hasattr(info.state, "value") else str(info.state),
+                    "enabled": info.enabled,
+                    "quarantined": info.quarantined,
+                    "is_healthy": health_info.get("is_healthy", False),
+                    "latency_ms": info.latency_ms,
+                    "uptime_seconds": info.uptime_seconds,
+                    "error": health_info.get("error"),
+                })
+
+            # Count healthy servers
+            healthy_count = sum(1 for h in health_data if h["is_healthy"])
+
+            return {
+                "status": "ok",
+                "servers": health_data,
+                "total": len(health_data),
+                "healthy": healthy_count,
+                "unhealthy": len(health_data) - healthy_count,
+            }
+        except Exception as e:
+            raise WireMethodError(f"Failed to get MCP health check: {e}", code=-32000)
+
+    async def _handle_eventbus_event(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle eventbus.event method (bd-79).
+
+        Routes incoming events from Elixir EventBus to the local MessageBus.
+        This is for reverse-channel events FROM Elixir TO Python.
+
+        Args:
+            params: {"topic": str, "event_type": str, "payload": dict, "timestamp": str | None}
+
+        Returns:
+            {"status": "ok"} on success
+        """
+        topic = params.get("topic", "")
+        event_type = params.get("event_type", "")
+        payload = params.get("payload", {})
+
+        try:
+            # Get message bus and emit the event as a generic message
+            bus = get_message_bus()
+
+            # Create a text message with the event info for now
+            # Future: Could create a dedicated EventMessage type
+            from code_puppy.messaging.messages import MessageLevel, MessageCategory, TextMessage
+
+            # Format event info for display
+            event_text = f"[EventBus:{topic}] {event_type}"
+            if payload:
+                import json
+                payload_str = json.dumps(payload, separators=(",", ":"))
+                event_text += f" | {payload_str}"
+
+            event_message = TextMessage(
+                level=MessageLevel.INFO,
+                text=event_text,
+                category=MessageCategory.SYSTEM,
+                is_markdown=False,
+            )
+
+            bus.emit(event_message)
+
+            return {"status": "ok", "topic": topic, "event_type": event_type}
+        except Exception as e:
+            # Return error but don't raise - EventBus routing is auxiliary
+            return {"status": "error", "error": str(e), "topic": topic, "event_type": event_type}

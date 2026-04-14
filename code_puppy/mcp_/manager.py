@@ -5,6 +5,10 @@ This module provides the main MCPManager class that coordinates all MCP server
 operations while maintaining pydantic-ai compatibility. It serves as the central
 point for managing servers, registering configurations, and providing servers
 to agents.
+
+bd-81: MCP bridge support for Elixir integration
+- list_servers() tries Elixir first, falls back to local
+- get_server_status() tries Elixir first, falls back to local
 """
 
 import asyncio
@@ -20,6 +24,23 @@ from .async_lifecycle import get_lifecycle_manager
 from .managed_server import ManagedMCPServer, ServerConfig, ServerState
 from .registry import ServerRegistry
 from .status_tracker import ServerStatusTracker
+
+# MCP bridge support (bd-81) - lazy import to avoid circular dependencies
+_elixir_bridge_imported = False
+_elixir_bridge = None
+
+
+def _get_elixir_bridge():
+    """Lazy import of elixir_bridge to avoid circular imports."""
+    global _elixir_bridge_imported, _elixir_bridge
+    if not _elixir_bridge_imported:
+        try:
+            from code_puppy.plugins import elixir_bridge
+            _elixir_bridge = elixir_bridge
+        except ImportError:
+            _elixir_bridge = None
+        _elixir_bridge_imported = True
+    return _elixir_bridge
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -333,13 +354,34 @@ class MCPManager:
 
         return True
 
-    def list_servers(self) -> list[ServerInfo]:
+    def list_servers(self, use_bridge: bool = True) -> list[ServerInfo]:
         """
         Get information about all registered servers.
+
+        bd-81: Bridge-aware implementation. When use_bridge=True and Elixir
+        control plane is connected, delegates to Elixir via mcp.list method.
+        Falls back to local implementation on timeout or connection errors.
+
+        Args:
+            use_bridge: Whether to attempt bridge delegation (default: True)
 
         Returns:
             List of ServerInfo objects with current status
         """
+        # Try bridge first if enabled and connected (bd-81)
+        if use_bridge:
+            bridge = _get_elixir_bridge()
+            if bridge and bridge.is_connected():
+                try:
+                    return self._list_servers_via_bridge(bridge)
+                except (TimeoutError, ConnectionError, RuntimeError) as e:
+                    logger.debug(f"Bridge delegation for list_servers failed, using local: {e}")
+                except Exception as e:
+                    logger.warning(f"Unexpected bridge error in list_servers: {e}")
+            else:
+                logger.debug("Bridge not available for list_servers, using local")
+
+        # Local implementation (fallback)
         server_infos = []
 
         for server_id, managed_server in self._managed_servers.items():
@@ -397,6 +439,61 @@ class MCPManager:
                     server_infos.append(server_info)
 
         return server_infos
+
+    def _list_servers_via_bridge(self, bridge) -> list[ServerInfo]:
+        """Internal: Call mcp.list via Elixir bridge and deserialize response (bd-81).
+
+        Args:
+            bridge: Elixir bridge module
+
+        Returns:
+            List of ServerInfo objects from Elixir
+
+        Raises:
+            ConnectionError: If bridge call fails
+            TimeoutError: If bridge call times out
+            RuntimeError: If bridge returns error response
+        """
+        try:
+            # Use asyncio to run the async call
+            result = asyncio.run(bridge.call_elixir_mcp("mcp.list", {}))
+
+            if result.get("status") != "ok":
+                error_msg = result.get("error", "Unknown bridge error")
+                raise RuntimeError(f"Bridge mcp.list failed: {error_msg}")
+
+            servers_data = result.get("servers", [])
+            server_infos = []
+
+            for server_data in servers_data:
+                # Parse state from string
+                state_str = server_data.get("state", "stopped")
+                try:
+                    state = ServerState(state_str)
+                except ValueError:
+                    state = ServerState.STOPPED
+
+                server_info = ServerInfo(
+                    id=server_data.get("id", ""),
+                    name=server_data.get("name", ""),
+                    type=server_data.get("type", ""),
+                    enabled=server_data.get("enabled", False),
+                    state=state,
+                    quarantined=server_data.get("quarantined", False),
+                    uptime_seconds=server_data.get("uptime_seconds"),
+                    error_message=server_data.get("error_message"),
+                    health=server_data.get("health"),
+                    latency_ms=server_data.get("latency_ms"),
+                )
+                server_infos.append(server_info)
+
+            logger.debug(f"list_servers via bridge returned {len(server_infos)} servers")
+            return server_infos
+
+        except (TimeoutError, ConnectionError, RuntimeError):
+            raise
+        except Exception as e:
+            raise RuntimeError(f"Bridge call failed: {e}") from e
 
     async def start_server(self, server_id: str) -> bool:
         """
@@ -737,17 +834,35 @@ class MCPManager:
             logger.warning(f"Attempted to remove non-existent server: {server_id}")
             return False
 
-    def get_server_status(self, server_id: str) -> dict[str, Any]:
+    def get_server_status(self, server_id: str, use_bridge: bool = True) -> dict[str, Any]:
         """
         Get comprehensive status for a server.
 
+        bd-81: Bridge-aware implementation. When use_bridge=True and Elixir
+        control plane is connected, delegates to Elixir via mcp.status method.
+        Falls back to local implementation on timeout or connection errors.
+
         Args:
             server_id: ID of server to get status for
+            use_bridge: Whether to attempt bridge delegation (default: True)
 
         Returns:
             Dictionary containing comprehensive status information
         """
-        # Get basic status from managed server
+        # Try bridge first if enabled and connected (bd-81)
+        if use_bridge:
+            bridge = _get_elixir_bridge()
+            if bridge and bridge.is_connected():
+                try:
+                    return self._get_server_status_via_bridge(bridge, server_id)
+                except (TimeoutError, ConnectionError, RuntimeError) as e:
+                    logger.debug(f"Bridge delegation for get_server_status failed, using local: {e}")
+                except Exception as e:
+                    logger.warning(f"Unexpected bridge error in get_server_status: {e}")
+            else:
+                logger.debug("Bridge not available for get_server_status, using local")
+
+        # Local implementation (fallback)
         managed_server = self._managed_servers.get(server_id)
         if managed_server is None:
             return {
@@ -787,6 +902,40 @@ class MCPManager:
         except Exception as e:
             logger.error(f"Error getting status for server {server_id}: {e}")
             return {"server_id": server_id, "exists": True, "error": str(e)}
+
+    def _get_server_status_via_bridge(self, bridge, server_id: str) -> dict[str, Any]:
+        """Internal: Call mcp.status via Elixir bridge and deserialize response (bd-81).
+
+        Args:
+            bridge: Elixir bridge module
+            server_id: Server ID to get status for
+
+        Returns:
+            Comprehensive server status dict from Elixir
+
+        Raises:
+            ConnectionError: If bridge call fails
+            TimeoutError: If bridge call times out
+            RuntimeError: If bridge returns error response
+        """
+        try:
+            result = asyncio.run(bridge.call_elixir_mcp("mcp.status", {"server_id": server_id}))
+
+            if result.get("status") != "ok":
+                error_msg = result.get("error", "Unknown bridge error")
+                raise RuntimeError(f"Bridge mcp.status failed: {error_msg}")
+
+            # Remove the wrapper status field, return the actual status data
+            status_result = {k: v for k, v in result.items() if k != "status"}
+            status_result["via_bridge"] = True  # Flag to indicate bridge origin
+
+            logger.debug(f"get_server_status via bridge for {server_id}")
+            return status_result
+
+        except (TimeoutError, ConnectionError, RuntimeError):
+            raise
+        except Exception as e:
+            raise RuntimeError(f"Bridge call failed: {e}") from e
 
 
 # Singleton instance with double-checked locking for thread safety

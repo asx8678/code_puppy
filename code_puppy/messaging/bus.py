@@ -174,12 +174,62 @@ class MessageBus:
         else:
             self._put_to_outgoing(message)
 
+    def _notify_elixir_if_connected(self, message: AnyMessage) -> None:
+        """Notify Elixir EventBus if bridge is connected (bd-79).
+
+        This is called AFTER local delivery to also emit to Elixir EventBus.
+        Fire-and-forget: never blocks, silently ignores all errors.
+
+        Args:
+            message: The message that was just delivered locally.
+        """
+        try:
+            # Lazy import to avoid circular dependencies
+            from code_puppy.plugins.elixir_bridge import (
+                is_connected,
+                notify_elixir_event,
+            )
+
+            # Check if bridge is available
+            if not is_connected():
+                return
+
+            # Extract event type and payload from message
+            event_type = message.__class__.__name__
+            payload: dict[str, Any] = {"level": "info"}
+
+            # Extract message details based on type
+            if hasattr(message, "text"):
+                payload["text"] = message.text
+            if hasattr(message, "level"):
+                payload["level"] = str(message.level)
+            if hasattr(message, "category"):
+                payload["category"] = str(message.category)
+
+            # Get session_id from message
+            session_id = getattr(message, "session_id", None)
+
+            # Fire-and-forget notification to Elixir
+            # This returns immediately and handles its own errors silently
+            notify_elixir_event(
+                event_type=event_type,
+                payload=payload,
+                run_id=None,  # Could be extended to extract from context
+                session_id=session_id,
+            )
+
+        except Exception:
+            # Silently ignore all errors - this is auxiliary, not critical path
+            # Local delivery already succeeded, Elixir notification is bonus
+            pass
+
     def emit(self, message: AnyMessage) -> None:
         """Emit a message to the UI.
 
         Thread-safe. Can be called from sync or async context.
         If no renderer is active, messages are buffered for later.
         Auto-tags message with current session_id if not already set.
+        Also notifies Elixir EventBus if bridge is connected (fire-and-forget).
 
         Args:
             message: The message to emit.
@@ -193,6 +243,8 @@ class MessageBus:
                     message.session_id = self._current_session_id
                 self._startup_buffer.append(message)
                 # deque with maxlen handles eviction automatically (O(1))
+            # Also notify Elixir if bridge connected (fire-and-forget, never blocks)
+            self._notify_elixir_if_connected(message)
             return
 
         # Renderer is active - need to acquire lock for session tagging and delivery
@@ -206,6 +258,9 @@ class MessageBus:
             except Exception:
                 # Don't let wakeup errors break message emission
                 pass
+
+        # Also notify Elixir if bridge connected (fire-and-forget, never blocks)
+        self._notify_elixir_if_connected(message)
 
     def emit_text(
         self,

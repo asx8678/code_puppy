@@ -45,6 +45,12 @@ bd-62: Client mode for calling Elixir control plane from Python
 - Added is_connected() to check if Elixir control plane is available
 - Added call_method() to send JSON-RPC requests to Elixir
 - Used by NativeBackend to route file operations through Elixir
+
+bd-77: Concurrency control bridge support
+- Added call_elixir_concurrency() for semaphore coordination
+
+bd-81: MCP bridge support
+- Added call_elixir_mcp() for MCP server management via bridge
 """
 
 from __future__ import annotations
@@ -176,6 +182,59 @@ def call_method(method: str, params: dict[str, Any], timeout: float = 30.0) -> d
             _pending_responses.pop(request_id, None)
 
 
+async def call_elixir_concurrency(method: str, params: dict[str, Any], timeout: float = 30.0) -> dict[str, Any]:
+    """Call a concurrency method on the Elixir control plane (bd-77).
+
+    Specialized wrapper around call_method for concurrency operations.
+    Falls back to local execution on timeout/connection errors.
+
+    Args:
+        method: Concurrency method name (e.g., "concurrency.acquire")
+        params: Method parameters dict (e.g., {"type": "file_ops"})
+        timeout: Maximum seconds to wait for response
+
+    Returns:
+        Response result dict from Elixir, or fallback result on timeout
+
+    Raises:
+        ConnectionError: If Elixir control plane is not connected (not raised on timeout)
+    """
+    if not is_connected():
+        raise ConnectionError("Elixir control plane not connected")
+
+    try:
+        return await call_method(method, params, timeout=timeout)
+    except TimeoutError:
+        # Return a fallback result that signals local handling
+        return {"status": "timeout", "fallback": True}
+
+
+async def call_elixir_mcp(method: str, params: dict[str, Any], timeout: float = 30.0) -> dict[str, Any]:
+    """Call an MCP method on the Elixir control plane (bd-81).
+
+    Specialized wrapper around call_method for MCP server management operations.
+    Used to delegate MCP server management to the Elixir control plane when available.
+
+    Args:
+        method: MCP method name (e.g., "mcp.list", "mcp.status")
+        params: Method parameters dict
+        timeout: Maximum seconds to wait for response
+
+    Returns:
+        Response result dict from Elixir, or raises exception on failure
+
+    Raises:
+        ConnectionError: If Elixir control plane is not connected
+        TimeoutError: If response not received within timeout
+        RuntimeError: If the call returns an error response
+    """
+    if not is_connected():
+        raise ConnectionError("Elixir control plane not connected")
+
+    # Call through to Elixir control plane
+    return await call_method(method, params, timeout=timeout)
+
+
 def _send_request_to_elixir(request: dict[str, Any]) -> None:
     """Send a JSON-RPC request to the Elixir control plane.
 
@@ -227,6 +286,77 @@ def handle_response(response: dict[str, Any]) -> None:
             slot["ready"] = True
 
 
+def notify_elixir_event(
+    event_type: str,
+    payload: dict[str, Any],
+    run_id: str | None = None,
+    session_id: str | None = None,
+) -> None:
+    """Notify Elixir EventBus of an event (bd-79).
+
+    Fire-and-forget notification to Elixir EventBus. This function:
+    - Returns immediately without blocking
+    - Silently ignores all errors (auxiliary, not critical path)
+    - Uses thread-safe operations if needed
+    - Sends event to appropriate topic based on run_id/session_id
+
+    Args:
+        event_type: Type of event (e.g., "agent_run_start", "tool_call", etc.)
+        payload: Event data payload
+        run_id: Optional run identifier (determines topic)
+        session_id: Optional session identifier (included in payload)
+    """
+    import asyncio
+    import threading
+
+    # Determine topic based on scope
+    if run_id:
+        topic = f"run:{run_id}"
+    elif session_id:
+        topic = f"session:{session_id}"
+    else:
+        topic = "global:events"
+
+    # Add session_id to payload if provided
+    full_payload = dict(payload)
+    if session_id is not None:
+        full_payload["session_id"] = session_id
+
+    try:
+        # Build the JSON-RPC notification using wire protocol
+        from .wire_protocol import emit_eventbus_broadcast
+
+        message = emit_eventbus_broadcast(
+            topic=topic,
+            event_type=event_type,
+            payload=full_payload,
+        )
+
+        # Send the message - use _send_request_to_elixir if available
+        # This is fire-and-forget, we don't wait for response
+        if BRIDGE_ENABLED:
+            # In bridge mode, write directly to stdout with Content-Length framing
+            _send_request_to_elixir(message)
+        elif is_connected():
+            # Client mode - send async if we can, otherwise sync
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in async context, use call_soon_threadsafe if on different thread
+                if threading.current_thread().ident != loop._thread_id:  # type: ignore[attr-defined]
+                    loop.call_soon_threadsafe(_send_request_to_elixir, message)
+                else:
+                    _send_request_to_elixir(message)
+            except RuntimeError:
+                # No running loop, call directly (sync context)
+                _send_request_to_elixir(message)
+        # else: not connected, silently drop
+
+    except Exception:
+        # Fire-and-forget: silently ignore all errors
+        # This is auxiliary functionality, not critical path
+        pass
+
+
 __all__ = [
     "BRIDGE_ENABLED",
     "BRIDGE_LOG_FILE",
@@ -236,4 +366,10 @@ __all__ = [
     "get_connection_url",
     "call_method",
     "handle_response",
+    # Concurrency bridge support (bd-77)
+    "call_elixir_concurrency",
+    # MCP bridge support (bd-81)
+    "call_elixir_mcp",
+    # EventBus bridge support (bd-79)
+    "notify_elixir_event",
 ]

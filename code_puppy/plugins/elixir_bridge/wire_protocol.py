@@ -369,6 +369,310 @@ def emit_bridge_closing(
     }
 
 
+def emit_concurrency_acquire(
+    limiter_type: str,
+    timeout: float | None = None,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit concurrency.acquire request.
+
+    Args:
+        limiter_type: Type of limiter (file_ops, api_calls, tool_calls)
+        timeout: Optional timeout in seconds
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    params: dict[str, Any] = {
+        "type": limiter_type,
+        "timestamp": timestamp or _get_timestamp(),
+    }
+    if timeout is not None:
+        params["timeout"] = timeout
+
+    return {
+        "jsonrpc": "2.0",
+        "method": "concurrency.acquire",
+        "params": params,
+    }
+
+
+def emit_concurrency_release(
+    limiter_type: str,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit concurrency.release notification.
+
+    Args:
+        limiter_type: Type of limiter (file_ops, api_calls, tool_calls)
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC notification dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "concurrency.release",
+        "params": {
+            "type": limiter_type,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_concurrency_status(
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit concurrency.status request.
+
+    Args:
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "concurrency.status",
+        "params": {
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_mcp_register_server(
+    name: str,
+    command: str,
+    args: list[str],
+    env: dict[str, str] | None = None,
+    opts: dict[str, Any] | None = None,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit mcp.register request.
+
+    Args:
+        name: Server name identifier
+        command: Command to execute (e.g., "npx")
+        args: Command arguments as list
+        env: Optional environment variables dict
+        opts: Optional additional server configuration
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    params: dict[str, Any] = {
+        "name": name,
+        "command": command,
+        "args": args,
+        "timestamp": timestamp or _get_timestamp(),
+    }
+    if env is not None:
+        params["env"] = env
+    if opts is not None:
+        params["opts"] = opts
+
+    return {
+        "jsonrpc": "2.0",
+        "method": "mcp.register",
+        "params": params,
+    }
+
+
+def emit_mcp_unregister_server(
+    server_id: str,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit mcp.unregister request.
+
+    Args:
+        server_id: Server identifier to unregister
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "mcp.unregister",
+        "params": {
+            "server_id": server_id,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_mcp_list_servers(
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit mcp.list request.
+
+    Args:
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "mcp.list",
+        "params": {
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_mcp_get_status(
+    server_id: str,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit mcp.status request.
+
+    Args:
+        server_id: Server identifier to get status for
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "mcp.status",
+        "params": {
+            "server_id": server_id,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_mcp_call_tool(
+    server_id: str,
+    method: str,
+    params: dict[str, Any],
+    timeout: float = 30.0,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit mcp.call_tool request.
+
+    Args:
+        server_id: Server identifier
+        method: Tool method name to call
+        params: Tool parameters dict
+        timeout: Maximum seconds to wait for response
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "mcp.call_tool",
+        "params": {
+            "server_id": server_id,
+            "method": method,
+            "params": params,
+            "timeout": timeout,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_mcp_health_check(
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit mcp.health_check request.
+
+    Args:
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "mcp.health_check",
+        "params": {
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_eventbus_broadcast(
+    topic: str,
+    event_type: str,
+    payload: dict[str, Any],
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit eventbus.broadcast notification (bd-79).
+
+    Args:
+        topic: EventBus topic (e.g., "session:<id>", "run:<id>", "global:events")
+        event_type: Event type identifier
+        payload: Event data payload
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC notification dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "eventbus.broadcast",
+        "params": {
+            "topic": topic,
+            "event_type": event_type,
+            "payload": payload,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_eventbus_subscribe(
+    topic: str,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit eventbus.subscribe request (bd-79).
+
+    Args:
+        topic: EventBus topic to subscribe to
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "eventbus.subscribe",
+        "params": {
+            "topic": topic,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_eventbus_unsubscribe(
+    topic: str,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit eventbus.unsubscribe request (bd-79).
+
+    Args:
+        topic: EventBus topic to unsubscribe from
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "eventbus.unsubscribe",
+        "params": {
+            "topic": topic,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
 def to_canonical_notification(
     event_type: str,
     run_id: str | None,
@@ -575,6 +879,93 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
             "search_string": str(params["search_string"]),
             "directory": str(params.get("directory", ".")),
         }
+
+    # Concurrency control methods (bd-77)
+    elif normalized_method == "concurrency.acquire":
+        limiter_type = params.get("type", "file_ops")
+        if limiter_type not in ("file_ops", "api_calls", "tool_calls"):
+            raise WireMethodError(
+                f"Invalid limiter type: {limiter_type}. Must be one of: file_ops, api_calls, tool_calls",
+                INVALID_PARAMS
+            )
+        result: dict[str, Any] = {"type": limiter_type}
+        if "timeout" in params:
+            result["timeout"] = float(params["timeout"])
+        return result
+
+    elif normalized_method == "concurrency.release":
+        limiter_type = params.get("type", "file_ops")
+        if limiter_type not in ("file_ops", "api_calls", "tool_calls"):
+            raise WireMethodError(
+                f"Invalid limiter type: {limiter_type}. Must be one of: file_ops, api_calls, tool_calls",
+                INVALID_PARAMS
+            )
+        return {"type": limiter_type}
+
+    elif normalized_method == "concurrency.status":
+        return {}  # No params needed for status
+
+    # MCP bridge methods (bd-81)
+    elif normalized_method == "mcp.register":
+        if "name" not in params:
+            raise WireMethodError("mcp.register requires 'name' param", INVALID_PARAMS)
+        if "command" not in params:
+            raise WireMethodError("mcp.register requires 'command' param", INVALID_PARAMS)
+        if "args" not in params:
+            raise WireMethodError("mcp.register requires 'args' param", INVALID_PARAMS)
+        result: dict[str, Any] = {
+            "name": str(params["name"]),
+            "command": str(params["command"]),
+            "args": list(params["args"]),
+        }
+        if "env" in params:
+            result["env"] = dict(params["env"])
+        if "opts" in params:
+            result["opts"] = dict(params["opts"])
+        return result
+
+    elif normalized_method == "mcp.unregister":
+        if "server_id" not in params:
+            raise WireMethodError("mcp.unregister requires 'server_id' param", INVALID_PARAMS)
+        return {"server_id": str(params["server_id"])}
+
+    elif normalized_method == "mcp.list":
+        return {}  # No params needed for list
+
+    elif normalized_method == "mcp.status":
+        if "server_id" not in params:
+            raise WireMethodError("mcp.status requires 'server_id' param", INVALID_PARAMS)
+        return {"server_id": str(params["server_id"])}
+
+    elif normalized_method == "mcp.call_tool":
+        if "server_id" not in params:
+            raise WireMethodError("mcp.call_tool requires 'server_id' param", INVALID_PARAMS)
+        if "method" not in params:
+            raise WireMethodError("mcp.call_tool requires 'method' param", INVALID_PARAMS)
+        result = {
+            "server_id": str(params["server_id"]),
+            "method": str(params["method"]),
+            "params": dict(params.get("params", {})),
+        }
+        if "timeout" in params:
+            result["timeout"] = float(params["timeout"])
+        return result
+
+    elif normalized_method == "mcp.health_check":
+        return {}  # No params needed for health_check
+
+    # EventBus bridge methods (bd-79)
+    elif normalized_method == "eventbus.event":
+        if "topic" not in params:
+            raise WireMethodError("eventbus.event requires 'topic' param", INVALID_PARAMS)
+        result: dict[str, Any] = {
+            "topic": str(params["topic"]),
+            "event_type": str(params.get("event_type", "")),
+            "payload": dict(params.get("payload", {})),
+        }
+        if "timestamp" in params:
+            result["timestamp"] = str(params["timestamp"])
+        return result
 
     elif normalized_method in ("get_status", "ping"):
         return params

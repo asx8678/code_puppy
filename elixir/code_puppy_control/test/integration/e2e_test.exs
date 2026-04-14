@@ -442,7 +442,8 @@ defmodule CodePuppyControl.E2ETest do
       if our_result do
         {^server_id, health} = our_result
         # Could be healthy or unhealthy depending on the echo command
-        assert health in [:healthy, {:unhealthy, :any}, :degraded] or match?({:unhealthy, _}, health)
+        assert health in [:healthy, {:unhealthy, :any}, :degraded] or
+                 match?({:unhealthy, _}, health)
       end
 
       # Cleanup
