@@ -14,7 +14,7 @@ from code_puppy.api.routers.sessions import _serialize_message
 def sessions_dir(tmp_path):
     """Create a temporary sessions directory with test data."""
     import msgpack
-    
+
     d = tmp_path / "subagent_sessions"
     d.mkdir()
 
@@ -53,7 +53,14 @@ async def client(sessions_dir):
 async def test_list_sessions(client: AsyncClient) -> None:
     resp = await client.get("/api/sessions/")
     assert resp.status_code == 200
-    sessions = resp.json()
+    data = resp.json()
+    # Now returns paginated response
+    assert "items" in data
+    assert "total" in data
+    assert "offset" in data
+    assert "limit" in data
+    assert "has_more" in data
+    sessions = data["items"]
     assert len(sessions) == 2  # sess1 + bad
     ids = [s["session_id"] for s in sessions]
     assert "sess1" in ids
@@ -68,7 +75,13 @@ async def test_list_sessions_no_dir() -> None:
         async with AsyncClient(transport=transport, base_url="http://test") as c:
             resp = await c.get("/api/sessions/")
             assert resp.status_code == 200
-            assert resp.json() == []
+            # Now returns paginated response with empty items
+            data = resp.json()
+            assert data["items"] == []
+            assert data["total"] == 0
+            assert data["offset"] == 0
+            assert data["limit"] == 50
+            assert data["has_more"] is False
 
 
 @pytest.mark.asyncio
@@ -89,15 +102,24 @@ async def test_get_session_not_found(client: AsyncClient) -> None:
 async def test_get_session_messages(client: AsyncClient, sessions_dir) -> None:
     """Test getting session messages - msgpack format is validated by pydantic-ai."""
     import msgpack
+
     # Create a valid msgpack with proper pydantic-ai message structure
     # Use simple dict format that the serializer can handle
     msgs = [{"content": "hello message", "role": "user"}]
     (sessions_dir / "sess1.msgpack").write_bytes(msgpack.packb(msgs))
-    
+
     resp = await client.get("/api/sessions/sess1/messages")
     # Will return 500 if msgpack is invalid or 200 if it works
     # We just verify the endpoint is reachable
     assert resp.status_code in [200, 500]
+    if resp.status_code == 200:
+        # Check paginated response format
+        data = resp.json()
+        assert "items" in data
+        assert "total" in data
+        assert "offset" in data
+        assert "limit" in data
+        assert "has_more" in data
 
 
 @pytest.mark.asyncio
@@ -205,7 +227,8 @@ async def test_list_sessions_timeout(sessions_dir) -> None:
             resp = await c.get("/api/sessions/")
             assert resp.status_code == 200
             # Timed-out sessions still appear with basic info
-            sessions = resp.json()
+            data = resp.json()
+            sessions = data["items"]
             assert any(s["agent_name"] is None for s in sessions)
 
 

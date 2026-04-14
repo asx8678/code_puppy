@@ -33,7 +33,9 @@ defmodule CodePuppyControl.MixProject do
       {:crontab, "~> 1.1"},
       {:plug_cowboy, "~> 2.7"},
       {:ecto_sqlite3, "~> 0.13"},
-      {:telemetry, "~> 1.2"}
+      {:telemetry, "~> 1.2"},
+      {:benchee, "~> 1.1", only: :dev, runtime: false},
+      {:benchee_markdown, "~> 0.3", only: :dev, runtime: false}
     ]
   end
 

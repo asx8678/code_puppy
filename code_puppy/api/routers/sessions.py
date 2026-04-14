@@ -3,19 +3,21 @@
 import asyncio
 import json
 import logging
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from code_puppy.api.schemas import PaginatedResponse
 from code_puppy.api.security import require_api_access
 
 logger = logging.getLogger(__name__)
 
-_VALID_SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
+VALID_SESSION_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
 
 
 def _validate_session_id(session_id: str) -> str:
@@ -34,7 +36,7 @@ def _validate_session_id(session_id: str) -> str:
     Raises:
         HTTPException: 400 if session_id is invalid.
     """
-    if not _VALID_SESSION_ID_RE.match(session_id):
+    if not VALID_SESSION_ID_PATTERN.match(session_id):
         raise HTTPException(
             status_code=400,
             detail="Invalid session_id: must match ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$",
@@ -42,8 +44,24 @@ def _validate_session_id(session_id: str) -> str:
     return session_id
 
 
-# Thread pool for blocking file I/O
-_executor = ThreadPoolExecutor(max_workers=2)
+def _get_max_workers() -> int:
+    """Get max workers for session I/O, configurable via env var.
+
+    Returns:
+        Number of workers for ThreadPoolExecutor (1-32 range)
+    """
+    env_val = os.getenv("PUP_SESSION_WORKERS")
+    if env_val:
+        try:
+            return max(1, min(32, int(env_val)))
+        except ValueError:
+            pass
+    # Default: scale with CPU count, minimum 4
+    return max(4, min(16, (os.cpu_count() or 4) + 2))
+
+
+# Thread pool for blocking file I/O (configurable worker count)
+_executor = ThreadPoolExecutor(max_workers=_get_max_workers())
 
 # Timeout for file operations (seconds)
 FILE_IO_TIMEOUT = 10.0
@@ -102,6 +120,75 @@ def _load_json_sync(file_path: Path) -> dict:
         return json.load(f)
 
 
+async def _load_all_session_metadata() -> list["SessionInfo"]:
+    """Load metadata for all sessions efficiently.
+
+    Uses parallel loading with increased concurrency to handle
+    large numbers of sessions.
+
+    Returns:
+        List of SessionInfo objects for all valid sessions
+    """
+    sessions_dir = _get_sessions_dir()
+    if not sessions_dir.exists():
+        return []
+
+    # Find all .txt metadata files
+    metadata_files = list(sessions_dir.glob("*.txt"))
+
+    if not metadata_files:
+        return []
+
+    # Load in parallel with increased concurrency
+    loop = asyncio.get_running_loop()
+    with ThreadPoolExecutor(max_workers=_get_max_workers()) as executor:
+        tasks = [
+            loop.run_in_executor(executor, _load_session_metadata_sync, f)
+            for f in metadata_files
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Filter out failures and None results
+    sessions = []
+    for result in results:
+        if isinstance(result, SessionInfo):
+            sessions.append(result)
+
+    return sessions
+
+
+def _load_session_metadata_sync(txt_file: Path) -> "SessionInfo | None":
+    """Synchronous metadata load for a single session.
+
+    Args:
+        txt_file: Path to the metadata .txt file
+
+    Returns:
+        SessionInfo if valid, None if invalid or error
+    """
+    session_id = txt_file.stem
+
+    # Validate session_id to skip files with invalid names
+    if not VALID_SESSION_ID_PATTERN.match(session_id):
+        return None
+
+    try:
+        with open(txt_file, "r") as f:
+            metadata = json.load(f)
+
+        return SessionInfo(
+            session_id=session_id,
+            agent_name=metadata.get("agent_name"),
+            initial_prompt=metadata.get("initial_prompt"),
+            created_at=metadata.get("created_at"),
+            last_updated=metadata.get("last_updated"),
+            message_count=metadata.get("message_count", 0),
+        )
+    except Exception:
+        # If we can't parse metadata, still include basic session info
+        return SessionInfo(session_id=session_id)
+
+
 def _load_session_sync(file_path: Path) -> Any:
     """Synchronous session load.
 
@@ -146,54 +233,43 @@ def _load_session_sync(file_path: Path) -> Any:
 
 
 @router.get("/")
-async def list_sessions() -> list[SessionInfo]:
-    """List all available sessions.
+async def list_sessions(
+    offset: int = Query(0, ge=0, description="Number of sessions to skip"),
+    limit: int = Query(50, ge=1, le=200, description="Max sessions to return"),
+    sort_by: str = Query(
+        "last_updated", pattern="^(last_updated|created_at|session_id)$"
+    ),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
+) -> PaginatedResponse[SessionInfo]:
+    """List all sessions with pagination.
+
+    Args:
+        offset: Number of sessions to skip (0-indexed)
+        limit: Maximum number of sessions to return (1-200)
+        sort_by: Field to sort by (last_updated, created_at, session_id)
+        order: Sort order (asc or desc)
 
     Returns:
-        List of SessionInfo objects for each session found
+        PaginatedResponse containing the session list and pagination metadata
     """
-    sessions_dir = _get_sessions_dir()
-    if not sessions_dir.exists():
-        return []
+    # Load all session metadata (we need total count)
+    all_sessions = await _load_all_session_metadata()
 
-    loop = asyncio.get_running_loop()
-    txt_files = list(sessions_dir.glob("*.txt"))
+    # Sort
+    reverse = order == "desc"
+    all_sessions.sort(key=lambda s: getattr(s, sort_by, "") or "", reverse=reverse)
 
-    if not txt_files:
-        return []
+    # Paginate
+    total = len(all_sessions)
+    paginated = all_sessions[offset : offset + limit]
 
-    async def load_session_metadata(txt_file: Path) -> SessionInfo | None:
-        """Load metadata for a single session file."""
-        session_id = txt_file.stem
-        # Validate session_id to skip files with invalid names
-        try:
-            _validate_session_id(session_id)
-        except HTTPException:
-            return None  # Skip files with invalid session ID names
-        try:
-            # Run blocking I/O in thread pool with timeout
-            metadata = await asyncio.wait_for(
-                loop.run_in_executor(_executor, _load_json_sync, txt_file),
-                timeout=FILE_IO_TIMEOUT,
-            )
-            return SessionInfo(
-                session_id=session_id,
-                agent_name=metadata.get("agent_name"),
-                initial_prompt=metadata.get("initial_prompt"),
-                created_at=metadata.get("created_at"),
-                last_updated=metadata.get("last_updated"),
-                message_count=metadata.get("message_count", 0),
-            )
-        except asyncio.TimeoutError:
-            # Timed out reading file, include basic info
-            return SessionInfo(session_id=session_id)
-        except Exception:
-            # If we can't parse metadata, still include basic session info
-            return SessionInfo(session_id=session_id)
-
-    # Run all loads in parallel and filter out invalid sessions
-    results = await asyncio.gather(*[load_session_metadata(f) for f in txt_files])
-    return [s for s in results if s is not None]
+    return PaginatedResponse(
+        items=paginated,
+        total=total,
+        offset=offset,
+        limit=limit,
+        has_more=offset + len(paginated) < total,
+    )
 
 
 @router.get("/{session_id}")
@@ -237,19 +313,29 @@ async def get_session(session_id: str) -> SessionInfo:
 
 
 @router.get("/{session_id}/messages")
-async def get_session_messages(session_id: str) -> list[dict[str, Any]]:
-    """Get the full message history for a session.
+async def get_session_messages(
+    session_id: str,
+    offset: int = Query(0, ge=0, description="Number of messages to skip"),
+    limit: int = Query(100, ge=1, le=500, description="Max messages to return"),
+) -> PaginatedResponse[dict[str, Any]]:
+    """Get messages for a session with pagination.
 
     Args:
         session_id: The session identifier
+        offset: Number of messages to skip (0-indexed)
+        limit: Maximum number of messages to return (1-500)
 
     Returns:
-        List of serialized message dictionaries
+        PaginatedResponse containing the message list and pagination metadata
 
     Raises:
-        HTTPException: 404 if session messages not found, 500 on load error, 504 on timeout
+        HTTPException: 400 if session_id is invalid, 404 if session not found,
+                     504 on timeout, 500 on load error
     """
-    session_id = _validate_session_id(session_id)
+    # Validate session_id
+    if not VALID_SESSION_ID_PATTERN.match(session_id):
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
+
     sessions_dir = _get_sessions_dir()
     pkl_file = sessions_dir / f"{session_id}.pkl"
 
@@ -263,7 +349,18 @@ async def get_session_messages(session_id: str) -> list[dict[str, Any]]:
             loop.run_in_executor(_executor, _load_session_sync, pkl_file),
             timeout=FILE_IO_TIMEOUT,
         )
-        return [_serialize_message(msg) for msg in messages]
+
+        # Paginate
+        total = len(messages)
+        paginated = messages[offset : offset + limit]
+
+        return PaginatedResponse(
+            items=[_serialize_message(msg) for msg in paginated],
+            total=total,
+            offset=offset,
+            limit=limit,
+            has_more=offset + len(paginated) < total,
+        )
     except asyncio.TimeoutError:
         raise HTTPException(
             504, f"Timeout loading session '{session_id}' messages"

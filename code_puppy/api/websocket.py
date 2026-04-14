@@ -125,9 +125,25 @@ def setup_websocket(app: FastAPI) -> None:
             # Note: We don't clear session history here - it's needed for
             # reconnection scenarios. TTL cleanup handles abandoned sessions.
 
+    async def _queue_output_with_backpressure(
+        output_queue: asyncio.Queue,
+        data: bytes,
+        timeout: float = 1.0,
+    ) -> bool:
+        """Queue output with backpressure - returns False if queue is full."""
+        try:
+            await asyncio.wait_for(output_queue.put(data), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"PTY output queue full (size={output_queue.qsize()}), "
+                f"dropping {len(data)} bytes"
+            )
+            return False
+
     @app.websocket("/ws/terminal")
     async def websocket_terminal(websocket: WebSocket) -> None:
-        """Interactive terminal WebSocket endpoint."""
+        """Interactive terminal WebSocket endpoint with binary frame support."""
         if await _reject_untrusted_origin(websocket):
             return
 
@@ -143,37 +159,123 @@ def setup_websocket(app: FastAPI) -> None:
         # Get the current event loop for thread-safe scheduling
         loop = asyncio.get_running_loop()
 
-        # Queue to receive PTY output in a thread-safe way with backpressure
-        output_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=1000)
+        # Check for binary mode support via query param
+        use_binary = websocket.query_params.get("binary", "true").lower() == "true"
+        if use_binary:
+            logger.debug("Terminal WebSocket using binary frame mode")
+        else:
+            logger.debug("Terminal WebSocket using legacy JSON/base64 mode")
 
-        # Output callback - called from thread pool, puts data in queue
-        def on_output(data: bytes) -> None:
-            try:
-                loop.call_soon_threadsafe(output_queue.put_nowait, data)
-            except asyncio.QueueFull:
-                logger.warning("Terminal output queue full, dropping data")
-            except Exception as e:
-                logger.error(f"on_output error: {e}")
+        # Queue to receive PTY output with larger capacity (was 1000, now 5000)
+        # Increased to accommodate coalescing delays
+        output_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=5000)
 
-        async def output_sender() -> None:
-            """Coroutine that sends queued output to WebSocket."""
+        # Create output callback with proper backpressure handling
+        def create_output_callback(
+            output_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop
+        ):
+            """Create a callback that safely queues output from the PTY thread."""
+
+            def on_output(data: bytes):
+                try:
+                    # Use run_coroutine_threadsafe for proper async handling from sync context
+                    future = asyncio.run_coroutine_threadsafe(
+                        _queue_output_with_backpressure(output_queue, data),
+                        loop,
+                    )
+                    # Don't block waiting for result - fire and forget with logging
+                    future.add_done_callback(
+                        lambda f: f.exception()
+                        and logger.warning(f"Queue error: {f.exception()}")
+                    )
+                except RuntimeError:
+                    # Loop closed - session is shutting down, ignore
+                    pass
+                except Exception as e:
+                    logger.debug(f"Output callback error: {e}")
+
+            return on_output
+
+        async def output_sender_binary() -> None:
+            """Send PTY output to WebSocket client using binary frames with coalescing."""
             try:
                 while True:
-                    data = await output_queue.get()
-                    await websocket.send_json(
-                        {
-                            "type": "output",
-                            "data": base64.b64encode(data).decode("ascii"),
-                        }
-                    )
+                    # Get first chunk
+                    first = await output_queue.get()
+
+                    # Coalesce small chunks within a short window (reduces frame count)
+                    batch = bytearray(first)
+                    coalesce_deadline = (
+                        asyncio.get_event_loop().time() + 0.005
+                    )  # 5ms window
+
+                    # Keep coalescing until we hit size limit or deadline
+                    while len(batch) < 65536:  # Max 64KB per frame
+                        try:
+                            remaining = coalesce_deadline - asyncio.get_event_loop().time()
+                            if remaining <= 0:
+                                break
+                            more = await asyncio.wait_for(
+                                output_queue.get(),
+                                timeout=remaining,
+                            )
+                            batch.extend(more)
+                        except asyncio.TimeoutError:
+                            break
+
+                    # Send as binary frame (no base64 encoding overhead)
+                    await websocket.send_bytes(bytes(batch))
+            except WebSocketDisconnect:
+                logger.debug("Output sender: client disconnected")
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                logger.error(f"output_sender error: {e}")
+                logger.warning(f"Binary output sender error: {e}")
+
+        async def output_sender_json() -> None:
+            """Send PTY output to WebSocket client using legacy JSON/base64 encoding."""
+            try:
+                while True:
+                    # Get first chunk
+                    first = await output_queue.get()
+
+                    # Simple batching for JSON mode (smaller coalescing window)
+                    batch = bytearray(first)
+                    deadline = asyncio.get_event_loop().time() + 0.002  # 2ms window
+
+                    while len(batch) < 32768:  # Smaller limit for JSON mode
+                        try:
+                            remaining = deadline - asyncio.get_event_loop().time()
+                            if remaining <= 0:
+                                break
+                            more = await asyncio.wait_for(
+                                output_queue.get(),
+                                timeout=remaining,
+                            )
+                            batch.extend(more)
+                        except asyncio.TimeoutError:
+                            break
+
+                    # Send as JSON with base64 encoding (33% overhead vs binary)
+                    await websocket.send_json(
+                        {
+                            "type": "output",
+                            "data": base64.b64encode(bytes(batch)).decode("ascii"),
+                        }
+                    )
+            except WebSocketDisconnect:
+                logger.debug("Output sender: client disconnected")
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.warning(f"JSON output sender error: {e}")
 
         sender_task = None
 
         try:
+            # Create output callback
+            on_output = create_output_callback(output_queue, loop)
+
             # Create PTY session
             session = await manager.create_session(
                 session_id=session_id, on_output=on_output
@@ -186,8 +288,11 @@ def setup_websocket(app: FastAPI) -> None:
                 {"type": "session_started", "session_id": session_id}
             )
 
-            # Start output sender task
-            sender_task = asyncio.create_task(output_sender())
+            # Start appropriate output sender based on negotiated mode
+            if use_binary:
+                sender_task = asyncio.create_task(output_sender_binary())
+            else:
+                sender_task = asyncio.create_task(output_sender_json())
 
             # Handle incoming messages
             while True:

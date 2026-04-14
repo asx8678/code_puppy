@@ -129,7 +129,7 @@
         // {"type":"session_started","session_id":"..."}. The query-param
         // "session" is intentionally ignored — the server is authoritative.
         const CONFIG = {
-            wsUrl: `ws://${window.location.host}/ws/terminal`,
+            wsUrl: `ws://${window.location.host}/ws/terminal?binary=true`,
             sessionId: 'connecting…',
             theme: {
                 background: '#1e1e1e',
@@ -162,6 +162,10 @@
         let socket = null;
         let reconnectAttempts = 0;
         const MAX_RECONNECT_ATTEMPTS = 5;
+        
+        // Debounce timers
+        let resizeTimeout = null;
+        let windowResizeTimeout = null;
         
         // DOM Elements
         const statusIndicator = document.getElementById('status-indicator');
@@ -210,16 +214,19 @@
                 }
             });
             
-            // Handle resize
+            // Handle resize with debouncing (100ms)
             terminal.onResize(({ cols, rows }) => {
-                updateTerminalSize();
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({
-                        type: 'resize',
-                        cols: cols,
-                        rows: rows
-                    }));
-                }
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    updateTerminalSize();
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({
+                            type: 'resize',
+                            cols: cols,
+                            rows: rows
+                        }));
+                    }
+                }, 100);  // 100ms debounce
             });
             
             // Welcome message
@@ -275,6 +282,9 @@
             const url = CONFIG.wsUrl;
             socket = new WebSocket(url);
             
+            // Enable binary frame handling
+            socket.binaryType = 'arraybuffer';
+            
             socket.onopen = () => {
                 setStatus('connected');
                 reconnectAttempts = 0;
@@ -291,20 +301,29 @@
             
             socket.onmessage = (event) => {
                 try {
-                    const message = JSON.parse(event.data);
-                    
-                    switch (message.type) {
-                        case 'output':
-                            terminal.write(new TextDecoder().decode(Uint8Array.from(atob(message.data), c => c.charCodeAt(0))));
-                            break;
-                        case 'error':
-                            terminal.writeln(`\x1b[1;31mError: ${message.message}\x1b[0m`);
-                            break;
-                        case 'session_started':
-                            CONFIG.sessionId = message.session_id;
-                            if (sessionIdEl) sessionIdEl.textContent = message.session_id;
-                            terminal.writeln(`\x1b[90mSession started: ${message.session_id}\x1b[0m`);
-                            break;
+                    if (event.data instanceof ArrayBuffer) {
+                        // Binary frame - write directly to terminal
+                        // Much faster than JSON+base64 (no 33% encoding overhead)
+                        const text = new TextDecoder().decode(event.data);
+                        terminal.write(text);
+                    } else {
+                        // JSON frame (legacy mode or control messages)
+                        const message = JSON.parse(event.data);
+                        
+                        switch (message.type) {
+                            case 'output':
+                                // Legacy base64-encoded output
+                                terminal.write(new TextDecoder().decode(Uint8Array.from(atob(message.data), c => c.charCodeAt(0))));
+                                break;
+                            case 'error':
+                                terminal.writeln(`\x1b[1;31mError: ${message.message}\x1b[0m`);
+                                break;
+                            case 'session_started':
+                                CONFIG.sessionId = message.session_id;
+                                if (sessionIdEl) sessionIdEl.textContent = message.session_id;
+                                terminal.writeln(`\x1b[90mSession started: ${message.session_id}\x1b[0m`);
+                                break;
+                        }
                     }
                 } catch (e) {
                     // Plain text output
@@ -346,11 +365,14 @@
             terminal.clear();
         });
         
-        // Handle window resize
+        // Handle window resize with debouncing (100ms)
         window.addEventListener('resize', () => {
-            if (fitAddon) {
-                fitAddon.fit();
-            }
+            clearTimeout(windowResizeTimeout);
+            windowResizeTimeout = setTimeout(() => {
+                if (fitAddon) {
+                    fitAddon.fit();
+                }
+            }, 100);  // 100ms debounce
         });
         
         // Handle page unload
