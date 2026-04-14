@@ -1125,7 +1125,7 @@
       "id": "bd-65",
       "title": "Fast Puppy Phase 5 - Delete hybrid leftovers (zig_bridge, /accel)",
       "description": "Final cleanup phase for the Fast Puppy Elixir rewrite.\n\nRemaining work:\n1. Delete code_puppy/zig_bridge/ directory - 350+ lines of dead CFFI code, nothing imports it\n2. Remove code_puppy/plugins/accel_status/ plugin - the /accel command is deprecated in favor of /fast_puppy status\n3. Update 2 stale Zig comments in code_puppy/process_runner_protocol.py\n\nExit criteria:\n- No zig_bridge directory\n- No /accel command\n- No Zig references in codebase\n- One coherent backend story",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -1135,7 +1135,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T17:37:25.011381",
-      "updated_at": "2026-04-14T17:37:27.372037",
+      "updated_at": "2026-04-14T17:38:26.033440",
       "comments": []
     }
   },
