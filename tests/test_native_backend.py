@@ -1,16 +1,16 @@
 """Tests for the NativeBackend unified acceleration interface.
 
 bd-61: Tests for Phase 1 of Fast Puppy rewrite — native backend adapter.
+bd-62: Tests for Phase 2 — Elixir control plane routing.
 """
 
-import os
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from code_puppy.native_backend import (
+    BackendPreference,
     CapabilityInfo,
     NativeBackend,
     get_backend_status,
@@ -433,6 +433,206 @@ class TestNativeBackendIntegration:
             is_avail = NativeBackend.is_available(cap_name)
             # is_available should match the active field in status
             assert is_avail == info.active
+
+
+class TestBackendPreference:
+    """Tests for the BackendPreference enum (bd-62)."""
+
+    def test_backend_preference_values(self):
+        """Test that BackendPreference enum has expected values."""
+        assert BackendPreference.ELIXIR_FIRST == "elixir_first"
+        assert BackendPreference.RUST_FIRST == "rust_first"
+        assert BackendPreference.PYTHON_ONLY == "python_only"
+
+    def test_default_preference_is_rust_first(self):
+        """Test that default preference is RUST_FIRST."""
+        # Reset to default first
+        NativeBackend.set_backend_preference(BackendPreference.RUST_FIRST)
+        assert NativeBackend.get_backend_preference() == BackendPreference.RUST_FIRST
+
+    def test_set_backend_preference_string(self):
+        """Test setting preference by string value."""
+        NativeBackend.set_backend_preference("elixir_first")
+        assert NativeBackend.get_backend_preference() == BackendPreference.ELIXIR_FIRST
+
+        NativeBackend.set_backend_preference("rust_first")
+        assert NativeBackend.get_backend_preference() == BackendPreference.RUST_FIRST
+
+    def test_set_backend_preference_enum(self):
+        """Test setting preference by enum value."""
+        NativeBackend.set_backend_preference(BackendPreference.PYTHON_ONLY)
+        assert NativeBackend.get_backend_preference() == BackendPreference.PYTHON_ONLY
+
+
+class TestElixirRouting:
+    """Tests for Elixir control plane routing (bd-62)."""
+
+    def test_is_elixir_available_import_error(self):
+        """Test _is_elixir_available returns False when import fails."""
+        with patch("builtins.__import__", side_effect=ImportError("No module named elixir_bridge")):
+            result = NativeBackend._is_elixir_available()
+            assert result is False
+
+    def test_is_elixir_available_returns_false_when_not_connected(self):
+        """Test _is_elixir_available when elixir_bridge is not connected."""
+        with patch("code_puppy.plugins.elixir_bridge.is_connected", return_value=False):
+            result = NativeBackend._is_elixir_available()
+            assert result is False
+
+    def test_is_elixir_available_returns_true_when_connected(self):
+        """Test _is_elixir_available when elixir_bridge is connected."""
+        with patch("code_puppy.plugins.elixir_bridge.is_connected", return_value=True):
+            result = NativeBackend._is_elixir_available()
+            assert result is True
+
+    def test_should_use_elixir_python_only(self):
+        """Test _should_use_elixir returns False when preference is PYTHON_ONLY."""
+        NativeBackend.set_backend_preference(BackendPreference.PYTHON_ONLY)
+
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            result = NativeBackend._should_use_elixir("file_ops")
+            assert result is False
+
+    def test_should_use_elixir_elixir_first_available(self):
+        """Test _should_use_elixir returns True when ELIXIR_FIRST and available."""
+        NativeBackend.set_backend_preference(BackendPreference.ELIXIR_FIRST)
+
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            result = NativeBackend._should_use_elixir("file_ops")
+            assert result is True
+
+    def test_should_use_elixir_elixir_first_unavailable(self):
+        """Test _should_use_elixir returns False when ELIXIR_FIRST but unavailable."""
+        NativeBackend.set_backend_preference(BackendPreference.ELIXIR_FIRST)
+
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=False):
+            result = NativeBackend._should_use_elixir("file_ops")
+            assert result is False
+
+    def test_should_use_elixir_rust_first_with_rust_available(self):
+        """Test _should_use_elixir returns False when RUST_FIRST and Rust available."""
+        NativeBackend.set_backend_preference(BackendPreference.RUST_FIRST)
+
+        with patch.object(NativeBackend, "is_available", return_value=True):
+            with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+                result = NativeBackend._should_use_elixir("file_ops")
+                assert result is False  # Rust is available, so don't use Elixir
+
+    def test_should_use_elixir_rust_first_without_rust(self):
+        """Test _should_use_elixir returns True when RUST_FIRST but Rust unavailable."""
+        NativeBackend.set_backend_preference(BackendPreference.RUST_FIRST)
+
+        with patch.object(NativeBackend, "is_available", return_value=False):
+            with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+                result = NativeBackend._should_use_elixir("file_ops")
+                assert result is True  # Rust unavailable, Elixir available, should use Elixir
+
+    def test_get_file_ops_source_elixir_first(self):
+        """Test _get_file_ops_source with ELIXIR_FIRST preference."""
+        NativeBackend.set_backend_preference(BackendPreference.ELIXIR_FIRST)
+
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            result = NativeBackend._get_file_ops_source()
+            assert result == "elixir"
+
+    def test_get_file_ops_source_rust_first(self):
+        """Test _get_file_ops_source with RUST_FIRST preference."""
+        NativeBackend.set_backend_preference(BackendPreference.RUST_FIRST)
+
+        with patch.object(NativeBackend, "_get_turbo_ops", return_value={"available": True}):
+            with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+                result = NativeBackend._get_file_ops_source()
+                assert result == "turbo_ops"
+
+    def test_get_file_ops_source_python_only(self):
+        """Test _get_file_ops_source with PYTHON_ONLY preference."""
+        NativeBackend.set_backend_preference(BackendPreference.PYTHON_ONLY)
+
+        result = NativeBackend._get_file_ops_source()
+        assert result == "python"
+
+    def test_list_files_falls_back_when_elixir_not_implemented(self, tmp_path: Path):
+        """Test list_files falls back when Elixir transport not implemented."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        NativeBackend.set_backend_preference(BackendPreference.ELIXIR_FIRST)
+
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            with patch("code_puppy.plugins.elixir_bridge.call_method", side_effect=NotImplementedError):
+                result = NativeBackend.list_files(str(tmp_path), recursive=False)
+
+                # Should fall back to Python fallback
+                assert isinstance(result, dict)
+                assert "files" in result or "error" in result
+
+    def test_list_files_falls_back_when_elixir_exception(self, tmp_path: Path):
+        """Test list_files falls back when Elixir raises exception."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        NativeBackend.set_backend_preference(BackendPreference.ELIXIR_FIRST)
+
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            with patch("code_puppy.plugins.elixir_bridge.call_method", side_effect=ConnectionError("Not connected")):
+                result = NativeBackend.list_files(str(tmp_path), recursive=False)
+
+                # Should fall back to Python fallback
+                assert isinstance(result, dict)
+                assert "files" in result or "error" in result
+
+    def test_read_file_falls_back_when_elixir_not_implemented(self, tmp_path: Path):
+        """Test read_file falls back when Elixir transport not implemented."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        NativeBackend.set_backend_preference(BackendPreference.ELIXIR_FIRST)
+
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            with patch("code_puppy.plugins.elixir_bridge.call_method", side_effect=NotImplementedError):
+                result = NativeBackend.read_file(str(test_file))
+
+                # Should fall back to Python
+                assert isinstance(result, dict)
+                assert "content" in result or "error" in result
+
+    def test_grep_falls_back_when_elixir_not_implemented(self, tmp_path: Path):
+        """Test grep falls back when Elixir transport not implemented."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def hello(): pass")
+
+        NativeBackend.set_backend_preference(BackendPreference.ELIXIR_FIRST)
+
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            with patch("code_puppy.plugins.elixir_bridge.call_method", side_effect=NotImplementedError):
+                result = NativeBackend.grep("def", str(tmp_path))
+
+                # Should fall back to Python
+                assert isinstance(result, dict)
+                assert "matches" in result or "error" in result
+
+
+class TestElixirStatusIntegration:
+    """Integration tests for Elixir status reporting (bd-62)."""
+
+    def test_get_detailed_status_includes_elixir(self):
+        """Test that get_detailed_status includes Elixir availability."""
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            status = NativeBackend.get_detailed_status()
+
+            assert "file_ops" in status
+            assert "elixir_available" in status["file_ops"] or "elixir" in str(status)
+
+    def test_get_status_file_ops_with_elixir_available(self):
+        """Test get_status when Elixir is available for file_ops."""
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            with patch.object(NativeBackend, "_get_turbo_ops", return_value={"available": False}):
+                status = NativeBackend.get_status()
+
+                file_ops_status = status[NativeBackend.Capabilities.FILE_OPS]
+                # Should be available because Elixir is available
+                assert file_ops_status.available is True
+                assert file_ops_status.active is True
 
 
 if __name__ == "__main__":

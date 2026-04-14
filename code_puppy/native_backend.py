@@ -10,11 +10,13 @@ All methods gracefully fall back to Python implementations when native modules
 are unavailable, ensuring the system works regardless of Rust build status.
 
 bd-61: Phase 1 of Fast Puppy rewrite — native backend adapter.
+bd-62: Phase 2 — Add Elixir control plane routing for file operations.
 """
 
 import asyncio
 import logging
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable
 
 from code_puppy.config import get_acceleration_config
@@ -27,10 +29,21 @@ class CapabilityInfo:
     """Information about a native capability."""
 
     name: str
-    configured: str  # "rust" or "python"
+    configured: str  # "rust", "python", or "elixir"
     available: bool
     active: bool
     status: str  # "active", "disabled", "unavailable"
+
+
+class BackendPreference(str, Enum):
+    """Backend preference for file operations.
+
+    bd-62: Controls the priority order for file operation backends.
+    """
+
+    ELIXIR_FIRST = "elixir_first"  # Try Elixir, fall back to Rust/Python
+    RUST_FIRST = "rust_first"  # Try Rust, fall back to Elixir/Python (default)
+    PYTHON_ONLY = "python_only"  # Only use Python fallbacks
 
 
 class NativeBackend:
@@ -68,6 +81,101 @@ class NativeBackend:
     # Internal cache for turbo_ops imports (lazy loaded)
     _turbo_ops_imports: dict[str, Any] | None = None
     _turbo_parse_imports: dict[str, Any] | None = None
+
+    # bd-62: Backend preference for routing decisions
+    _backend_preference: BackendPreference = BackendPreference.RUST_FIRST
+
+    # -------------------------------------------------------------------------
+    # Elixir Bridge Integration (bd-62)
+    # -------------------------------------------------------------------------
+
+    @classmethod
+    def _is_elixir_available(cls) -> bool:
+        """Check if Elixir control plane is connected and available.
+
+        Returns:
+            True if Elixir control plane can be used for file operations.
+        """
+        try:
+            from code_puppy.plugins.elixir_bridge import is_connected
+
+            return is_connected()
+        except ImportError:
+            return False
+
+    @classmethod
+    def _call_elixir(cls, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Make JSON-RPC call to Elixir control plane.
+
+        Args:
+            method: JSON-RPC method name (e.g., "file_list")
+            params: Method parameters dict
+
+        Returns:
+            Response dict from Elixir
+
+        Raises:
+            ConnectionError: If Elixir is not connected
+            Exception: If the call fails
+        """
+        from code_puppy.plugins.elixir_bridge import call_method
+
+        return call_method(method, params)
+
+    @classmethod
+    def set_backend_preference(cls, preference: str | BackendPreference) -> None:
+        """Set the backend preference for file operations.
+
+        bd-62: Controls the priority order for routing file operations.
+
+        Args:
+            preference: One of "elixir_first", "rust_first", or "python_only"
+
+        Example:
+            NativeBackend.set_backend_preference("elixir_first")
+            # Now Elixir will be tried first, with Rust/Python fallback
+        """
+        if isinstance(preference, str):
+            cls._backend_preference = BackendPreference(preference)
+        else:
+            cls._backend_preference = preference
+
+    @classmethod
+    def get_backend_preference(cls) -> BackendPreference:
+        """Get the current backend preference.
+
+        Returns:
+            Current BackendPreference value.
+        """
+        return cls._backend_preference
+
+    @classmethod
+    def _should_use_elixir(cls, capability: str) -> bool:
+        """Determine if Elixir should be used for a capability.
+
+        bd-62: Routing logic based on backend preference and availability.
+
+        Args:
+            capability: Capability name (e.g., "file_ops")
+
+        Returns:
+            True if Elixir should be tried for this capability.
+        """
+        if cls._backend_preference == BackendPreference.PYTHON_ONLY:
+            return False
+
+        if cls._backend_preference == BackendPreference.ELIXIR_FIRST:
+            return cls._is_elixir_available()
+
+        # RUST_FIRST: only use Elixir if Rust is unavailable
+        if not cls.is_available(capability):
+            return cls._is_elixir_available()
+
+        return False
+
+    # -------------------------------------------------------------------------
+    # Native Module Loading
+    # -------------------------------------------------------------------------
 
     @classmethod
     def _get_turbo_ops(cls) -> dict[str, Any]:
@@ -140,6 +248,13 @@ class NativeBackend:
         turbo_ops = cls._get_turbo_ops()
         turbo_parse = cls._get_turbo_parse()
 
+        # bd-62: Check Elixir availability
+        elixir_available = cls._is_elixir_available()
+
+        # Determine file_ops source based on availability and preference
+        file_ops_available = turbo_ops["available"] or elixir_available
+        file_ops_active = turbo_ops["available"] or elixir_available
+
         return {
             cls.Capabilities.MESSAGE_CORE: CapabilityInfo(
                 name=cls.Capabilities.MESSAGE_CORE,
@@ -151,18 +266,18 @@ class NativeBackend:
             cls.Capabilities.FILE_OPS: CapabilityInfo(
                 name=cls.Capabilities.FILE_OPS,
                 configured=config.get("turbo_ops", "python"),
-                available=turbo_ops["available"],
-                active=turbo_ops["available"],
-                status="active" if turbo_ops["available"] else "unavailable",
+                available=file_ops_available,
+                active=file_ops_active,
+                status="active" if file_ops_active else "unavailable",
             ),
             cls.Capabilities.REPO_INDEX: CapabilityInfo(
                 name=cls.Capabilities.REPO_INDEX,
                 configured=config.get("turbo_ops", "python"),
-                available=turbo_ops["available"] and turbo_ops["index_directory"] is not None,
-                active=turbo_ops["available"] and turbo_ops["index_directory"] is not None,
+                available=turbo_ops["available"] and turbo_ops.get("index_directory") is not None,
+                active=turbo_ops["available"] and turbo_ops.get("index_directory") is not None,
                 status=(
                     "active"
-                    if turbo_ops["available"] and turbo_ops["index_directory"] is not None
+                    if turbo_ops["available"] and turbo_ops.get("index_directory") is not None
                     else "unavailable"
                 ),
             ),
@@ -170,10 +285,75 @@ class NativeBackend:
                 name=cls.Capabilities.PARSE,
                 configured=config.get("turbo_parse", "python"),
                 available=TURBO_PARSE_AVAILABLE,
-                active=turbo_parse["available"] and is_turbo_parse_enabled(),
-                status="active" if (turbo_parse["available"] and is_turbo_parse_enabled()) else "disabled",
+                active=turbo_parse.get("available", False) and is_turbo_parse_enabled(),
+                status="active" if (turbo_parse.get("available", False) and is_turbo_parse_enabled()) else "disabled",
             ),
         }
+
+    @classmethod
+    def get_detailed_status(cls) -> dict[str, Any]:
+        """Return detailed status including all backend sources.
+
+        bd-62: Extended status with Elixir and backend preference info.
+
+        Returns:
+            Dict with detailed capability status and backend info.
+        """
+        turbo_ops = cls._get_turbo_ops()
+
+        return {
+            "message_core": {
+                "available": True,  # Python implementation always available
+                "rust_available": False,  # Will be set by _core_bridge
+                "source": "rust" if False else "python",  # TODO: check _core_bridge
+            },
+            "file_ops": {
+                "available": turbo_ops["available"] or cls._is_elixir_available(),
+                "rust_available": turbo_ops["available"],
+                "elixir_available": cls._is_elixir_available(),
+                "source": cls._get_file_ops_source(),
+                "backend_preference": cls._backend_preference.value,
+            },
+            "repo_index": {
+                "available": turbo_ops["available"] and turbo_ops["index_directory"] is not None,
+                "rust_available": turbo_ops["available"] and turbo_ops["index_directory"] is not None,
+                "source": "turbo_ops" if (turbo_ops["available"] and turbo_ops["index_directory"]) else "python",
+            },
+            "parse": {
+                "available": False,  # Will be set by turbo_parse_bridge
+                "rust_available": False,  # TODO: check turbo_parse_bridge
+                "source": "turbo_parse" if False else "python",
+            },
+        }
+
+    @classmethod
+    def _get_file_ops_source(cls) -> str:
+        """Determine the effective file_ops source based on routing logic.
+
+        bd-62: Returns the actual source that will be used for file operations.
+
+        Returns:
+            One of "turbo_ops", "elixir", or "python".
+        """
+        turbo_ops = cls._get_turbo_ops()
+
+        # Check routing logic
+        if cls._backend_preference == BackendPreference.ELIXIR_FIRST:
+            if cls._is_elixir_available():
+                return "elixir"
+            if turbo_ops["available"]:
+                return "turbo_ops"
+            return "python"
+
+        if cls._backend_preference == BackendPreference.RUST_FIRST:
+            if turbo_ops["available"]:
+                return "turbo_ops"
+            if cls._is_elixir_available():
+                return "elixir"
+            return "python"
+
+        # PYTHON_ONLY
+        return "python"
 
     @classmethod
     def is_available(cls, capability: str) -> bool:
@@ -256,6 +436,8 @@ class NativeBackend:
     ) -> dict[str, Any]:
         """List files with fallback to Python.
 
+        bd-62: Routes through Elixir control plane when available and preferred.
+
         Args:
             directory: Directory to list.
             recursive: Whether to list recursively.
@@ -265,6 +447,30 @@ class NativeBackend:
             Dict with "files" key containing list of file paths,
             or "error" key if listing failed.
         """
+        # bd-62: Try Elixir first if preferred and available
+        if _prefer_native and cls._should_use_elixir("file_ops"):
+            try:
+                result = cls._call_elixir("file_list", {
+                    "directory": directory,
+                    "recursive": recursive,
+                })
+                # Normalize Elixir response format
+                if result.get("success", True):
+                    return {
+                        "files": [f.get("path", f) if isinstance(f, dict) else f for f in result.get("files", [])],
+                        "count": result.get("file_count", len(result.get("files", []))),
+                        "total_size": result.get("total_size", 0),
+                        "source": "elixir",
+                    }
+                else:
+                    logger.debug(f"Elixir file_list returned error: {result.get('error')}")
+            except NotImplementedError:
+                # Elixir transport not yet implemented, fall through
+                logger.debug("Elixir transport not implemented, falling back")
+            except Exception as e:
+                logger.debug(f"Elixir file_list failed, falling back: {e}")
+
+        # Try Rust turbo_ops
         turbo_ops = cls._get_turbo_ops()
         native_func = turbo_ops["list_files"] if (_prefer_native and turbo_ops["available"]) else None
 
@@ -319,6 +525,8 @@ class NativeBackend:
     ) -> dict[str, Any]:
         """Search files with fallback to Python.
 
+        bd-62: Routes through Elixir control plane when available and preferred.
+
         Args:
             pattern: Search pattern (regex supported).
             directory: Directory to search in.
@@ -328,6 +536,30 @@ class NativeBackend:
             Dict with "matches" key containing list of match dicts,
             or "error" key if search failed.
         """
+        # bd-62: Try Elixir first if preferred and available
+        if _prefer_native and cls._should_use_elixir("file_ops"):
+            try:
+                result = cls._call_elixir("grep_search", {
+                    "search_string": pattern,
+                    "directory": directory,
+                })
+                # Normalize Elixir response format
+                if result.get("success", True):
+                    matches = result.get("matches", [])
+                    return {
+                        "matches": matches,
+                        "total_matches": len(matches),
+                        "files_searched": result.get("files_searched", 0),
+                        "source": "elixir",
+                    }
+                else:
+                    logger.debug(f"Elixir grep_search returned error: {result.get('error')}")
+            except NotImplementedError:
+                logger.debug("Elixir transport not implemented, falling back")
+            except Exception as e:
+                logger.debug(f"Elixir grep_search failed, falling back: {e}")
+
+        # Try Rust turbo_ops
         turbo_ops = cls._get_turbo_ops()
         native_func = turbo_ops["grep"] if (_prefer_native and turbo_ops["available"]) else None
 
@@ -361,7 +593,7 @@ class NativeBackend:
 
         if native_func:
             try:
-                result = native_func(pat, dir_path)
+                result = native_func(pattern, directory)
                 if isinstance(result, dict):
                     return {**result, "source": "turbo_ops"}
                 return {"matches": result, "total_matches": len(result) if isinstance(result, list) else 0, "source": "turbo_ops"}
@@ -381,6 +613,8 @@ class NativeBackend:
     ) -> dict[str, Any]:
         """Read file with fallback to Python.
 
+        bd-62: Routes through Elixir control plane when available and preferred.
+
         Args:
             path: Path to file.
             start_line: Optional 1-based starting line number.
@@ -393,6 +627,33 @@ class NativeBackend:
         """
         import os
 
+        # bd-62: Try Elixir first if preferred and available
+        if _prefer_native and cls._should_use_elixir("file_ops"):
+            try:
+                params: dict[str, Any] = {"path": path}
+                if start_line is not None:
+                    params["start_line"] = start_line
+                if num_lines is not None:
+                    params["num_lines"] = num_lines
+
+                result = cls._call_elixir("file_read", params)
+                # Normalize Elixir response format
+                if result.get("success", True):
+                    content = result.get("content", "")
+                    return {
+                        "content": content,
+                        "num_tokens": len(content) // 4,  # Rough estimate
+                        "total_lines": result.get("total_lines", 0),
+                        "source": "elixir",
+                    }
+                else:
+                    logger.debug(f"Elixir file_read returned error: {result.get('error')}")
+            except NotImplementedError:
+                logger.debug("Elixir transport not implemented, falling back")
+            except Exception as e:
+                logger.debug(f"Elixir file_read failed, falling back: {e}")
+
+        # Try Rust turbo_ops
         turbo_ops = cls._get_turbo_ops()
         native_func = turbo_ops["read_file"] if (_prefer_native and turbo_ops["available"]) else None
 
@@ -448,6 +709,8 @@ class NativeBackend:
     ) -> dict[str, Any]:
         """Batch read files with fallback to Python.
 
+        bd-62: Routes through Elixir control plane when available and preferred.
+
         Args:
             paths: List of file paths to read.
             start_line: Optional 1-based starting line number (applied to all files).
@@ -458,6 +721,33 @@ class NativeBackend:
             Dict with "files" key containing list of file result dicts,
             each with "file_path", "content", "num_tokens", "error", "success" keys.
         """
+        # bd-62: Try Elixir batch read if preferred and available
+        if _prefer_native and cls._should_use_elixir("file_ops"):
+            try:
+                params: dict[str, Any] = {"paths": paths}
+                if start_line is not None:
+                    params["start_line"] = start_line
+                if num_lines is not None:
+                    params["num_lines"] = num_lines
+
+                result = cls._call_elixir("file_read_batch", params)
+                # Normalize Elixir response format
+                if result.get("success", True):
+                    files = result.get("files", [])
+                    return {
+                        "files": files,
+                        "total_files": len(paths),
+                        "successful_reads": sum(1 for f in files if f.get("success", False)),
+                        "source": "elixir",
+                    }
+                else:
+                    logger.debug(f"Elixir file_read_batch returned error: {result.get('error')}")
+            except NotImplementedError:
+                logger.debug("Elixir transport not implemented, falling back to sequential")
+            except Exception as e:
+                logger.debug(f"Elixir file_read_batch failed, falling back: {e}")
+
+        # Fall back to sequential reads (Rust or Python per file)
         results = []
         for path in paths:
             result = cls.read_file(path, start_line, num_lines, _prefer_native=_prefer_native)
@@ -557,7 +847,6 @@ class NativeBackend:
             from pathlib import Path
 
             from code_puppy.plugins.repo_compass.indexer import (
-                IGNORED_DIRS,
                 build_structure_map as python_build_structure_map,
             )
 
@@ -727,6 +1016,7 @@ __all__ = [
     # Main class
     "NativeBackend",
     "CapabilityInfo",
+    "BackendPreference",
     # Status functions
     "get_backend_status",
     "is_capability_available",
