@@ -963,14 +963,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T13:34:43.374383",
-      "updated_at": "2026-04-14T13:39:09.324039",
+      "updated_at": "2026-04-14T13:51:13.422805",
       "comments": []
     },
     "bd-56": {
       "id": "bd-56",
       "title": "OBS-5: CORS allow_methods missing PUT - config endpoint unreachable from browsers",
       "description": "**Location:** code_puppy/api/app.py, CORS middleware configuration\n\n**Problem:** CORS middleware allows GET, POST, DELETE, OPTIONS but not PUT. The config router has PUT /{key} endpoint that will fail CORS preflight from browsers.\n\n**Fix:** Either:\n1. Add 'PUT' to allow_methods list (if browser PUT is intended)\n2. Change config update route to use POST instead of PUT\n\n**Priority:** P4 (Observation)\n**Category:** API",
-      "status": "open",
+      "status": "closed",
       "priority": 4,
       "type": "bug",
       "labels": [
@@ -980,7 +980,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T13:34:43.381113",
-      "updated_at": "2026-04-14T13:37:58.965471",
+      "updated_at": "2026-04-14T13:51:13.363713",
       "comments": []
     },
     "bd-57": {
@@ -997,7 +997,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T13:34:43.388563",
-      "updated_at": "2026-04-14T13:44:56.563397",
+      "updated_at": "2026-04-14T13:51:13.451521",
       "comments": []
     },
     "bd-58": {
@@ -1014,7 +1014,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T13:34:43.392788",
-      "updated_at": "2026-04-14T13:39:41.371352",
+      "updated_at": "2026-04-14T13:51:13.393800",
       "comments": []
     }
   },
