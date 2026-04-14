@@ -11,12 +11,13 @@ Configuration:
     - PUP_ACCEL_PUPPY_CORE=rust|python
     - PUP_ACCEL_TURBO_PARSE=rust|python
     - PUP_ACCEL_TURBO_OPS=rust|python
+
+bd-61: Now delegates to NativeBackend for unified acceleration access.
 """
 
-import os
 from typing import Any
 
-from code_puppy.config import get_acceleration_config
+from code_puppy.native_backend import NativeBackend
 
 # Import Rust acceleration (primary for puppy_core, turbo_parse)
 from code_puppy._core_bridge import (
@@ -49,32 +50,20 @@ def get_backend_info() -> dict[str, Any]:
     Returns:
         Dict with backend status for each module (puppy_core, turbo_parse, turbo_ops)
     """
-    config = get_acceleration_config()
+    # Delegate to NativeBackend for unified status
+    native_status = NativeBackend.get_status()
 
-    # Determine effective backends based on availability + config
-    rust_status = get_rust_status()
-    turbo_parse_status = get_turbo_parse_status()
+    # Maintain backward compatible output format
+    result: dict[str, Any] = {}
+    for cap_name, info in native_status.items():
+        result[cap_name] = {
+            "configured": info.configured,
+            "available": info.available,
+            "active": info.active,
+            "status": info.status,
+        }
 
-    return {
-        "puppy_core": {
-            "configured": config["puppy_core"],
-            "available": RUST_AVAILABLE,
-            "active": RUST_AVAILABLE and is_rust_enabled(),
-            "status": "active" if (RUST_AVAILABLE and is_rust_enabled()) else "disabled",
-        },
-        "turbo_parse": {
-            "configured": config["turbo_parse"],
-            "available": TURBO_PARSE_AVAILABLE,
-            "active": turbo_parse_status.get("active", False),
-            "status": "active" if turbo_parse_status.get("active", False) else "disabled",
-        },
-        "turbo_ops": {
-            "configured": config["turbo_ops"],
-            "available": False,  # Handled by turbo_executor agent
-            "active": False,
-            "status": "disabled (via turbo_executor)",
-        },
-    }
+    return result
 
 
 def get_backend_summary() -> dict[str, str]:
@@ -90,26 +79,23 @@ def get_backend_summary() -> dict[str, str]:
     }
 
 
-# File operations - always use Python fallback
-# (Rust turbo_ops handled separately by turbo_executor agent)
+# File operations - delegated to NativeBackend for unified access
 def list_files(directory: str = ".", recursive: bool = True) -> dict[str, Any]:
-    """List files using Python implementation.
+    """List files using NativeBackend with fallback.
 
     Note: For accelerated file operations, use the turbo_executor agent
     which handles batch operations via Rust.
     """
-    from code_puppy.tools import list_files as python_list_files
-    return python_list_files(directory, recursive)
+    return NativeBackend.list_files(directory, recursive)
 
 
 def grep(pattern: str, directory: str = ".") -> dict[str, Any]:
-    """Search files using Python implementation.
+    """Search files using NativeBackend with fallback.
 
     Note: For accelerated file operations, use the turbo_executor agent
     which handles batch operations via Rust.
     """
-    from code_puppy.tools import grep as python_grep
-    return python_grep(pattern, directory)
+    return NativeBackend.grep(pattern, directory)
 
 
 __all__ = [

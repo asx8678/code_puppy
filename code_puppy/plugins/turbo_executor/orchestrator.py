@@ -28,21 +28,10 @@ try:
 except ImportError:
     _NOTIFICATIONS_AVAILABLE = False
 
-# Try to import Rust turbo_ops for accelerated file operations
-try:
-    from turbo_ops import list_files as turbo_list_files
-    from turbo_ops import grep as turbo_grep
-    from turbo_ops import read_file as turbo_read_file
+# Import NativeBackend for unified acceleration interface
+from code_puppy.native_backend import NativeBackend
 
-    TURBO_OPS_AVAILABLE = True
-except (ImportError, SystemError):
-    TURBO_OPS_AVAILABLE = False
-    turbo_list_files = None  # type: ignore
-    turbo_grep = None  # type: ignore
-    turbo_read_file = None  # type: ignore
-
-
-# Fallback: Import Python-native file operations when turbo_ops unavailable
+# Fallback: Import Python-native file operations when native unavailable
 from code_puppy.tools.file_operations import (
     _grep,
     _list_files,
@@ -78,11 +67,15 @@ class TurboOrchestrator:
 
         Args:
             enable_parallel: Whether to enable parallel execution (future feature)
-            prefer_native_python: Force use of native Python operations even if turbo_ops available
+            prefer_native_python: Force use of native Python operations even if native available
         """
         self.enable_parallel = enable_parallel
         self.prefer_native_python = prefer_native_python
-        self._turbo_ops_available = TURBO_OPS_AVAILABLE and not prefer_native_python
+        self._native_file_ops_available = NativeBackend.is_available(
+            NativeBackend.Capabilities.FILE_OPS
+        ) and not prefer_native_python
+        # Backward compatibility: maintain old attribute name
+        self._turbo_ops_available = self._native_file_ops_available
 
         self._operation_handlers: dict[OperationType, Callable] = {
             OperationType.LIST_FILES: self._execute_list_files,
@@ -93,7 +86,7 @@ class TurboOrchestrator:
     @property
     def using_native_ops(self) -> bool:
         """Check if using native Python operations (fallback mode)."""
-        return not self._turbo_ops_available
+        return not self._native_file_ops_available
 
     async def execute(self, plan: Plan) -> PlanResult:
         """Execute a plan and return results.
@@ -284,7 +277,7 @@ class TurboOrchestrator:
         directory = args.get("directory", ".")
         recursive = args.get("recursive", True)
 
-        # Security gate: validate directory before Rust acceleration
+        # Security gate: validate directory before native acceleration
         is_valid, error_msg = validate_file_path(directory, "list")
         if not is_valid:
             return {
@@ -293,27 +286,34 @@ class TurboOrchestrator:
                 "source": "security_blocked",
             }
 
-        # Try turbo_ops first if available
-        if self._turbo_ops_available and turbo_list_files is not None:
-            try:
-                # Run in thread pool since turbo_ops is likely sync
-                result = await asyncio.to_thread(turbo_list_files, directory, recursive)
-                return {
-                    "content": result,
-                    "error": None,
-                    "source": "turbo_ops",
-                }
-            except Exception:
-                # Fall through to native Python on failure
-                pass
+        # Use NativeBackend with fallback
+        prefer_native = not self.prefer_native_python
+        result = NativeBackend.list_files(directory, recursive, _prefer_native=prefer_native)
 
-        # Fallback to native Python implementation (now async)
-        result = await _list_files(None, directory, recursive)
+        # Transform NativeBackend result to orchestrator format
+        # Map source names for backward compatibility with existing tests
+        source_mapping = {
+            "native_backend": "native_python" if not prefer_native else "turbo_ops",
+            "python_fallback": "native_python",
+            "turbo_ops": "turbo_ops",
+        }
+        source = source_mapping.get(
+            result.get("source"),
+            "native_python" if not prefer_native else "turbo_ops"
+        )
 
+        if "error" in result and result["error"]:
+            return {
+                "content": None,
+                "error": result["error"],
+                "source": source,
+            }
+
+        files = result.get("files", [])
         return {
-            "content": result.content,
-            "error": result.error,
-            "source": "native_python",
+            "content": files,
+            "error": None,
+            "source": source,
         }
 
     async def _execute_grep(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -321,7 +321,7 @@ class TurboOrchestrator:
         search_string = args.get("search_string", "")
         directory = args.get("directory", ".")
 
-        # Security gate: validate directory before Rust acceleration
+        # Security gate: validate directory before native acceleration
         is_valid, error_msg = validate_file_path(directory, "search")
         if not is_valid:
             return {
@@ -331,43 +331,43 @@ class TurboOrchestrator:
                 "source": "security_blocked",
             }
 
-        # Try turbo_ops first if available
-        if self._turbo_ops_available and turbo_grep is not None:
-            try:
-                # Run in thread pool since turbo_ops is likely sync
-                result = await asyncio.to_thread(turbo_grep, search_string, directory)
-                return {
-                    "matches": [
-                        {
-                            "file_path": m.get("file_path", ""),
-                            "line_number": m.get("line_number", 0),
-                            "line_content": m.get("line_content", ""),
-                        }
-                        for m in result.get("matches", [])
-                    ],
-                    "total_matches": result.get("total_matches", 0),
-                    "error": None,
-                    "source": "turbo_ops",
-                }
-            except Exception:
-                # Fall through to native Python on failure
-                pass
+        # Use NativeBackend with fallback
+        prefer_native = not self.prefer_native_python
+        result = NativeBackend.grep(search_string, directory, _prefer_native=prefer_native)
 
-        # Fallback to native Python implementation (now async)
-        result = await _grep(None, search_string, directory)
+        # Transform NativeBackend result to orchestrator format
+        # Map source names for backward compatibility with existing tests
+        source_mapping = {
+            "native_backend": "native_python" if not prefer_native else "turbo_ops",
+            "python_fallback": "native_python",
+            "turbo_ops": "turbo_ops",
+        }
+        source = source_mapping.get(
+            result.get("source"),
+            "native_python" if not prefer_native else "turbo_ops"
+        )
 
+        if "error" in result and result["error"]:
+            return {
+                "matches": [],
+                "total_matches": 0,
+                "error": result["error"],
+                "source": source,
+            }
+
+        matches = result.get("matches", [])
         return {
             "matches": [
                 {
-                    "file_path": m.file_path,
-                    "line_number": m.line_number,
-                    "line_content": m.line_content,
+                    "file_path": m.get("file_path", ""),
+                    "line_number": m.get("line_number", 0),
+                    "line_content": m.get("line_content", ""),
                 }
-                for m in result.matches
+                for m in matches
             ],
-            "total_matches": len(result.matches),
-            "error": result.error,
-            "source": "native_python",
+            "total_matches": len(matches),
+            "error": None,
+            "source": source,
         }
 
     async def _execute_read_files(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -379,7 +379,7 @@ class TurboOrchestrator:
         files_data: list[dict[str, Any]] = []
         original_total = len(file_paths)  # Track original count for reporting
 
-        # Security gate: validate paths before Rust acceleration
+        # Security gate: validate paths before native acceleration
         validated_paths = []
         for file_path in file_paths:
             try:
@@ -404,81 +404,50 @@ class TurboOrchestrator:
                     "success": False,
                 })
 
-        # Only process validated paths through turbo_ops
+        # Only process validated paths through native backend
         file_paths = validated_paths
 
-        # Try turbo_ops first if available
-        if self._turbo_ops_available and turbo_read_file is not None and file_paths:
-            try:
-                for file_path in file_paths:
-                    try:
-                        # Convert 0 sentinels to None (Rust expects Option<usize>)
-                        start = start_line if start_line and start_line > 0 else None
-                        num = num_lines if num_lines and num_lines > 0 else None
-                        result = await asyncio.to_thread(turbo_read_file, file_path, start, num)
-                        # Respect turbo_ops success/error fields (it returns errors, doesn't raise)
-                        files_data.append(
-                            {
-                                "file_path": file_path,
-                                "content": result.get("content"),
-                                "num_tokens": result.get("num_tokens", 0),
-                                "error": result.get("error"),
-                                "success": result.get("success", False),
-                            }
-                        )
-                    except Exception as e:
-                        files_data.append(
-                            {
-                                "file_path": file_path,
-                                "content": None,
-                                "num_tokens": 0,
-                                "error": str(e),
-                                "success": False,
-                            }
-                        )
+        if file_paths:
+            # Use NativeBackend batch read with fallback
+            prefer_native = not self.prefer_native_python
+            result = NativeBackend.read_files(
+                file_paths, start_line, num_lines, _prefer_native=prefer_native
+            )
 
-                return {
-                    "files": files_data,
-                    "total_files": original_total,
-                    "successful_reads": sum(1 for f in files_data if f["success"]),
-                    "source": "turbo_ops",
-                }
-            except Exception:
-                # Fall through to native Python on failure
-                files_data = [f for f in files_data if f["file_path"] not in file_paths]
+            # Merge with security-blocked files and format
+            native_files = result.get("files", [])
+            files_data.extend(native_files)
 
-        # Fallback to native Python implementation
-        for file_path in file_paths:
-            try:
-                content, num_tokens, error = await asyncio.to_thread(
-                    _read_file_sync, file_path, start_line, num_lines
-                )
+            # Map source names for backward compatibility with existing tests
+            source_mapping = {
+                "native_backend": "native_python" if not prefer_native else "turbo_ops",
+                "python_fallback": "native_python",
+                "turbo_ops": "turbo_ops",
+            }
+            source = source_mapping.get(
+                result.get("source"),
+                "native_python" if not prefer_native else "turbo_ops"
+            )
 
-                files_data.append(
-                    {
-                        "file_path": file_path,
-                        "content": content,
-                        "num_tokens": num_tokens,
-                        "error": error,
-                        "success": error is None,
-                    }
-                )
-            except Exception as e:
-                files_data.append(
-                    {
-                        "file_path": file_path,
-                        "content": None,
-                        "num_tokens": 0,
-                        "error": str(e),
-                        "success": False,
-                    }
-                )
+            return {
+                "files": files_data,
+                "total_files": original_total,
+                "successful_reads": sum(1 for f in files_data if f.get("success", False)),
+                "source": source,
+            }
+
+        # No valid paths to read - still need to map source for consistency
+        source_mapping = {
+            True: "native_python",
+            False: "turbo_ops",
+        }
+        source = source_mapping.get(self.prefer_native_python, "native_python")
 
         return {
             "files": files_data,
             "total_files": original_total,
-            "successful_reads": sum(1 for f in files_data if f["success"]),
-            "source": "native_python",
+            "successful_reads": 0,
+            "source": source,
         }
 
     def validate_plan(self, plan: Plan) -> list[str]:

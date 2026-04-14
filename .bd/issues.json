@@ -1018,7 +1018,59 @@
       "created_at": "2026-04-14T13:34:43.392788",
       "updated_at": "2026-04-14T13:51:13.393800",
       "comments": []
+    },
+    "bd-59": {
+      "id": "bd-59",
+      "title": "Add Python handlers for Elixir lifecycle commands",
+      "description": "Python bridge needs handlers for Elixir \u2192 Python lifecycle commands: run/start, run/cancel, exit, and initialize. Currently these are missing, meaning Elixir cannot initiate runs or graceful shutdown. See ADR-002 for protocol details.",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "protocol",
+        "elixir",
+        "python"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T16:20:13.963364",
+      "updated_at": "2026-04-14T16:24:00.653757",
+      "comments": []
+    },
+    "bd-60": {
+      "id": "bd-60",
+      "title": "Remove stale Zig references from config and docs",
+      "description": "Remove outdated Zig/Rust hybrid references from: code_puppy/config.py, code_puppy/acceleration/__init__.py, docs/acceleration.md. The codebase is now Rust-only for native acceleration.",
+      "status": "closed",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "cleanup",
+        "docs"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T16:20:13.966501",
+      "updated_at": "2026-04-14T16:21:12.486094",
+      "comments": [
+        "Claimed by code-puppy-019d8c - starting work on removing stale Zig references"
+      ]
+    },
+    "bd-61": {
+      "id": "bd-61",
+      "title": "Fast Puppy rewrite Phase 1 - native backend adapter",
+      "description": "Create code_puppy/native_backend.py as single entry point for all native acceleration. Migrate consumers (turbo_executor/orchestrator.py, repo_compass/turbo_indexer_bridge.py) to use the adapter instead of direct imports. Per fast_puppy_elixir_rewrite_plan.md Phase 1.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "fast-puppy",
+        "elixir",
+        "architecture"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T16:20:13.971090",
+      "updated_at": "2026-04-14T16:20:13.971098",
+      "comments": []
     }
   },
-  "counter": 58
+  "counter": 61
 }

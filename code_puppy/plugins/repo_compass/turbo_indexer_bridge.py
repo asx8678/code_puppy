@@ -3,20 +3,14 @@
 This module provides a unified API for directory indexing that:
 1. Uses the Rust `turbo_ops.index_directory()` when available (5-10x faster)
 2. Falls back to the pure Python implementation when Rust is unavailable
+
+bd-61: Migrated to use NativeBackend for unified acceleration access.
 """
 
 from dataclasses import dataclass
 from pathlib import Path
 
-# Try to import Rust indexer
-try:
-    from turbo_ops import index_directory as _rust_index_directory
-    from turbo_ops import FileSummary as RustFileSummary
-    TURBO_INDEXER_AVAILABLE = True
-except (ImportError, SystemError):
-    TURBO_INDEXER_AVAILABLE = False
-    _rust_index_directory = None
-    RustFileSummary = None
+from code_puppy.native_backend import NativeBackend
 
 # Import Python fallback
 from code_puppy.plugins.repo_compass.indexer import (
@@ -25,6 +19,9 @@ from code_puppy.plugins.repo_compass.indexer import (
     IGNORED_DIRS,
 )
 
+# Legacy compatibility: check NativeBackend status
+TURBO_INDEXER_AVAILABLE = NativeBackend.is_available(NativeBackend.Capabilities.REPO_INDEX)
+
 
 @dataclass(frozen=True, slots=True)
 class FileSummary:
@@ -32,16 +29,7 @@ class FileSummary:
     path: str
     kind: str
     symbols: tuple[str, ...] = ()
-    
-    @classmethod
-    def from_rust(cls, rust_summary: "RustFileSummary") -> "FileSummary":
-        """Convert Rust FileSummary to Python FileSummary."""
-        return cls(
-            path=rust_summary.path,
-            kind=rust_summary.kind,
-            symbols=tuple(rust_summary.symbols),
-        )
-    
+
     @classmethod
     def from_python(cls, py_summary: PythonFileSummary) -> "FileSummary":
         """Convert Python FileSummary (already the same structure)."""
@@ -60,38 +48,43 @@ def build_structure_map(
     force_python: bool = False,
 ) -> list[FileSummary]:
     """Build a structure map of the repository.
-    
-    Uses Rust acceleration when available for 5-10x speedup.
-    
+
+    Uses Rust acceleration via NativeBackend when available for 5-10x speedup.
+
     Args:
         root: Root directory to scan
         max_files: Maximum number of files to include
         max_symbols_per_file: Maximum symbols to extract per file
         force_python: Force use of Python implementation (for testing)
-        
+
     Returns:
         List of FileSummary objects describing the repo structure
     """
-    if TURBO_INDEXER_AVAILABLE and not force_python:
-        # Use Rust implementation
-        rust_summaries = _rust_index_directory(
-            str(root),
-            max_files,
-            max_symbols_per_file,
-            list(IGNORED_DIRS),  # Pass Python's ignored dirs to Rust
+    prefer_native = not force_python
+    results = NativeBackend.index_directory(
+        str(root), max_files, max_symbols_per_file, _prefer_native=prefer_native
+    )
+
+    # Convert result dicts to FileSummary objects
+    return [
+        FileSummary(
+            path=r["path"],
+            kind=r["kind"],
+            symbols=tuple(r.get("symbols", [])),
         )
-        return [FileSummary.from_rust(s) for s in rust_summaries]
-    else:
-        # Use Python fallback
-        py_summaries = _python_build_structure_map(root, max_files, max_symbols_per_file)
-        return [FileSummary.from_python(s) for s in py_summaries]
+        for r in results
+    ]
 
 
 def get_indexer_status() -> dict:
     """Return diagnostic info about the indexer backend."""
+    status = NativeBackend.get_status()
+    repo_index_status = status.get(NativeBackend.Capabilities.REPO_INDEX)
+
     return {
-        "rust_available": TURBO_INDEXER_AVAILABLE,
-        "backend": "turbo_ops" if TURBO_INDEXER_AVAILABLE else "python",
+        "rust_available": repo_index_status.available if repo_index_status else False,
+        "backend": "turbo_ops" if (repo_index_status and repo_index_status.active) else "python",
+        "native_backend_status": repo_index_status.status if repo_index_status else "unknown",
     }
 
 
