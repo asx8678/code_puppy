@@ -2520,14 +2520,14 @@ def get_acceleration_config() -> dict:
 
     Returns the current acceleration configuration with any environment
     variable overrides applied. Environment variables follow the pattern:
-    PUP_ACCEL_<BACKEND_NAME> = rust|zig|python
+    PUP_ACCEL_<BACKEND_NAME> = rust|python
 
     Example:
         PUP_ACCEL_PUPPY_CORE=python  # Force Python fallback for puppy_core
-        PUP_ACCEL_TURBO_OPS=rust     # Use Rust instead of Zig for file ops
+        PUP_ACCEL_TURBO_OPS=rust     # Use Rust for file ops
 
     Returns:
-        Dict mapping backend names to their configured language (rust|zig|python)
+        Dict mapping backend names to their configured language (rust|python)
     """
     config = ACCELERATION_BACKENDS.copy()
 
@@ -2548,7 +2548,7 @@ def get_acceleration_backend(backend_name: str) -> str:
         backend_name: Name of the backend (puppy_core, turbo_parse, turbo_ops)
 
     Returns:
-        The configured language for the backend (rust, zig, or python)
+        The configured language for the backend (rust or python)
     """
     config = get_acceleration_config()
     return config.get(backend_name, "python")
@@ -2562,7 +2562,7 @@ def set_acceleration_backend(backend_name: str, language: str) -> None:
 
     Args:
         backend_name: Name of the backend (puppy_core, turbo_parse, turbo_ops)
-        language: Language to use (rust, zig, or python)
+        language: Language to use (rust or python)
 
     Raises:
         ValueError: If backend_name or language is invalid
