@@ -374,7 +374,26 @@
         "Starting MessagePack implementation - aiming for 5-10x speedup over current JSON path and closing the gap to <10x vs Rust native (currently at 160x). Will prioritize a minimal serde.zig integration first.",
         "Binary protocol implemented. FFI overhead (~2ms) is the bottleneck, not serialization. PyO3 has fundamentally lower overhead than cffi/ctypes."
       ]
+    },
+    "bd-23": {
+      "id": "bd-23",
+      "title": "Agent Flow V2 Phase 1: Trustworthy Foundation",
+      "description": "Implement the foundational layer for Agent Flow V2 observability system. This phase establishes the normalized event schema, accounting state separation, and reconciliation mechanism.\n\n**Tasks:**\n1. Define normalized event schema (based on agent_flow_v2_schema_example.json)\n2. Add accounting state to token counts (estimated_live, provider_reported_exact, reconciled, unknown)\n3. Add reconciliation events (live estimate \u2192 exact usage correction)\n4. Make model calls explicit nodes in the flow reducer (separate from agent nodes)\n5. Persist normalized events (NDJSON per session as first step)\n\n**Key Files:**\n- code_puppy/plugins/flow_visualizer/ (existing plugin to extend)\n- agent_flow_v2_design.md (design document)\n- agent_flow_v2_schema_example.json (schema reference)\n\n**Success Criteria:**\n- Token counts show accounting state (estimated vs exact)\n- Reconciliation events correct live estimates when provider usage arrives\n- Model calls are visible as separate nodes from agent runs\n- Events are persisted for replay",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "observability",
+        "tokens",
+        "architecture"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T06:48:12.463480",
+      "updated_at": "2026-04-14T06:48:35.091472",
+      "comments": [
+        "Claimed by code-puppy-019d8a - starting work on Agent Flow V2 Phase 1"
+      ]
     }
   },
-  "counter": 22
+  "counter": 23
 }

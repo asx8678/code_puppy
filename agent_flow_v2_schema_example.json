@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent Flow V2 Normalized Event",
+  "type": "object",
+  "required": [
+    "event_id",
+    "trace_id",
+    "event_type",
+    "timestamp"
+  ],
+  "properties": {
+    "event_id": {"type": "string"},
+    "trace_id": {"type": "string"},
+    "span_id": {"type": ["string", "null"]},
+    "parent_span_id": {"type": ["string", "null"]},
+    "run_id": {"type": ["string", "null"]},
+    "session_id": {"type": ["string", "null"]},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "span.started",
+        "span.updated",
+        "span.ended",
+        "transfer.started",
+        "transfer.chunk",
+        "transfer.completed",
+        "usage.reported",
+        "usage.reconciled",
+        "artifact.created",
+        "artifact.read"
+      ]
+    },
+    "node": {
+      "type": ["object", "null"],
+      "properties": {
+        "id": {"type": "string"},
+        "kind": {
+          "type": "string",
+          "enum": [
+            "user",
+            "session",
+            "agent_run",
+            "model_call",
+            "tool_call",
+            "memory_snapshot",
+            "artifact"
+          ]
+        },
+        "name": {"type": ["string", "null"]},
+        "status": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "transfer": {
+      "type": ["object", "null"],
+      "properties": {
+        "message_id": {"type": ["string", "null"]},
+        "kind": {
+          "type": ["string", "null"],
+          "enum": [
+            null,
+            "user_prompt",
+            "system_instructions",
+            "history_context",
+            "retrieved_context",
+            "model_input",
+            "model_output",
+            "tool_args",
+            "tool_result",
+            "delegate_prompt",
+            "delegate_response",
+            "memory_append",
+            "artifact_write",
+            "artifact_read"
+          ]
+        },
+        "source_node_id": {"type": ["string", "null"]},
+        "target_node_id": {"type": ["string", "null"]},
+        "token_count": {"type": ["integer", "null"], "minimum": 0},
+        "token_class": {
+          "type": ["string", "null"],
+          "enum": [
+            null,
+            "input_tokens",
+            "output_tokens",
+            "reasoning_tokens",
+            "cached_tokens",
+            "estimated_tokens",
+            "billable_tokens"
+          ]
+        },
+        "accounting": {
+          "type": ["string", "null"],
+          "enum": [
+            null,
+            "estimated_live",
+            "provider_reported_exact",
+            "reconciled",
+            "unknown"
+          ]
+        },
+        "preview": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "metrics": {
+      "type": ["object", "null"],
+      "properties": {
+        "duration_ms": {"type": ["number", "null"], "minimum": 0},
+        "cost_usd": {"type": ["number", "null"], "minimum": 0}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
