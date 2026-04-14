@@ -151,7 +151,8 @@ defmodule CodePuppyControl.PythonWorker.Port do
       :binary,
       :use_stdio,
       :exit_status,
-      :stderr_to_stdout,
+      # NOTE: stderr goes to parent's stderr (visible in logs but not in protocol stream)
+      # This matches ADR-001: stdout=protocol messages, stderr=diagnostics
       args: [script_path, "--run-id", run_id]
     ]
 
