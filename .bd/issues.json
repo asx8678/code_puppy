@@ -1142,7 +1142,7 @@
       "id": "bd-66",
       "title": "Fix type annotation and compatibility issues",
       "description": "Several issues identified in code review:\n\n1. **CRITICAL**: `app_runner.py` uses `callable` (builtin function) instead of `Callable` (type) at lines 43-45\n2. **TEST FAILURE**: `TURBO_OPS_AVAILABLE` missing from `turbo_executor/orchestrator.py` but expected by `test_import_smoke.py`\n3. **CODE SMELL**: `native_backend.py:473` has hardcoded `\"rust\" if False else \"python\"` for message_core status\n4. **CLEANUP**: `session_storage.py` forward references could be cleaner",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "bug",
       "labels": [
@@ -1152,7 +1152,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T19:34:59.169860",
-      "updated_at": "2026-04-14T19:35:00.758117",
+      "updated_at": "2026-04-14T19:36:18.270612",
       "comments": []
     }
   },
