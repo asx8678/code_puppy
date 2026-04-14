@@ -31,7 +31,6 @@ defmodule CodePuppyControl.Scheduler.Task do
   import Ecto.Changeset
 
   @schedule_types ["interval", "hourly", "daily", "cron", "one_shot"]
-  @statuses [nil, "success", "failed", "running"]
 
   schema "scheduled_tasks" do
     field(:name, :string)

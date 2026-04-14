@@ -235,15 +235,6 @@ defmodule CodePuppyControl.Scheduler do
     |> Oban.insert()
   end
 
-  @doc """
-  Runs a task by its ID.
-
-  ## Returns
-
-    * `{:ok, job}` - Job created successfully
-    * `{:error, :not_found}` - Task not found
-    * `{:error, reason}` - Failed to create job
-  """
   @spec run_task_now(integer()) :: {:ok, Oban.Job.t()} | {:error, :not_found | term()}
   def run_task_now(task_id) when is_integer(task_id) do
     case get_task(task_id) do

@@ -817,7 +817,7 @@
       "id": "bd-46",
       "title": "P1: Remove Zig duplication - Remove puppy_core, turbo_ops, turbo_parse Zig crates",
       "description": "HIGH SEVERITY: Remove redundant Zig crates that duplicate Rust functionality. Keep only process_runner temporarily for process management.\n\n**Scope:**\n- Remove zig_src/puppy_core (duplicate of code_puppy_core Rust)\n- Remove zig_src/turbo_ops (duplicate of turbo_ops Rust)\n- Remove zig_src/turbo_parse (duplicate of turbo_parse Rust)\n- Keep zig_src/process_runner temporarily (unique functionality)\n\n**Rationale:**\n- No benefit to maintaining two implementations\n- Rust versions are primary and better tested\n- Focus resources on single implementation\n\n**Acceptance Criteria:**\n- [ ] puppy_core removed from build.zig\n- [ ] turbo_ops removed from build.zig\n- [ ] turbo_parse removed from build.zig\n- [ ] process_runner kept with proper tests\n- [ ] Documentation updated\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -825,14 +825,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:41.993038",
-      "updated_at": "2026-04-14T10:37:41.993048",
+      "updated_at": "2026-04-14T11:24:42.022495",
       "comments": []
     },
     "bd-47": {
       "id": "bd-47",
       "title": "P1: Unbounded history lists - request_history and events grow without limit",
       "description": "HIGH SEVERITY: Run.State stores request_history and events as unbounded lists, causing unbounded memory growth over long-running sessions.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/run/state.ex:203-204\n\n**Impact:** \n- Unbounded memory growth\n- OOM crashes on long sessions\n- No eviction policy\n- Performance degradation over time\n\n**Fix:** \n- Add configurable history limits (e.g., max 1000 entries)\n- Implement ring buffer or circular eviction\n- Add :history_limit config option\n- Log warning when history is truncated\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "bug",
       "labels": [
@@ -840,7 +840,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:41.999391",
-      "updated_at": "2026-04-14T10:37:41.999397",
+      "updated_at": "2026-04-14T11:24:42.052645",
       "comments": []
     },
     "bd-48": {
@@ -855,7 +855,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:42.003789",
-      "updated_at": "2026-04-14T11:16:52.261728",
+      "updated_at": "2026-04-14T11:24:42.081394",
       "comments": []
     },
     "bd-49": {
@@ -870,7 +870,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:48.559230",
-      "updated_at": "2026-04-14T11:21:34.677855",
+      "updated_at": "2026-04-14T11:24:42.167332",
       "comments": []
     },
     "bd-50": {
@@ -885,7 +885,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:48.559918",
-      "updated_at": "2026-04-14T11:23:01.231452",
+      "updated_at": "2026-04-14T11:24:42.196145",
       "comments": []
     },
     "bd-51": {
@@ -900,7 +900,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:48.561608",
-      "updated_at": "2026-04-14T11:20:46.067163",
+      "updated_at": "2026-04-14T11:24:42.224466",
       "comments": []
     },
     "bd-52": {
@@ -915,14 +915,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:57.391932",
-      "updated_at": "2026-04-14T11:18:24.761491",
+      "updated_at": "2026-04-14T11:24:42.109606",
       "comments": []
     },
     "bd-53": {
       "id": "bd-53",
       "title": "P1: Run.Manager polling - Uses Process.sleep(100) instead of event-driven",
       "description": "HIGH SEVERITY: Run.Manager uses Process.sleep(100) polling loop instead of event-driven architecture (GenStage, PubSub, or message passing).\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/run/manager.ex:190-254\n\n**Impact:** \n- 10ms latency overhead minimum\n- Wasted CPU cycles on polling\n- Scalability ceiling under load\n- Non-idiomatic Elixir code\n\n**Fix:** \n- Use PubSub for state change events\n- Or GenStage for backpressure\n- Or simple message passing GenServer\n- Eliminate all polling loops\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "bug",
       "labels": [
@@ -930,7 +930,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:57.393982",
-      "updated_at": "2026-04-14T10:37:57.393989",
+      "updated_at": "2026-04-14T11:24:42.138447",
       "comments": []
     }
   },

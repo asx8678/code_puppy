@@ -33,7 +33,6 @@ defmodule CodePuppyControl.Scheduler.Worker do
   require Logger
 
   @run_timeout_ms 300_000
-  @max_run_timeout_ms 600_000
 
   @impl Oban.Worker
   @doc """
