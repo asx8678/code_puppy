@@ -142,6 +142,11 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
     Logger.info("Starting Python worker for run #{run_id}")
 
+    # Find python3 executable with full path for spawn_executable compatibility
+    python_exe = System.find_executable("python3") || "python3"
+
+    # Use spawn_executable for compatibility with newer Erlang/OTP versions
+    # When using args option, we must use spawn_executable not spawn
     port_opts = [
       :binary,
       :use_stdio,
@@ -150,7 +155,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
       args: [script_path, "--run-id", run_id]
     ]
 
-    port = Port.open({:spawn, "python3"}, port_opts)
+    port = Port.open({:spawn_executable, python_exe}, port_opts)
 
     state = %__MODULE__{
       port: port,
