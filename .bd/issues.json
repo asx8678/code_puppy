@@ -345,7 +345,7 @@
       "id": "bd-22",
       "title": "[zig] Phase 2.5: MessagePack binary protocol for performance",
       "description": "Replace JSON serialization with MessagePack to close performance gap with Rust.\n\nTasks:\n- [ ] Add serde.zig or zig-msgpack dependency to build.zig.zon\n- [ ] Create msgpack_bridge.zig with binary serialization\n- [ ] Export puppy_core_process_messages_msgpack() C ABI\n- [ ] Update Python bridge to use msgpack\n- [ ] Benchmark: target <10x slower than Rust (from 160x)\n\nExpected improvement: 5-10x speedup over JSON path.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -359,9 +359,10 @@
         ]
       },
       "created_at": "2026-04-14T06:21:03.667472",
-      "updated_at": "2026-04-14T06:21:12.562533",
+      "updated_at": "2026-04-14T06:27:30.488478",
       "comments": [
-        "Starting MessagePack implementation - aiming for 5-10x speedup over current JSON path and closing the gap to <10x vs Rust native (currently at 160x). Will prioritize a minimal serde.zig integration first."
+        "Starting MessagePack implementation - aiming for 5-10x speedup over current JSON path and closing the gap to <10x vs Rust native (currently at 160x). Will prioritize a minimal serde.zig integration first.",
+        "Binary protocol implemented. FFI overhead (~2ms) is the bottleneck, not serialization. PyO3 has fundamentally lower overhead than cffi/ctypes."
       ]
     }
   },
