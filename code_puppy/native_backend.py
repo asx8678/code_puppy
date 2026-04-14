@@ -4,13 +4,14 @@ This module provides a single entry point for all native acceleration:
 - MESSAGE_CORE: code_puppy_core (message serialization)
 - FILE_OPS: turbo_ops (file operations - list_files, grep, read_file)
 - REPO_INDEX: turbo_ops indexer (repository structure indexing)
-- PARSE: turbo_parse (tree-sitter parsing)
+- PARSE: turbo_parse / Elixir NIF (tree-sitter parsing)
 
 All methods gracefully fall back to Python implementations when native modules
 are unavailable, ensuring the system works regardless of Rust build status.
 
 bd-61: Phase 1 of Fast Puppy rewrite — native backend adapter.
 bd-62: Phase 2 — Add Elixir control plane routing for file operations.
+bd-64: Phase 4 — Add Elixir NIF routing for parse operations.
 """
 
 import asyncio
@@ -97,6 +98,9 @@ class NativeBackend:
 
     # bd-63: Legacy global toggle for backward compatibility
     _legacy_global_enabled: bool | None = None
+
+    # bd-64: Track last source used for each capability
+    _last_source: dict[str, str] = {}
 
     # -------------------------------------------------------------------------
     # Elixir Bridge Integration (bd-62)
@@ -389,7 +393,7 @@ class NativeBackend:
 
         # Import bridge modules to check their status
         from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
-        from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE, is_turbo_parse_enabled
+        from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
 
         turbo_ops = cls._get_turbo_ops()
         _ = cls._get_turbo_parse()  # Ensure lazy-load happens for status
@@ -413,10 +417,10 @@ class NativeBackend:
         # Legacy: also respect _core_bridge.is_rust_enabled() for backward compat
         msg_core_active = msg_core_tech_available and msg_core_user_enabled and is_rust_enabled()
 
-        # Determine parse technical availability
-        parse_tech_available = TURBO_PARSE_AVAILABLE
+        # Determine parse technical availability (bd-64: include Elixir)
+        parse_tech_available = TURBO_PARSE_AVAILABLE or cls._is_elixir_available()
         parse_user_enabled = cls.is_enabled(cls.Capabilities.PARSE)
-        parse_active = parse_tech_available and parse_user_enabled and is_turbo_parse_enabled()
+        parse_active = parse_tech_available and parse_user_enabled
 
         return {
             cls.Capabilities.MESSAGE_CORE: CapabilityInfo(
@@ -459,6 +463,7 @@ class NativeBackend:
             Dict with detailed capability status and backend info.
         """
         turbo_ops = cls._get_turbo_ops()
+        turbo_parse = cls._get_turbo_parse()
 
         return {
             "message_core": {
@@ -479,9 +484,10 @@ class NativeBackend:
                 "source": "turbo_ops" if (turbo_ops["available"] and turbo_ops["index_directory"]) else "python",
             },
             "parse": {
-                "available": False,  # Will be set by turbo_parse_bridge
-                "rust_available": False,  # TODO: check turbo_parse_bridge
-                "source": "turbo_parse" if False else "python",
+                "available": turbo_parse.get("available", False) or cls._is_elixir_available(),
+                "rust_available": turbo_parse.get("available", False),
+                "elixir_available": cls._is_elixir_available(),
+                "source": cls._last_source.get(cls.Capabilities.PARSE, "unknown"),
             },
         }
 
@@ -1056,6 +1062,8 @@ class NativeBackend:
     ) -> dict[str, Any]:
         """Parse file for symbols/AST.
 
+        bd-64: Now routes through Elixir control plane when available and preferred.
+
         Args:
             path: Path to file to parse.
             language: Optional language hint (auto-detected if None).
@@ -1066,22 +1074,37 @@ class NativeBackend:
         """
         # bd-63: Check if capability is enabled first
         if not cls.is_active(cls.Capabilities.PARSE):
-            _prefer_native = False
+            return {"error": "Parse capability disabled", "path": path}
 
-        turbo_parse = cls._get_turbo_parse()
-        native_func = turbo_parse["parse_file"] if (_prefer_native and turbo_parse["available"]) else None
-
-        if native_func:
+        # bd-64: Try Elixir first if preferred and available
+        if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE):
             try:
-                return native_func(path, language)
+                result = cls._call_elixir("parse_file", {
+                    "path": path,
+                    "language": language,
+                })
+                if "error" not in result:
+                    cls._last_source[cls.Capabilities.PARSE] = "elixir"
+                    return result
             except Exception as e:
-                logger.debug(f"turbo_parse parse_file failed: {e}")
+                logger.debug(f"Elixir parse_file failed: {e}")
 
-        # Fallback to Python (simplified)
+        # Try Rust turbo_parse
+        turbo_parse = cls._get_turbo_parse()
+        if turbo_parse["available"]:
+            try:
+                native_func = turbo_parse["parse_file"]
+                result = native_func(path, language)
+                cls._last_source[cls.Capabilities.PARSE] = "turbo_parse"
+                return result
+            except Exception as e:
+                logger.debug(f"turbo_parse.parse_file failed: {e}")
+
+        # Python fallback - return error stub
+        cls._last_source[cls.Capabilities.PARSE] = "python_fallback"
         return {
-            "success": False,
-            "error": "turbo_parse not available",
-            "tree": None,
+            "error": "No parse backend available",
+            "path": path,
             "language": language or "unknown",
         }
 
@@ -1095,6 +1118,8 @@ class NativeBackend:
     ) -> dict[str, Any]:
         """Parse source code for symbols/AST.
 
+        bd-64: Now routes through Elixir control plane when available and preferred.
+
         Args:
             source: Source code string to parse.
             language: Language identifier.
@@ -1103,26 +1128,126 @@ class NativeBackend:
         Returns:
             Dict with parse results or error.
         """
-        # bd-63: Check if capability is enabled first
         if not cls.is_active(cls.Capabilities.PARSE):
-            _prefer_native = False
+            return {"error": "Parse capability disabled"}
 
-        turbo_parse = cls._get_turbo_parse()
-        native_func = turbo_parse["parse_source"] if (_prefer_native and turbo_parse["available"]) else None
-
-        if native_func:
+        # bd-64: Try Elixir first if preferred and available
+        if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE):
             try:
-                return native_func(source, language)
+                result = cls._call_elixir("parse_source", {
+                    "source": source,
+                    "language": language,
+                })
+                if "error" not in result:
+                    cls._last_source[cls.Capabilities.PARSE] = "elixir"
+                    return result
             except Exception as e:
-                logger.debug(f"turbo_parse parse_source failed: {e}")
+                logger.debug(f"Elixir parse_source failed: {e}")
 
-        # Fallback to Python (simplified)
-        return {
-            "success": False,
-            "error": "turbo_parse not available",
-            "tree": None,
-            "language": language,
-        }
+        # Try Rust turbo_parse
+        turbo_parse = cls._get_turbo_parse()
+        if turbo_parse["available"]:
+            try:
+                native_func = turbo_parse["parse_source"]
+                result = native_func(source, language)
+                cls._last_source[cls.Capabilities.PARSE] = "turbo_parse"
+                return result
+            except Exception as e:
+                logger.debug(f"turbo_parse.parse_source failed: {e}")
+
+        cls._last_source[cls.Capabilities.PARSE] = "python_fallback"
+        return {"error": "No parse backend available", "language": language}
+
+    @classmethod
+    def extract_symbols(
+        cls,
+        source: str,
+        language: str,
+        *,
+        _prefer_native: bool = True,
+    ) -> list[dict]:
+        """Extract symbols from source code.
+
+        bd-64: Now routes through Elixir control plane when available and preferred.
+
+        Args:
+            source: Source code string to extract symbols from.
+            language: Language identifier.
+            _prefer_native: Internal flag to force Python fallback.
+
+        Returns:
+            List of symbol dicts with name, kind, range info.
+        """
+        if not cls.is_active(cls.Capabilities.PARSE):
+            return []
+
+        # bd-64: Try Elixir first if preferred and available
+        if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE):
+            try:
+                result = cls._call_elixir("extract_symbols", {
+                    "source": source,
+                    "language": language,
+                })
+                symbols = result.get("symbols", [])
+                if symbols:
+                    cls._last_source[cls.Capabilities.PARSE] = "elixir"
+                    return symbols
+            except Exception as e:
+                logger.debug(f"Elixir extract_symbols failed: {e}")
+
+        # Try Rust turbo_parse
+        turbo_parse = cls._get_turbo_parse()
+        if turbo_parse["available"]:
+            try:
+                native_func = turbo_parse["extract_symbols"]
+                result = native_func(source, language)
+                cls._last_source[cls.Capabilities.PARSE] = "turbo_parse"
+                # Handle both dict and list return types
+                if isinstance(result, dict):
+                    return result.get("symbols", [])
+                return result if isinstance(result, list) else []
+            except Exception as e:
+                logger.debug(f"turbo_parse.extract_symbols failed: {e}")
+
+        cls._last_source[cls.Capabilities.PARSE] = "python_fallback"
+        return []
+
+    @classmethod
+    def supported_languages(cls) -> list[str]:
+        """Get list of supported languages for parsing.
+
+        bd-64: Routes through Elixir when available, then tries Rust.
+
+        Returns:
+            List of supported language identifiers.
+        """
+        # Try Elixir
+        if cls._is_elixir_available():
+            try:
+                result = cls._call_elixir("supported_languages", {})
+                languages = result.get("languages", [])
+                if languages:
+                    return languages
+            except Exception:
+                pass
+
+        # Try Rust
+        turbo_parse = cls._get_turbo_parse()
+        if turbo_parse["available"]:
+            try:
+                from turbo_parse import supported_languages as turbo_supported
+
+                result = turbo_supported()
+                # Handle both list return and dict with "languages" key
+                if isinstance(result, list):
+                    return result
+                if isinstance(result, dict):
+                    return result.get("languages", [])
+            except Exception:
+                pass
+
+        # Fallback
+        return ["python", "elixir"]  # Regex fallback only supports these
 
     @classmethod
     def is_language_supported(cls, language: str) -> bool:
@@ -1192,6 +1317,21 @@ def parse_file(path: str, language: str | None = None) -> dict[str, Any]:
     return NativeBackend.parse_file(path, language)
 
 
+def parse_source(source: str, language: str) -> dict[str, Any]:
+    """Parse source code (convenience function)."""
+    return NativeBackend.parse_source(source, language)
+
+
+def extract_symbols(source: str, language: str) -> list[dict]:
+    """Extract symbols from source code (convenience function)."""
+    return NativeBackend.extract_symbols(source, language)
+
+
+def supported_languages() -> list[str]:
+    """Get list of supported languages for parsing (convenience function)."""
+    return NativeBackend.supported_languages()
+
+
 def index_directory(
     root: str, max_files: int = 40, max_symbols_per_file: int = 8
 ) -> list[dict[str, Any]]:
@@ -1216,6 +1356,9 @@ __all__ = [
     "serialize_messages",
     # Parse operations
     "parse_file",
+    "parse_source",
+    "extract_symbols",
+    "supported_languages",
     # Index operations
     "index_directory",
 ]
