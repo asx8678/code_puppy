@@ -179,23 +179,30 @@ def call_method(method: str, params: dict[str, Any], timeout: float = 30.0) -> d
 def _send_request_to_elixir(request: dict[str, Any]) -> None:
     """Send a JSON-RPC request to the Elixir control plane.
 
-    TODO(code-puppy-elixir-client): Implement actual transport
-    Currently raises NotImplementedError - needs HTTP or socket implementation.
+    bd-82: In bridge mode (CODE_PUPPY_BRIDGE=1), writes Content-Length
+    framed JSON-RPC to stdout. Elixir port.ex already handles requests
+    from Python and sends responses back via stdin.
 
-    Args:
-        request: JSON-RPC request dict
-
-    Raises:
-        NotImplementedError: Transport not yet implemented
+    When not in bridge mode, raises NotImplementedError.
     """
-    # Placeholder - actual implementation needs:
-    # 1. HTTP client to Elixir control plane endpoint
-    # 2. Or socket-based communication
-    # 3. Or stdio-based if Elixir is child process
-    raise NotImplementedError(
-        "Elixir control plane client transport not yet implemented. "
-        "NativeBackend will fall back to Rust/Python implementations."
-    )
+    if not BRIDGE_ENABLED:
+        raise NotImplementedError(
+            "Elixir control plane client transport not yet implemented "
+            "outside bridge mode. NativeBackend will fall back to Python."
+        )
+
+    import json
+    import sys
+
+    try:
+        body = json.dumps(request, separators=(",", ":"))
+        body_bytes = body.encode("utf-8")
+        header = f"Content-Length: {len(body_bytes)}\r\n\r\n"
+        sys.stdout.buffer.write(header.encode("utf-8"))
+        sys.stdout.buffer.write(body_bytes)
+        sys.stdout.buffer.flush()
+    except Exception as e:
+        raise ConnectionError(f"Failed to send request to Elixir: {e}") from e
 
 
 def handle_response(response: dict[str, Any]) -> None:

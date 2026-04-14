@@ -69,6 +69,22 @@ class SessionHistoryBuffer:
         self._last_access: dict[str, float] = {}
         self._lock = threading.Lock()
 
+    def _try_elixir(self, method: str, params: dict) -> dict | None:
+        """Try to call Elixir EventStore via bridge. Returns None if unavailable.
+
+        bd-78: Proxy reads to Elixir EventStore when bridge is connected.
+        Falls back to local deque when Elixir is not available.
+        """
+        try:
+            from code_puppy.plugins.elixir_bridge import is_connected, call_method
+            if is_connected():
+                return call_method(method, params, timeout=5.0)
+        except (ImportError, NotImplementedError, ConnectionError, TimeoutError):
+            pass
+        except Exception:
+            pass
+        return None
+
     def _update_access_time(self, session_id: str) -> None:
         """Update the last access time for a session.
 
@@ -107,6 +123,12 @@ class SessionHistoryBuffer:
         Returns:
             List of events for the session, or empty list if session unknown.
         """
+        # bd-78: Try Elixir EventStore first (richer data, cursor-based)
+        elixir_result = self._try_elixir("history_get", {"session_id": session_id})
+        if elixir_result is not None:
+            return elixir_result.get("events", [])
+
+        # Fall back to local deque
         with self._lock:
             session_deque = self._history.get(session_id)
             if session_deque is None:

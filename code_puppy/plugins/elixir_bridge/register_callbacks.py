@@ -288,6 +288,14 @@ async def _stdin_reader_loop() -> None:
                 )
                 continue
 
+            # bd-82: Detect responses to OUR requests (reverse channel)
+            # Responses have "result" or "error" but no "method"
+            if ("result" in request or "error" in request) and "method" not in request:
+                from code_puppy.plugins.elixir_bridge import handle_response
+                handle_response(request)
+                _log_bridge(f"Handled reverse-channel response id={request.get('id')}", "debug")
+                continue
+
             # Dispatch command
             response = await _bridge_controller.dispatch(request)
 

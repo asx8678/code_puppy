@@ -1321,7 +1321,7 @@
       "id": "bd-76",
       "title": "Phase 2: Remove turbo_ops Rust crate",
       "description": "Delete turbo_ops/ directory, remove from Cargo.toml workspace members, remove from pyproject.toml data files, remove from builder.py CRATES registry, simplify NativeBackend to Elixir->Python fallback chain (remove ~52 turbo_ops references), update doc comments in Elixir files.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -1330,9 +1330,111 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T20:43:28.114612",
-      "updated_at": "2026-04-14T20:43:28.114620",
+      "updated_at": "2026-04-14T20:53:45.861194",
+      "comments": []
+    },
+    "bd-77": {
+      "id": "bd-77",
+      "title": "Phase 3.2: Migrate ConcurrencyLimits to Elixir",
+      "description": "ConcurrencyLimits (335 lines, 9 callers) has 3 lazy-initialized TrackedSemaphore globals. Migrate to Elixir GenServer with ETS-backed counters. Python becomes thin async proxy via elixir_bridge.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:58:32.159369",
+      "updated_at": "2026-04-14T20:58:32.159378",
+      "comments": []
+    },
+    "bd-78": {
+      "id": "bd-78",
+      "title": "Phase 3.1: Migrate SessionHistoryBuffer to Elixir EventStore",
+      "description": "SessionHistoryBuffer (257 lines, 5 callers) has 95% overlap with Elixir EventStore (ETS-backed, TTL cleanup). Elixir port.ex already stores events via EventStore.store(). Add history_get/history_clear bridge methods to port.ex, update Python to proxy to Elixir when available, fall back to local deque. Smallest singleton, cleanest migration.",
+      "status": "open",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:58:32.163913",
+      "updated_at": "2026-04-14T20:58:32.163927",
+      "comments": []
+    },
+    "bd-79": {
+      "id": "bd-79",
+      "title": "Phase 3.3: Add MessageBus bridge to Elixir EventBus",
+      "description": "MessageBus (33 callers, 47 methods) has 70% overlap with Elixir EventBus. Add bridge methods for emit/subscribe. High blast radius \u2014 proxy pattern, not full replacement. Phase 3 creates the bridge, Phase 4 switches callers.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:58:32.166705",
+      "updated_at": "2026-04-14T20:58:32.166716",
+      "comments": []
+    },
+    "bd-80": {
+      "id": "bd-80",
+      "title": "Phase 3.5-3.7: Defer RunLimiter/AdaptiveRateLimiter/AgentManager to Phase 4",
+      "description": "These 3 singletons (113 internal refs total) control Python-side concurrency and agent lifecycle. They should move with the agent runtime in Phase 4, not separately. RunLimiter: semaphore semantics. AdaptiveRateLimiter: circuit breaker with 75 internal refs. AgentManager: 35 refs, module-level procedural pattern.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3",
+        "deferred"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:58:32.175294",
+      "updated_at": "2026-04-14T20:58:32.175302",
+      "comments": []
+    },
+    "bd-81": {
+      "id": "bd-81",
+      "title": "Phase 3.4: Wire MCPManager to Elixir MCP.Server",
+      "description": "MCPManager (15 callers) has 60% overlap with Elixir MCP.Server GenServer. Add bridge for register/start/stop/list. Elixir already has per-server GenServer supervision.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:58:32.185767",
+      "updated_at": "2026-04-14T20:58:32.185781",
+      "comments": []
+    },
+    "bd-82": {
+      "id": "bd-82",
+      "title": "CRITICAL: Implement Python\u2192Elixir reverse channel (call_method transport)",
+      "description": "elixir_bridge.call_method() raises NotImplementedError \u2014 the Python\u2192Elixir transport was never wired. This means ALL Elixir file ops (Phase 2) silently fall back to Python. ALL singleton proxying (Phase 3) is blocked. Fix: In bridge mode, _send_request_to_elixir should write Content-Length framed JSON-RPC to stdout. The stdin reader should detect responses (has result/error, no method) and route to handle_response(). Port.ex already handles requests FROM Python \u2014 the Elixir side works, only the Python transport is missing.",
+      "status": "open",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "migration",
+        "phase-3",
+        "blocker"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T21:03:21.306651",
+      "updated_at": "2026-04-14T21:03:21.306661",
       "comments": []
     }
   },
-  "counter": 76
+  "counter": 82
 }

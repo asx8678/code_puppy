@@ -446,6 +446,34 @@ defmodule CodePuppyControl.PythonWorker.Port do
     Protocol.encode_response(%{"languages" => languages}, nil)
   end
 
+  # bd-78: History/EventStore bridge methods for Python SessionHistoryBuffer migration
+  defp handle_file_request("history_get", params) do
+    session_id = params["session_id"]
+    opts = []
+    opts = if params["limit"], do: Keyword.put(opts, :limit, params["limit"]), else: opts
+    opts = if params["since"], do: Keyword.put(opts, :since, params["since"]), else: opts
+
+    events = CodePuppyControl.EventStore.get_events(session_id, opts)
+    Protocol.encode_response(%{"events" => events, "count" => length(events)}, nil)
+  end
+
+  defp handle_file_request("history_clear", params) do
+    session_id = params["session_id"]
+    CodePuppyControl.EventStore.clear(session_id)
+    Protocol.encode_response(%{"cleared" => true}, nil)
+  end
+
+  defp handle_file_request("history_count", params) do
+    session_id = params["session_id"]
+    count = CodePuppyControl.EventStore.count(session_id)
+    Protocol.encode_response(%{"count" => count}, nil)
+  end
+
+  defp handle_file_request("history_stats", _params) do
+    stats = CodePuppyControl.EventStore.stats()
+    Protocol.encode_response(stats, nil)
+  end
+
   defp handle_file_request(method, _params) do
     Protocol.encode_error(-32601, "Method not found: #{method}", nil, nil)
   end
