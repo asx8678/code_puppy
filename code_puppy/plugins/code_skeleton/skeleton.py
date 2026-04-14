@@ -54,21 +54,20 @@ def _skeleton_via_treesitter(content: str, language: str) -> str | None:
 
     Returns None if turbo_parse is unavailable or fails.
     """
+    # bd-71: Route through NativeBackend (single native boundary)
     try:
-        from code_puppy import turbo_parse_bridge
+        from code_puppy.native_backend import NativeBackend
     except ImportError:
         return None
 
-    extract_fn = getattr(turbo_parse_bridge, "extract_symbols", None)
-    if extract_fn is None:
+    if not NativeBackend.is_active(NativeBackend.Capabilities.PARSE):
         return None
 
-    is_supported = getattr(turbo_parse_bridge, "is_language_supported", None)
-    if is_supported is not None and not is_supported(language):
+    if not NativeBackend.is_language_supported(language):
         return None
 
     try:
-        symbols = extract_fn(content, language)
+        symbols = NativeBackend.extract_symbols(content, language)
     except Exception as exc:
         logger.debug("code_skeleton: turbo_parse failed for %s: %s", language, exc)
         return None

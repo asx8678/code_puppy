@@ -1182,11 +1182,12 @@
       "type": "task",
       "labels": [
         "migration",
-        "phase-0"
+        "phase-0",
+        "in_progress"
       ],
       "dependencies": {},
       "created_at": "2026-04-14T20:05:41.687611",
-      "updated_at": "2026-04-14T20:05:41.687619",
+      "updated_at": "2026-04-14T20:20:17.823648",
       "comments": []
     },
     "bd-69": {
@@ -1214,12 +1215,15 @@
       "type": "task",
       "labels": [
         "migration",
-        "phase-0"
+        "phase-0",
+        "in_progress"
       ],
       "dependencies": {},
       "created_at": "2026-04-14T20:05:41.699417",
-      "updated_at": "2026-04-14T20:05:41.699427",
-      "comments": []
+      "updated_at": "2026-04-14T20:20:14.086480",
+      "comments": [
+        "Claimed by planning-agent-019d8d for adversarial planning work."
+      ]
     },
     "bd-71": {
       "id": "bd-71",

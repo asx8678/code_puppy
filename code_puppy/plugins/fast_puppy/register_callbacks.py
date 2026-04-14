@@ -162,7 +162,7 @@ def _handle_status() -> str:
         Formatted status string.
     """
     from code_puppy.native_backend import NativeBackend
-    from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
+    # bd-69: _core_bridge imports removed — NativeBackend.get_status() used instead
 
     lines = ["⚡ Fast Puppy Status", ""]
 
@@ -184,7 +184,7 @@ def _handle_status() -> str:
 
     # Legacy bridge status
     lines.append("")
-    lines.append(f"  message_core bridge: {'✅' if RUST_AVAILABLE else '❌'} available, {'✅' if is_rust_enabled() else '💤'} enabled")
+    lines.append(f"  message_core bridge: {'✅' if NativeBackend.is_active(NativeBackend.Capabilities.MESSAGE_CORE) else '❌'} available, {'✅' if NativeBackend.is_message_core_active() else '💤'} enabled")
 
     return "\n".join(lines)
 
