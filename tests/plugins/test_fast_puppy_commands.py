@@ -46,7 +46,7 @@ class TestHandleFastPuppyStatus:
     """Tests for /fast_puppy status command."""
 
     def test_fast_puppy_status_shows_all_crates(self):
-        """Invokes status and verifies all 3 crate names appear in output."""
+        """Invokes status and verifies all 2 crate names appear in output."""
         emit_calls = []
 
         def mock_emit(msg):
@@ -57,7 +57,6 @@ class TestHandleFastPuppyStatus:
                 "code_puppy.plugins.fast_puppy.register_callbacks.get_all_crate_status",
                 return_value=[
                     {"name": "code_puppy_core", "installed": True, "fresh": True, "active": True, "crate_dir_found": True},
-                    {"name": "turbo_ops", "installed": True, "fresh": True, "active": True, "crate_dir_found": True},
                     {"name": "turbo_parse", "installed": False, "fresh": False, "active": False, "crate_dir_found": True},
                 ],
             ):
@@ -88,7 +87,6 @@ class TestHandleFastPuppyStatus:
         # Check all crate names appear
         all_output = " ".join(emit_calls)
         assert "code_puppy_core" in all_output
-        assert "turbo_ops" in all_output
         assert "turbo_parse" in all_output
 
 
@@ -111,7 +109,6 @@ class TestHandleFastPuppyBuild:
                         "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
                         return_value={
                             "code_puppy_core": True,
-                            "turbo_ops": True,
                             "turbo_parse": True,
                         },
                     ) as mock_build_all:
@@ -144,7 +141,6 @@ class TestHandleFastPuppyBuild:
                         "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
                         return_value={
                             "code_puppy_core": True,
-                            "turbo_ops": True,
                             "turbo_parse": True,
                         },
                     ) as mock_build_all:
@@ -159,7 +155,7 @@ class TestHandleFastPuppyBuild:
         mock_build_all.assert_called_once()
 
     def test_fast_puppy_build_single_crate_name(self):
-        """/fast_puppy build turbo_ops rebuilds only that crate."""
+        """/fast_puppy build turbo_parse rebuilds only that crate."""
         with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info"):
             with patch(
                 "code_puppy.plugins.fast_puppy.register_callbacks._has_rust_toolchain",
@@ -170,10 +166,10 @@ class TestHandleFastPuppyBuild:
                     "code_puppy.plugins.fast_puppy.register_callbacks.build_single_crate",
                     return_value=True,
                 ) as mock_build_single:
-                    result = _handle_fast_puppy("/fast_puppy build turbo_ops", "fast_puppy")
+                    result = _handle_fast_puppy("/fast_puppy build turbo_parse", "fast_puppy")
 
         assert result is True
-        mock_build_single.assert_called_once_with("turbo_ops")
+        mock_build_single.assert_called_once_with("turbo_parse")
 
     def test_fast_puppy_build_single_code_puppy_core(self):
         """/fast_puppy build code_puppy_core also enables runtime after build."""
@@ -315,7 +311,6 @@ class TestHandleFastPuppyNoArgs:
                 "code_puppy.plugins.fast_puppy.register_callbacks.get_all_crate_status",
                 return_value=[
                     {"name": "code_puppy_core", "installed": False, "fresh": False, "active": False, "crate_dir_found": True},
-                    {"name": "turbo_ops", "installed": False, "fresh": False, "active": False, "crate_dir_found": True},
                     {"name": "turbo_parse", "installed": False, "fresh": False, "active": False, "crate_dir_found": True},
                 ],
             ):
@@ -366,7 +361,7 @@ class TestOnStartup:
     """Tests for _on_startup() function."""
 
     def test_on_startup_emits_banner_when_all_active(self):
-        """When all 3 crates active, emit full success banner."""
+        """When all 2 crates active, emit full success banner."""
         emit_calls = []
 
         def mock_emit(msg):
@@ -378,7 +373,6 @@ class TestOnStartup:
                 "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
                 return_value={
                     "code_puppy_core": True,
-                    "turbo_ops": True,
                     "turbo_parse": True,
                 },
             ):
@@ -406,7 +400,6 @@ class TestOnStartup:
                 "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
                 return_value={
                     "code_puppy_core": True,
-                    "turbo_ops": True,
                     "turbo_parse": False,
                 },
             ):
@@ -418,8 +411,8 @@ class TestOnStartup:
                             _on_startup()
 
         all_output = " ".join(emit_calls)
-        # Should say "2/3" or mention turbo_parse is missing (now uses "turbo_parse missing" in the message)
-        assert "2/3" in all_output or "turbo_parse" in all_output or "active" in all_output.lower()
+        # Should say "1/2" or mention turbo_parse is missing (now uses "turbo_parse missing" in the message)
+        assert "1/2" in all_output or "turbo_parse" in all_output or "active" in all_output.lower()
 
     def test_on_startup_emits_pure_python_when_no_toolchain(self):
         """When no Rust toolchain, emit pure Python banner."""

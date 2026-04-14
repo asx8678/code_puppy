@@ -395,66 +395,68 @@ class TestModuleLevelFunctions:
 
 
 class TestNativeBackendLazyLoading:
-    """Tests for lazy loading of native modules."""
+    """Tests for lazy loading of native modules.
 
-    def test_turbo_ops_lazy_loading(self):
-        """Test that turbo_ops is lazily loaded (cached) after first access."""
+    bd-76: turbo_ops removed. Only turbo_parse remains for parse operations.
+    """
+
+    def test_turbo_parse_lazy_loading(self):
+        """Test that turbo_parse is lazily loaded (cached) after first access."""
         # Reset the cache
-        NativeBackend._turbo_ops_imports = None
+        NativeBackend._turbo_parse_imports = None
 
         # Before any operation, cache should be None
-        assert NativeBackend._turbo_ops_imports is None
+        assert NativeBackend._turbo_parse_imports is None
 
-        # After a file operation, cache should be populated
-        with patch("code_puppy.native_backend.logger"):
-            NativeBackend.list_files(".", _prefer_native=False)
+        # After accessing the cache, it should be populated
+        _ = NativeBackend._get_turbo_parse()
 
         # After the operation, the cache should be populated
-        assert NativeBackend._turbo_ops_imports is not None
+        assert NativeBackend._turbo_parse_imports is not None
 
-    def test_turbo_ops_imported_on_file_op(self):
-        """Test that turbo_ops is imported when file op is called."""
+    def test_turbo_parse_imported_on_parse_call(self):
+        """Test that turbo_parse is imported when parse operation is called."""
         # Reset the cache
-        NativeBackend._turbo_ops_imports = None
+        NativeBackend._turbo_parse_imports = None
 
-        # File operation should trigger import attempt
+        # Parse operation should trigger import attempt
         with patch("code_puppy.native_backend.logger"):
-            NativeBackend.list_files(".", _prefer_native=True)
+            _ = NativeBackend._get_turbo_parse()
 
         # After the operation, the cache should be populated
-        assert NativeBackend._turbo_ops_imports is not None
+        assert NativeBackend._turbo_parse_imports is not None
 
 
 class TestNativeBackendErrorHandling:
     """Tests for error handling in NativeBackend."""
 
     def test_list_files_handles_exception(self):
-        """Test that list_files handles exceptions gracefully."""
-        with patch.object(NativeBackend, "_get_turbo_ops") as mock_get_ops:
-            mock_get_ops.return_value = {
-                "available": True,
-                "list_files": MagicMock(side_effect=Exception("Test error")),
-            }
+        """Test that list_files handles exceptions gracefully.
 
-            result = NativeBackend.list_files("/nonexistent", _prefer_native=True)
+        bd-76: Turbo ops removed, Python fallback always used for non-Elixir.
+        """
+        # When Elixir raises, should fallback to Python
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            with patch.object(NativeBackend, "_call_elixir", side_effect=Exception("Test error")):
+                result = NativeBackend.list_files("/nonexistent", _prefer_native=True)
 
-            # Should fall back to Python
-            assert isinstance(result, dict)
-            assert "source" in result
+                # Should fall back to Python
+                assert isinstance(result, dict)
+                assert "source" in result
 
     def test_read_file_handles_exception(self):
-        """Test that read_file handles exceptions gracefully."""
-        with patch.object(NativeBackend, "_get_turbo_ops") as mock_get_ops:
-            mock_get_ops.return_value = {
-                "available": True,
-                "read_file": MagicMock(side_effect=Exception("Test error")),
-            }
+        """Test that read_file handles exceptions gracefully.
 
-            result = NativeBackend.read_file("/nonexistent", _prefer_native=True)
+        bd-76: Turbo ops removed, Python fallback always used for non-Elixir.
+        """
+        # When Elixir raises, should fallback to Python
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            with patch.object(NativeBackend, "_call_elixir", side_effect=Exception("Test error")):
+                result = NativeBackend.read_file("/nonexistent", _prefer_native=True)
 
-            # Should fall back to Python
-            assert isinstance(result, dict)
-            assert "source" in result
+                # Should fall back to Python
+                assert isinstance(result, dict)
+                assert "source" in result
 
 
 class TestNativeBackendIntegration:
@@ -721,14 +723,16 @@ class TestElixirRouting:
             result = NativeBackend._should_use_elixir("file_ops")
             assert result is False
 
-    def test_should_use_elixir_rust_first_with_rust_available(self):
-        """Test _should_use_elixir returns False when RUST_FIRST and Rust available."""
+    def test_should_use_elixir_rust_first_with_elixir_available(self):
+        """Test _should_use_elixir returns True when RUST_FIRST and Elixir available.
+
+        bd-76: With turbo_ops removed, RUST_FIRST now means "use Elixir if available".
+        """
         NativeBackend.set_backend_preference(BackendPreference.RUST_FIRST)
 
-        with patch.object(NativeBackend, "is_available", return_value=True):
-            with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
-                result = NativeBackend._should_use_elixir("file_ops")
-                assert result is False  # Rust is available, so don't use Elixir
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            result = NativeBackend._should_use_elixir("file_ops")
+            assert result is True  # Elixir is available, so use it
 
     def test_should_use_elixir_rust_first_without_rust(self):
         """Test _should_use_elixir returns True when RUST_FIRST but Rust unavailable."""
@@ -747,14 +751,16 @@ class TestElixirRouting:
             result = NativeBackend._get_file_ops_source()
             assert result == "elixir"
 
-    def test_get_file_ops_source_rust_first(self):
-        """Test _get_file_ops_source with RUST_FIRST preference."""
+    def test_get_file_ops_source_rust_first_with_elixir(self):
+        """Test _get_file_ops_source with RUST_FIRST preference when Elixir available.
+
+        bd-76: With turbo_ops removed, returns "elixir" when Elixir available.
+        """
         NativeBackend.set_backend_preference(BackendPreference.RUST_FIRST)
 
-        with patch.object(NativeBackend, "_get_turbo_ops", return_value={"available": True}):
-            with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
-                result = NativeBackend._get_file_ops_source()
-                assert result == "turbo_ops"
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            result = NativeBackend._get_file_ops_source()
+            assert result == "elixir"
 
     def test_get_file_ops_source_python_only(self):
         """Test _get_file_ops_source with PYTHON_ONLY preference."""
@@ -836,15 +842,17 @@ class TestElixirStatusIntegration:
             assert "elixir_available" in status["file_ops"] or "elixir" in str(status)
 
     def test_get_status_file_ops_with_elixir_available(self):
-        """Test get_status when Elixir is available for file_ops."""
-        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
-            with patch.object(NativeBackend, "_get_turbo_ops", return_value={"available": False}):
-                status = NativeBackend.get_status()
+        """Test get_status when Elixir is available for file_ops.
 
-                file_ops_status = status[NativeBackend.Capabilities.FILE_OPS]
-                # Should be available because Elixir is available
-                assert file_ops_status.available is True
-                assert file_ops_status.active is True
+        bd-76: With turbo_ops removed and Python fallback always available.
+        """
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            status = NativeBackend.get_status()
+
+            file_ops_status = status[NativeBackend.Capabilities.FILE_OPS]
+            # Should be available because Elixir is available and Python fallback exists
+            assert file_ops_status.available is True
+            assert file_ops_status.active is True
 
 
 if __name__ == "__main__":

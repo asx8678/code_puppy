@@ -220,7 +220,7 @@ def _on_startup():
         # Emit summary banner based on results
         active_count = sum(1 for v in results.values() if v)
         total_count = len(results)
-        expected_count = len(CRATES)  # Should be 3
+        expected_count = len(CRATES)  # Should be 2
         if results and active_count == expected_count:
             emit_info("🐕⚡ Fast Puppy: All Rust accelerators active — zoom! zoom! 🚀")
         elif active_count > 0:

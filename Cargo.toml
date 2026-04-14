@@ -1,5 +1,5 @@
 [workspace]
-members = ["code_puppy_core", "turbo_ops", "turbo_parse", "turbo_parse_core"]
+members = ["code_puppy_core", "turbo_parse", "turbo_parse_core"]
 resolver = "2"
 
 [workspace.dependencies]

@@ -2,8 +2,8 @@
 
 This module provides a single entry point for all native acceleration:
 - MESSAGE_CORE: code_puppy_core (message serialization)
-- FILE_OPS: turbo_ops (file operations - list_files, grep, read_file)
-- REPO_INDEX: turbo_ops indexer (repository structure indexing)
+- FILE_OPS: Elixir FileOps / Python fallback (list_files, grep, read_file)
+- REPO_INDEX: Python indexer via repo_compass (Elixir indexer available)
 - PARSE: turbo_parse / Elixir NIF (tree-sitter parsing)
 
 All methods gracefully fall back to Python implementations when native modules
@@ -83,12 +83,10 @@ class NativeBackend:
         """Capability names as constants."""
 
         MESSAGE_CORE = "message_core"  # code_puppy_core
-        FILE_OPS = "file_ops"  # turbo_ops
-        REPO_INDEX = "repo_index"  # turbo_ops indexer
+        FILE_OPS = "file_ops"  # Elixir FileOps / Python fallback
+        REPO_INDEX = "repo_index"  # Python indexer (Elixir planned)
         PARSE = "parse"  # turbo_parse
 
-    # Internal cache for turbo_ops imports (lazy loaded)
-    _turbo_ops_imports: dict[str, Any] | None = None
     _turbo_parse_imports: dict[str, Any] | None = None
 
     # bd-62: Backend preference for routing decisions
@@ -307,7 +305,8 @@ class NativeBackend:
     def _should_use_elixir(cls, capability: str) -> bool:
         """Determine if Elixir should be used for a capability.
 
-        bd-62: Routing logic based on backend preference and availability.
+        bd-76: Routing logic based on backend preference and Elixir availability.
+        turbo_ops removed — file operations now route through Elixir or Python.
 
         Args:
             capability: Capability name (e.g., "file_ops")
@@ -318,54 +317,12 @@ class NativeBackend:
         if cls._backend_preference == BackendPreference.PYTHON_ONLY:
             return False
 
-        if cls._backend_preference == BackendPreference.ELIXIR_FIRST:
-            return cls._is_elixir_available()
-
-        # RUST_FIRST: only use Elixir if Rust is unavailable
-        if not cls.is_available(capability):
-            return cls._is_elixir_available()
-
-        return False
+        # ELIXIR_FIRST or RUST_FIRST: use Elixir if available
+        return cls._is_elixir_available()
 
     # -------------------------------------------------------------------------
     # Native Module Loading
     # -------------------------------------------------------------------------
-
-    @classmethod
-    def _get_turbo_ops(cls) -> dict[str, Any]:
-        """Lazy-load turbo_ops imports with fallback handling."""
-        if cls._turbo_ops_imports is None:
-            imports: dict[str, Any] = {
-                "available": False,
-                "list_files": None,
-                "grep": None,
-                "read_file": None,
-                "index_directory": None,
-                "FileSummary": None,
-            }
-            try:
-                from turbo_ops import list_files, grep, read_file
-
-                imports["list_files"] = list_files
-                imports["grep"] = grep
-                imports["read_file"] = read_file
-                imports["available"] = True
-
-                # Also try to load indexer components
-                try:
-                    from turbo_ops import index_directory, FileSummary
-
-                    imports["index_directory"] = index_directory
-                    imports["FileSummary"] = FileSummary
-                except (ImportError, SystemError):
-                    logger.debug("turbo_ops indexer not available")
-
-            except (ImportError, SystemError):
-                logger.debug("turbo_ops not available, will use Python fallbacks")
-
-            cls._turbo_ops_imports = imports
-
-        return cls._turbo_ops_imports
 
     @classmethod
     def _get_turbo_parse(cls) -> dict[str, Any]:
@@ -401,19 +358,18 @@ class NativeBackend:
         from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
         from code_puppy.turbo_parse_bridge import TURBO_PARSE_AVAILABLE
 
-        turbo_ops = cls._get_turbo_ops()
         _ = cls._get_turbo_parse()  # Ensure lazy-load happens for status
 
         # bd-62: Check Elixir availability
         elixir_available = cls._is_elixir_available()
 
-        # Determine file_ops technical availability (before user preference)
-        file_ops_tech_available = turbo_ops["available"] or elixir_available
+        # bd-76: file_ops availability — Elixir or Python fallback (turbo_ops removed)
+        file_ops_tech_available = elixir_available or True  # Python fallback always available
         file_ops_user_enabled = cls.is_enabled(cls.Capabilities.FILE_OPS)
         file_ops_active = file_ops_tech_available and file_ops_user_enabled
 
-        # Determine repo_index technical availability
-        repo_index_tech_available = turbo_ops["available"] and turbo_ops.get("index_directory") is not None
+        # bd-76: repo_index — Python indexer always available
+        repo_index_tech_available = True  # Python fallback via repo_compass
         repo_index_user_enabled = cls.is_enabled(cls.Capabilities.REPO_INDEX)
         repo_index_active = repo_index_tech_available and repo_index_user_enabled
 
@@ -438,14 +394,14 @@ class NativeBackend:
             ),
             cls.Capabilities.FILE_OPS: CapabilityInfo(
                 name=cls.Capabilities.FILE_OPS,
-                configured=config.get("turbo_ops", "python"),
+                configured="elixir",
                 available=file_ops_tech_available,
                 active=file_ops_active,
                 status="active" if file_ops_active else ("disabled" if not file_ops_user_enabled else "unavailable"),
             ),
             cls.Capabilities.REPO_INDEX: CapabilityInfo(
                 name=cls.Capabilities.REPO_INDEX,
-                configured=config.get("turbo_ops", "python"),
+                configured="elixir",
                 available=repo_index_tech_available,
                 active=repo_index_active,
                 status="active" if repo_index_active else ("disabled" if not repo_index_user_enabled else "unavailable"),
@@ -468,26 +424,23 @@ class NativeBackend:
         Returns:
             Dict with detailed capability status and backend info.
         """
-        turbo_ops = cls._get_turbo_ops()
         turbo_parse = cls._get_turbo_parse()
 
         return {
             "message_core": {
-                "available": True,  # Python implementation always available
-                "rust_available": False,  # Will be set by _core_bridge
+                "available": True,
+                "rust_available": False,
                 "source": cls._get_message_core_source(),
             },
             "file_ops": {
-                "available": turbo_ops["available"] or cls._is_elixir_available(),
-                "rust_available": turbo_ops["available"],
+                "available": True,  # Python fallback always available
                 "elixir_available": cls._is_elixir_available(),
                 "source": cls._get_file_ops_source(),
                 "backend_preference": cls._backend_preference.value,
             },
             "repo_index": {
-                "available": turbo_ops["available"] and turbo_ops["index_directory"] is not None,
-                "rust_available": turbo_ops["available"] and turbo_ops["index_directory"] is not None,
-                "source": "turbo_ops" if (turbo_ops["available"] and turbo_ops["index_directory"]) else "python",
+                "available": True,  # Python fallback always available
+                "source": "elixir" if cls._is_elixir_available() else "python",
             },
             "parse": {
                 "available": turbo_parse.get("available", False) or cls._is_elixir_available(),
@@ -514,29 +467,17 @@ class NativeBackend:
     def _get_file_ops_source(cls) -> str:
         """Determine the effective file_ops source based on routing logic.
 
-        bd-62: Returns the actual source that will be used for file operations.
+        bd-76: turbo_ops removed. Source is now Elixir or Python.
 
         Returns:
-            One of "turbo_ops", "elixir", or "python".
+            One of "elixir" or "python".
         """
-        turbo_ops = cls._get_turbo_ops()
-
-        # Check routing logic
-        if cls._backend_preference == BackendPreference.ELIXIR_FIRST:
-            if cls._is_elixir_available():
-                return "elixir"
-            if turbo_ops["available"]:
-                return "turbo_ops"
+        if cls._backend_preference == BackendPreference.PYTHON_ONLY:
             return "python"
 
-        if cls._backend_preference == BackendPreference.RUST_FIRST:
-            if turbo_ops["available"]:
-                return "turbo_ops"
-            if cls._is_elixir_available():
-                return "elixir"
-            return "python"
+        if cls._is_elixir_available():
+            return "elixir"
 
-        # PYTHON_ONLY
         return "python"
 
     @classmethod
@@ -607,7 +548,7 @@ class NativeBackend:
         return fallback_func(*args, **kwargs)
 
     # -------------------------------------------------------------------------
-    # File Operations (from turbo_ops with Python fallbacks)
+    # File Operations (Elixir / Python fallback)
     # -------------------------------------------------------------------------
 
     @classmethod
@@ -658,10 +599,6 @@ class NativeBackend:
             except Exception as e:
                 logger.debug(f"Elixir file_list failed, falling back: {e}")
 
-        # Try Rust turbo_ops
-        turbo_ops = cls._get_turbo_ops()
-        native_func = turbo_ops["list_files"] if (_prefer_native and turbo_ops["available"]) else None
-
         def _python_fallback(dir_path: str, rec: bool) -> dict[str, Any]:
             """Python fallback using standard library with proper error handling."""
             import os
@@ -691,15 +628,6 @@ class NativeBackend:
                 return {"files": files, "count": len(files), "source": "python_fallback"}
             except Exception as e:
                 return {"error": str(e), "files": [], "count": 0, "source": "python_fallback"}
-
-        if native_func:
-            try:
-                result = native_func(directory, recursive)
-                if isinstance(result, list):
-                    return {"files": result, "count": len(result), "source": "turbo_ops"}
-                return {**result, "source": "turbo_ops"}
-            except Exception as e:
-                logger.debug(f"turbo_ops list_files failed: {e}")
 
         return _python_fallback(directory, recursive)
 
@@ -751,10 +679,6 @@ class NativeBackend:
             except Exception as e:
                 logger.debug(f"Elixir grep_search failed, falling back: {e}")
 
-        # Try Rust turbo_ops
-        turbo_ops = cls._get_turbo_ops()
-        native_func = turbo_ops["grep"] if (_prefer_native and turbo_ops["available"]) else None
-
         def _python_fallback(pat: str, dir_path: str) -> dict[str, Any]:
             """Python fallback using re module."""
             import os
@@ -782,15 +706,6 @@ class NativeBackend:
                 return {"matches": matches, "total_matches": len(matches), "source": "python_fallback"}
             except Exception as e:
                 return {"error": str(e), "matches": [], "total_matches": 0, "source": "python_fallback"}
-
-        if native_func:
-            try:
-                result = native_func(pattern, directory)
-                if isinstance(result, dict):
-                    return {**result, "source": "turbo_ops"}
-                return {"matches": result, "total_matches": len(result) if isinstance(result, list) else 0, "source": "turbo_ops"}
-            except Exception as e:
-                logger.debug(f"turbo_ops grep failed: {e}")
 
         return _python_fallback(pattern, directory)
 
@@ -849,10 +764,6 @@ class NativeBackend:
             except Exception as e:
                 logger.debug(f"Elixir file_read failed, falling back: {e}")
 
-        # Try Rust turbo_ops
-        turbo_ops = cls._get_turbo_ops()
-        native_func = turbo_ops["read_file"] if (_prefer_native and turbo_ops["available"]) else None
-
         def _python_fallback(
             file_path: str, start: int | None, num: int | None
         ) -> dict[str, Any]:
@@ -879,18 +790,6 @@ class NativeBackend:
                 return {"content": content, "num_tokens": num_tokens, "source": "python_fallback"}
             except Exception as e:
                 return {"error": str(e), "content": None, "num_tokens": 0, "source": "python_fallback"}
-
-        if native_func:
-            try:
-                # Convert 0/None to proper None for Rust
-                start = start_line if start_line and start_line > 0 else None
-                num = num_lines if num_lines and num_lines > 0 else None
-                result = native_func(path, start, num)
-                if isinstance(result, dict):
-                    return {**result, "source": "turbo_ops"}
-                return {"content": result, "num_tokens": len(result) // 4, "source": "turbo_ops"}
-            except Exception as e:
-                logger.debug(f"turbo_ops read_file failed: {e}")
 
         return _python_fallback(path, start_line, num_lines)
 
@@ -1015,7 +914,7 @@ class NativeBackend:
         return cls.is_active(cls.Capabilities.MESSAGE_CORE)
 
     # -------------------------------------------------------------------------
-    # Repository Index (from turbo_ops indexer)
+    # Repository Index (Python indexer via repo_compass)
     # -------------------------------------------------------------------------
 
     @classmethod
@@ -1042,24 +941,7 @@ class NativeBackend:
         if not cls.is_active(cls.Capabilities.REPO_INDEX):
             _prefer_native = False
 
-        turbo_ops = cls._get_turbo_ops()
-        native_index = turbo_ops.get("index_directory") if (_prefer_native and turbo_ops["available"]) else None
-
-        if native_index:
-            try:
-                rust_results = native_index(root, max_files, max_symbols_per_file, [])
-                return [
-                    {
-                        "path": getattr(r, "path", str(r)),
-                        "kind": getattr(r, "kind", "unknown"),
-                        "symbols": list(getattr(r, "symbols", [])),
-                    }
-                    for r in rust_results
-                ]
-            except Exception as e:
-                logger.debug(f"turbo_ops index_directory failed: {e}")
-
-        # Fallback to Python indexer from repo_compass
+        # Python indexer via repo_compass (turbo_ops removed in bd-76)
         try:
             from pathlib import Path
 

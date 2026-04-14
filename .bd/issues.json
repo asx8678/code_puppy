@@ -1245,7 +1245,7 @@
       "id": "bd-72",
       "title": "BUG: RequestTracker stale cleanup crashes on nil target",
       "description": "handle_info(:cleanup) calls GenServer.reply(target, ...) where target can be nil when request was registered via register_only but awaiter never called. GenServer.reply(nil, ...) crashes the process. Fix: guard with 'if target' before calling reply.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1255,7 +1255,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T20:36:44.633473",
-      "updated_at": "2026-04-14T20:37:07.024135",
+      "updated_at": "2026-04-14T20:40:08.125632",
       "comments": [
         "Claimed by code-puppy-019d8d. In progress."
       ]
@@ -1264,7 +1264,7 @@
       "id": "bd-73",
       "title": "FIX: RequestTracker timer map not cleaned on completion",
       "description": "cancel_timer() cancels the timer process but state.timers map entry is not removed in complete/fail handlers. Minor memory leak. Fix: add Map.delete(state.timers, request_id) to completion paths.",
-      "status": "open",
+      "status": "closed",
       "priority": 4,
       "type": "task",
       "labels": [
@@ -1274,7 +1274,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T20:36:44.639244",
-      "updated_at": "2026-04-14T20:37:07.025865",
+      "updated_at": "2026-04-14T20:40:08.121843",
       "comments": [
         "Claimed by code-puppy-019d8d. In progress."
       ]
@@ -1283,7 +1283,7 @@
       "id": "bd-74",
       "title": "BUG: file_read_batch crashes on FileOps error",
       "description": "port.ex handle_file_request(\"file_read_batch\") uses {:ok, results} = FileOps.read_files(paths, opts) which crashes if read_files returns {:error, reason}. Fix: use case statement.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -1293,7 +1293,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T20:36:44.641110",
-      "updated_at": "2026-04-14T20:37:07.035658",
+      "updated_at": "2026-04-14T20:40:08.132210",
       "comments": [
         "Claimed by code-puppy-019d8d. In progress."
       ]
@@ -1302,7 +1302,7 @@
       "id": "bd-75",
       "title": "BUG: grep_search param mismatch \u2014 Elixir bridge grep is broken",
       "description": "Python NativeBackend sends 'search_string' key but Elixir port.ex handle_file_request reads 'pattern'. Grep via Elixir bridge passes nil pattern. Fix: change port.ex to read params[\"search_string\"] OR params[\"pattern\"] (accept both for compatibility).",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "task",
       "labels": [
@@ -1312,11 +1312,27 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T20:36:57.499338",
-      "updated_at": "2026-04-14T20:37:07.023155",
+      "updated_at": "2026-04-14T20:40:08.133595",
       "comments": [
         "Claimed by code-puppy-019d8d. In progress."
       ]
+    },
+    "bd-76": {
+      "id": "bd-76",
+      "title": "Phase 2: Remove turbo_ops Rust crate",
+      "description": "Delete turbo_ops/ directory, remove from Cargo.toml workspace members, remove from pyproject.toml data files, remove from builder.py CRATES registry, simplify NativeBackend to Elixir->Python fallback chain (remove ~52 turbo_ops references), update doc comments in Elixir files.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-2"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:43:28.114612",
+      "updated_at": "2026-04-14T20:43:28.114620",
+      "comments": []
     }
   },
-  "counter": 75
+  "counter": 76
 }

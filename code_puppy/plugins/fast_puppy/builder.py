@@ -1,7 +1,7 @@
 """Multi-crate Rust builder for Fast Puppy plugin.
 
 This module provides generic auto-build functionality for all Rust crates
-in the code_puppy workspace: code_puppy_core, turbo_ops, turbo_parse.
+in the code_puppy workspace: code_puppy_core, turbo_parse.
 """
 
 import importlib
@@ -28,13 +28,6 @@ CRATES = [
         "dir": "code_puppy_core",
         "probe": "_code_puppy_core",
         "bridges": ["code_puppy._core_bridge"],
-        # No patch_targets - NativeBackend handles routing
-    },
-    {
-        "name": "turbo_ops",
-        "dir": "turbo_ops",
-        "probe": "turbo_ops",
-        "bridges": [],
         # No patch_targets - NativeBackend handles routing
     },
     {
