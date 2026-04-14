@@ -43,7 +43,13 @@ class MessageCategory(str, Enum):
 
 
 class BaseMessage(BaseModel):
-    """Base class for all structured messages with auto-generated id and timestamp."""
+    """Base class for all structured messages with auto-generated id and timestamp.
+    
+    Note on Elixir Migration (bd-27):
+        Added run_id and timestamp_unix_ms fields to support the Elixir wire protocol
+        for event streaming. These are optional to maintain backward compatibility.
+        See event_schema.md for full protocol documentation.
+    """
 
     id: str = Field(
         default_factory=lambda: str(uuid4()),
@@ -53,8 +59,18 @@ class BaseMessage(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc),
         description="When this message was created (UTC)",
     )
+    # Elixir Wire Protocol: Unix timestamp for compatibility with Elixir/Erlang systems
+    timestamp_unix_ms: int = Field(
+        default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000),
+        description="Unix timestamp in milliseconds (for Elixir wire protocol)",
+    )
     category: MessageCategory = Field(
         description="Category for routing and rendering decisions"
+    )
+    # Elixir Wire Protocol: run_id tracks execution runs across process boundaries
+    run_id: str | None = Field(
+        default=None,
+        description="Run ID for execution tracking (Elixir wire protocol requirement)",
     )
     session_id: str | None = Field(
         default=None,

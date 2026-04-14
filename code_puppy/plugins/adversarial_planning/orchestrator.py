@@ -538,16 +538,23 @@ class AdversarialPlanningOrchestrator:
     async def _default_invoke_agent(
         self, agent_name: str, prompt: str, session_id: str
     ) -> str:
-        """Default agent invocation using Code Puppy's invoke_agent."""
+        """Default agent invocation using Code Puppy's invoke_agent.
+        
+        Note: invoke_agent_headless returns a string directly, not a dict.
+        This was a documented bug from the singleton audit (bd-27) where
+        the code incorrectly assumed a dict return with .get() method.
+        """
         from code_puppy.tools.agent_tools import invoke_agent_headless
         
+        # invoke_agent_headless returns str directly - no .get() needed
         result = await invoke_agent_headless(
             agent_name=agent_name,
             prompt=prompt,
             session_id=session_id,
         )
         
-        return result.get("response", "")
+        # Result is already a string - no dict lookup needed
+        return result if isinstance(result, str) else str(result)
     
     def _default_emit_progress(self, event_type: str, data: dict) -> None:
         """Default progress emission."""
