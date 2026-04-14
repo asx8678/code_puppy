@@ -791,8 +791,8 @@ class TestSecurityRegressionQuotedPaths:
         
         result = classify_command("cat '/etc/shadow'")
         assert result.risk != "none", "Quoted sensitive path should not be regex-classified as 'none'"
-        # Should be 'ambiguous' to trigger LLM review
-        assert result.is_ambiguous is True, "Should require LLM assessment"
+        # Now returns definitive 'medium' risk instead of ambiguous - better security
+        assert result.risk == "medium", "Should be classified as medium risk for sensitive file access"
 
     @pytest.mark.anyio
     async def test_double_quoted_etc_shadow_not_regex_safe(self):
@@ -801,7 +801,7 @@ class TestSecurityRegressionQuotedPaths:
         
         result = classify_command('cat "/etc/shadow"')
         assert result.risk != "none"
-        assert result.is_ambiguous is True
+        assert result.risk == "medium"
 
     @pytest.mark.anyio
     async def test_quoted_ssh_key_not_regex_safe(self):
@@ -810,7 +810,7 @@ class TestSecurityRegressionQuotedPaths:
         
         result = classify_command("head '~/.ssh/id_rsa'")
         assert result.risk != "none"
-        assert result.is_ambiguous is True
+        assert result.risk == "medium"
 
     @pytest.mark.anyio
     async def test_grep_quoted_etc_passwd_not_regex_safe(self):

@@ -246,3 +246,46 @@ class TestRiskLevels:
         assert result.risk in ["critical", "high", "ambiguous"], (
             f"cat /etc/shadow should not be auto-allowed, got: {result.risk}"
         )
+
+
+class TestPathNormalizationBypass:
+    """Regression tests for path normalization bypass (bd-61 audit finding).
+    
+    Verifies that path normalization bypass attempts like //etc/passwd,
+    ///etc/passwd, and /./etc/passwd are correctly detected and blocked.
+    The _normalize_command_for_checks() function must collapse multiple
+    slashes and remove dot segments before path pattern matching.
+    """
+
+    @pytest.mark.parametrize("command", [
+        # Multiple slashes bypass
+        "cat //etc/passwd",
+        "cat ///etc/passwd",
+        "cat ////etc/passwd",
+        "head //private/etc/shadow",
+        "cat //dev/sda",
+        "cat //root/.ssh/id_rsa",
+        "grep foo //etc/passwd",
+        "cat //etc/shadow",
+        "less //private/etc/sudoers",
+        # Dot segment bypass
+        "cat /./etc/passwd",
+        "head /./private/etc/shadow",
+        "grep foo /./etc/shadow",
+        "cat /./dev/sda",
+        "cat /./root/.ssh/id_rsa",
+        # Combined bypasses
+        "cat //./etc/passwd",
+        "cat /././etc/passwd",
+        "head ///./private/etc/shadow",
+        # With arguments
+        "cat -n //etc/passwd",
+        "head -20 /./private/etc/shadow",
+    ])
+    def test_path_normalization_bypass_blocked(self, command: str) -> None:
+        """Regression test for path normalization bypass (bd-61 audit finding)."""
+        result = classify_command(command)
+        assert result.risk != "none", (
+            f"Path normalization bypass should be blocked: {command}\n"
+            f"Got risk='{result.risk}', reasoning='{result.reasoning}'"
+        )

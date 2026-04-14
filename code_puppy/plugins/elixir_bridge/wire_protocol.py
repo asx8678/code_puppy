@@ -602,6 +602,74 @@ def frame_message(message: dict[str, Any]) -> bytes:
     return header + body
 
 
+def parse_framed_message(framed: bytes) -> dict[str, Any]:
+    """Parse a Content-Length framed message.
+
+    Parses HTTP-style Content-Length framing as per BRIDGE_PROTOCOL_V1.md:
+    Content-Length: <byte-length>\\r\\n
+    \\r\\n
+    <json-body>
+
+    Args:
+        framed: Framed message bytes
+
+    Returns:
+        Parsed JSON message dict
+
+    Raises:
+        WireMethodError: If framing is invalid or JSON is malformed
+
+    Example:
+        >>> framed = b'Content-Length: 49\\r\\n\\r\\n{"jsonrpc":"2.0","method":"ping","params":{}}'
+        >>> parsed = parse_framed_message(framed)
+        >>> print(parsed["method"])
+        'ping'
+    """
+    try:
+        # Find the header/body separator
+        if b"\r\n\r\n" not in framed:
+            raise WireMethodError(
+                "Invalid framing: missing header/body separator", PARSE_ERROR
+            )
+
+        header_part, body = framed.split(b"\r\n\r\n", 1)
+
+        # Parse Content-Length header
+        if not header_part.startswith(b"Content-Length: "):
+            raise WireMethodError(
+                "Invalid framing: missing Content-Length header", PARSE_ERROR
+            )
+
+        try:
+            content_length = int(header_part.split(b": ")[1])
+        except (IndexError, ValueError) as e:
+            raise WireMethodError(
+                f"Invalid Content-Length value: {e}", PARSE_ERROR
+            ) from e
+
+        # Validate body length
+        if len(body) != content_length:
+            raise WireMethodError(
+                f"Content-Length mismatch: expected {content_length}, got {len(body)}",
+                PARSE_ERROR,
+            )
+
+        # Parse JSON body
+        try:
+            return json.loads(body.decode("utf-8"))
+        except json.JSONDecodeError as e:
+            raise WireMethodError(
+                f"Invalid JSON in message body: {e}", PARSE_ERROR
+            ) from e
+
+    except WireMethodError:
+        raise
+    except Exception as e:
+        raise WireMethodError(
+            f"Failed to parse framed message: {e}", PARSE_ERROR
+        ) from e
+
+
 def serialize_for_wire(data: Any) -> str:
     """Serialize data to JSON string for wire protocol.
 

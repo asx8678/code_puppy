@@ -18,6 +18,9 @@ SECURITY FIXES (issue code_puppy-70t, bd-61):
 - Added 600-line and 10000-char limits to prevent DoS via regex matching
 - Added explicit find -delete/-exec patterns for mass deletion detection
 - CRITICAL FIX bd-61: Shared sensitive path patterns prevent shell bypasses
+- CRITICAL FIX bd-61: Path normalization in _normalize_command_for_checks()
+  collapses multiple slashes (//+ -> /) and removes dot segments (/./ -> /)
+  to prevent bypasses like //etc/passwd or /./etc/passwd
 """
 
 import re
@@ -441,12 +444,15 @@ def _normalize_command_for_checks(command: str) -> str:
     
     Strips quotes from paths within the command so that sensitive
     path detection works on quoted arguments like '/etc/shadow'.
+    Also normalizes path separators to prevent bypass attempts
+    like //etc/passwd or /./etc/passwd.
     
     Args:
         command: Shell command string.
         
     Returns:
-        Command with quoted paths normalized (quotes stripped).
+        Command with quoted paths normalized (quotes stripped) and
+        path separators collapsed (//+ -> /, /./ -> /).
     """
     # Extract all quoted strings and unquote them
     result = command
@@ -457,7 +463,17 @@ def _normalize_command_for_checks(command: str) -> str:
         # Return the content without quotes
         return match.group(2)
     
-    return quoted_pattern.sub(unquote_match, result)
+    result = quoted_pattern.sub(unquote_match, result)
+    
+    # SECURITY FIX bd-61: Normalize path separators to prevent bypass
+    # Collapse multiple slashes: //etc -> /etc, ///etc -> /etc
+    result = re.sub(r'/{2,}', '/', result)
+    
+    # Remove /. segments: /./etc -> /etc, /foo/./bar -> /foo/bar
+    # But preserve standalone . and ..
+    result = re.sub(r'/\.(?=/|$)', '', result)
+    
+    return result
 
 
 def _path_with_traversal_hits_sensitive(command: str) -> bool:
@@ -629,9 +645,11 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
         r"^\s*(?:cat|head|tail|less|more)\s+(?:-[a-zA-Z0-9]+\s+)*[^|;\&\`\$>]*$",
         command
     )
-    # Also allow input redirection form: cat < /path/to/file
+    # Also allow input redirection form: cat < /path/to/file or cat </path/to/file
+    # SECURITY FIX: Pattern handles both spaced (cat < /file) and non-spaced (cat </file) variants
+    # Using \s* before < allows matching both "cat <" and "cat<"
     file_read_redirect = re.match(
-        r"^\s*cat\s+<\s*\S+$",
+        r"^\s*cat\s*<\s*\S+$",
         command
     )
     if file_read_match or file_read_redirect:
@@ -641,8 +659,14 @@ def _classify_single_command(command: str) -> RegexClassificationResult:
         
         # Check for sensitive paths in the normalized command
         if _SENSITIVE_PATH_PATTERN.search(normalized_cmd):
-            # Has sensitive paths - fall through to ambiguous/LLM
-            pass  # Fall through to the ambiguous return below
+            # SECURITY FIX: Attempt to read sensitive files is medium risk
+            # Previously fell through to ambiguous/LLM which could return low risk
+            return RegexClassificationResult(
+                risk="medium",
+                reasoning="Attempt to read sensitive system file detected",
+                blocked=False,
+                is_ambiguous=False,
+            )
         elif _TRAVERSAL_PATTERN.search(normalized_cmd):
             # SECURITY FIX: Detect traversal patterns that could escape to sensitive paths
             # Check if the path with traversal might resolve to sensitive paths
