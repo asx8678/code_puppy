@@ -1159,7 +1159,7 @@
       "id": "bd-67",
       "title": "Phase 0.1: Route base_agent.py _core_bridge through NativeBackend",
       "description": "Replace direct _core_bridge imports in base_agent.py (lines 44-48) with NativeBackend. Add NativeBackend.MessageBatchHandle re-export, NativeBackend.create_message_batch(), NativeBackend.is_message_core_active(). Fix dead code bug: _core_bridge.rust_split_for_summarization and rust_truncation_indices don't exist (silently AttributeError). 37+ usage points to update.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -1168,9 +1168,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T20:05:41.685263",
-      "updated_at": "2026-04-14T20:06:12.188982",
+      "updated_at": "2026-04-14T21:54:12.695988",
       "comments": [
-        "Claimed by planning-agent-019d8d for in-progress work"
+        "Claimed by planning-agent-019d8d for in-progress work",
+        "Already implemented: base_agent.py routes through NativeBackend (lines 36-40). Dead code bugs fixed at lines 1061/1862. 74 tests pass."
       ]
     },
     "bd-68": {
