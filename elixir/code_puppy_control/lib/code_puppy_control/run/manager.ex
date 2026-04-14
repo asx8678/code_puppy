@@ -63,7 +63,8 @@ defmodule CodePuppyControl.Run.Manager do
              metadata: full_metadata
            ) do
       # Tell worker to start the run
-      PythonWorker.Port.start_run(worker_pid, %{
+      # Use run_id for Registry lookup, not worker_pid
+      PythonWorker.Port.start_run(run_id, %{
         run_id: run_id,
         session_id: session_id,
         agent_name: agent_name,
