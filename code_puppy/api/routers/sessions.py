@@ -8,8 +8,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from code_puppy.api.security import require_api_access
 
 logger = logging.getLogger(__name__)
 
@@ -272,17 +274,24 @@ async def get_session_messages(session_id: str) -> list[dict[str, Any]]:
 
 
 @router.delete("/{session_id}")
-async def delete_session(session_id: str) -> dict[str, str]:
+async def delete_session(
+    session_id: str,
+    _auth: None = Depends(require_api_access),
+) -> dict[str, str]:
     """Delete a session and its data.
 
+    Requires authentication for non-loopback clients or when
+    CODE_PUPPY_REQUIRE_TOKEN is set.
+
     Args:
-        session_id: The session identifier
+        session_id: The session identifier.
+        _auth: Authentication dependency (injected, not used directly).
 
     Returns:
-        Success message dict
+        dict[str, str]: Success message.
 
     Raises:
-        HTTPException: 404 if session not found
+        HTTPException: 404 if session not found.
     """
     session_id = _validate_session_id(session_id)
     sessions_dir = _get_sessions_dir()

@@ -10,11 +10,16 @@ the same-origin policy).
 This module centralises the allow-list used by:
 - the FastAPI CORS middleware
 - the /ws/events and /ws/terminal origin enforcement
+- the bearer token authentication for mutating operations
 """
 
 import logging
 import os
+import secrets
 from urllib.parse import urlparse
+
+from fastapi import Depends, HTTPException, Request, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 logger = logging.getLogger(__name__)
 
@@ -91,4 +96,79 @@ def is_trusted_origin(origin: str | None) -> bool:
     return False
 
 
-__all__ = ["get_allowed_origins", "is_trusted_origin"]
+# =============================================================================
+# Bearer Token Authentication for Mutating Operations
+# =============================================================================
+
+_bearer = HTTPBearer(auto_error=False)
+
+# Local hosts that are allowed by default without authentication
+_LOCAL_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def require_api_access(
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None = Security(_bearer),
+) -> None:
+    """Require authentication for mutating API operations.
+
+    Security model (defense-in-depth):
+    - Loopback clients (127.0.0.1, ::1, localhost) are allowed by default
+    - If CODE_PUPPY_REQUIRE_TOKEN=1, even loopback clients need a token
+    - Non-loopback clients always need a valid token
+    - Token is validated against CODE_PUPPY_API_TOKEN env var using
+      constant-time comparison to prevent timing attacks
+
+    This dependency should be applied to all endpoints that perform
+    destructive or state-mutating operations (execute commands,
+    modify config, delete sessions, etc.).
+
+    Args:
+        request: The incoming HTTP request (for client IP extraction).
+        creds: Bearer token credentials from the Authorization header.
+
+    Raises:
+        HTTPException: 403 if token not configured, 401 if auth required/invalid.
+
+    Example:
+        >>> @router.post("/dangerous")
+        ... async def dangerous_op(_auth: None = Depends(require_api_access)):
+        ...     pass
+    """
+    client_host = request.client.host if request.client else None
+
+    # Check if we require token even for loopback (strict mode)
+    strict_mode = os.getenv("CODE_PUPPY_REQUIRE_TOKEN", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+    # Loopback access without explicit token requirement
+    if client_host in _LOCAL_HOSTS and not strict_mode:
+        return
+
+    # Token required - validate it
+    expected_token = os.getenv("CODE_PUPPY_API_TOKEN")
+    if not expected_token:
+        raise HTTPException(
+            status_code=403,
+            detail="API token not configured. Set CODE_PUPPY_API_TOKEN env var.",
+        )
+
+    if not creds:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header required (Bearer token)",
+        )
+
+    # Constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(creds.credentials, expected_token):
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+
+__all__ = [
+    "get_allowed_origins",
+    "is_trusted_origin",
+    "require_api_access",
+]

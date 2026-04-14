@@ -12,9 +12,10 @@ import os
 import sys
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from code_puppy.api.security import require_api_access
 from code_puppy.tools.command_runner import _kill_process_group
 
 # Ensure commands are registered by importing command_handler
@@ -24,6 +25,10 @@ import code_puppy.command_line.command_handler  # noqa: F401
 # Timeout for command execution (seconds)
 COMMAND_TIMEOUT = 30.0
 
+# Auth Policy:
+# - POST /execute: Protected (requires auth for non-loopback)
+# - POST /autocomplete: Protected (requires auth for non-loopback)
+# - GET /: Public (lists available commands)
 router = APIRouter()
 
 
@@ -292,7 +297,10 @@ async def get_command_info(name: str) -> CommandInfo:
 
 
 @router.post("/execute")
-async def execute_command(request: CommandExecuteRequest) -> CommandExecuteResponse:
+async def execute_command(
+    request: CommandExecuteRequest,
+    _auth: None = Depends(require_api_access),
+) -> CommandExecuteResponse:
     """Execute a slash command.
 
     Takes a command string (with or without leading /) and executes it
@@ -300,8 +308,12 @@ async def execute_command(request: CommandExecuteRequest) -> CommandExecuteRespo
     proper cancellation on timeout - the process is killed if it exceeds
     the timeout.
 
+    Requires authentication for non-loopback clients or when
+    CODE_PUPPY_REQUIRE_TOKEN is set.
+
     Args:
         request: CommandExecuteRequest with the command to execute.
+        _auth: Authentication dependency (injected, not used directly).
 
     Returns:
         CommandExecuteResponse: Result of command execution.
@@ -317,7 +329,10 @@ async def execute_command(request: CommandExecuteRequest) -> CommandExecuteRespo
 
 
 @router.post("/autocomplete")
-async def autocomplete_command(request: AutocompleteRequest) -> AutocompleteResponse:
+async def autocomplete_command(
+    request: AutocompleteRequest,
+    _auth: None = Depends(require_api_access),
+) -> AutocompleteResponse:
     """Get autocomplete suggestions for a partial command.
 
     Provides intelligent autocomplete based on partial input:

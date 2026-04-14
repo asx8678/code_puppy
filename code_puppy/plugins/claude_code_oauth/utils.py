@@ -19,6 +19,21 @@ from .config import (
     get_token_storage_path,
 )
 
+# SECURITY: These fields are sensitive and must never be logged.
+# The _redact_secrets function should be used when logging any token data.
+SENSITIVE_FIELDS = {"access_token", "refresh_token", "id_token", "api_key", "secret", "client_secret"}
+
+
+def _redact_secrets(data: dict[str, Any]) -> dict[str, Any]:
+    """Redact sensitive fields from token response data for safe logging."""
+    if not isinstance(data, dict):
+        return {"_raw": "<non-dict response>"}
+    return {
+        k: ("***REDACTED***" if k.lower() in SENSITIVE_FIELDS else v)
+        for k, v in data.items()
+    }
+
+
 # Proactive refresh buffer default (seconds). Actual buffer is dynamic
 # based on expires_in to avoid overly aggressive refreshes.
 TOKEN_REFRESH_BUFFER_SECONDS = 300
@@ -393,9 +408,9 @@ def refresh_access_token(force: bool = False) -> str | None:
             content_type = response.headers.get("content-type", "")
             if not content_type.startswith("application/json"):
                 logger.error(
-                    "Token refresh returned non-JSON response (Content-Type: %s): %s",
+                    "Token refresh returned non-JSON response (Content-Type: %s). "
+                    "Response body omitted for security.",
                     content_type,
-                    response.text[:500],
                 )
                 return None
             try:
@@ -416,25 +431,23 @@ def refresh_access_token(force: bool = False) -> str | None:
                 return tokens["access_token"]
         else:
             # Classify error for appropriate logging
+            # SECURITY: Never log response body - it may contain tokens or sensitive data
             if _is_unrecoverable_token_error(response):
                 logger.warning(
                     "Claude token refresh failed with unrecoverable error (%s). "
-                    "Tokens may need re-authentication. Error: %s",
+                    "Tokens may need re-authentication.",
                     response.status_code,
-                    response.text[:200],
                 )
             elif _is_transient_error(response):
                 logger.debug(
-                    "Claude token refresh failed (transient %s): %s",
+                    "Claude token refresh failed (transient %s)",
                     response.status_code,
-                    response.text[:200],
                 )
             else:
                 # Ambiguous/unclassified error - log quietly
                 logger.debug(
-                    "Claude token refresh failed (%s): %s",
+                    "Claude token refresh failed (%s)",
                     response.status_code,
-                    response.text[:200],
                 )
     except requests.exceptions.Timeout:
         logger.debug("Claude token refresh timed out (transient)")
@@ -616,14 +629,15 @@ def exchange_code_for_tokens(
             timeout=30,
         )
         logger.info("Token exchange response: %s", response.status_code)
-        logger.debug("Response body: %s", response.text)
+        # SECURITY: Never log response.text directly - it may contain tokens.
+        # Log only response keys after redaction for safe debugging.
         if response.status_code == 200:
             content_type = response.headers.get("content-type", "")
             if not content_type.startswith("application/json"):
                 logger.error(
-                    "Token exchange returned non-JSON response (Content-Type: %s): %s",
+                    "Token exchange returned non-JSON response (Content-Type: %s). "
+                    "Response body omitted for security.",
                     content_type,
-                    response.text[:500],
                 )
                 return None
             try:
@@ -631,13 +645,14 @@ def exchange_code_for_tokens(
             except (ValueError, json.JSONDecodeError) as e:
                 logger.error("Failed to parse token exchange response as JSON: %s", e)
                 return None
+            # SECURITY: Log only the keys, not values - tokens are sensitive
+            logger.debug("Token response keys: %s", sorted(token_data.keys()))
             token_data["expires_at"] = _calculate_expires_at(
                 token_data.get("expires_in")
             )
             return token_data
-        logger.error(
-            "Token exchange failed: %s - %s", response.status_code, response.text
-        )
+        # SECURITY: Never log response body on error - it may contain partial tokens
+        logger.warning("Token exchange failed: status=%s", response.status_code)
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Token exchange error: %s", exc)
     return None
@@ -728,9 +743,9 @@ def fetch_claude_code_models(access_token: str) -> list[str | None]:
             content_type = response.headers.get("content-type", "")
             if not content_type.startswith("application/json"):
                 logger.error(
-                    "Models fetch returned non-JSON response (Content-Type: %s): %s",
+                    "Models fetch returned non-JSON response (Content-Type: %s). "
+                    "Response body omitted for security.",
                     content_type,
-                    response.text[:500],
                 )
                 return None
             try:
@@ -746,8 +761,9 @@ def fetch_claude_code_models(access_token: str) -> list[str | None]:
                         models.append(name)
                 return models
         else:
+            # SECURITY: Never log response body - it may contain sensitive data
             logger.error(
-                "Failed to fetch models: %s - %s", response.status_code, response.text
+                "Failed to fetch models: status=%s", response.status_code
             )
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Error fetching Claude Code models: %s", exc)

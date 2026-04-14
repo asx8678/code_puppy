@@ -3,8 +3,10 @@
 import re
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from code_puppy.api.security import require_api_access
 
 # Patterns that indicate a sensitive key whose value should be redacted.
 _SENSITIVE_PATTERNS = re.compile(
@@ -67,8 +69,24 @@ async def get_config_value(key: str) -> ConfigValue:
 
 
 @router.put("/{key}")
-async def set_config_value(key: str, update: ConfigUpdate) -> ConfigValue:
-    """Set a configuration value."""
+async def set_config_value(
+    key: str,
+    update: ConfigUpdate,
+    _auth: None = Depends(require_api_access),
+) -> ConfigValue:
+    """Set a configuration value.
+
+    Requires authentication for non-loopback clients or when
+    CODE_PUPPY_REQUIRE_TOKEN is set.
+
+    Args:
+        key: The configuration key to set.
+        update: ConfigUpdate with the new value.
+        _auth: Authentication dependency (injected, not used directly).
+
+    Returns:
+        ConfigValue: The updated configuration value (redacted if sensitive).
+    """
     from code_puppy.config import get_config_keys, get_value, set_value
 
     valid_keys = get_config_keys()
@@ -82,8 +100,22 @@ async def set_config_value(key: str, update: ConfigUpdate) -> ConfigValue:
 
 
 @router.delete("/{key}")
-async def reset_config_value(key: str) -> dict[str, str]:
-    """Reset a configuration value to default (remove from config file)."""
+async def reset_config_value(
+    key: str,
+    _auth: None = Depends(require_api_access),
+) -> dict[str, str]:
+    """Reset a configuration value to default (remove from config file).
+
+    Requires authentication for non-loopback clients or when
+    CODE_PUPPY_REQUIRE_TOKEN is set.
+
+    Args:
+        key: The configuration key to reset.
+        _auth: Authentication dependency (injected, not used directly).
+
+    Returns:
+        dict[str, str]: Success message.
+    """
     from code_puppy.config import reset_value
 
     reset_value(key)

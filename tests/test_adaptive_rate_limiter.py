@@ -21,6 +21,7 @@ from code_puppy.adaptive_rate_limiter import (
     record_rate_limit,
     acquire_model_slot,
     release_model_slot,
+    release_model_slot_async,
     reset,
 )
 
@@ -124,7 +125,7 @@ class TestSemaphoreCreation:
     @pytest.mark.asyncio
     async def test_acquire_creates_state(self):
         await acquire_model_slot("gpt-4")
-        release_model_slot("gpt-4")
+        await release_model_slot_async("gpt-4")
         status = get_status()
         assert "gpt-4" in status
         assert status["gpt-4"]["active_count"] == 0
@@ -135,9 +136,9 @@ class TestSemaphoreCreation:
         await acquire_model_slot("gpt-4")
         await acquire_model_slot("gpt-4")
         await acquire_model_slot("gpt-4")
-        release_model_slot("gpt-4")
-        release_model_slot("gpt-4")
-        release_model_slot("gpt-4")
+        await release_model_slot_async("gpt-4")
+        await release_model_slot_async("gpt-4")
+        await release_model_slot_async("gpt-4")
         status = get_status()
         assert status["gpt-4"]["current_limit"] == 5.0
         assert status["gpt-4"]["active_count"] == 0
@@ -524,7 +525,7 @@ class TestCheckModelSlot:
             acquire_model_slot,
             check_model_slot,
             configure,
-            release_model_slot,
+            release_model_slot_async,
         )
 
         configure(initial_limit=1, min_limit=1)
@@ -533,7 +534,7 @@ class TestCheckModelSlot:
         # Slot occupied → False
         assert check_model_slot("gpt-4") is False
 
-        release_model_slot("gpt-4")
+        await release_model_slot_async("gpt-4")
         # Now free again
         assert check_model_slot("gpt-4") is True
 

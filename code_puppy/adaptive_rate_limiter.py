@@ -67,6 +67,7 @@ class ModelRateLimitState:
     active_count: int = 0
     last_429_time: float | None = None
     total_429_count: int = 0
+    last_used_time: float = field(default_factory=time.monotonic)
     condition: asyncio.Condition = field(default=None, repr=False)
 
     # Circuit breaker fields
@@ -202,27 +203,36 @@ def _ensure_queue(state: ModelRateLimitState) -> asyncio.Queue:
 
 
 def _cleanup_old_states(max_age_seconds: float = 3600) -> int:
-    """Remove states that haven't seen 429s in a while.
+    """Remove stale model states that have been idle for too long.
 
-    Returns the number of states removed.  States that were never
-    rate-limited (``last_429_time is None``) are also eligible for
-    cleanup once they exceed the age threshold, keeping the state
-    dict from growing unboundedly as new models are encountered.
+    Only removes states where:
+    - active_count == 0 (no in-flight requests)
+    - request_queue is empty or None
+    - last_used_time is older than max_age_seconds
     """
     now = time.monotonic()
-    to_remove = [
-        k
-        for k, s in _state.model_states.items()
-        if s.last_429_time is None or (now - s.last_429_time) > max_age_seconds
-    ]
-    for k in to_remove:
-        del _state.model_states[k]
-    if to_remove:
+    stale_keys = []
+
+    for key, state in _state.model_states.items():
+        # Never cleanup states with active work
+        if state.active_count > 0:
+            continue
+        # Never cleanup states with queued work
+        if state.request_queue is not None and not state.request_queue.empty():
+            continue
+        # Check idle time
+        if (now - state.last_used_time) > max_age_seconds:
+            stale_keys.append(key)
+
+    for key in stale_keys:
+        del _state.model_states[key]
+
+    if stale_keys:
         logger.debug(
             "adaptive_rate_limiter: cleaned up %d stale model state(s)",
-            len(to_remove),
+            len(stale_keys),
         )
-    return len(to_remove)
+    return len(stale_keys)
 
 
 async def _recovery_loop() -> None:
@@ -724,14 +734,14 @@ async def acquire_model_slot(
                 timeout=timeout,
             )
         state.active_count += 1
+        state.last_used_time = time.monotonic()
 
 
-def release_model_slot(model_name: str) -> None:
-    """Release an adaptive concurrency slot for *model_name*.
+async def release_model_slot_async(model_name: str) -> None:
+    """Release an adaptive concurrency slot (async version - preferred).
 
-    This is synchronous because it only decrements a counter and
-    notifies waiters.  It must be called exactly once for every
-    successful ``acquire_model_slot`` call.
+    This version correctly performs the release under the condition lock,
+    preventing race conditions with waiters.
     """
     key = _normalize_model_name(model_name)
     if key is None:
@@ -739,14 +749,34 @@ def release_model_slot(model_name: str) -> None:
 
     state = _state.model_states.get(key)
     if state is not None:
-        # We need to notify waiters from an async context, but release()
-        # is sync.  We schedule the notification on the running loop.
-        state.active_count = max(0, state.active_count - 1)
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_notify_waiters(state))
-        except RuntimeError:
-            pass
+        async with state.condition:
+            state.active_count = max(0, state.active_count - 1)
+            state.last_used_time = time.monotonic()  # Track for cleanup
+            state.condition.notify_all()
+
+
+def release_model_slot(model_name: str) -> None:
+    """Release an adaptive concurrency slot for *model_name*.
+
+    This is synchronous but schedules the actual release on the event loop
+    to ensure proper locking. Prefer `release_model_slot_async` in async code.
+
+    Must be called exactly once for every successful `acquire_model_slot` call.
+    """
+    key = _normalize_model_name(model_name)
+    if key is None:
+        return
+
+    try:
+        loop = asyncio.get_running_loop()
+        # Schedule the properly-locked async release
+        loop.create_task(release_model_slot_async(key))
+    except RuntimeError:
+        # No running loop - do best-effort sync release
+        # This path should be rare (mainly for cleanup during shutdown)
+        state = _state.model_states.get(key)
+        if state is not None:
+            state.active_count = max(0, state.active_count - 1)
 
 
 def is_circuit_open(model_name: str) -> bool:
@@ -909,8 +939,9 @@ class ModelAwareLimiter:
         exc_tb: Any,
     ) -> bool:
         if self._state is not None:
-            self._state.active_count = max(0, self._state.active_count - 1)
             async with self._state.condition:
+                self._state.active_count = max(0, self._state.active_count - 1)
+                self._state.last_used_time = time.monotonic()  # Track for cleanup
                 self._state.condition.notify_all()
         return False
 
