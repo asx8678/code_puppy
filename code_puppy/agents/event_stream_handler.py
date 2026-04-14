@@ -22,6 +22,7 @@ from rich.text import Text
 from code_puppy.config import get_banner_color, get_subagent_verbose
 from code_puppy.messaging.spinner import pause_all_spinners, resume_all_spinners
 from code_puppy.tools.subagent_context import is_subagent
+from code_puppy.agents.stream_event_normalizer import normalize_stream_event
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ def _reset_stream_state() -> None:
     _did_stream_text = False
     _streamed_line_count = 0
 
+
 # Track active flush tasks to prevent garbage collection and ensure completion
 _active_flush_tasks: set[asyncio.Task] = set()
 
@@ -72,12 +74,13 @@ _TEXT_FLUSH_CHAR_THRESHOLD = 80
 def _fire_stream_event(event_type: str, event_data: Any) -> None:
     """Fire a stream event callback asynchronously (non-blocking) with batching.
 
-    Events are batched to reduce task creation overhead. The batch is flushed
-    when 'part_end' event is received or when batch size reaches the threshold.
+    Events are normalized to a unified schema and batched to reduce task
+    creation overhead. The batch is flushed when 'part_end' event is received
+    or when batch size reaches the threshold.
 
     Args:
         event_type: Type of the event (e.g., 'part_start', 'part_delta', 'part_end')
-        event_data: Data associated with the event
+        event_data: Data associated with the event (will be normalized)
     """
     global _pending_stream_events
 
@@ -88,7 +91,24 @@ def _fire_stream_event(event_type: str, event_data: Any) -> None:
         from code_puppy.messaging import get_session_context
 
         agent_session_id = get_session_context()
-        _pending_stream_events.append((event_type, event_data, agent_session_id))
+
+        # Normalize event data to unified schema for consistent processing
+        # by downstream consumers like Agent Trace
+        if isinstance(event_data, dict):
+            normalized_data = normalize_stream_event(event_type, event_data)
+        else:
+            # Fallback for non-dict event data (shouldn't happen in practice)
+            normalized_data = {
+                "content_delta": str(event_data) if event_data else None,
+                "args_delta": None,
+                "tool_name": None,
+                "tool_name_delta": None,
+                "part_kind": "unknown",
+                "index": -1,
+                "raw": {"_original": event_data},
+            }
+
+        _pending_stream_events.append((event_type, normalized_data, agent_session_id))
 
         # Flush on part_end or when batch threshold reached
         if (

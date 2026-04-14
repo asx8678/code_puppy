@@ -16,6 +16,8 @@ import logging
 from collections.abc import AsyncIterable
 from typing import Any
 
+from code_puppy.agents.stream_event_normalizer import normalize_stream_event
+
 from pydantic_ai import PartDeltaEvent, PartEndEvent, PartStartEvent, RunContext
 from pydantic_ai.messages import (
     TextPart,
@@ -39,6 +41,9 @@ def _fire_callback(event_type: str, event_data: Any, session_id: str | None) -> 
     """Fire stream_event callback non-blocking.
 
     Schedules the callback to run asynchronously without waiting for it.
+    Events are normalized to a unified schema for consistent processing by
+    downstream consumers like Agent Trace.
+
     Silently ignores errors if no event loop is running or if the callback
     system is unavailable.
 
@@ -50,8 +55,26 @@ def _fire_callback(event_type: str, event_data: Any, session_id: str | None) -> 
     try:
         from code_puppy import callbacks
 
+        # Normalize event data to unified schema for consistent processing
+        # by downstream consumers like Agent Trace
+        if isinstance(event_data, dict):
+            normalized_data = normalize_stream_event(event_type, event_data)
+        else:
+            # Fallback for non-dict event data (shouldn't happen in practice)
+            normalized_data = {
+                "content_delta": str(event_data) if event_data else None,
+                "args_delta": None,
+                "tool_name": None,
+                "tool_name_delta": None,
+                "part_kind": "unknown",
+                "index": -1,
+                "raw": {"_original": event_data},
+            }
+
         loop = asyncio.get_running_loop()
-        loop.create_task(callbacks.on_stream_event(event_type, event_data, session_id))
+        loop.create_task(
+            callbacks.on_stream_event(event_type, normalized_data, session_id)
+        )
     except RuntimeError:
         # No event loop running - this can happen during shutdown
         logger.debug("No event loop available for stream event callback")
