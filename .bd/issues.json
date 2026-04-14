@@ -497,7 +497,7 @@
       "id": "bd-29",
       "title": "Phase 1B: Wire Protocol Implementation",
       "description": "Implement JSON-RPC 2.0 over stdio per ADR-001. Content-Length framing. Python worker Port wrapper.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -510,14 +510,16 @@
         ]
       },
       "created_at": "2026-04-14T08:14:56.142674",
-      "updated_at": "2026-04-14T08:14:56.142681",
-      "comments": []
+      "updated_at": "2026-04-14T08:56:59.428351",
+      "comments": [
+        "Complete: Integration tests for protocol, request tracker, python worker. MockPythonWorker helper created."
+      ]
     },
     "bd-30": {
       "id": "bd-30",
       "title": "Phase 2A: Session/Run Registry",
       "description": "Move session/run tracking from Python to Elixir Registry + GenServer. Blocked by: Phase 1A.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -530,8 +532,10 @@
         ]
       },
       "created_at": "2026-04-14T08:14:59.307138",
-      "updated_at": "2026-04-14T08:14:59.307145",
-      "comments": []
+      "updated_at": "2026-04-14T08:56:59.440759",
+      "comments": [
+        "Complete: Run.Manager API, Run.State with worker monitoring, PubSub event routing, RunController updates."
+      ]
     },
     "bd-31": {
       "id": "bd-31",
@@ -634,8 +638,10 @@
         ]
       },
       "created_at": "2026-04-14T08:15:25.225004",
-      "updated_at": "2026-04-14T08:56:03.825625",
-      "comments": []
+      "updated_at": "2026-04-14T08:56:59.451426",
+      "comments": [
+        "Complete: MCP stdio bridge with McpSession, McpRegistry, 5 new handlers (mcp_start, mcp_stop, mcp_request, mcp_list, mcp_notification)."
+      ]
     },
     "bd-36": {
       "id": "bd-36",
