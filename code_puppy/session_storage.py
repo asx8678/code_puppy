@@ -6,6 +6,7 @@ us avoid duplication while staying inside the Zen-of-Python sweet spot: simple
 is better than complex, nested side effects are worse than deliberate helpers.
 """
 
+from __future__ import annotations
 
 from collections.abc import Callable
 import atexit

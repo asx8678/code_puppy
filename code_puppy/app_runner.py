@@ -14,6 +14,7 @@ import argparse
 import os
 import sys
 import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from code_puppy import __version__, callbacks
@@ -39,11 +40,11 @@ if TYPE_CHECKING:
 shutdown_flag = False
 
 # Lazy-loaded function references — populated on first use of run()
-_interactive_mode: callable | None = None
-_execute_single_prompt: callable | None = None
+_interactive_mode: Callable | None = None
+_execute_single_prompt: Callable | None = None
 
 
-def _get_interactive_mode() -> callable:
+def _get_interactive_mode() -> Callable:
     """Lazy import interactive_mode to defer heavy TUI dependencies."""
     global _interactive_mode
     if _interactive_mode is None:

@@ -4,6 +4,9 @@ Provides sequential (and future parallel) execution of file operations
 with structured result collection.
 """
 
+# Backward compatibility flag for tests
+TURBO_OPS_AVAILABLE: bool = False
+
 import asyncio
 import time
 from datetime import datetime, timezone
@@ -30,6 +33,12 @@ except ImportError:
 
 # Import NativeBackend for unified acceleration interface
 from code_puppy.native_backend import NativeBackend
+
+# Try to detect if turbo_ops is available
+try:
+    TURBO_OPS_AVAILABLE = NativeBackend.is_available(NativeBackend.Capabilities.FILE_OPS)
+except Exception:
+    pass
 
 # Fallback: Import Python-native file operations when native unavailable
 from code_puppy.tools.file_operations import (

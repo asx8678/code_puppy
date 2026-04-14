@@ -469,7 +469,7 @@ class NativeBackend:
             "message_core": {
                 "available": True,  # Python implementation always available
                 "rust_available": False,  # Will be set by _core_bridge
-                "source": "rust" if False else "python",  # TODO: check _core_bridge
+                "source": cls._get_message_core_source(),
             },
             "file_ops": {
                 "available": turbo_ops["available"] or cls._is_elixir_available(),
@@ -490,6 +490,19 @@ class NativeBackend:
                 "source": cls._last_source.get(cls.Capabilities.PARSE, "unknown"),
             },
         }
+
+    @classmethod
+    def _get_message_core_source(cls) -> str:
+        """Get the actual source for message_core capability."""
+        if not cls.is_active(cls.Capabilities.MESSAGE_CORE):
+            return "disabled"
+        try:
+            from code_puppy._core_bridge import is_rust_enabled
+            if is_rust_enabled():
+                return "rust"
+        except ImportError:
+            pass
+        return "python"
 
     @classmethod
     def _get_file_ops_source(cls) -> str:
