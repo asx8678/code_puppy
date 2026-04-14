@@ -1,13 +1,21 @@
 use rustler::{Encoder, Env, NifResult, Term};
 use serde::Serialize;
 
-// Re-import the modules we need directly to avoid PyO3 code in lib.rs
-use turbo_parse::symbols::{extract_symbols as _extract_symbols, extract_symbols_from_file as _extract_symbols_from_file};
-use turbo_parse::parser::{parse_source as _parse_source, parse_file as _parse_file};
-use turbo_parse::registry::{is_language_supported as _is_language_supported, list_supported_languages as _list_supported_languages, get_language as _get_language};
-use turbo_parse::diagnostics::extract_diagnostics;
-use turbo_parse::folds::{get_folds as _get_folds, get_folds_from_file as _get_folds_from_file};
-use turbo_parse::highlights::{get_highlights as _get_highlights, get_highlights_from_file as _get_highlights_from_file};
+// Use the core crate directly - no PyO3 dependencies!
+use turbo_parse_core::{
+    extract_symbols as _extract_symbols,
+    extract_symbols_from_file as _extract_symbols_from_file,
+    parse_source as _parse_source,
+    parse_file as _parse_file,
+    is_language_supported as _is_language_supported,
+    list_supported_languages as _list_supported_languages,
+    get_language as _get_language,
+    extract_diagnostics,
+    get_folds as _get_folds,
+    get_folds_from_file as _get_folds_from_file,
+    get_highlights as _get_highlights,
+    get_highlights_from_file as _get_highlights_from_file,
+};
 
 /// Convert a serializable Rust value to an Elixir term via JSON.
 fn to_elixir_term<'a>(env: Env<'a>, value: &impl Serialize) -> NifResult<Term<'a>> {
