@@ -50,11 +50,44 @@ defmodule CodePuppyControlWeb.SessionChannel do
     * `:session_id` - The session identifier
     * `:joined_at` - UTC DateTime of join
     * `:replay_cursor` - The cursor value used for replay
+
+  ## Authorization
+
+  The socket's `verified_session_id` must match the channel's session_id,
+  unless the socket is in dev mode (verified_session_id is nil).
   """
   @impl true
   def join("session:" <> session_id, params, socket) do
     Logger.info("SessionChannel: client joining session #{session_id}")
 
+    # Authorize: verify this socket owns the session
+    verified_session_id = socket.assigns[:verified_session_id]
+
+    if authorized_for_session?(verified_session_id, session_id) do
+      do_join_session(session_id, params, socket)
+    else
+      Logger.warning(
+        "SessionChannel: unauthorized join attempt for session #{session_id} (verified: #{verified_session_id})"
+      )
+
+      {:error, %{reason: "unauthorized"}}
+    end
+  end
+
+  # Reject join attempts for invalid topics.
+  @impl true
+  def join(topic, _params, _socket) do
+    Logger.warning("SessionChannel: rejected join attempt for topic #{topic}")
+    {:error, %{reason: "unauthorized"}}
+  end
+
+  # Authorize join if verified_session_id is nil (dev mode) or matches the session
+  defp authorized_for_session?(nil, _channel_session_id), do: true
+
+  defp authorized_for_session?(verified_id, channel_session_id),
+    do: verified_id == channel_session_id
+
+  defp do_join_session(session_id, params, socket) do
     # Subscribe to session events via PubSub
     case EventBus.subscribe_session(session_id) do
       :ok ->
@@ -86,13 +119,6 @@ defmodule CodePuppyControlWeb.SessionChannel do
 
         {:error, %{reason: "subscription_failed"}}
     end
-  end
-
-  # Reject join attempts for invalid topics.
-  @impl true
-  def join(topic, _params, _socket) do
-    Logger.warning("SessionChannel: rejected join attempt for topic #{topic}")
-    {:error, %{reason: "unauthorized"}}
   end
 
   # ============================================================================
@@ -227,7 +253,7 @@ defmodule CodePuppyControlWeb.SessionChannel do
 
   # Forward PubSub events to the client.
   @impl true
-  def handle_info({:event, event}, socket) do
+  def handle_info({:run_event, event}, socket) do
     # Transform internal event format to client format if needed
     push(socket, "event", event)
 

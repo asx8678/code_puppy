@@ -17,3 +17,6 @@ config :phoenix, :plug_init_mode, :runtime
 config :code_puppy_control, CodePuppyControl.Repo,
   database: "priv/dev.db",
   pool_size: 5
+
+# Dev mode: no websocket secret means all connections are allowed
+config :code_puppy_control, :websocket_secret, nil

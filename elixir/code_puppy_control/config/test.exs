@@ -14,6 +14,9 @@ config :logger, level: :warning
 # Python worker script for testing (mock path)
 config :code_puppy_control, :python_worker_script, "/tmp/mock_python_worker.py"
 
+# WebSocket auth secret for testing
+config :code_puppy_control, :websocket_secret, "test_websocket_secret_for_testing"
+
 # Ensure Oban config exists for tests
 config :code_puppy_control, Oban,
   engine: Oban.Engines.Basic,

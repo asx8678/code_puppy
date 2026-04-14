@@ -53,51 +53,17 @@ defmodule CodePuppyControlWeb.RunChannel do
     # First check if the run exists
     case Run.Manager.get_run(run_id) do
       {:ok, run_state} ->
-        session_id = run_state.session_id
+        # Authorize: verify this socket owns the run's session
+        verified_session_id = socket.assigns[:verified_session_id]
 
-        # Subscribe to run events via PubSub
-        case EventBus.subscribe_run(run_id) do
-          :ok ->
-            # Optionally subscribe to session events too
-            include_session = Map.get(params, "include_session", false)
+        if authorized_for_run?(verified_session_id, run_state.session_id) do
+          do_join_run(run_id, run_state, params, socket)
+        else
+          Logger.warning(
+            "RunChannel: unauthorized join attempt for run #{run_id} (session: #{run_state.session_id})"
+          )
 
-            if include_session && session_id do
-              EventBus.subscribe_session(session_id)
-            end
-
-            # Get replay parameters
-            replay = Map.get(params, "replay", true)
-            since = Map.get(params, "since", 0)
-
-            # Build socket assigns
-            socket =
-              socket
-              |> assign(:run_id, run_id)
-              |> assign(:session_id, session_id)
-              |> assign(:joined_at, DateTime.utc_now())
-              |> assign(:replay_cursor, since)
-              |> assign(:include_session, include_session)
-              |> assign(:run_state, run_state)
-
-            # Schedule replay if requested
-            if replay do
-              send(self(), {:send_replay, run_id, since})
-            end
-
-            # Schedule heartbeat check
-            schedule_heartbeat_check()
-
-            {:ok,
-             %{
-               run_id: run_id,
-               session_id: session_id,
-               status: run_state.status,
-               agent_name: run_state.agent_name
-             }, socket}
-
-          {:error, reason} ->
-            Logger.error("RunChannel: failed to subscribe to run #{run_id}: #{inspect(reason)}")
-            {:error, %{reason: "subscription_failed"}}
+          {:error, %{reason: "unauthorized"}}
         end
 
       {:error, :not_found} ->
@@ -111,6 +77,59 @@ defmodule CodePuppyControlWeb.RunChannel do
   def join(topic, _params, _socket) do
     Logger.warning("RunChannel: rejected join attempt for topic #{topic}")
     {:error, %{reason: "unauthorized"}}
+  end
+
+  # Authorize join if verified_session_id is nil (dev mode) or matches the run's session
+  defp authorized_for_run?(nil, _run_session_id), do: true
+  defp authorized_for_run?(verified_id, run_session_id), do: verified_id == run_session_id
+
+  defp do_join_run(run_id, run_state, params, socket) do
+    session_id = run_state.session_id
+
+    # Subscribe to run events via PubSub
+    case EventBus.subscribe_run(run_id) do
+      :ok ->
+        # Optionally subscribe to session events too
+        include_session = Map.get(params, "include_session", false)
+
+        if include_session && session_id do
+          EventBus.subscribe_session(session_id)
+        end
+
+        # Get replay parameters
+        replay = Map.get(params, "replay", true)
+        since = Map.get(params, "since", 0)
+
+        # Build socket assigns
+        socket =
+          socket
+          |> assign(:run_id, run_id)
+          |> assign(:session_id, session_id)
+          |> assign(:joined_at, DateTime.utc_now())
+          |> assign(:replay_cursor, since)
+          |> assign(:include_session, include_session)
+          |> assign(:run_state, run_state)
+
+        # Schedule replay if requested
+        if replay do
+          send(self(), {:send_replay, run_id, since})
+        end
+
+        # Schedule heartbeat check
+        schedule_heartbeat_check()
+
+        {:ok,
+         %{
+           run_id: run_id,
+           session_id: session_id,
+           status: run_state.status,
+           agent_name: run_state.agent_name
+         }, socket}
+
+      {:error, reason} ->
+        Logger.error("RunChannel: failed to subscribe to run #{run_id}: #{inspect(reason)}")
+        {:error, %{reason: "subscription_failed"}}
+    end
   end
 
   # ============================================================================
@@ -260,7 +279,7 @@ defmodule CodePuppyControlWeb.RunChannel do
 
   # Forward PubSub run events to the client.
   @impl true
-  def handle_info({:event, event}, socket) do
+  def handle_info({:run_event, event}, socket) do
     run_id = socket.assigns.run_id
     event_run_id = event[:run_id] || event["run_id"]
 

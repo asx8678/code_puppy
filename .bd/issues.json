@@ -847,7 +847,7 @@
       "id": "bd-48",
       "title": "P1: Event tuple mismatch - Run.State vs EventBus send different formats",
       "description": "HIGH SEVERITY: Run.State expects {:run_event, event} tuple but EventBus sends {:event, event}, causing event processing failures.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/run/state.ex\n- elixir/code_puppy_control/lib/code_puppy_control/event_bus.ex\n\n**Impact:** \n- Events not processed correctly\n- Run state updates lost\n- Event-driven features broken\n- Silent failures in event handling\n\n**Fix:** Standardize on ONE event tuple format:\n- Option A: Change Run.State to expect {:event, event}\n- Option B: Change EventBus to send {:run_event, event}\n- Document the chosen format\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "bug",
       "labels": [
@@ -855,14 +855,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:42.003789",
-      "updated_at": "2026-04-14T10:37:42.003798",
+      "updated_at": "2026-04-14T11:16:52.261728",
       "comments": []
     },
     "bd-49": {
       "id": "bd-49",
       "title": "P2: WebSocket unauthenticated - UserSocket allows any client connection",
       "description": "MEDIUM SEVERITY: UserSocket does not authenticate clients, allowing any WebSocket connection to subscribe to run events and potentially access sensitive data.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control_web/channels/user_socket.ex\n\n**Impact:** \n- Unauthorized access to run events\n- Information disclosure\n- No connection authentication/authorization\n\n**Fix:** \n- Add token-based authentication on connect\n- Verify session/run ownership before allowing channel join\n- Implement authorization checks for run: events\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "bug",
       "labels": [
@@ -870,7 +870,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:48.559230",
-      "updated_at": "2026-04-14T10:37:48.559240",
+      "updated_at": "2026-04-14T11:21:34.677855",
       "comments": []
     },
     "bd-50": {
@@ -892,7 +892,7 @@
       "id": "bd-51",
       "title": "P2: Config sprawl - Multiple config surfaces need consolidation",
       "description": "MEDIUM SEVERITY: Configuration is scattered across multiple surfaces with no single source of truth, making deployment and environment management difficult.\n\n**Config Surfaces:**\n- Application environment (config/runtime.exs)\n- Python config (config.json)\n- Zig build options (build.zig)\n- Environment variables (inconsistent naming)\n- Compile-time vs runtime config confusion\n\n**Impact:** \n- Hard to configure correctly\n- Environment-specific bugs\n- Deployment complexity\n- No validation of config values\n\n**Fix:** \n- Centralize config in one module\n- Add config validation at startup\n- Document all config options\n- Standardize environment variable naming (PUP_ prefix)\n- Fail fast on invalid config\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -900,14 +900,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:48.561608",
-      "updated_at": "2026-04-14T10:37:48.561615",
+      "updated_at": "2026-04-14T11:20:46.067163",
       "comments": []
     },
     "bd-52": {
       "id": "bd-52",
       "title": "P1: MCP.Server blocking receive - Raw receive inside GenServer callbacks",
       "description": "HIGH SEVERITY: MCP.Server uses blocking 'receive' inside GenServer.handle_info/2, blocking the GenServer and potentially deadlocking the supervision tree.\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/mcp/server.ex:352-385\n\n**Impact:** \n- MCP server blocks on message processing\n- Cannot handle concurrent MCP requests\n- GenServer mailbox backup under load\n- Potential supervision tree deadlock\n\n**Fix:** \n- Refactor to use :active, :once TCP mode\n- Handle packets as they arrive via handle_info\n- Or use :gen_tcp.controlling_process + separate process\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "bug",
       "labels": [
@@ -915,7 +915,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:57.391932",
-      "updated_at": "2026-04-14T10:37:57.391941",
+      "updated_at": "2026-04-14T11:18:24.761491",
       "comments": []
     },
     "bd-53": {

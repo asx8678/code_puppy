@@ -10,14 +10,28 @@ defmodule CodePuppyControlWeb.UserSocket do
   - `"session:*"` - SessionChannel: Events for all runs in a session
   - `"run:*"` - RunChannel: Events for a specific run only
 
-  ## Connection
+  ## Authentication
 
-  No authentication is currently required - any client can connect.
-  Future versions may add token-based authentication.
+  Token-based authentication is used to verify clients. Pass a signed token
+  in the connect params:
+
+      let socket = new Phoenix.Socket("/socket", {params: {token: signedToken}})
+
+  ## Token Generation
+
+  Tokens are signed using `Phoenix.Token` with the `PUP_WEBSOCKET_SECRET`
+  environment variable. Generate tokens server-side:
+
+      Phoenix.Token.sign(socket, "session", session_id)
+
+  ## Dev Mode
+
+  If `PUP_WEBSOCKET_SECRET` is not configured, all connections are allowed.
+  The socket assigns will have `verified_session_id: nil`.
 
   ## Example Client Usage (JavaScript)
 
-      let socket = new Phoenix.Socket("/socket")
+      let socket = new Phoenix.Socket("/socket", {params: {token: myToken}})
       socket.connect()
 
       let sessionChannel = socket.channel("session:session-123", {replay: true})
@@ -42,6 +56,9 @@ defmodule CodePuppyControlWeb.UserSocket do
 
   require Logger
 
+  # 24 hours
+  @token_max_age 86_400
+
   # ============================================================================
   # Channels
   # ============================================================================
@@ -56,62 +73,93 @@ defmodule CodePuppyControlWeb.UserSocket do
   @doc """
   Verify and identify the socket connection.
 
-  Currently accepts all connections without authentication.
-  Future versions may:
-  - Validate API tokens
-  - Check session permissions
-  - Rate limit connections
+  If `PUP_WEBSOCKET_SECRET` is configured, validates the token parameter
+  and extracts the session_id. If no secret is configured (dev mode),
+  accepts all connections.
 
   ## Socket ID
 
-  Returns `nil` since we don't track socket identities yet.
-  This means broadcasts to `socket_id` won't reach any socket.
+  Returns a session-based socket ID if authenticated, or nil if in dev mode.
   """
   @impl true
   def connect(params, socket, connect_info) do
     Logger.debug("UserSocket: client connecting with params #{inspect(params)}")
 
-    # Store connection metadata
-    socket =
-      socket
-      |> assign(:connected_at, DateTime.utc_now())
-      |> assign(:connect_info, connect_info)
-      |> assign(:client_params, params)
+    token = params["token"]
 
-    # Future: Add authentication here
-    # token = params["token"]
-    # case authenticate(token) do
-    #   {:ok, user} -> {:ok, assign(socket, :current_user, user)}
-    #   {:error, reason} -> {:error, reason}
-    # end
+    case authenticate(token) do
+      {:ok, session_id} ->
+        Logger.debug("UserSocket: authenticated session #{session_id}")
 
-    {:ok, socket}
+        socket =
+          socket
+          |> assign(:connected_at, DateTime.utc_now())
+          |> assign(:connect_info, connect_info)
+          |> assign(:client_params, params)
+          |> assign(:verified_session_id, session_id)
+
+        {:ok, socket}
+
+      {:error, :dev_mode} ->
+        Logger.debug("UserSocket: no secret configured, accepting connection (dev mode)")
+
+        socket =
+          socket
+          |> assign(:connected_at, DateTime.utc_now())
+          |> assign(:connect_info, connect_info)
+          |> assign(:client_params, params)
+          |> assign(:verified_session_id, nil)
+
+        {:ok, socket}
+
+      {:error, reason} ->
+        Logger.warning("UserSocket: authentication failed - #{inspect(reason)}")
+        {:error, :invalid_token}
+    end
   end
 
   @doc """
   Return the socket ID for identifying the socket server side.
 
-  Currently returns `nil` as we don't need to identify specific sockets.
-  If we add user authentication, this would return a unique identifier
-  for broadcasting to specific users.
+  Returns a session-based ID for authenticated sockets, enabling targeted
+  broadcasts to specific sessions. Returns nil in dev mode.
   """
   @impl true
-  def id(_socket) do
-    # Future: Return user-specific ID for targeted broadcasts
-    # "user_socket:#{socket.assigns.current_user.id}"
-    nil
+  def id(socket) do
+    case socket.assigns.verified_session_id do
+      nil -> nil
+      session_id -> "session:#{session_id}"
+    end
   end
 
   # ============================================================================
-  # Private Functions (for future use)
+  # Private Functions
   # ============================================================================
 
-  # defp authenticate(nil), do: {:error, :missing_token}
-  # defp authenticate(token) do
-  #   # Validate JWT or API token
-  #   case Phoenix.Token.verify(socket, "user salt", token, max_age: 86400) do
-  #     {:ok, user_id} -> {:ok, %{id: user_id}}
-  #     {:error, reason} -> {:error, reason}
-  #   end
-  # end
+  # Dev mode: no secret configured, accept all connections
+  defp authenticate(token) do
+    case websocket_secret() do
+      nil -> {:error, :dev_mode}
+      secret -> do_authenticate(token, secret)
+    end
+  end
+
+  defp do_authenticate(nil, _secret), do: {:error, :missing_token}
+
+  defp do_authenticate(token, secret) do
+    case Phoenix.Token.verify(socket_impl(), secret, token, max_age: @token_max_age) do
+      {:ok, session_id} -> {:ok, session_id}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp websocket_secret do
+    Application.get_env(:code_puppy_control, :websocket_secret) ||
+      System.get_env("PUP_WEBSOCKET_SECRET")
+  end
+
+  # Socket implementation for Phoenix.Token - uses endpoint module
+  defp socket_impl do
+    CodePuppyControlWeb.Endpoint
+  end
 end
