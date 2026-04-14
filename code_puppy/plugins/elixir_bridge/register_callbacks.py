@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import sys
 from typing import Any
 
@@ -32,6 +33,9 @@ logger = logging.getLogger(__name__)
 # Module-level state - bridge controller instance
 _bridge_controller: BridgeController | None = None
 
+# Protocol configuration - can be set to "newline" for backward compatibility
+_BRIDGE_PROTOCOL = os.environ.get("CODE_PUPPY_BRIDGE_PROTOCOL", "content-length")
+
 # Line 600 limit compliance - bridge implementation split into submodules
 
 
@@ -43,6 +47,97 @@ def _log_bridge(message: str, level: str = "info") -> None:
                 f.write(f"[{level}] {message}\\n")
         except Exception:
             pass  # Best effort logging
+
+
+def _write_framed_message(msg: dict) -> None:
+    """Write a JSON-RPC message with Content-Length framing.
+    
+    Supports backward compatibility via _BRIDGE_PROTOCOL:
+    - "content-length": Uses Content-Length framing (default)
+    - "newline": Uses newline-delimited JSON
+    """
+    global _BRIDGE_PROTOCOL
+    try:
+        if _BRIDGE_PROTOCOL == "newline":
+            # Legacy newline-delimited protocol
+            json_line = json.dumps(msg, separators=(",", ":"))
+            sys.stdout.write(json_line + "\\n")
+            sys.stdout.flush()
+        else:
+            # Content-Length framing (default, protocol spec)
+            body = json.dumps(msg, separators=(",", ":"))
+            body_bytes = body.encode("utf-8")
+            header = f"Content-Length: {len(body_bytes)}\r\n\r\n"
+            sys.stdout.buffer.write(header.encode("utf-8"))
+            sys.stdout.buffer.write(body_bytes)
+            sys.stdout.buffer.flush()
+    except Exception as e:
+        _log_bridge(f"Failed to write framed message: {e}", "error")
+
+
+def _read_framed_message(reader: asyncio.StreamReader) -> dict | None:
+    """Read a JSON-RPC message with Content-Length framing from reader.
+    
+    Supports backward compatibility via _BRIDGE_PROTOCOL:
+    - "content-length": Uses Content-Length framing (default)
+    - "newline": Uses newline-delimited JSON
+    
+    Returns None on EOF or parse error.
+    """
+    global _BRIDGE_PROTOCOL
+    try:
+        if _BRIDGE_PROTOCOL == "newline":
+            # Legacy newline-delimited protocol
+            line_bytes = reader.readline()
+            if not line_bytes:
+                return None  # EOF
+            line = line_bytes.decode("utf-8").strip()
+            if not line:
+                return None  # Empty line
+            return json.loads(line)
+        else:
+            # Content-Length framing (default, protocol spec)
+            # Read header line (Content-Length: N\r\n)
+            header = b""
+            while True:
+                byte = reader.read(1)
+                if not byte:
+                    return None  # EOF
+                header += byte
+                if header.endswith(b"\r\n"):
+                    break
+            
+            # Parse Content-Length
+            header_str = header.decode("utf-8").strip()
+            if not header_str.lower().startswith("content-length:"):
+                _log_bridge(f"Invalid header: {header_str[:50]}", "error")
+                return None
+            
+            try:
+                content_length = int(header_str.split(":", 1)[1].strip())
+            except (ValueError, IndexError):
+                _log_bridge(f"Failed to parse Content-Length from: {header_str}", "error")
+                return None
+            
+            # Read separator \r\n
+            separator = reader.read(2)
+            if separator != b"\r\n":
+                _log_bridge(f"Invalid separator: {separator!r}", "error")
+                return None
+            
+            # Read exactly content_length bytes
+            body_bytes = reader.read(content_length)
+            if len(body_bytes) != content_length:
+                _log_bridge(f"Incomplete read: got {len(body_bytes)} bytes, expected {content_length}", "error")
+                return None
+            
+            return json.loads(body_bytes.decode("utf-8"))
+    except json.JSONDecodeError as e:
+        _log_bridge(f"JSON parse error: {e}", "error")
+        return None
+    except Exception as e:
+        _log_bridge(f"Read error: {e}", "error")
+        return None
 
 
 async def _on_startup() -> None:
@@ -69,7 +164,7 @@ async def _on_startup() -> None:
         # Emit bridge ready notification
         _emit_bridge_notification("bridge_ready", {
             "version": "1.0.0",
-            "pid": sys.pid,
+            "pid": os.getpid(),
             "capabilities": ["invoke_agent", "run_shell", "file_ops", "event_stream"]
         })
         
@@ -121,6 +216,7 @@ def _on_stream_event(
     
     This callback intercepts all events and forwards them to Elixir
     via stdout in JSON-RPC notification format (no response expected).
+    Uses Content-Length framing for Elixir protocol compatibility.
     
     Format: {"jsonrpc": "2.0", "method": "event", "params": {...}}
     
@@ -143,11 +239,9 @@ def _on_stream_event(
             "params": wire_event
         }
         
-        # Write to stdout with newline delimiter
-        # This is how Elixir Port expects framed messages
-        json_line = json.dumps(notification, separators=(",", ":"))
-        sys.stdout.write(json_line + "\\n")
-        sys.stdout.flush()
+        # Write to stdout with Content-Length framing
+        # This is the Elixir JSON-RPC protocol specification
+        _write_framed_message(notification)
         
         _log_bridge(f"Emitted event: {event_type}", "debug")
         
@@ -160,6 +254,7 @@ def _emit_bridge_notification(method: str, params: dict[str, Any]) -> None:
     """Emit a bridge-level notification.
     
     Used for bridge lifecycle events (ready, closing, error).
+    Uses Content-Length framing for Elixir protocol compatibility.
     """
     try:
         notification = {
@@ -167,9 +262,7 @@ def _emit_bridge_notification(method: str, params: dict[str, Any]) -> None:
             "method": method,
             "params": params
         }
-        json_line = json.dumps(notification, separators=(",", ":"))
-        sys.stdout.write(json_line + "\\n")
-        sys.stdout.flush()
+        _write_framed_message(notification)
     except Exception as e:
         _log_bridge(f"Failed to emit bridge notification: {e}", "error")
 
@@ -177,8 +270,12 @@ def _emit_bridge_notification(method: str, params: dict[str, Any]) -> None:
 async def _stdin_reader_loop() -> None:
     """Read JSON-RPC commands from stdin.
     
-    Continuously reads newline-delimited JSON commands from stdin,
+    Continuously reads Content-Length framed JSON commands from stdin,
     dispatches them via the bridge controller, and writes responses.
+    
+    Supports backward compatibility via _BRIDGE_PROTOCOL:
+    - "content-length": Uses Content-Length framing (default)
+    - "newline": Uses newline-delimited JSON
     
     Async-safe: Uses asyncio.StreamReader for non-blocking I/O.
     See: docs/rules/async-io.md for callback implementation rules.
@@ -204,26 +301,15 @@ async def _stdin_reader_loop() -> None:
     
     while BRIDGE_ENABLED and _bridge_controller is not None:
         try:
-            # Read line (non-blocking with asyncio)
-            line_bytes = await reader.readline()
+            # Read framed message (Content-Length or newline based on protocol)
+            request = _read_framed_message(reader)
             
-            if not line_bytes:
-                # EOF - stdin closed
+            if request is None:
+                # EOF or parse error - reader is exhausted
                 _log_bridge("Stdin EOF reached", "info")
                 break
             
-            line = line_bytes.decode("utf-8").strip()
-            if not line:
-                continue
-            
-            _log_bridge(f"Received: {line[:200]}...", "debug")
-            
-            # Parse JSON-RPC request
-            try:
-                request = json.loads(line)
-            except json.JSONDecodeError as e:
-                _send_jsonrpc_error(None, -32700, f"Parse error: {e}")
-                continue
+            _log_bridge(f"Received: {str(request)[:200]}...", "debug")
             
             # Validate basic JSON-RPC structure
             if request.get("jsonrpc") != "2.0":
@@ -248,22 +334,26 @@ async def _stdin_reader_loop() -> None:
 
 
 def _send_jsonrpc_response(request_id: Any, result: Any) -> None:
-    """Send a JSON-RPC success response."""
+    """Send a JSON-RPC success response.
+    
+    Uses Content-Length framing for Elixir protocol compatibility.
+    """
     try:
         response = {
             "jsonrpc": "2.0",
             "id": request_id,
             "result": result
         }
-        json_line = json.dumps(response, separators=(",", ":"))
-        sys.stdout.write(json_line + "\\n")
-        sys.stdout.flush()
+        _write_framed_message(response)
     except Exception as e:
         _log_bridge(f"Failed to send response: {e}", "error")
 
 
 def _send_jsonrpc_error(request_id: Any, code: int, message: str, data: Any = None) -> None:
-    """Send a JSON-RPC error response."""
+    """Send a JSON-RPC error response.
+    
+    Uses Content-Length framing for Elixir protocol compatibility.
+    """
     try:
         error = {
             "code": code,
@@ -277,9 +367,7 @@ def _send_jsonrpc_error(request_id: Any, code: int, message: str, data: Any = No
             "id": request_id,
             "error": error
         }
-        json_line = json.dumps(response, separators=(",", ":"))
-        sys.stdout.write(json_line + "\\n")
-        sys.stdout.flush()
+        _write_framed_message(response)
     except Exception as e:
         _log_bridge(f"Failed to send error: {e}", "error")
 
