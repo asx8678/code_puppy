@@ -16,8 +16,10 @@ logger = logging.getLogger(__name__)
 def _log_indexer_status():
     """Log which indexer backend is active at startup."""
     status = get_indexer_status()
-    if status["rust_available"]:
-        logger.debug("Repo Compass using Rust acceleration (turbo_ops)")
+    # bd-83: Report actual backend (elixir/python), not stale "turbo_ops"
+    backend = status.get("backend", "python")
+    if status.get("rust_available") or backend == "elixir":
+        logger.debug(f"Repo Compass using native backend ({backend})")
     else:
         logger.debug("Repo Compass using Python backend")
 
@@ -119,7 +121,9 @@ def _build_repo_context(root: Path | None = None) -> str | None:
             context_parts.append(build_line)
 
         # Decision markers (≈30-50 tokens)
-        decisions_section = _format_decision_markers_section(project_root, max_markers=3)
+        decisions_section = _format_decision_markers_section(
+            project_root, max_markers=3
+        )
         if decisions_section:
             context_parts.append(decisions_section)
 

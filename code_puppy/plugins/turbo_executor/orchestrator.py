@@ -4,10 +4,6 @@ Provides sequential (and future parallel) execution of file operations
 with structured result collection.
 """
 
-# Backward compatibility flag for tests
-TURBO_OPS_AVAILABLE: bool = False
-
-import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -34,19 +30,20 @@ except ImportError:
 # Import NativeBackend for unified acceleration interface
 from code_puppy.native_backend import NativeBackend
 
-# Try to detect if turbo_ops is available
+# bd-84: Backward compatibility flags for tests
 try:
-    TURBO_OPS_AVAILABLE = NativeBackend.is_available(NativeBackend.Capabilities.FILE_OPS)
+    NATIVE_FILE_OPS_AVAILABLE = NativeBackend.is_available(
+        NativeBackend.Capabilities.FILE_OPS
+    )
+    TURBO_OPS_AVAILABLE = (
+        NATIVE_FILE_OPS_AVAILABLE  # Deprecated: use NATIVE_FILE_OPS_AVAILABLE
+    )
 except Exception:
-    pass
+    NATIVE_FILE_OPS_AVAILABLE = False
+    TURBO_OPS_AVAILABLE = False
 
 # Fallback: Import Python-native file operations when native unavailable
-from code_puppy.tools.file_operations import (
-    _grep,
-    _list_files,
-    _read_file_sync,
-    validate_file_path,
-)
+from code_puppy.tools.file_operations import validate_file_path
 
 
 class TurboOrchestrator:
@@ -55,7 +52,7 @@ class TurboOrchestrator:
     Currently executes operations sequentially. Future versions will
     support parallel execution based on operation priorities and dependencies.
 
-    Falls back to native Python file operations when Rust turbo_ops is unavailable.
+    Falls back to native Python file operations when native backend (Elixir) is unavailable.
 
     Example:
         plan = Plan(
@@ -80,11 +77,18 @@ class TurboOrchestrator:
         """
         self.enable_parallel = enable_parallel
         self.prefer_native_python = prefer_native_python
-        self._native_file_ops_available = NativeBackend.is_available(
-            NativeBackend.Capabilities.FILE_OPS
-        ) and not prefer_native_python
-        # Backward compatibility: maintain old attribute name
+        self._native_file_ops_available = (
+            NativeBackend.is_available(NativeBackend.Capabilities.FILE_OPS)
+            and not prefer_native_python
+        )
+        # Backward compatibility: maintain old attribute name (bd-84)
         self._turbo_ops_available = self._native_file_ops_available
+        # bd-84: Track actual backend source for accurate reporting
+        self._backend_source = (
+            NativeBackend._get_file_ops_source()
+            if hasattr(NativeBackend, "_get_file_ops_source")
+            else ("elixir" if self._native_file_ops_available else "python")
+        )
 
         self._operation_handlers: dict[OperationType, Callable] = {
             OperationType.LIST_FILES: self._execute_list_files,
@@ -297,19 +301,25 @@ class TurboOrchestrator:
 
         # Use NativeBackend with fallback
         prefer_native = not self.prefer_native_python
-        result = NativeBackend.list_files(directory, recursive, _prefer_native=prefer_native)
-
-        # Transform NativeBackend result to orchestrator format
-        # Map source names for backward compatibility with existing tests
-        source_mapping = {
-            "native_backend": "native_python" if not prefer_native else "turbo_ops",
-            "python_fallback": "native_python",
-            "turbo_ops": "turbo_ops",
-        }
-        source = source_mapping.get(
-            result.get("source"),
-            "native_python" if not prefer_native else "turbo_ops"
+        result = NativeBackend.list_files(
+            directory, recursive, _prefer_native=prefer_native
         )
+
+        # bd-84: Map source names to actual backend (elixir/python), not stale "turbo_ops"
+        actual_source = (
+            NativeBackend._get_file_ops_source()
+            if hasattr(NativeBackend, "_get_file_ops_source")
+            else "python"
+        )
+        source_mapping = {
+            "native_backend": actual_source,
+            "python_fallback": "python",
+            "elixir": "elixir",
+            "python": "python",
+            # Legacy mapping for backward compatibility
+            "turbo_ops": actual_source,
+        }
+        source = source_mapping.get(result.get("source"), actual_source)
 
         if "error" in result and result["error"]:
             return {
@@ -342,19 +352,25 @@ class TurboOrchestrator:
 
         # Use NativeBackend with fallback
         prefer_native = not self.prefer_native_python
-        result = NativeBackend.grep(search_string, directory, _prefer_native=prefer_native)
-
-        # Transform NativeBackend result to orchestrator format
-        # Map source names for backward compatibility with existing tests
-        source_mapping = {
-            "native_backend": "native_python" if not prefer_native else "turbo_ops",
-            "python_fallback": "native_python",
-            "turbo_ops": "turbo_ops",
-        }
-        source = source_mapping.get(
-            result.get("source"),
-            "native_python" if not prefer_native else "turbo_ops"
+        result = NativeBackend.grep(
+            search_string, directory, _prefer_native=prefer_native
         )
+
+        # bd-84: Map source names to actual backend (elixir/python), not stale "turbo_ops"
+        actual_source = (
+            NativeBackend._get_file_ops_source()
+            if hasattr(NativeBackend, "_get_file_ops_source")
+            else "python"
+        )
+        source_mapping = {
+            "native_backend": actual_source,
+            "python_fallback": "python",
+            "elixir": "elixir",
+            "python": "python",
+            # Legacy mapping for backward compatibility
+            "turbo_ops": actual_source,
+        }
+        source = source_mapping.get(result.get("source"), actual_source)
 
         if "error" in result and result["error"]:
             return {
@@ -395,23 +411,27 @@ class TurboOrchestrator:
                 is_valid, error_msg = validate_file_path(file_path, "read")
                 if not is_valid:
                     # Add to results as blocked
-                    files_data.append({
-                        "file_path": file_path,
-                        "content": None,
-                        "num_tokens": 0,
-                        "error": f"Security: {error_msg}",
-                        "success": False,
-                    })
+                    files_data.append(
+                        {
+                            "file_path": file_path,
+                            "content": None,
+                            "num_tokens": 0,
+                            "error": f"Security: {error_msg}",
+                            "success": False,
+                        }
+                    )
                 else:
                     validated_paths.append(file_path)
             except Exception as e:
-                files_data.append({
-                    "file_path": file_path,
-                    "content": None,
-                    "num_tokens": 0,
-                    "error": f"Validation error: {e}",
-                    "success": False,
-                })
+                files_data.append(
+                    {
+                        "file_path": file_path,
+                        "content": None,
+                        "num_tokens": 0,
+                        "error": f"Validation error: {e}",
+                        "success": False,
+                    }
+                )
 
         # Only process validated paths through native backend
         file_paths = validated_paths
@@ -427,36 +447,43 @@ class TurboOrchestrator:
             native_files = result.get("files", [])
             files_data.extend(native_files)
 
-            # Map source names for backward compatibility with existing tests
-            source_mapping = {
-                "native_backend": "native_python" if not prefer_native else "turbo_ops",
-                "python_fallback": "native_python",
-                "turbo_ops": "turbo_ops",
-            }
-            source = source_mapping.get(
-                result.get("source"),
-                "native_python" if not prefer_native else "turbo_ops"
+            # bd-84: Map source names to actual backend (elixir/python), not stale "turbo_ops"
+            actual_source = (
+                NativeBackend._get_file_ops_source()
+                if hasattr(NativeBackend, "_get_file_ops_source")
+                else "python"
             )
+            source_mapping = {
+                "native_backend": actual_source,
+                "python_fallback": "python",
+                "elixir": "elixir",
+                "python": "python",
+                # Legacy mapping for backward compatibility
+                "turbo_ops": actual_source,
+            }
+            source = source_mapping.get(result.get("source"), actual_source)
 
             return {
                 "files": files_data,
                 "total_files": original_total,
-                "successful_reads": sum(1 for f in files_data if f.get("success", False)),
+                "successful_reads": sum(
+                    1 for f in files_data if f.get("success", False)
+                ),
                 "source": source,
             }
 
-        # No valid paths to read - still need to map source for consistency
-        source_mapping = {
-            True: "native_python",
-            False: "turbo_ops",
-        }
-        source = source_mapping.get(self.prefer_native_python, "native_python")
+        # No valid paths to read - still need to map source for consistency (bd-84)
+        actual_source = (
+            NativeBackend._get_file_ops_source()
+            if hasattr(NativeBackend, "_get_file_ops_source")
+            else "python"
+        )
 
         return {
             "files": files_data,
             "total_files": original_total,
             "successful_reads": 0,
-            "source": source,
+            "source": actual_source,
         }
 
     def validate_plan(self, plan: Plan) -> list[str]:

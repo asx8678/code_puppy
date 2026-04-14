@@ -1,10 +1,11 @@
-"""Bridge to Rust turbo_ops indexer with Python fallback.
+"""Bridge to native backend indexer with Python fallback.
 
 This module provides a unified API for directory indexing that:
-1. Uses the Rust `turbo_ops.index_directory()` when available (5-10x faster)
-2. Falls back to the pure Python implementation when Rust is unavailable
+1. Uses the native backend (Elixir) when available (5-10x faster)
+2. Falls back to the pure Python implementation when native backend is unavailable
 
 bd-61: Migrated to use NativeBackend for unified acceleration access.
+bd-83: Updated references from "turbo_ops" to "native backend" / "elixir".
 """
 
 from dataclasses import dataclass
@@ -14,18 +15,19 @@ from code_puppy.native_backend import NativeBackend
 
 # Import Python fallback
 from code_puppy.plugins.repo_compass.indexer import (
-    build_structure_map as _python_build_structure_map,
     FileSummary as PythonFileSummary,
-    IGNORED_DIRS,
 )
 
 # Legacy compatibility: check NativeBackend status
-TURBO_INDEXER_AVAILABLE = NativeBackend.is_available(NativeBackend.Capabilities.REPO_INDEX)
+TURBO_INDEXER_AVAILABLE = NativeBackend.is_available(
+    NativeBackend.Capabilities.REPO_INDEX
+)
 
 
 @dataclass(frozen=True, slots=True)
 class FileSummary:
     """Unified FileSummary that works with both Rust and Python backends."""
+
     path: str
     kind: str
     symbols: tuple[str, ...] = ()
@@ -81,10 +83,21 @@ def get_indexer_status() -> dict:
     status = NativeBackend.get_status()
     repo_index_status = status.get(NativeBackend.Capabilities.REPO_INDEX)
 
+    # bd-83: Report actual backend source (elixir/python), not stale "turbo_ops"
+    backend_source = "python"
+    if repo_index_status and repo_index_status.active:
+        # Get actual source from NativeBackend if available
+        if hasattr(NativeBackend, "_get_file_ops_source"):
+            backend_source = NativeBackend._get_file_ops_source()
+        else:
+            backend_source = "elixir"  # Default when active
+
     return {
         "rust_available": repo_index_status.available if repo_index_status else False,
-        "backend": "turbo_ops" if (repo_index_status and repo_index_status.active) else "python",
-        "native_backend_status": repo_index_status.status if repo_index_status else "unknown",
+        "backend": backend_source,
+        "native_backend_status": repo_index_status.status
+        if repo_index_status
+        else "unknown",
     }
 
 
