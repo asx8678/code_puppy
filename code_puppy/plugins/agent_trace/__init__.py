@@ -36,6 +36,13 @@ from code_puppy.plugins.agent_trace.reducer import (
     reduce_event,
     replay_trace,
 )
+from code_puppy.plugins.agent_trace.cli_renderer import (
+    render_trace,
+    render_live,
+    set_render_enabled,
+    is_render_enabled,
+    clear_previous_render,
+)
 
 __all__ = [
     # Schema
@@ -62,4 +69,10 @@ __all__ = [
     "TokenUsage",
     "reduce_event",
     "replay_trace",
+    # CLI Renderer
+    "render_trace",
+    "render_live",
+    "set_render_enabled",
+    "is_render_enabled",
+    "clear_previous_render",
 ]

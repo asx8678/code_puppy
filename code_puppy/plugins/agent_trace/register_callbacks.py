@@ -29,6 +29,11 @@ from code_puppy.plugins.agent_trace.emitter import (
 )
 from code_puppy.plugins.agent_trace.store import TraceStore
 from code_puppy.plugins.agent_trace.reducer import TraceState, reduce_event
+from code_puppy.plugins.agent_trace.cli_renderer import (
+    render_live,
+    clear_previous_render,
+    set_render_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +60,7 @@ def _get_or_create_trace_id(session_id: str | None) -> str:
 
 def _on_startup():
     """Initialize the trace system."""
-    emit_info("📊 Agent Trace V2 loaded (normalized observability)")
+    emit_info("📊 Agent Trace V2 loaded (live CLI visualization enabled)")
 
 
 async def _on_agent_run_start(
@@ -118,6 +123,10 @@ async def _on_agent_run_start(
         _store.append(agent_event)
         _store.append(model_event)
         
+        # Render live trace
+        if trace_id in _trace_states:
+            render_live(_trace_states[trace_id], mode="tree")
+        
     except Exception as e:
         logger.debug(f"Agent trace error in agent_run_start: {e}")
 
@@ -171,6 +180,10 @@ async def _on_stream_event(
             # Reduce and persist
             _trace_states[trace_id] = reduce_event(_trace_states[trace_id], transfer_event)
             _store.append(transfer_event)
+        
+        # Live render update
+        if trace_id in _trace_states:
+            render_live(_trace_states[trace_id], mode="tree")
         
     except Exception as e:
         logger.debug(f"Agent trace error in stream_event: {e}")
@@ -290,6 +303,10 @@ async def _on_post_tool_call(
         _store.append(result_event)
         _store.append(end_event)
         
+        # Render updated state
+        if trace_id in _trace_states:
+            render_live(_trace_states[trace_id], mode="tree")
+        
     except Exception as e:
         logger.debug(f"Agent trace error in post_tool_call: {e}")
 
@@ -364,6 +381,10 @@ async def _on_agent_run_end(
         _trace_states[trace_id] = reduce_event(_trace_states[trace_id], agent_end)
         _store.append(agent_end)
         
+        # Final render with reconciliation
+        if trace_id in _trace_states:
+            render_live(_trace_states[trace_id], mode="tree", force=True)
+        
         # Cleanup
         if model_span_id in _estimated_usage:
             del _estimated_usage[model_span_id]
@@ -418,7 +439,18 @@ def _handle_trace_command(command: str, name: str) -> Any:
         emit_info("📊 Trace state cleared")
         return True
     
-    emit_info("Usage: /trace status|list|show <id>|clear")
+    if subcommand == "on":
+        set_render_enabled(True)
+        emit_info("📊 Live trace rendering enabled")
+        return True
+    
+    if subcommand == "off":
+        set_render_enabled(False)
+        clear_previous_render()
+        emit_info("📊 Live trace rendering disabled")
+        return True
+    
+    emit_info("Usage: /trace status|list|show <id>|clear|on|off")
     return True
 
 
