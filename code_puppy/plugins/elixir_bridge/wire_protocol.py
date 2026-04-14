@@ -485,13 +485,16 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
             raise WireMethodError("run.start requires 'agent_name' param", INVALID_PARAMS)
         if "prompt" not in params:
             raise WireMethodError("run.start requires 'prompt' param", INVALID_PARAMS)
-        return {
+        result = {
             "agent_name": str(params["agent_name"]),
             "prompt": str(params["prompt"]),
             "session_id": params.get("session_id"),
-            "run_id": params.get("run_id"),
             "context": params.get("context", {}),
         }
+        # Only include run_id if provided - handler will auto-generate if missing
+        if "run_id" in params:
+            result["run_id"] = params["run_id"]
+        return result
 
     elif normalized_method == "run.cancel":
         if "run_id" not in params:
@@ -519,12 +522,15 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
             raise WireMethodError("invoke_agent requires 'agent_name' param", INVALID_PARAMS)
         if "prompt" not in params:
             raise WireMethodError("invoke_agent requires 'prompt' param", INVALID_PARAMS)
-        return {
+        result = {
             "agent_name": str(params["agent_name"]),
             "prompt": str(params["prompt"]),
             "session_id": params.get("session_id"),
-            "run_id": params.get("run_id"),
         }
+        # Only include run_id if provided - handler will auto-generate if missing
+        if "run_id" in params:
+            result["run_id"] = params["run_id"]
+        return result
 
     elif normalized_method == "run_shell":
         if "command" not in params:

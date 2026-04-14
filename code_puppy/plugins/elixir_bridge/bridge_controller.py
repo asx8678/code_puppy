@@ -95,6 +95,10 @@ class BridgeController:
 
         self._command_count += 1
 
+        # Normalize slash-style to dot-style for V1 methods
+        # e.g., "run/start" -> "run.start"
+        normalized_method = method.replace("/", ".")
+
         # Map method names to handlers (V1 canonical + legacy)
         handlers: dict[str, Any] = {
             "run.start": self._handle_run_start,
@@ -111,7 +115,7 @@ class BridgeController:
             "ping": self._handle_ping,
         }
 
-        handler = handlers.get(method)
+        handler = handlers.get(normalized_method)
         if handler is None:
             raise WireMethodError(f"Unknown method: {method}", code=-32601)
 
