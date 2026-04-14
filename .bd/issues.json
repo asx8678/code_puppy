@@ -1446,7 +1446,114 @@
       "created_at": "2026-04-14T21:03:21.306651",
       "updated_at": "2026-04-14T21:06:34.323405",
       "comments": []
+    },
+    "bd-83": {
+      "id": "bd-83",
+      "title": "Phase 2.3: Route turbo_indexer_bridge through NativeBackend",
+      "description": "",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-2",
+        "cleanup"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-85"
+        ]
+      },
+      "created_at": "2026-04-14T22:03:33.954737",
+      "updated_at": "2026-04-14T22:04:35.405083",
+      "comments": [
+        "turbo_indexer_bridge.py still references Rust turbo_ops for repo indexing. Route through NativeBackend.index_directory() which already exists. Remove direct turbo_ops imports. Fallback to Python indexer when Elixir unavailable."
+      ]
+    },
+    "bd-84": {
+      "id": "bd-84",
+      "title": "Phase 2.2: Route TurboOrchestrator through NativeBackend",
+      "description": "",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-2",
+        "cleanup"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-85"
+        ]
+      },
+      "created_at": "2026-04-14T22:03:33.955778",
+      "updated_at": "2026-04-14T22:04:35.404270",
+      "comments": [
+        "TurboOrchestrator (plugins/turbo_executor/orchestrator.py) still imports turbo_ops directly in 16 places. Route all file ops through NativeBackend.list_files/grep/read_file instead. Remove direct turbo_ops imports. Update _get_backend_info() to report 'elixir' or 'python' (not 'turbo_ops')."
+      ]
+    },
+    "bd-85": {
+      "id": "bd-85",
+      "title": "Phase 2.1: Wire Elixir file_ops to Python via elixir_bridge",
+      "description": "",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-2",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T22:03:33.967073",
+      "updated_at": "2026-04-14T22:03:59.757861",
+      "comments": [
+        "Wire Elixir file_ops.ex (already complete) to Python via elixir_bridge. Add handlers in bridge_controller.py for: file.list, file.read, file.read_batch, file.grep. Update native_backend.py to use bridge RPC instead of NotImplementedError. Transport: JSON-RPC over stdio (existing elixir_bridge pattern). Exit criteria: list_files/grep/read_file work through Elixir when bridge connected."
+      ]
+    },
+    "bd-86": {
+      "id": "bd-86",
+      "title": "Phase 2.5: Remove stale turbo_ops references from config",
+      "description": "",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-2",
+        "cleanup"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T22:03:33.974826",
+      "updated_at": "2026-04-14T22:03:59.781366",
+      "comments": [
+        "Clean up stale turbo_ops references: config.py declares turbo_ops as 'rust' backend (line ~50). Remove or update to reflect Elixir reality. Also check pyproject.toml, any docs referencing turbo_ops as Rust."
+      ]
+    },
+    "bd-87": {
+      "id": "bd-87",
+      "title": "Phase 2.4: Add file_ops integration tests (Elixir backend)",
+      "description": "",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-2",
+        "testing"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-85"
+        ]
+      },
+      "created_at": "2026-04-14T22:03:33.977353",
+      "updated_at": "2026-04-14T22:04:35.412044",
+      "comments": [
+        "Add integration tests for Elixir-backed file ops: test_file_ops_elixir_backend.py. Test list_files, grep, read_file, read_files through the bridge. Mock bridge for unit tests, real bridge for integration. Verify security gates (sensitive_path blocking) work end-to-end."
+      ]
     }
   },
-  "counter": 82
+  "counter": 87
 }
