@@ -36,7 +36,10 @@ defmodule CodePuppyControl.Run.State do
     :metadata
   ]
 
-  @type status :: :starting | :running | :completed | :failed | :cancelled
+  @type status :: :starting | :running | :completed | :failed | :cancelled | :paused | :pending | :unknown
+
+  # Valid statuses for safe atom conversion from external input
+  @valid_statuses ~w(starting running completed failed cancelled paused pending)a
 
   @type t :: %__MODULE__{
           run_id: String.t(),
@@ -55,6 +58,31 @@ defmodule CodePuppyControl.Run.State do
         }
 
   @inactivity_timeout :timer.minutes(30)
+
+  @doc """
+  Safely converts a status string to an atom.
+  Returns the atom if valid, or :unknown for invalid statuses.
+  This prevents atom table exhaustion from external input.
+  """
+  @spec safe_status_atom(String.t() | atom()) :: status()
+  def safe_status_atom(status) when is_atom(status) do
+    if status in @valid_statuses, do: status, else: :unknown
+  end
+
+  def safe_status_atom(status) when is_binary(status) do
+    case status do
+      "starting" -> :starting
+      "running" -> :running
+      "completed" -> :completed
+      "failed" -> :failed
+      "cancelled" -> :cancelled
+      "paused" -> :paused
+      "pending" -> :pending
+      _ -> :unknown
+    end
+  end
+
+  def safe_status_atom(_), do: :unknown
 
   # Client API
 
@@ -367,7 +395,7 @@ defmodule CodePuppyControl.Run.State do
     new_state =
       case event do
         %{"type" => "status", "status" => status} ->
-          %{state | status: String.to_atom(status), events: new_events}
+          %{state | status: safe_status_atom(status), events: new_events}
 
         %{"type" => "completed"} ->
           %{

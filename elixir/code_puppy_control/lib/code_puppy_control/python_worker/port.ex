@@ -323,7 +323,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
 
-    CodePuppyControl.Run.State.set_status(run_id, String.to_atom(params["status"]))
+    CodePuppyControl.Run.State.set_status(run_id, CodePuppyControl.Run.State.safe_status_atom(params["status"]))
 
     CodePuppyControl.EventStore.store(event)
     CodePuppyControl.EventBus.broadcast_event(event, store: false)
