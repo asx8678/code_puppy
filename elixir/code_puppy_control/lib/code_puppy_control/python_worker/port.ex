@@ -22,6 +22,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
   require Logger
 
+  alias CodePuppyControl.FileOps
   alias CodePuppyControl.Protocol
 
   defstruct [:port, :run_id, :buffer, :request_counter, :parent_pid, ready: false]
@@ -246,7 +247,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
     # Process each message
     for message <- messages do
-      handle_message(message, state.run_id)
+      handle_incoming_message(message, state.run_id, state.port)
     end
 
     {:noreply, %{state | buffer: rest}}
@@ -285,6 +286,148 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   # Private functions
+
+  # Handle incoming messages - detect if it's a request (needs response) or response/notification
+  defp handle_incoming_message(%{"id" => id, "method" => method, "params" => params}, _run_id, port) do
+    # This is a request FROM Python that needs a response back
+    response = handle_file_request(method, params)
+
+    # Add the id to make it a proper JSON-RPC response
+    response_with_id = Map.put(response, "id", id)
+
+    # Send response back through the port
+    framed = Protocol.frame(response_with_id)
+    Port.command(port, framed)
+  end
+
+  defp handle_incoming_message(%{"id" => id, "result" => result}, _run_id, _port) do
+    # This is a response TO a request we sent
+    CodePuppyControl.RequestTracker.complete_request(id, result)
+  end
+
+  defp handle_incoming_message(%{"id" => id, "error" => error}, _run_id, _port) do
+    # This is an error response TO a request we sent
+    CodePuppyControl.RequestTracker.fail_request(id, {:python_error, error})
+  end
+
+  defp handle_incoming_message(message, run_id, _port) do
+    # Pass to existing notification handlers
+    handle_message(message, run_id)
+  end
+
+  # File operation request handlers (called by Python)
+
+  defp handle_file_request("file_list", params) do
+    directory = params["directory"] || "."
+    opts = params_to_file_ops_opts(params)
+
+    case FileOps.list_files(directory, opts) do
+      {:ok, files} ->
+        # Convert DateTime to ISO8601 strings for JSON serialization
+        serializable_files =
+          Enum.map(files, fn file ->
+            file
+            |> Map.update(:modified, nil, fn dt ->
+              case DateTime.to_iso8601(dt) do
+                {:ok, str} -> str
+                str when is_binary(str) -> str
+                _ -> nil
+              end
+            end)
+            |> Map.update(:type, nil, fn t ->
+              if is_atom(t), do: Atom.to_string(t), else: t
+            end)
+          end)
+
+        Protocol.encode_response(%{"files" => serializable_files}, nil)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "File list failed: #{inspect(reason)}", nil, nil)
+    end
+  end
+
+  defp handle_file_request("grep_search", params) do
+    pattern = params["pattern"]
+    directory = params["directory"] || "."
+    opts = params_to_grep_opts(params)
+
+    case FileOps.grep(pattern, directory, opts) do
+      {:ok, matches} ->
+        Protocol.encode_response(%{"matches" => matches}, nil)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Grep search failed: #{inspect(reason)}", nil, nil)
+    end
+  end
+
+  defp handle_file_request("file_read", params) do
+    path = params["path"]
+    opts = params_to_read_opts(params)
+
+    case FileOps.read_file(path, opts) do
+      {:ok, result} ->
+        # Convert to JSON-serializable format
+        serializable_result =
+          result
+          |> Map.update(:error, nil, fn err -> err end)
+          |> Map.update(:truncated, false, fn t -> t end)
+
+        Protocol.encode_response(serializable_result, nil)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "File read failed: #{inspect(reason)}", nil, nil)
+    end
+  end
+
+  defp handle_file_request("file_read_batch", params) do
+    paths = params["paths"] || []
+    opts = params_to_read_opts(params)
+
+    {:ok, results} = FileOps.read_files(paths, opts)
+
+    # Convert to JSON-serializable format
+    serializable_results =
+      Enum.map(results, fn result ->
+        result
+        |> Map.update(:error, nil, fn err -> err end)
+        |> Map.update(:truncated, false, fn t -> t end)
+      end)
+
+    Protocol.encode_response(%{"files" => serializable_results}, nil)
+  end
+
+  defp handle_file_request(method, _params) do
+    Protocol.encode_error(-32601, "Method not found: #{method}", nil, nil)
+  end
+
+  # Option conversion helpers
+
+  defp params_to_file_ops_opts(params) do
+    [
+      recursive: Map.get(params, "recursive", true),
+      include_hidden: Map.get(params, "include_hidden", false),
+      ignore_patterns: Map.get(params, "ignore_patterns", []),
+      max_files: Map.get(params, "max_files", 10_000)
+    ]
+  end
+
+  defp params_to_grep_opts(params) do
+    [
+      case_sensitive: Map.get(params, "case_sensitive", true),
+      max_matches: Map.get(params, "max_matches", 1_000),
+      file_pattern: Map.get(params, "file_pattern", "*"),
+      context_lines: Map.get(params, "context_lines", 0)
+    ]
+  end
+
+  defp params_to_read_opts(params) do
+    opts = []
+    opts = if params["start_line"], do: Keyword.put(opts, :start_line, params["start_line"]), else: opts
+    opts = if params["num_lines"], do: Keyword.put(opts, :num_lines, params["num_lines"]), else: opts
+    opts
+  end
+
+  # Legacy message handlers (for backward compatibility with existing Python events)
 
   defp handle_message(%{"id" => id, "result" => result}, _run_id) do
     CodePuppyControl.RequestTracker.complete_request(id, result)
