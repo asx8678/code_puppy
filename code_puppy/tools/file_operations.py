@@ -22,13 +22,23 @@ from code_puppy.constants import (
     MAX_GREP_MATCHES,
     MAX_READ_FILE_TOKENS,
 )
-from code_puppy.messaging import (  # New structured messaging types
+from code_puppy.messaging import (
     FileContentMessage,
     FileEntry,
     FileListingMessage,
     GrepMatch,
     GrepResultMessage,
     get_message_bus,
+)
+# SECURITY: Shared sensitive path definitions (bd-61)
+from code_puppy.sensitive_paths import (
+    ALLOWED_ENV_PATTERNS,
+    SENSITIVE_DIR_PREFIXES,
+    SENSITIVE_EXACT_FILES,
+    SENSITIVE_EXTENSIONS,
+    SENSITIVE_FILENAME_PREFIXES,
+    SENSITIVE_FILENAMES,
+    is_sensitive_path,
 )
 from code_puppy.token_counting import count_tokens
 from code_puppy.utils.eol import normalize_eol, strip_bom
@@ -105,52 +115,16 @@ _COMMON_HOME_SUBDIRS = frozenset(
     }
 )
 
-# SECURITY FIX 8c0/egh: Sensitive path data - module-level frozensets for O(1) lookup
-# (was being rebuilt on every validate_file_path call)
-_SENSITIVE_DIR_PREFIXES = frozenset(
-    {
-        os.path.join(os.path.expanduser("~"), ".ssh") + os.sep,
-        os.path.join(os.path.expanduser("~"), ".aws") + os.sep,
-        os.path.join(os.path.expanduser("~"), ".gnupg") + os.sep,
-        os.path.join(os.path.expanduser("~"), ".gcp") + os.sep,
-        os.path.join(os.path.expanduser("~"), ".config", "gcloud") + os.sep,
-        os.path.join(os.path.expanduser("~"), ".azure") + os.sep,
-        os.path.join(os.path.expanduser("~"), ".kube") + os.sep,
-        os.path.join(os.path.expanduser("~"), ".docker") + os.sep,
-    }
-)
-
-_SENSITIVE_EXACT_FILES = frozenset(
-    {
-        os.path.join(os.path.expanduser("~"), ".netrc"),
-        os.path.join(os.path.expanduser("~"), ".pgpass"),
-        os.path.join(os.path.expanduser("~"), ".my.cnf"),
-        os.path.join(os.path.expanduser("~"), ".env"),
-        os.path.join(os.path.expanduser("~"), ".bash_history"),
-        os.path.join(os.path.expanduser("~"), ".npmrc"),
-        os.path.join(os.path.expanduser("~"), ".pypirc"),
-        os.path.join(os.path.expanduser("~"), ".gitconfig"),
-        "/etc/shadow",
-        "/etc/sudoers",
-        "/etc/master.passwd",  # BSD/macOS
-        "/etc/passwd",
-        # macOS /private/etc symlinks (realpath resolves /etc -> /private/etc)
-        "/private/etc/shadow",
-        "/private/etc/sudoers",
-        "/private/etc/master.passwd",
-        "/private/etc/passwd",
-    }
-)
-
-# SECURITY FIX b26: Also block project-local .env files anywhere
-# Block .env and .env.* variants (.env.local, .env.production, etc.)
-# BUT allow .env.example, .env.sample, .env.template (safe documentation files)
-_SENSITIVE_FILENAMES = frozenset({".env"})
-# Catches .env.local, .env.production, etc. but allows .env.example/.sample/.template
-_ALLOWED_ENV_PATTERNS = frozenset({".env.example", ".env.sample", ".env.template"})
-_SENSITIVE_FILENAME_PREFIXES = frozenset({".env."})
-
-_SENSITIVE_EXTENSIONS = frozenset({".pem", ".key", ".p12", ".pfx", ".keystore"})
+# SECURITY FIX 8c0/egh/bd-61: Sensitive path data now imported from
+# code_puppy.security.sensitive_paths for single source of truth.
+# The following are re-exported for backward compatibility:
+# - SENSITIVE_DIR_PREFIXES
+# - SENSITIVE_EXACT_FILES
+# - SENSITIVE_FILENAMES
+# - ALLOWED_ENV_PATTERNS
+# - SENSITIVE_FILENAME_PREFIXES
+# - SENSITIVE_EXTENSIONS
+# - is_sensitive_path()
 
 
 class ListFileOutput(BaseModel):
@@ -588,70 +562,13 @@ async def _list_files(
 def _is_sensitive_path(file_path: str) -> bool:
     """Check if a path points to a sensitive file/directory.
 
+    DELEGATE to code_puppy.security.sensitive_paths.is_sensitive_path()
+    for a single source of truth (SECURITY FIX bd-61).
+
     Used by file_operations and the file_permission_handler plugin to block
     access to credentials, SSH keys, and other secrets — even in yolo_mode.
-
-    SECURITY FIX peis/wslg/p8wo/8y6x: sensitive-path blocklist.
-    PERFORMANCE FIX 8c0/egh: Uses module-level frozensets for O(1) lookup.
-
-    Args:
-        file_path: Path to check (may be relative, absolute, or contain ~).
-
-    Returns:
-        True if the path points to a sensitive location and should be blocked.
     """
-    if not file_path:
-        return False
-
-    # Normalize: expand ~, resolve symlinks, make absolute
-    try:
-        expanded = os.path.abspath(os.path.expanduser(file_path))
-        # Resolve symlinks so we catch symlink-based bypass attempts.
-        # Use realpath which doesn't require the file to exist.
-        resolved = os.path.realpath(expanded)
-    except (OSError, ValueError):
-        # If we can't normalize, treat it as NOT sensitive (let other
-        # checks handle invalid paths); validate_file_path will catch
-        # genuinely bad input.
-        return False
-
-    # Check directory prefixes (with trailing separator to avoid
-    # "/home/user/.sshfoo" matching "/home/user/.ssh")
-    # SECURITY FIX: Also check exact directory match (e.g., "/home/user/.ssh")
-    for prefix in _SENSITIVE_DIR_PREFIXES:
-        if resolved.startswith(prefix):
-            return True
-        # Check exact directory match (prefix without trailing slash)
-        exact_dir = prefix.rstrip(os.sep)
-        if resolved == exact_dir:
-            return True
-
-    # Check exact-match files
-    if resolved in _SENSITIVE_EXACT_FILES:
-        return True
-
-    # SECURITY FIX b26: Block sensitive filenames anywhere (e.g., .env)
-    basename = os.path.basename(resolved)
-    if basename in _SENSITIVE_FILENAMES:
-        return True
-    # Block .env.* variants (lowercase comparison for case-insensitive match)
-    # BUT allow .env.example, .env.sample, .env.template (safe documentation)
-    basename_lower = basename.lower()
-    if basename_lower in _ALLOWED_ENV_PATTERNS:
-        return False  # Explicitly allow these safe documentation files
-    if any(
-        basename_lower.startswith(prefix) for prefix in _SENSITIVE_FILENAME_PREFIXES
-    ):
-        return True
-
-    # Check for private key files by extension anywhere (SECURITY FIX b26)
-    # Previously only blocked if parent directory had credential-ish names,
-    # but deploy.key, server.pem, etc. anywhere can contain secrets.
-    _, ext = os.path.splitext(resolved)
-    if ext.lower() in _SENSITIVE_EXTENSIONS:
-        return True
-
-    return False
+    return is_sensitive_path(file_path)
 
 
 def validate_file_path(file_path: str, operation: str) -> tuple[bool, str | None]:

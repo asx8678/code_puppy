@@ -13,15 +13,25 @@ Design principles:
 - Fast path: Returns immediately for safe commands without LLM roundtrip
 - Defense in depth: Regex blocks obvious attacks; LLM handles edge cases
 
-SECURITY FIXES (issue code_puppy-70t):
+SECURITY FIXES (issue code_puppy-70t, bd-61):
 - Regex patterns use bounded repetition to prevent O(n²) catastrophic backtracking
 - Added 600-line and 10000-char limits to prevent DoS via regex matching
 - Added explicit find -delete/-exec patterns for mass deletion detection
+- CRITICAL FIX bd-61: Shared sensitive path patterns prevent shell bypasses
 """
 
 import re
 from dataclasses import dataclass
 from typing import Literal
+
+# SECURITY FIX bd-61: Import shared sensitive path patterns from central module.
+# This ensures shell command filtering blocks ALL paths that file_operations
+# blocks, preventing bypass vectors where shell commands read sensitive files.
+from code_puppy.sensitive_paths import (
+    SENSITIVE_PATH_REGEX_PATTERN,
+    SENSITIVE_PATH_PATTERNS,
+    get_sensitive_path_regex_pattern,
+)
 
 # SECURITY: Maximum command length to prevent regex DoS
 # Commands longer than this are rejected immediately
@@ -369,10 +379,16 @@ def _extract_unquoted_text(command: str) -> str:
 
 
 # Pre-compiled patterns for checking sensitive paths in file operations
-# SECURITY FIX: Now also matches after input redirection operators (<, <<, <<<)
-_SENSITIVE_PATH_PATTERN = re.compile(
-    r"(?:^|\s|<<?<?)(?:/etc|/root|/proc|~/.ssh|~/.aws|/var/log|/home/root)(?:/|$|\s)"
-)
+# SECURITY FIX bd-61: Now using shared patterns from code_puppy.security.sensitive_paths
+# This ensures shell command filtering blocks ALL paths that file_operations blocks.
+# Added paths: /private/etc (macOS), /dev (device files), ~root (root home via tilde)
+# 
+# Old pattern (for reference):
+#   (?:^|\s|<<?<?)(?:/etc|/root|/proc|~/.ssh|~/.aws|/var/log|/home/root)(?:/|$|\s)
+#
+# Using shared pattern to prevent bypass vectors where shell commands read
+# sensitive files that file_operations correctly blocks.
+_SENSITIVE_PATH_PATTERN = SENSITIVE_PATH_REGEX_PATTERN
 
 # SECURITY FIX: Pattern to detect relative path traversal that could escape to sensitive paths
 _TRAVERSAL_PATTERN = re.compile(r"\.\./")
