@@ -1,85 +1,179 @@
 """
-Integration tests for Python↔Elixir bridge protocol.
+Integration tests for Python↔Elixir bridge protocol V1.
 
 These tests verify that:
-1. Wire format matches BRIDGE_PROTOCOL.md specification
-2. All event types are correctly formatted
+1. Wire format matches BRIDGE_PROTOCOL_V1.md specification
+2. All canonical event methods are correctly formatted
 3. Request/response structures are correct
 4. Content-Length framing works correctly
 5. Error codes match JSON-RPC 2.0 specification
 
-See: docs/BRIDGE_PROTOCOL.md
+See: docs/protocol/BRIDGE_PROTOCOL_V1.md
 """
 
 import json
 import pytest
 from datetime import datetime, timezone
 
-# Import the wire protocol module
+# Import the wire protocol module with V1 canonical methods
 from code_puppy.plugins.elixir_bridge.wire_protocol import (
-    to_wire_event,
     from_wire_params,
-    message_to_wire,
     frame_message,
     JsonRpcError,
+    WireMethodError,
     PARSE_ERROR,
     INVALID_REQUEST,
     METHOD_NOT_FOUND,
     INVALID_PARAMS,
     INTERNAL_ERROR,
-    WireMethodError,
+    # V1 canonical emitters
+    emit_run_status,
+    emit_run_text,
+    emit_run_tool_result,
+    emit_run_completed,
+    emit_run_failed,
+    emit_run_prompt,
+    emit_run_event,
+    emit_bridge_ready,
+    emit_bridge_closing,
+    to_canonical_notification,
 )
-from code_puppy.messaging.messages import BaseMessage, TextMessage, MessageCategory, MessageLevel
 
 
-class TestWireEventFormat:
-    """Test that events match the protocol specification."""
+class TestCanonicalEventFormat:
+    """Test that V1 canonical events match the protocol specification."""
 
-    def test_event_has_required_fields(self):
-        """Events must have jsonrpc, method, and params."""
-        event = to_wire_event(
-            event_type="agent_response",
+    def test_run_status_has_required_fields(self):
+        """run.status must have jsonrpc, method, and params with run_id, status, timestamp."""
+        notification = emit_run_status(
             run_id="run-123",
             session_id="session-456",
-            payload={"text": "Hello", "finished": False},
+            status="running",
         )
 
-        parsed = json.loads(event)
-        assert parsed["jsonrpc"] == "2.0"
-        assert parsed["method"] == "event"
-        assert "params" in parsed
+        assert notification["jsonrpc"] == "2.0"
+        assert notification["method"] == "run.status"
+        assert "params" in notification
+        assert notification["params"]["run_id"] == "run-123"
+        assert notification["params"]["session_id"] == "session-456"
+        assert notification["params"]["status"] == "running"
+        assert "timestamp" in notification["params"]
 
-    def test_event_params_structure(self):
-        """Event params must have event_type, run_id, session_id, timestamp, payload."""
-        event = to_wire_event(
-            event_type="tool_call",
+    def test_run_text_has_required_fields(self):
+        """run.text must have run_id, text, finished, timestamp."""
+        notification = emit_run_text(
             run_id="run-123",
             session_id="session-456",
-            payload={"tool_name": "read_file", "tool_args": {"path": "test.py"}},
+            text="Hello world",
+            finished=True,
         )
 
-        parsed = json.loads(event)
-        params = parsed["params"]
+        assert notification["method"] == "run.text"
+        assert notification["params"]["text"] == "Hello world"
+        assert notification["params"]["finished"] is True
+        assert "timestamp" in notification["params"]
 
-        assert params["event_type"] == "tool_call"
-        assert params["run_id"] == "run-123"
-        assert params["session_id"] == "session-456"
-        assert "timestamp" in params
-        assert "payload" in params
-        assert params["payload"]["tool_name"] == "read_file"
+    def test_run_tool_result_has_required_fields(self):
+        """run.tool_result must have run_id, tool_call_id, tool_name, result."""
+        notification = emit_run_tool_result(
+            run_id="run-123",
+            session_id="session-456",
+            tool_call_id="call-789",
+            tool_name="file_read",
+            result={"content": "test data"},
+        )
+
+        assert notification["method"] == "run.tool_result"
+        assert notification["params"]["tool_call_id"] == "call-789"
+        assert notification["params"]["tool_name"] == "file_read"
+        assert notification["params"]["result"]["content"] == "test data"
+
+    def test_run_completed_has_required_fields(self):
+        """run.completed must have run_id and timestamp."""
+        notification = emit_run_completed(
+            run_id="run-123",
+            session_id="session-456",
+            result={"output": "done"},
+        )
+
+        assert notification["method"] == "run.completed"
+        assert notification["params"]["run_id"] == "run-123"
+        assert notification["params"]["result"]["output"] == "done"
+        assert "timestamp" in notification["params"]
+
+    def test_run_failed_has_required_fields(self):
+        """run.failed must have run_id and error with code and message."""
+        notification = emit_run_failed(
+            run_id="run-123",
+            session_id="session-456",
+            error_code=-32000,
+            error_message="Something went wrong",
+            error_details={"traceback": "..."},
+        )
+
+        assert notification["method"] == "run.failed"
+        assert notification["params"]["run_id"] == "run-123"
+        assert notification["params"]["error"]["code"] == -32000
+        assert notification["params"]["error"]["message"] == "Something went wrong"
+        assert notification["params"]["error"]["details"]["traceback"] == "..."
+
+    def test_run_prompt_has_required_fields(self):
+        """run.prompt must have run_id, prompt_id, question."""
+        notification = emit_run_prompt(
+            run_id="run-123",
+            session_id="session-456",
+            prompt_id="prompt-789",
+            question="What file should I analyze?",
+            options=["src/", "tests/", "docs/"],
+        )
+
+        assert notification["method"] == "run.prompt"
+        assert notification["params"]["prompt_id"] == "prompt-789"
+        assert notification["params"]["question"] == "What file should I analyze?"
+        assert notification["params"]["options"] == ["src/", "tests/", "docs/"]
+
+    def test_run_event_generic(self):
+        """run.event is the generic fallback for unknown event types."""
+        notification = emit_run_event(
+            run_id="run-123",
+            session_id="session-456",
+            event_type="custom_event",
+            data={"foo": "bar"},
+        )
+
+        assert notification["method"] == "run.event"
+        assert notification["params"]["event_type"] == "custom_event"
+        assert notification["params"]["data"]["foo"] == "bar"
+
+    def test_bridge_ready_has_required_fields(self):
+        """bridge.ready must have capabilities and version."""
+        notification = emit_bridge_ready(
+            capabilities=["shell", "file_ops", "agents"],
+            version="1.0.0",
+        )
+
+        assert notification["method"] == "bridge.ready"
+        assert notification["params"]["capabilities"] == ["shell", "file_ops", "agents"]
+        assert notification["params"]["version"] == "1.0.0"
+        assert "timestamp" in notification["params"]
+
+    def test_bridge_closing_has_required_fields(self):
+        """bridge.closing must have reason and timestamp."""
+        notification = emit_bridge_closing(reason="shutdown")
+
+        assert notification["method"] == "bridge.closing"
+        assert notification["params"]["reason"] == "shutdown"
+        assert "timestamp" in notification["params"]
 
     def test_timestamp_is_iso8601(self):
         """Timestamp must be ISO 8601 format."""
-        event = to_wire_event(
-            event_type="run_started",
+        notification = emit_run_status(
             run_id="run-123",
             session_id="session-456",
-            payload={"agent_name": "code-puppy"},
+            status="running",
         )
 
-        parsed = json.loads(event)
-        timestamp = parsed["params"]["timestamp"]
-
+        timestamp = notification["params"]["timestamp"]
         # Should parse without error
         dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         assert dt is not None
@@ -88,19 +182,17 @@ class TestWireEventFormat:
 
     def test_timestamp_utc(self):
         """Timestamp should be in UTC."""
-        # Use a time window that accounts for microsecond precision differences
         import time
+
         before = time.time()
-        event = to_wire_event(
-            event_type="test",
+        notification = emit_run_status(
             run_id="run-123",
             session_id="session-456",
-            payload={},
+            status="running",
         )
         after = time.time()
 
-        parsed = json.loads(event)
-        timestamp = parsed["params"]["timestamp"]
+        timestamp = notification["params"]["timestamp"]
         dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
 
         # Convert to timestamp for comparison (ignoring microsecond differences)
@@ -108,130 +200,181 @@ class TestWireEventFormat:
         # Should be within test execution window (with small tolerance)
         assert before - 1 <= event_ts <= after + 1
 
-    @pytest.mark.parametrize(
-        "event_type",
-        [
-            "bridge_ready",
-            "bridge_closing",
-            "run_started",
-            "agent_response",
-            "tool_call",
-            "tool_result",
-            "status_update",
-            "run_completed",
-            "run_failed",
-        ],
-    )
-    def test_all_event_types_format_correctly(self, event_type):
-        """All documented event types should format without error."""
-        event = to_wire_event(
-            event_type=event_type,
-            run_id="run-123",
-            session_id="session-456",
-            payload={},
-        )
-
-        parsed = json.loads(event)
-        assert parsed["params"]["event_type"] == event_type
-
-    def test_event_returns_json_string(self):
-        """to_wire_event must return a JSON string, not a dict."""
-        event = to_wire_event(
-            event_type="test_event",
-            run_id="run-123",
-            session_id="session-456",
-            payload={"key": "value"},
-        )
-
-        assert isinstance(event, str)
-        # Should be valid JSON
-        parsed = json.loads(event)
-        assert parsed["params"]["payload"]["key"] == "value"
-
-    def test_empty_payload(self):
-        """Events with empty payload should still include payload field."""
-        event = to_wire_event(
-            event_type="bridge_ready",
-            run_id="run-123",
-            session_id="session-456",
-            payload={},
-        )
-
-        parsed = json.loads(event)
-        assert parsed["params"]["payload"] == {}
-
-    def test_none_run_id(self):
-        """Events with None run_id should still include run_id field."""
-        event = to_wire_event(
-            event_type="bridge_ready",
-            run_id=None,
-            session_id="session-456",
-            payload={},
-        )
-
-        parsed = json.loads(event)
-        assert parsed["params"]["run_id"] is None
-
-    def test_none_session_id(self):
-        """Events with None session_id should still include session_id field."""
-        event = to_wire_event(
-            event_type="bridge_ready",
+    def test_optional_session_id_omitted(self):
+        """Session ID should be omitted from params when None."""
+        notification = emit_run_status(
             run_id="run-123",
             session_id=None,
-            payload={},
+            status="running",
         )
 
-        parsed = json.loads(event)
-        assert parsed["params"]["session_id"] is None
+        assert "session_id" not in notification["params"]
 
 
-class TestMessageToWire:
-    """Test conversion of BaseMessage objects to wire format."""
+class TestEventTypeMapping:
+    """Test that internal event types map to canonical methods."""
 
-    def test_message_conversion(self):
-        """TextMessage should convert to proper wire format."""
-        # Create a simple test message using TextMessage which has proper fields
-        msg = TextMessage(
-            category=MessageCategory.AGENT,
-            level=MessageLevel.INFO,
-            text="Hello",
+    @pytest.mark.parametrize(
+        ("event_type", "expected_method"),
+        [
+            ("status", "run.status"),
+            ("text", "run.text"),
+            ("tool_output", "run.tool_result"),
+            ("completed", "run.completed"),
+            ("failed", "run.failed"),
+            ("prompt", "run.prompt"),
+            ("unknown_event", "run.event"),
+        ],
+    )
+    def test_event_type_mapping(self, event_type, expected_method):
+        """Internal event types should map to correct canonical methods."""
+        notification = to_canonical_notification(
+            event_type=event_type,
             run_id="run-123",
-            session_id="session-456",
+            session_id="sess-456",
+            payload={"test": "data"},
         )
 
-        wire = message_to_wire(msg)
+        assert notification["method"] == expected_method
 
-        assert wire["jsonrpc"] == "2.0"
-        assert wire["method"] == "event"
-        assert wire["params"]["event_type"] == "agent"
-        assert wire["params"]["run_id"] == "run-123"
-        assert wire["params"]["session_id"] == "session-456"
-        assert "timestamp" in wire["params"]
-        assert "payload" in wire["params"]
-
-    def test_message_payload_excludes_wire_fields(self):
-        """Payload should not include wire protocol metadata fields."""
-        msg = TextMessage(
-            category=MessageCategory.AGENT,
-            level=MessageLevel.INFO,
-            text="Hello",
+    def test_status_mapping_extracts_status_field(self):
+        """Status event should extract status from payload."""
+        notification = to_canonical_notification(
+            event_type="status",
             run_id="run-123",
-            session_id="session-456",
+            session_id="sess-456",
+            payload={"status": "completed"},
         )
 
-        wire = message_to_wire(msg)
-        payload = wire["params"]["payload"]
+        assert notification["method"] == "run.status"
+        assert notification["params"]["status"] == "completed"
 
-        assert "run_id" not in payload
-        assert "session_id" not in payload
-        assert "timestamp" not in payload
-        assert "category" not in payload
-        # Text should be in payload
-        assert "text" in payload
+    def test_text_mapping_extracts_text_field(self):
+        """Text event should extract text from payload."""
+        notification = to_canonical_notification(
+            event_type="text",
+            run_id="run-123",
+            session_id="sess-456",
+            payload={"text": "Hello", "finished": True},
+        )
+
+        assert notification["method"] == "run.text"
+        assert notification["params"]["text"] == "Hello"
+        assert notification["params"]["finished"] is True
+
+    def test_tool_output_mapping_extracts_tool_fields(self):
+        """Tool output event should extract tool fields from payload."""
+        notification = to_canonical_notification(
+            event_type="tool_output",
+            run_id="run-123",
+            session_id="sess-456",
+            payload={
+                "tool_call_id": "call-789",
+                "tool_name": "file_read",
+                "result": {"content": "test"},
+            },
+        )
+
+        assert notification["method"] == "run.tool_result"
+        assert notification["params"]["tool_call_id"] == "call-789"
+        assert notification["params"]["tool_name"] == "file_read"
 
 
 class TestRequestValidation:
-    """Test that request parameter validation works correctly."""
+    """Test that request parameter validation works correctly for V1 methods."""
+
+    def test_run_start_valid_params(self):
+        """run.start requires agent_name and prompt."""
+        params = {
+            "agent_name": "turbo-executor",
+            "prompt": "Analyze code",
+            "session_id": "session-123",
+            "run_id": "run-456",
+            "context": {"key": "value"},
+        }
+
+        result = from_wire_params("run.start", params)
+        assert result["agent_name"] == "turbo-executor"
+        assert result["prompt"] == "Analyze code"
+        assert result["session_id"] == "session-123"
+        assert result["run_id"] == "run-456"
+        assert result["context"] == {"key": "value"}
+
+    def test_run_start_missing_agent_name(self):
+        """run.start should reject missing agent_name."""
+        params = {"prompt": "Analyze code"}
+
+        with pytest.raises(WireMethodError) as exc_info:
+            from_wire_params("run.start", params)
+        assert exc_info.value.code == INVALID_PARAMS
+
+    def test_run_start_missing_prompt(self):
+        """run.start should reject missing prompt."""
+        params = {"agent_name": "turbo-executor"}
+
+        with pytest.raises(WireMethodError) as exc_info:
+            from_wire_params("run.start", params)
+        assert exc_info.value.code == INVALID_PARAMS
+
+    def test_run_cancel_valid_params(self):
+        """run.cancel requires run_id."""
+        params = {"run_id": "run-123", "reason": "user_requested"}
+
+        result = from_wire_params("run.cancel", params)
+        assert result["run_id"] == "run-123"
+        assert result["reason"] == "user_requested"
+
+    def test_run_cancel_missing_run_id(self):
+        """run.cancel should reject missing run_id."""
+        params = {"reason": "timeout"}
+
+        with pytest.raises(WireMethodError) as exc_info:
+            from_wire_params("run.cancel", params)
+        assert exc_info.value.code == INVALID_PARAMS
+
+    def test_run_cancel_default_reason(self):
+        """run.cancel should use default reason."""
+        params = {"run_id": "run-123"}
+
+        result = from_wire_params("run.cancel", params)
+        assert result["reason"] == "user_requested"
+
+    def test_initialize_valid_params(self):
+        """initialize accepts capabilities and config."""
+        params = {
+            "capabilities": ["shell", "agents"],
+            "config": {"timeout": 30},
+        }
+
+        result = from_wire_params("initialize", params)
+        assert result["capabilities"] == ["shell", "agents"]
+        assert result["config"] == {"timeout": 30}
+
+    def test_exit_valid_params(self):
+        """exit accepts reason and timeout_ms."""
+        params = {"reason": "upgrade", "timeout_ms": 10000}
+
+        result = from_wire_params("exit", params)
+        assert result["reason"] == "upgrade"
+        assert result["timeout_ms"] == 10000
+
+    def test_exit_default_params(self):
+        """exit should use default values."""
+        params = {}
+
+        result = from_wire_params("exit", params)
+        assert result["reason"] == "shutdown"
+        assert result["timeout_ms"] == 5000
+
+    def test_slash_to_dot_normalization(self):
+        """Slash-style method names should normalize to dot-style."""
+        params = {"run_id": "run-123", "reason": "test"}
+
+        # Use slash-style method name
+        result = from_wire_params("run/cancel", params)
+        assert result["run_id"] == "run-123"
+
+    # Legacy method tests (kept for backward compatibility during transition)
 
     def test_invoke_agent_valid_params(self):
         """invoke_agent requires agent_name and prompt."""
@@ -250,15 +393,7 @@ class TestRequestValidation:
 
     def test_invoke_agent_missing_agent_name(self):
         """invoke_agent should reject missing agent_name."""
-        params = {"prompt": "Hello!"}  # missing agent_name
-
-        with pytest.raises(WireMethodError) as exc_info:
-            from_wire_params("invoke_agent", params)
-        assert exc_info.value.code == INVALID_PARAMS
-
-    def test_invoke_agent_missing_prompt(self):
-        """invoke_agent should reject missing prompt."""
-        params = {"agent_name": "code-puppy"}  # missing prompt
+        params = {"prompt": "Hello!"}
 
         with pytest.raises(WireMethodError) as exc_info:
             from_wire_params("invoke_agent", params)
@@ -273,14 +408,6 @@ class TestRequestValidation:
         assert result["start_line"] == 1
         assert result["num_lines"] == 50
 
-    def test_file_read_missing_path(self):
-        """file_read should reject missing path."""
-        params = {"start_line": 1}
-
-        with pytest.raises(WireMethodError) as exc_info:
-            from_wire_params("file_read", params)
-        assert exc_info.value.code == INVALID_PARAMS
-
     def test_run_shell_valid_params(self):
         """run_shell requires command."""
         params = {"command": "ls -la", "cwd": "/tmp", "timeout": 30}
@@ -290,100 +417,10 @@ class TestRequestValidation:
         assert result["cwd"] == "/tmp"
         assert result["timeout"] == 30
 
-    def test_run_shell_missing_command(self):
-        """run_shell should reject missing command."""
-        params = {"cwd": "/tmp"}
-
-        with pytest.raises(WireMethodError) as exc_info:
-            from_wire_params("run_shell", params)
-        assert exc_info.value.code == INVALID_PARAMS
-
-    def test_run_shell_default_timeout(self):
-        """run_shell should use default timeout of 60."""
-        params = {"command": "ls"}
-
-        result = from_wire_params("run_shell", params)
-        assert result["timeout"] == 60
-
     def test_ping_no_params_required(self):
         """ping should work with empty params."""
         result = from_wire_params("ping", {})
         assert result == {}
-
-    def test_get_status_no_params_required(self):
-        """get_status should work with empty params."""
-        result = from_wire_params("get_status", {})
-        assert result == {}
-
-    def test_file_list_valid_params(self):
-        """file_list requires directory."""
-        params = {"directory": "/test", "recursive": True}
-
-        result = from_wire_params("file_list", params)
-        assert result["directory"] == "/test"
-        assert result["recursive"] is True
-
-    def test_file_list_missing_directory(self):
-        """file_list should reject missing directory."""
-        params = {"recursive": True}
-
-        with pytest.raises(WireMethodError) as exc_info:
-            from_wire_params("file_list", params)
-        assert exc_info.value.code == INVALID_PARAMS
-
-    def test_file_list_default_recursive(self):
-        """file_list should default recursive to False."""
-        params = {"directory": "/test"}
-
-        result = from_wire_params("file_list", params)
-        assert result["recursive"] is False
-
-    def test_file_write_valid_params(self):
-        """file_write requires path and content."""
-        params = {"path": "/test/file.py", "content": "print('hello')"}
-
-        result = from_wire_params("file_write", params)
-        assert result["path"] == "/test/file.py"
-        assert result["content"] == "print('hello')"
-
-    def test_file_write_missing_path(self):
-        """file_write should reject missing path."""
-        params = {"content": "print('hello')"}
-
-        with pytest.raises(WireMethodError) as exc_info:
-            from_wire_params("file_write", params)
-        assert exc_info.value.code == INVALID_PARAMS
-
-    def test_file_write_missing_content(self):
-        """file_write should reject missing content."""
-        params = {"path": "/test/file.py"}
-
-        with pytest.raises(WireMethodError) as exc_info:
-            from_wire_params("file_write", params)
-        assert exc_info.value.code == INVALID_PARAMS
-
-    def test_grep_search_valid_params(self):
-        """grep_search requires search_string."""
-        params = {"search_string": "def test", "directory": "/test"}
-
-        result = from_wire_params("grep_search", params)
-        assert result["search_string"] == "def test"
-        assert result["directory"] == "/test"
-
-    def test_grep_search_missing_search_string(self):
-        """grep_search should reject missing search_string."""
-        params = {"directory": "/test"}
-
-        with pytest.raises(WireMethodError) as exc_info:
-            from_wire_params("grep_search", params)
-        assert exc_info.value.code == INVALID_PARAMS
-
-    def test_grep_search_default_directory(self):
-        """grep_search should default directory to current directory."""
-        params = {"search_string": "def test"}
-
-        result = from_wire_params("grep_search", params)
-        assert result["directory"] == "."
 
     def test_unknown_method(self):
         """Unknown methods should raise method not found error."""
@@ -468,7 +505,7 @@ class TestContentLengthFraming:
         """Frames should handle unicode content correctly."""
         message = {
             "jsonrpc": "2.0",
-            "method": "event",
+            "method": "run.text",
             "params": {"text": "Hello 世界 🌍"},
         }
         framed = frame_message(message)
@@ -483,83 +520,54 @@ class TestContentLengthFraming:
         parsed = json.loads(body)
         assert parsed["params"]["text"] == "Hello 世界 🌍"
 
-    def test_frame_empty_message(self):
-        """Frames should handle empty messages."""
-        message: dict = {}
-        framed = frame_message(message)
-
-        header, body = framed.split(b"\r\n\r\n", 1)
-        content_length = int(header.split(b": ")[1])
-        assert len(body) == content_length
-        assert body == b"{}"
-
-    def test_frame_complex_message(self):
-        """Frames should handle complex nested messages."""
-        message = {
-            "jsonrpc": "2.0",
-            "method": "invoke_agent",
-            "params": {
-                "agent_name": "code-puppy",
-                "prompt": "Test",
-                "options": {"stream": True, "max_tokens": 1000},
-            },
-        }
-        framed = frame_message(message)
-
-        header, body = framed.split(b"\r\n\r\n", 1)
-        content_length = int(header.split(b": ")[1])
-        assert len(body) == content_length
-
-        parsed = json.loads(body)
-        assert parsed["method"] == "invoke_agent"
-        assert parsed["params"]["options"]["stream"] is True
-
 
 class TestWireProtocolIntegration:
     """Integration tests for the complete wire protocol flow."""
 
-    def test_event_round_trip(self):
-        """Events should serialize and deserialize correctly."""
-        original = {
-            "jsonrpc": "2.0",
-            "method": "event",
-            "params": {
-                "event_type": "agent_response",
-                "run_id": "run-123",
-                "session_id": "session-456",
-                "timestamp": "2026-04-14T12:00:00Z",
-                "payload": {"text": "Hello", "finished": False},
-            },
-        }
+    def test_notification_round_trip(self):
+        """Notifications should serialize and frame correctly."""
+        notification = emit_run_text(
+            run_id="run-123",
+            session_id="session-456",
+            text="Hello",
+            finished=False,
+        )
 
         # Frame and unframe
-        framed = frame_message(original)
+        framed = frame_message(notification)
         _, body = framed.split(b"\r\n\r\n", 1)
         parsed = json.loads(body)
 
-        assert parsed["jsonrpc"] == original["jsonrpc"]
-        assert parsed["method"] == original["method"]
-        assert parsed["params"]["event_type"] == "agent_response"
-        assert parsed["params"]["payload"]["text"] == "Hello"
+        assert parsed["jsonrpc"] == "2.0"
+        assert parsed["method"] == "run.text"
+        assert parsed["params"]["text"] == "Hello"
+        assert parsed["params"]["run_id"] == "run-123"
 
     def test_compact_json_formatting(self):
         """Wire protocol should use compact JSON without whitespace."""
-        event = to_wire_event(
-            event_type="test",
+        notification = emit_run_status(
             run_id="run-123",
             session_id="session-456",
-            payload={"key": "value"},
+            status="running",
         )
 
-        # Should not contain extra whitespace
-        assert "  " not in event  # No double spaces
-        assert "\n" not in event  # No newlines
-        assert "\t" not in event  # No tabs
+        # Frame it
+        framed = frame_message(notification)
+        _, body = framed.split(b"\r\n\r\n", 1)
+        json_str = body.decode("utf-8")
 
-    def test_all_methods_have_proper_error_codes(self):
-        """All parameter validation errors should use correct JSON-RPC codes."""
+        # Should not contain extra whitespace
+        assert "  " not in json_str  # No double spaces
+        assert "\n" not in json_str  # No newlines
+        assert "\t" not in json_str  # No tabs
+
+    def test_all_v1_methods_have_proper_error_codes(self):
+        """All V1 method parameter validation errors should use correct JSON-RPC codes."""
         test_cases = [
-            ("invoke_agent", {}, INVALID_PARAMS),
+            ("run.start", {}, INVALID_PARAMS),
+            ("run.start", {"agent_name": "test"}, INVALID_PARAMS),
+            ("run.cancel", {}, INVALID_PARAMS),
+            ("invoke_agent", {}, INVALID_PARAMS),  # Legacy
             ("invoke_agent", {"agent_name": "test"}, INVALID_PARAMS),
             ("run_shell", {}, INVALID_PARAMS),
             ("file_list", {}, INVALID_PARAMS),
