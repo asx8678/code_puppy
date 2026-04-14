@@ -26,7 +26,7 @@ defmodule CodePuppyControl.MCP.Server do
 
   require Logger
 
-  alias CodePuppyControl.Protocol
+  alias CodePuppyControl.{Protocol, Telemetry}
 
   defstruct [
     :server_id,
@@ -185,6 +185,8 @@ defmodule CodePuppyControl.MCP.Server do
       {:ok, port} ->
         schedule_health_check()
         Logger.info("MCP server #{name} started successfully")
+        # Emit MCP connect telemetry
+        Telemetry.mcp_connect(server_id, name)
         {:ok, %{state | port: port, status: :running, health: :healthy}}
 
       {:error, reason} ->
@@ -200,6 +202,7 @@ defmodule CodePuppyControl.MCP.Server do
       {:reply, {:error, :quarantined}, state}
     else
       request_id = generate_request_id()
+      start_time = System.monotonic_time(:millisecond)
 
       # Send request to Zig runner
       message =
@@ -215,8 +218,14 @@ defmodule CodePuppyControl.MCP.Server do
 
       Port.command(state.port, Protocol.frame(message))
 
-      # Track pending request
-      pending = Map.put(state.pending_requests, request_id, from)
+      # Track pending request with timing info for telemetry
+      pending =
+        Map.put(state.pending_requests, request_id, %{
+          from: from,
+          start_time: start_time,
+          method: method
+        })
+
       {:noreply, %{state | pending_requests: pending}}
     end
   end
@@ -310,7 +319,7 @@ defmodule CodePuppyControl.MCP.Server do
   end
 
   @impl true
-  def terminate(_reason, state) do
+  def terminate(reason, state) do
     Logger.info("Terminating MCP server #{state.name}")
 
     if state.port do
@@ -321,6 +330,9 @@ defmodule CodePuppyControl.MCP.Server do
       Port.command(state.port, Protocol.frame(message))
       Port.close(state.port)
     end
+
+    # Emit MCP disconnect telemetry
+    Telemetry.mcp_disconnect(state.server_id, state.name, reason)
 
     :ok
   end
@@ -411,7 +423,17 @@ defmodule CodePuppyControl.MCP.Server do
       {nil, _} ->
         {:noreply, state}
 
-      {from, pending} ->
+      {%{from: from, start_time: start_time, method: method} = _pending_data, pending} ->
+        # Emit request duration telemetry
+        duration_ms =
+          System.convert_time_unit(
+            System.monotonic_time(:millisecond) - start_time,
+            :native,
+            :millisecond
+          )
+
+        Telemetry.request_duration("mcp:#{state.server_id}", method, id, duration_ms)
+
         GenServer.reply(from, {:ok, result})
         {:noreply, %{state | pending_requests: pending, error_count: 0}}
     end
@@ -422,7 +444,17 @@ defmodule CodePuppyControl.MCP.Server do
       {nil, _} ->
         {:noreply, state}
 
-      {from, pending} ->
+      {%{from: from, start_time: start_time, method: method} = _pending_data, pending} ->
+        # Emit request duration telemetry even on error
+        duration_ms =
+          System.convert_time_unit(
+            System.monotonic_time(:millisecond) - start_time,
+            :native,
+            :millisecond
+          )
+
+        Telemetry.request_duration("mcp:#{state.server_id}", method, id, duration_ms)
+
         GenServer.reply(from, {:error, error})
         {:noreply, handle_error(%{state | pending_requests: pending}, error)}
     end

@@ -877,7 +877,7 @@
       "id": "bd-50",
       "title": "P2: Missing telemetry - No :telemetry instrumentation in Elixir control plane",
       "description": "MEDIUM SEVERITY: No :telemetry instrumentation in the Elixir control plane, making production observability and debugging difficult.\n\n**Missing Instrumentation:**\n- Run lifecycle events (start, complete, fail)\n- Request latency histograms\n- Python worker message queue depth\n- MCP connection metrics\n- WebSocket connection stats\n\n**Impact:** \n- Blind to production issues\n- No performance metrics\n- Difficult to diagnose bottlenecks\n- No alerting capability\n\n**Fix:** \n- Add :telemetry dependency\n- Instrument all critical paths\n- Define standard metric names\n- Document metric semantics\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -885,7 +885,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:48.559918",
-      "updated_at": "2026-04-14T10:37:48.559924",
+      "updated_at": "2026-04-14T11:23:01.231452",
       "comments": []
     },
     "bd-51": {

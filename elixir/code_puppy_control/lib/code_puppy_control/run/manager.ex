@@ -43,6 +43,9 @@ defmodule CodePuppyControl.Run.Manager do
     config = Keyword.get(opts, :config, %{})
     metadata = Keyword.get(opts, :metadata, %{})
 
+    # Note: Telemetry.run_start is emitted in Run.State.init for consistency
+    # This ensures we track the actual process start time accurately
+
     Logger.info("Starting run #{run_id} for session #{session_id}, agent #{agent_name}")
 
     # Merge session and agent info into metadata

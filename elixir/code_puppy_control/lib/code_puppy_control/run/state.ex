@@ -36,7 +36,8 @@ defmodule CodePuppyControl.Run.State do
     :metadata
   ]
 
-  @type status :: :starting | :running | :completed | :failed | :cancelled | :paused | :pending | :unknown
+  @type status ::
+          :starting | :running | :completed | :failed | :cancelled | :paused | :pending | :unknown
 
   # Valid statuses for safe atom conversion from external input
   @valid_statuses ~w(starting running completed failed cancelled paused pending)a

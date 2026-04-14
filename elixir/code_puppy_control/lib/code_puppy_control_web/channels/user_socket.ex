@@ -56,6 +56,8 @@ defmodule CodePuppyControlWeb.UserSocket do
 
   require Logger
 
+  alias CodePuppyControl.Telemetry
+
   # 24 hours
   @token_max_age 86_400
 
@@ -98,6 +100,9 @@ defmodule CodePuppyControlWeb.UserSocket do
           |> assign(:client_params, params)
           |> assign(:verified_session_id, session_id)
 
+        # Emit WebSocket connect telemetry
+        Telemetry.websocket_connect(socket.id, connect_info[:transport], params)
+
         {:ok, socket}
 
       {:error, :dev_mode} ->
@@ -109,6 +114,9 @@ defmodule CodePuppyControlWeb.UserSocket do
           |> assign(:connect_info, connect_info)
           |> assign(:client_params, params)
           |> assign(:verified_session_id, nil)
+
+        # Emit WebSocket connect telemetry
+        Telemetry.websocket_connect(socket.id, connect_info[:transport], params)
 
         {:ok, socket}
 
