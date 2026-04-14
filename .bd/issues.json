@@ -1093,7 +1093,7 @@
       "id": "bd-63",
       "title": "Fast Puppy Phase 3 - Simplify activation to capability-based profiles",
       "description": "Remove monkey-patching from Fast Puppy and switch to capability-based profiles via NativeBackend.\n\nCurrent problems:\n- builder.py uses _reload_and_patch_crate() to setattr() on consumer modules\n- Single enable_fast_puppy bool doesn't match per-capability reality\n- Consumers check RUST_AVAILABLE flags instead of querying NativeBackend\n\nPhase 3 tasks:\n1. Remove patch_targets and _reload_and_patch_crate() from builder.py\n2. Add per-capability config keys (fast_puppy.message_core, fast_puppy.file_ops, etc.)\n3. Rewrite /fast_puppy commands to operate on NativeBackend capabilities\n4. Update any remaining consumers to use NativeBackend instead of module flags\n5. Builder should only build - no patching, no module reloading\n\nExit criteria:\n- /fast_puppy enable|disable affects capability profiles, not just _core_bridge\n- No import-time monkey-patching in steady-state operation",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1101,7 +1101,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T16:45:52.393469",
-      "updated_at": "2026-04-14T16:45:52.393478",
+      "updated_at": "2026-04-14T16:51:32.286889",
       "comments": []
     }
   },
