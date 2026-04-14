@@ -302,7 +302,7 @@ def _make_int_getter(
             if max_val is not None:
                 result = min(max_val, result)
             return result
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return default
 
     getter.__name__ = getter_name
@@ -347,7 +347,7 @@ def _make_float_getter(
             if max_val is not None:
                 result = min(max_val, result)
             return result
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return default
 
     getter.__name__ = getter_name
@@ -420,9 +420,11 @@ def get_use_dbos() -> bool:
         return False
     try:
         import dbos as _dbos  # noqa: F401
+
         return True
     except ImportError:
         return False
+
 
 get_subagent_verbose = _make_bool_getter(
     "subagent_verbose",
@@ -835,6 +837,7 @@ def set_config_value(key: str, value: str):
     # Lazy import to avoid circular imports at module load time
     try:
         from code_puppy.config_package.loader import reset_puppy_config_for_tests
+
         reset_puppy_config_for_tests()
     except Exception:
         pass  # Typed config layer not loaded yet - safe to skip
@@ -864,6 +867,7 @@ def reset_value(key: str) -> None:
     # Also invalidate the typed config singleton (config_package.loader)
     try:
         from code_puppy.config_package.loader import reset_puppy_config_for_tests
+
         reset_puppy_config_for_tests()
     except Exception:
         pass  # Typed config layer not loaded yet - safe to skip
@@ -1212,7 +1216,7 @@ def get_temperature() -> float | None:
         temp = float(val)
         # Clamp to valid range (most APIs accept 0-2)
         return max(0.0, min(2.0, temp))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
@@ -1268,7 +1272,7 @@ def get_model_setting(
 
     try:
         return float(val)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return default
 
 
@@ -1331,7 +1335,7 @@ def get_all_model_settings(model_name: str) -> dict:
                             settings[setting_name] = int(val_stripped)
                         else:
                             settings[setting_name] = float(val_stripped)
-                    except (ValueError, TypeError):
+                    except ValueError, TypeError:
                         # Keep as string if not a number
                         settings[setting_name] = val_stripped
 
@@ -1593,7 +1597,7 @@ def get_protected_token_count():
 
         # Apply constraints: minimum 1000, maximum 75% of context length
         return max(1000, min(configured_value, max_protected_tokens))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         # If parsing fails, return a reasonable default that respects the 75% limit
         model_context_length = get_model_context_length()
         max_protected_tokens = int(model_context_length * 0.75)
@@ -1672,7 +1676,7 @@ def get_summarization_trigger_fraction() -> float:
     try:
         result = float(val) if val else 0.85
         return max(0.5, min(0.95, result))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 0.85
 
 
@@ -1688,7 +1692,7 @@ def get_summarization_keep_fraction() -> float:
     try:
         result = float(val) if val else 0.10
         return max(0.05, min(0.50, result))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 0.10
 
 
@@ -1774,7 +1778,7 @@ def get_message_limit(default: int = 100) -> int:
     val = get_value("message_limit")
     try:
         return int(val) if val else default
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return default
 
 
@@ -1795,7 +1799,7 @@ def save_command_to_history(command: str):
             command = command.encode("utf-8", errors="surrogatepass").decode(
                 "utf-8", errors="replace"
             )
-        except (UnicodeEncodeError, UnicodeDecodeError):
+        except UnicodeEncodeError, UnicodeDecodeError:
             # If that fails, do a more aggressive cleanup
             command = "".join(
                 char if ord(char) < 0xD800 or ord(char) > 0xDFFF else "\ufffd"
@@ -2509,11 +2513,12 @@ def get_memory_extraction_model() -> str | None:
 # Default acceleration backend configuration
 # Architecture:
 # - Rust (PyO3): puppy_core, turbo_parse (performance critical, FFI-sensitive)
-# - turbo_ops via Rust turbo_executor (file I/O batch operations)
+# - file_ops via NativeBackend (Elixir control plane or Python fallback)
+# bd-86: turbo_ops removed, file_ops now routes through Elixir or Python
 ACCELERATION_BACKENDS = {
-    "puppy_core": "rust",   # Rust for message processing
+    "puppy_core": "rust",  # Rust for message processing
     "turbo_parse": "rust",  # Rust for tree-sitter grammars
-    "turbo_ops": "rust",    # Rust turbo_executor for file I/O
+    "file_ops": "elixir",  # Elixir/Python for file I/O (was turbo_ops)
 }
 
 # Environment variable prefix for overrides
@@ -2550,10 +2555,10 @@ def get_acceleration_backend(backend_name: str) -> str:
     """Get the configured backend for a specific acceleration module.
 
     Args:
-        backend_name: Name of the backend (puppy_core, turbo_parse, turbo_ops)
+        backend_name: Name of the backend (puppy_core, turbo_parse, file_ops)
 
     Returns:
-        The configured language for the backend (rust or python)
+        The configured language for the backend (rust, python, or elixir)
     """
     config = get_acceleration_config()
     return config.get(backend_name, "python")
@@ -2566,14 +2571,15 @@ def set_acceleration_backend(backend_name: str, language: str) -> None:
     For runtime-only changes, use environment variables.
 
     Args:
-        backend_name: Name of the backend (puppy_core, turbo_parse, turbo_ops)
-        language: Language to use (rust or python)
+        backend_name: Name of the backend (puppy_core, turbo_parse, file_ops)
+        language: Language to use (rust, python, or elixir)
 
     Raises:
         ValueError: If backend_name or language is invalid
     """
+    # bd-86: Updated valid languages to include "elixir"
     valid_backends = set(ACCELERATION_BACKENDS.keys())
-    valid_languages = ("rust", "python")
+    valid_languages = ("rust", "python", "elixir")  # bd-86: Added "elixir"
 
     if backend_name not in valid_backends:
         raise ValueError(f"Invalid backend: {backend_name}. Valid: {valid_backends}")

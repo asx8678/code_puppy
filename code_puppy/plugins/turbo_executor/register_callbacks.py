@@ -40,8 +40,11 @@ def _on_startup():
     """Initialize the orchestrator on startup."""
     global _orchestrator
     _orchestrator = TurboOrchestrator()
+    # bd-86: Updated to reflect file_ops routing through Elixir/Python
     ops_mode = (
-        "turbo_ops (Rust)" if _orchestrator._turbo_ops_available else "native Python"
+        "native backend (Elixir)"
+        if _orchestrator._turbo_ops_available
+        else "Python fallback"
     )
     logger.info(f"Turbo Executor plugin initialized (using {ops_mode})")
 
@@ -75,14 +78,24 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         emit_info("🚀 Turbo Executor Status:")
         emit_info(f"   Orchestrator ready: {orch is not None}")
         emit_info(f"   Parallel mode: {orch.enable_parallel}")
-        ops_source = "Rust turbo_ops" if orch._turbo_ops_available else "native Python"
+        # bd-86: Updated status message (file_ops routes through NativeBackend)
+        ops_source = (
+            "native backend (Elixir)"
+            if orch._turbo_ops_available
+            else "Python fallback"
+        )
         emit_info(f"   Operations source: {ops_source}")
         emit_info("   Supported operations: list_files, grep, read_files")
         return True
 
     if subcommand == "help":
         orch = _get_orchestrator()
-        ops_source = "Rust turbo_ops" if orch._turbo_ops_available else "native Python"
+        # bd-86: Updated help text
+        ops_source = (
+            "native backend (Elixir)"
+            if orch._turbo_ops_available
+            else "Python fallback"
+        )
         emit_info("🚀 Turbo Executor — Batch File Operations")
         emit_info("")
         emit_info("Usage:")
@@ -102,7 +115,7 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         emit_info("Operations: list_files, grep, read_files")
         emit_info("Priority: lower numbers execute first (default 100)")
         emit_info("")
-        emit_info(f"Backend: {ops_source}")
+        emit_info(f"Backend: {ops_source}")  # bd-86: Updated backend description
         return True
 
     if subcommand == "plan":

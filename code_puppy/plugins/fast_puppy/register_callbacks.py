@@ -1,10 +1,12 @@
 """Fast Puppy — toggle Rust acceleration on/off at runtime.
 
-Auto-builds all Rust modules (code_puppy_core, turbo_ops, turbo_parse)
+Auto-builds all Rust modules (code_puppy_core, turbo_parse)
 on first startup if toolchain is available.
+File operations now route through NativeBackend (Elixir or Python fallback).
 Persists capability preferences to puppy.cfg so they survive restarts.
 
 bd-63: Rewritten for capability-based profiles.
+bd-86: Removed turbo_ops references — file_ops now uses Elixir/Python.
 
 Usage:
     /fast_puppy                     → show current status
@@ -91,6 +93,7 @@ def _write_persisted_preference(enabled: bool) -> None:
 
 # bd-63: New capability-based handlers
 
+
 def _handle_enable(args: list[str]) -> str:
     """Enable all capabilities or a specific capability.
 
@@ -120,7 +123,9 @@ def _handle_enable(args: list[str]) -> str:
         NativeBackend.enable_capability(cap_map[cap])
         NativeBackend.save_preferences()
         return f"✅ {cap} enabled"
-    return f"❌ Unknown capability: {cap}. Use: message_core, file_ops, repo_index, parse"
+    return (
+        f"❌ Unknown capability: {cap}. Use: message_core, file_ops, repo_index, parse"
+    )
 
 
 def _handle_disable(args: list[str]) -> str:
@@ -152,7 +157,9 @@ def _handle_disable(args: list[str]) -> str:
         NativeBackend.disable_capability(cap_map[cap])
         NativeBackend.save_preferences()
         return f"✅ {cap} disabled"
-    return f"❌ Unknown capability: {cap}. Use: message_core, file_ops, repo_index, parse"
+    return (
+        f"❌ Unknown capability: {cap}. Use: message_core, file_ops, repo_index, parse"
+    )
 
 
 def _handle_status() -> str:
@@ -184,7 +191,9 @@ def _handle_status() -> str:
 
     # Legacy bridge status
     lines.append("")
-    lines.append(f"  message_core bridge: {'✅' if NativeBackend.is_active(NativeBackend.Capabilities.MESSAGE_CORE) else '❌'} available, {'✅' if NativeBackend.is_message_core_active() else '💤'} enabled")
+    lines.append(
+        f"  message_core bridge: {'✅' if NativeBackend.is_active(NativeBackend.Capabilities.MESSAGE_CORE) else '❌'} available, {'✅' if NativeBackend.is_message_core_active() else '💤'} enabled"
+    )
 
     return "\n".join(lines)
 
@@ -246,7 +255,10 @@ def _custom_help():
         ("fast_puppy", "Toggle Rust acceleration / show status"),
         ("fast_puppy build [name|--all]", "Rebuild Rust crate(s)"),
         ("fast_puppy status", "Show detailed capability status"),
-        ("fast_puppy enable [cap]", "Enable all or specific capability (message_core, file_ops, repo_index, parse)"),
+        (
+            "fast_puppy enable [cap]",
+            "Enable all or specific capability (message_core, file_ops, repo_index, parse)",
+        ),
         ("fast_puppy disable [cap]", "Disable all or specific capability"),
     ]
 
@@ -367,7 +379,9 @@ def _handle_fast_puppy(command: str, name: str):
 
     # Get runtime status from core bridge
     rust_status = get_rust_status()
-    _ = _read_persisted_preference()  # Legacy: kept for reference but not used (bd-63 uses per-capability)
+    _ = (
+        _read_persisted_preference()
+    )  # Legacy: kept for reference but not used (bd-63 uses per-capability)
 
     # Check config values for status display
     try:
