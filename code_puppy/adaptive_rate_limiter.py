@@ -209,23 +209,25 @@ def _cleanup_old_states(max_age_seconds: float = 3600) -> int:
     - active_count == 0 (no in-flight requests)
     - request_queue is empty or None
     - last_used_time is older than max_age_seconds
+
+    This function creates a snapshot of keys to avoid RuntimeError from
+    dict mutation during iteration under high concurrency.
     """
     now = time.monotonic()
-    stale_keys = []
 
-    for key, state in _state.model_states.items():
-        # Never cleanup states with active work
-        if state.active_count > 0:
-            continue
-        # Never cleanup states with queued work
-        if state.request_queue is not None and not state.request_queue.empty():
-            continue
-        # Check idle time
-        if (now - state.last_used_time) > max_age_seconds:
-            stale_keys.append(key)
+    # First pass: identify stale keys (snapshot to avoid mutation issues)
+    # We iterate over list() to protect against concurrent modifications
+    stale_keys = [
+        key
+        for key, state in list(_state.model_states.items())
+        if state.active_count == 0
+        and (state.request_queue is None or state.request_queue.empty())
+        and (now - state.last_used_time) > max_age_seconds
+    ]
 
+    # Second pass: delete identified keys using pop (safe even if key removed)
     for key in stale_keys:
-        del _state.model_states[key]
+        _state.model_states.pop(key, None)
 
     if stale_keys:
         logger.debug(

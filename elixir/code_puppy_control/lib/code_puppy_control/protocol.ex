@@ -94,6 +94,28 @@ defmodule CodePuppyControl.Protocol do
   end
 
   @doc """
+  Alias for `encode_request/3`.
+  """
+  def request(method, params, id), do: encode_request(method, params, id)
+
+  @doc """
+  Alias for `encode_notification/2`.
+  """
+  def notification(method, params), do: encode_notification(method, params)
+
+  @doc """
+  Alias for `encode_response/2` with argument order for compatibility.
+  """
+  def response(id, result), do: encode_response(result, id)
+
+  @doc """
+  Alias for `encode_error/4` with simplified signature.
+  """
+  def error_response(id, code, message) do
+    encode_error(code, message, nil, id)
+  end
+
+  @doc """
   Decodes a JSON-RPC 2.0 message.
 
   Returns `{:ok, message}` on success or `{:error, reason}` on failure.

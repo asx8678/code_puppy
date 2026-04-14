@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import re
 import secrets
 import time
@@ -506,11 +507,17 @@ def get_valid_access_token() -> str | None:
 def save_tokens(tokens: dict[str, Any]) -> bool:
     # SECURITY: tokens stored with 0o600 permissions only. For enhanced security,
     # consider using the 'keyring' package for OS-level encryption.
+    # SECURITY FIX: Use os.open with explicit mode to create file with correct
+    # permissions atomically, avoiding TOCTOU race condition.
     try:
         token_path = get_token_storage_path()
-        with open(token_path, "w", encoding="utf-8") as handle:
-            json.dump(tokens, handle, indent=2)
-        token_path.chmod(0o600)
+        fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(tokens, handle, indent=2)
+        except:
+            os.close(fd)
+            raise
         logger.debug(f"Saved OAuth tokens to {token_path} with 0o600 permissions")
         return True
     except Exception as exc:  # pragma: no cover - defensive logging
@@ -587,10 +594,18 @@ def load_claude_models_filtered() -> dict[str, Any]:
 
 
 def save_claude_models(models: dict[str, Any]) -> bool:
+    # SECURITY: model configs contain API keys - use 0o600 permissions.
+    # SECURITY FIX: Use os.open with explicit mode to create file with correct
+    # permissions atomically, avoiding TOCTOU race condition.
     try:
         models_path = get_claude_models_path()
-        with open(models_path, "w", encoding="utf-8") as handle:
-            json.dump(models, handle, indent=2)
+        fd = os.open(models_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(models, handle, indent=2)
+        except:
+            os.close(fd)
+            raise
         return True
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Failed to save Claude models: %s", exc)

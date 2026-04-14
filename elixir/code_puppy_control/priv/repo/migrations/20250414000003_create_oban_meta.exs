@@ -8,18 +8,20 @@ defmodule CodePuppyControl.Repo.Migrations.CreateObanMeta do
   use Ecto.Migration
 
   def up do
-    create table(:oban_meta, primary_key: false) do
-      add :key, :string, primary_key: true, null: false
-      add :value, :map, null: false, default: %{}
-      add :inserted_at, :utc_datetime, null: false, default: fragment("datetime('now')")
-      add :updated_at, :utc_datetime, null: false, default: fragment("datetime('now')")
-    end
+    execute("""
+    CREATE TABLE IF NOT EXISTS oban_meta (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT DEFAULT '{}' NOT NULL,
+      inserted_at TEXT DEFAULT (datetime('now')) NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now')) NOT NULL
+    )
+    """)
 
     # Insert initial values for Oban
-    execute("INSERT INTO oban_meta (key, value) VALUES ('singleton', '{\"lock_version\": 0}') ON CONFLICT DO NOTHING")
+    execute("INSERT OR IGNORE INTO oban_meta (key, value) VALUES ('singleton', '{\"lock_version\": 0}')")
   end
 
   def down do
-    drop table(:oban_meta)
+    execute("DROP TABLE IF EXISTS oban_meta")
   end
 end

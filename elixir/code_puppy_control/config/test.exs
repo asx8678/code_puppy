@@ -18,18 +18,20 @@ config :code_puppy_control, :python_worker_script, "/tmp/mock_python_worker.py"
 config :code_puppy_control, :websocket_secret, "test_websocket_secret_for_testing"
 
 # Ensure Oban config exists for tests
+# Use :inline mode for testing and disable PostgreSQL-specific features
 config :code_puppy_control, Oban,
   engine: Oban.Engines.Basic,
   peer: false,
   queues: false,
   repo: CodePuppyControl.Repo,
+  notifier: Oban.Notifiers.Isolated,
   testing: :inline
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
 
-# In-memory database for testing
+# File-based database for testing (in-memory causes migration issues with SQLite)
 config :code_puppy_control, CodePuppyControl.Repo,
-  database: ":memory:",
+  database: System.get_env("PUP_TEST_DB", "priv/repo/test.db"),
   pool_size: 1,
   pool: Ecto.Adapters.SQL.Sandbox

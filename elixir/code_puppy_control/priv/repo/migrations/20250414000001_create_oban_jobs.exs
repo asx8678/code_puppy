@@ -8,38 +8,37 @@ defmodule CodePuppyControl.Repo.Migrations.CreateObanJobs do
   use Ecto.Migration
 
   def up do
-    create table(:oban_jobs, primary_key: false, engine: :set) do
-      add :id, :bigserial, primary_key: true
-      add :state, :string, null: false, default: "available"
-      add :queue, :string, null: false, default: "default"
-      add :worker, :string, null: false
-      add :args, :map, null: false, default: %{}
-      add :meta, :map, null: false, default: %{}
-      add :tags, {:array, :string}, null: false, default: []
-      add :errors, {:array, :map}, null: false, default: []
-      add :attempt, :integer, null: false, default: 0
-      add :max_attempts, :integer, null: false, default: 20
-      add :priority, :integer, null: false, default: 0
+    execute("""
+    CREATE TABLE IF NOT EXISTS oban_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      state TEXT DEFAULT 'available' NOT NULL,
+      queue TEXT DEFAULT 'default' NOT NULL,
+      worker TEXT NOT NULL,
+      args TEXT DEFAULT '{}' NOT NULL,
+      meta TEXT DEFAULT '{}' NOT NULL,
+      tags TEXT DEFAULT '[]' NOT NULL,
+      errors TEXT DEFAULT '[]' NOT NULL,
+      attempt INTEGER DEFAULT 0 NOT NULL,
+      max_attempts INTEGER DEFAULT 20 NOT NULL,
+      priority INTEGER DEFAULT 0 NOT NULL,
+      attempted_at TEXT,
+      attempted_by TEXT,
+      cancelled_at TEXT,
+      completed_at TEXT,
+      discarded_at TEXT,
+      inserted_at TEXT DEFAULT (datetime('now')) NOT NULL,
+      scheduled_at TEXT DEFAULT (datetime('now')) NOT NULL,
+      updated_at TEXT
+    )
+    """)
 
-      add :attempted_at, :utc_datetime
-      add :attempted_by, :string
-      add :cancelled_at, :utc_datetime
-      add :completed_at, :utc_datetime
-      add :discarded_at, :utc_datetime
-      add :inserted_at, :utc_datetime, null: false, default: fragment("datetime('now')")
-      add :scheduled_at, :utc_datetime, null: false, default: fragment("datetime('now')")
-
-      # Add indexes for performance
-      timestamps()
-    end
-
-    create index(:oban_jobs, [:state, :queue, :scheduled_at], name: :oban_jobs_state_queue_scheduled_at_index)
-    create index(:oban_jobs, [:state, :queue, :priority, :scheduled_at], name: :oban_jobs_state_queue_priority_scheduled_at_index)
+    execute("CREATE INDEX IF NOT EXISTS oban_jobs_state_queue_scheduled_at_index ON oban_jobs(state, queue, scheduled_at)")
+    execute("CREATE INDEX IF NOT EXISTS oban_jobs_state_queue_priority_scheduled_at_index ON oban_jobs(state, queue, priority, scheduled_at)")
   end
 
   def down do
-    drop_if_exists index(:oban_jobs, [:state, :queue, :scheduled_at], name: :oban_jobs_state_queue_scheduled_at_index)
-    drop_if_exists index(:oban_jobs, [:state, :queue, :priority, :scheduled_at], name: :oban_jobs_state_queue_priority_scheduled_at_index)
-    drop table(:oban_jobs)
+    execute("DROP INDEX IF EXISTS oban_jobs_state_queue_scheduled_at_index")
+    execute("DROP INDEX IF EXISTS oban_jobs_state_queue_priority_scheduled_at_index")
+    execute("DROP TABLE IF EXISTS oban_jobs")
   end
 end

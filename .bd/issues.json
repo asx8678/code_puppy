@@ -932,7 +932,91 @@
       "created_at": "2026-04-14T10:37:57.393982",
       "updated_at": "2026-04-14T11:24:42.138447",
       "comments": []
+    },
+    "bd-54": {
+      "id": "bd-54",
+      "title": "LOW-2: Add rate limiting for API authentication failures",
+      "description": "**Location:** code_puppy/api/security.py\n\n**Problem:** No rate limiting on failed authentication attempts. An attacker could brute-force API tokens without throttling.\n\n**Fix:** Add rate limiting (e.g., 5 failures per minute per IP):\n- Track failed attempts by client IP\n- Return 429 Too Many Requests after threshold\n- Consider using a sliding window or token bucket algorithm\n\n**Priority:** P3 (Low)\n**Category:** Security",
+      "status": "open",
+      "priority": 3,
+      "type": "bug",
+      "labels": [
+        "security",
+        "low-priority"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T13:34:43.372626",
+      "updated_at": "2026-04-14T13:34:43.372635",
+      "comments": []
+    },
+    "bd-55": {
+      "id": "bd-55",
+      "title": "LOW-4: Rate limiter cleanup modifies dict without holding lock",
+      "description": "**Location:** code_puppy/adaptive_rate_limiter.py, _cleanup_old_states()\n\n**Problem:** The cleanup function iterates and deletes from model_states dict outside the async lock. Under high concurrency, this could cause RuntimeError from dict mutation during iteration.\n\n**Fix:** Either:\n1. Perform cleanup while holding the lock\n2. Add explicit synchronization\n3. Add a comment documenting why it's safe (if it is)\n\n**Priority:** P3 (Low)\n**Category:** Concurrency",
+      "status": "closed",
+      "priority": 3,
+      "type": "bug",
+      "labels": [
+        "bug",
+        "low-priority",
+        "claimed-by-code-puppy-019d8b"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T13:34:43.374383",
+      "updated_at": "2026-04-14T13:39:09.324039",
+      "comments": []
+    },
+    "bd-56": {
+      "id": "bd-56",
+      "title": "OBS-5: CORS allow_methods missing PUT - config endpoint unreachable from browsers",
+      "description": "**Location:** code_puppy/api/app.py, CORS middleware configuration\n\n**Problem:** CORS middleware allows GET, POST, DELETE, OPTIONS but not PUT. The config router has PUT /{key} endpoint that will fail CORS preflight from browsers.\n\n**Fix:** Either:\n1. Add 'PUT' to allow_methods list (if browser PUT is intended)\n2. Change config update route to use POST instead of PUT\n\n**Priority:** P4 (Observation)\n**Category:** API",
+      "status": "open",
+      "priority": 4,
+      "type": "bug",
+      "labels": [
+        "bug",
+        "low-priority",
+        "claimed-by-code-puppy-019d8b"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T13:34:43.381113",
+      "updated_at": "2026-04-14T13:37:58.965471",
+      "comments": []
+    },
+    "bd-57": {
+      "id": "bd-57",
+      "title": "Add cross-language integration tests for bridge protocol",
+      "description": "**Context:** The Python\u2194Elixir bridge protocol was recently aligned (see docs/BRIDGE_PROTOCOL.md). However, tests currently use mocks that don't exercise the real protocol.\n\n**Need:**\n1. Python-side tests that verify wire format matches spec\n2. Elixir-side tests that verify event handling with real Python bridge\n3. End-to-end tests that run actual agent invocations through the bridge\n\n**Files to test:**\n- code_puppy/plugins/elixir_bridge/wire_protocol.py\n- code_puppy/plugins/elixir_bridge/bridge_controller.py\n- elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex\n\n**Priority:** P2 (Medium)\n**Category:** Testing",
+      "status": "closed",
+      "priority": 2,
+      "type": "feature",
+      "labels": [
+        "testing",
+        "integration",
+        "claimed-by-code-puppy-019d8b"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T13:34:43.388563",
+      "updated_at": "2026-04-14T13:44:56.563397",
+      "comments": []
+    },
+    "bd-58": {
+      "id": "bd-58",
+      "title": "LOW-1: Fix TOCTOU race in OAuth token file permissions",
+      "description": "**Location:** code_puppy/plugins/claude_code_oauth/utils.py\n\n**Problem:** Token files may be created with insecure permissions briefly before chmod is applied. This is a Time-Of-Check-Time-Of-Use (TOCTOU) race condition.\n\n**Fix:** Use os.open() with mode 0o600 directly instead of open() + chmod():\n\nfd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)\nwith os.fdopen(fd, 'w') as f:\n    f.write(token_data)\n\n**Priority:** P3 (Low)\n**Category:** Security",
+      "status": "closed",
+      "priority": 3,
+      "type": "bug",
+      "labels": [
+        "security",
+        "low-priority",
+        "claimed-by-code-puppy-019d8b"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T13:34:43.392788",
+      "updated_at": "2026-04-14T13:39:41.371352",
+      "comments": []
     }
   },
-  "counter": 53
+  "counter": 58
 }
