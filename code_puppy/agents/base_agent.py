@@ -41,15 +41,12 @@ except ImportError:
     DBOSAgent = None  # type: ignore[assignment,misc]
 
 # Rust acceleration bridge (optional - falls back to Python)
-from code_puppy import _core_bridge
-from code_puppy._core_bridge import RUST_AVAILABLE, is_rust_enabled
-from code_puppy._core_bridge import (
+# bd-67: Route all native acceleration through NativeBackend (single import site)
+from code_puppy.native_backend import (
     MessageBatchHandle,
+    NativeBackend,
     create_message_batch,
 )
-
-if RUST_AVAILABLE:
-    pass
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -112,11 +109,11 @@ from code_puppy.utils.binary_token_estimation import (
 def _rust_enabled() -> bool:
     """Check current Rust acceleration state (respects /fast_puppy toggle).
 
-    Replaces the old module-level ``_RUST_ENABLED`` bool which was evaluated
-    once at import time and never updated, making the /fast_puppy toggle
-    completely non-functional for all 5 Rust hot paths.
+    bd-67: Routes through NativeBackend.is_message_core_active() which checks
+    both Rust availability and user enable/disable preferences via the unified
+    capability system.
     """
-    return is_rust_enabled()
+    return NativeBackend.is_message_core_active()
 
 
 _reload_count = 0
@@ -1057,28 +1054,13 @@ class BaseAgent(ABC, AgentPromptMixin):
                     batch = serialized_messages
                 else:
                     batch = create_message_batch(messages)
-                # Process to get per-message tokens (cached in batch)
+                # Process to populate per-message tokens (cached in batch)
                 batch.process([], [], "")
-                per_message_tokens = batch.get_per_message_tokens()
 
-                # Build tool_call_ids_per_message: list of [(id, kind), ...] per message
-                tool_call_ids_per_message: list[list[tuple[str, str]]] = []
-                for msg in messages:
-                    ids_for_msg: list[tuple[str, str]] = []
-                    for part in getattr(msg, "parts", None) or ():
-                        tool_call_id = getattr(part, "tool_call_id", None)
-                        if tool_call_id:
-                            part_kind = getattr(part, "part_kind", "")
-                            if part_kind:
-                                ids_for_msg.append((tool_call_id, part_kind))
-                    tool_call_ids_per_message.append(ids_for_msg)
-
-                # Call Rust split_for_summarization
-                split_result = _core_bridge.rust_split_for_summarization(
-                    per_message_tokens,
-                    tool_call_ids_per_message,
-                    protected_tokens_limit,
-                )
+                # bd-67: Use batch method directly — fixes dead code where
+                # _core_bridge.rust_split_for_summarization (wrong name) always
+                # threw AttributeError. The batch method has the correct Rust binding.
+                split_result = batch.split_for_summarization(protected_tokens_limit)
 
                 # Convert indices back to message lists
                 messages_to_summarize = [
@@ -1864,28 +1846,22 @@ class BaseAgent(ABC, AgentPromptMixin):
         # Try Rust fast path
         if _rust_enabled():
             try:
-                # Use MessageBatchHandle if provided
+                # Use MessageBatchHandle if provided, otherwise create one
                 if isinstance(serialized_messages, MessageBatchHandle):
                     batch = serialized_messages
-                    # Ensure process() has been called to populate token counts
-                    if batch.get_per_message_tokens() is None:
-                        batch.process([], [], "")
-                    tokens = batch.get_per_message_tokens()
-                elif per_message_tokens is not None:
-                    # Reuse pre-computed tokens from caller (e.g., message_history_processor)
-                    tokens = per_message_tokens
                 else:
-                    # Compute from scratch when not provided
                     batch = create_message_batch(messages)
+                # Ensure process() has been called to populate token counts
+                if batch.get_per_message_tokens() is None:
                     batch.process([], [], "")
-                    tokens = batch.get_per_message_tokens()
 
                 second_has_thinking = len(messages) > 1 and any(
                     isinstance(p, ThinkingPart) for p in messages[1].parts
                 )
-                kept = _core_bridge.rust_truncation_indices(
-                    tokens, protected_tokens, second_has_thinking
-                )
+                # bd-67: Use batch method directly — fixes dead code where
+                # _core_bridge.rust_truncation_indices (wrong name) always
+                # threw AttributeError.
+                kept = batch.truncation_indices(protected_tokens, second_has_thinking)
                 result = [messages[i] for i in kept]
                 result = self.prune_interrupted_tool_calls(result)
                 return result

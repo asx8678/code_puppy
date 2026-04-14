@@ -22,6 +22,12 @@ from typing import Any, Callable
 
 from code_puppy.config import get_acceleration_config
 
+# Re-export message core types for consumers routing through NativeBackend (bd-67)
+from code_puppy._core_bridge import (
+    MessageBatchHandle,
+    create_message_batch,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -994,6 +1000,19 @@ class NativeBackend:
         from code_puppy._core_bridge import MessageBatchHandle
 
         return MessageBatchHandle(messages)
+
+    @classmethod
+    def is_message_core_active(cls) -> bool:
+        """Check if message_core (Rust acceleration) is both available AND enabled.
+
+        bd-67: Replaces scattered is_rust_enabled() checks in consumers.
+        This is the single entry point for checking if Rust message processing
+        is available and should be used.
+
+        Returns:
+            True if Rust message core is installed, enabled by user, and active.
+        """
+        return cls.is_active(cls.Capabilities.MESSAGE_CORE)
 
     # -------------------------------------------------------------------------
     # Repository Index (from turbo_ops indexer)
