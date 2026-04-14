@@ -24,14 +24,15 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
   alias CodePuppyControl.Protocol
 
-  defstruct [:port, :run_id, :buffer, :request_counter, :parent_pid]
+  defstruct [:port, :run_id, :buffer, :request_counter, :parent_pid, ready: false]
 
   @type t :: %__MODULE__{
           port: port() | nil,
           run_id: String.t(),
           buffer: String.t(),
           request_counter: non_neg_integer(),
-          parent_pid: pid()
+          parent_pid: pid(),
+          ready: boolean()
         }
 
   # Client API
@@ -293,6 +294,49 @@ defmodule CodePuppyControl.PythonWorker.Port do
     CodePuppyControl.RequestTracker.fail_request(id, {:python_error, error})
   end
 
+  # Generic "event" handler that maps Python's format to internal event types
+  defp handle_message(%{"method" => "event", "params" => params}, run_id) do
+    # Map Python's generic event format to our internal event types
+    event_type = params["event_type"]
+    session_id = params["session_id"]
+    payload = params["payload"] || %{}
+
+    case event_type do
+      "agent_response" ->
+        handle_agent_response_event(run_id, session_id, payload)
+
+      "tool_call" ->
+        handle_tool_call_event(run_id, session_id, payload)
+
+      "tool_result" ->
+        handle_tool_result_event(run_id, session_id, payload)
+
+      "run_started" ->
+        handle_run_started_event(run_id, session_id, payload)
+
+      "run_completed" ->
+        handle_run_completed_event(run_id, session_id, payload)
+
+      "run_failed" ->
+        handle_run_failed_event(run_id, session_id, payload)
+
+      "status_update" ->
+        handle_status_event(run_id, session_id, payload)
+
+      "bridge_ready" ->
+        Logger.info("Python bridge ready for run #{run_id}")
+        {:ok, %{ready: true}}
+
+      "bridge_closing" ->
+        Logger.info("Python bridge closing for run #{run_id}")
+        {:ok, %{}}
+
+      unknown ->
+        Logger.debug("Unknown event type from Python: #{unknown}")
+        {:ok, %{}}
+    end
+  end
+
   defp handle_message(%{"method" => "run.event", "params" => params}, run_id) do
     # Structured run event - store and broadcast via EventBus
     event = %{
@@ -455,6 +499,118 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
   defp generate_request_id(state) do
     "#{state.run_id}-#{state.request_counter}-#{System.unique_integer([:positive])}"
+  end
+
+  # Helper functions to transform and forward events from Python format
+  defp handle_agent_response_event(run_id, session_id, payload) do
+    text = payload["text"] || ""
+    finished = payload["finished"] || false
+
+    event = %{
+      "type" => "text",
+      "run_id" => run_id,
+      "session_id" => session_id,
+      "content" => text,
+      "finished" => finished,
+      "data" => payload,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    broadcast_event(run_id, "text", event)
+    {:ok, event}
+  end
+
+  defp handle_tool_call_event(run_id, session_id, payload) do
+    event = %{
+      "type" => "tool_call",
+      "run_id" => run_id,
+      "session_id" => session_id,
+      "tool_name" => payload["tool_name"],
+      "tool_args" => payload["tool_args"],
+      "tool_call_id" => payload["tool_call_id"],
+      "data" => payload,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    broadcast_event(run_id, "tool_call", event)
+    {:ok, event}
+  end
+
+  defp handle_tool_result_event(run_id, session_id, payload) do
+    event = %{
+      "type" => "tool_result",
+      "run_id" => run_id,
+      "session_id" => session_id,
+      "tool_name" => payload["tool_name"],
+      "result" => payload["result"],
+      "tool_call_id" => payload["tool_call_id"],
+      "data" => payload,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    broadcast_event(run_id, "tool_result", event)
+    {:ok, event}
+  end
+
+  defp handle_run_started_event(run_id, session_id, payload) do
+    event = %{
+      "type" => "started",
+      "run_id" => run_id,
+      "session_id" => session_id,
+      "agent_name" => payload["agent_name"],
+      "data" => payload,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    CodePuppyControl.Run.State.set_status(run_id, :running)
+    broadcast_event(run_id, "started", event)
+    {:ok, event}
+  end
+
+  defp handle_run_completed_event(run_id, session_id, payload) do
+    event = %{
+      "type" => "completed",
+      "run_id" => run_id,
+      "session_id" => session_id,
+      "result" => payload["result"],
+      "data" => payload,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    CodePuppyControl.Run.State.complete(run_id, payload)
+    broadcast_event(run_id, "completed", event)
+    {:ok, event}
+  end
+
+  defp handle_run_failed_event(run_id, session_id, payload) do
+    event = %{
+      "type" => "failed",
+      "run_id" => run_id,
+      "session_id" => session_id,
+      "error" => payload["error"],
+      "data" => payload,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    CodePuppyControl.Run.State.set_status(run_id, :failed, payload["error"])
+    broadcast_event(run_id, "failed", event)
+    {:ok, event}
+  end
+
+  defp handle_status_event(run_id, session_id, payload) do
+    event = %{
+      "type" => "status",
+      "run_id" => run_id,
+      "session_id" => session_id,
+      "status" => payload["status"],
+      "data" => payload,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    status_atom = CodePuppyControl.Run.State.safe_status_atom(payload["status"])
+    CodePuppyControl.Run.State.set_status(run_id, status_atom)
+    broadcast_event(run_id, "status", event)
+    {:ok, event}
   end
 
   defp get_script_path(opts) do
