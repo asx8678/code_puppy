@@ -299,12 +299,16 @@
       "priority": 3,
       "type": "task",
       "labels": [
-        "enhancement"
+        "enhancement",
+        "in-progress"
       ],
       "dependencies": {},
       "created_at": "2026-04-14T05:54:41.879420",
-      "updated_at": "2026-04-14T05:54:41.879428",
-      "comments": []
+      "updated_at": "2026-04-14T06:38:09.299256",
+      "comments": [
+        "Updated for hybrid cutover approach:\n\nHybrid Architecture:\n- Rust (PyO3): puppy_core, turbo_parse (performance critical)\n- Zig (cffi): turbo_ops (file I/O, less FFI sensitive)\n\nThis replaces the full Rust deprecation plan. The hybrid approach leverages:\n- Rust's 80x lower FFI overhead for hot paths (message processing, parsing)\n- Zig's simpler build/cross-compilation for file operations (less FFI sensitive)\n\nCompleted:\n- [x] Implement unified acceleration bridge (code_puppy/acceleration/)\n\nTasks to complete:\n- [ ] Add feature flags for hybrid backend selection\n- [ ] Integrate zig_bridge.list_files and zig_bridge.grep into tools/\n- [ ] Update CI to build both Rust and Zig extensions\n- [ ] Performance benchmark: hybrid vs pure Rust vs pure Python\n- [ ] Document hybrid architecture in docs/acceleration.md",
+        "Starting Phase 4: Production cutover with hybrid architecture"
+      ]
     },
     "bd-20": {
       "id": "bd-20",
@@ -330,16 +334,20 @@
       "id": "bd-21",
       "title": "[zig] Phase 3: Enable tree-sitter grammar linking",
       "description": "Enable actual tree-sitter grammar linking instead of stubs:\n\nTasks:\n- [ ] Vendor tree-sitter grammars (Python, Rust, JS, TS, C)\n- [ ] Update build.zig to compile grammars from source\n- [ ] OR: Document system grammar installation\n- [ ] Enable languages.zig to use real extern functions\n- [ ] Test parsing for each supported language\n\nAcceptance criteria:\n- At least Python and Rust grammars work\n- Parse output matches turbo_parse Rust crate\n- No runtime crashes on parse operations\n\nDepends on: Phase 1 (complete)\nBlocks: Phase 4",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
-        "enhancement"
+        "enhancement",
+        "in-progress"
       ],
       "dependencies": {},
       "created_at": "2026-04-14T05:54:41.889621",
-      "updated_at": "2026-04-14T05:54:41.889629",
-      "comments": []
+      "updated_at": "2026-04-14T06:37:06.415836",
+      "comments": [
+        "Starting Phase 3: Tree-sitter grammar implementation - vendor approach",
+        "Closing as won't-fix: Tree-sitter grammars will use Rust turbo_parse. Zig turbo_ops handles file I/O only (hybrid approach)."
+      ]
     },
     "bd-22": {
       "id": "bd-22",

@@ -71,6 +71,11 @@ __all__ = [
     "get_user_agents_directory",
     # Environment
     "load_api_keys_to_environment",
+    # Acceleration backend configuration
+    "ACCELERATION_BACKENDS",
+    "get_acceleration_config",
+    "get_acceleration_backend",
+    "set_acceleration_backend",
 ]
 
 # Compiled regex for _sanitize_model_name_for_key - single pass replacement
@@ -2490,3 +2495,85 @@ def get_memory_extraction_model() -> str | None:
     the default model. None means use the current active model.
     """
     return get_value("memory_extraction_model")
+
+
+# =============================================================================
+# Acceleration Backend Configuration (Hybrid Zig/Rust Architecture)
+# =============================================================================
+
+# Default acceleration backend configuration
+# Architecture:
+# - Rust (PyO3): puppy_core, turbo_parse (performance critical, FFI-sensitive)
+# - Zig (cffi): turbo_ops (file I/O, less FFI sensitive, simpler builds)
+ACCELERATION_BACKENDS = {
+    "puppy_core": "rust",   # Rust for message processing
+    "turbo_parse": "rust",  # Rust for tree-sitter grammars
+    "turbo_ops": "zig",     # Zig for file I/O operations
+}
+
+# Environment variable prefix for overrides
+_ACCEL_ENV_PREFIX = "PUP_ACCEL_"
+
+
+def get_acceleration_config() -> dict:
+    """Get acceleration backend configuration with environment overrides.
+
+    Returns the current acceleration configuration with any environment
+    variable overrides applied. Environment variables follow the pattern:
+    PUP_ACCEL_<BACKEND_NAME> = rust|zig|python
+
+    Example:
+        PUP_ACCEL_PUPPY_CORE=python  # Force Python fallback for puppy_core
+        PUP_ACCEL_TURBO_OPS=rust     # Use Rust instead of Zig for file ops
+
+    Returns:
+        Dict mapping backend names to their configured language (rust|zig|python)
+    """
+    config = ACCELERATION_BACKENDS.copy()
+
+    # Apply environment variable overrides
+    for backend in config:
+        env_var = f"{_ACCEL_ENV_PREFIX}{backend.upper()}"
+        override = os.environ.get(env_var)
+        if override and override.lower() in ("rust", "zig", "python"):
+            config[backend] = override.lower()
+
+    return config
+
+
+def get_acceleration_backend(backend_name: str) -> str:
+    """Get the configured backend for a specific acceleration module.
+
+    Args:
+        backend_name: Name of the backend (puppy_core, turbo_parse, turbo_ops)
+
+    Returns:
+        The configured language for the backend (rust, zig, or python)
+    """
+    config = get_acceleration_config()
+    return config.get(backend_name, "python")
+
+
+def set_acceleration_backend(backend_name: str, language: str) -> None:
+    """Set the acceleration backend for a specific module via config.
+
+    Note: This sets the persistent configuration value in puppy.cfg.
+    For runtime-only changes, use environment variables.
+
+    Args:
+        backend_name: Name of the backend (puppy_core, turbo_parse, turbo_ops)
+        language: Language to use (rust, zig, or python)
+
+    Raises:
+        ValueError: If backend_name or language is invalid
+    """
+    valid_backends = set(ACCELERATION_BACKENDS.keys())
+    valid_languages = ("rust", "zig", "python")
+
+    if backend_name not in valid_backends:
+        raise ValueError(f"Invalid backend: {backend_name}. Valid: {valid_backends}")
+    if language not in valid_languages:
+        raise ValueError(f"Invalid language: {language}. Valid: {valid_languages}")
+
+    # Store in config for persistence (without the prefix)
+    set_config_value(f"accel_backend_{backend_name}", language)
