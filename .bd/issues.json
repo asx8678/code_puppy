@@ -1103,7 +1103,22 @@
       "created_at": "2026-04-14T16:45:52.393469",
       "updated_at": "2026-04-14T16:51:32.286889",
       "comments": []
+    },
+    "bd-64": {
+      "id": "bd-64",
+      "title": "Fast Puppy Phase 4 - Migrate turbo_parse to Elixir via Rustler NIF",
+      "description": "Migrate turbo_parse parsing capabilities to Elixir. Rather than rewriting tree-sitter parsing in pure Elixir, use Rustler to create NIF bindings from the existing turbo_parse Rust code.\n\nCurrent state:\n- turbo_parse Rust crate: 35+ functions, 6 languages, tree-sitter based\n- Elixir SymbolExtractor: regex-based, only Python+Elixir, returns simple strings\n\nMigration approach (staged):\n1. Stage 1: Create Rustler NIF wrapper for turbo_parse in Elixir\n2. Stage 2: Port symbol extraction (is_language_supported, extract_symbols, extract_symbols_from_file)\n3. Stage 3: Port diagnostics (extract_syntax_diagnostics)\n4. Stage 4: Port folds and highlights\n5. Stage 5: Port batch parsing and caching\n\nKey files:\n- turbo_parse/src/lib.rs - Rust API\n- code_puppy/turbo_parse_bridge.py - Python bridge\n- elixir/code_puppy_control/lib/code_puppy_control/indexer/symbol_extractor.ex - current Elixir impl\n\nExit criteria:\n- Elixir can call turbo_parse via NIF for symbol extraction\n- SymbolExtractor upgraded to use NIF instead of regex\n- NativeBackend routes parse ops through Elixir when available",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "fast-puppy,elixir,turbo-parse,rustler"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T17:11:05.779002",
+      "updated_at": "2026-04-14T17:11:05.779010",
+      "comments": []
     }
   },
-  "counter": 63
+  "counter": 64
 }

@@ -3,16 +3,16 @@ use std::sync::OnceLock;
 
 mod batch;
 mod cache;
-mod diagnostics;
+pub mod diagnostics;
 mod dynamic;
-mod folds;
-mod highlights;
+pub mod folds;
+pub mod highlights;
 mod incremental;
 mod injection;
-mod parser;
-mod registry;
+pub mod parser;
+pub mod registry;
 mod stats;
-mod symbols;
+pub mod symbols;
 pub mod queries;
 
 use batch::{parse_files_batch as _parse_files_batch, BatchParseOptions, BatchParseResult};

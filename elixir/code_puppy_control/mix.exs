@@ -34,6 +34,7 @@ defmodule CodePuppyControl.MixProject do
       {:plug_cowboy, "~> 2.7"},
       {:ecto_sqlite3, "~> 0.13"},
       {:telemetry, "~> 1.2"},
+      {:rustler, "~> 0.34.0", runtime: false},
       {:benchee, "~> 1.1", only: :dev, runtime: false},
       {:benchee_markdown, "~> 0.3", only: :dev, runtime: false}
     ]
