@@ -1532,10 +1532,11 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T22:03:33.974826",
-      "updated_at": "2026-04-14T22:29:29.845096",
+      "updated_at": "2026-04-14T22:30:09.208259",
       "comments": [
         "Clean up stale turbo_ops references: config.py declares turbo_ops as 'rust' backend (line ~50). Remove or update to reflect Elixir reality. Also check pyproject.toml, any docs referencing turbo_ops as Rust.",
-        "Claimed by planning-agent-019d8d"
+        "Claimed by planning-agent-019d8d",
+        "Complete: Replaced turbo_ops with file_ops/elixir in ACCELERATION_BACKENDS. Updated docstrings and status displays across config.py, fast_puppy, and turbo_executor."
       ]
     },
     "bd-87": {
@@ -1556,10 +1557,11 @@
         ]
       },
       "created_at": "2026-04-14T22:03:33.977353",
-      "updated_at": "2026-04-14T22:29:29.875647",
+      "updated_at": "2026-04-14T22:30:09.232096",
       "comments": [
         "Add integration tests for Elixir-backed file ops: test_file_ops_elixir_backend.py. Test list_files, grep, read_file, read_files through the bridge. Mock bridge for unit tests, real bridge for integration. Verify security gates (sensitive_path blocking) work end-to-end.",
-        "Claimed by planning-agent-019d8d"
+        "Claimed by planning-agent-019d8d",
+        "Complete: Created tests/integration/test_file_ops_elixir_backend.py with 29 tests covering list_files, grep, read_file, read_files, fallback behavior, and security gates."
       ]
     }
   },
