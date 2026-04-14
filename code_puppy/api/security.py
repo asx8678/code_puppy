@@ -16,9 +16,12 @@ This module centralises the allow-list used by:
 import logging
 import os
 import secrets
+import time
+from collections import defaultdict
+from threading import Lock
 from urllib.parse import urlparse
 
-from fastapi import Depends, HTTPException, Request, Security
+from fastapi import HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 logger = logging.getLogger(__name__)
@@ -105,6 +108,103 @@ _bearer = HTTPBearer(auto_error=False)
 # Local hosts that are allowed by default without authentication
 _LOCAL_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "::1", "localhost"})
 
+# =============================================================================
+# Rate Limiting for Authentication Failures
+# =============================================================================
+
+# Rate limiting configuration
+AUTH_RATE_LIMIT_WINDOW = 60  # seconds
+AUTH_RATE_LIMIT_MAX_FAILURES = 5
+
+# In-memory storage for failed attempts: {ip: [(timestamp, ...], ...}
+_auth_failures: dict[str, list[float]] = defaultdict(list)
+_auth_failures_lock = Lock()
+
+
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP from request, handling proxies."""
+    # Check X-Forwarded-For header (if behind proxy)
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        # Take the first IP (original client)
+        return forwarded.split(",")[0].strip()
+
+    # Fall back to direct client IP
+    if request.client:
+        return request.client.host
+
+    return "unknown"
+
+
+def _check_auth_rate_limit(request: Request) -> None:
+    """Check if client IP has exceeded auth failure rate limit.
+
+    Raises HTTPException 429 if rate limit exceeded.
+    """
+    client_ip = _get_client_ip(request)
+    now = time.monotonic()
+    window_start = now - AUTH_RATE_LIMIT_WINDOW
+
+    with _auth_failures_lock:
+        # Get failures for this IP
+        failures = _auth_failures.get(client_ip, [])
+
+        # Filter to only recent failures (within window)
+        recent_failures = [t for t in failures if t > window_start]
+
+        # Update stored failures (also serves as cleanup)
+        if recent_failures:
+            _auth_failures[client_ip] = recent_failures
+        elif client_ip in _auth_failures:
+            del _auth_failures[client_ip]
+
+        # Check if over limit
+        if len(recent_failures) >= AUTH_RATE_LIMIT_MAX_FAILURES:
+            # Calculate retry-after (when oldest failure expires)
+            oldest = min(recent_failures)
+            retry_after = int(oldest + AUTH_RATE_LIMIT_WINDOW - now) + 1
+            raise HTTPException(
+                status_code=429,
+                detail="Too many authentication failures. Please try again later.",
+                headers={"Retry-After": str(max(1, retry_after))},
+            )
+
+
+def _record_auth_failure(request: Request) -> None:
+    """Record a failed authentication attempt for rate limiting."""
+    client_ip = _get_client_ip(request)
+    now = time.monotonic()
+
+    with _auth_failures_lock:
+        _auth_failures[client_ip].append(now)
+
+        # Periodic cleanup: if we have too many IPs tracked, clean old entries
+        if len(_auth_failures) > 1000:
+            _cleanup_old_auth_failures()
+
+
+def _cleanup_old_auth_failures() -> None:
+    """Remove expired auth failure entries. Called with lock held."""
+    now = time.monotonic()
+    window_start = now - AUTH_RATE_LIMIT_WINDOW
+
+    expired_ips = []
+    for ip, failures in _auth_failures.items():
+        recent = [t for t in failures if t > window_start]
+        if recent:
+            _auth_failures[ip] = recent
+        else:
+            expired_ips.append(ip)
+
+    for ip in expired_ips:
+        del _auth_failures[ip]
+
+
+def reset_auth_rate_limits() -> None:
+    """Reset all auth rate limits. Useful for testing."""
+    with _auth_failures_lock:
+        _auth_failures.clear()
+
 
 def require_api_access(
     request: Request,
@@ -118,6 +218,7 @@ def require_api_access(
     - Non-loopback clients always need a valid token
     - Token is validated against CODE_PUPPY_API_TOKEN env var using
       constant-time comparison to prevent timing attacks
+    - Rate limited: 5 failures per minute per IP (returns 429 after limit)
 
     This dependency should be applied to all endpoints that perform
     destructive or state-mutating operations (execute commands,
@@ -128,7 +229,8 @@ def require_api_access(
         creds: Bearer token credentials from the Authorization header.
 
     Raises:
-        HTTPException: 403 if token not configured, 401 if auth required/invalid.
+        HTTPException: 403 if token not configured, 401 if auth required/invalid,
+                      429 if rate limit exceeded.
 
     Example:
         >>> @router.post("/dangerous")
@@ -148,6 +250,9 @@ def require_api_access(
     if client_host in _LOCAL_HOSTS and not strict_mode:
         return
 
+    # Check rate limit before attempting auth
+    _check_auth_rate_limit(request)
+
     # Token required - validate it
     expected_token = os.getenv("CODE_PUPPY_API_TOKEN")
     if not expected_token:
@@ -157,6 +262,7 @@ def require_api_access(
         )
 
     if not creds:
+        _record_auth_failure(request)
         raise HTTPException(
             status_code=401,
             detail="Authorization header required (Bearer token)",
@@ -164,6 +270,7 @@ def require_api_access(
 
     # Constant-time comparison to prevent timing attacks
     if not secrets.compare_digest(creds.credentials, expected_token):
+        _record_auth_failure(request)
         raise HTTPException(status_code=401, detail="Invalid API token")
 
 
@@ -171,4 +278,5 @@ __all__ = [
     "get_allowed_origins",
     "is_trusted_origin",
     "require_api_access",
+    "reset_auth_rate_limits",
 ]
