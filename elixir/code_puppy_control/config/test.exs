@@ -11,6 +11,9 @@ config :code_puppy_control, CodePuppyControlWeb.Endpoint,
 # Print only warnings and errors during test
 config :logger, level: :warning
 
+# Python worker script for testing (mock path)
+config :code_puppy_control, :python_worker_script, "/tmp/mock_python_worker.py"
+
 # Ensure Oban config exists for tests
 config :code_puppy_control, Oban,
   engine: Oban.Engines.Basic,

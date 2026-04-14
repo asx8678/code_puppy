@@ -22,19 +22,26 @@ defmodule CodePuppyControl.PythonWorkerIntegrationTest do
 
   # Set up the supervision tree for each test
   setup do
-    # Ensure required processes are started
-    start_link_supervised!({Registry, keys: :unique, name: CodePuppyControl.Run.Registry})
-    start_link_supervised!(WorkerSupervisor)
+    # Ensure required processes are started (only if not already running from application)
+    unless Process.whereis(CodePuppyControl.Run.Registry) do
+      start_link_supervised!({Registry, keys: :unique, name: CodePuppyControl.Run.Registry})
+    end
+
+    unless Process.whereis(WorkerSupervisor) do
+      start_link_supervised!(WorkerSupervisor)
+    end
 
     # Generate unique run IDs to avoid collisions
     run_id = "test-run-#{System.unique_integer([:positive])}"
 
     on_exit(fn ->
-      # Clean up any workers started during the test
-      WorkerSupervisor.list_workers()
-      |> Enum.each(fn {id, _pid} ->
-        WorkerSupervisor.terminate_worker(id)
-      end)
+      # Clean up any workers started during the test (only if supervisor is running)
+      if Process.whereis(WorkerSupervisor) do
+        WorkerSupervisor.list_workers()
+        |> Enum.each(fn {id, _pid} ->
+          WorkerSupervisor.terminate_worker(id)
+        end)
+      end
     end)
 
     %{run_id: run_id}

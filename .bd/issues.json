@@ -620,7 +620,7 @@
       "id": "bd-35",
       "title": "Phase 3B: MCP Stdio Bridge",
       "description": "Handle MCP server stdio in Zig. JSON-RPC framing. Blocked by: Phase 3A.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -634,7 +634,7 @@
         ]
       },
       "created_at": "2026-04-14T08:15:25.225004",
-      "updated_at": "2026-04-14T08:15:25.225014",
+      "updated_at": "2026-04-14T08:56:03.825625",
       "comments": []
     },
     "bd-36": {
