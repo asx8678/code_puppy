@@ -40,7 +40,8 @@ defmodule CodePuppyControl.MCP.Server do
     :last_health_check,
     :error_count,
     :quarantine_until,
-    pending_requests: %{}
+    pending_requests: %{},
+    receive_buffer: ""
   ]
 
   @type t :: %__MODULE__{
@@ -55,7 +56,8 @@ defmodule CodePuppyControl.MCP.Server do
           last_health_check: DateTime.t() | nil,
           error_count: non_neg_integer(),
           quarantine_until: DateTime.t() | nil,
-          pending_requests: map()
+          pending_requests: map(),
+          receive_buffer: String.t()
         }
 
   @health_check_interval 30_000
@@ -255,17 +257,23 @@ defmodule CodePuppyControl.MCP.Server do
   end
 
   @impl true
-  def handle_info({port, {:data, data}}, %{port: port} = state) do
-    case Protocol.decode(data) do
-      {:ok, message} ->
-        handle_port_message(message, state)
+  def handle_info({port, {:data, data}}, %{port: port, receive_buffer: buffer} = state) do
+    new_buffer = buffer <> data
 
-      {:error, reason} ->
-        Logger.warning(
-          "Failed to decode message from MCP server #{state.name}: #{inspect(reason)}"
-        )
+    case Protocol.parse_framed(new_buffer) do
+      {[], rest} ->
+        # Incomplete message, need more data
+        {:noreply, %{state | receive_buffer: rest}}
 
-        {:noreply, state}
+      {messages, rest} when is_list(messages) ->
+        # Process all complete messages
+        new_state =
+          Enum.reduce(messages, %{state | receive_buffer: rest}, fn message, acc_state ->
+            {:noreply, new_s} = handle_port_message(message, acc_state)
+            new_s
+          end)
+
+        {:noreply, new_state}
     end
   end
 
@@ -330,8 +338,8 @@ defmodule CodePuppyControl.MCP.Server do
     port =
       Port.open({:spawn_executable, zig_runner}, [
         :binary,
-        :exit_status,
-        {:packet, 4}
+        :exit_status
+        # NOTE: No {:packet, 4} - we use Content-Length framing at application level
       ])
 
     # Send mcp_start command
@@ -352,15 +360,23 @@ defmodule CodePuppyControl.MCP.Server do
     # Wait for acknowledgment
     receive do
       {^port, {:data, data}} ->
-        case Protocol.decode(data) do
-          {:ok, %{"result" => %{"status" => "started"}}} ->
-            {:ok, port}
+        case Protocol.parse_framed(data) do
+          {[], _rest} ->
+            # Incomplete - wait a bit more (shouldn't happen in blocking context)
+            Port.close(port)
+            {:error, :incomplete_response}
 
-          {:ok, %{"error" => error}} ->
-            {:error, error}
+          {[message | _], _rest} ->
+            case message do
+              %{"result" => %{"status" => "started"}} ->
+                {:ok, port}
 
-          other ->
-            {:error, {:unexpected_response, other}}
+              %{"error" => error} ->
+                {:error, error}
+
+              other ->
+                {:error, {:unexpected_response, other}}
+            end
         end
     after
       10_000 ->
@@ -375,9 +391,15 @@ defmodule CodePuppyControl.MCP.Server do
 
     receive do
       {port, {:data, data}} when port == state.port ->
-        case Protocol.decode(data) do
-          {:ok, %{"result" => _}} -> :ok
-          _ -> {:error, :invalid_response}
+        case Protocol.parse_framed(data) do
+          {[], _rest} ->
+            {:error, :incomplete_response}
+
+          {[message | _], _rest} ->
+            case message do
+              %{"result" => _} -> :ok
+              _ -> {:error, :invalid_response}
+            end
         end
     after
       5_000 -> {:error, :timeout}
