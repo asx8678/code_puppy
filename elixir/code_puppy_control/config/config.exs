@@ -10,11 +10,16 @@ config :logger, :console,
 
 config :phoenix, :json_library, Jason
 
-# Oban is currently disabled - the Postgres notifier is not compatible with SQLite
-# To re-enable, switch to PostgreSQL or configure with SQLite-compatible notifier
-# config :code_puppy_control, Oban,
-#   engine: Oban.Engines.Basic,
-#   queues: [default: 10],
-#   repo: CodePuppyControl.Repo
+# Oban configuration with SQLite support
+config :code_puppy_control, Oban,
+  engine: Oban.Engines.Lite,
+  queues: [default: 10, scheduled: 5],
+  repo: CodePuppyControl.Repo,
+  plugins: [
+    # Prune completed jobs older than 7 days
+    {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
+    # Rescue orphaned jobs after 30 minutes
+    {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)}
+  ]
 
 import_config "#{config_env()}.exs"

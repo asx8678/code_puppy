@@ -5,10 +5,16 @@ defmodule CodePuppyControl.Application do
   Supervision tree:
   1. CodePuppyControl.Repo - SQLite database for state persistence
   2. Phoenix.PubSub - Event distribution
-  3. CodePuppyControl.Run.Registry - Process registry for run tracking
-  4. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
-  5. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
-  6. CodePuppyControlWeb.Endpoint - HTTP API endpoint
+  3. CodePuppyControl.EventStore - ETS-based event history for replay
+  4. CodePuppyControl.Run.Registry - Process registry for run tracking
+  4. CodePuppyControl.Run.Supervisor - DynamicSupervisor for run processes
+  5. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
+  6. CodePuppyControl.MCP.Registry - Process registry for MCP servers
+  7. CodePuppyControl.MCP.Supervisor - DynamicSupervisor for MCP servers
+  8. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
+  9. Oban - Job processing engine with SQLite Lite engine
+  10. CodePuppyControl.Scheduler.CronScheduler - Periodic scheduler for cron tasks
+  11. CodePuppyControlWeb.Endpoint - HTTP API endpoint
   """
 
   use Application
@@ -18,12 +24,18 @@ defmodule CodePuppyControl.Application do
     children = [
       CodePuppyControl.Repo,
       {Phoenix.PubSub, name: CodePuppyControl.PubSub},
+      CodePuppyControl.EventStore,
       CodePuppyControl.Run.Registry,
       {DynamicSupervisor, strategy: :one_for_one, name: CodePuppyControl.Run.Supervisor},
       CodePuppyControl.PythonWorker.Supervisor,
+      # MCP Server supervision
+      {Registry, keys: :unique, name: CodePuppyControl.MCP.Registry},
+      CodePuppyControl.MCP.Supervisor,
       CodePuppyControl.RequestTracker,
-      # Oban is disabled - requires PostgreSQL
-      # {Oban, Application.fetch_env!(:code_puppy_control, Oban)},
+      # Oban job processing with SQLite engine
+      {Oban, Application.fetch_env!(:code_puppy_control, Oban)},
+      # Periodic scheduler for cron tasks
+      {CodePuppyControl.Scheduler.CronScheduler, []},
       CodePuppyControlWeb.Endpoint
     ]
 

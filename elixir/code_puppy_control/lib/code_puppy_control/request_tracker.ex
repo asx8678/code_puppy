@@ -56,6 +56,19 @@ defmodule CodePuppyControl.RequestTracker do
   end
 
   @doc """
+  Provides a user response to a prompt request.
+
+  This is used by the UI to send user input back to a waiting agent.
+  The response is matched to the original prompt via prompt_id.
+  """
+  @spec provide_response(String.t(), term()) :: :ok | {:error, :not_found}
+  def provide_response(prompt_id, response) do
+    # For now, we treat prompt responses as completing a pending request
+    # In the future, this may need a separate prompt tracking system
+    complete_request(prompt_id, %{"response" => response, "prompt_id" => prompt_id})
+  end
+
+  @doc """
   Returns statistics about pending requests.
   """
   @spec stats() :: %{pending: non_neg_integer(), oldest_ms: non_neg_integer() | nil}
@@ -125,6 +138,25 @@ defmodule CodePuppyControl.RequestTracker do
 
         # Reply to the waiting process with error
         GenServer.reply(pending.from, {:error, reason})
+
+        {:reply, :ok, %{state | pending: new_pending, timers: new_timers}}
+    end
+  end
+
+  @impl true
+  def handle_call({:provide_response, prompt_id, response}, _from, state) do
+    # Treat prompt_id as a request_id for completion
+    case Map.pop(state.pending, prompt_id) do
+      {nil, _} ->
+        {:reply, {:error, :not_found}, state}
+
+      {pending, new_pending} ->
+        # Cancel the timeout timer
+        {timer, new_timers} = Map.pop(state.timers, prompt_id)
+        if timer, do: Process.cancel_timer(timer)
+
+        # Reply to the waiting process
+        GenServer.reply(pending.from, {:ok, %{"response" => response, "prompt_id" => prompt_id}})
 
         {:reply, :ok, %{state | pending: new_pending, timers: new_timers}}
     end

@@ -39,6 +39,12 @@ defmodule CodePuppyControlWeb.Router do
     resources "/runs", RunController, only: [:create, :show, :delete]
     post "/runs/:id/execute", RunController, :execute
     get "/runs/:id/history", RunController, :history
+
+    # MCP Server endpoints
+    resources "/mcp", MCPController, only: [:index, :create, :show, :delete]
+    post "/mcp/:id/call", MCPController, :call_tool
+    post "/mcp/:id/restart", MCPController, :restart
+    get "/mcp/health", MCPController, :health
   end
 
   # LiveDashboard is available in development for monitoring

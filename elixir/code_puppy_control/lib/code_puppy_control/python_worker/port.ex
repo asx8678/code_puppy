@@ -285,35 +285,155 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   defp handle_message(%{"method" => "run.event", "params" => params}, run_id) do
-    # Structured run event - broadcast to PubSub
-    event_type = params["type"] || "unknown"
-    broadcast_event(run_id, event_type, params)
+    # Structured run event - store and broadcast via EventBus
+    event = %{
+      "type" => params["type"] || "unknown",
+      "run_id" => run_id,
+      "session_id" => params["session_id"],
+      "data" => params,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    # Store in EventStore and broadcast via PubSub
+    CodePuppyControl.EventStore.store(event)
+    CodePuppyControl.EventBus.broadcast_event(event, store: false)
+
+    # Also broadcast for backward compatibility
+    broadcast_event(run_id, event["type"], params)
     {:ok, params}
   end
 
   defp handle_message(%{"method" => "run.status", "params" => params}, run_id) do
-    # Run status update
+    # Run status update - store and broadcast
+    event = %{
+      "type" => "status",
+      "run_id" => run_id,
+      "session_id" => params["session_id"],
+      "status" => params["status"],
+      "data" => params,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
     CodePuppyControl.Run.State.set_status(run_id, String.to_atom(params["status"]))
+
+    CodePuppyControl.EventStore.store(event)
+    CodePuppyControl.EventBus.broadcast_event(event, store: false)
+
     broadcast_event(run_id, "status", params)
     {:ok, params}
   end
 
   defp handle_message(%{"method" => "run.completed", "params" => params}, run_id) do
-    # Run completed
+    # Run completed - store and broadcast
+    event = %{
+      "type" => "completed",
+      "run_id" => run_id,
+      "session_id" => params["session_id"],
+      "result" => params["result"],
+      "data" => params,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
     CodePuppyControl.Run.State.complete(run_id, params)
+
+    CodePuppyControl.EventStore.store(event)
+    CodePuppyControl.EventBus.broadcast_event(event, store: false)
+
     broadcast_event(run_id, "completed", params)
     {:ok, params}
   end
 
   defp handle_message(%{"method" => "run.failed", "params" => params}, run_id) do
-    # Run failed
+    # Run failed - store and broadcast
+    event = %{
+      "type" => "failed",
+      "run_id" => run_id,
+      "session_id" => params["session_id"],
+      "error" => params["error"],
+      "data" => params,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
     CodePuppyControl.Run.State.set_status(run_id, :failed, params["error"])
+
+    CodePuppyControl.EventStore.store(event)
+    CodePuppyControl.EventBus.broadcast_event(event, store: false)
+
     broadcast_event(run_id, "failed", params)
     {:ok, params}
   end
 
+  defp handle_message(%{"method" => "run.text", "params" => params}, run_id) do
+    # Text/content from agent - store and broadcast
+    event = %{
+      "type" => "text",
+      "run_id" => run_id,
+      "session_id" => params["session_id"],
+      "content" => params["content"],
+      "chunk" => params["chunk"] || false,
+      "data" => params,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    CodePuppyControl.EventStore.store(event)
+    CodePuppyControl.EventBus.broadcast_event(event, store: false)
+
+    broadcast_event(run_id, "text", params)
+    {:ok, params}
+  end
+
+  defp handle_message(%{"method" => "run.tool_result", "params" => params}, run_id) do
+    # Tool execution result - store and broadcast
+    event = %{
+      "type" => "tool_result",
+      "run_id" => run_id,
+      "session_id" => params["session_id"],
+      "tool_name" => params["tool_name"],
+      "result" => params["result"],
+      "tool_call_id" => params["tool_call_id"],
+      "data" => params,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    CodePuppyControl.EventStore.store(event)
+    CodePuppyControl.EventBus.broadcast_event(event, store: false)
+
+    broadcast_event(run_id, "tool_result", params)
+    {:ok, params}
+  end
+
+  defp handle_message(%{"method" => "run.prompt", "params" => params}, run_id) do
+    # Agent needs user input - store and broadcast
+    event = %{
+      "type" => "prompt",
+      "run_id" => run_id,
+      "session_id" => params["session_id"],
+      "prompt_id" => params["prompt_id"],
+      "data" => params,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    CodePuppyControl.EventStore.store(event)
+    CodePuppyControl.EventBus.broadcast_event(event, store: false)
+
+    broadcast_event(run_id, "prompt", params)
+    {:ok, params}
+  end
+
   defp handle_message(message, run_id) when is_map(message) do
-    # Generic notification - publish to PubSub
+    # Generic notification - store and publish to PubSub
+    # Build event structure if possible
+    event = %{
+      "type" => "notification",
+      "run_id" => run_id,
+      "session_id" => message["session_id"],
+      "data" => message,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    CodePuppyControl.EventStore.store(event)
+    CodePuppyControl.EventBus.broadcast_event(event, store: false)
+
     Phoenix.PubSub.broadcast(
       CodePuppyControl.PubSub,
       "run:#{run_id}",

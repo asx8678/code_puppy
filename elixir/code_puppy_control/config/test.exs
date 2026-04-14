@@ -30,4 +30,3 @@ config :code_puppy_control, CodePuppyControl.Repo,
   database: ":memory:",
   pool_size: 1,
   pool: Ecto.Adapters.SQL.Sandbox
-

@@ -30,6 +30,7 @@ defmodule CodePuppyControl.MixProject do
       {:phoenix_pubsub, "~> 2.1"},
       {:jason, "~> 1.4"},
       {:oban, "~> 2.17"},
+      {:crontab, "~> 1.1"},
       {:plug_cowboy, "~> 2.7"},
       {:ecto_sqlite3, "~> 0.13"}
     ]
