@@ -58,8 +58,30 @@ from .config_resolve import (
 from .peek_file import peek_file_sync, peek_file, reset_pools
 from .thread_safe_cache import thread_safe_lru_cache, thread_safe_cache
 
+def format_duration(seconds: float) -> str:
+    """Format a duration into a compact human-friendly string.
+
+    Examples:
+        0.25 -> "250ms"
+        1.5 -> "1.5s"
+        90.5 -> "1m 30.5s"
+        3665 -> "1h 1m"
+    """
+    if seconds < 1:
+        return f"{seconds * 1000:.0f}ms"
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes, remainder = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{int(minutes)}m {remainder:.1f}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{int(hours)}h {int(minutes)}m"
+
+
 __all__ = [
-    # Agent helpers
+    # Duration formatting
+    "format_duration",
+
     "invert_conversation_roles",
     # Emit utilities
     "emit_error",

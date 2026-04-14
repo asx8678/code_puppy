@@ -8,6 +8,8 @@ from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.text import Text
 
+from code_puppy.utils import format_duration
+
 # Global variable to track current token per second rate
 CURRENT_TOKEN_RATE = 0.0
 _TOKEN_RATE_LOCK = threading.Lock()
@@ -137,8 +139,15 @@ class StatusDisplay:
 
         self._calculate_rate()
 
+    def _elapsed_seconds(self) -> float:
+        """Return the elapsed runtime for the current task."""
+        if self.start_time is None:
+            return 0.0
+        return max(0.0, time.time() - self.start_time)
+
     def _get_status_panel(self) -> Panel:
         """Generate a status panel with current rate and animated message"""
+        elapsed = self._elapsed_seconds()
         rate_text = (
             f"{self.current_rate:.1f} t/s" if self.current_rate > 0 else "Warming up..."
         )
@@ -152,27 +161,28 @@ class StatusDisplay:
                 self.loading_messages
             )
 
-        # Create a highly visible status message
+        message = self.loading_messages[self.current_message_index]
+
+        # Create compact status: ⏳ {message} • {tokens} tok • {rate} • {elapsed}
         status_text = Text.assemble(
-            Text(f"⏳ {rate_text} ", style="bold cyan"),
-            str(self.spinner),
-            Text(
-                f" {self.loading_messages[self.current_message_index]} ⏳",
-                style="bold yellow",
-            ),
+            Text(f"⏳ {message}  •  ", style="bold yellow"),
+            Text(f"{self.token_count} tok  •  ", style="white"),
+            Text(f"{rate_text}  •  ", style="bold cyan"),
+            Text(format_duration(elapsed), style="dim"),
         )
 
-        # Use expanded panel with more visible formatting
+        # Use compact panel with minimal padding
         return Panel(
             status_text,
             title="[bold blue]Code Puppy Status[/bold blue]",
             border_style="bright_blue",
             expand=False,
-            padding=(1, 2),
+            padding=(0, 1),
         )
 
     def _get_status_text(self) -> Text:
         """Generate a status text with current rate and animated message"""
+        elapsed = self._elapsed_seconds()
         rate_text = (
             f"{self.current_rate:.1f} t/s" if self.current_rate > 0 else "Warming up..."
         )
@@ -186,10 +196,12 @@ class StatusDisplay:
         )
         message = self.loading_messages[self.current_message_index]
 
-        # Create a highly visible status text
+        # Create compact status: ⏳ {message} • {tokens} tok • {rate} • {elapsed}
         return Text.assemble(
-            Text(f"⏳ {rate_text} 🐾", style="bold cyan"),
-            Text(f" {message}", style="yellow"),
+            Text(f"⏳ {message}  •  ", style="bold yellow"),
+            Text(f"{self.token_count} tok  •  ", style="white"),
+            Text(f"{rate_text}  •  ", style="bold cyan"),
+            Text(format_duration(elapsed), style="dim"),
         )
 
     async def _update_display(self) -> None:
@@ -273,7 +285,7 @@ class StatusDisplay:
             elapsed = time.time() - self.start_time if self.start_time else 0
             avg_rate = self.token_count / elapsed if elapsed > 0 else 0
             emit_info(
-                f"Completed: {self.token_count} tokens in {elapsed:.1f}s ({avg_rate:.1f} t/s avg)"
+                f"Completed · {self.token_count} tok · {format_duration(elapsed)} · {avg_rate:.1f} t/s avg"
             )
 
             # Reset state
@@ -293,5 +305,5 @@ class StatusDisplay:
             elapsed = time.time() - self.start_time if self.start_time else 0
             avg_rate = self.token_count / elapsed if elapsed > 0 else 0
             emit_info(
-                f"Completed: {self.token_count} tokens in {elapsed:.1f}s ({avg_rate:.1f} t/s avg)"
+                f"Completed · {self.token_count} tok · {format_duration(elapsed)} · {avg_rate:.1f} t/s avg"
             )

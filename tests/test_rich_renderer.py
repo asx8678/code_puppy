@@ -444,3 +444,78 @@ def test_start_stop_and_consume_buffer() -> None:
     renderer.stop()
 
     assert renderer._running is False
+
+
+def test_render_shell_line_stderr_uses_warning_style() -> None:
+    """Test that stderr lines use warning styling (yellow) instead of dim."""
+    renderer, console = _make_renderer()
+    
+    renderer._render_shell_line(ShellLineMessage(line="error output", stream="stderr"))
+    
+    assert console.print.call_args.kwargs["style"] == "yellow"
+
+
+def test_render_failed_shell_output_shows_preview_panel() -> None:
+    """Test that failed commands show stderr preview panel."""
+    renderer, console = _make_renderer()
+    
+    renderer._render_shell_output(
+        ShellOutputMessage(
+            command="pytest",
+            stdout="",
+            stderr="FAILED test_example.py::test_case\nAssertionError: expected True",
+            exit_code=1,
+            duration_seconds=1.2,
+        )
+    )
+    
+    # Should have multiple print calls - summary panel and stderr preview
+    assert console.print.call_count >= 2
+    # Check that Panel was used
+    panel_calls = [call for call in console.print.call_args_list 
+                   if call.args and isinstance(call.args[0], Panel)]
+    assert len(panel_calls) >= 2  # At least summary + stderr preview
+
+
+def test_render_helpers_for_terminal_summaries() -> None:
+    """Test the new helper methods for terminal display formatting."""
+    renderer, _ = _make_renderer()
+    
+    # Test format_duration via import
+    from code_puppy.utils import format_duration
+    assert format_duration(0.25) == "250ms"
+    assert format_duration(1.5) == "1.5s"
+    assert format_duration(65.5) == "1m 5.5s"
+    assert format_duration(3665) == "1h 1m"
+    
+    # Test _count_lines
+    assert renderer._count_lines("") == 0
+    assert renderer._count_lines("hello") == 1
+    assert renderer._count_lines("a\nb\nc") == 3
+    assert renderer._count_lines("a\nb\nc\n") == 3  # trailing newline stripped
+    
+    # Test _summarize_line_numbers
+    assert renderer._summarize_line_numbers([]) == "-"
+    assert renderer._summarize_line_numbers([1]) == "1"
+    assert renderer._summarize_line_numbers([1, 1, 1]) == "1"  # deduped
+    assert renderer._summarize_line_numbers([5, 3, 1, 4, 2]) == "1, 2, 3, 4, 5"  # sorted
+    assert renderer._summarize_line_numbers([1, 2, 3, 4, 5, 6, 7]) == "1, 2, 3, 4, 5, 6, +1 more"
+    
+    # Test _truncate_preview
+    assert renderer._truncate_preview("") == ""
+    assert renderer._truncate_preview("short") == "short"
+    assert "..." in renderer._truncate_preview("line\n" * 10)  # Should truncate
+
+
+def test_render_shell_start_uses_panel_format() -> None:
+    """Test that shell start uses structured Panel format."""
+    renderer, console = _make_renderer()
+    renderer._get_banner_color = Mock(return_value="blue")
+    
+    msg = ShellStartMessage(command="ls -la", cwd="/tmp", timeout=30, background=False)
+    renderer._render_shell_start(msg)
+    
+    # Check Panel was used
+    panel_calls = [call for call in console.print.call_args_list 
+                   if call.args and isinstance(call.args[0], Panel)]
+    assert len(panel_calls) >= 1

@@ -25,6 +25,7 @@ from rich.rule import Rule
 from rich.table import Table
 
 from code_puppy.async_utils import format_size
+from code_puppy.utils import format_duration
 from code_puppy.config import get_subagent_verbose
 from code_puppy.tools.common import format_diff_with_colors
 
@@ -285,6 +286,47 @@ class RichConsoleRenderer:
         """
         return is_subagent() and not get_subagent_verbose()
 
+    @staticmethod
+    def _count_lines(text: str) -> int:
+        """Count visible lines in shell output text."""
+        normalized = text.rstrip("\n")
+        return len(normalized.splitlines()) if normalized else 0
+
+    @staticmethod
+    def _format_size(size_bytes: int) -> str:
+        """Format a size in bytes into a human-friendly string."""
+        return format_size(size_bytes)
+
+    @staticmethod
+    def _summarize_line_numbers(line_numbers: list[int], *, max_items: int = 6) -> str:
+        """Build a compact summary of matching line numbers."""
+        unique_lines = sorted(set(line_numbers))
+        if not unique_lines:
+            return "-"
+        visible = ", ".join(str(num) for num in unique_lines[:max_items])
+        remaining = len(unique_lines) - max_items
+        if remaining > 0:
+            return f"{visible}, " f"+{remaining} more"
+        return visible
+
+    @staticmethod
+    def _truncate_preview(
+        text: str, *, max_lines: int = 6, max_chars: int = 400
+    ) -> str:
+        """Trim multiline output to a short preview for terminal display."""
+        clean = text.strip("\n")
+        if not clean:
+            return ""
+        lines = clean.splitlines()
+        preview = "\n".join(lines[:max_lines])
+        truncated = False
+        if len(preview) > max_chars:
+            preview = preview[: max_chars - 3].rstrip() + "..."
+            truncated = True
+        if len(lines) > max_lines and not truncated:
+            preview += "\n..."
+        return preview
+
     # =========================================================================
     # Adaptive Rendering Helpers (bd code_puppy-6ig)
     # =========================================================================
@@ -440,9 +482,17 @@ class RichConsoleRenderer:
         remaining_lines = max(0, len(lines) - len(preview_lines))
         remaining_chars = max(0, len(text) - len(preview))
         if log_path:
-            suffix = f"\n[dim]... ({remaining_lines} more lines, {remaining_chars} more chars — full output at {log_path})[/dim]"
+            suffix = (
+                f"\n[dim]... ({remaining_lines} more lines,"
+                f" {remaining_chars} more chars"
+                f" — full output at {log_path})[/dim]"
+            )
         else:
-            suffix = f"\n[dim]... ({remaining_lines} more lines, {remaining_chars} more chars — truncated)[/dim]"
+            suffix = (
+                f"\n[dim]... ({remaining_lines} more lines,"
+                f" {remaining_chars} more chars"
+                f" — truncated)[/dim]"
+            )
         return preview + suffix, True
 
     def _write_collapse_log(
@@ -911,8 +961,14 @@ class RichConsoleRenderer:
             for file_path in sorted(by_file.keys()):
                 file_matches = by_file[file_path]
                 match_word = "match" if len(file_matches) == 1 else "matches"
+
+                # Build line number summary
+                line_numbers = [m.line_number for m in file_matches]
+                lines_summary = self._summarize_line_numbers(line_numbers)
+
                 self._console.print(
-                    f"\n[dim]📄 {file_path} ({len(file_matches)} {match_word})[/dim]"
+                    f"\n[dim]📄 {file_path} ({len(file_matches)} {match_word}) "
+                    f"lines: {lines_summary}[/dim]"
                 )
 
                 # Show each match with line number and content
@@ -931,22 +987,28 @@ class RichConsoleRenderer:
                     ln = match.line_number
                     self._console.print(f"  [dim]{ln:4d}[/dim] │ {highlighted_line}")
         else:
-            # Concise mode (default): Show only file summaries
+            # Concise mode (default): Show aligned table format
             self._console.print("")
+            table = Table.grid(padding=(0, 2))
+            table.add_column(style="dim", no_wrap=True)  # icon + file
+            table.add_column(style="bold cyan", justify="right", no_wrap=True)  # count
+            table.add_column(style="dim", no_wrap=True)  # unit
+
             for file_path in sorted(by_file.keys()):
                 file_matches = by_file[file_path]
                 match_word = "match" if len(file_matches) == 1 else "matches"
-                self._console.print(
-                    f"[dim]📄 {file_path} ({len(file_matches)} {match_word})[/dim]"
-                )
+                table.add_row(f"📄 {file_path}", str(len(file_matches)), match_word)
 
-        # Summary - subtle
+            self._console.print(table)
+
+        # Summary with files_searched included
         match_word = "match" if msg.total_matches == 1 else "matches"
         file_word = "file" if len(by_file) == 1 else "files"
         num_files = len(by_file)
         self._console.print(
-            f"[dim]Found {msg.total_matches} {match_word} "
-            f"across {num_files} {file_word}[/dim]"
+            f"[dim]Found {msg.total_matches} {match_word}"
+            f" across {num_files} {file_word}"
+            f" (searched {msg.files_searched} files)[/dim]"
         )
 
         # Trailing newline for spinner separation
@@ -1011,63 +1073,100 @@ class RichConsoleRenderer:
 
     def _render_shell_start(self, msg: ShellStartMessage) -> None:
         """Render shell command start notification."""
-        # Skip for sub-agents unless verbose mode
         if self._should_suppress_subagent_output():
             return
 
-        # Escape command to prevent Rich markup injection
         safe_command = escape_rich_markup(msg.command)
-        # Header showing command is starting
         banner = self._format_banner("shell_command", "SHELL COMMAND")
+        self._console.print(f"\n{banner} 🚀")
 
-        # Add background indicator if running in background mode
-        if msg.background:
-            self._console.print(
-                f"\n{banner} 🚀 [dim]$ {safe_command}[/dim]  [bold magenta][BACKGROUND 🌙][/bold magenta]"
-            )
-        else:
-            self._console.print(f"\n{banner} 🚀 [dim]$ {safe_command}[/dim]")
+        details = Table.grid(padding=(0, 2))
+        details.add_column(style="bold cyan", no_wrap=True)
+        details.add_column(style="white")
+        details.add_row("Command", f"$ {safe_command}")
 
-        # Show working directory if specified
         if msg.cwd:
             safe_cwd = escape_rich_markup(msg.cwd)
-            self._console.print(f"[dim]📂 Working directory: {safe_cwd}[/dim]")
+            details.add_row("Directory", safe_cwd)
 
-        # Show timeout or background status
-        if msg.background:
-            self._console.print("[dim]⏱ Runs detached (no timeout)[/dim]")
-        else:
-            self._console.print(f"[dim]⏱ Timeout: {msg.timeout}s[/dim]")
+        mode_text = "BACKGROUND 🌙" if msg.background else "FOREGROUND"
+        timeout_text = (
+            "Runs detached (no timeout)"
+            if msg.background
+            else format_duration(float(msg.timeout))
+        )
+        details.add_row("Mode", mode_text)
+        details.add_row("Timeout", timeout_text)
+
+        self._console.print(Panel.fit(details, border_style="magenta", padding=(0, 1)))
 
     def _render_shell_line(self, msg: ShellLineMessage) -> None:
         """Render shell output line preserving ANSI codes and carriage returns."""
         import sys
-
         from rich.text import Text
 
-        # Check if line contains carriage return (progress bar style output)
         if "\r" in msg.line:
-            # Bypass Rich entirely - write directly to stdout so terminal interprets \r
-            # Apply dim styling manually via ANSI codes
             sys.stdout.write(f"\033[2m{msg.line}\033[0m")
             sys.stdout.flush()
         else:
-            # Normal line: use Rich for nice formatting
-            # Fast-path: skip ANSI parsing for plain text (no escape codes)
             if "\033[" in msg.line:
                 text = Text.from_ansi(msg.line)
             else:
                 text = Text(msg.line)
-            self._console.print(text, style="dim")
+            style = "yellow" if msg.stream == "stderr" else "dim"
+            self._console.print(text, style=style)
 
     def _render_shell_output(self, msg: ShellOutputMessage) -> None:
-        """Render shell command output - just a trailing newline for spinner separation.
+        """Render a compact shell command completion summary."""
+        stdout_lines = self._count_lines(msg.stdout)
+        stderr_lines = self._count_lines(msg.stderr)
+        success = msg.exit_code == 0
+        border_style = "green" if success else "red"
+        title = (
+            "[bold green]✓ COMMAND FINISHED[/bold green]"
+            if success
+            else "[bold red]✗ COMMAND FAILED[/bold red]"
+        )
 
-        Shell command results are already returned to the LLM via tool responses,
-        so we don't need to clutter the UI with redundant output.
-        """
-        # Just print trailing newline for spinner separation
-        self._console.print()
+        summary = Table.grid(padding=(0, 2))
+        summary.add_column(style="bold cyan", no_wrap=True)
+        summary.add_column(style="white")
+        summary.add_row("Exit", str(msg.exit_code))
+        summary.add_row("Duration", format_duration(msg.duration_seconds))
+        summary.add_row(
+            "Stdout",
+            f"{stdout_lines} line(s)" if stdout_lines else "empty",
+        )
+        summary.add_row(
+            "Stderr",
+            f"{stderr_lines} line(s)" if stderr_lines else "empty",
+        )
+
+        self._console.print(Panel.fit(summary, title=title, border_style=border_style))
+
+        # Show stderr preview on failure or if there's stderr content
+        stderr_preview = self._truncate_preview(msg.stderr)
+        if stderr_preview:
+            self._console.print(
+                Panel.fit(
+                    escape_rich_markup(stderr_preview),
+                    title="[bold yellow]stderr preview[/bold yellow]",
+                    border_style="yellow",
+                    padding=(0, 1),
+                )
+            )
+        elif not success:
+            # If no stderr but command failed, show stdout preview
+            stdout_preview = self._truncate_preview(msg.stdout)
+            if stdout_preview:
+                self._console.print(
+                    Panel.fit(
+                        escape_rich_markup(stdout_preview),
+                        title="[bold cyan]stdout preview[/bold cyan]",
+                        border_style="cyan",
+                        padding=(0, 1),
+                    )
+                )
 
     # =========================================================================
     # Agent Messages
