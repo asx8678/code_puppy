@@ -162,14 +162,16 @@ defmodule CodePuppyControl.RequestTracker do
       %{result: {:ok, result}} = _pending ->
         # Result already arrived, return immediately
         new_pending = Map.delete(state.pending, request_id)
+        new_timers = Map.delete(state.timers, request_id)
         cancel_timer(state.timers, request_id)
-        {:reply, {:ok, result}, %{state | pending: new_pending}}
+        {:reply, {:ok, result}, %{state | pending: new_pending, timers: new_timers}}
 
       %{result: {:error, reason}} = _pending ->
         # Error already arrived
         new_pending = Map.delete(state.pending, request_id)
+        new_timers = Map.delete(state.timers, request_id)
         cancel_timer(state.timers, request_id)
-        {:reply, {:error, reason}, %{state | pending: new_pending}}
+        {:reply, {:error, reason}, %{state | pending: new_pending, timers: new_timers}}
 
       pending ->
         # Still waiting, store the awaiter
@@ -193,15 +195,17 @@ defmodule CodePuppyControl.RequestTracker do
         # New pattern: awaiter is waiting, reply directly
         GenServer.reply(awaiter, {:ok, result})
         new_pending = Map.delete(state.pending, request_id)
+        new_timers = Map.delete(state.timers, request_id)
         cancel_timer(state.timers, request_id)
-        {:reply, :ok, %{state | pending: new_pending}}
+        {:reply, :ok, %{state | pending: new_pending, timers: new_timers}}
 
       %{from: from} ->
         # Old pattern (backward compat): reply to original caller
         GenServer.reply(from, {:ok, result})
         new_pending = Map.delete(state.pending, request_id)
+        new_timers = Map.delete(state.timers, request_id)
         cancel_timer(state.timers, request_id)
-        {:reply, :ok, %{state | pending: new_pending}}
+        {:reply, :ok, %{state | pending: new_pending, timers: new_timers}}
     end
   end
 
@@ -220,15 +224,17 @@ defmodule CodePuppyControl.RequestTracker do
         # New pattern: awaiter is waiting, reply directly with error
         GenServer.reply(awaiter, {:error, reason})
         new_pending = Map.delete(state.pending, request_id)
+        new_timers = Map.delete(state.timers, request_id)
         cancel_timer(state.timers, request_id)
-        {:reply, :ok, %{state | pending: new_pending}}
+        {:reply, :ok, %{state | pending: new_pending, timers: new_timers}}
 
       %{from: from} ->
         # Old pattern (backward compat): reply to original caller with error
         GenServer.reply(from, {:error, reason})
         new_pending = Map.delete(state.pending, request_id)
+        new_timers = Map.delete(state.timers, request_id)
         cancel_timer(state.timers, request_id)
-        {:reply, :ok, %{state | pending: new_pending}}
+        {:reply, :ok, %{state | pending: new_pending, timers: new_timers}}
     end
   end
 
@@ -250,16 +256,18 @@ defmodule CodePuppyControl.RequestTracker do
         result = %{"response" => response, "prompt_id" => prompt_id}
         GenServer.reply(awaiter, {:ok, result})
         new_pending = Map.delete(state.pending, prompt_id)
+        new_timers = Map.delete(state.timers, prompt_id)
         cancel_timer(state.timers, prompt_id)
-        {:reply, :ok, %{state | pending: new_pending}}
+        {:reply, :ok, %{state | pending: new_pending, timers: new_timers}}
 
       %{from: from} ->
         # Old pattern (backward compat): reply to original caller
         result = %{"response" => response, "prompt_id" => prompt_id}
         GenServer.reply(from, {:ok, result})
         new_pending = Map.delete(state.pending, prompt_id)
+        new_timers = Map.delete(state.timers, prompt_id)
         cancel_timer(state.timers, prompt_id)
-        {:reply, :ok, %{state | pending: new_pending}}
+        {:reply, :ok, %{state | pending: new_pending, timers: new_timers}}
     end
   end
 
@@ -310,7 +318,8 @@ defmodule CodePuppyControl.RequestTracker do
 
     for {id, target} <- stale_ids do
       Logger.warning("Cleaning up stale request #{id}")
-      GenServer.reply(target, {:error, :stale_request})
+      # bd-72: Guard against nil target (register_only without awaiter)
+      if target, do: GenServer.reply(target, {:error, :stale_request})
     end
 
     stale_id_set = MapSet.new(stale_ids, fn {id, _} -> id end)

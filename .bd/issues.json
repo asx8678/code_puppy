@@ -1177,7 +1177,7 @@
       "id": "bd-68",
       "title": "Phase 0.2: Route explorer.py turbo_parse_bridge through NativeBackend",
       "description": "Replace direct turbo_parse_bridge imports in code_context/explorer.py with NativeBackend. Add NativeBackend.extract_symbols_from_file() wrapper.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1187,14 +1187,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T20:05:41.687611",
-      "updated_at": "2026-04-14T20:20:17.823648",
+      "updated_at": "2026-04-14T20:25:50.750312",
       "comments": []
     },
     "bd-69": {
       "id": "bd-69",
       "title": "Phase 0.5: Route fast_puppy/register_callbacks.py _core_bridge imports",
       "description": "Replace 4 direct _core_bridge import sites (lines 165, 258, 306, 335) in fast_puppy/register_callbacks.py with NativeBackend queries.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1203,14 +1203,14 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T20:05:41.692325",
-      "updated_at": "2026-04-14T20:05:41.692335",
+      "updated_at": "2026-04-14T20:25:50.782435",
       "comments": []
     },
     "bd-70": {
       "id": "bd-70",
       "title": "Phase 0.3: Route acceleration/__init__.py through NativeBackend",
       "description": "Replace direct _core_bridge and turbo_parse_bridge imports in acceleration/__init__.py. Make it a thin re-export layer over NativeBackend.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -1220,7 +1220,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T20:05:41.699417",
-      "updated_at": "2026-04-14T20:20:14.086480",
+      "updated_at": "2026-04-14T20:25:50.813019",
       "comments": [
         "Claimed by planning-agent-019d8d for adversarial planning work."
       ]
@@ -1229,7 +1229,7 @@
       "id": "bd-71",
       "title": "Phase 0.4: Route remaining turbo_parse_bridge consumers",
       "description": "Route syntax_validate.py, skeleton.py, and turbo_parse/register_callbacks.py through NativeBackend. These already use lazy imports so lower risk.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -1238,9 +1238,85 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T20:05:41.703302",
-      "updated_at": "2026-04-14T20:05:41.703308",
+      "updated_at": "2026-04-14T20:25:50.844153",
       "comments": []
+    },
+    "bd-72": {
+      "id": "bd-72",
+      "title": "BUG: RequestTracker stale cleanup crashes on nil target",
+      "description": "handle_info(:cleanup) calls GenServer.reply(target, ...) where target can be nil when request was registered via register_only but awaiter never called. GenServer.reply(nil, ...) crashes the process. Fix: guard with 'if target' before calling reply.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "bug",
+        "phase-1",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:36:44.633473",
+      "updated_at": "2026-04-14T20:37:07.024135",
+      "comments": [
+        "Claimed by code-puppy-019d8d. In progress."
+      ]
+    },
+    "bd-73": {
+      "id": "bd-73",
+      "title": "FIX: RequestTracker timer map not cleaned on completion",
+      "description": "cancel_timer() cancels the timer process but state.timers map entry is not removed in complete/fail handlers. Minor memory leak. Fix: add Map.delete(state.timers, request_id) to completion paths.",
+      "status": "open",
+      "priority": 4,
+      "type": "task",
+      "labels": [
+        "bug",
+        "phase-1",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:36:44.639244",
+      "updated_at": "2026-04-14T20:37:07.025865",
+      "comments": [
+        "Claimed by code-puppy-019d8d. In progress."
+      ]
+    },
+    "bd-74": {
+      "id": "bd-74",
+      "title": "BUG: file_read_batch crashes on FileOps error",
+      "description": "port.ex handle_file_request(\"file_read_batch\") uses {:ok, results} = FileOps.read_files(paths, opts) which crashes if read_files returns {:error, reason}. Fix: use case statement.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "bug",
+        "phase-1",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:36:44.641110",
+      "updated_at": "2026-04-14T20:37:07.035658",
+      "comments": [
+        "Claimed by code-puppy-019d8d. In progress."
+      ]
+    },
+    "bd-75": {
+      "id": "bd-75",
+      "title": "BUG: grep_search param mismatch \u2014 Elixir bridge grep is broken",
+      "description": "Python NativeBackend sends 'search_string' key but Elixir port.ex handle_file_request reads 'pattern'. Grep via Elixir bridge passes nil pattern. Fix: change port.ex to read params[\"search_string\"] OR params[\"pattern\"] (accept both for compatibility).",
+      "status": "open",
+      "priority": 0,
+      "type": "task",
+      "labels": [
+        "bug",
+        "phase-1",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:36:57.499338",
+      "updated_at": "2026-04-14T20:37:07.023155",
+      "comments": [
+        "Claimed by code-puppy-019d8d. In progress."
+      ]
     }
   },
-  "counter": 71
+  "counter": 75
 }

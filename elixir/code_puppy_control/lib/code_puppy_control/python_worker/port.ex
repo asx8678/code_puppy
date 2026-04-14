@@ -347,7 +347,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   defp handle_file_request("grep_search", params) do
-    pattern = params["pattern"]
+    pattern = params["search_string"] || params["pattern"]
     directory = params["directory"] || "."
     opts = params_to_grep_opts(params)
 
@@ -383,17 +383,21 @@ defmodule CodePuppyControl.PythonWorker.Port do
     paths = params["paths"] || []
     opts = params_to_read_opts(params)
 
-    {:ok, results} = FileOps.read_files(paths, opts)
+    # bd-74: Handle error case instead of crash on pattern match
+    case FileOps.read_files(paths, opts) do
+      {:ok, results} ->
+        serializable_results =
+          Enum.map(results, fn result ->
+            result
+            |> Map.update(:error, nil, fn err -> err end)
+            |> Map.update(:truncated, false, fn t -> t end)
+          end)
 
-    # Convert to JSON-serializable format
-    serializable_results =
-      Enum.map(results, fn result ->
-        result
-        |> Map.update(:error, nil, fn err -> err end)
-        |> Map.update(:truncated, false, fn t -> t end)
-      end)
+        Protocol.encode_response(%{"files" => serializable_results}, nil)
 
-    Protocol.encode_response(%{"files" => serializable_results}, nil)
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Batch file read failed: #{inspect(reason)}", nil, nil)
+    end
   end
 
   # Parse operation handlers using turbo_parse NIF
