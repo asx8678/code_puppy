@@ -742,7 +742,7 @@
       "id": "bd-41",
       "title": "P0: sys.pid bug - Python bridge emits sys.pid which doesn't exist",
       "description": "CRITICAL BUG: Python bridge emits 'sys.pid' field that doesn't exist in Python's sys module. Should be 'os.getpid()'.\n\n**Files:**\n- code_puppy/plugins/elixir_bridge/register_callbacks.py:70-73\n\n**Impact:** Elixir side receives invalid/None worker PID causing connection tracking failures and inability to correlate Python processes with Elixir runs.\n\n**Fix:** Change sys.pid to os.getpid() in the Python bridge registration message.\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "bug",
       "labels": [
@@ -750,7 +750,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:25.554361",
-      "updated_at": "2026-04-14T10:37:25.554370",
+      "updated_at": "2026-04-14T11:08:05.537105",
       "comments": []
     },
     "bd-42": {
@@ -802,7 +802,7 @@
       "id": "bd-45",
       "title": "P0: MCP framing mismatch - Double framing with {:packet,4} + Content-Length",
       "description": "CRITICAL BUG: MCP server uses BEAM {:packet, 4} framing PLUS manual Content-Length parsing, causing double-framing issues and ID type mismatch (integer vs string).\n\n**Files:**\n- elixir/code_puppy_control/lib/code_puppy_control/mcp/server.ex:323-350\n- zig_src/process_runner/protocol.zig\n\n**Impact:** \n- Message truncation/concatenation\n- ID type mismatches between Elixir (integer) and Zig (string)\n- Protocol parsing failures on MCP stdio bridge\n\n**Fix:** \n- Choose ONE framing method (prefer manual Content-Length for MCP compliance)\n- Remove {:packet, 4} from socket options\n- Normalize ID types to strings throughout\n\n**Related:** Part of comprehensive Elixir Control Plane audit findings.",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "type": "bug",
       "labels": [
@@ -810,7 +810,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T10:37:31.098880",
-      "updated_at": "2026-04-14T10:37:31.098886",
+      "updated_at": "2026-04-14T11:06:37.490209",
       "comments": []
     },
     "bd-46": {
