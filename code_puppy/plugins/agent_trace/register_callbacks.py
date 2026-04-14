@@ -34,6 +34,20 @@ from code_puppy.plugins.agent_trace.cli_renderer import (
     clear_previous_render,
     set_render_enabled,
 )
+from code_puppy.plugins.agent_trace.analytics import (
+    analyze_token_budget,
+    compare_runs,
+    detect_outliers,
+    export_json,
+    export_otel,
+    export_csv,
+)
+from code_puppy.plugins.agent_trace.cli_analytics import (
+    render_token_budget,
+    render_comparison,
+    render_outlier_report,
+    render_trace_summary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -385,6 +399,17 @@ async def _on_agent_run_end(
         if trace_id in _trace_states:
             render_live(_trace_states[trace_id], mode="tree", force=True)
         
+        # Auto-analyze for outliers and show summary
+        if trace_id in _trace_states:
+            state = _trace_states[trace_id]
+            events = _store.read(trace_id)
+            budget = analyze_token_budget(state, events)
+            outliers = detect_outliers(state)
+            
+            # Show compact summary if there are outliers or significant token usage
+            if outliers.outliers or budget.total() > 500:
+                print(render_trace_summary(budget, outliers))
+        
         # Cleanup
         if model_span_id in _estimated_usage:
             del _estimated_usage[model_span_id]
@@ -398,7 +423,7 @@ async def _on_agent_run_end(
 def _custom_help():
     """Provide help for trace commands."""
     return [
-        ("trace", "Agent trace: /trace status|list|show <id>|clear"),
+        ("trace", "Agent trace: /trace on|off|status|list|show|budget|compare|analyze|export"),
     ]
 
 
@@ -409,6 +434,17 @@ def _handle_trace_command(command: str, name: str) -> Any:
     
     parts = command.strip().split()
     subcommand = parts[1] if len(parts) > 1 else "status"
+    
+    if subcommand == "on":
+        set_render_enabled(True)
+        emit_info("📊 Live trace rendering enabled")
+        return True
+    
+    if subcommand == "off":
+        set_render_enabled(False)
+        clear_previous_render()
+        emit_info("📊 Live trace rendering disabled")
+        return True
     
     if subcommand == "status":
         active = sum(1 for s in _trace_states.values() for sp in s.spans.values() if sp.status == "running")
@@ -431,6 +467,107 @@ def _handle_trace_command(command: str, name: str) -> Any:
         emit_info(f"📊 Trace {trace_id}: {len(events)} events")
         return True
     
+    if subcommand == "budget":
+        # Show token budget for current or specified trace
+        trace_id = parts[2] if len(parts) > 2 else None
+        
+        if trace_id:
+            # Load from store
+            events = _store.read(trace_id)
+            if not events:
+                emit_info(f"📊 Trace {trace_id} not found")
+                return True
+            from code_puppy.plugins.agent_trace.reducer import replay_trace
+            state = replay_trace(events)
+        elif _trace_states:
+            # Use most recent active trace
+            trace_id = list(_trace_states.keys())[-1]
+            state = _trace_states[trace_id]
+            events = _store.read(trace_id)
+        else:
+            emit_info("📊 No active traces. Use /trace budget <trace_id>")
+            return True
+        
+        budget = analyze_token_budget(state, events)
+        print(render_token_budget(budget))
+        return True
+    
+    if subcommand == "compare" and len(parts) > 3:
+        trace1_id = parts[2]
+        trace2_id = parts[3]
+        
+        # Load both traces
+        events1 = _store.read(trace1_id)
+        events2 = _store.read(trace2_id)
+        
+        if not events1:
+            emit_info(f"📊 Trace {trace1_id} not found")
+            return True
+        if not events2:
+            emit_info(f"📊 Trace {trace2_id} not found")
+            return True
+        
+        from code_puppy.plugins.agent_trace.reducer import replay_trace
+        state1 = replay_trace(events1)
+        state2 = replay_trace(events2)
+        
+        comparison = compare_runs(state1, state2)
+        print(render_comparison(comparison))
+        return True
+    
+    if subcommand == "analyze":
+        # Run outlier detection
+        trace_id = parts[2] if len(parts) > 2 else None
+        
+        if trace_id:
+            events = _store.read(trace_id)
+            if not events:
+                emit_info(f"📊 Trace {trace_id} not found")
+                return True
+            from code_puppy.plugins.agent_trace.reducer import replay_trace
+            state = replay_trace(events)
+        elif _trace_states:
+            trace_id = list(_trace_states.keys())[-1]
+            state = _trace_states[trace_id]
+        else:
+            emit_info("📊 No active traces. Use /trace analyze <trace_id>")
+            return True
+        
+        outliers = detect_outliers(state)
+        print(render_outlier_report(outliers))
+        return True
+    
+    if subcommand == "export" and len(parts) > 2:
+        trace_id = parts[2]
+        format_type = parts[3] if len(parts) > 3 else "json"
+        
+        events = _store.read(trace_id)
+        if not events:
+            emit_info(f"📊 Trace {trace_id} not found")
+            return True
+        
+        from code_puppy.plugins.agent_trace.reducer import replay_trace
+        state = replay_trace(events)
+        
+        if format_type == "json":
+            import json
+            output = json.dumps(export_json(state, events), indent=2)
+        elif format_type == "otel":
+            import json
+            output = json.dumps(export_otel(state, events), indent=2)
+        elif format_type == "csv":
+            output = export_csv(state)
+        else:
+            emit_info(f"📊 Unknown format: {format_type}. Use json, otel, or csv")
+            return True
+        
+        # Write to file
+        filename = f"{trace_id}.{format_type}"
+        with open(filename, "w") as f:
+            f.write(output)
+        emit_info(f"📊 Exported to {filename}")
+        return True
+    
     if subcommand == "clear":
         _trace_states.clear()
         _session_spans.clear()
@@ -439,18 +576,7 @@ def _handle_trace_command(command: str, name: str) -> Any:
         emit_info("📊 Trace state cleared")
         return True
     
-    if subcommand == "on":
-        set_render_enabled(True)
-        emit_info("📊 Live trace rendering enabled")
-        return True
-    
-    if subcommand == "off":
-        set_render_enabled(False)
-        clear_previous_render()
-        emit_info("📊 Live trace rendering disabled")
-        return True
-    
-    emit_info("Usage: /trace status|list|show <id>|clear|on|off")
+    emit_info("Usage: /trace on|off|status|list|show <id>|budget [id]|compare <t1> <t2>|analyze [id]|export <id> [json|otel|csv]|clear")
     return True
 
 

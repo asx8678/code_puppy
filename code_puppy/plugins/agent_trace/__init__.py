@@ -43,6 +43,26 @@ from code_puppy.plugins.agent_trace.cli_renderer import (
     is_render_enabled,
     clear_previous_render,
 )
+from code_puppy.plugins.agent_trace.analytics import (
+    TokenBudget,
+    RunMetrics,
+    RunComparison,
+    Outlier,
+    OutlierReport,
+    analyze_token_budget,
+    compare_runs,
+    detect_outliers,
+    export_json,
+    export_otel,
+    export_csv,
+)
+from code_puppy.plugins.agent_trace.cli_analytics import (
+    render_token_budget,
+    render_comparison,
+    render_outlier_report,
+    render_trace_summary,
+    render_inline_summary,
+)
 
 __all__ = [
     # Schema
@@ -75,4 +95,22 @@ __all__ = [
     "set_render_enabled",
     "is_render_enabled",
     "clear_previous_render",
+    # Analytics
+    "TokenBudget",
+    "RunMetrics",
+    "RunComparison",
+    "Outlier",
+    "OutlierReport",
+    "analyze_token_budget",
+    "compare_runs",
+    "detect_outliers",
+    "export_json",
+    "export_otel",
+    "export_csv",
+    # CLI Analytics
+    "render_token_budget",
+    "render_comparison",
+    "render_outlier_report",
+    "render_trace_summary",
+    "render_inline_summary",
 ]
