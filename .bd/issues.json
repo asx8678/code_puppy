@@ -1154,7 +1154,89 @@
       "created_at": "2026-04-14T19:34:59.169860",
       "updated_at": "2026-04-14T19:36:18.270612",
       "comments": []
+    },
+    "bd-67": {
+      "id": "bd-67",
+      "title": "Phase 0.1: Route base_agent.py _core_bridge through NativeBackend",
+      "description": "Replace direct _core_bridge imports in base_agent.py (lines 44-48) with NativeBackend. Add NativeBackend.MessageBatchHandle re-export, NativeBackend.create_message_batch(), NativeBackend.is_message_core_active(). Fix dead code bug: _core_bridge.rust_split_for_summarization and rust_truncation_indices don't exist (silently AttributeError). 37+ usage points to update.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-0"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:05:41.685263",
+      "updated_at": "2026-04-14T20:06:12.188982",
+      "comments": [
+        "Claimed by planning-agent-019d8d for in-progress work"
+      ]
+    },
+    "bd-68": {
+      "id": "bd-68",
+      "title": "Phase 0.2: Route explorer.py turbo_parse_bridge through NativeBackend",
+      "description": "Replace direct turbo_parse_bridge imports in code_context/explorer.py with NativeBackend. Add NativeBackend.extract_symbols_from_file() wrapper.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-0"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:05:41.687611",
+      "updated_at": "2026-04-14T20:05:41.687619",
+      "comments": []
+    },
+    "bd-69": {
+      "id": "bd-69",
+      "title": "Phase 0.5: Route fast_puppy/register_callbacks.py _core_bridge imports",
+      "description": "Replace 4 direct _core_bridge import sites (lines 165, 258, 306, 335) in fast_puppy/register_callbacks.py with NativeBackend queries.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-0"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:05:41.692325",
+      "updated_at": "2026-04-14T20:05:41.692335",
+      "comments": []
+    },
+    "bd-70": {
+      "id": "bd-70",
+      "title": "Phase 0.3: Route acceleration/__init__.py through NativeBackend",
+      "description": "Replace direct _core_bridge and turbo_parse_bridge imports in acceleration/__init__.py. Make it a thin re-export layer over NativeBackend.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-0"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:05:41.699417",
+      "updated_at": "2026-04-14T20:05:41.699427",
+      "comments": []
+    },
+    "bd-71": {
+      "id": "bd-71",
+      "title": "Phase 0.4: Route remaining turbo_parse_bridge consumers",
+      "description": "Route syntax_validate.py, skeleton.py, and turbo_parse/register_callbacks.py through NativeBackend. These already use lazy imports so lower risk.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-0"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T20:05:41.703302",
+      "updated_at": "2026-04-14T20:05:41.703308",
+      "comments": []
     }
   },
-  "counter": 66
+  "counter": 71
 }
