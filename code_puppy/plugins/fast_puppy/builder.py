@@ -430,12 +430,16 @@ def _build_crate(crate_dir: Path, crate_name: str) -> tuple[bool, str]:
 
     try:
         # Use Popen for heartbeat support on long builds
+        # NOTE: cwd must be repo root (parent of crate_dir), NOT the crate dir itself.
+        # When using 'uv run maturin', running from inside a directory with pyproject.toml
+        # causes uv to try building that package first, which fails with free-threaded Python.
+        # The --manifest-path flag already tells maturin where Cargo.toml is, so crate_dir as cwd is redundant AND harmful.
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            cwd=str(crate_dir),
+            cwd=str(crate_dir.parent),
             env=build_env,
         )
 
