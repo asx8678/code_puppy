@@ -1,7 +1,8 @@
 """Zig cffi bridge - direct bindings to Zig shared libraries.
 
 Exposes: ZIG_AVAILABLE, process_messages_batch(), prune_and_filter(),
-parse_source(), list_files(), grep(), is_language_supported()
+process_messages_batch_binary(), parse_source(), list_files(), grep(),
+is_language_supported()
 """
 
 from __future__ import annotations
@@ -61,12 +62,24 @@ def _load_lib(name: str) -> Any | None:
 if CFFI_AVAILABLE and _ffi is not None:
     _ffi.cdef("""
         typedef void* PuppyCoreHandle;
-        typedef enum { success=0, invalid_argument=-1, out_of_memory=-2 } PuppyCoreError;
+        typedef enum { success=0, invalid_argument=-1, out_of_memory=-2,
+                       serialization_failed=-3, pruning_failed=-4 } PuppyCoreError;
         PuppyCoreHandle puppy_core_create(void);
         void puppy_core_destroy(PuppyCoreHandle handle);
         PuppyCoreError puppy_core_process_messages(PuppyCoreHandle h, const char* msgs,
             const char* sys, char** out);
         void puppy_core_free_string(char* ptr);
+
+        // Binary protocol for fast FFI (avoids JSON serialization)
+        PuppyCoreError puppy_core_process_messages_binary(
+            PuppyCoreHandle h,
+            const uint8_t* input_data,
+            size_t input_len,
+            const char* sys,
+            uint8_t** output_data,
+            size_t* output_len
+        );
+        void puppy_core_free_bytes(uint8_t* ptr, size_t len);
 
         typedef void* TurboOpsHandle;
         typedef enum { tops_success=0, tops_invalid=-1 } TurboOpsError;
@@ -197,8 +210,142 @@ def is_language_supported(language: str) -> bool:
     return bool(_lib_turbo_parse.turbo_parse_is_language_supported(language.encode()))
 
 
+# ── Binary Protocol Helpers ──────────────────────────────────────────────────
+
+def _pack_messages_binary(messages: list[dict]) -> bytes:
+    """Pack messages into compact binary format.
+
+    Format:
+        [u32 message_count]
+        For each message:
+          [u8 role_len][role bytes]
+          [u32 parts_count]
+          For each part:
+            [u32 content_len][content bytes]
+    """
+    import struct
+    buf = bytearray()
+    buf.extend(struct.pack('<I', len(messages)))  # u32 count
+
+    for msg in messages:
+        role = (msg.get('role') or '').encode('utf-8')
+        buf.append(len(role))  # u8 role_len
+        buf.extend(role)
+        parts = msg.get('parts', [])
+        buf.extend(struct.pack('<I', len(parts)))  # u32 parts_count
+
+        for part in parts:
+            # Try content first, fall back to content_json
+            content = (part.get('content') or part.get('content_json') or '').encode('utf-8')
+            buf.extend(struct.pack('<I', len(content)))  # u32 content_len
+            buf.extend(content)
+
+    return bytes(buf)
+
+
+def _unpack_result_binary(data: bytes) -> dict[str, Any]:
+    """Unpack binary result from Zig.
+
+    Format:
+        [u32 count]
+        For each message:
+          [i64 tokens]
+          [u64 hash]
+        [i64 total_tokens]
+        [i64 overhead_tokens]
+    """
+    import struct
+    pos = 0
+
+    count = struct.unpack_from('<I', data, pos)[0]
+    pos += 4
+
+    per_message_tokens = []
+    message_hashes = []
+
+    for _ in range(count):
+        tokens = struct.unpack_from('<q', data, pos)[0]
+        pos += 8  # i64
+        hash_val = struct.unpack_from('<Q', data, pos)[0]
+        pos += 8  # u64
+        per_message_tokens.append(tokens)
+        message_hashes.append(hash_val)
+
+    total_tokens = struct.unpack_from('<q', data, pos)[0]
+    pos += 8
+    overhead = struct.unpack_from('<q', data, pos)[0]
+    pos += 8
+
+    return {
+        'per_message_tokens': per_message_tokens,
+        'total_message_tokens': total_tokens,
+        'message_hashes': message_hashes,
+        'context_overhead_tokens': overhead,
+    }
+
+
+def _safe_call_binary(lib: Any, fn: str, *args: Any) -> dict[str, Any]:
+    """Call a binary FFI function and handle result unpacking."""
+    import struct
+
+    if lib is None:
+        return {"success": False, "error": "Zig library not loaded"}
+
+    fn_obj = getattr(lib, fn, None)
+    if fn_obj is None:
+        return {"success": False, "error": f"{fn} not found"}
+
+    out_ptr = _ffi.new("uint8_t**")  # type: ignore[attr-defined]
+    out_len = _ffi.new("size_t*")  # type: ignore[attr-defined]
+
+    rc = fn_obj(*args, out_ptr, out_len)
+
+    if rc != 0:
+        return {"success": False, "error": f"Zig error: {rc}"}
+
+    if out_ptr[0] == _ffi.NULL:  # type: ignore[attr-defined]
+        return {"success": False, "error": "Zig returned null pointer"}
+
+    try:
+        # Copy bytes from Zig buffer
+        buf_len = out_len[0]
+        raw_bytes = bytes(_ffi.buffer(out_ptr[0], buf_len))  # type: ignore[attr-defined]
+        result = _unpack_result_binary(raw_bytes)
+        result["success"] = True
+
+        # Free Zig memory
+        lib.puppy_core_free_bytes(out_ptr[0], buf_len)
+        return result
+    except struct.error as e:
+        lib.puppy_core_free_bytes(out_ptr[0], out_len[0])
+        return {"success": False, "error": f"Failed to unpack result: {e}"}
+
+
+# ── Public API ───────────────────────────────────────────────────────────────
+
+def process_messages_batch_binary(messages: list[dict], system_prompt: str = "") -> dict[str, Any]:
+    """Process messages using the binary protocol (faster than JSON for large batches).
+
+    This avoids JSON serialization overhead by using a compact binary format
+    for both input and output.
+    """
+    h = _get_puppy_core_handle()
+    if h is None:
+        return {"success": False, "error": "zig_puppy_core not available"}
+
+    binary_data = _pack_messages_binary(messages)
+    return _safe_call_binary(
+        _lib_puppy_core,
+        "puppy_core_process_messages_binary",
+        h,
+        binary_data,
+        len(binary_data),
+        system_prompt.encode('utf-8')
+    )
+
+
 __all__ = [
     "ZIG_AVAILABLE", "CFFI_AVAILABLE",
-    "process_messages_batch", "prune_and_filter",
+    "process_messages_batch", "process_messages_batch_binary", "prune_and_filter",
     "list_files", "grep", "parse_source", "is_language_supported",
 ]

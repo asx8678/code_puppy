@@ -71,7 +71,7 @@ def bench_rust():
 
 
 def bench_zig():
-    """Benchmark Zig acceleration with pre-serialized data (fair comparison)."""
+    """Benchmark Zig JSON acceleration with pre-serialized data (fair comparison)."""
     try:
         from code_puppy.zig_bridge import ZIG_AVAILABLE
         if not ZIG_AVAILABLE:
@@ -104,6 +104,35 @@ def bench_zig():
             rc = _lib_puppy_core.puppy_core_process_messages(h, encoded, sys_prompt, out)
             if rc == 0 and out[0] != _ffi.NULL:
                 _lib_puppy_core.puppy_core_free_string(out[0])
+        elapsed = time.perf_counter() - start
+        
+        return elapsed / iterations * 1000, None  # ms per iteration
+        
+    except Exception as e:
+        return None, str(e)
+
+
+def bench_zig_binary():
+    """Benchmark Zig binary protocol acceleration."""
+    try:
+        from code_puppy.zig_bridge import (
+            ZIG_AVAILABLE,
+            process_messages_batch_binary as zig_binary_batch,
+        )
+        if not ZIG_AVAILABLE:
+            return None, "Zig not available"
+        
+        messages = generate_test_messages(200, 5)
+        
+        # Warm up
+        for _ in range(5):
+            zig_binary_batch(messages, "System prompt here")
+        
+        # Benchmark
+        start = time.perf_counter()
+        iterations = 100
+        for _ in range(iterations):
+            zig_binary_batch(messages, "System prompt here")
         elapsed = time.perf_counter() - start
         
         return elapsed / iterations * 1000, None  # ms per iteration
@@ -158,38 +187,63 @@ def main():
     # Python baseline
     py_time, py_err = bench_python()
     if py_err:
-        print(f"Python: ERROR - {py_err}")
+        print(f"Python:      ERROR - {py_err}")
     else:
-        print(f"Python:  {py_time:7.3f} ms/iter (baseline)")
+        print(f"Python:      {py_time:7.3f} ms/iter (baseline)")
         results["python"] = py_time
     
     # Rust
     rust_time, rust_err = bench_rust()
     if rust_err:
-        print(f"Rust:    ERROR - {rust_err}")
+        print(f"Rust:        ERROR - {rust_err}")
     else:
         speedup = py_time / rust_time if py_time else 0
-        print(f"Rust:    {rust_time:7.3f} ms/iter ({speedup:.1f}x vs Python)")
+        print(f"Rust:        {rust_time:7.3f} ms/iter ({speedup:.1f}x vs Python)")
         results["rust"] = rust_time
     
-    # Zig
+    # Zig JSON
     zig_time, zig_err = bench_zig()
     if zig_err:
-        print(f"Zig:     ERROR - {zig_err}")
+        print(f"Zig (JSON):  ERROR - {zig_err}")
     else:
         speedup_py = py_time / zig_time if py_time else 0
         speedup_rust = rust_time / zig_time if rust_time else 0
-        print(f"Zig:     {zig_time:7.3f} ms/iter ({speedup_py:.1f}x vs Python, {speedup_rust:.1f}x vs Rust)")
-        results["zig"] = zig_time
+        print(f"Zig (JSON):  {zig_time:7.3f} ms/iter ({speedup_py:.1f}x vs Python, {speedup_rust:.1f}x vs Rust)")
+        results["zig_json"] = zig_time
+    
+    # Zig Binary
+    zig_bin_time, zig_bin_err = bench_zig_binary()
+    if zig_bin_err:
+        print(f"Zig (Binary): ERROR - {zig_bin_err}")
+    else:
+        speedup_py = py_time / zig_bin_time if py_time else 0
+        speedup_rust = rust_time / zig_bin_time if rust_time else 0
+        speedup_json = zig_time / zig_bin_time if zig_time else 0
+        print(f"Zig (Binary): {zig_bin_time:7.3f} ms/iter ({speedup_py:.1f}x vs Python, {speedup_rust:.1f}x vs Rust, {speedup_json:.1f}x vs Zig JSON)")
+        results["zig_binary"] = zig_bin_time
     
     print()
     print("=" * 60)
     
-    if "zig" in results and "rust" in results:
-        if results["zig"] < results["rust"]:
-            print(f"✅ Zig is {results['rust']/results['zig']:.1f}x FASTER than Rust")
-        else:
-            print(f"⚠️  Zig is {results['zig']/results['rust']:.1f}x slower than Rust")
+    # Find fastest implementation
+    if results:
+        fastest = min(results, key=results.get)
+        fastest_time = results[fastest]
+        print(f"🏆 Winner: {fastest.upper()} at {fastest_time:.3f} ms/iter")
+        
+        # Compare Zig implementations
+        if "zig_json" in results and "zig_binary" in results:
+            if results["zig_binary"] < results["zig_json"]:
+                print(f"✅ Zig Binary is {results['zig_json']/results['zig_binary']:.1f}x faster than Zig JSON")
+            else:
+                print(f"⚠️  Zig Binary is {results['zig_binary']/results['zig_json']:.1f}x slower than Zig JSON")
+        
+        # Compare Zig vs Rust
+        if "zig_binary" in results and "rust" in results:
+            if results["zig_binary"] < results["rust"]:
+                print(f"✅ Zig Binary is {results['rust']/results['zig_binary']:.1f}x FASTER than Rust")
+            else:
+                print(f"⚠️  Zig Binary is {results['zig_binary']/results['rust']:.1f}x slower than Rust")
     
     return 0 if results else 1
 

@@ -290,7 +290,80 @@
       "created_at": "2026-04-13T22:56:50.286186",
       "updated_at": "2026-04-13T23:14:32.419669",
       "comments": []
+    },
+    "bd-19": {
+      "id": "bd-19",
+      "title": "[zig] Phase 4: Production cutover and Rust deprecation",
+      "description": "Switch from Rust to Zig acceleration in production:\n\nTasks:\n- [ ] Add ZIG_ACCELERATION feature flag\n- [ ] Update _core_bridge.py to prefer Zig over Rust\n- [ ] A/B test Zig vs Rust performance\n- [ ] Update CI to build Zig wheels\n- [ ] Remove Rust crates (if Zig passes all tests)\n\nAcceptance criteria:\n- Zig modules pass all integration tests\n- Performance is >= Rust\n- Clean deprecation path documented\n- CI produces Zig wheels for all platforms\n\nDepends on: Phase 2, Phase 3",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "enhancement"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T05:54:41.879420",
+      "updated_at": "2026-04-14T05:54:41.879428",
+      "comments": []
+    },
+    "bd-20": {
+      "id": "bd-20",
+      "title": "[zig] Phase 2: Implement hot path logic (token estimation, hashing, pruning)",
+      "description": "Implement the actual hot path logic in Zig modules (currently placeholders):\n\nTasks:\n- [ ] puppy_core/token_estimation.zig: SIMD-accelerated token counting\n- [ ] puppy_core/message_hashing.zig: Benchmark xxHash64 vs FNV-1a\n- [ ] puppy_core/pruning.zig: Complete single-pass pruning algorithm\n- [ ] Add comprehensive tests comparing Zig output to Rust/Python\n- [ ] Benchmark Zig vs Rust performance\n\nAcceptance criteria:\n- All token estimation tests pass\n- Hash output matches Rust implementation\n- Pruning produces identical results to Rust\n- Performance >= Rust (target: 10-20% faster)\n\nDepends on: Phase 1 (complete)\nBlocks: Phase 4",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "enhancement",
+        "performance",
+        "in-progress"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T05:54:41.883203",
+      "updated_at": "2026-04-14T06:16:45.742554",
+      "comments": [
+        "Claimed by planning-agent-019d89 for Phase 2 implementation",
+        "Phase 2 complete. Implemented token estimation, pruning, C ABI. Zig works but ~160x slower than Rust due to JSON overhead (cffi vs PyO3 architecture)."
+      ]
+    },
+    "bd-21": {
+      "id": "bd-21",
+      "title": "[zig] Phase 3: Enable tree-sitter grammar linking",
+      "description": "Enable actual tree-sitter grammar linking instead of stubs:\n\nTasks:\n- [ ] Vendor tree-sitter grammars (Python, Rust, JS, TS, C)\n- [ ] Update build.zig to compile grammars from source\n- [ ] OR: Document system grammar installation\n- [ ] Enable languages.zig to use real extern functions\n- [ ] Test parsing for each supported language\n\nAcceptance criteria:\n- At least Python and Rust grammars work\n- Parse output matches turbo_parse Rust crate\n- No runtime crashes on parse operations\n\nDepends on: Phase 1 (complete)\nBlocks: Phase 4",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "enhancement"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-14T05:54:41.889621",
+      "updated_at": "2026-04-14T05:54:41.889629",
+      "comments": []
+    },
+    "bd-22": {
+      "id": "bd-22",
+      "title": "[zig] Phase 2.5: MessagePack binary protocol for performance",
+      "description": "Replace JSON serialization with MessagePack to close performance gap with Rust.\n\nTasks:\n- [ ] Add serde.zig or zig-msgpack dependency to build.zig.zon\n- [ ] Create msgpack_bridge.zig with binary serialization\n- [ ] Export puppy_core_process_messages_msgpack() C ABI\n- [ ] Update Python bridge to use msgpack\n- [ ] Benchmark: target <10x slower than Rust (from 160x)\n\nExpected improvement: 5-10x speedup over JSON path.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "enhancement",
+        "performance",
+        "in-progress"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-19"
+        ]
+      },
+      "created_at": "2026-04-14T06:21:03.667472",
+      "updated_at": "2026-04-14T06:21:12.562533",
+      "comments": [
+        "Starting MessagePack implementation - aiming for 5-10x speedup over current JSON path and closing the gap to <10x vs Rust native (currently at 160x). Will prioritize a minimal serde.zig integration first."
+      ]
     }
   },
-  "counter": 18
+  "counter": 22
 }

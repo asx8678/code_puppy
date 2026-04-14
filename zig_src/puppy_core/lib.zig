@@ -30,6 +30,7 @@ pub const token_estimation = @import("token_estimation.zig");
 pub const message_hashing = @import("message_hashing.zig");
 pub const pruning = @import("pruning.zig");
 pub const serialization = @import("serialization.zig");
+pub const binary_protocol = @import("binary_protocol.zig");
 
 // Type imports for cleaner code
 const MessageContent = message_hashing.MessageContent;
@@ -276,6 +277,84 @@ export fn puppy_core_free_string(ptr: [*c]u8) void {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Binary Protocol C ABI (Fast FFI)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Process messages using the binary protocol format.
+/// This is significantly faster than JSON for large batches.
+///
+/// Input format:
+///   [u32 message_count]
+///   For each message:
+///     [u8 role_len][role bytes]
+///     [u32 parts_count]
+///     For each part:
+///       [u32 content_len][content bytes]
+///
+/// Output format:
+///   [u32 count]
+///   For each message:
+///     [i64 tokens]
+///     [u64 hash]
+///   [i64 total_tokens]
+///   [i64 overhead_tokens]
+///
+/// Caller must free output_data with puppy_core_free_bytes().
+export fn puppy_core_process_messages_binary(
+    handle: ?*anyopaque,
+    input_data: [*]const u8,
+    input_len: usize,
+    system_prompt: [*:0]const u8,
+    output_data: *[*]u8,
+    output_len: *usize,
+) PuppyCoreError {
+    if (handle == null) return .invalid_argument;
+    if (input_len == 0) return .invalid_argument;
+    
+    const ctx: *CoreContext = @ptrCast(@alignCast(handle.?));
+    const allocator = ctx.allocator;
+    
+    // Slice the input data
+    const input_slice = input_data[0..input_len];
+    
+    // Parse system prompt
+    const sys_prompt_slice = std.mem.span(system_prompt);
+    
+    // Process using binary protocol
+    var result = binary_protocol.processMessagesBinary(
+        allocator,
+        input_slice,
+        sys_prompt_slice,
+        &ctx.estimator,
+        &ctx.hasher,
+    ) catch |err| {
+        return switch (err) {
+            error.OutOfMemory => .out_of_memory,
+            error.InvalidData => .invalid_argument,
+        };
+    };
+    defer result.deinit(allocator);
+    
+    // Serialize result to binary format
+    const serialized = binary_protocol.serializeResult(allocator, result) catch {
+        return .out_of_memory;
+    };
+    
+    // Return the buffer - caller must free with puppy_core_free_bytes
+    output_data.* = serialized.ptr;
+    output_len.* = serialized.len;
+    
+    return .success;
+}
+
+/// Free bytes returned by puppy_core_process_messages_binary.
+/// Must be called with the same length returned in output_len.
+export fn puppy_core_free_bytes(ptr: [*]u8, len: usize) void {
+    if (len == 0) return;
+    std.heap.c_allocator.free(ptr[0..len]);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Internal Types
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -313,6 +392,8 @@ test "C ABI exports exist" {
     _ = puppy_core_destroy;
     _ = puppy_core_process_messages;
     _ = puppy_core_free_string;
+    _ = puppy_core_process_messages_binary;
+    _ = puppy_core_free_bytes;
 }
 
 test "concatenateParts - empty parts" {
