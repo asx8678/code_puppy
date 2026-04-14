@@ -24,35 +24,37 @@ defmodule CodePuppyControl.Parser do
   Extract symbols from source, with fallback to regex.
   """
   def extract_symbols(source, language) do
-    if nif_available?() and TurboParseNif.is_language_supported(language) do
-      case TurboParseNif.extract_symbols(source, language) do
-        json when is_binary(json) -> Jason.decode(json)
-        other -> {:ok, other}
-      end
-    else
-      # Fallback to regex-based extraction
-      symbols = SymbolExtractor.extract(source, language, 1000)
-      
-      outline = %{
-        "language" => language,
-        "symbols" => Enum.map(symbols, fn sym ->
-          # Parse symbol string like "def foo" or "class Bar"
-          [kind, name] = String.split(sym, " ", parts: 2)
-          %{
-            "name" => name,
-            "kind" => kind_to_symbol_kind(kind),
-            "start_line" => 1,
-            "end_line" => 1,
-            "start_col" => 0,
-            "end_col" => 0
-          }
-        end),
-        "extraction_time_ms" => 0.0,
-        "success" => true,
-        "errors" => []
-      }
-      
-      {:ok, outline}
+    cond do
+      nif_available?() and TurboParseNif.is_language_supported(language) ->
+        # Use NIF for supported languages
+        case TurboParseNif.extract_symbols(source, language) do
+          json when is_binary(json) -> Jason.decode(json)
+          other -> {:ok, other}
+        end
+
+      language in ["python", "elixir"] ->
+        # Use SymbolExtractor for regex-based fallback on known languages
+        symbols = SymbolExtractor.extract_regex_symbols(source, language)
+
+        outline = %{
+          "language" => language,
+          "symbols" => symbols,
+          "extraction_time_ms" => 0.0,
+          "success" => true,
+          "errors" => []
+        }
+
+        {:ok, outline}
+
+      true ->
+        # Unsupported language - return empty result
+        {:ok, %{
+          "language" => language,
+          "symbols" => [],
+          "extraction_time_ms" => 0.0,
+          "success" => false,
+          "errors" => ["Unsupported language: #{language}"]
+        }}
     end
   end
 
@@ -62,16 +64,26 @@ defmodule CodePuppyControl.Parser do
   def extract_symbols_from_file(path, language \\ nil) do
     lang = language || detect_language(path)
 
-    if nif_available?() and is_binary(lang) and TurboParseNif.is_language_supported(lang) do
-      case TurboParseNif.extract_symbols_from_file(path, lang) do
-        json when is_binary(json) -> Jason.decode(json)
-        other -> {:ok, other}
-      end
-    else
-      case File.read(path) do
-        {:ok, content} -> extract_symbols(content, lang || "unknown")
-        {:error, reason} -> {:error, reason}
-      end
+    cond do
+      nif_available?() and is_binary(lang) and TurboParseNif.is_language_supported(lang) ->
+        case TurboParseNif.extract_symbols_from_file(path, lang) do
+          json when is_binary(json) -> Jason.decode(json)
+          other -> {:ok, other}
+        end
+
+      is_binary(lang) and lang in ["python", "elixir"] ->
+        # Fallback: read file and use regex extraction
+        case File.read(path) do
+          {:ok, content} ->
+            symbols = SymbolExtractor.extract_regex_symbols(content, lang)
+            {:ok, %{"language" => lang, "symbols" => symbols, "success" => true}}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      true ->
+        {:ok, %{"language" => lang || "unknown", "symbols" => [], "success" => false}}
     end
   end
 
@@ -170,9 +182,4 @@ defmodule CodePuppyControl.Parser do
       _ -> nil
     end
   end
-
-  defp kind_to_symbol_kind("def"), do: "function"
-  defp kind_to_symbol_kind("class"), do: "class"
-  defp kind_to_symbol_kind("defmodule"), do: "module"
-  defp kind_to_symbol_kind(other), do: other
 end

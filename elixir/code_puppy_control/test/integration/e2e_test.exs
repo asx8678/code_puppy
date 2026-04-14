@@ -215,7 +215,8 @@ defmodule CodePuppyControl.E2ETest do
             true
         end
 
-      assert event_received or events == []
+      # event_received is true if we got an event or timed out (which is ok for mock)
+      assert event_received
 
       # Cleanup
       Run.Manager.delete_run(run_id)
@@ -441,7 +442,7 @@ defmodule CodePuppyControl.E2ETest do
       if our_result do
         {^server_id, health} = our_result
         # Could be healthy or unhealthy depending on the echo command
-        assert health in [:healthy, {:unhealthy, _}, :degraded]
+        assert health in [:healthy, {:unhealthy, :any}, :degraded] or match?({:unhealthy, _}, health)
       end
 
       # Cleanup

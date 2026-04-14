@@ -396,6 +396,52 @@ defmodule CodePuppyControl.PythonWorker.Port do
     Protocol.encode_response(%{"files" => serializable_results}, nil)
   end
 
+  # Parse operation handlers using turbo_parse NIF
+
+  defp handle_file_request("parse_source", params) do
+    source = params["source"]
+    language = params["language"]
+
+    case CodePuppyControl.Parser.parse_source(source, language) do
+      {:ok, result} ->
+        Protocol.encode_response(result, nil)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Parse failed: #{inspect(reason)}", nil, nil)
+    end
+  end
+
+  defp handle_file_request("parse_file", params) do
+    path = params["path"]
+    language = params["language"]
+
+    case CodePuppyControl.Parser.parse_file(path, language) do
+      {:ok, result} ->
+        Protocol.encode_response(result, nil)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Parse file failed: #{inspect(reason)}", nil, nil)
+    end
+  end
+
+  defp handle_file_request("extract_symbols", params) do
+    source = params["source"]
+    language = params["language"]
+
+    case CodePuppyControl.Parser.extract_symbols(source, language) do
+      {:ok, outline} ->
+        Protocol.encode_response(%{"symbols" => outline["symbols"] || []}, nil)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Extract symbols failed: #{inspect(reason)}", nil, nil)
+    end
+  end
+
+  defp handle_file_request("supported_languages", _params) do
+    languages = CodePuppyControl.Parser.supported_languages()
+    Protocol.encode_response(%{"languages" => languages}, nil)
+  end
+
   defp handle_file_request(method, _params) do
     Protocol.encode_error(-32601, "Method not found: #{method}", nil, nil)
   end
