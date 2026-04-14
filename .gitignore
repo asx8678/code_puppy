@@ -61,6 +61,11 @@ code_puppy/bundled_skills/
 # Eval log output
 evals/logs/
 
+# Zig build artifacts
+.zig-cache/
+zig-out/
+liblib.a
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
