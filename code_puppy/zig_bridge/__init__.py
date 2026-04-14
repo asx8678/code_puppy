@@ -93,6 +93,35 @@ _lib_turbo_ops = _load_lib("zig_turbo_ops") if CFFI_AVAILABLE else None
 _lib_turbo_parse = _load_lib("zig_turbo_parse") if CFFI_AVAILABLE else None
 ZIG_AVAILABLE = any([lib is not None for lib in [_lib_puppy_core, _lib_turbo_ops, _lib_turbo_parse]])
 
+# ── Handle cache (module-level singletons) ───────────────────────────────────
+_cached_puppy_core_handle = None
+_cached_turbo_ops_handle = None
+_cached_turbo_parse_handle = None
+
+
+def _get_puppy_core_handle():
+    """Get cached puppy_core handle (lazy initialization)."""
+    global _cached_puppy_core_handle
+    if _cached_puppy_core_handle is None and _lib_puppy_core is not None:
+        _cached_puppy_core_handle = _lib_puppy_core.puppy_core_create()
+    return _cached_puppy_core_handle
+
+
+def _get_turbo_ops_handle():
+    """Get cached turbo_ops handle (lazy initialization)."""
+    global _cached_turbo_ops_handle
+    if _cached_turbo_ops_handle is None and _lib_turbo_ops is not None:
+        _cached_turbo_ops_handle = _lib_turbo_ops.turbo_ops_create(1)
+    return _cached_turbo_ops_handle
+
+
+def _get_turbo_parse_handle():
+    """Get cached turbo_parse handle (lazy initialization)."""
+    global _cached_turbo_parse_handle
+    if _cached_turbo_parse_handle is None and _lib_turbo_parse is not None:
+        _cached_turbo_parse_handle = _lib_turbo_parse.turbo_parse_create()
+    return _cached_turbo_parse_handle
+
 
 def _zig_str_to_py(zig_ptr: Any, free_fn: Callable[[Any], None]) -> str:
     if zig_ptr is None:
@@ -113,6 +142,8 @@ def _safe_call(lib: Any, fn: str, *args: Any, free: str = "") -> dict[str, Any]:
         rc = fn_obj(*args, out)
         if rc != 0:
             return {"success": False, "error": f"Zig error: {rc}"}
+        if out[0] == _ffi.NULL:  # type: ignore[attr-defined]
+            return {"success": False, "error": "Zig returned null pointer"}
         output = _zig_str_to_py(out[0], getattr(lib, free))
         try:
             return {"success": True, "data": json.loads(output)}
@@ -123,17 +154,12 @@ def _safe_call(lib: Any, fn: str, *args: Any, free: str = "") -> dict[str, Any]:
 
 # ── Public API ───────────────────────────────────────────────────────────────
 def process_messages_batch(messages: list[dict], system_prompt: str = "") -> dict[str, Any]:
-    if _lib_puppy_core is None:
-        return {"success": False, "error": "zig_puppy_core not available"}
-    h = _lib_puppy_core.puppy_core_create()
+    h = _get_puppy_core_handle()
     if h is None:
-        return {"success": False, "error": "Failed to create handle"}
-    try:
-        return _safe_call(_lib_puppy_core, "puppy_core_process_messages",
-            h, json.dumps(messages).encode(), system_prompt.encode(),
-            free="puppy_core_free_string")
-    finally:
-        _lib_puppy_core.puppy_core_destroy(h)
+        return {"success": False, "error": "zig_puppy_core not available"}
+    return _safe_call(_lib_puppy_core, "puppy_core_process_messages",
+        h, json.dumps(messages).encode(), system_prompt.encode(),
+        free="puppy_core_free_string")
 
 
 def prune_and_filter(messages: list[dict], max_tokens: int = 50000) -> dict[str, Any]:
@@ -142,42 +168,27 @@ def prune_and_filter(messages: list[dict], max_tokens: int = 50000) -> dict[str,
 
 
 def list_files(directory: str = ".", recursive: bool = True) -> dict[str, Any]:
-    if _lib_turbo_ops is None:
-        return {"success": False, "error": "zig_turbo_ops not available"}
-    h = _lib_turbo_ops.turbo_ops_create(1)
+    h = _get_turbo_ops_handle()
     if h is None:
-        return {"success": False, "error": "Failed to create handle"}
-    try:
-        return _safe_call(_lib_turbo_ops, "turbo_ops_list_files",
-            h, directory.encode(), 1 if recursive else 0, free="turbo_ops_free_string")
-    finally:
-        _lib_turbo_ops.turbo_ops_destroy(h)
+        return {"success": False, "error": "zig_turbo_ops not available"}
+    return _safe_call(_lib_turbo_ops, "turbo_ops_list_files",
+        h, directory.encode(), 1 if recursive else 0, free="turbo_ops_free_string")
 
 
 def grep(pattern: str, directory: str = ".") -> dict[str, Any]:
-    if _lib_turbo_ops is None:
-        return {"success": False, "error": "zig_turbo_ops not available"}
-    h = _lib_turbo_ops.turbo_ops_create(1)
+    h = _get_turbo_ops_handle()
     if h is None:
-        return {"success": False, "error": "Failed to create handle"}
-    try:
-        return _safe_call(_lib_turbo_ops, "turbo_ops_grep",
-            h, pattern.encode(), directory.encode(), free="turbo_ops_free_string")
-    finally:
-        _lib_turbo_ops.turbo_ops_destroy(h)
+        return {"success": False, "error": "zig_turbo_ops not available"}
+    return _safe_call(_lib_turbo_ops, "turbo_ops_grep",
+        h, pattern.encode(), directory.encode(), free="turbo_ops_free_string")
 
 
 def parse_source(source: str, language: str) -> dict[str, Any]:
-    if _lib_turbo_parse is None:
-        return {"success": False, "error": "zig_turbo_parse not available"}
-    h = _lib_turbo_parse.turbo_parse_create()
+    h = _get_turbo_parse_handle()
     if h is None:
-        return {"success": False, "error": "Failed to create handle"}
-    try:
-        return _safe_call(_lib_turbo_parse, "turbo_parse_source",
-            h, source.encode(), language.encode(), free="turbo_parse_free_string")
-    finally:
-        _lib_turbo_parse.turbo_parse_destroy(h)
+        return {"success": False, "error": "zig_turbo_parse not available"}
+    return _safe_call(_lib_turbo_parse, "turbo_parse_source",
+        h, source.encode(), language.encode(), free="turbo_parse_free_string")
 
 
 def is_language_supported(language: str) -> bool:

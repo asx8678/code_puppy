@@ -31,6 +31,9 @@ pub const message_hashing = @import("message_hashing.zig");
 pub const pruning = @import("pruning.zig");
 pub const serialization = @import("serialization.zig");
 
+// Type imports for cleaner code
+const MessageContent = message_hashing.MessageContent;
+
 // Re-export main types for ergonomic usage
 pub const TokenEstimator = token_estimation.TokenEstimator;
 pub const MessageHasher = message_hashing.MessageHasher;
@@ -96,6 +99,18 @@ export fn puppy_core_destroy(handle: ?*anyopaque) void {
     std.heap.c_allocator.destroy(ctx);
 }
 
+/// Message part structure for parsing JSON input
+const MessagePart = struct {
+    content: ?[]const u8 = null,
+    content_json: ?[]const u8 = null,
+};
+
+/// Message structure for parsing JSON input
+const InputMessage = struct {
+    role: []const u8,
+    parts: []const MessagePart,
+};
+
 /// Process a batch of messages and return token counts.
 /// Input: JSON array of message objects
 /// Output: JSON object with per_message_tokens, total_tokens, hashes
@@ -107,17 +122,151 @@ export fn puppy_core_process_messages(
     output_json: *[*:0]u8,
 ) PuppyCoreError {
     if (handle == null) return .invalid_argument;
-    if (messages_json[0] == 0) return .invalid_argument;  // Check for empty string instead of null comparison
+    
+    // Check for empty messages_json
+    const json_slice = std.mem.span(messages_json);
+    if (json_slice.len == 0) return .invalid_argument;
     
     const ctx: *CoreContext = @ptrCast(@alignCast(handle.?));
+    const allocator = ctx.allocator;
     
-    // TODO(code-puppy-zig-001): Implement message processing
-    // This will call into token_estimation.zig and message_hashing.zig
-    _ = ctx;
-    _ = system_prompt;
-    _ = output_json;
+    // Parse messages JSON
+    const parsed = std.json.parseFromSlice([]InputMessage, allocator, json_slice, .{
+        .ignore_unknown_fields = true,
+    }) catch return .invalid_argument;
+    defer parsed.deinit();
     
+    const messages = parsed.value;
+    if (messages.len == 0) return .invalid_argument;
+    
+    // Allocate arrays for results
+    var per_message_tokens = allocator.alloc(i64, messages.len) catch return .out_of_memory;
+    defer allocator.free(per_message_tokens);
+    
+    var message_hashes = allocator.alloc(u64, messages.len) catch return .out_of_memory;
+    defer allocator.free(message_hashes);
+    
+    // Process each message
+    var total_tokens: i64 = 0;
+    for (messages, 0..) |msg, i| {
+        var msg_tokens: i64 = 0;
+        
+        // Accumulate tokens from all parts
+        for (msg.parts) |part| {
+            const content = part.content orelse part.content_json orelse "";
+            msg_tokens += ctx.estimator.estimateTokens(content);
+        }
+        
+        // Add message overhead
+        msg_tokens += token_estimation.MESSAGE_OVERHEAD_TOKENS;
+        
+        per_message_tokens[i] = msg_tokens;
+        total_tokens += msg_tokens;
+        
+        // Hash the message (concatenate all parts for hashing)
+        const msg_content = concatenateParts(allocator, msg.parts) catch return .out_of_memory;
+        defer allocator.free(msg_content);
+        
+        const hash_content = MessageContent{
+            .role = msg.role,
+            .content = msg_content,
+            .metadata = null,
+        };
+        message_hashes[i] = ctx.hasher.hashMessage(hash_content);
+    }
+    
+    // Calculate system prompt overhead
+    const sys_prompt_slice = std.mem.span(system_prompt);
+    const overhead_tokens = ctx.estimator.estimateTokens(sys_prompt_slice);
+    const context_overhead = overhead_tokens + token_estimation.SYSTEM_PROMPT_OVERHEAD;
+    
+    // Build result JSON
+    const result_json = buildResultJson(
+        allocator,
+        per_message_tokens,
+        total_tokens,
+        message_hashes,
+        context_overhead,
+    ) catch return .out_of_memory;
+    
+    // Cast from [*:0]u8 to [*:0]u8 for C ABI compatibility (result is already null-terminated)
+    output_json.* = result_json;
     return .success;
+}
+
+/// Concatenate all message parts into a single string
+fn concatenateParts(allocator: std.mem.Allocator, parts: []const MessagePart) error{OutOfMemory}![]u8 {
+    var total_len: usize = 0;
+    for (parts) |part| {
+        const content = part.content orelse part.content_json orelse "";
+        total_len += content.len;
+    }
+    
+    var result = try allocator.alloc(u8, total_len);
+    var offset: usize = 0;
+    
+    for (parts) |part| {
+        const content = part.content orelse part.content_json orelse "";
+        @memcpy(result[offset..][0..content.len], content);
+        offset += content.len;
+    }
+    
+    return result;
+}
+
+/// Build the result JSON string
+fn buildResultJson(
+    allocator: std.mem.Allocator,
+    per_message_tokens: []const i64,
+    total_tokens: i64,
+    message_hashes: []const u64,
+    context_overhead: i64,
+) error{OutOfMemory}![*:0]u8 {
+    // Calculate buffer size needed
+    // Format: {"per_message_tokens":[...],"total_message_tokens":N,"message_hashes":[...],"context_overhead_tokens":N}
+    var buf_size: usize = 100; // Base size for JSON structure
+    
+    // Each number needs up to ~20 chars (for i64)
+    buf_size += per_message_tokens.len * 25;
+    buf_size += message_hashes.len * 25;
+    
+    var result = try allocator.alloc(u8, buf_size);
+    
+    var stream = std.io.fixedBufferStream(result);
+    const writer = stream.writer();
+    
+    // Write JSON manually for efficiency and C-string compatibility
+    writer.writeAll("{\"per_message_tokens\":[") catch unreachable;
+    
+    for (per_message_tokens, 0..) |tokens, i| {
+        if (i > 0) writer.writeByte(',') catch unreachable;
+        writer.print("{d}", .{tokens}) catch unreachable;
+    }
+    
+    writer.writeAll("],\"total_message_tokens\":") catch unreachable;
+    writer.print("{d}", .{total_tokens}) catch unreachable;
+    
+    writer.writeAll(",\"message_hashes\":[") catch unreachable;
+    
+    for (message_hashes, 0..) |hash, i| {
+        if (i > 0) writer.writeByte(',') catch unreachable;
+        // Print u64 hash as unsigned
+        writer.print("{d}", .{hash}) catch unreachable;
+    }
+    
+    writer.writeAll("],\"context_overhead_tokens\":") catch unreachable;
+    writer.print("{d}", .{context_overhead}) catch unreachable;
+    
+    writer.writeAll("}\x00") catch unreachable;
+    
+    // Trim to actual size
+    const actual_len = stream.getPos() catch unreachable;
+    if (actual_len < buf_size) {
+        result = try allocator.realloc(result, actual_len);
+    }
+    
+    // Ensure null terminator is in place (last write was \x00)
+    return @ptrCast(result.ptr);
 }
 
 /// Free a string returned by puppy_core_* functions.
@@ -164,4 +313,160 @@ test "C ABI exports exist" {
     _ = puppy_core_destroy;
     _ = puppy_core_process_messages;
     _ = puppy_core_free_string;
+}
+
+test "concatenateParts - empty parts" {
+    const allocator = std.testing.allocator;
+    
+    const empty_parts: []const MessagePart = &.{};
+    const result = try concatenateParts(allocator, empty_parts);
+    defer allocator.free(result);
+    
+    try std.testing.expectEqualStrings("", result);
+}
+
+test "concatenateParts - single part" {
+    const allocator = std.testing.allocator;
+    
+    const parts = &[_]MessagePart{
+        .{ .content = "Hello", .content_json = null },
+    };
+    const result = try concatenateParts(allocator, parts);
+    defer allocator.free(result);
+    
+    try std.testing.expectEqualStrings("Hello", result);
+}
+
+test "concatenateParts - multiple parts" {
+    const allocator = std.testing.allocator;
+    
+    const parts = &[_]MessagePart{
+        .{ .content = "Hello ", .content_json = null },
+        .{ .content = null, .content_json = "World" },
+        .{ .content = "!", .content_json = null },
+    };
+    const result = try concatenateParts(allocator, parts);
+    defer allocator.free(result);
+    
+    try std.testing.expectEqualStrings("Hello World!", result);
+}
+
+test "buildResultJson - basic output" {
+    const allocator = std.testing.allocator;
+    
+    const per_message_tokens = &[_]i64{ 10, 20, 30 };
+    const total_tokens: i64 = 60;
+    const message_hashes = &[_]u64{ 123, 456, 789 };
+    const context_overhead: i64 = 50;
+    
+    const result = try buildResultJson(
+        allocator,
+        per_message_tokens,
+        total_tokens,
+        message_hashes,
+        context_overhead,
+    );
+    defer allocator.free(std.mem.span(result));
+    
+    // Verify result is valid JSON
+    const result_slice = std.mem.span(result);
+    try std.testing.expect(result_slice.len > 0);
+    try std.testing.expect(std.mem.endsWith(u8, result_slice, "}"));
+    
+    // Verify all expected fields are present
+    try std.testing.expect(std.mem.indexOf(u8, result_slice, "per_message_tokens") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result_slice, "total_message_tokens") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result_slice, "message_hashes") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result_slice, "context_overhead_tokens") != null);
+}
+
+test "puppy_core_process_messages - basic flow" {
+    const allocator = std.testing.allocator;
+    
+    // Create context
+    var ctx = CoreContext{
+        .allocator = allocator,
+        .estimator = TokenEstimator.init(allocator),
+        .hasher = MessageHasher.init(allocator),
+    };
+    defer ctx.deinit();
+    
+    // Test with valid input
+    const messages_json = 
+        \\[{"role":"user","parts":[{"content":"Hello world"}]}]
+    ;
+    const system_prompt = "You are helpful.";
+    
+    var output: [*:0]u8 = undefined;
+    const result = puppy_core_process_messages(
+        @ptrCast(&ctx),
+        messages_json,
+        system_prompt,
+        &output,
+    );
+    
+    try std.testing.expectEqual(PuppyCoreError.success, result);
+    
+    // Free the output
+    defer allocator.free(std.mem.span(output));
+    
+    const output_slice = std.mem.span(output);
+    try std.testing.expect(output_slice.len > 0);
+    // Verify JSON structure
+    try std.testing.expect(std.mem.startsWith(u8, output_slice, "{"));
+    try std.testing.expect(std.mem.endsWith(u8, output_slice, "}"));
+}
+
+test "puppy_core_process_messages - null handle returns error" {
+    var output: [*:0]u8 = undefined;
+    const result = puppy_core_process_messages(
+        null,
+        "[]",
+        "",
+        &output,
+    );
+    
+    try std.testing.expectEqual(PuppyCoreError.invalid_argument, result);
+}
+
+test "puppy_core_process_messages - empty messages returns error" {
+    const allocator = std.testing.allocator;
+    
+    var ctx = CoreContext{
+        .allocator = allocator,
+        .estimator = TokenEstimator.init(allocator),
+        .hasher = MessageHasher.init(allocator),
+    };
+    defer ctx.deinit();
+    
+    var output: [*:0]u8 = undefined;
+    const result = puppy_core_process_messages(
+        @ptrCast(&ctx),
+        "[]",
+        "",
+        &output,
+    );
+    
+    try std.testing.expectEqual(PuppyCoreError.invalid_argument, result);
+}
+
+test "puppy_core_process_messages - invalid JSON returns error" {
+    const allocator = std.testing.allocator;
+    
+    var ctx = CoreContext{
+        .allocator = allocator,
+        .estimator = TokenEstimator.init(allocator),
+        .hasher = MessageHasher.init(allocator),
+    };
+    defer ctx.deinit();
+    
+    var output: [*:0]u8 = undefined;
+    const result = puppy_core_process_messages(
+        @ptrCast(&ctx),
+        "not valid json",
+        "",
+        &output,
+    );
+    
+    try std.testing.expectEqual(PuppyCoreError.invalid_argument, result);
 }
