@@ -1,18 +1,16 @@
-"""Unified acceleration bridge - Hybrid Zig/Rust approach.
+"""Unified acceleration bridge - Rust native approach.
 
 Architecture:
-- Rust (PyO3): puppy_core, turbo_parse (performance critical)
-- Zig (cffi): turbo_ops (file I/O, less FFI sensitive)
+- Rust (PyO3): puppy_core, turbo_parse, turbo_ops (all via Rust)
 
-This hybrid approach leverages:
-- Rust's superior FFI performance via PyO3 for hot paths
-- Zig's simpler build/cross-compilation for file operations
+This approach leverages Rust's superior FFI performance via PyO3 for all
+acceleration paths, with turbo_executor handling batch file operations.
 
 Configuration:
     Use environment variables to override backends:
-    - PUP_ACCEL_PUPPY_CORE=rust|zig|python
-    - PUP_ACCEL_TURBO_PARSE=rust|zig|python
-    - PUP_ACCEL_TURBO_OPS=rust|zig|python
+    - PUP_ACCEL_PUPPY_CORE=rust|python
+    - PUP_ACCEL_TURBO_PARSE=rust|python
+    - PUP_ACCEL_TURBO_OPS=rust|python
 """
 
 import os
@@ -44,18 +42,6 @@ except ImportError:
     TURBO_PARSE_AVAILABLE = False
     get_turbo_parse_status = lambda: {"installed": False, "enabled": False, "active": False}  # type: ignore[assignment]
 
-# Import Zig acceleration for turbo_ops
-try:
-    from code_puppy.zig_bridge import (
-        ZIG_AVAILABLE,
-        list_files as zig_list_files,
-        grep as zig_grep,
-    )
-except ImportError:
-    ZIG_AVAILABLE = False
-    zig_list_files = None  # type: ignore[assignment]
-    zig_grep = None  # type: ignore[assignment]
-
 
 def get_backend_info() -> dict[str, Any]:
     """Return detailed backend information including config and runtime status.
@@ -84,9 +70,9 @@ def get_backend_info() -> dict[str, Any]:
         },
         "turbo_ops": {
             "configured": config["turbo_ops"],
-            "available": ZIG_AVAILABLE,
-            "active": ZIG_AVAILABLE and config["turbo_ops"] == "zig",
-            "status": "active" if ZIG_AVAILABLE else "disabled",
+            "available": False,  # Handled by turbo_executor agent
+            "active": False,
+            "status": "disabled (via turbo_executor)",
         },
     }
 
@@ -104,29 +90,24 @@ def get_backend_summary() -> dict[str, str]:
     }
 
 
-# File operations - use Zig if configured and available
+# File operations - always use Python fallback
+# (Rust turbo_ops handled separately by turbo_executor agent)
 def list_files(directory: str = ".", recursive: bool = True) -> dict[str, Any]:
-    """List files using configured backend (Zig preferred, then Python)."""
-    config = get_acceleration_config()
+    """List files using Python implementation.
 
-    # Check if turbo_ops should use Zig
-    if config.get("turbo_ops") == "zig" and ZIG_AVAILABLE and zig_list_files:
-        return zig_list_files(directory, recursive)
-
-    # Fallback: use Python implementation
+    Note: For accelerated file operations, use the turbo_executor agent
+    which handles batch operations via Rust.
+    """
     from code_puppy.tools import list_files as python_list_files
     return python_list_files(directory, recursive)
 
 
 def grep(pattern: str, directory: str = ".") -> dict[str, Any]:
-    """Search files using configured backend (Zig preferred, then Python)."""
-    config = get_acceleration_config()
+    """Search files using Python implementation.
 
-    # Check if turbo_ops should use Zig
-    if config.get("turbo_ops") == "zig" and ZIG_AVAILABLE and zig_grep:
-        return zig_grep(pattern, directory)
-
-    # Fallback: use Python implementation
+    Note: For accelerated file operations, use the turbo_executor agent
+    which handles batch operations via Rust.
+    """
     from code_puppy.tools import grep as python_grep
     return python_grep(pattern, directory)
 
@@ -134,7 +115,6 @@ def grep(pattern: str, directory: str = ".") -> dict[str, Any]:
 __all__ = [
     # Backend info
     "RUST_AVAILABLE",
-    "ZIG_AVAILABLE",
     "TURBO_PARSE_AVAILABLE",
     "get_backend_info",
     "get_backend_summary",
@@ -146,7 +126,7 @@ __all__ = [
     "serialize_session",
     "deserialize_session",
     "MessageBatchHandle",
-    # Zig-backed (turbo_ops)
+    # Python fallback (turbo_ops via turbo_executor)
     "list_files",
     "grep",
 ]

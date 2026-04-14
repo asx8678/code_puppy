@@ -1,6 +1,6 @@
 """Acceleration status slash command.
 
-Provides /accel status to show the hybrid Zig/Rust acceleration configuration.
+Provides /accel status to show the Rust acceleration configuration.
 """
 
 from rich.console import Group
@@ -13,7 +13,7 @@ from code_puppy.messaging import emit_info
 
 def _custom_help() -> list[tuple[str, str]]:
     return [
-        ("accel", "Show acceleration backend status (Zig/Rust hybrid)"),
+        ("accel", "Show acceleration backend status (Rust native)"),
         ("accel status", "Detailed acceleration backend information"),
     ]
 
@@ -47,7 +47,7 @@ def _render_accel_status_panel() -> Panel:
     lines = []
 
     # Header
-    lines.append(Text("Hybrid Architecture: Rust + Zig", style="bold cyan"))
+    lines.append(Text("Rust Acceleration", style="bold cyan"))
     lines.append(Text(""))
 
     # puppy_core (Rust)
@@ -78,7 +78,7 @@ def _render_accel_status_panel() -> Panel:
     lines.append(Text("              Tree-sitter grammars, syntax highlighting", style="dim"))
     lines.append(Text(""))
 
-    # turbo_ops (Zig)
+    # turbo_ops (via turbo_executor)
     turbo_ops = info.get("turbo_ops", {})
     badge = _format_status_badge(
         turbo_ops.get("status", "unknown"),
@@ -89,14 +89,14 @@ def _render_accel_status_panel() -> Panel:
         (f"({turbo_ops.get('configured', 'python')}) ", "dim"),
         badge
     ))
-    lines.append(Text("              File I/O, directory listing, grep", style="dim"))
+    lines.append(Text("              File I/O via turbo_executor agent (Rust)", style="dim"))
     lines.append(Text(""))
 
     # Configuration hint
     lines.append(Text("Configuration via environment:", style="bold"))
-    lines.append(Text("  PUP_ACCEL_PUPPY_CORE=rust|zig|python", style="dim"))
-    lines.append(Text("  PUP_ACCEL_TURBO_PARSE=rust|zig|python", style="dim"))
-    lines.append(Text("  PUP_ACCEL_TURBO_OPS=rust|zig|python", style="dim"))
+    lines.append(Text("  PUP_ACCEL_PUPPY_CORE=rust|python", style="dim"))
+    lines.append(Text("  PUP_ACCEL_TURBO_PARSE=rust|python", style="dim"))
+    lines.append(Text("  PUP_ACCEL_TURBO_OPS=rust|python", style="dim"))
 
     content = Group(*lines)
     return Panel(

@@ -2498,17 +2498,17 @@ def get_memory_extraction_model() -> str | None:
 
 
 # =============================================================================
-# Acceleration Backend Configuration (Hybrid Zig/Rust Architecture)
+# Acceleration Backend Configuration (Rust Architecture)
 # =============================================================================
 
 # Default acceleration backend configuration
 # Architecture:
 # - Rust (PyO3): puppy_core, turbo_parse (performance critical, FFI-sensitive)
-# - Zig (cffi): turbo_ops (file I/O, less FFI sensitive, simpler builds)
+# - turbo_ops via Rust turbo_executor (file I/O batch operations)
 ACCELERATION_BACKENDS = {
     "puppy_core": "rust",   # Rust for message processing
     "turbo_parse": "rust",  # Rust for tree-sitter grammars
-    "turbo_ops": "zig",     # Zig for file I/O operations
+    "turbo_ops": "rust",    # Rust turbo_executor for file I/O
 }
 
 # Environment variable prefix for overrides
@@ -2535,7 +2535,7 @@ def get_acceleration_config() -> dict:
     for backend in config:
         env_var = f"{_ACCEL_ENV_PREFIX}{backend.upper()}"
         override = os.environ.get(env_var)
-        if override and override.lower() in ("rust", "zig", "python"):
+        if override and override.lower() in ("rust", "python"):
             config[backend] = override.lower()
 
     return config
@@ -2568,7 +2568,7 @@ def set_acceleration_backend(backend_name: str, language: str) -> None:
         ValueError: If backend_name or language is invalid
     """
     valid_backends = set(ACCELERATION_BACKENDS.keys())
-    valid_languages = ("rust", "zig", "python")
+    valid_languages = ("rust", "python")
 
     if backend_name not in valid_backends:
         raise ValueError(f"Invalid backend: {backend_name}. Valid: {valid_backends}")
