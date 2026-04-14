@@ -1058,7 +1058,7 @@
       "id": "bd-61",
       "title": "Fast Puppy rewrite Phase 1 - native backend adapter",
       "description": "Create code_puppy/native_backend.py as single entry point for all native acceleration. Migrate consumers (turbo_executor/orchestrator.py, repo_compass/turbo_indexer_bridge.py) to use the adapter instead of direct imports. Per fast_puppy_elixir_rewrite_plan.md Phase 1.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -1068,7 +1068,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-14T16:20:13.971090",
-      "updated_at": "2026-04-14T16:20:13.971098",
+      "updated_at": "2026-04-14T16:30:28.721737",
       "comments": []
     }
   },
