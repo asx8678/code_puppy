@@ -164,7 +164,8 @@ defmodule CodePuppyControl.RequestTracker do
     schedule_cleanup()
 
     now = System.monotonic_time(:millisecond)
-    stale_threshold = 5 * 60 * 1000  # 5 minutes
+    # 5 minutes
+    stale_threshold = 5 * 60 * 1000
 
     stale_ids =
       for {id, %{timestamp: ts, from: from}} <- state.pending,

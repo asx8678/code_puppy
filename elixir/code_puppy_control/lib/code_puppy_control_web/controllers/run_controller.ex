@@ -1,48 +1,53 @@
 defmodule CodePuppyControlWeb.RunController do
   @moduledoc """
   Controller for run management API endpoints.
+
+  Uses Run.Manager for high-level run coordination.
   """
 
   use CodePuppyControlWeb, :controller
 
   require Logger
 
-  alias CodePuppyControl.Run.{State, Supervisor}
-  alias CodePuppyControl.PythonWorker.Supervisor, as: WorkerSupervisor
+  alias CodePuppyControl.Run.Manager
 
   @doc """
   POST /api/runs
 
   Creates a new run with an associated Python worker.
   """
-  def create(conn, params) do
-    run_id = generate_run_id()
+  def create(conn, %{"session_id" => session_id, "agent_name" => agent_name} = params) do
+    config = Map.get(params, "config", %{})
     metadata = Map.get(params, "metadata", %{})
 
-    Logger.info("Creating new run #{run_id}")
+    case Manager.start_run(session_id, agent_name,
+           config: config,
+           metadata: metadata
+         ) do
+      {:ok, run_id} ->
+        conn
+        |> put_status(:created)
+        |> json(%{
+          id: run_id,
+          session_id: session_id,
+          agent_name: agent_name,
+          status: "starting",
+          created_at: DateTime.utc_now() |> DateTime.to_iso8601()
+        })
 
-    # Start the run state process
-    with {:ok, _pid} <- Supervisor.start_run(run_id, metadata),
-         # Start the Python worker for this run
-         {:ok, _worker_pid} <- WorkerSupervisor.start_worker(run_id, metadata: metadata) do
-      # Update status to running
-      State.set_status(run_id, :running)
-
-      conn
-      |> put_status(:created)
-      |> json(%{
-        "id" => run_id,
-        "status" => "running",
-        "created_at" => DateTime.utc_now() |> DateTime.to_iso8601()
-      })
-    else
       {:error, reason} ->
-        Logger.error("Failed to create run #{run_id}: #{inspect(reason)}")
+        Logger.error("Failed to create run: #{inspect(reason)}")
 
         conn
-        |> put_status(:internal_server_error)
-        |> json(%{"error" => "Failed to create run", "details" => inspect(reason)})
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "Failed to create run", details: inspect(reason)})
     end
+  end
+
+  def create(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "Missing required fields: session_id and agent_name"})
   end
 
   @doc """
@@ -51,22 +56,40 @@ defmodule CodePuppyControlWeb.RunController do
   Gets the current status of a run.
   """
   def show(conn, %{"id" => run_id}) do
-    case State.get_state(run_id) do
+    case Manager.get_run(run_id) do
       {:ok, state} ->
         json(conn, %{
-          "id" => run_id,
-          "status" => state.status,
-          "started_at" => format_datetime(state.started_at),
-          "completed_at" => format_datetime(state.completed_at),
-          "error" => state.error,
-          "metadata" => state.metadata
+          id: run_id,
+          session_id: state.session_id,
+          agent_name: state.agent_name,
+          status: state.status,
+          started_at: format_datetime(state.started_at),
+          completed_at: format_datetime(state.completed_at),
+          error: state.error,
+          metadata: state.metadata,
+          event_count: length(state.events)
         })
 
       {:error, :not_found} ->
         conn
         |> put_status(:not_found)
-        |> json(%{"error" => "Run not found"})
+        |> json(%{error: "Run not found"})
     end
+  end
+
+  @doc """
+  GET /api/runs
+
+  Lists runs, optionally filtered by session_id.
+  """
+  def index(conn, params) do
+    session_id = Map.get(params, "session_id")
+    runs = Manager.list_runs_with_details(session_id)
+
+    json(conn, %{
+      runs: runs,
+      count: length(runs)
+    })
   end
 
   @doc """
@@ -77,13 +100,40 @@ defmodule CodePuppyControlWeb.RunController do
   def delete(conn, %{"id" => run_id}) do
     Logger.info("Deleting run #{run_id}")
 
-    # Stop the Python worker first
-    WorkerSupervisor.terminate_worker(run_id)
+    case Manager.delete_run(run_id) do
+      :ok ->
+        send_resp(conn, :no_content, "")
 
-    # Then stop the run state process
-    Supervisor.terminate_run(run_id)
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Run not found"})
+    end
+  end
 
-    send_resp(conn, :no_content, "")
+  @doc """
+  POST /api/runs/:id/cancel
+
+  Cancels a running run.
+  """
+  def cancel(conn, %{"id" => run_id} = params) do
+    reason = Map.get(params, "reason", "user_cancelled")
+
+    case Manager.cancel_run(run_id, reason) do
+      :ok ->
+        conn
+        |> put_status(:ok)
+        |> json(%{
+          id: run_id,
+          status: "cancelled",
+          cancelled_at: DateTime.utc_now() |> DateTime.to_iso8601()
+        })
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Run not found"})
+    end
   end
 
   @doc """
@@ -98,20 +148,21 @@ defmodule CodePuppyControlWeb.RunController do
     if is_nil(tool_name) do
       conn
       |> put_status(:bad_request)
-      |> json(%{"error" => "Missing required field: tool_name"})
+      |> json(%{error: "Missing required field: tool_name"})
     else
       alias CodePuppyControl.PythonWorker.Port
+      alias CodePuppyControl.Run.State
 
       # Record the request
       State.record_request(run_id, %{
-        "tool_name" => tool_name,
-        "arguments" => arguments
+        tool_name: tool_name,
+        arguments: arguments
       })
 
       # Execute via Python worker
       case Port.call(run_id, "tools/call", %{
-             "name" => tool_name,
-             "arguments" => arguments
+             name: tool_name,
+             arguments: arguments
            }) do
         {:ok, result} ->
           State.record_response(run_id, result)
@@ -119,21 +170,21 @@ defmodule CodePuppyControlWeb.RunController do
           conn
           |> put_status(:ok)
           |> json(%{
-            "run_id" => run_id,
-            "tool_name" => tool_name,
-            "result" => result,
-            "executed_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+            run_id: run_id,
+            tool_name: tool_name,
+            result: result,
+            executed_at: DateTime.utc_now() |> DateTime.to_iso8601()
           })
 
         {:error, reason} ->
-          State.record_response(run_id, %{"error" => reason})
+          State.record_response(run_id, %{error: reason})
 
           conn
           |> put_status(:internal_server_error)
           |> json(%{
-            "run_id" => run_id,
-            "tool_name" => tool_name,
-            "error" => inspect(reason)
+            run_id: run_id,
+            tool_name: tool_name,
+            error: inspect(reason)
           })
       end
     end
@@ -145,27 +196,21 @@ defmodule CodePuppyControlWeb.RunController do
   Gets the request/response history for a run.
   """
   def history(conn, %{"id" => run_id}) do
-    case State.get_history(run_id) do
+    case CodePuppyControl.Run.State.get_history(run_id) do
       [] ->
         conn
         |> put_status(:not_found)
-        |> json(%{"error" => "Run not found or no history"})
+        |> json(%{error: "Run not found or no history"})
 
       history ->
         json(conn, %{
-          "run_id" => run_id,
-          "history" => Enum.reverse(history)
+          run_id: run_id,
+          history: Enum.reverse(history)
         })
     end
   end
 
   # Private functions
-
-  defp generate_run_id do
-    base = System.unique_integer([:positive])
-    timestamp = System.system_time(:millisecond)
-    "run-#{timestamp}-#{base}"
-  end
 
   defp format_datetime(nil), do: nil
 

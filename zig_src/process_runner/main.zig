@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Process Runner Entry Point - Erlang Port Interface
+// Process Runner Entry Point - Erlang Port Interface with MCP Support
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Standalone executable that runs as an Erlang Port from Elixir.
-// Handles framed JSON-RPC messages for process management.
+// Handles framed JSON-RPC messages for process management and MCP server control.
 //
 // Usage from Elixir:
 //   Port.open({:spawn_executable, "zig-out/bin/process_runner"}, [
@@ -13,6 +13,7 @@
 const std = @import("std");
 const protocol = @import("protocol.zig");
 const process = @import("process.zig");
+const mcp = @import("mcp.zig");
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Globals
@@ -22,6 +23,7 @@ const process = @import("process.zig");
 // for production use with output streaming callbacks
 var g_sessions: ?*process.SessionRegistry = null;
 var g_allocator: ?std.mem.Allocator = null;
+var g_mcp_registry: ?*mcp.McpRegistry = null;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Main Entry Point
@@ -46,9 +48,14 @@ pub fn main() !void {
     var sessions = process.SessionRegistry.init(allocator);
     defer sessions.deinit();
 
+    // Initialize MCP registry
+    var mcp_registry = mcp.McpRegistry.init(allocator);
+    defer mcp_registry.deinit();
+
     // Store for potential output streaming access
     g_sessions = &sessions;
     g_allocator = allocator;
+    g_mcp_registry = &mcp_registry;
 
     std.log.info("Process runner started - awaiting commands", .{});
 
@@ -65,7 +72,7 @@ pub fn main() !void {
         defer allocator.free(msg);
 
         // Parse and handle the message
-        const response = handleMessage(msg, &sessions, allocator) catch |err| {
+        const response = handleMessage(msg, &sessions, &mcp_registry, allocator) catch |err| {
             std.log.err("Error handling message: {s}", .{@errorName(err)});
             // Create error response
             const error_response = try protocol.createErrorResponse(
@@ -90,6 +97,7 @@ pub fn main() !void {
     sessions.cleanupAll();
     g_sessions = null;
     g_allocator = null;
+    g_mcp_registry = null;
 
     std.log.info("Process runner shutdown complete", .{});
 }
@@ -101,6 +109,7 @@ pub fn main() !void {
 fn handleMessage(
     msg_bytes: []const u8,
     sessions: *process.SessionRegistry,
+    mcp_registry: *mcp.McpRegistry,
     allocator: std.mem.Allocator,
 ) !?protocol.Response {
     // Parse the request
@@ -124,6 +133,12 @@ fn handleMessage(
         .kill => try handleKill(&request, sessions, allocator),
         .write_stdin => try handleWriteStdin(&request, sessions, allocator),
         .resize_pty => try handleResizePty(&request, sessions, allocator),
+        // MCP handlers
+        .mcp_start => try handleMcpStart(&request, mcp_registry, allocator),
+        .mcp_stop => try handleMcpStop(&request, mcp_registry, allocator),
+        .mcp_request => try handleMcpRequest(&request, mcp_registry, allocator),
+        .mcp_list => try handleMcpList(&request, mcp_registry, allocator),
+        .mcp_notification => try handleMcpNotification(&request, mcp_registry, allocator),
         .unknown => try protocol.createErrorResponse(
             request.id,
             -32601, // Method not found
@@ -508,6 +523,358 @@ fn handleResizePty(
     errdefer result_obj.object.deinit();
     try result_obj.object.put("rows", std.json.Value{ .integer = rows });
     try result_obj.object.put("cols", std.json.Value{ .integer = cols });
+
+    return try protocol.createSuccessResponse(request.id, result_obj, allocator);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MCP Method Handlers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+fn handleMcpStart(
+    request: *const protocol.Request,
+    mcp_registry: *mcp.McpRegistry,
+    allocator: std.mem.Allocator,
+) !protocol.Response {
+    const params = request.params orelse {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32602,
+            "Missing params object",
+            allocator,
+        );
+    };
+
+    // Get server_id
+    const server_id = if (params.object.get("server_id")) |id_json| switch (id_json) {
+        .string => |s| s,
+        else => {
+            return try protocol.createErrorResponse(
+                request.id,
+                -32602,
+                "server_id must be a string",
+                allocator,
+            );
+        },
+    } else {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32602,
+            "Missing 'server_id' parameter",
+            allocator,
+        );
+    };
+
+    // Get command
+    const command = if (params.object.get("command")) |cmd_json| switch (cmd_json) {
+        .string => |s| s,
+        else => {
+            return try protocol.createErrorResponse(
+                request.id,
+                -32602,
+                "command must be a string",
+                allocator,
+            );
+        },
+    } else {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32602,
+            "Missing 'command' parameter",
+            allocator,
+        );
+    };
+
+    // Build args array
+    var args_list = std.ArrayList([]const u8).init(allocator);
+    defer {
+        for (args_list.items) |arg| {
+            allocator.free(arg);
+        }
+        args_list.deinit();
+    }
+
+    if (params.object.get("args")) |args_json| {
+        switch (args_json) {
+            .array => |arr| {
+                for (arr.items) |item| {
+                    switch (item) {
+                        .string => |s| try args_list.append(try allocator.dupe(u8, s)),
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+
+    // Start the MCP server
+    mcp_registry.startServer(server_id, command, args_list.items) catch |err| {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32000,
+            @errorName(err),
+            allocator,
+        );
+    };
+
+    // Build success response
+    var result_obj = std.json.Value{ .object = std.json.ObjectMap.init(allocator) };
+    errdefer result_obj.object.deinit();
+    try result_obj.object.put("server_id", std.json.Value{ .string = server_id });
+    try result_obj.object.put("status", std.json.Value{ .string = "started" });
+
+    return try protocol.createSuccessResponse(request.id, result_obj, allocator);
+}
+
+fn handleMcpStop(
+    request: *const protocol.Request,
+    mcp_registry: *mcp.McpRegistry,
+    allocator: std.mem.Allocator,
+) !protocol.Response {
+    const params = request.params orelse {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32602,
+            "Missing params object",
+            allocator,
+        );
+    };
+
+    // Get server_id
+    const server_id = if (params.object.get("server_id")) |id_json| switch (id_json) {
+        .string => |s| s,
+        else => {
+            return try protocol.createErrorResponse(
+                request.id,
+                -32602,
+                "server_id must be a string",
+                allocator,
+            );
+        },
+    } else {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32602,
+            "Missing 'server_id' parameter",
+            allocator,
+        );
+    };
+
+    // Stop the MCP server
+    mcp_registry.stopServer(server_id) catch |err| {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32000,
+            @errorName(err),
+            allocator,
+        );
+    };
+
+    // Build success response
+    var result_obj = std.json.Value{ .object = std.json.ObjectMap.init(allocator) };
+    errdefer result_obj.object.deinit();
+    try result_obj.object.put("server_id", std.json.Value{ .string = server_id });
+    try result_obj.object.put("status", std.json.Value{ .string = "stopped" });
+
+    return try protocol.createSuccessResponse(request.id, result_obj, allocator);
+}
+
+fn handleMcpRequest(
+    request: *const protocol.Request,
+    mcp_registry: *mcp.McpRegistry,
+    allocator: std.mem.Allocator,
+) !protocol.Response {
+    const params = request.params orelse {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32602,
+            "Missing params object",
+            allocator,
+        );
+    };
+
+    // Get server_id
+    const server_id = if (params.object.get("server_id")) |id_json| switch (id_json) {
+        .string => |s| s,
+        else => {
+            return try protocol.createErrorResponse(
+                request.id,
+                -32602,
+                "server_id must be a string",
+                allocator,
+            );
+        },
+    } else {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32602,
+            "Missing 'server_id' parameter",
+            allocator,
+        );
+    };
+
+    // Get method
+    const method = if (params.object.get("method")) |m| switch (m) {
+        .string => |s| s,
+        else => {
+            return try protocol.createErrorResponse(
+                request.id,
+                -32602,
+                "method must be a string",
+                allocator,
+            );
+        },
+    } else {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32602,
+            "Missing 'method' parameter",
+            allocator,
+        );
+    };
+
+    // Get optional params for MCP request
+    const mcp_params = params.object.get("mcp_params");
+    
+    // Get optional timeout
+    const timeout_ms: u32 = if (params.object.get("timeout_ms")) |t| switch (t) {
+        .integer => |i| @intCast(i),
+        .float => |f| @intFromFloat(f),
+        else => 30000,
+    } else 30000;
+
+    // Route the request
+    const response = mcp_registry.routeRequest(server_id, method, mcp_params, timeout_ms) catch |err| {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32000,
+            @errorName(err),
+            allocator,
+        );
+    };
+    defer allocator.free(response);
+
+    // Parse the response and extract result
+    const parsed = std.json.parseFromSlice(std.json.Value, allocator, response, .{}) catch {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32603,
+            "Failed to parse MCP response",
+            allocator,
+        );
+    };
+    defer parsed.deinit();
+
+    // Build success response with MCP result
+    var result_obj = std.json.Value{ .object = std.json.ObjectMap.init(allocator) };
+    errdefer result_obj.object.deinit();
+    try result_obj.object.put("server_id", std.json.Value{ .string = server_id });
+    
+    // Include either result or error from MCP response
+    if (parsed.value.object.get("result")) |result| {
+        try result_obj.object.put("result", result);
+    }
+    if (parsed.value.object.get("error")) |err_val| {
+        try result_obj.object.put("error", err_val);
+    }
+
+    return try protocol.createSuccessResponse(request.id, result_obj, allocator);
+}
+
+fn handleMcpList(
+    request: *const protocol.Request,
+    mcp_registry: *mcp.McpRegistry,
+    allocator: std.mem.Allocator,
+) !protocol.Response {
+    // Get list of servers
+    const servers = mcp_registry.listServers(allocator) catch |err| {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32000,
+            @errorName(err),
+            allocator,
+        );
+    };
+    defer {
+        for (servers) |s| allocator.free(s);
+        allocator.free(servers);
+    }
+
+    // Build server list array
+    var server_array = std.json.Array.init(allocator);
+    errdefer server_array.deinit();
+    
+    for (servers) |server_id| {
+        try server_array.append(std.json.Value{ .string = server_id });
+    }
+
+    // Build success response
+    var result_obj = std.json.Value{ .object = std.json.ObjectMap.init(allocator) };
+    errdefer result_obj.object.deinit();
+    try result_obj.object.put("servers", std.json.Value{ .array = server_array });
+    try result_obj.object.put("count", std.json.Value{ .integer = @intCast(servers.len) });
+
+    return try protocol.createSuccessResponse(request.id, result_obj, allocator);
+}
+
+fn handleMcpNotification(
+    request: *const protocol.Request,
+    mcp_registry: *mcp.McpRegistry,
+    allocator: std.mem.Allocator,
+) !protocol.Response {
+    const params = request.params orelse {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32602,
+            "Missing params object",
+            allocator,
+        );
+    };
+
+    // Get server_id
+    const server_id = if (params.object.get("server_id")) |id_json| switch (id_json) {
+        .string => |s| s,
+        else => {
+            return try protocol.createErrorResponse(
+                request.id,
+                -32602,
+                "server_id must be a string",
+                allocator,
+            );
+        },
+    } else {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32602,
+            "Missing 'server_id' parameter",
+            allocator,
+        );
+    };
+
+    // Read pending notification
+    const notification = mcp_registry.readNotification(server_id) catch |err| {
+        return try protocol.createErrorResponse(
+            request.id,
+            -32000,
+            @errorName(err),
+            allocator,
+        );
+    };
+
+    // Build response
+    var result_obj = std.json.Value{ .object = std.json.ObjectMap.init(allocator) };
+    errdefer result_obj.object.deinit();
+    
+    if (notification) |n| {
+        try result_obj.object.put("has_notification", std.json.Value{ .bool = true });
+        try result_obj.object.put("method", std.json.Value{ .string = n.method });
+        if (n.params) |p| {
+            try result_obj.object.put("params", p);
+        }
+    } else {
+        try result_obj.object.put("has_notification", std.json.Value{ .bool = false });
+    }
 
     return try protocol.createSuccessResponse(request.id, result_obj, allocator);
 }

@@ -3,11 +3,11 @@ defmodule CodePuppyControl.Application do
   OTP Application for CodePuppy Control Plane.
 
   Supervision tree:
-  1. CodePuppyControl.Repo - SQLite database for Oban and state persistence
+  1. CodePuppyControl.Repo - SQLite database for state persistence
   2. Phoenix.PubSub - Event distribution
   3. CodePuppyControl.Run.Registry - Process registry for run tracking
   4. CodePuppyControl.PythonWorker.Supervisor - DynamicSupervisor for Python workers
-  5. Oban - Job processing
+  5. CodePuppyControl.RequestTracker - Tracks JSON-RPC request/response correlation
   6. CodePuppyControlWeb.Endpoint - HTTP API endpoint
   """
 
@@ -22,7 +22,8 @@ defmodule CodePuppyControl.Application do
       {DynamicSupervisor, strategy: :one_for_one, name: CodePuppyControl.Run.Supervisor},
       CodePuppyControl.PythonWorker.Supervisor,
       CodePuppyControl.RequestTracker,
-      {Oban, Application.fetch_env!(:code_puppy_control, Oban)},
+      # Oban is disabled - requires PostgreSQL
+      # {Oban, Application.fetch_env!(:code_puppy_control, Oban)},
       CodePuppyControlWeb.Endpoint
     ]
 

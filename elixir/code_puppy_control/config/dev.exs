@@ -5,7 +5,8 @@ config :code_puppy_control, CodePuppyControlWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  secret_key_base: "dev_secret_key_base_that_is_at_least_64_bytes_long_for_dev_only_12345678901234567890",
+  secret_key_base:
+    "dev_secret_key_base_that_is_at_least_64_bytes_long_for_dev_only_12345678901234567890",
   watchers: []
 
 config :logger, :console, level: :debug

@@ -3,10 +3,12 @@ defmodule CodePuppyControl.Run.State do
   GenServer for managing the state of a single run.
 
   Tracks:
-  - Run lifecycle (pending, running, completed, failed)
+  - Run lifecycle (:starting, :running, :completed, :failed, :cancelled)
+  - Associated Python worker PID (monitored for crashes)
+  - Session and agent context
   - Tool executions and their results
   - Correlation between requests and responses
-  - Metadata about the run
+  - Run events from PubSub
 
   This process is started on demand and exits when the run completes
   or after a period of inactivity.
@@ -20,24 +22,34 @@ defmodule CodePuppyControl.Run.State do
 
   defstruct [
     :run_id,
+    :session_id,
+    :agent_name,
+    :worker_pid,
+    :worker_ref,
     :status,
     :started_at,
     :completed_at,
     :error,
     :request_history,
+    :events,
     :last_activity,
     :metadata
   ]
 
-  @type status :: :pending | :running | :completed | :failed
+  @type status :: :starting | :running | :completed | :failed | :cancelled
 
   @type t :: %__MODULE__{
           run_id: String.t(),
+          session_id: String.t() | nil,
+          agent_name: String.t() | nil,
+          worker_pid: pid() | nil,
+          worker_ref: reference() | nil,
           status: status(),
           started_at: DateTime.t() | nil,
           completed_at: DateTime.t() | nil,
           error: term() | nil,
           request_history: list(map()),
+          events: list(map()),
           last_activity: integer(),
           metadata: map()
         }
@@ -65,10 +77,10 @@ defmodule CodePuppyControl.Run.State do
   Creates a new run state process on demand.
   """
   @spec start_run(String.t(), map()) :: {:ok, pid()} | {:error, term()}
-  def start_run(run_id, metadata \\ %{}) do
+  def start_run(run_id, opts \\ %{}) do
     child_spec = %{
       id: {__MODULE__, run_id},
-      start: {__MODULE__, :start_link, [[run_id: run_id, metadata: metadata]]},
+      start: {__MODULE__, :start_link, [[run_id: run_id] |> Keyword.merge(Map.to_list(opts))]},
       restart: :temporary
     }
 
@@ -116,6 +128,30 @@ defmodule CodePuppyControl.Run.State do
   end
 
   @doc """
+  Updates the run with event data.
+  """
+  @spec add_event(String.t(), map()) :: :ok
+  def add_event(run_id, event) do
+    GenServer.cast(via_tuple(run_id), {:add_event, event})
+  end
+
+  @doc """
+  Completes a run with final status and data.
+  """
+  @spec complete(String.t(), map()) :: :ok
+  def complete(run_id, data \\ %{}) do
+    GenServer.cast(via_tuple(run_id), {:complete, data})
+  end
+
+  @doc """
+  Cancels a run.
+  """
+  @spec cancel(String.t(), term() | nil) :: :ok
+  def cancel(run_id, reason \\ nil) do
+    GenServer.cast(via_tuple(run_id), {:cancel, reason})
+  end
+
+  @doc """
   Gets the request history for a run.
   """
   @spec get_history(String.t()) :: list(map())
@@ -144,17 +180,28 @@ defmodule CodePuppyControl.Run.State do
   def init(opts) do
     run_id = Keyword.fetch!(opts, :run_id)
     metadata = Keyword.get(opts, :metadata, %{})
+    session_id = Keyword.get(opts, :session_id)
+    agent_name = Keyword.get(opts, :agent_name)
+    worker_pid = Keyword.get(opts, :worker_pid)
 
-    # Subscribe to PubSub for Python notifications
+    # Subscribe to PubSub for Python notifications and events
     Phoenix.PubSub.subscribe(CodePuppyControl.PubSub, "run:#{run_id}")
+
+    # Monitor the worker if provided
+    worker_ref = if worker_pid, do: Process.monitor(worker_pid), else: nil
 
     state = %__MODULE__{
       run_id: run_id,
-      status: :pending,
+      session_id: session_id,
+      agent_name: agent_name,
+      worker_pid: worker_pid,
+      worker_ref: worker_ref,
+      status: :starting,
       started_at: DateTime.utc_now(),
       completed_at: nil,
       error: nil,
       request_history: [],
+      events: [],
       last_activity: System.monotonic_time(:millisecond),
       metadata: metadata
     }
@@ -162,7 +209,7 @@ defmodule CodePuppyControl.Run.State do
     # Schedule inactivity check
     schedule_inactivity_check()
 
-    Logger.info("Started Run.State for #{run_id}")
+    Logger.info("Started Run.State for #{run_id} (session: #{session_id}, agent: #{agent_name})")
     {:ok, state}
   end
 
@@ -214,9 +261,51 @@ defmodule CodePuppyControl.Run.State do
       state
       | status: status,
         error: error,
-        completed_at: if(status in [:completed, :failed], do: DateTime.utc_now())
+        completed_at:
+          if(status in [:completed, :failed, :cancelled],
+            do: DateTime.utc_now(),
+            else: state.completed_at
+          )
     }
 
+    {:noreply, touch(new_state)}
+  end
+
+  @impl true
+  def handle_cast({:add_event, event}, state) do
+    new_state = %{state | events: [event | state.events]}
+    {:noreply, touch(new_state)}
+  end
+
+  @impl true
+  def handle_cast({:complete, data}, state) do
+    new_state = %{
+      state
+      | status: :completed,
+        completed_at: DateTime.utc_now(),
+        error: data["error"],
+        metadata: Map.merge(state.metadata, data)
+    }
+
+    Logger.info("Run #{state.run_id} completed")
+    {:noreply, touch(new_state)}
+  end
+
+  @impl true
+  def handle_cast({:cancel, reason}, state) do
+    new_state = %{
+      state
+      | status: :cancelled,
+        completed_at: DateTime.utc_now(),
+        error: reason || "cancelled"
+    }
+
+    # Also cancel the worker if running
+    if state.worker_pid do
+      WorkerSupervisor.terminate_worker(state.run_id)
+    end
+
+    Logger.info("Run #{state.run_id} cancelled: #{inspect(reason)}")
     {:noreply, touch(new_state)}
   end
 
@@ -237,14 +326,22 @@ defmodule CodePuppyControl.Run.State do
     # Handle specific notification types
     new_state =
       case message do
+        %{"method" => "run.started", "params" => _} ->
+          %{new_state | status: :running}
+
         %{"method" => "tool_executed", "params" => params} ->
-          # Handle tool execution notification
           handle_tool_executed(new_state, params)
 
-        %{"method" => "run_completed", "params" => _params} ->
-          %{new_state | status: :completed, completed_at: DateTime.utc_now()}
+        %{"method" => "run.completed", "params" => params} ->
+          %{
+            new_state
+            | status: :completed,
+              error: params["error"],
+              completed_at: DateTime.utc_now(),
+              metadata: Map.merge(new_state.metadata, params)
+          }
 
-        %{"method" => "run_failed", "params" => params} ->
+        %{"method" => "run.failed", "params" => params} ->
           %{
             new_state
             | status: :failed,
@@ -260,12 +357,77 @@ defmodule CodePuppyControl.Run.State do
   end
 
   @impl true
+  def handle_info({:run_event, event}, state) do
+    # Handle run events from PubSub
+    Logger.debug("Received run event for #{state.run_id}: #{inspect(event)}")
+
+    new_events = [event | state.events]
+
+    # Update status based on event type
+    new_state =
+      case event do
+        %{"type" => "status", "status" => status} ->
+          %{state | status: String.to_atom(status), events: new_events}
+
+        %{"type" => "completed"} ->
+          %{
+            state
+            | status: :completed,
+              completed_at: DateTime.utc_now(),
+              events: new_events
+          }
+
+        %{"type" => "failed", "error" => error} ->
+          %{
+            state
+            | status: :failed,
+              error: error,
+              completed_at: DateTime.utc_now(),
+              events: new_events
+          }
+
+        _ ->
+          %{state | events: new_events}
+      end
+
+    {:noreply, touch(new_state)}
+  end
+
+  @impl true
+  def handle_info(
+        {:DOWN, ref, :process, pid, reason},
+        %{worker_pid: pid, worker_ref: ref} = state
+      ) do
+    # Worker died - mark run as failed if not already completed
+    if state.status not in [:completed, :failed, :cancelled] do
+      Logger.error("Worker for run #{state.run_id} died: #{inspect(reason)}")
+
+      new_state = %{
+        state
+        | status: :failed,
+          error: "Worker process terminated: #{inspect(reason)}",
+          completed_at: DateTime.utc_now()
+      }
+
+      {:noreply, new_state}
+    else
+      {:noreply, state}
+    end
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+    # Other process down, ignore
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info(:check_inactivity, state) do
     now = System.monotonic_time(:millisecond)
     elapsed = now - state.last_activity
 
     cond do
-      state.status in [:completed, :failed] and elapsed > @inactivity_timeout ->
+      state.status in [:completed, :failed, :cancelled] and elapsed > @inactivity_timeout ->
         Logger.info("Run #{state.run_id} inactive after completion, shutting down")
         {:stop, :normal, state}
 

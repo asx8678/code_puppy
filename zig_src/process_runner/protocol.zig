@@ -72,6 +72,12 @@ pub const Method = enum {
     write_stdin,
     resize_pty,
     ping,
+    // MCP methods
+    mcp_start,
+    mcp_stop,
+    mcp_request,
+    mcp_list,
+    mcp_notification,
     unknown,
 
     pub fn fromString(str: []const u8) Method {
@@ -80,6 +86,11 @@ pub const Method = enum {
         if (std.mem.eql(u8, str, "write_stdin")) return .write_stdin;
         if (std.mem.eql(u8, str, "resize_pty")) return .resize_pty;
         if (std.mem.eql(u8, str, "ping")) return .ping;
+        if (std.mem.eql(u8, str, "mcp_start")) return .mcp_start;
+        if (std.mem.eql(u8, str, "mcp_stop")) return .mcp_stop;
+        if (std.mem.eql(u8, str, "mcp_request")) return .mcp_request;
+        if (std.mem.eql(u8, str, "mcp_list")) return .mcp_list;
+        if (std.mem.eql(u8, str, "mcp_notification")) return .mcp_notification;
         return .unknown;
     }
 
@@ -90,6 +101,11 @@ pub const Method = enum {
             .write_stdin => "write_stdin",
             .resize_pty => "resize_pty",
             .ping => "ping",
+            .mcp_start => "mcp_start",
+            .mcp_stop => "mcp_stop",
+            .mcp_request => "mcp_request",
+            .mcp_list => "mcp_list",
+            .mcp_notification => "mcp_notification",
             .unknown => "unknown",
         };
     }

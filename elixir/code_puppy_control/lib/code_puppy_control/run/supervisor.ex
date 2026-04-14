@@ -21,14 +21,22 @@ defmodule CodePuppyControl.Run.Supervisor do
   @doc """
   Starts a run state process for the given run_id.
 
+  Options:
+    * `:session_id` - The session this run belongs to
+    * `:agent_name` - The agent being run
+    * `:worker_pid` - The Python worker PID to monitor
+    * `:metadata` - Additional run metadata
+
   Returns `{:ok, pid}` on success. If a process already exists
   for this run_id, returns `{:ok, existing_pid}`.
   """
-  @spec start_run(String.t(), map()) :: DynamicSupervisor.on_start_child()
-  def start_run(run_id, metadata \\ %{}) do
+  @spec start_run(String.t(), keyword()) :: DynamicSupervisor.on_start_child()
+  def start_run(run_id, opts \\ []) do
+    metadata = Keyword.get(opts, :metadata, %{})
+
     child_spec = %{
       id: {State, run_id},
-      start: {State, :start_link, [[run_id: run_id, metadata: metadata]]},
+      start: {State, :start_link, [[run_id: run_id, metadata: metadata] |> Keyword.merge(opts)]},
       restart: :temporary
     }
 

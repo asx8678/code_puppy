@@ -4,11 +4,20 @@ import Config
 # you can enable the server option below.
 config :code_puppy_control, CodePuppyControlWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
-  secret_key_base: "test_secret_key_base_that_is_at_least_64_bytes_long_123456789012345678901234567890",
+  secret_key_base:
+    "test_secret_key_base_that_is_at_least_64_bytes_long_123456789012345678901234567890",
   server: false
 
 # Print only warnings and errors during test
 config :logger, level: :warning
+
+# Ensure Oban config exists for tests
+config :code_puppy_control, Oban,
+  engine: Oban.Engines.Basic,
+  peer: false,
+  queues: false,
+  repo: CodePuppyControl.Repo,
+  testing: :inline
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
@@ -19,9 +28,3 @@ config :code_puppy_control, CodePuppyControl.Repo,
   pool_size: 1,
   pool: Ecto.Adapters.SQL.Sandbox
 
-# Oban testing configuration
-config :code_puppy_control, Oban,
-  engine: Oban.Engines.Basic,
-  notifier: {Oban.Notifiers.Poll, []},
-  queues: false,
-  repo: CodePuppyControl.Repo

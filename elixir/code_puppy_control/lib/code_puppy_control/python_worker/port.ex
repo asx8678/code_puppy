@@ -77,6 +77,40 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   @doc """
+  Starts a run on the Python worker.
+  """
+  @spec start_run(String.t(), map()) :: :ok
+  def start_run(run_id, params) do
+    notify(run_id, "run/start", params)
+  end
+
+  @doc """
+  Cancels a run on the Python worker.
+  """
+  @spec cancel_run(String.t()) :: :ok
+  def cancel_run(run_id) do
+    notify(run_id, "run/cancel", %{"run_id" => run_id})
+  end
+
+  @doc """
+  Broadcasts a run event to PubSub.
+  """
+  @spec broadcast_event(String.t(), String.t(), map()) :: :ok
+  def broadcast_event(run_id, event_type, data) do
+    Phoenix.PubSub.broadcast(
+      CodePuppyControl.PubSub,
+      "run:#{run_id}",
+      {:run_event,
+       %{
+         "type" => event_type,
+         "run_id" => run_id,
+         "data" => data,
+         "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+       }}
+    )
+  end
+
+  @doc """
   Looks up the run_id for a given Port PID.
   """
   @spec pid_to_run_id(pid()) :: {:ok, String.t()} | :error
@@ -183,10 +217,11 @@ defmodule CodePuppyControl.PythonWorker.Port do
   @impl true
   def handle_info(:send_initialize, state) do
     # Send initialize notification to Python worker
-    message = Protocol.encode_notification("initialize", %{
-      "run_id" => state.run_id,
-      "elixir_pid" => :erlang.pid_to_list(self())
-    })
+    message =
+      Protocol.encode_notification("initialize", %{
+        "run_id" => state.run_id,
+        "elixir_pid" => :erlang.pid_to_list(self())
+      })
 
     framed = Protocol.frame(message)
     Port.command(state.port, framed)
@@ -249,8 +284,36 @@ defmodule CodePuppyControl.PythonWorker.Port do
     CodePuppyControl.RequestTracker.fail_request(id, {:python_error, error})
   end
 
+  defp handle_message(%{"method" => "run.event", "params" => params}, run_id) do
+    # Structured run event - broadcast to PubSub
+    event_type = params["type"] || "unknown"
+    broadcast_event(run_id, event_type, params)
+    {:ok, params}
+  end
+
+  defp handle_message(%{"method" => "run.status", "params" => params}, run_id) do
+    # Run status update
+    CodePuppyControl.Run.State.set_status(run_id, String.to_atom(params["status"]))
+    broadcast_event(run_id, "status", params)
+    {:ok, params}
+  end
+
+  defp handle_message(%{"method" => "run.completed", "params" => params}, run_id) do
+    # Run completed
+    CodePuppyControl.Run.State.complete(run_id, params)
+    broadcast_event(run_id, "completed", params)
+    {:ok, params}
+  end
+
+  defp handle_message(%{"method" => "run.failed", "params" => params}, run_id) do
+    # Run failed
+    CodePuppyControl.Run.State.set_status(run_id, :failed, params["error"])
+    broadcast_event(run_id, "failed", params)
+    {:ok, params}
+  end
+
   defp handle_message(message, run_id) when is_map(message) do
-    # Notification - publish to PubSub
+    # Generic notification - publish to PubSub
     Phoenix.PubSub.broadcast(
       CodePuppyControl.PubSub,
       "run:#{run_id}",

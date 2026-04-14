@@ -8,8 +8,7 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  config :code_puppy_control, CodePuppyControlWeb.Endpoint,
-    secret_key_base: secret_key_base
+  config :code_puppy_control, CodePuppyControlWeb.Endpoint, secret_key_base: secret_key_base
 
   database_path =
     System.get_env("DATABASE_PATH") ||
@@ -17,13 +16,13 @@ if config_env() == :prod do
       environment variable DATABASE_PATH is missing.
       """
 
-  config :code_puppy_control, CodePuppyControl.Repo,
-    database: database_path
+  config :code_puppy_control, CodePuppyControl.Repo, database: database_path
 
-  config :code_puppy_control, :python_worker_script,
-    System.get_env("PYTHON_WORKER_SCRIPT") ||
-      raise """
-      environment variable PYTHON_WORKER_SCRIPT is missing.
-      This should point to the Python worker entry point.
-      """
+  config :code_puppy_control,
+         :python_worker_script,
+         System.get_env("PYTHON_WORKER_SCRIPT") ||
+           raise("""
+           environment variable PYTHON_WORKER_SCRIPT is missing.
+           This should point to the Python worker entry point.
+           """)
 end
