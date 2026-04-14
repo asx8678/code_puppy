@@ -299,10 +299,10 @@ def _reduce_usage_reported(state: TraceState, event: TraceEvent) -> TraceState:
     usage_data = event.extra.get("usage", {}) if event.extra else {}
     
     new_usage = TokenUsage(
-        input_tokens=usage_data.get("input_tokens") or span.usage.input_tokens,
-        output_tokens=usage_data.get("output_tokens") or span.usage.output_tokens,
-        reasoning_tokens=usage_data.get("reasoning_tokens") or span.usage.reasoning_tokens,
-        cached_tokens=usage_data.get("cached_tokens") or span.usage.cached_tokens,
+        input_tokens=usage_data["input_tokens"] if usage_data.get("input_tokens") is not None else span.usage.input_tokens,
+        output_tokens=usage_data["output_tokens"] if usage_data.get("output_tokens") is not None else span.usage.output_tokens,
+        reasoning_tokens=usage_data["reasoning_tokens"] if usage_data.get("reasoning_tokens") is not None else span.usage.reasoning_tokens,
+        cached_tokens=usage_data["cached_tokens"] if usage_data.get("cached_tokens") is not None else span.usage.cached_tokens,
         accounting=event.transfer.accounting if event.transfer else span.usage.accounting,
         estimated_input=span.usage.estimated_input,
         estimated_output=span.usage.estimated_output,
@@ -357,11 +357,12 @@ def _reduce_usage_reconciled(state: TraceState, event: TraceEvent) -> TraceState
     reconciliation = event.extra.get("reconciliation", {}) if event.extra else {}
     exact = reconciliation.get("exact", {})
     
+    # Use exact values when provided (even if 0), fall back to existing only when None
     new_usage = TokenUsage(
-        input_tokens=exact.get("input_tokens") or span.usage.input_tokens,
-        output_tokens=exact.get("output_tokens") or span.usage.output_tokens,
-        reasoning_tokens=exact.get("reasoning_tokens") or span.usage.reasoning_tokens,
-        cached_tokens=exact.get("cached_tokens") or span.usage.cached_tokens,
+        input_tokens=exact["input_tokens"] if exact.get("input_tokens") is not None else span.usage.input_tokens,
+        output_tokens=exact["output_tokens"] if exact.get("output_tokens") is not None else span.usage.output_tokens,
+        reasoning_tokens=exact["reasoning_tokens"] if exact.get("reasoning_tokens") is not None else span.usage.reasoning_tokens,
+        cached_tokens=exact["cached_tokens"] if exact.get("cached_tokens") is not None else span.usage.cached_tokens,
         accounting=AccountingState.RECONCILED,
         estimated_input=span.usage.estimated_input,
         estimated_output=span.usage.estimated_output,

@@ -26,6 +26,7 @@ from code_puppy.plugins.agent_trace.emitter import (
     emit_span_ended,
     emit_transfer,
     emit_usage_reconciled,
+    emit_usage_reported,
 )
 from code_puppy.plugins.agent_trace.store import TraceStore
 from code_puppy.plugins.agent_trace.reducer import TraceState, reduce_event
@@ -417,6 +418,28 @@ async def _on_agent_run_end(
 
         # End model span first
         if model_span_id and model_node_id:
+            # Emit usage_reported with exact provider numbers (bd-66)
+            if exact_usage:
+                usage_event = emit_usage_reported(
+                    trace_id=trace_id,
+                    span_id=model_span_id,
+                    node_id=model_node_id,
+                    input_tokens=exact_usage.get("input_tokens")
+                    or exact_usage.get("prompt_tokens"),
+                    output_tokens=exact_usage.get("output_tokens")
+                    or exact_usage.get("completion_tokens"),
+                    reasoning_tokens=exact_usage.get("reasoning_tokens"),
+                    cached_tokens=exact_usage.get("cache_read_tokens")
+                    or exact_usage.get("cached_tokens"),
+                    accounting=AccountingState.PROVIDER_REPORTED_EXACT,
+                    model_name=model_name,
+                    session_id=session_id,
+                )
+                _trace_states[trace_id] = reduce_event(
+                    _trace_states[trace_id], usage_event
+                )
+                _store.append(usage_event)
+
             # Check if we have exact usage to emit reconciliation
             if exact_usage and model_span_id in _estimated_usage:
                 estimated = _estimated_usage[model_span_id]
@@ -431,7 +454,8 @@ async def _on_agent_run_end(
                     exact_output=exact_usage.get("output_tokens")
                     or exact_usage.get("completion_tokens"),
                     exact_reasoning=exact_usage.get("reasoning_tokens"),
-                    exact_cached=exact_usage.get("cached_tokens"),
+                    exact_cached=exact_usage.get("cache_read_tokens")
+                    or exact_usage.get("cached_tokens"),
                     session_id=session_id,
                 )
                 _trace_states[trace_id] = reduce_event(

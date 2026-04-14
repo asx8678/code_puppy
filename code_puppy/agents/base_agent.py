@@ -2928,6 +2928,7 @@ class BaseAgent(ABC, AgentPromptMixin):
         # (e.g., token refresh heartbeats for OAuth models)
         # Also creates a RunContext for hierarchical tracing
         _run_context = None
+        _run_usage = None  # Will hold provider usage data for trace reconciliation
         try:
             _start_results, _run_context = await on_agent_run_start(
                 agent_name=self.name,
@@ -3012,6 +3013,21 @@ class BaseAgent(ABC, AgentPromptMixin):
             # Wait for the task to complete or be cancelled
             result = await agent_task
 
+            # Extract provider usage for trace reconciliation (bd-66)
+            try:
+                if result is not None and hasattr(result, 'usage'):
+                    usage = result.usage()
+                    if usage:
+                        _run_usage = {
+                            "input_tokens": getattr(usage, 'input_tokens', None),
+                            "output_tokens": getattr(usage, 'output_tokens', None),
+                            "reasoning_tokens": getattr(usage, 'reasoning_tokens', None),
+                            "cache_read_tokens": getattr(usage, 'cache_read_tokens', None) or getattr(usage, 'cache_read_input_tokens', None),
+                            "cache_write_tokens": getattr(usage, 'cache_write_tokens', None) or getattr(usage, 'cache_creation_input_tokens', None),
+                        }
+            except Exception:
+                logger.debug("Failed to extract usage for trace", exc_info=True)
+
             # Update MCP tool cache after successful run for accurate token estimation
             if self._state.mcp_servers:
                 try:
@@ -3067,7 +3083,7 @@ class BaseAgent(ABC, AgentPromptMixin):
                     success=_run_success,
                     error=_run_error,
                     response_text=_run_response_text,
-                    metadata={"model": self.get_model_name()},
+                    metadata={"model": self.get_model_name(), "usage": _run_usage},
                     run_context=_run_context,
                 )
             except Exception:
