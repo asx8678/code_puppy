@@ -18,7 +18,7 @@ Example Elixir Port usage:
     # Elixir side
     port = Port.open({:spawn, "python -m code_puppy"}, [:binary, :exit_status])
     # Send command
-    Port.command(port, ~s({"jsonrpc": "2.0", "id": "1", "method": "invoke_agent", "params": {...}}\\n))
+    Port.command(port, ~s({"jsonrpc": "2.0", "id": "1", "method": "invoke_agent", "params": {...}}\n))
     # Receive event
     receive do
       {^port, {:data, data}} ->
@@ -51,6 +51,11 @@ bd-77: Concurrency control bridge support
 
 bd-81: MCP bridge support
 - Added call_elixir_mcp() for MCP server management via bridge
+
+bd-103: Protocol bridge optimization
+- Replace polling with threading.Event for response matching
+- Add orjson support for faster serialization (5-10x improvement)
+- Add batch request support (N requests in single frame)
 """
 
 from __future__ import annotations
@@ -61,6 +66,8 @@ import time
 import uuid
 from typing import Any
 
+from .wire_protocol import _serialize_json
+
 # Bridge mode detection - used by register_callbacks to decide whether to activate
 BRIDGE_ENABLED = os.environ.get("CODE_PUPPY_BRIDGE", "").strip() == "1"
 BRIDGE_LOG_FILE = os.environ.get("CODE_PUPPY_BRIDGE_LOG")
@@ -68,7 +75,39 @@ BRIDGE_LOG_FILE = os.environ.get("CODE_PUPPY_BRIDGE_LOG")
 # Client mode: Python calling Elixir control plane
 # These are set when Elixir control plane is detected
 _elixir_control_plane_url: str | None = None
-_pending_responses: dict[str, dict[str, Any]] = {}
+
+
+# bd-103: Response slot with threading.Event for zero-latency notification
+class _ResponseSlot:
+    """Response slot with threading.Event for instant notification.
+
+    Replaces polling-based response matching with event-driven approach.
+    Eliminates the 10ms polling floor that was adding latency.
+    """
+
+    __slots__ = ("event", "result", "error", "_lock")
+
+    def __init__(self):
+        self.event = threading.Event()
+        self.result: Any = None
+        self.error: Any = None
+        self._lock = threading.Lock()
+
+    def wait(self, timeout: float) -> tuple[Any, Any]:
+        """Wait for response with timeout. Returns (result, error)."""
+        if self.event.wait(timeout):
+            return self.result, self.error
+        return None, None  # Timeout
+
+    def complete(self, result: Any, error: Any) -> None:
+        """Mark response as complete."""
+        with self._lock:
+            self.result = result
+            self.error = error
+            self.event.set()
+
+
+_pending_responses: dict[str, _ResponseSlot] = {}
 _response_lock = threading.Lock()
 
 
@@ -119,6 +158,9 @@ def call_method(
     Sends a JSON-RPC 2.0 request to the Elixir control plane and waits
     for the response. Used by NativeBackend to route file operations.
 
+    bd-103: Uses threading.Event for zero-latency response notification
+    instead of polling with time.sleep().
+
     Args:
         method: JSON-RPC method name (e.g., "file_list", "file_read")
         params: Method parameters dict
@@ -148,28 +190,19 @@ def call_method(
         "params": params,
     }
 
-    # Create response slot
+    # Create response slot with threading.Event (bd-103 optimization)
+    slot = _ResponseSlot()
     with _response_lock:
-        _pending_responses[request_id] = {"ready": False, "result": None, "error": None}
+        _pending_responses[request_id] = slot
 
     try:
         # Send the request
-        # TODO(code-puppy-elixir-client): Implement actual transport (HTTP, socket, etc.)
-        # For now, this is a placeholder that raises NotImplementedError
-        # Real implementation will send over socket/HTTP to Elixir
         _send_request_to_elixir(request)
 
-        # Wait for response with timeout
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            with _response_lock:
-                slot = _pending_responses.get(request_id)
-                if slot and slot["ready"]:
-                    result = slot["result"]
-                    error = slot["error"]
-                    break
-            time.sleep(0.01)  # Short sleep to prevent busy waiting
-        else:
+        # bd-103: Wait using threading.Event instead of polling
+        result, error = slot.wait(timeout)
+
+        if result is None and error is None and not slot.event.is_set():
             raise TimeoutError(f"Elixir call timed out after {timeout}s")
 
         # Check for error response
@@ -207,7 +240,7 @@ async def call_elixir_concurrency(
         raise ConnectionError("Elixir control plane not connected")
 
     try:
-        return await call_method(method, params, timeout=timeout)
+        return call_method(method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
         return {"status": "timeout", "fallback": True}
@@ -237,7 +270,7 @@ async def call_elixir_run_limiter(
         raise ConnectionError("Elixir control plane not connected")
 
     try:
-        return await call_method(method, params, timeout=timeout)
+        return call_method(method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
         return {"status": "timeout", "fallback": True}
@@ -268,7 +301,7 @@ async def call_elixir_mcp(
         raise ConnectionError("Elixir control plane not connected")
 
     # Call through to Elixir control plane
-    return await call_method(method, params, timeout=timeout)
+    return call_method(method, params, timeout=timeout)
 
 
 async def call_elixir_rate_limiter(
@@ -297,7 +330,7 @@ async def call_elixir_rate_limiter(
         raise ConnectionError("Elixir control plane not connected")
 
     try:
-        return await call_method(method, params, timeout=timeout)
+        return call_method(method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
         return {"status": "timeout", "fallback": True}
@@ -329,7 +362,7 @@ async def call_elixir_agent_manager(
         raise ConnectionError("Elixir control plane not connected")
 
     try:
-        return await call_method(method, params, timeout=timeout)
+        return call_method(method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
         return {"status": "timeout", "fallback": True}
@@ -342,6 +375,8 @@ def _send_request_to_elixir(request: dict[str, Any]) -> None:
     framed JSON-RPC to stdout. Elixir port.ex already handles requests
     from Python and sends responses back via stdin.
 
+    bd-103: Uses orjson for faster serialization when available.
+
     When not in bridge mode, raises NotImplementedError.
     """
     if not BRIDGE_ENABLED:
@@ -350,12 +385,10 @@ def _send_request_to_elixir(request: dict[str, Any]) -> None:
             "outside bridge mode. NativeBackend will fall back to Python."
         )
 
-    import json
     import sys
 
     try:
-        body = json.dumps(request, separators=(",", ":"))
-        body_bytes = body.encode("utf-8")
+        body_bytes = _serialize_json(request)
         header = f"Content-Length: {len(body_bytes)}\r\n\r\n"
         sys.stdout.buffer.write(header.encode("utf-8"))
         sys.stdout.buffer.write(body_bytes)
@@ -364,10 +397,113 @@ def _send_request_to_elixir(request: dict[str, Any]) -> None:
         raise ConnectionError(f"Failed to send request to Elixir: {e}") from e
 
 
+def send_batch_to_elixir(requests: list[dict[str, Any]]) -> None:
+    """Send multiple JSON-RPC requests in a single frame (bd-103).
+
+    Batching reduces IPC overhead by combining N requests into one write.
+    Uses JSON-RPC 2.0 batch format (array of request objects).
+
+    Args:
+        requests: List of JSON-RPC request dicts
+    """
+    if not BRIDGE_ENABLED:
+        raise NotImplementedError(
+            "Elixir control plane client transport not yet implemented "
+            "outside bridge mode."
+        )
+
+    import sys
+
+    try:
+        # JSON-RPC 2.0 batch format: array of messages
+        body_bytes = _serialize_json(requests)
+        header = f"Content-Length: {len(body_bytes)}\r\n\r\n"
+        sys.stdout.buffer.write(header.encode("utf-8"))
+        sys.stdout.buffer.write(body_bytes)
+        sys.stdout.buffer.flush()
+    except Exception as e:
+        raise ConnectionError(f"Failed to send batch to Elixir: {e}") from e
+
+
+def call_batch(
+    calls: list[tuple[str, dict[str, Any]]], timeout: float = 30.0
+) -> list[dict[str, Any]]:
+    """Send multiple JSON-RPC calls as a batch (bd-103).
+
+    Batching reduces IPC overhead by combining N requests into a single
+    write operation. Responses are matched by request ID.
+
+    Args:
+        calls: List of (method, params) tuples
+        timeout: Maximum seconds to wait for all responses
+
+    Returns:
+        List of result dicts in same order as calls
+
+    Raises:
+        TimeoutError: If any response not received within timeout
+        RuntimeError: If any call returns an error
+    """
+    global _pending_responses
+
+    if not is_connected():
+        raise ConnectionError("Elixir control plane not connected")
+
+    # Build all requests and register response slots
+    requests = []
+    slots: list[tuple[str, _ResponseSlot]] = []
+
+    for method, params in calls:
+        request_id = f"req-{uuid.uuid4().hex[:16]}"
+        slot = _ResponseSlot()
+
+        requests.append(
+            {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
+        )
+
+        with _response_lock:
+            _pending_responses[request_id] = slot
+
+        slots.append((request_id, slot))
+
+    try:
+        # Send all requests in a single frame
+        send_batch_to_elixir(requests)
+
+        # Wait for all responses
+        results = []
+        deadline = time.time() + timeout
+
+        for request_id, slot in slots:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                raise TimeoutError("Batch call timed out")
+
+            result, error = slot.wait(remaining)
+
+            if result is None and error is None and not slot.event.is_set():
+                raise TimeoutError(f"Batch call timed out waiting for {request_id}")
+
+            if error is not None:
+                raise RuntimeError(f"Elixir call failed: {error}")
+
+            results.append(result if result is not None else {})
+
+        return results
+
+    finally:
+        # Clean up all response slots
+        with _response_lock:
+            for request_id, _ in slots:
+                _pending_responses.pop(request_id, None)
+
+
 def handle_response(response: dict[str, Any]) -> None:
     """Handle a JSON-RPC response from Elixir.
 
     Called by the transport layer when a response is received from Elixir.
+
+    bd-103: Uses threading.Event for instant notification.
 
     Args:
         response: JSON-RPC response dict with "id", "result", and/or "error"
@@ -379,11 +515,9 @@ def handle_response(response: dict[str, Any]) -> None:
         return  # Notification, no response needed
 
     with _response_lock:
-        if request_id in _pending_responses:
-            slot = _pending_responses[request_id]
-            slot["result"] = response.get("result")
-            slot["error"] = response.get("error")
-            slot["ready"] = True
+        slot = _pending_responses.get(request_id)
+        if slot is not None:
+            slot.complete(response.get("result"), response.get("error"))
 
 
 def notify_elixir_event(
@@ -460,12 +594,15 @@ def notify_elixir_event(
 __all__ = [
     "BRIDGE_ENABLED",
     "BRIDGE_LOG_FILE",
-    # Client mode (Python → Elixir)
+    # Client mode (Python -> Elixir)
     "is_connected",
     "set_connection_url",
     "get_connection_url",
     "call_method",
     "handle_response",
+    # Batch support (bd-103)
+    "call_batch",
+    "send_batch_to_elixir",
     # Concurrency bridge support (bd-77)
     "call_elixir_concurrency",
     # Run limiter bridge support (bd-100)

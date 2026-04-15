@@ -5,13 +5,26 @@ defmodule CodePuppyControl.Protocol do
   This module handles:
   - JSON-RPC 2.0 request/response/notification encoding
   - Content-Length HTTP-style framing for Port communication
-  - Batch message support
+  - Batch message support (bd-103)
 
   ## Framing Format
 
       Content-Length: <bytes>\r\n
+
       \r\n
+
       <json_rpc_message>
+
+  ## Batch Format (bd-103)
+
+  JSON-RPC 2.0 batch format sends an array of messages:
+
+      Content-Length: <bytes>\r\n
+
+      \r\n
+
+      [{"jsonrpc":"2.0","id":1,"method":"file_read","params":{...}},
+       {"jsonrpc":"2.0","id":2,"method":"file_list","params":{...}}]
   """
 
   @type json_rpc_id :: String.t() | integer() | nil
@@ -124,12 +137,22 @@ defmodule CodePuppyControl.Protocol do
 
       iex> Protocol.decode(~s({"jsonrpc":"2.0","id":1,"result":{}}))
       {:ok, %{"jsonrpc" => "2.0", "id" => 1, "result" => %{}}}
+
+      iex> Protocol.decode(~s([{"jsonrpc":"2.0","id":1}]))
+      {:ok, [%{"jsonrpc" => "2.0", "id" => 1}]}
   """
   @spec decode(String.t() | binary()) :: {:ok, json_rpc_message()} | {:error, term()}
   def decode(data) when is_binary(data) do
     case Jason.decode(data) do
-      {:ok, parsed} -> validate_jsonrpc(parsed)
-      {:error, reason} -> {:error, {:invalid_json, reason}}
+      {:ok, parsed} when is_map(parsed) ->
+        validate_jsonrpc(parsed)
+
+      {:ok, parsed} when is_list(parsed) ->
+        # bd-103: Batch message support - validate all messages in array
+        validate_batch_jsonrpc(parsed)
+
+      {:error, reason} ->
+        {:error, {:invalid_json, reason}}
     end
   end
 
@@ -156,9 +179,28 @@ defmodule CodePuppyControl.Protocol do
   end
 
   @doc """
+  Frames a batch of JSON-RPC messages (bd-103).
+
+  Batching reduces IPC overhead by combining N messages into one write.
+  Uses JSON-RPC 2.0 batch format (array of messages).
+
+  ## Examples
+
+      iex> Protocol.frame_batch([%{"jsonrpc" => "2.0", "id" => 1}, %{"jsonrpc" => "2.0", "id" => 2}])
+      "Content-Length: 53\\r\\n\\r\\n[{\\"jsonrpc\\":\\"2.0\\",\\"id\\":1},{\\"jsonrpc\\":\\"2.0\\",\\"id\\":2}]"
+  """
+  @spec frame_batch(list(map())) :: String.t()
+  def frame_batch(messages) when is_list(messages) do
+    body = Jason.encode!(messages)
+    "Content-Length: #{byte_size(body)}\r\n\r\n#{body}"
+  end
+
+  @doc """
   Parses framed messages from a buffer, returning parsed messages and remaining buffer.
 
   Returns `{messages, rest_buffer}` where messages is a list of decoded JSON-RPC messages.
+
+  bd-103: Supports batch messages (JSON array format).
 
   ## Examples
 
@@ -203,6 +245,14 @@ defmodule CodePuppyControl.Protocol do
 
   defp validate_jsonrpc(_) do
     {:error, {:invalid_jsonrpc, "missing or invalid jsonrpc version"}}
+  end
+
+  # bd-103: Validate batch of JSON-RPC messages
+  defp validate_batch_jsonrpc(messages) when is_list(messages) do
+    case Enum.all?(messages, &match?(%{"jsonrpc" => "2.0"}, &1)) do
+      true -> {:ok, messages}
+      false -> {:error, {:invalid_jsonrpc, "batch contains invalid messages"}}
+    end
   end
 
   defp parse_framed_loop(buffer, acc) do

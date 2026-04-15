@@ -14,8 +14,21 @@ defmodule CodePuppyControl.PythonWorker.Port do
   Messages are framed using Content-Length HTTP-style headers:
 
       Content-Length: 47\r\n
+
       \r\n
+
       {"jsonrpc":"2.0","id":1,"method":"initialize"}
+
+  ## Batch Support (bd-103)
+
+  Supports JSON-RPC 2.0 batch format for multiple messages in a single frame:
+
+      Content-Length: <bytes>\r\n
+
+      \r\n
+
+      [{"jsonrpc":"2.0","id":1,"method":"file_read","params":{}},
+       {"jsonrpc":"2.0","id":2,"method":"file_list","params":{}}]
   """
 
   use GenServer
@@ -38,65 +51,44 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
   # Client API
 
-  @doc """
-  Starts a linked PythonWorker.Port for a specific run.
-
-  ## Options
-
-    * `:run_id` - Required. The run identifier this worker handles.
-    * `:script_path` - Optional. Path to Python worker script. Defaults to application config.
-    * `:parent` - Optional. PID to monitor. When parent exits, worker exits.
-
-  """
   def start_link(opts) do
     run_id = Keyword.fetch!(opts, :run_id)
     GenServer.start_link(__MODULE__, opts, name: via_tuple(run_id))
   end
 
-  @doc """
-  Returns a `via_tuple` for Registry lookup.
-  """
   def via_tuple(run_id) do
     {:via, Registry, {CodePuppyControl.Run.Registry, {:python_worker, run_id}}}
   end
 
-  @doc """
-  Sends a JSON-RPC request to the Python worker and awaits response.
-
-  Returns `{:ok, result}` or `{:error, reason}`.
-  """
   @spec call(String.t(), String.t(), map(), timeout()) :: {:ok, term()} | {:error, term()}
   def call(run_id, method, params, timeout \\ 30_000) do
     GenServer.call(via_tuple(run_id), {:call, method, params, timeout}, timeout + 5000)
   end
 
   @doc """
-  Sends a JSON-RPC notification to the Python worker (no response expected).
+  Sends multiple JSON-RPC requests as a batch (bd-103).
+  Batching reduces IPC overhead by combining N requests into a single write.
   """
+  @spec call_batch(String.t(), list({String.t(), map()}), timeout()) :: list({:ok, term()} | {:error, term()})
+  def call_batch(run_id, calls, timeout \\ 30_000) do
+    GenServer.call(via_tuple(run_id), {:call_batch, calls, timeout}, timeout + 5000)
+  end
+
   @spec notify(String.t(), String.t(), map()) :: :ok
   def notify(run_id, method, params) do
     GenServer.cast(via_tuple(run_id), {:notify, method, params})
   end
 
-  @doc """
-  Starts a run on the Python worker.
-  """
   @spec start_run(String.t(), map()) :: :ok
   def start_run(run_id, params) do
     notify(run_id, "run/start", params)
   end
 
-  @doc """
-  Cancels a run on the Python worker.
-  """
   @spec cancel_run(String.t()) :: :ok
   def cancel_run(run_id) do
     notify(run_id, "run/cancel", %{"run_id" => run_id})
   end
 
-  @doc """
-  Broadcasts a run event to PubSub.
-  """
   @spec broadcast_event(String.t(), String.t(), map()) :: :ok
   def broadcast_event(run_id, event_type, data) do
     Phoenix.PubSub.broadcast(
@@ -112,9 +104,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
     )
   end
 
-  @doc """
-  Looks up the run_id for a given Port PID.
-  """
   @spec pid_to_run_id(pid()) :: {:ok, String.t()} | :error
   def pid_to_run_id(pid) do
     case Registry.keys(CodePuppyControl.Run.Registry, pid) do
@@ -123,9 +112,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
     end
   end
 
-  @doc """
-  Gracefully shuts down the Python worker.
-  """
   @spec shutdown(String.t()) :: :ok
   def shutdown(run_id) do
     GenServer.cast(via_tuple(run_id), :shutdown)
@@ -139,22 +125,16 @@ defmodule CodePuppyControl.PythonWorker.Port do
     parent_pid = Keyword.get(opts, :parent, self())
     script_path = get_script_path(opts)
 
-    # Monitor the parent so we exit when it does
     Process.monitor(parent_pid)
 
     Logger.info("Starting Python worker for run #{run_id}")
 
-    # Find python3 executable with full path for spawn_executable compatibility
     python_exe = System.find_executable("python3") || "python3"
 
-    # Use spawn_executable for compatibility with newer Erlang/OTP versions
-    # When using args option, we must use spawn_executable not spawn
     port_opts = [
       :binary,
       :use_stdio,
       :exit_status,
-      # NOTE: stderr goes to parent's stderr (visible in logs but not in protocol stream)
-      # This matches ADR-001: stdout=protocol messages, stderr=diagnostics
       args: [script_path, "--run-id", run_id]
     ]
 
@@ -168,7 +148,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
       parent_pid: parent_pid
     }
 
-    # Send initialize request
     send(self(), :send_initialize)
 
     {:ok, state}
@@ -178,15 +157,12 @@ defmodule CodePuppyControl.PythonWorker.Port do
   def handle_call({:call, method, params, timeout}, from, state) do
     request_id = generate_request_id(state)
 
-    # Register FIRST, before sending (fixes race condition)
     :ok = CodePuppyControl.RequestTracker.register_request(request_id, method, timeout)
 
-    # Now send the request
     message = Protocol.encode_request(method, params, request_id)
     framed = Protocol.frame(message)
     Port.command(state.port, framed)
 
-    # Await response in a separate process
     Task.start(fn ->
       case CodePuppyControl.RequestTracker.await_response(request_id, timeout) do
         {:ok, result} ->
@@ -198,6 +174,37 @@ defmodule CodePuppyControl.PythonWorker.Port do
     end)
 
     new_state = %{state | request_counter: state.request_counter + 1}
+    {:noreply, new_state}
+  end
+
+  @impl true
+  def handle_call({:call_batch, calls, timeout}, from, state) do
+    # bd-103: Batch request support
+    {messages, request_ids} =
+      Enum.map_reduce(calls, [], fn {method, params}, acc ->
+        request_id = generate_request_id(state)
+        :ok = CodePuppyControl.RequestTracker.register_request(request_id, method, timeout)
+        message = Protocol.encode_request(method, params, request_id)
+        {message, [{request_id, method} | acc]}
+      end)
+
+    # Send all requests in a single batch frame
+    framed = Protocol.frame_batch(messages)
+    Port.command(state.port, framed)
+
+    Task.start(fn ->
+      results =
+        Enum.map(Enum.reverse(request_ids), fn {request_id, _method} ->
+          case CodePuppyControl.RequestTracker.await_response(request_id, timeout) do
+            {:ok, result} -> {:ok, result}
+            {:error, reason} -> {:error, reason}
+          end
+        end)
+
+      GenServer.reply(from, results)
+    end)
+
+    new_state = %{state | request_counter: state.request_counter + length(calls)}
     {:noreply, new_state}
   end
 
@@ -214,12 +221,10 @@ defmodule CodePuppyControl.PythonWorker.Port do
   def handle_cast(:shutdown, state) do
     Logger.info("Shutting down Python worker for run #{state.run_id}")
 
-    # Send exit notification
     message = Protocol.encode_notification("exit", %{"code" => 0})
     framed = Protocol.frame(message)
     Port.command(state.port, framed)
 
-    # Close the port
     Port.close(state.port)
 
     {:stop, :normal, %{state | port: nil}}
@@ -227,7 +232,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
   @impl true
   def handle_info(:send_initialize, state) do
-    # Send initialize notification to Python worker
     message =
       Protocol.encode_notification("initialize", %{
         "run_id" => state.run_id,
@@ -247,7 +251,8 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
     # Process each message
     for message <- messages do
-      handle_incoming_message(message, state.run_id, state.port)
+      # bd-103: Handle batch messages (list) or single message (map)
+      handle_incoming_messages(message, state.run_id, state.port)
     end
 
     {:noreply, %{state | buffer: rest}}
@@ -287,35 +292,38 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
   # Private functions
 
-  # Handle incoming messages - detect if it's a request (needs response) or response/notification
+  # bd-103: Handle batch messages (list) or single message (map)
+  defp handle_incoming_messages(messages, run_id, port) when is_list(messages) do
+    for message <- messages do
+      handle_incoming_message(message, run_id, port)
+    end
+  end
+
+  defp handle_incoming_messages(message, run_id, port) when is_map(message) do
+    handle_incoming_message(message, run_id, port)
+  end
+
   defp handle_incoming_message(
          %{"id" => id, "method" => method, "params" => params},
          _run_id,
          port
        ) do
-    # This is a request FROM Python that needs a response back
     response = handle_file_request(method, params)
-
-    # Add the id to make it a proper JSON-RPC response
     response_with_id = Map.put(response, "id", id)
 
-    # Send response back through the port
     framed = Protocol.frame(response_with_id)
     Port.command(port, framed)
   end
 
   defp handle_incoming_message(%{"id" => id, "result" => result}, _run_id, _port) do
-    # This is a response TO a request we sent
     CodePuppyControl.RequestTracker.complete_request(id, result)
   end
 
   defp handle_incoming_message(%{"id" => id, "error" => error}, _run_id, _port) do
-    # This is an error response TO a request we sent
     CodePuppyControl.RequestTracker.fail_request(id, {:python_error, error})
   end
 
   defp handle_incoming_message(message, run_id, _port) do
-    # Pass to existing notification handlers
     handle_message(message, run_id)
   end
 
@@ -327,7 +335,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
     case FileOps.list_files(directory, opts) do
       {:ok, files} ->
-        # Convert DateTime to ISO8601 strings for JSON serialization
         serializable_files =
           Enum.map(files, fn file ->
             file
@@ -370,7 +377,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
 
     case FileOps.read_file(path, opts) do
       {:ok, result} ->
-        # Convert to JSON-serializable format
         serializable_result =
           result
           |> Map.update(:error, nil, fn err -> err end)
@@ -387,7 +393,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
     paths = params["paths"] || []
     opts = params_to_read_opts(params)
 
-    # bd-74: Handle error case instead of crash on pattern match
     case FileOps.read_files(paths, opts) do
       {:ok, results} ->
         serializable_results =
@@ -450,7 +455,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
     Protocol.encode_response(%{"languages" => languages}, nil)
   end
 
-  # bd-93: Get fold ranges for code folding
   defp handle_file_request("get_folds", params) do
     source = params["source"]
     language = params["language"]
@@ -464,7 +468,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
     end
   end
 
-  # bd-93: Get syntax highlights
   defp handle_file_request("get_highlights", params) do
     source = params["source"]
     language = params["language"]
@@ -478,7 +481,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
     end
   end
 
-  # bd-96: Parse multiple files in batch using Task.async_stream
   defp handle_file_request("parse_batch", params) do
     paths = params["paths"] || []
     language = params["language"]
@@ -501,7 +503,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
     Protocol.encode_response(%{"results" => results, "count" => length(results)}, nil)
   end
 
-  # bd-78: History/EventStore bridge methods for Python SessionHistoryBuffer migration
   defp handle_file_request("history_get", params) do
     session_id = params["session_id"]
     opts = []
@@ -532,8 +533,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
   defp handle_file_request(method, _params) do
     Protocol.encode_error(-32601, "Method not found: #{method}", nil, nil)
   end
-
-  # Option conversion helpers
 
   defp params_to_file_ops_opts(params) do
     [
@@ -567,8 +566,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
     opts
   end
 
-  # Legacy message handlers (for backward compatibility with existing Python events)
-
   defp handle_message(%{"id" => id, "result" => result}, _run_id) do
     CodePuppyControl.RequestTracker.complete_request(id, result)
   end
@@ -577,9 +574,7 @@ defmodule CodePuppyControl.PythonWorker.Port do
     CodePuppyControl.RequestTracker.fail_request(id, {:python_error, error})
   end
 
-  # Generic "event" handler that maps Python's format to internal event types
   defp handle_message(%{"method" => "event", "params" => params}, run_id) do
-    # Map Python's generic event format to our internal event types
     event_type = params["event_type"]
     session_id = params["session_id"]
     payload = params["payload"] || %{}
@@ -621,7 +616,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   defp handle_message(%{"method" => "run.event", "params" => params}, run_id) do
-    # Structured run event - store and broadcast via EventBus
     event = %{
       "type" => params["type"] || "unknown",
       "run_id" => run_id,
@@ -630,17 +624,14 @@ defmodule CodePuppyControl.PythonWorker.Port do
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
 
-    # Store in EventStore and broadcast via PubSub
     CodePuppyControl.EventStore.store(event)
     CodePuppyControl.EventBus.broadcast_event(event, store: false)
 
-    # Also broadcast for backward compatibility
     broadcast_event(run_id, event["type"], params)
     {:ok, params}
   end
 
   defp handle_message(%{"method" => "run.status", "params" => params}, run_id) do
-    # Run status update - store and broadcast
     event = %{
       "type" => "status",
       "run_id" => run_id,
@@ -663,7 +654,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   defp handle_message(%{"method" => "run.completed", "params" => params}, run_id) do
-    # Run completed - store and broadcast
     event = %{
       "type" => "completed",
       "run_id" => run_id,
@@ -683,7 +673,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   defp handle_message(%{"method" => "run.failed", "params" => params}, run_id) do
-    # Run failed - store and broadcast
     event = %{
       "type" => "failed",
       "run_id" => run_id,
@@ -703,7 +692,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   defp handle_message(%{"method" => "run.text", "params" => params}, run_id) do
-    # Text/content from agent - store and broadcast
     event = %{
       "type" => "text",
       "run_id" => run_id,
@@ -722,7 +710,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   defp handle_message(%{"method" => "run.tool_result", "params" => params}, run_id) do
-    # Tool execution result - store and broadcast
     event = %{
       "type" => "tool_result",
       "run_id" => run_id,
@@ -742,7 +729,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   defp handle_message(%{"method" => "run.prompt", "params" => params}, run_id) do
-    # Agent needs user input - store and broadcast
     event = %{
       "type" => "prompt",
       "run_id" => run_id,
@@ -760,8 +746,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
   end
 
   defp handle_message(message, run_id) when is_map(message) do
-    # Generic notification - store and publish to PubSub
-    # Build event structure if possible
     event = %{
       "type" => "notification",
       "run_id" => run_id,
@@ -784,7 +768,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
     "#{state.run_id}-#{state.request_counter}-#{System.unique_integer([:positive])}"
   end
 
-  # Helper functions to transform and forward events from Python format
   defp handle_agent_response_event(run_id, session_id, payload) do
     text = payload["text"] || ""
     finished = payload["finished"] || false
