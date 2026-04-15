@@ -63,13 +63,12 @@ except ImportError:
     _RUN_LIMITER_AVAILABLE = False
     # Fallback stubs for graceful degradation
 
-
     class RunConcurrencyLimitError(Exception):  # type: ignore[no-redef]
         pass
 
-
     def get_run_limiter() -> None:  # type: ignore[misc]
         return None
+
 
 # Set to track active subagent invocation tasks
 _active_subagent_tasks: set[asyncio.Task] = set()
@@ -87,25 +86,27 @@ _sessions_dir_cache: Path | None = None
 # Keys that should NOT propagate from parent agent to sub-agent
 # These are either session-specific, parent-private, or would confuse the sub-agent
 # Based on deepagents' _EXCLUDED_STATE_KEYS pattern
-_EXCLUDED_STATE_KEYS: frozenset[str] = frozenset({
-    # Session-specific keys that only make sense for the parent
-    "parent_session_id",
-    "agent_session_id",
-    "session_history",
-    # Previous tool results that would clutter the sub-agent's view
-    "previous_tool_results",
-    "tool_call_history",
-    "tool_outputs",
-    # Internal state keys
-    "_private_state",
-    "_internal_metadata",
-    # Callback/plugin state that shouldn't leak
-    "callback_registry",
-    "hook_state",
-    # UI/rendering state
-    "render_context",
-    "console_state",
-})
+_EXCLUDED_STATE_KEYS: frozenset[str] = frozenset(
+    {
+        # Session-specific keys that only make sense for the parent
+        "parent_session_id",
+        "agent_session_id",
+        "session_history",
+        # Previous tool results that would clutter the sub-agent's view
+        "previous_tool_results",
+        "tool_call_history",
+        "tool_outputs",
+        # Internal state keys
+        "_private_state",
+        "_internal_metadata",
+        # Callback/plugin state that shouldn't leak
+        "callback_registry",
+        "hook_state",
+        # UI/rendering state
+        "render_context",
+        "console_state",
+    }
+)
 
 
 def filter_context_for_subagent(context: dict | None) -> dict:
@@ -255,9 +256,6 @@ def _generate_session_hash_suffix() -> str:
     return uuid.uuid4().hex[:8]
 
 
-
-
-
 # Regex pattern for kebab-case session IDs
 SESSION_ID_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 SESSION_ID_MAX_LENGTH = 128
@@ -350,7 +348,7 @@ def _get_subagent_sessions_dir() -> Path:
     global _sessions_dir_cache
     if _sessions_dir_cache is not None:
         return _sessions_dir_cache
-    
+
     sessions_dir = Path(DATA_DIR) / "subagent_sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     _sessions_dir_cache = sessions_dir
@@ -358,6 +356,7 @@ def _get_subagent_sessions_dir() -> Path:
 
 
 # ----- Sync helpers for session save/load -----
+
 
 def _save_session_history_sync(
     session_id: str,
@@ -400,7 +399,9 @@ def _save_session_history_sync(
 
     payload = {
         "format": "pydantic-ai-json-v2",
-        "payload": ModelMessagesTypeAdapter.dump_python(message_history, mode="json") if ModelMessagesTypeAdapter else [],  # type: ignore[attr]
+        "payload": ModelMessagesTypeAdapter.dump_python(message_history, mode="json")
+        if ModelMessagesTypeAdapter
+        else [],  # type: ignore[attr]
         "metadata": {
             "session_id": session_id,
             "agent_name": agent_name,
@@ -442,13 +443,25 @@ def _load_session_history_sync(session_id: str) -> list[ModelMessage]:
             # v2 format with folded metadata
             if isinstance(data, dict) and data.get("format") == "pydantic-ai-json-v2":
                 payload = data.get("payload", [])
-                return ModelMessagesTypeAdapter.validate_python(payload) if ModelMessagesTypeAdapter else []
+                return (
+                    ModelMessagesTypeAdapter.validate_python(payload)
+                    if ModelMessagesTypeAdapter
+                    else []
+                )
             # v1 format (legacy, no metadata)
             if isinstance(data, dict) and data.get("format") == "pydantic-ai-json":
                 payload = data.get("payload", [])
-                return ModelMessagesTypeAdapter.validate_python(payload) if ModelMessagesTypeAdapter else []
+                return (
+                    ModelMessagesTypeAdapter.validate_python(payload)
+                    if ModelMessagesTypeAdapter
+                    else []
+                )
             # Oldest format: plain list
-            return ModelMessagesTypeAdapter.validate_python(data) if ModelMessagesTypeAdapter else []
+            return (
+                ModelMessagesTypeAdapter.validate_python(data)
+                if ModelMessagesTypeAdapter
+                else []
+            )
         except Exception:
             pass  # Fall through to other formats or return empty
 
@@ -466,6 +479,7 @@ def _load_session_history_sync(session_id: str) -> list[ModelMessage]:
 
 
 # ----- Async wrappers using asyncio.to_thread -----
+
 
 async def _save_session_history_async(
     session_id: str,
@@ -710,16 +724,7 @@ def register_invoke_agent(agent):
             puppy_rules = agent_config.load_puppy_rules()
             if puppy_rules:
                 instructions += f"\n\n{puppy_rules}"
-
-            # Apply prompt additions (like file permission handling) to temporary agents
-            from code_puppy import callbacks
             from code_puppy.model_utils import prepare_prompt_for_model
-
-            prompt_additions = callbacks.on_load_prompt()
-            # Filter out None values that can occur when callbacks fail
-            prompt_additions = [p for p in prompt_additions if p is not None]
-            if len(prompt_additions):
-                instructions += "\n" + "\n".join(prompt_additions)
 
             # Handle claude-code models: swap instructions, and prepend system prompt only on first message
             prepared = prepare_prompt_for_model(
@@ -929,7 +934,9 @@ def register_invoke_agent(agent):
             if run_limiter is not None:
                 return await _run_with_limiter()
             else:
-                return await _run_with_limiter()  # Limiter is None inside, works as no-op
+                return (
+                    await _run_with_limiter()
+                )  # Limiter is None inside, works as no-op
 
         except Exception as e:
             # Emit clean failure summary
@@ -990,7 +997,6 @@ async def invoke_agent_headless(
     from code_puppy.model_factory import ModelFactory, make_model_settings
     from code_puppy.model_utils import prepare_prompt_for_model
     from code_puppy.tools import register_tools_for_agent
-    from code_puppy import callbacks
 
     # Load agent config
     agent_config = load_agent(agent_name)
@@ -1013,14 +1019,12 @@ async def invoke_agent_headless(
     if puppy_rules:
         instructions += f"\n\n{puppy_rules}"
 
-    prompt_additions = callbacks._trigger_callbacks_sync("load_prompt")
-    prompt_additions = [p for p in prompt_additions if p is not None]
-    if prompt_additions:
-        instructions += "\n" + "\n".join(prompt_additions)
-
     # Handle model-specific prompt preparation
     prepared = prepare_prompt_for_model(
-        model_name, instructions, prompt, prepend_system_to_user=True,
+        model_name,
+        instructions,
+        prompt,
+        prepend_system_to_user=True,
     )
     instructions = prepared.instructions
     prompt = prepared.user_prompt
