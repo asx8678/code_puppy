@@ -8,7 +8,6 @@
 # - Unit tests
 # - Integration tests
 # - Python bridge availability
-# - Zig process runner build (if available)
 # - E2E tests with mock worker
 #
 # Usage:
@@ -165,36 +164,7 @@ fi
 cd "$PROJECT_ROOT"
 
 # -----------------------------------------------------------------------------
-# Step 6: Check Zig runner (if zig available)
-# -----------------------------------------------------------------------------
-log_step "Checking Zig runner..."
-
-if command -v zig &> /dev/null; then
-    if [ -d "../zig_src/process_runner" ] || [ -d "zig_src/process_runner" ]; then
-        ZIG_DIR="zig_src/process_runner"
-        if [ -d "../$ZIG_DIR" ]; then
-            ZIG_DIR="../$ZIG_DIR"
-        fi
-
-        echo "Building in: $ZIG_DIR"
-        cd "$ZIG_DIR"
-
-        if zig build; then
-            log_success "Zig runner built successfully"
-        else
-            log_warning "Zig build had issues"
-        fi
-
-        cd "$PROJECT_ROOT"
-    else
-        log_warning "Zig source directory not found"
-    fi
-else
-    log_warning "Zig not installed, skipping Zig build"
-fi
-
-# -----------------------------------------------------------------------------
-# Step 7: Run E2E tests with mock worker
+# Step 6: Run E2E tests with mock worker
 # -----------------------------------------------------------------------------
 log_step "Running E2E tests..."
 
