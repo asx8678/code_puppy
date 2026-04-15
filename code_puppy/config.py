@@ -1742,6 +1742,41 @@ def get_summarization_history_dir() -> Path:
     return Path.home() / ".code_puppy" / "history"
 
 
+
+
+get_summarization_return_max_length = _make_int_getter(
+    "summarization_return_max_length",
+    default=5000,
+    min_val=500,
+    max_val=100000,
+    doc="""Max characters for tool return content before pre-truncation.
+    Tool returns longer than this will be truncated with head/tail preservation.
+    Defaults to 5000. Configurable by 'summarization_return_max_length' key.
+    """,
+)
+
+
+get_summarization_return_head_chars = _make_int_getter(
+    "summarization_return_head_chars",
+    default=500,
+    min_val=100,
+    max_val=5000,
+    doc="""Characters to preserve from the start of a truncated tool return.
+    Defaults to 500. Configurable by 'summarization_return_head_chars' key.
+    """,
+)
+
+
+get_summarization_return_tail_chars = _make_int_getter(
+    "summarization_return_tail_chars",
+    default=200,
+    min_val=50,
+    max_val=2000,
+    doc="""Characters to preserve from the end of a truncated tool return.
+    Defaults to 200. Configurable by 'summarization_return_tail_chars' key.
+    """,
+)
+
 # --- End Enhanced Summarization Config ---
 
 

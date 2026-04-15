@@ -24,6 +24,7 @@ from code_puppy.compaction.tool_arg_truncation import (
     pretruncate_messages,
     truncate_tool_arg,
     truncate_tool_call_args,
+    truncate_tool_return_content,
 )
 
 __all__ = [
@@ -37,4 +38,5 @@ __all__ = [
     "SummarizationThresholds",
     "truncate_tool_arg",
     "truncate_tool_call_args",
+    "truncate_tool_return_content",
 ]

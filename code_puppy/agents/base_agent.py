@@ -1373,14 +1373,20 @@ class BaseAgent(ABC, AgentPromptMixin):
         if cfg.summarization_pretruncate_enabled:
             try:
                 max_arg_len = cfg.summarization_arg_max_length
+                max_ret_len = cfg.summarization_return_max_length
+                ret_head = cfg.summarization_return_head_chars
+                ret_tail = cfg.summarization_return_tail_chars
                 truncated_msgs, trunc_count = pretruncate_messages(
                     messages,
                     keep_recent=10,
                     max_length=max_arg_len,
+                    max_return_length=max_ret_len,
+                    return_head_chars=ret_head,
+                    return_tail_chars=ret_tail,
                 )
                 if trunc_count > 0:
                     emit_info(
-                        f"✂️ Pre-truncated {trunc_count} messages (tool args > {max_arg_len} chars)"
+                        f"✂️ Pre-truncated {trunc_count} messages (args > {max_arg_len}, returns > {max_ret_len} chars)"
                     )
                 messages = truncated_msgs
             except Exception as e:

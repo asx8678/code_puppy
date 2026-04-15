@@ -1,20 +1,21 @@
-"""Pre-summarization optimization: truncate large tool call args in older messages.
+"""Pre-summarization optimization: truncate large tool call args and returns.
 
 This is a cheap pass that often reclaims significant tokens without needing an
 LLM call for full summarization. Targets write_file/edit_file tool calls where
-the 'content' arg can be huge.
+the 'content' arg can be huge, and tool returns (read_file, grep, list_files)
+where the return content can be very large.
 """
 
 import dataclasses
 import logging
 from typing import Any, Sequence
 
-# pydantic-ai imports
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
     ToolCallPart,
+    ToolReturnPart,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,12 @@ _TARGET_KEYS: frozenset[str] = frozenset({
 
 DEFAULT_MAX_ARG_LENGTH = 500  # chars
 DEFAULT_TRUNCATION_TEXT = " ...(argument truncated during compaction)"
+
+# Tool return truncation defaults
+DEFAULT_MAX_RETURN_LENGTH = 5000  # chars
+DEFAULT_RETURN_HEAD_CHARS = 500  # chars to keep from start
+DEFAULT_RETURN_TAIL_CHARS = 200  # chars to keep from end
+DEFAULT_RETURN_TRUNCATION_TEXT = "\n...(truncated during compaction)...\n"
 
 
 def truncate_tool_arg(
@@ -117,7 +124,6 @@ def _truncate_message_tool_calls(
     Returns:
         New message with truncated args, or original if no changes needed
     """
-    # Only ModelResponse and ModelRequest can contain tool calls
     if not isinstance(msg, (ModelResponse, ModelRequest)):
         return msg
 
@@ -138,8 +144,6 @@ def _truncate_message_tool_calls(
             )
 
             if modified:
-                # Create new ToolCallPart with truncated args, preserving all fields
-                # Use dataclasses.replace to ensure all fields are preserved (code_puppy-lg9)
                 new_part = dataclasses.replace(part, args=new_args)
                 new_parts.append(new_part)
                 any_modified = True
@@ -151,14 +155,98 @@ def _truncate_message_tool_calls(
     if not any_modified:
         return msg
 
-    # Create new message with truncated parts
     if isinstance(msg, ModelResponse):
         return ModelResponse(parts=new_parts)
     elif isinstance(msg, ModelRequest):
         return ModelRequest(parts=new_parts)
 
-    # Fallback: should not reach here given isinstance check above
     return msg
+
+
+def truncate_tool_return_content(
+    content: Any,
+    *,
+    max_length: int = DEFAULT_MAX_RETURN_LENGTH,
+    head_chars: int = DEFAULT_RETURN_HEAD_CHARS,
+    tail_chars: int = DEFAULT_RETURN_TAIL_CHARS,
+    truncation_text: str = DEFAULT_RETURN_TRUNCATION_TEXT,
+) -> tuple[Any, bool]:
+    """Truncate tool return content if it's a string and too long.
+
+    Preserves the first head_chars and last tail_chars characters with a
+    truncation marker in between.
+
+    Args:
+        content: The tool return content to potentially truncate
+        max_length: Total length threshold before truncation kicks in
+        head_chars: Characters to keep from the start
+        tail_chars: Characters to keep from the end
+        truncation_text: Marker text inserted at the truncation point
+
+    Returns:
+        (new_content, was_modified)
+    """
+    if not isinstance(content, str):
+        return content, False
+    if len(content) <= max_length:
+        return content, False
+    total_orig = len(content)
+    truncated = content[:head_chars] + truncation_text + content[-tail_chars:]
+    summary_header = f"[Truncated: tool return was {total_orig} chars]\n"
+    return summary_header + truncated, True
+
+
+def _truncate_message_tool_returns(
+    msg: ModelMessage,
+    max_length: int = DEFAULT_MAX_RETURN_LENGTH,
+    head_chars: int = DEFAULT_RETURN_HEAD_CHARS,
+    tail_chars: int = DEFAULT_RETURN_TAIL_CHARS,
+) -> ModelMessage:
+    """Return a new message with tool return content truncated, or the original.
+
+    Processes ModelRequest parts containing ToolReturnPart instances.
+
+    Args:
+        msg: The message to process
+        max_length: Maximum characters before truncation kicks in
+        head_chars: Characters to keep from the start of the return
+        tail_chars: Characters to keep from the end of the return
+
+    Returns:
+        New message with truncated returns, or original if no changes needed
+    """
+    if not isinstance(msg, ModelRequest):
+        return msg
+
+    parts = getattr(msg, "parts", None)
+    if not parts:
+        return msg
+
+    new_parts = []
+    any_modified = False
+
+    for part in parts:
+        if isinstance(part, ToolReturnPart):
+            content = part.content
+            new_content, modified = truncate_tool_return_content(
+                content,
+                max_length=max_length,
+                head_chars=head_chars,
+                tail_chars=tail_chars,
+            )
+            if modified:
+                new_part = dataclasses.replace(part, content=new_content)
+                new_parts.append(new_part)
+                any_modified = True
+            else:
+                new_parts.append(part)
+        else:
+            new_parts.append(part)
+
+    if not any_modified:
+        return msg
+
+    return ModelRequest(parts=new_parts)
 
 
 def pretruncate_messages(
@@ -166,8 +254,11 @@ def pretruncate_messages(
     *,
     keep_recent: int = 10,
     max_length: int = DEFAULT_MAX_ARG_LENGTH,
+    max_return_length: int = DEFAULT_MAX_RETURN_LENGTH,
+    return_head_chars: int = DEFAULT_RETURN_HEAD_CHARS,
+    return_tail_chars: int = DEFAULT_RETURN_TAIL_CHARS,
 ) -> tuple[list[ModelMessage], int]:
-    """Pre-truncate tool call args in messages older than the `keep_recent` most recent.
+    """Pre-truncate tool call args AND tool returns in older messages.
 
     This is an OPTIONAL cheap pass to run BEFORE full summarization. It tries to
     reclaim tokens without an LLM call.
@@ -176,15 +267,17 @@ def pretruncate_messages(
         messages: Full message history (pydantic-ai messages)
         keep_recent: Don't touch the last N messages (they're active context)
         max_length: Max characters allowed per target arg before truncation
+        max_return_length: Max characters for tool returns before truncation
+        return_head_chars: Characters to keep from start of truncated returns
+        return_tail_chars: Characters to keep from end of truncated returns
 
     Returns:
-        (modified_messages, truncation_count) — modified_messages is a new list;
+        (modified_messages, truncation_count) -- modified_messages is a new list;
         the original is not mutated.
     """
     if len(messages) <= keep_recent:
         return list(messages), 0
 
-    # Messages older than the keep window are candidates for truncation
     if keep_recent > 0:
         older = list(messages[:-keep_recent])
         recent = list(messages[-keep_recent:])
@@ -196,7 +289,15 @@ def pretruncate_messages(
     modified_older: list[ModelMessage] = []
 
     for msg in older:
+        # First pass: truncate tool call args
         new_msg = _truncate_message_tool_calls(msg, max_length)
+        # Second pass: truncate tool return content
+        new_msg = _truncate_message_tool_returns(
+            new_msg,
+            max_length=max_return_length,
+            head_chars=return_head_chars,
+            tail_chars=return_tail_chars,
+        )
         if new_msg is not msg:
             truncation_count += 1
         modified_older.append(new_msg)
