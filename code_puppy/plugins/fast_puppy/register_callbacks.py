@@ -21,16 +21,13 @@ Profiles: elixir_first, rust_first, python_only
 Capabilities: message_core, file_ops, repo_index, parse
 """
 
-import importlib
 import logging
 
 from code_puppy.callbacks import register_callback
-from code_puppy.config_package import get_puppy_config
 from code_puppy.messaging import emit_info
 
 # Import discovery functions from builder.py (bd-91: split from rust_builder.py)
 from code_puppy.plugins.fast_puppy.builder import (
-    _find_crate_dir,
     _find_repo_root,
     get_all_crate_status,
     get_available_backends,
@@ -211,7 +208,6 @@ def _handle_status() -> str:
         Formatted status string.
     """
     from code_puppy.native_backend import NativeBackend
-    from code_puppy._core_bridge import get_rust_status
     # bd-69: _core_bridge imports removed — NativeBackend.get_status() used instead
     # bd-90: Updated to show Elixir-first architecture details
     # bd-88: Improved to show actual backend in use and actionable next steps
@@ -226,7 +222,6 @@ def _handle_status() -> str:
 
     # Get crate build status (bd-92: merged from old default view)
     crate_statuses = get_all_crate_status()
-    rust_status = get_rust_status()
     repo_root = _find_repo_root()
 
     lines = ["⚡ Fast Puppy Status", ""]
@@ -374,7 +369,6 @@ def _emit_startup_banner(backend_status: dict, profile) -> None:
 
     bd-92: New helper for clean startup messaging.
     """
-    from code_puppy.native_backend import BackendPreference
 
     elixir = backend_status.get("elixir_available", False)
     rust = backend_status.get("rust_installed", False)
@@ -432,10 +426,6 @@ def _handle_fast_puppy(command: str, name: str):
     if name != "fast_puppy":
         return None
 
-    from code_puppy._core_bridge import (
-        get_rust_status,
-        set_rust_enabled,
-    )
 
     parts = command.strip().split()
     subcommand = parts[1] if len(parts) > 1 else ""

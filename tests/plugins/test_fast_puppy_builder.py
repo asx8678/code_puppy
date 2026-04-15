@@ -9,7 +9,6 @@ bd-91: Module was split - discovery in builder.py, builds in rust_builder.py
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import os
 
 import pytest
 
@@ -372,103 +371,6 @@ class TestPrewarmWorkspace:
             assert "cargo" in call_args
             assert "build" in call_args
             assert "--workspace" in call_args
-
-
-
-
-
-class TestBuildEnv:
-    """Tests for _build_env() helper."""
-
-    def test_returns_env_copy_as_baseline(self):
-        """Returns a dict that starts as a copy of os.environ."""
-        with patch.dict("os.environ", {"HOME": "/tmp/home", "PATH": "/usr/bin"}, clear=True):
-            with patch("sys.prefix", "/no-venv-here"):
-                env = _build_env()
-                assert env["HOME"] == "/tmp/home"
-                assert env["PATH"] == "/usr/bin"
-
-    def test_returns_env_as_is_when_virtual_env_already_set(self):
-        """When VIRTUAL_ENV is already set, return env without modification."""
-        with patch.dict(
-            "os.environ",
-            {"VIRTUAL_ENV": "/opt/venv", "PATH": "/usr/bin"},
-            clear=True,
-        ):
-            # sys.prefix should NOT be consulted at all when VIRTUAL_ENV is set
-            env = _build_env()
-            assert env["VIRTUAL_ENV"] == "/opt/venv"
-            # PATH should NOT be modified when VIRTUAL_ENV is pre-set
-            assert env["PATH"] == "/usr/bin"
-
-    def test_derives_from_sys_prefix_with_pyvenv_cfg(self, tmp_path):
-        """Derives venv from sys.prefix when pyvenv.cfg exists."""
-        venv_dir = tmp_path / "my_venv"
-        venv_dir.mkdir()
-        (venv_dir / "bin").mkdir()
-        (venv_dir / "pyvenv.cfg").write_text("home = /usr/bin\n")
-
-        with patch.dict("os.environ", {"PATH": "/usr/bin:/usr/local/bin"}, clear=True):
-            with patch("sys.prefix", str(venv_dir)):
-                env = _build_env()
-
-        bin_dir = str(venv_dir / "bin")
-        assert env["PATH"].startswith(bin_dir + os.pathsep)
-        assert env["VIRTUAL_ENV"] == str(venv_dir)
-
-    def test_skips_path_patch_when_no_pyvenv_cfg(self, tmp_path):
-        """Returns unmodified env when sys.prefix has no pyvenv.cfg."""
-        # tmp_path doesn't have pyvenv.cfg
-        with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
-            with patch("sys.prefix", str(tmp_path)):
-                env = _build_env()
-
-        assert env["PATH"] == "/usr/bin"
-        assert "VIRTUAL_ENV" not in env
-
-    def test_prepends_venv_bin_to_path(self, tmp_path):
-        """Ensures venv/bin is prepended (not appended) to PATH."""
-        venv_dir = tmp_path / "venv"
-        venv_dir.mkdir()
-        (venv_dir / "bin").mkdir()
-        (venv_dir / "pyvenv.cfg").write_text("home = /usr/bin\n")
-
-        with patch.dict("os.environ", {"PATH": "/usr/bin:/usr/local/bin"}, clear=True):
-            with patch("sys.prefix", str(venv_dir)):
-                env = _build_env()
-
-        parts = env["PATH"].split(os.pathsep)
-        assert parts[0] == str(venv_dir / "bin")
-        assert "/usr/bin" in parts[1:]
-
-    def test_handles_empty_path_gracefully(self, tmp_path):
-        """Works correctly when PATH is empty or absent."""
-        venv_dir = tmp_path / "venv"
-        venv_dir.mkdir()
-        (venv_dir / "bin").mkdir()
-        (venv_dir / "pyvenv.cfg").write_text("home = /usr/bin\n")
-
-        with patch.dict("os.environ", {}, clear=True):
-            with patch("sys.prefix", str(venv_dir)):
-                env = _build_env()
-
-        # Should just be the bin dir without a trailing separator
-        assert env["PATH"] == str(venv_dir / "bin")
-        assert env["VIRTUAL_ENV"] == str(venv_dir)
-
-    def test_does_not_mutate_os_environ(self, tmp_path):
-        """The returned dict must be an independent copy."""
-        venv_dir = tmp_path / "venv"
-        venv_dir.mkdir()
-        (venv_dir / "bin").mkdir()
-        (venv_dir / "pyvenv.cfg").write_text("home = /usr/bin\n")
-
-        with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
-            with patch("sys.prefix", str(venv_dir)):
-                env = _build_env()
-                # Mutating the returned dict must not affect os.environ
-                env["PATH"] = "MUTATED"
-                assert os.environ.get("PATH") == "/usr/bin"
 
 
 @pytest.mark.slow

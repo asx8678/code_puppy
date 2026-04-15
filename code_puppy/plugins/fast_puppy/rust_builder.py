@@ -28,7 +28,6 @@ from code_puppy.messaging import emit_info
 from code_puppy.plugins.fast_puppy.builder import (
     CRATES,
     _find_crate_dir,
-    _find_repo_root,
     _is_crate_installed,
 )
 
