@@ -1001,33 +1001,4 @@ class ModelFactory:
         raise ValueError(f"Unsupported model type: {model_type}")
 
 
-# ── Routing Integration (Foundation — not yet wired into production) ────
-def route_model(model_name: str, config: dict) -> tuple:
-    """Route a model request through the composite strategy chain.
 
-    .. note:: **Foundation only** — this function is not yet called by any
-       production code path.  ``ModelFactory.get_model()`` remains the
-       active entry point.  Wire this in when the routing system is
-       ready for production use.
-
-    Consults the availability circuit breaker and plugin strategies
-    before falling back to the default builder registry.
-
-    Args:
-        model_name: Requested model name.
-        config: Full models configuration dict.
-
-    Returns:
-        Tuple of (model_instance, resolved_model_name, metadata).
-
-    Raises:
-        ValueError: If no strategy could produce a model.
-    """
-    from code_puppy.routing.router import create_default_router
-    from code_puppy.routing.strategy import RoutingContext
-
-    router = create_default_router()
-    ctx = RoutingContext(model_name=model_name, config=config)
-
-    decision = router.route(ctx)
-    return decision.model, decision.model_name, decision.metadata

@@ -9,25 +9,12 @@ so we need stable, distinct runtime identities.
 from typing import Any
 
 from pydantic_ai.providers.anthropic import AnthropicProvider
-from pydantic_ai.providers.openai import OpenAIProvider
 
 
 class AliasedAnthropicProvider(AnthropicProvider):
     """Anthropic provider with an overridable runtime identity."""
 
     def __init__(self, *args: Any, provider_name: str = "anthropic", **kwargs: Any):
-        self._provider_name = provider_name
-        super().__init__(*args, **kwargs)
-
-    @property
-    def name(self) -> str:
-        return self._provider_name
-
-
-class AliasedOpenAIProvider(OpenAIProvider):
-    """OpenAI provider with an overridable runtime identity."""
-
-    def __init__(self, *args: Any, provider_name: str = "openai", **kwargs: Any):
         self._provider_name = provider_name
         super().__init__(*args, **kwargs)
 
@@ -94,10 +81,3 @@ def make_anthropic_provider(provider_name: str, **kwargs: Any) -> AnthropicProvi
     if provider_name == "anthropic":
         return AnthropicProvider(**kwargs)
     return AliasedAnthropicProvider(provider_name=provider_name, **kwargs)
-
-
-def make_openai_provider(provider_name: str, **kwargs: Any) -> OpenAIProvider:
-    """Create an OpenAI-family provider with a stable runtime name."""
-    if provider_name == "openai":
-        return OpenAIProvider(**kwargs)
-    return AliasedOpenAIProvider(provider_name=provider_name, **kwargs)
