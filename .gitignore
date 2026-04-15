@@ -74,3 +74,4 @@ liblib.a
 # bd worktree
 code_puppy-bqwm/
 MagicMock/
+htmlcov/
