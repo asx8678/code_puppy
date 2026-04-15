@@ -23,7 +23,7 @@ defmodule CodePuppyControl.Indexer.Constants do
                   ".vscode",
                   ".DS_Store",
                   "_build",
-                  "deps",
+                  "deps"
                 ])
 
   @important_files MapSet.new([

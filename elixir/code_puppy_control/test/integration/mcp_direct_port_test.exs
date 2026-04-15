@@ -60,14 +60,18 @@ defmodule CodePuppyControl.Integration.MCPDirectPortTest do
 
           # === 1. MCP Initialize Handshake ===
           init_msg =
-            encode_mcp_request("initialize", %{
-              "protocolVersion" => "2024-11-05",
-              "capabilities" => %{},
-              "clientInfo" => %{
-                "name" => "integration_test",
-                "version" => "0.1.0"
-              }
-            }, 1)
+            encode_mcp_request(
+              "initialize",
+              %{
+                "protocolVersion" => "2024-11-05",
+                "capabilities" => %{},
+                "clientInfo" => %{
+                  "name" => "integration_test",
+                  "version" => "0.1.0"
+                }
+              },
+              1
+            )
 
           Port.command(port, init_msg)
 
@@ -100,10 +104,14 @@ defmodule CodePuppyControl.Integration.MCPDirectPortTest do
 
           # === 4. tools/call (list_directory) ===
           call_msg =
-            encode_mcp_request("tools/call", %{
-              "name" => "list_directory",
-              "arguments" => %{"path" => tmp_dir}
-            }, 3)
+            encode_mcp_request(
+              "tools/call",
+              %{
+                "name" => "list_directory",
+                "arguments" => %{"path" => tmp_dir}
+              },
+              3
+            )
 
           Port.command(port, call_msg)
 

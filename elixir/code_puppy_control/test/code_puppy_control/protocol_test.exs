@@ -198,7 +198,12 @@ defmodule CodePuppyControl.ProtocolTest do
   describe "frame_batch/1" do
     test "frames multiple messages as JSON array" do
       messages = [
-        %{"jsonrpc" => "2.0", "id" => 1, "method" => "file_read", "params" => %{"path" => "a.py"}},
+        %{
+          "jsonrpc" => "2.0",
+          "id" => 1,
+          "method" => "file_read",
+          "params" => %{"path" => "a.py"}
+        },
         %{"jsonrpc" => "2.0", "id" => 2, "method" => "file_read", "params" => %{"path" => "b.py"}}
       ]
 
@@ -261,10 +266,11 @@ defmodule CodePuppyControl.ProtocolTest do
     end
 
     test "parses batch followed by single message" do
-      batch = Protocol.frame_batch([
-        %{"jsonrpc" => "2.0", "id" => 1, "result" => %{}},
-        %{"jsonrpc" => "2.0", "id" => 2, "result" => %{}}
-      ])
+      batch =
+        Protocol.frame_batch([
+          %{"jsonrpc" => "2.0", "id" => 1, "result" => %{}},
+          %{"jsonrpc" => "2.0", "id" => 2, "result" => %{}}
+        ])
 
       single = Protocol.frame(%{"jsonrpc" => "2.0", "id" => 3, "result" => %{}})
 
@@ -274,6 +280,76 @@ defmodule CodePuppyControl.ProtocolTest do
       assert is_list(decoded_batch)
       assert length(decoded_batch) == 2
       assert decoded_single["id"] == 3
+    end
+  end
+
+  describe "frame_newline/1" do
+    test "encodes message as JSON with trailing newline" do
+      msg = %{"jsonrpc" => "2.0", "id" => 1, "method" => "test"}
+      framed = Protocol.frame_newline(msg)
+
+      assert framed =~ "\"jsonrpc\":\"2.0\""
+      assert String.ends_with?(framed, "\n")
+    end
+
+    test "round-trips with parse_newline" do
+      msg = %{
+        "jsonrpc" => "2.0",
+        "id" => 42,
+        "method" => "initialize",
+        "params" => %{"x" => 1}
+      }
+
+      framed = Protocol.frame_newline(msg)
+
+      {messages, ""} = Protocol.parse_newline(framed)
+      assert length(messages) == 1
+      assert hd(messages) == msg
+    end
+  end
+
+  describe "parse_newline/1" do
+    test "parses single message" do
+      line = Jason.encode!(%{"jsonrpc" => "2.0", "id" => 1}) <> "\n"
+      {messages, ""} = Protocol.parse_newline(line)
+      assert length(messages) == 1
+      assert hd(messages)["id"] == 1
+    end
+
+    test "parses multiple messages" do
+      data =
+        (Jason.encode!(%{"jsonrpc" => "2.0", "id" => 1}) <> "\n") <>
+          Jason.encode!(%{"jsonrpc" => "2.0", "id" => 2}) <> "\n"
+
+      {messages, ""} = Protocol.parse_newline(data)
+      assert length(messages) == 2
+      assert Enum.map(messages, & &1["id"]) == [1, 2]
+    end
+
+    test "handles incomplete trailing data" do
+      data = Jason.encode!(%{"jsonrpc" => "2.0", "id" => 1}) <> "\n{\"partial"
+      {messages, rest} = Protocol.parse_newline(data)
+
+      assert length(messages) == 1
+      assert rest == "{\"partial"
+    end
+
+    test "skips malformed JSON lines" do
+      data = "not json\n" <> Jason.encode!(%{"jsonrpc" => "2.0", "id" => 1}) <> "\n"
+      {messages, ""} = Protocol.parse_newline(data)
+
+      assert length(messages) == 1
+      assert hd(messages)["id"] == 1
+    end
+
+    test "handles empty buffer" do
+      {messages, ""} = Protocol.parse_newline("")
+      assert messages == []
+    end
+
+    test "handles buffer with only newline" do
+      {messages, ""} = Protocol.parse_newline("\n")
+      assert messages == []
     end
   end
 end

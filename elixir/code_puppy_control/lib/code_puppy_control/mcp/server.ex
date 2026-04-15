@@ -204,7 +204,6 @@ defmodule CodePuppyControl.MCP.Server do
       request_id = generate_request_id()
       start_time = System.monotonic_time(:millisecond)
 
-
       message =
         Protocol.encode_request(
           "tools/call",
