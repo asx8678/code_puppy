@@ -3,9 +3,12 @@ defmodule CodePuppyControl.Parser do
   High-level parsing interface using turbo_parse NIF.
 
   Falls back to regex-based extraction when NIF unavailable.
+
+  Also provides hashline formatting for file display with line anchors.
   """
 
   alias CodePuppyControl.TurboParseNif
+  alias CodePuppyControl.HashlineNif
   alias CodePuppyControl.Indexer.SymbolExtractor
 
   @doc """
@@ -180,6 +183,55 @@ defmodule CodePuppyControl.Parser do
       TurboParseNif.supported_languages()
     else
       ["python", "elixir"]
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Hashline integration - file display with line anchors
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Format text with hashline prefixes for display with line anchors.
+
+  Each line gets a `LINE_NUM#HASH:` prefix for precise referencing.
+  `start_line` is 1-based by convention.
+  """
+  @spec format_with_hashlines(String.t(), non_neg_integer()) :: String.t()
+  def format_with_hashlines(text, start_line \\ 1) do
+    HashlineNif.format_hashlines(text, start_line)
+  end
+
+  @doc """
+  Strip hashline prefixes from text, returning plain content.
+  """
+  @spec strip_hashlines(String.t()) :: String.t()
+  def strip_hashlines(text) do
+    HashlineNif.strip_hashline_prefixes(text)
+  end
+
+  @doc """
+  Validate that a hashline anchor still matches the current line content.
+  """
+  @spec validate_anchor(non_neg_integer(), String.t(), String.t()) :: boolean()
+  def validate_anchor(idx, line, expected_hash) do
+    HashlineNif.validate_hashline_anchor(idx, line, expected_hash)
+  end
+
+  @doc """
+  Read a file and format with hashline prefixes for display.
+
+  Returns `{:ok, formatted_text}` or `{:error, reason}`.
+  `start_line` is 1-based by convention.
+  """
+  @spec read_file_with_hashlines(String.t(), non_neg_integer()) ::
+          {:ok, String.t()} | {:error, term()}
+  def read_file_with_hashlines(path, start_line \\ 1) do
+    case File.read(path) do
+      {:ok, content} ->
+        {:ok, format_with_hashlines(content, start_line)}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
