@@ -2532,14 +2532,15 @@ def get_acceleration_config() -> dict:
 
     Returns the current acceleration configuration with any environment
     variable overrides applied. Environment variables follow the pattern:
-    PUP_ACCEL_<BACKEND_NAME> = rust|python
+    PUP_ACCEL_<BACKEND_NAME> = elixir|rust|python
 
     Example:
-        PUP_ACCEL_PUPPY_CORE=python  # Force Python fallback for puppy_core
-        PUP_ACCEL_TURBO_OPS=rust     # Use Rust for file ops
+        PUP_ACCEL_PUPPY_CORE=python   # Force Python fallback for puppy_core
+        PUP_ACCEL_FILE_OPS=elixir     # Use Elixir for file ops (default)
+        PUP_ACCEL_FILE_OPS=python     # Force Python fallback for file ops
 
     Returns:
-        Dict mapping backend names to their configured language (rust|python)
+        Dict mapping backend names to their configured language (elixir|rust|python)
     """
     config = ACCELERATION_BACKENDS.copy()
 
@@ -2547,7 +2548,7 @@ def get_acceleration_config() -> dict:
     for backend in config:
         env_var = f"{_ACCEL_ENV_PREFIX}{backend.upper()}"
         override = os.environ.get(env_var)
-        if override and override.lower() in ("rust", "python"):
+        if override and override.lower() in ("rust", "python", "elixir"):
             config[backend] = override.lower()
 
     return config
