@@ -221,8 +221,10 @@ class TestPluginRegistration:
 
     def test_callback_is_registered(self):
         """Verify the pre_tool_call callback is registered."""
-        # Import re-registers the callback
-        from code_puppy.plugins.tool_allowlist import register_callbacks  # noqa: F401
+        # Explicitly call register to ensure coverage tracking captures it
+        from code_puppy.plugins.tool_allowlist.register_callbacks import register
+
+        register()
 
         callbacks = callbacks_module.get_callbacks("pre_tool_call")
         callback_funcs = [c for c in callbacks]

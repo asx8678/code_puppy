@@ -652,10 +652,10 @@ class TestModelStorage:
                 "name": "gpt-4",
                 "context_length": 8192,
             },
-            "chatgpt-gpt-3.5-turbo": {
+            "chatgpt-gpt-4-32k": {
                 "type": "openai",
-                "name": "gpt-3.5-turbo",
-                "context_length": 4096,
+                "name": "gpt-4-32k",
+                "context_length": 32768,
             },
         }
 
@@ -840,7 +840,6 @@ class TestFetchChatGPTModels:
         mock_response.json.return_value = {
             "models": [
                 {"slug": "gpt-4"},
-                {"slug": "gpt-3.5-turbo"},
                 {"slug": "gpt-4-32k"},
                 {"slug": "o1-preview"},
                 {"slug": "o1-mini"},
@@ -854,7 +853,6 @@ class TestFetchChatGPTModels:
         assert "gpt-5.4" in result
         assert "gpt-5.3-instant" in result
         assert "gpt-4" in result
-        assert "gpt-3.5-turbo" in result
         assert "gpt-4-32k" in result
         assert "o1-preview" in result
         assert "o1-mini" in result
@@ -876,10 +874,10 @@ class TestFetchChatGPTModels:
         mock_response.json.return_value = {
             "models": [
                 {"slug": "gpt-4"},
-                {"slug": "gpt-3.5-turbo"},
+                {"slug": "gpt-4-32k"},
                 {"slug": "gpt-4"},  # Duplicate
                 {"slug": "gpt-4"},  # Another duplicate
-                {"slug": "gpt-3.5-turbo"},  # Duplicate
+                {"slug": "gpt-4-32k"},  # Duplicate
                 {"slug": "o1-preview"},
             ]
         }
@@ -890,7 +888,7 @@ class TestFetchChatGPTModels:
         # Should preserve order (but implementation may not dedupe)
         # The actual implementation doesn't dedupe, so we just check it returns models
         assert "gpt-4" in result
-        assert "gpt-3.5-turbo" in result
+        assert "gpt-4-32k" in result
         assert "o1-preview" in result
 
     @patch("requests.get")
@@ -901,7 +899,7 @@ class TestFetchChatGPTModels:
         mock_response.json.return_value = {
             "models": [
                 {"slug": "gpt-4"},
-                {"slug": "gpt-3.5-turbo"},
+                {"slug": "gpt-4-32k"},
                 {"slug": "o1-preview"},
                 {"slug": "o1-mini"},
             ]
@@ -915,7 +913,7 @@ class TestFetchChatGPTModels:
             "gpt-5.4",
             "gpt-5.3-instant",
             "gpt-4",
-            "gpt-3.5-turbo",
+            "gpt-4-32k",
             "o1-preview",
             "o1-mini",
         ]:
@@ -1036,7 +1034,7 @@ class TestAddModelsToConfig:
         }
         mock_save.return_value = True
 
-        models = ["gpt-4", "gpt-3.5-turbo"]
+        models = ["gpt-4", "gpt-4-32k"]
 
         result = add_models_to_extra_config(models)
 
@@ -1051,7 +1049,7 @@ class TestAddModelsToConfig:
 
         # Should contain new models with correct structure
         assert "chatgpt-gpt-4" in saved_config
-        assert "chatgpt-gpt-3.5-turbo" in saved_config
+        assert "chatgpt-gpt-4-32k" in saved_config
 
         gpt4_config = saved_config["chatgpt-gpt-4"]
         assert gpt4_config["type"] == "chatgpt_oauth"
@@ -1134,8 +1132,8 @@ class TestRemoveChatGPTModels:
                 "name": "gpt-4",
                 "oauth_source": "chatgpt-oauth-plugin",
             },
-            "chatgpt-gpt-3.5-turbo": {
-                "name": "gpt-3.5-turbo",
+            "chatgpt-gpt-4-32k": {
+                "name": "gpt-4-32k",
                 "oauth_source": "chatgpt-oauth-plugin",
             },
             "custom-model": {
@@ -1155,7 +1153,7 @@ class TestRemoveChatGPTModels:
 
         # Should only contain non-OAuth models
         assert "chatgpt-gpt-4" not in saved_config
-        assert "chatgpt-gpt-3.5-turbo" not in saved_config
+        assert "chatgpt-gpt-4-32k" not in saved_config
         assert "custom-model" in saved_config
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.save_chatgpt_models")

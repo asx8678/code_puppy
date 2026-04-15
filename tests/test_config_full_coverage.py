@@ -3,6 +3,7 @@
 Targets all uncovered lines from existing test suites.
 """
 
+import builtins
 import configparser
 import json
 import os
@@ -12,6 +13,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from code_puppy import config as cp_config
+
+
+@pytest.fixture
+def mock_dbos_installed():
+    """Mock the dbos module as installed for testing."""
+    mock_dbos = type("dbos", (), {})()
+    _real_import = builtins.__import__
+    with patch("builtins.__import__", side_effect=lambda name, *args, **kwargs: mock_dbos if name == "dbos" else _real_import(name, *args, **kwargs)):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +43,7 @@ class TestGetXdgDir:
 # Boolean config getters
 # ---------------------------------------------------------------------------
 class TestBooleanGetters:
-    def test_get_use_dbos_default_true(self):
+    def test_get_use_dbos_default_true(self, mock_dbos_installed):
         """enable_dbos defaults to True when not set."""
         assert cp_config.get_use_dbos() is True
 
@@ -212,11 +222,11 @@ class TestNumericGetters:
 
     def test_get_compaction_strategy_invalid(self):
         cp_config.set_config_value("compaction_strategy", "invalid")
-        assert cp_config.get_compaction_strategy() == "truncation"
+        assert cp_config.get_compaction_strategy() == "summarization"
 
     def test_get_message_limit_default(self):
         cp_config.reset_value("message_limit")
-        assert cp_config.get_message_limit() == 1000
+        assert cp_config.get_message_limit() == 100
 
     def test_get_message_limit_custom(self):
         cp_config.set_config_value("message_limit", "500")
@@ -224,7 +234,7 @@ class TestNumericGetters:
 
     def test_get_message_limit_invalid(self):
         cp_config.set_config_value("message_limit", "bad")
-        assert cp_config.get_message_limit() == 1000
+        assert cp_config.get_message_limit() == 100
 
     def test_get_message_limit_custom_default(self):
         cp_config.reset_value("message_limit")
@@ -1100,7 +1110,7 @@ class TestAllowRecursion:
 # set_enable_dbos
 # ---------------------------------------------------------------------------
 class TestSetEnableDbos:
-    def test_set(self):
+    def test_set(self, mock_dbos_installed):
         cp_config.set_enable_dbos(True)
         assert cp_config.get_use_dbos() is True
         cp_config.set_enable_dbos(False)

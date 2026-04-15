@@ -109,6 +109,8 @@ markers = [
 ]
 
 [tool.coverage.run]
+# Enable parallel mode to prevent race conditions when running with pytest-xdist
+parallel = true
 # omit = ["code_puppy/main.py"]  # Temporarily disabled for complete coverage tracking
 
 [tool.coverage.report]

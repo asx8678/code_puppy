@@ -16,7 +16,9 @@ class TestMessagingExtended:
     def setup_method(self):
         """Set up a fresh message queue for each test."""
         self.queue = MessageQueue()
-        self.queue.start()
+        # Note: We don't start the queue here because the background thread
+        # would consume messages, making them unavailable to get_nowait().
+        # Tests that need the background thread should call start() explicitly.
 
     def teardown_method(self):
         """Clean up after each test."""
@@ -208,6 +210,9 @@ class TestMessagingExtended:
         def test_listener(message):
             received_messages.append(message)
 
+        # Start queue for listener test (needs background thread)
+        self.queue.start()
+
         # Add listener and mark renderer active
         self.queue.add_listener(test_listener)
         self.queue.mark_renderer_active()
@@ -304,6 +309,8 @@ class TestMessagingExtended:
 
     def test_concurrent_access(self):
         """Test thread-safe concurrent access to queue."""
+        # Start queue for concurrent test (needs background thread)
+        self.queue.start()
         self.queue.mark_renderer_active()
 
         messages_sent = []

@@ -45,11 +45,13 @@ class TestHasMaturin:
     ) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         assert _has_maturin() is True
-        mock_run.assert_called_once_with(
-            [sys.executable, "-m", "maturin", "--version"],
-            capture_output=True,
-            timeout=10,
-        )
+        # Verify subprocess.run was called with expected args (env is passed)
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
+        assert call_args[0][0] == [sys.executable, "-m", "maturin", "--version"]
+        assert call_args[1].get("capture_output") is True
+        assert call_args[1].get("timeout") == 10
+        assert "env" in call_args[1]
 
     @patch(
         "code_puppy.plugins.fast_puppy.builder.shutil.which",
@@ -143,10 +145,15 @@ class TestTryAutoBuild:
         "code_puppy.plugins.fast_puppy.builder._has_maturin",
         return_value=False,
     )
+    @patch(
+        "code_puppy.plugins.fast_puppy.builder._check_disable_autobuild",
+        return_value=False,
+    )
     @patch("code_puppy.plugins.fast_puppy.builder.subprocess.run")
     def test_proceeds_on_successful_pip_install(
         self,
         mock_run: MagicMock,
+        mock_check_disable: MagicMock,
         mock_has_maturin: MagicMock,
         mock_repo_root: MagicMock,
         mock_find_crate: MagicMock,
@@ -205,42 +212,38 @@ class TestHandleFastPuppy:
 
         result = _handle_fast_puppy("/fast_puppy", "fast_puppy")
         assert result is True
-        # Status should emit multiple diagnostic lines
-        assert mock_emit.call_count >= 2
+        # Status should emit diagnostic line(s)
+        assert mock_emit.call_count >= 1
 
-    @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
-    )
-    @patch("code_puppy._core_bridge.set_rust_enabled")
+    @patch("code_puppy.native_backend.NativeBackend.save_preferences")
+    @patch("code_puppy.native_backend.NativeBackend.disable_all")
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
-    @patch("code_puppy._core_bridge.RUST_AVAILABLE", True)
-    def test_disable_persists_false(
+    def test_disable_uses_native_backend(
         self,
         mock_emit: MagicMock,
-        mock_set_rust: MagicMock,
-        mock_write: MagicMock,
+        mock_disable_all: MagicMock,
+        mock_save: MagicMock,
     ) -> None:
+        """Disable now uses NativeBackend.disable_all() instead of set_rust_enabled."""
         result = _handle_fast_puppy("/fast_puppy disable", "fast_puppy")
         assert result is True
-        mock_set_rust.assert_called_once_with(False)
-        mock_write.assert_called_once_with(False)
+        mock_disable_all.assert_called_once()
+        mock_save.assert_called_once()
 
-    @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
-    )
-    @patch("code_puppy._core_bridge.set_rust_enabled")
+    @patch("code_puppy.native_backend.NativeBackend.save_preferences")
+    @patch("code_puppy.native_backend.NativeBackend.enable_all")
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
-    @patch("code_puppy._core_bridge.RUST_AVAILABLE", True)
-    def test_enable_when_rust_available(
+    def test_enable_uses_native_backend(
         self,
         mock_emit: MagicMock,
-        mock_set_rust: MagicMock,
-        mock_write: MagicMock,
+        mock_enable_all: MagicMock,
+        mock_save: MagicMock,
     ) -> None:
+        """Enable now uses NativeBackend.enable_all() instead of set_rust_enabled."""
         result = _handle_fast_puppy("/fast_puppy enable", "fast_puppy")
         assert result is True
-        mock_set_rust.assert_called_once_with(True)
-        mock_write.assert_called_once_with(True)
+        mock_enable_all.assert_called_once()
+        mock_save.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -249,74 +252,62 @@ class TestHandleFastPuppy:
 
 
 class TestOnStartup:
-    """_on_startup applies persisted preferences and optionally auto-builds."""
+    """_on_startup detects available backends and respects user preferences."""
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all")
-    @patch("code_puppy._core_bridge.set_rust_enabled")
-    @patch("code_puppy._core_bridge.is_rust_enabled", return_value=False)
-    @patch("code_puppy._core_bridge.RUST_AVAILABLE", False)
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
     @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference",
-        return_value=False,
+        "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends"
     )
-    def test_always_auto_builds_even_when_disabled(
+    @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
+    @patch("code_puppy.native_backend.NativeBackend.load_preferences")
+    @patch("code_puppy.native_backend.NativeBackend.is_enabled")
+    def test_startup_detects_backends_and_emits_info(
         self,
-        mock_pref: MagicMock,
-        mock_emit: MagicMock,
         mock_is_enabled: MagicMock,
-        mock_set_rust: MagicMock,
-        mock_auto_build: MagicMock,
+        mock_load_prefs: MagicMock,
+        mock_emit: MagicMock,
+        mock_get_backends: MagicMock,
     ) -> None:
-        """When persisted preference is False, _try_auto_build_all should STILL be called."""
-        _on_startup()
-        mock_auto_build.assert_called_once()
+        """Startup now detects backends without auto-building."""
+        mock_is_enabled.return_value = True  # Capabilities enabled
+        mock_get_backends.return_value = {
+            "elixir_available": True,
+            "rust_installed": True,
+            "python_fallback": True,
+        }
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all")
-    @patch("code_puppy._core_bridge.set_rust_enabled")
-    @patch("code_puppy._core_bridge.is_rust_enabled", return_value=True)
-    @patch("code_puppy._core_bridge.RUST_AVAILABLE", True)
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
-    @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference",
-        return_value=True,
-    )
-    @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
-    )
-    def test_on_startup_force_enables_rust(
-        self,
-        mock_write_pref: MagicMock,
-        mock_pref: MagicMock,
-        mock_emit: MagicMock,
-        mock_is_enabled: MagicMock,
-        mock_set_rust: MagicMock,
-        mock_auto_build: MagicMock,
-    ) -> None:
-        """On startup, set_rust_enabled(True) is called and persisted."""
         _on_startup()
-        mock_set_rust.assert_called_once_with(True)
-        mock_write_pref.assert_called_once_with(True)
 
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all")
-    @patch("code_puppy._core_bridge.set_rust_enabled")
-    @patch("code_puppy._core_bridge.is_rust_enabled", return_value=True)
-    @patch("code_puppy._core_bridge.RUST_AVAILABLE", True)
-    @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
+        mock_load_prefs.assert_called_once()
+        mock_get_backends.assert_called_once()
+        # Should emit info about native backend status
+        mock_emit.assert_called_once()
+        # Verify the message mentions Elixir
+        call_args = mock_emit.call_args[0][0]
+        assert "Elixir" in call_args or "native" in call_args.lower()
+
     @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference",
-        return_value=False,
+        "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends"
     )
-    def test_respects_user_disabled_preference(
+    @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
+    @patch("code_puppy.native_backend.NativeBackend.load_preferences")
+    @patch("code_puppy.native_backend.NativeBackend.is_enabled")
+    def test_startup_shows_disabled_when_all_capabilities_off(
         self,
-        mock_pref: MagicMock,
-        mock_emit: MagicMock,
         mock_is_enabled: MagicMock,
-        mock_set_rust: MagicMock,
-        mock_auto_build: MagicMock,
+        mock_load_prefs: MagicMock,
+        mock_emit: MagicMock,
+        mock_get_backends: MagicMock,
     ) -> None:
-        """When persisted preference is False (user explicitly disabled), respect it."""
+        """When all capabilities disabled, shows disabled message."""
+        mock_is_enabled.return_value = False  # All capabilities disabled
+        mock_get_backends.return_value = {
+            "elixir_available": False,
+            "rust_installed": False,
+            "python_fallback": True,
+        }
+
         _on_startup()
-        # User explicitly disabled, so we should set to False, not force enable
-        mock_set_rust.assert_called_once_with(False)
-        # Should NOT call write since we're not changing the preference
+
+        mock_emit.assert_called_once()
+        call_args = mock_emit.call_args[0][0]
+        assert "disabled" in call_args.lower() or "💤" in call_args

@@ -87,6 +87,7 @@ from code_puppy.tools.file_modifications import (
     register_create_file,
     register_delete_file,
     register_delete_snippet,
+    register_edit_file,
     register_replace_in_file,
 )
 from code_puppy.tools.file_operations import (
@@ -127,6 +128,8 @@ TOOL_REGISTRY = {
     "replace_in_file": register_replace_in_file,
     "delete_snippet": register_delete_snippet,
     "delete_file": register_delete_file,
+    # Legacy edit_file (deprecated, kept for backward compatibility)
+    "edit_file": register_edit_file,
     # Command Runner
     "agent_run_shell_command": register_agent_run_shell_command,
     "agent_share_your_reasoning": register_agent_share_your_reasoning,

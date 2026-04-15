@@ -54,7 +54,7 @@ class TestFastPuppyStartup:
         )
 
     def test_partial_results_correct_count(self):
-        """Partial success should show correct active/total counts."""
+        """When Elixir is available, show active backend message."""
         emit_calls = []
 
         def mock_emit(msg):
@@ -65,11 +65,10 @@ class TestFastPuppyStartup:
             side_effect=mock_emit,
         ):
             with patch(
-                "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
+                "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends",
                 return_value={
-                    "code_puppy_core": True,
-                    "turbo_ops": False,
-                    "turbo_parse": False,
+                    "elixir_available": True,
+                    "python_fallback": True,
                 },
             ):
                 with patch("code_puppy._core_bridge.set_rust_enabled"):
@@ -80,18 +79,22 @@ class TestFastPuppyStartup:
                         with patch(
                             "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
                         ):
-                            _on_startup()
+                            with patch(
+                                "code_puppy.native_backend.NativeBackend.load_preferences"
+                            ):
+                                with patch(
+                                    "code_puppy.native_backend.NativeBackend.is_enabled",
+                                    return_value=True,
+                                ):
+                                    _on_startup()
 
         all_output = " ".join(emit_calls)
-        # Should show correct count (1/3)
-        assert "1/3" in all_output
-        # Should NOT claim all are active
-        assert "All Rust accelerators active" not in all_output
-        # Should mention the missing crates
-        assert "turbo_ops" in all_output or "turbo_parse" in all_output
+        # Should show Elixir backend active
+        assert "Native backend active" in all_output
+        assert "Elixir" in all_output
 
     def test_two_of_three_active_message(self):
-        """When 2 of 3 crates are active, show correct message."""
+        """When backends are available, show active message with Elixir preferred."""
         emit_calls = []
 
         def mock_emit(msg):
@@ -102,11 +105,10 @@ class TestFastPuppyStartup:
             side_effect=mock_emit,
         ):
             with patch(
-                "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
+                "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends",
                 return_value={
-                    "code_puppy_core": True,
-                    "turbo_ops": True,
-                    "turbo_parse": False,
+                    "elixir_available": True,
+                    "python_fallback": True,
                 },
             ):
                 with patch("code_puppy._core_bridge.set_rust_enabled"):
@@ -117,18 +119,22 @@ class TestFastPuppyStartup:
                         with patch(
                             "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
                         ):
-                            _on_startup()
+                            with patch(
+                                "code_puppy.native_backend.NativeBackend.load_preferences"
+                            ):
+                                with patch(
+                                    "code_puppy.native_backend.NativeBackend.is_enabled",
+                                    return_value=True,
+                                ):
+                                    _on_startup()
 
         all_output = " ".join(emit_calls)
-        # Should show 2/3 count
-        assert "2/3" in all_output
-        # Should mention only missing crate
-        assert "turbo_parse" in all_output
-        # Should NOT claim all are active
-        assert "All Rust accelerators active" not in all_output
+        # Should show Elixir backend active message
+        assert "Native backend active" in all_output
+        assert "Elixir" in all_output
 
     def test_all_three_active_shows_success_message(self):
-        """When all 3 crates are active, show success message."""
+        """When backends are available and enabled, show active message."""
         emit_calls = []
 
         def mock_emit(msg):
@@ -139,11 +145,10 @@ class TestFastPuppyStartup:
             side_effect=mock_emit,
         ):
             with patch(
-                "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
+                "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends",
                 return_value={
-                    "code_puppy_core": True,
-                    "turbo_ops": True,
-                    "turbo_parse": True,
+                    "elixir_available": True,
+                    "python_fallback": True,
                 },
             ):
                 with patch("code_puppy._core_bridge.set_rust_enabled"):
@@ -154,11 +159,18 @@ class TestFastPuppyStartup:
                         with patch(
                             "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
                         ):
-                            _on_startup()
+                            with patch(
+                                "code_puppy.native_backend.NativeBackend.load_preferences"
+                            ):
+                                with patch(
+                                    "code_puppy.native_backend.NativeBackend.is_enabled",
+                                    return_value=True,
+                                ):
+                                    _on_startup()
 
         all_output = " ".join(emit_calls)
-        # Should show all active message
-        assert "All Rust accelerators active" in all_output
+        # Should show native backend active message
+        assert "Native backend active" in all_output
         # Should show rocket emoji
         assert "🚀" in all_output
 
@@ -326,7 +338,7 @@ class TestStartupEdgeCases:
     """Additional edge cases for startup behavior."""
 
     def test_single_crate_result_shows_correct_message(self):
-        """When only 1 crate in results (edge case), show correct count."""
+        """When Elixir is available, show active backend message."""
         emit_calls = []
 
         def mock_emit(msg):
@@ -337,10 +349,10 @@ class TestStartupEdgeCases:
             side_effect=mock_emit,
         ):
             with patch(
-                "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
+                "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends",
                 return_value={
-                    "code_puppy_core": True,
-                    # Note: only 1 crate in results (unexpected but handle gracefully)
+                    "elixir_available": True,
+                    "python_fallback": True,
                 },
             ):
                 with patch("code_puppy._core_bridge.set_rust_enabled"):
@@ -351,16 +363,22 @@ class TestStartupEdgeCases:
                         with patch(
                             "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
                         ):
-                            _on_startup()
+                            with patch(
+                                "code_puppy.native_backend.NativeBackend.load_preferences"
+                            ):
+                                with patch(
+                                    "code_puppy.native_backend.NativeBackend.is_enabled",
+                                    return_value=True,
+                                ):
+                                    _on_startup()
 
         all_output = " ".join(emit_calls)
-        # Should show 1/1 count for the results we have
-        assert "1/1" in all_output
-        # Should NOT claim all accelerators (since we expect 3)
-        assert "All Rust accelerators active" not in all_output
+        # Should show Elixir backend active message
+        assert "Native backend active" in all_output
+        assert "Elixir" in all_output
 
-    def test_all_false_results_shows_pure_python(self):
-        """When all results are False, show pure Python message."""
+    def test_all_false_results_shows_python_fallback(self):
+        """When only Python fallback available, show Python fallback message."""
         emit_calls = []
 
         def mock_emit(msg):
@@ -370,12 +388,12 @@ class TestStartupEdgeCases:
             "code_puppy.plugins.fast_puppy.register_callbacks.emit_info",
             side_effect=mock_emit,
         ):
+            # Patch where the function is imported, not where it's defined
             with patch(
-                "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
+                "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends",
                 return_value={
-                    "code_puppy_core": False,
-                    "turbo_ops": False,
-                    "turbo_parse": False,
+                    "elixir_available": False,
+                    "python_fallback": True,
                 },
             ):
                 with patch("code_puppy._core_bridge.set_rust_enabled"):
@@ -386,17 +404,18 @@ class TestStartupEdgeCases:
                         with patch(
                             "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
                         ):
-                            _on_startup()
+                            with patch(
+                                "code_puppy.native_backend.NativeBackend.load_preferences"
+                            ):
+                                with patch(
+                                    "code_puppy.native_backend.NativeBackend.is_enabled",
+                                    return_value=True,
+                                ):
+                                    _on_startup()
 
         all_output = " ".join(emit_calls)
-        # Should indicate pure Python mode
-        assert (
-            "Pure Python" in all_output
-            or "0/3" in all_output
-            or "missing" in all_output.lower()
-        )
-        # Should NOT claim all are active
-        assert "All Rust accelerators active" not in all_output
+        # Should indicate Python fallback mode
+        assert "Python fallback" in all_output
 
     def test_startup_handles_exception_gracefully(self):
         """When startup throws exception, emit fallback message."""
@@ -410,10 +429,14 @@ class TestStartupEdgeCases:
             side_effect=mock_emit,
         ):
             with patch(
-                "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
+                "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends",
                 side_effect=Exception("Unexpected error"),
             ):
-                _on_startup()
+                with patch(
+                    "code_puppy.native_backend.NativeBackend.load_preferences",
+                    side_effect=Exception("load error"),  # Exception in load_preferences triggers the catch
+                ):
+                    _on_startup()
 
         all_output = " ".join(emit_calls)
         # Should show fallback message about startup hiccup
@@ -434,7 +457,7 @@ class TestCapabilityManagement:
         with patch("code_puppy.native_backend.NativeBackend.save_preferences"):
             result = _handle_enable([])
 
-        assert "All native acceleration enabled" in result
+        assert "All native backends enabled" in result
         assert NativeBackend.is_enabled(NativeBackend.Capabilities.MESSAGE_CORE)
         assert NativeBackend.is_enabled(NativeBackend.Capabilities.FILE_OPS)
         assert NativeBackend.is_enabled(NativeBackend.Capabilities.REPO_INDEX)
@@ -451,7 +474,7 @@ class TestCapabilityManagement:
         with patch("code_puppy.native_backend.NativeBackend.save_preferences"):
             result = _handle_disable([])
 
-        assert "All native acceleration disabled" in result
+        assert "All native backends disabled" in result
         assert not NativeBackend.is_enabled(NativeBackend.Capabilities.MESSAGE_CORE)
         assert not NativeBackend.is_enabled(NativeBackend.Capabilities.FILE_OPS)
         assert not NativeBackend.is_enabled(NativeBackend.Capabilities.REPO_INDEX)

@@ -56,56 +56,40 @@ class TestSanitizeDisplayText:
 
 class TestGetPinnedModel:
     @patch(
-        "code_puppy.command_line.agent_menu.get_agent_pinned_model",
+        "code_puppy.command_line.agent_menu.get_effective_agent_pinned_model",
         return_value="gpt-4",
     )
     def test_builtin_pinned(self, mock_pin):
         assert _get_pinned_model("agent1") == "gpt-4"
 
     @patch(
-        "code_puppy.command_line.agent_menu.get_agent_pinned_model", return_value=None
+        "code_puppy.command_line.agent_menu.get_effective_agent_pinned_model",
+        return_value=None,
     )
-    @patch("code_puppy.agents.json_agent.discover_json_agents", return_value={})
-    def test_no_pinned(self, mock_json, mock_pin):
+    def test_no_pinned(self, mock_pin):
         assert _get_pinned_model("agent1") is None
 
     @patch(
-        "code_puppy.command_line.agent_menu.get_agent_pinned_model", return_value=None
+        "code_puppy.command_line.agent_menu.get_effective_agent_pinned_model",
+        return_value="claude-3",
     )
     def test_json_agent_pinned(self, mock_pin):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump({"model": "claude-3"}, f)
-            f.flush()
-            with patch(
-                "code_puppy.agents.json_agent.discover_json_agents",
-                return_value={"agent1": f.name},
-            ):
-                assert _get_pinned_model("agent1") == "claude-3"
-        os.unlink(f.name)
+        assert _get_pinned_model("agent1") == "claude-3"
 
     @patch(
-        "code_puppy.command_line.agent_menu.get_agent_pinned_model", return_value=None
+        "code_puppy.command_line.agent_menu.get_effective_agent_pinned_model",
+        return_value=None,
     )
     def test_json_agent_no_model(self, mock_pin):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump({}, f)
-            f.flush()
-            with patch(
-                "code_puppy.agents.json_agent.discover_json_agents",
-                return_value={"agent1": f.name},
-            ):
-                assert _get_pinned_model("agent1") is None
-        os.unlink(f.name)
+        assert _get_pinned_model("agent1") is None
 
     @patch(
-        "code_puppy.command_line.agent_menu.get_agent_pinned_model",
-        side_effect=Exception,
+        "code_puppy.command_line.agent_menu.get_effective_agent_pinned_model",
+        side_effect=Exception("test error"),
     )
     def test_exception_in_builtin(self, mock_pin):
-        with patch(
-            "code_puppy.agents.json_agent.discover_json_agents", side_effect=Exception
-        ):
-            assert _get_pinned_model("agent1") is None
+        with pytest.raises(Exception, match="test error"):
+            _get_pinned_model("agent1")
 
 
 # --------------- _build_model_picker_choices ---------------
@@ -147,7 +131,8 @@ class TestSelectPinnedModel:
         "code_puppy.command_line.agent_menu.load_model_names", return_value=["m1", "m2"]
     )
     @patch(
-        "code_puppy.command_line.agent_menu.get_agent_pinned_model", return_value=None
+        "code_puppy.command_line.agent_menu.get_effective_agent_pinned_model",
+        return_value=None,
     )
     async def test_success(self, mock_pin, mock_load, mock_select):
         mock_select.return_value = "  m1"
@@ -161,7 +146,8 @@ class TestSelectPinnedModel:
     )
     @patch("code_puppy.command_line.agent_menu.load_model_names", return_value=["m1"])
     @patch(
-        "code_puppy.command_line.agent_menu.get_agent_pinned_model", return_value=None
+        "code_puppy.command_line.agent_menu.get_effective_agent_pinned_model",
+        return_value=None,
     )
     async def test_cancelled(self, mock_pin, mock_load, mock_select):
         result = await _select_pinned_model("agent1")
@@ -179,7 +165,8 @@ class TestSelectPinnedModel:
     @pytest.mark.asyncio
     @patch("code_puppy.command_line.agent_menu.load_model_names", return_value=[])
     @patch(
-        "code_puppy.command_line.agent_menu.get_agent_pinned_model", return_value=None
+        "code_puppy.command_line.agent_menu.get_effective_agent_pinned_model",
+        return_value=None,
     )
     async def test_empty_models(self, mock_pin, mock_load):
         with patch(
@@ -251,66 +238,46 @@ class TestReloadAgentIfCurrent:
 class TestApplyPinnedModel:
     @patch("code_puppy.command_line.agent_menu._reload_agent_if_current")
     @patch("code_puppy.command_line.agent_menu.emit_success")
-    @patch("code_puppy.command_line.agent_menu.set_agent_pinned_model")
-    @patch("code_puppy.agents.json_agent.discover_json_agents", return_value={})
-    def test_builtin_pin(self, mock_json, mock_set, mock_emit, mock_reload):
+    @patch("code_puppy.command_line.agent_menu.apply_agent_pinned_model", return_value="gpt-4")
+    def test_builtin_pin(self, mock_apply, mock_emit, mock_reload):
         _apply_pinned_model("agent1", "gpt-4")
-        mock_set.assert_called_with("agent1", "gpt-4")
+        mock_apply.assert_called_with("agent1", "gpt-4")
         mock_emit.assert_called()
         mock_reload.assert_called_with("agent1", "gpt-4")
 
     @patch("code_puppy.command_line.agent_menu._reload_agent_if_current")
     @patch("code_puppy.command_line.agent_menu.emit_success")
-    @patch("code_puppy.command_line.agent_menu.clear_agent_pinned_model")
-    @patch("code_puppy.agents.json_agent.discover_json_agents", return_value={})
-    def test_builtin_unpin(self, mock_json, mock_clear, mock_emit, mock_reload):
+    @patch("code_puppy.command_line.agent_menu.apply_agent_pinned_model", return_value=None)
+    def test_builtin_unpin(self, mock_apply, mock_emit, mock_reload):
         _apply_pinned_model("agent1", "(unpin)")
-        mock_clear.assert_called_with("agent1")
+        mock_apply.assert_called_with("agent1", "(unpin)")
         mock_emit.assert_called()
         mock_reload.assert_called_with("agent1", None)
 
     @patch("code_puppy.command_line.agent_menu._reload_agent_if_current")
     @patch("code_puppy.command_line.agent_menu.emit_success")
-    def test_json_agent_pin(self, mock_emit, mock_reload):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump({"name": "test"}, f)
-            f.flush()
-            with patch(
-                "code_puppy.agents.json_agent.discover_json_agents",
-                return_value={"agent1": f.name},
-            ):
-                _apply_pinned_model("agent1", "claude-3")
-            with open(f.name) as rf:
-                data = json.load(rf)
-            assert data["model"] == "claude-3"
-        os.unlink(f.name)
+    @patch("code_puppy.command_line.agent_menu.apply_agent_pinned_model", return_value="claude-3")
+    def test_json_agent_pin(self, mock_apply, mock_emit, mock_reload):
+        _apply_pinned_model("agent1", "claude-3")
+        mock_apply.assert_called_with("agent1", "claude-3")
+        mock_emit.assert_called()
+        mock_reload.assert_called_with("agent1", "claude-3")
 
     @patch("code_puppy.command_line.agent_menu._reload_agent_if_current")
     @patch("code_puppy.command_line.agent_menu.emit_success")
-    def test_json_agent_unpin(self, mock_emit, mock_reload):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump({"name": "test", "model": "gpt-4"}, f)
-            f.flush()
-            with patch(
-                "code_puppy.agents.json_agent.discover_json_agents",
-                return_value={"agent1": f.name},
-            ):
-                _apply_pinned_model("agent1", "(unpin)")
-            with open(f.name) as rf:
-                data = json.load(rf)
-            assert "model" not in data
-        os.unlink(f.name)
+    @patch("code_puppy.command_line.agent_menu.apply_agent_pinned_model", return_value=None)
+    def test_json_agent_unpin(self, mock_apply, mock_emit, mock_reload):
+        _apply_pinned_model("agent1", "(unpin)")
+        mock_apply.assert_called_with("agent1", "(unpin)")
+        mock_emit.assert_called()
+        mock_reload.assert_called_with("agent1", None)
 
     @patch("code_puppy.command_line.agent_menu.emit_warning")
     @patch(
-        "code_puppy.agents.json_agent.discover_json_agents",
+        "code_puppy.command_line.agent_menu.apply_agent_pinned_model",
         side_effect=Exception("fail"),
     )
-    @patch(
-        "code_puppy.command_line.agent_menu.set_agent_pinned_model",
-        side_effect=Exception("fail"),
-    )
-    def test_exception(self, mock_set, mock_json, mock_warn):
+    def test_exception(self, mock_apply, mock_warn):
         _apply_pinned_model("agent1", "gpt-4")
         mock_warn.assert_called()
 

@@ -13,6 +13,16 @@ The tool_policy_default setting controls behavior when both lists are empty:
 - 'allow': All tools allowed (default, for backward compatibility)
 - 'deny': All tools denied when no allowlist configured (fail-safe mode)
 - 'audit': All tools allowed but logged (for monitoring)
+
+Usage:
+    The plugin auto-registers on import. To test the registration:
+    
+    >>> from code_puppy.plugins.tool_allowlist import register_callbacks
+    >>> from code_puppy import callbacks as cb
+    >>> assert any(
+    ...     getattr(c, "__name__", None) == "_on_pre_tool_call"
+    ...     for c in cb.get_callbacks("pre_tool_call")
+    ... )
 """
 
 import logging

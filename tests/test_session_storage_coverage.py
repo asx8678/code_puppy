@@ -17,10 +17,28 @@ import pytest
 
 from code_puppy import session_storage
 from code_puppy.session_storage import (
-    _LEGACY_SIGNATURE_SIZE,
-    _LEGACY_SIGNED_HEADER,
+    _JSON_MAGIC,
+    _get_hmac_key,
+    _compute_hmac,
     restore_autosave_interactively,
 )
+
+
+def _create_json_session_file(path, messages, compacted_hashes=None):
+    """Create a session file in the new JSON+HMAC format.
+
+    Args:
+        path: Path to write the session file (.pkl extension)
+        messages: List of message dicts to serialize
+        compacted_hashes: Optional list of compacted hashes (default: [])
+    """
+    payload = {
+        "messages": messages,
+        "compacted_hashes": list(compacted_hashes) if compacted_hashes else [],
+    }
+    json_data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    hmac_sig = _compute_hmac(_get_hmac_key(), json_data)
+    path.write_bytes(_JSON_MAGIC + hmac_sig + json_data)
 
 
 # Helper context manager to mock all the imports used by restore_autosave_interactively
@@ -328,14 +346,9 @@ class TestRestoreAutosaveUserSelection:
     @pytest.mark.asyncio
     async def test_numeric_selection_loads_session(self, tmp_path):
         """User selecting 1-5 should load the corresponding session."""
-        import pickle
-
-        # Create a valid session with proper pickle content
+        # Create a valid session with new JSON+HMAC format
         history = [{"role": "user", "content": "test message"}]
-        _pkl = pickle.dumps(history)
-        (tmp_path / "test_session.pkl").write_bytes(
-            _LEGACY_SIGNED_HEADER + (b"x" * _LEGACY_SIGNATURE_SIZE) + _pkl
-        )
+        _create_json_session_file(tmp_path / "test_session.pkl", history)
         (tmp_path / "test_session_meta.json").write_text(
             json.dumps({"timestamp": "2024-01-01T00:00:00", "message_count": 1}),
             encoding="utf-8",
@@ -355,13 +368,8 @@ class TestRestoreAutosaveUserSelection:
     @pytest.mark.asyncio
     async def test_direct_name_selection(self, tmp_path):
         """User typing exact session name should load that session."""
-        import pickle
-
         history = [{"role": "user", "content": "named session"}]
-        _pkl = pickle.dumps(history)
-        (tmp_path / "my_specific_session.pkl").write_bytes(
-            _LEGACY_SIGNED_HEADER + (b"x" * _LEGACY_SIGNATURE_SIZE) + _pkl
-        )
+        _create_json_session_file(tmp_path / "my_specific_session.pkl", history)
         (tmp_path / "my_specific_session_meta.json").write_text(
             json.dumps({"timestamp": "2024-01-01T00:00:00", "message_count": 1}),
             encoding="utf-8",
@@ -539,13 +547,8 @@ class TestRestoreAutosaveErrorHandling:
     @pytest.mark.asyncio
     async def test_set_autosave_id_failure_ignored(self, tmp_path):
         """Failure to set autosave ID should be silently ignored."""
-        import pickle
-
         history = [{"role": "user", "content": "test"}]
-        _pkl = pickle.dumps(history)
-        (tmp_path / "session.pkl").write_bytes(
-            _LEGACY_SIGNED_HEADER + (b"x" * _LEGACY_SIGNATURE_SIZE) + _pkl
-        )
+        _create_json_session_file(tmp_path / "session.pkl", history)
         (tmp_path / "session_meta.json").write_text(
             json.dumps({"timestamp": "2024-01-01T00:00:00", "message_count": 1}),
             encoding="utf-8",
@@ -615,16 +618,11 @@ class TestRestoreAutosaveSuccessPath:
     @pytest.mark.asyncio
     async def test_successful_restore_emits_success_message(self, tmp_path):
         """Should emit success message with token count after restore."""
-        import pickle
-
         history = [
             {"role": "user", "content": "Hello"},
             {"role": "assistant", "content": "Hi there!"},
         ]
-        _pkl = pickle.dumps(history)
-        (tmp_path / "success.pkl").write_bytes(
-            _LEGACY_SIGNED_HEADER + (b"x" * _LEGACY_SIGNATURE_SIZE) + _pkl
-        )
+        _create_json_session_file(tmp_path / "success.pkl", history)
         (tmp_path / "success_meta.json").write_text(
             json.dumps({"timestamp": "2024-01-01T00:00:00", "message_count": 2}),
             encoding="utf-8",

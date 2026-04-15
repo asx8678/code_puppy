@@ -1,3 +1,4 @@
+import json
 from unittest.mock import mock_open, patch
 
 import pytest
@@ -18,9 +19,14 @@ class TestConfigExtendedPart2:
 
     @pytest.fixture
     def mock_config_file(self):
-        """Mock config file operations"""
+        """Mock config file operations and clear caches"""
+        import code_puppy.config as config_module
+
         with patch("code_puppy.config.CONFIG_FILE", "/mock/config/puppy.cfg"):
+            # Clear all registered caches before and after each test
+            config_module._invalidate_config()
             yield
+            config_module._invalidate_config()
 
     def test_agent_pinned_model_get_set(self, mock_config_file):
         """Test getting and setting agent-specific pinned models"""
@@ -56,54 +62,64 @@ class TestConfigExtendedPart2:
 
     def test_get_compaction_strategy(self, mock_config_file):
         """Test getting compaction strategy configuration"""
+        import code_puppy.config as config_module
+
         # Test default strategy
         with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = None
             result = get_compaction_strategy()
-            assert result == "truncation"  # Default value
+            assert result == "summarization"  # Default value
             mock_get.assert_called_once_with("compaction_strategy")
 
         # Test valid strategies
         for strategy in ["summarization", "truncation"]:
+            config_module._invalidate_config()  # Clear cache between tests
             with patch("code_puppy.config.get_value") as mock_get:
                 mock_get.return_value = strategy.upper()  # Test case normalization
                 result = get_compaction_strategy()
                 assert result == strategy.lower()
 
         # Test invalid strategy falls back to default
+        config_module._invalidate_config()  # Clear cache
         with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = "invalid_strategy"
             result = get_compaction_strategy()
-            assert result == "truncation"  # Default fallback
+            assert result == "summarization"  # Default fallback
 
     def test_get_compaction_threshold(self, mock_config_file):
         """Test getting compaction threshold configuration"""
-        # Test default threshold
+        import code_puppy.config as config_module
+
+        # Test default threshold (from _make_float_getter with caching)
         with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = None
             result = get_compaction_threshold()
-            assert result == 0.85  # Default value
+            assert result == 0.85  # Default value from _make_float_getter
             mock_get.assert_called_once_with("compaction_threshold")
 
         # Test valid threshold
+        config_module._invalidate_config()  # Clear cache
         with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = "0.75"
             result = get_compaction_threshold()
             assert result == 0.75
 
         # Test threshold clamping - minimum
+        config_module._invalidate_config()  # Clear cache
         with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = "0.3"  # Below minimum
             result = get_compaction_threshold()
             assert result == 0.5  # Clamped to minimum
 
         # Test threshold clamping - maximum
+        config_module._invalidate_config()  # Clear cache
         with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = "0.98"  # Above maximum
             result = get_compaction_threshold()
             assert result == 0.95  # Clamped to maximum
 
         # Test invalid value falls back to default
+        config_module._invalidate_config()  # Clear cache
         with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = "invalid"
             result = get_compaction_threshold()
@@ -111,28 +127,37 @@ class TestConfigExtendedPart2:
 
     def test_get_use_dbos(self, mock_config_file):
         """Test getting DBOS usage flag"""
-        # Test default (True - DBOS enabled by default)
-        with patch("code_puppy.config.get_value") as mock_get:
-            mock_get.return_value = None
-            result = get_use_dbos()
-            assert result is True
-            mock_get.assert_called_once_with("enable_dbos")
+        import code_puppy.config as config_module
 
-        # Test various true values
-        true_values = ["1", "true", "yes", "on", "TRUE", "Yes"]
-        for val in true_values:
+        # Mock dbos import to simulate it being installed
+        with patch("builtins.__import__") as mock_import:
+            mock_dbos = type("dbos", (), {})()
+            mock_import.return_value = mock_dbos
+
+            # Test default (True - DBOS enabled by default)
             with patch("code_puppy.config.get_value") as mock_get:
-                mock_get.return_value = val
+                mock_get.return_value = None
                 result = get_use_dbos()
                 assert result is True
+                mock_get.assert_called_once_with("enable_dbos")
 
-        # Test various false values
-        false_values = ["0", "false", "no", "off", "", "random"]
-        for val in false_values:
-            with patch("code_puppy.config.get_value") as mock_get:
-                mock_get.return_value = val
-                result = get_use_dbos()
-                assert result is False
+            # Test various true values
+            true_values = ["1", "true", "yes", "on", "TRUE", "Yes"]
+            for val in true_values:
+                config_module._invalidate_config()  # Clear cache
+                with patch("code_puppy.config.get_value") as mock_get:
+                    mock_get.return_value = val
+                    result = get_use_dbos()
+                    assert result is True
+
+            # Test various false values
+            false_values = ["0", "false", "no", "off", "", "random"]
+            for val in false_values:
+                config_module._invalidate_config()  # Clear cache
+                with patch("code_puppy.config.get_value") as mock_get:
+                    mock_get.return_value = val
+                    result = get_use_dbos()
+                    assert result is False
 
     def test_load_mcp_server_configs(self):
         """Test loading MCP server configurations"""
@@ -142,20 +167,26 @@ class TestConfigExtendedPart2:
         }
         mock_config_data = {"mcp_servers": mock_servers}
 
+        # Clear cache before testing
+        import code_puppy.config as config_module
+        config_module._MCP_CONFIG_CACHE = None
+        config_module._MCP_CONFIG_MTIME = 0
+
         # Test successful loading
+        mock_file = mock_open(read_data=json.dumps(mock_config_data))
         with (
             patch("code_puppy.config.MCP_SERVERS_FILE", "/mock/mcp_servers.json"),
             patch("pathlib.Path.exists", return_value=True),
-            patch(
-                "builtins.open",
-                mock_open(
-                    read_data='{"mcp_servers": {"server1": "http://localhost:3001"}}'
-                ),
-            ),
+            patch("pathlib.Path.stat") as mock_stat,
+            patch("builtins.open", mock_file),
         ):
-            with patch("json.loads", return_value=mock_config_data):
-                result = load_mcp_server_configs()
-                assert result == mock_servers
+            mock_stat.return_value.st_mtime = 12345
+            result = load_mcp_server_configs()
+            assert result == mock_servers
+
+        # Clear cache before next test
+        config_module._MCP_CONFIG_CACHE = None
+        config_module._MCP_CONFIG_MTIME = 0
 
         # Test file not exists
         with (
@@ -164,6 +195,10 @@ class TestConfigExtendedPart2:
         ):
             result = load_mcp_server_configs()
             assert result == {}
+
+        # Clear cache before error test
+        config_module._MCP_CONFIG_CACHE = None
+        config_module._MCP_CONFIG_MTIME = 0
 
         # Test error handling
         with (
@@ -205,14 +240,17 @@ class TestConfigExtendedPart2:
 
     def test_compaction_config_edge_cases(self, mock_config_file):
         """Test edge cases for compaction configuration"""
+        import code_puppy.config as config_module
+
         # Test compaction strategy with whitespace (note: actual implementation doesn't strip)
         with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = "  summarization  "
             result = get_compaction_strategy()
             # The actual implementation doesn't strip whitespace, so it falls back to default
-            assert result == "truncation"  # Default fallback for non-exact match
+            assert result == "summarization"  # Default fallback for non-exact match
 
         # Test compaction strategy with exact match
+        config_module._invalidate_config()  # Clear cache
         with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = "summarization"
             result = get_compaction_strategy()
@@ -227,6 +265,7 @@ class TestConfigExtendedPart2:
         ]
 
         for input_val, expected in test_cases:
+            config_module._invalidate_config()  # Clear cache between tests
             with patch("code_puppy.config.get_value") as mock_get:
                 mock_get.return_value = input_val
                 result = get_compaction_threshold()
@@ -234,9 +273,12 @@ class TestConfigExtendedPart2:
 
     def test_config_value_types(self, mock_config_file):
         """Test that config values handle different types correctly"""
+        import code_puppy.config as config_module
+
         # Test with integer values for threshold
         with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = "1"
+            config_module._invalidate_config()  # Clear cache
             result = get_compaction_threshold()
             assert isinstance(result, float)
             assert result == 0.95  # Clamped to maximum
@@ -244,6 +286,7 @@ class TestConfigExtendedPart2:
         # Test with float values for threshold
         with patch("code_puppy.config.get_value") as mock_get:
             mock_get.return_value = "0.7"
+            config_module._invalidate_config()  # Clear cache
             result = get_compaction_threshold()
             assert isinstance(result, float)
             assert result == 0.7

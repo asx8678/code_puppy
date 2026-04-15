@@ -7,6 +7,7 @@ import pytest
 
 from code_puppy.config import (
     DEFAULT_SECTION,
+    _invalidate_config,
     get_allow_recursion,
     get_auto_save_session,
     get_compaction_threshold,
@@ -179,19 +180,25 @@ class TestConfigExtendedPart1:
         with open(config_file, "w") as f:
             config.write(f)
 
-        with patch("code_puppy.config.CONFIG_FILE", config_file):
-            result = get_use_dbos()
-            assert result is True  # Default should be True
+        # Mock dbos import to simulate it being installed
+        with patch("builtins.__import__") as mock_import:
+            mock_dbos = type("dbos", (), {})()
+            mock_import.return_value = mock_dbos
+
+            with patch("code_puppy.config.CONFIG_FILE", config_file):
+                result = get_use_dbos()
+                assert result is True  # Default should be True
 
     def test_integer_conversion_message_limit(self, mock_config_file):
         """Test integer conversion for message_limit"""
         result = get_message_limit()
         assert result == 50
 
-        # Test default when not set
+        # Test default when not set (get_message_limit default is 100)
+        _invalidate_config()  # Clear cache
         set_config_value("message_limit", "")
         result = get_message_limit()
-        assert result == 1000  # Default should be 1000
+        assert result == 100  # Default is 100 (changed from 1000)
 
     def test_integer_conversion_protected_token_count(self, mock_config_file):
         """Test integer conversion for protected_token_count"""
@@ -324,21 +331,25 @@ class TestConfigExtendedPart1:
 
     def test_type_conversion_edge_cases(self, mock_config_file):
         """Test type conversion with edge case values"""
-        # Test integer conversion with invalid values
+        # Test integer conversion with invalid values (default is 100)
+        _invalidate_config()  # Clear cache
         set_config_value("message_limit", "invalid")
         result = get_message_limit()
-        assert result == 1000  # Should fall back to default
+        assert result == 100  # Should fall back to default
 
         # Test float conversion with invalid values
+        _invalidate_config()  # Clear cache
         set_config_value("compaction_threshold", "invalid")
         result = get_compaction_threshold()
         assert result == 0.85  # Should fall back to default
 
         # Test integer conversion with out-of-range values
+        _invalidate_config()  # Clear cache
         set_config_value("diff_context_lines", "100")  # Above max of 50
         result = get_diff_context_lines()
         assert result == 50  # Should be clamped to max
 
+        _invalidate_config()  # Clear cache
         set_config_value("diff_context_lines", "-5")  # Below min of 0
         result = get_diff_context_lines()
         assert result == 0  # Should be clamped to min

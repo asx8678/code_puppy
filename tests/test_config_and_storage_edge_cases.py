@@ -9,6 +9,7 @@ Focuses on areas that don't require complex mocking:
 - Session storage edge cases
 """
 
+import builtins
 import configparser
 import os
 from pathlib import Path
@@ -38,10 +39,19 @@ def mock_config_paths(monkeypatch, tmp_path):
     return mock_config_dir, mock_config_file, mock_data_dir
 
 
+@pytest.fixture
+def mock_dbos_installed():
+    """Mock the dbos module as installed for testing."""
+    mock_dbos = type("dbos", (), {})()
+    _real_import = builtins.__import__
+    with patch("builtins.__import__", side_effect=lambda name, *args, **kwargs: mock_dbos if name == "dbos" else _real_import(name, *args, **kwargs)):
+        yield
+
+
 class TestDBOSConfiguration:
     """Test DBOS (Database Operating System) configuration."""
 
-    def test_get_use_dbos_returns_true_by_default(self, mock_config_paths):
+    def test_get_use_dbos_returns_true_by_default(self, mock_config_paths, mock_dbos_installed):
         """Test that DBOS is enabled by default."""
         mock_cfg_dir, mock_cfg_file, _ = mock_config_paths
 
@@ -56,7 +66,7 @@ class TestDBOSConfiguration:
 
     @pytest.mark.parametrize("truthy_value", ["1", "true", "True", "yes", "on"])
     def test_get_use_dbos_returns_true_for_truthy_values(
-        self, mock_config_paths, truthy_value
+        self, mock_config_paths, mock_dbos_installed, truthy_value
     ):
         """Test that various truthy values enable DBOS."""
         mock_cfg_dir, mock_cfg_file, _ = mock_config_paths
@@ -394,7 +404,7 @@ class TestCallbacksErrorHandling:
         callbacks.clear_callbacks()
 
     def test_get_callbacks_returns_copy(self):
-        """Test that get_callbacks returns a copy, not the original list."""
+        """Test that get_callbacks returns an immutable tuple snapshot."""
 
         def my_callback():
             pass
@@ -405,8 +415,12 @@ class TestCallbacksErrorHandling:
         retrieved = callbacks.get_callbacks("startup")
         original_count = callbacks.count_callbacks("startup")
 
-        # Modify the retrieved list
-        retrieved.append(lambda: None)
+        # Verify it returns a tuple (immutable snapshot)
+        assert isinstance(retrieved, tuple)
+
+        # Verify we can't modify the tuple
+        with pytest.raises(AttributeError, match="'tuple' object has no attribute 'append'"):
+            retrieved.append(lambda: None)
 
         # Original should be unchanged
         assert callbacks.count_callbacks("startup") == original_count

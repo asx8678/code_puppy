@@ -25,16 +25,17 @@ class TestCustomHelp:
         """Verify _custom_help returns the expected command tuples."""
         result = _custom_help()
 
-        # Check we have all 5 commands
-        assert len(result) == 5
+        # Check we have 8 commands (including profile commands)
+        assert len(result) == 8
 
         # Check each command format
         commands = [cmd for cmd, desc in result]
         assert "fast_puppy" in commands
         assert "fast_puppy build [name|--all]" in commands
         assert "fast_puppy status" in commands
-        assert "fast_puppy enable" in commands
-        assert "fast_puppy disable" in commands
+        assert "fast_puppy enable [cap]" in commands
+        assert "fast_puppy disable [cap]" in commands
+        assert "fast_puppy profile" in commands
 
         # Verify descriptions are non-empty
         for cmd, desc in result:
@@ -46,7 +47,7 @@ class TestHandleFastPuppyStatus:
     """Tests for /fast_puppy status command."""
 
     def test_fast_puppy_status_shows_all_crates(self):
-        """Invokes status and verifies all 2 crate names appear in output."""
+        """Invokes status and verifies crate names appear in output."""
         emit_calls = []
 
         def mock_emit(msg):
@@ -65,10 +66,12 @@ class TestHandleFastPuppyStatus:
                     "enabled": True,
                     "active": True,
                 }):
-                    with patch(
-                        "code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference",
-                        return_value=True,
-                    ):
+                    with patch("code_puppy.native_backend.NativeBackend.get_status") as mock_status:
+                        from code_puppy.native_backend import CapabilityInfo
+                        mock_status.return_value = {
+                            "message_core": CapabilityInfo(name="message_core", configured="rust", available=True, active=True, status="active"),
+                            "parse": CapabilityInfo(name="parse", configured="rust", available=False, active=False, status="unavailable"),
+                        }
                         with patch(
                             "code_puppy.plugins.fast_puppy.register_callbacks._has_rust_toolchain",
                             return_value=True,
@@ -84,10 +87,11 @@ class TestHandleFastPuppyStatus:
                                     result = _handle_fast_puppy("/fast_puppy status", "fast_puppy")
 
         assert result is True
-        # Check all crate names appear
+        # Check capability and crate names appear in output
         all_output = " ".join(emit_calls)
-        assert "code_puppy_core" in all_output
-        assert "turbo_parse" in all_output
+        # Status shows capabilities from NativeBackend and crate info
+        assert "message_core" in all_output  # Capability name
+        assert "parse" in all_output  # Capability name
 
 
 class TestHandleFastPuppyBuild:
@@ -256,49 +260,37 @@ class TestHandleFastPuppyEnableDisable:
     """Tests for /fast_puppy enable and /fast_puppy disable commands."""
 
     def test_fast_puppy_enable_sets_enabled(self):
-        """Enable command should call set_rust_enabled(True)."""
+        """Enable command should enable all capabilities via NativeBackend."""
         with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info"):
-            with patch("code_puppy._core_bridge.RUST_AVAILABLE", True):
-                with patch("code_puppy._core_bridge.set_rust_enabled") as mock_set:
-                    with patch(
-                        "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
-                    ) as mock_write:
-                        result = _handle_fast_puppy("/fast_puppy enable", "fast_puppy")
+            with patch("code_puppy.native_backend.NativeBackend.enable_all") as mock_enable:
+                with patch("code_puppy.native_backend.NativeBackend.save_preferences") as mock_save:
+                    result = _handle_fast_puppy("/fast_puppy enable", "fast_puppy")
 
         assert result is True
-        mock_set.assert_called_once_with(True)
-        mock_write.assert_called_once_with(True)
+        mock_enable.assert_called_once()
+        mock_save.assert_called_once()
 
-    def test_fast_puppy_enable_builds_if_not_available(self):
-        """Enable should try to build if Rust not already available."""
+    def test_fast_puppy_enable_uses_native_backend(self):
+        """Enable should use NativeBackend.enable_all()."""
         with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info"):
-            with patch("code_puppy._core_bridge.RUST_AVAILABLE", False):
-                # Patch where it's looked up in register_callbacks
-                with patch(
-                    "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
-                    return_value={"code_puppy_core": False},  # Build failed
-                ) as mock_build:
-                    with patch("code_puppy._core_bridge.set_rust_enabled"):
-                        with patch(
-                            "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
-                        ):
-                            result = _handle_fast_puppy("/fast_puppy enable", "fast_puppy")
+            with patch("code_puppy.native_backend.NativeBackend.enable_all") as mock_enable:
+                with patch("code_puppy.native_backend.NativeBackend.save_preferences") as mock_save:
+                    result = _handle_fast_puppy("/fast_puppy enable", "fast_puppy")
 
         assert result is True
-        mock_build.assert_called_once()
+        mock_enable.assert_called_once()
+        mock_save.assert_called_once()
 
     def test_fast_puppy_disable_sets_disabled(self):
-        """Disable command should call set_rust_enabled(False)."""
+        """Disable command should disable all capabilities via NativeBackend."""
         with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info"):
-            with patch("code_puppy._core_bridge.set_rust_enabled") as mock_set:
-                with patch(
-                    "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
-                ) as mock_write:
+            with patch("code_puppy.native_backend.NativeBackend.disable_all") as mock_disable:
+                with patch("code_puppy.native_backend.NativeBackend.save_preferences") as mock_save:
                     result = _handle_fast_puppy("/fast_puppy disable", "fast_puppy")
 
         assert result is True
-        mock_set.assert_called_once_with(False)
-        mock_write.assert_called_once_with(False)
+        mock_disable.assert_called_once()
+        mock_save.assert_called_once()
 
 
 class TestHandleFastPuppyNoArgs:
@@ -361,81 +353,73 @@ class TestOnStartup:
     """Tests for _on_startup() function."""
 
     def test_on_startup_emits_banner_when_all_active(self):
-        """When all 2 crates active, emit full success banner."""
+        """When backends are available, emit success banner."""
         emit_calls = []
 
         def mock_emit(msg):
             emit_calls.append(msg)
 
         with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info", side_effect=mock_emit):
-            # Patch where it's looked up in register_callbacks
             with patch(
-                "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
+                "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends",
                 return_value={
-                    "code_puppy_core": True,
-                    "turbo_parse": True,
+                    "elixir_available": True,
+                    "python_fallback": True,
                 },
             ):
-                with patch("code_puppy._core_bridge.RUST_AVAILABLE", True):
-                    with patch("code_puppy._core_bridge.set_rust_enabled"):
-                        with patch(
-                            "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
-                        ):
-                            _on_startup()
+                with patch("code_puppy.native_backend.NativeBackend.load_preferences"):
+                    with patch("code_puppy.native_backend.NativeBackend.is_enabled", return_value=True):
+                        _on_startup()
 
         all_output = " ".join(emit_calls)
-        assert "All Rust accelerators active" in all_output
+        assert "Native backend active" in all_output
         assert "🚀" in all_output
 
-    def test_on_startup_emits_partial_banner_when_some_active(self):
-        """When only some crates active, emit partial banner."""
+    def test_on_startup_emits_partial_banner_when_python_fallback(self):
+        """When only Python fallback is available, emit fallback banner."""
         emit_calls = []
 
         def mock_emit(msg):
             emit_calls.append(msg)
 
         with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info", side_effect=mock_emit):
-            # Patch where it's looked up in register_callbacks
             with patch(
-                "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
+                "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends",
                 return_value={
-                    "code_puppy_core": True,
-                    "turbo_parse": False,
+                    "elixir_available": False,
+                    "python_fallback": True,
                 },
             ):
-                with patch("code_puppy._core_bridge.RUST_AVAILABLE", True):
-                    with patch("code_puppy._core_bridge.set_rust_enabled"):
-                        with patch(
-                            "code_puppy.plugins.fast_puppy.register_callbacks._write_persisted_preference"
-                        ):
-                            _on_startup()
+                with patch("code_puppy.native_backend.NativeBackend.load_preferences"):
+                    with patch("code_puppy.native_backend.NativeBackend.is_enabled", return_value=True):
+                        _on_startup()
 
         all_output = " ".join(emit_calls)
-        # Should say "1/2" or mention turbo_parse is missing (now uses "turbo_parse missing" in the message)
-        assert "1/2" in all_output or "turbo_parse" in all_output or "active" in all_output.lower()
+        # Should show Python fallback message
+        assert "Python fallback" in all_output
 
-    def test_on_startup_emits_pure_python_when_no_toolchain(self):
-        """When no Rust toolchain, emit pure Python banner."""
+    def test_on_startup_emits_python_fallback_when_no_elixir(self):
+        """When no Elixir available, emit Python fallback banner."""
         emit_calls = []
 
         def mock_emit(msg):
             emit_calls.append(msg)
 
         with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info", side_effect=mock_emit):
-            # Patch where it's looked up in register_callbacks
             with patch(
-                "code_puppy.plugins.fast_puppy.register_callbacks._try_auto_build_all",
-                return_value={},
+                "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends",
+                return_value={
+                    "elixir_available": False,
+                    "python_fallback": True,
+                },
             ):
-                with patch(
-                    "code_puppy.plugins.fast_puppy.register_callbacks._has_rust_toolchain",
-                    return_value=False,
-                ):
-                    _on_startup()
+                with patch("code_puppy.native_backend.NativeBackend.load_preferences"):
+                    with patch("code_puppy.native_backend.NativeBackend.is_enabled", return_value=True):
+                        _on_startup()
 
         all_output = " ".join(emit_calls)
-        # When toolchain not found and results are empty, message changed
-        assert "Pure Python" in all_output or "toolchain" in all_output.lower() or "🐕" in all_output
+        # Should show Python fallback message
+        assert "Python fallback" in all_output or "🐕" in all_output
 
 
 class TestPersistedPreference:
@@ -473,29 +457,38 @@ class TestPersistedPreference:
 
 
 class TestOnStartupRespectsUserPreference:
-    """Regression tests for C2."""
+    """Regression tests for C2 - capability-based preferences."""
 
-    def test_on_startup_respects_persisted_false(self):
+    def test_on_startup_respects_disabled_capabilities(self):
+        """When all capabilities are disabled, show disabled message."""
         from unittest.mock import patch
         from code_puppy.plugins.fast_puppy import register_callbacks as rc
 
-        with patch.object(rc, "_try_auto_build_all", return_value={"code_puppy_core": True}):
-            with patch.object(rc, "_read_persisted_preference", return_value=False):
-                with patch.object(rc, "_write_persisted_preference") as mock_write:
-                    with patch("code_puppy._core_bridge.set_rust_enabled") as mock_set:
-                        with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info"):
-                            rc._on_startup()
-                            mock_set.assert_called_once_with(False)
-                            mock_write.assert_not_called()  # MUST NOT overwrite user's choice
+        with patch(
+            "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends",
+            return_value={"elixir_available": True, "python_fallback": True},
+        ):
+            with patch("code_puppy.native_backend.NativeBackend.load_preferences"):
+                with patch("code_puppy.native_backend.NativeBackend.is_enabled", return_value=False):
+                    with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info") as mock_emit:
+                        rc._on_startup()
+                        # Should emit disabled message
+                        all_output = " ".join([str(call) for call in mock_emit.call_args_list])
+                        assert "disabled" in all_output.lower()
 
     def test_on_startup_persists_default_on_first_run(self):
+        """On first run with enabled capabilities, show active message."""
         from unittest.mock import patch
         from code_puppy.plugins.fast_puppy import register_callbacks as rc
 
-        with patch.object(rc, "_try_auto_build_all", return_value={"code_puppy_core": True}):
-            with patch.object(rc, "_read_persisted_preference", return_value=None):
-                with patch.object(rc, "_write_persisted_preference") as mock_write:
-                    with patch("code_puppy._core_bridge.set_rust_enabled"):
-                        with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info"):
-                            rc._on_startup()
-                            mock_write.assert_called_once_with(True)
+        with patch(
+            "code_puppy.plugins.fast_puppy.register_callbacks.get_available_backends",
+            return_value={"elixir_available": True, "python_fallback": True},
+        ):
+            with patch("code_puppy.native_backend.NativeBackend.load_preferences"):
+                with patch("code_puppy.native_backend.NativeBackend.is_enabled", return_value=True):
+                    with patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info") as mock_emit:
+                        rc._on_startup()
+                        # Should emit active message
+                        all_output = " ".join([str(call) for call in mock_emit.call_args_list])
+                        assert "active" in all_output.lower()

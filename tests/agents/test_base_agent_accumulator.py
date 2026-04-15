@@ -304,6 +304,7 @@ class TestBaseAgentAccumulator:
             enable_dbos=True,
             enable_streaming=True,
             enable_agent_memory=False,
+            free_threading_enabled=False,
             # UI / Behavior - key settings for this test
             temperature=0.0,
             protected_token_count=50,  # Low to trigger truncation

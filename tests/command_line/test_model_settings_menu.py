@@ -64,7 +64,7 @@ class TestSettingDefinitions:
         temp_def = SETTING_DEFINITIONS["temperature"]
         assert temp_def["type"] == "numeric"
         assert temp_def["min"] == 0.0
-        assert temp_def["max"] == 1.0
+        assert temp_def["max"] == 2.0
         assert temp_def["step"] == 0.05
 
     def test_seed_setting_definition(self):
@@ -246,9 +246,9 @@ class TestNumericSettingValidation:
     def test_temperature_max_bound(self):
         """Test temperature value respects maximum bound."""
         temp_def = SETTING_DEFINITIONS["temperature"]
-        value = 2.0  # Above maximum
+        value = 3.0  # Above maximum
         clamped = min(temp_def["max"], value)
-        assert clamped == 1.0
+        assert clamped == 2.0
 
     def test_seed_positive_value(self):
         """Test seed setting accepts positive integers."""

@@ -105,7 +105,7 @@ class TestFilePermissions(unittest.TestCase):
             # Restore callbacks
             _callbacks["file_permission"] = original_callbacks
 
-    @patch("code_puppy.callbacks.on_file_permission")
+    @patch("code_puppy.callbacks.on_file_permission_async")
     def test_write_to_file_with_permission_denied(self, mock_permission):
         """Test write_to_file when permission is denied."""
         mock_permission.return_value = [False]
@@ -119,7 +119,7 @@ class TestFilePermissions(unittest.TestCase):
         self.assertTrue(result["user_rejection"])
         self.assertEqual(result["rejection_type"], "explicit_user_denial")
 
-    @patch("code_puppy.callbacks.on_file_permission")
+    @patch("code_puppy.callbacks.on_file_permission_async")
     def test_write_to_file_with_permission_granted(self, mock_permission):
         """Test write_to_file when permission is granted."""
         mock_permission.return_value = [True]
@@ -151,7 +151,7 @@ class TestFilePermissions(unittest.TestCase):
             content = f.read()
         self.assertEqual(content, "Yolo content")
 
-    @patch("code_puppy.callbacks.on_file_permission")
+    @patch("code_puppy.callbacks.on_file_permission_async")
     def test_delete_snippet_with_permission_denied(self, mock_permission):
         """Test delete_snippet_from_file when permission is denied."""
         mock_permission.return_value = [False]
@@ -165,7 +165,7 @@ class TestFilePermissions(unittest.TestCase):
         self.assertTrue(result["user_rejection"])
         self.assertEqual(result["rejection_type"], "explicit_user_denial")
 
-    @patch("code_puppy.callbacks.on_file_permission")
+    @patch("code_puppy.callbacks.on_file_permission_async")
     def test_replace_in_file_with_permission_denied(self, mock_permission):
         """Test replace_in_file when permission is denied."""
         mock_permission.return_value = [False]
@@ -180,7 +180,7 @@ class TestFilePermissions(unittest.TestCase):
         self.assertTrue(result["user_rejection"])
         self.assertEqual(result["rejection_type"], "explicit_user_denial")
 
-    @patch("code_puppy.callbacks.on_file_permission")
+    @patch("code_puppy.callbacks.on_file_permission_async")
     def test_delete_file_with_permission_denied(self, mock_permission):
         """Test _delete_file when permission is denied."""
         mock_permission.return_value = [False]

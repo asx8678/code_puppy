@@ -171,7 +171,7 @@ class TestOAuthFlowIntegration:
             json=lambda: {
                 "data": [
                     {"id": "gpt-4"},
-                    {"id": "gpt-3.5-turbo"},
+                    {"id": "gpt-4-32k"},
                     {"id": "whisper-1"},  # Should be filtered out
                 ]
             },

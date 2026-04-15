@@ -47,8 +47,8 @@ class TestModelManagement:
         """Test loading ChatGPT models from storage."""
         models_file = tmp_path / "models.json"
         models_data = {
-            "chatgpt-gpt-5.2": {"type": "chatgpt_oauth", "name": "gpt-5.2"},
-            "chatgpt-gpt-5.2-codex": {"type": "chatgpt_oauth", "name": "gpt-5.2-codex"},
+            "chatgpt-gpt-5.4": {"type": "chatgpt_oauth", "name": "gpt-5.4"},
+            "chatgpt-gpt-5.3-codex": {"type": "chatgpt_oauth", "name": "gpt-5.3-codex"},
         }
         models_file.write_text(json.dumps(models_data))
         mock_path.return_value = models_file
@@ -72,7 +72,7 @@ class TestModelManagement:
         """Test saving ChatGPT models to storage."""
         models_file = tmp_path / "models.json"
         mock_path.return_value = models_file
-        models_data = {"chatgpt-gpt-5.2": {"type": "chatgpt_oauth"}}
+        models_data = {"chatgpt-gpt-5.4": {"type": "chatgpt_oauth"}}
 
         result = save_chatgpt_models(models_data)
 
@@ -86,12 +86,12 @@ class TestModelManagement:
         models_file = tmp_path / "models.json"
         mock_path.return_value = models_file
 
-        result = add_models_to_extra_config(["gpt-5.2", "gpt-5.2-codex"])
+        result = add_models_to_extra_config(["gpt-5.4", "gpt-5.3-codex"])
 
         assert result is True
         models = json.loads(models_file.read_text())
-        assert "chatgpt-gpt-5.2" in models
-        assert "chatgpt-gpt-5.2-codex" in models
+        assert "chatgpt-gpt-5.4" in models
+        assert "chatgpt-gpt-5.3-codex" in models
 
     @patch("code_puppy.plugins.chatgpt_oauth.utils.get_chatgpt_models_path")
     def test_add_models_with_context_settings(self, mock_path, tmp_path):
@@ -99,10 +99,10 @@ class TestModelManagement:
         models_file = tmp_path / "models.json"
         mock_path.return_value = models_file
 
-        add_models_to_extra_config(["gpt-5.2"])
+        add_models_to_extra_config(["gpt-5.4"])
 
         models = json.loads(models_file.read_text())
-        model_config = models["chatgpt-gpt-5.2"]
+        model_config = models["chatgpt-gpt-5.4"]
 
         assert model_config["type"] == "chatgpt_oauth"
         assert (
@@ -137,7 +137,7 @@ class TestModelManagement:
         """Test removing ChatGPT models from configuration."""
         models_file = tmp_path / "models.json"
         models_data = {
-            "chatgpt-gpt-5.2": {
+            "chatgpt-gpt-5.4": {
                 "type": "chatgpt_oauth",
                 "oauth_source": "chatgpt-oauth-plugin",
             },
@@ -150,7 +150,7 @@ class TestModelManagement:
 
         assert removed == 1
         models = json.loads(models_file.read_text())
-        assert "chatgpt-gpt-5.2" not in models
+        assert "chatgpt-gpt-5.4" not in models
         assert "other-model" in models
 
     @patch("requests.get")
@@ -160,8 +160,8 @@ class TestModelManagement:
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "models": [
-                {"slug": "gpt-5.2", "id": "gpt5.2"},
-                {"slug": "gpt-5.2-codex", "id": "gpt5.2.codex"},
+                {"slug": "gpt-4", "id": "gpt4"},
+                {"slug": "gpt-4-32k", "id": "gpt4.32k"},
             ]
         }
         mock_get.return_value = mock_response
@@ -171,8 +171,8 @@ class TestModelManagement:
         # Required models are prepended if not in API response
         assert "gpt-5.4" in models
         assert "gpt-5.3-instant" in models
-        assert "gpt-5.2" in models
-        assert "gpt-5.2-codex" in models
+        assert "gpt-4" in models
+        assert "gpt-4-32k" in models
 
     @patch("requests.get")
     def test_fetch_chatgpt_models_api_error(self, mock_get):

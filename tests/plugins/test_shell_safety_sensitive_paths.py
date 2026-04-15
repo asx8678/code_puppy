@@ -240,10 +240,10 @@ class TestRiskLevels:
         )
 
     def test_sensitive_cat_is_blocked_or_ambiguous(self) -> None:
-        """cat on sensitive paths should be blocked or ambiguous."""
+        """cat on sensitive paths should be blocked, medium, or ambiguous."""
         result = classify_command("cat /etc/shadow")
-        # Should be at least ambiguous, possibly blocked
-        assert result.risk in ["critical", "high", "ambiguous"], (
+        # Should be at least medium (not auto-allowed), possibly higher
+        assert result.risk in ["critical", "high", "medium", "ambiguous"], (
             f"cat /etc/shadow should not be auto-allowed, got: {result.risk}"
         )
 

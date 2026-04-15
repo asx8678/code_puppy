@@ -97,7 +97,7 @@ class TestSummarizationAgent:
                 "code_puppy.summarization_agent.ModelFactory.get_model"
             ) as mock_get_model,
             patch(
-                "code_puppy.summarization_agent.get_global_model_name"
+                "code_puppy.summarization_agent.get_model_for_role"
             ) as mock_get_name,
             patch("code_puppy.summarization_agent.Agent") as mock_agent_class,
         ):
@@ -113,7 +113,7 @@ class TestSummarizationAgent:
                 mock_load_config.call_count >= 1
             )  # May be called multiple times due to imports
             mock_get_model.assert_called_once_with("test-model", mock_models_config)
-            mock_get_name.assert_called_once()
+            mock_get_name.assert_called_once_with("summarizer")
             # Verify Agent() was instantiated with the mock_model
             mock_agent_class.assert_called_once()
             call_kwargs = mock_agent_class.call_args.kwargs
@@ -134,7 +134,7 @@ class TestSummarizationAgent:
                 "code_puppy.summarization_agent.ModelFactory.get_model"
             ) as mock_get_model,
             patch(
-                "code_puppy.summarization_agent.get_global_model_name"
+                "code_puppy.summarization_agent.get_model_for_role"
             ) as mock_get_name,
             patch("pydantic_ai.durable_exec.dbos.DBOSAgent") as mock_dbos_agent,
         ):
@@ -169,7 +169,7 @@ class TestSummarizationAgent:
                 "code_puppy.summarization_agent.ModelFactory.get_model"
             ) as mock_get_model,
             patch(
-                "code_puppy.summarization_agent.get_global_model_name"
+                "code_puppy.summarization_agent.get_model_for_role"
             ) as mock_get_name,
             patch("code_puppy.summarization_agent.Agent") as mock_agent_class,
         ):
@@ -484,7 +484,7 @@ class TestSummarizationAgentEdgeCases:
                 "code_puppy.summarization_agent.ModelFactory.load_config"
             ) as mock_load_config,
             patch("code_puppy.summarization_agent.ModelFactory.get_model"),
-            patch("code_puppy.summarization_agent.get_global_model_name"),
+            patch("code_puppy.summarization_agent.get_model_for_role"),
         ):
             mock_load_config.side_effect = Exception("Config load failed")
 
@@ -497,7 +497,7 @@ class TestSummarizationAgentEdgeCases:
             patch("code_puppy.summarization_agent.ModelFactory.load_config"),
             patch("code_puppy.summarization_agent.ModelFactory.get_model"),
             patch(
-                "code_puppy.summarization_agent.get_global_model_name"
+                "code_puppy.summarization_agent.get_model_for_role"
             ) as mock_get_name,
         ):
             mock_get_name.side_effect = Exception("Model name error")
@@ -539,7 +539,7 @@ class TestSummarizationAgentEdgeCases:
                 "code_puppy.summarization_agent.ModelFactory.get_model"
             ) as mock_get_model,
             patch(
-                "code_puppy.summarization_agent.get_global_model_name"
+                "code_puppy.summarization_agent.get_model_for_role"
             ) as mock_get_name,
             patch("code_puppy.summarization_agent.Agent") as mock_agent_class,
         ):
@@ -589,7 +589,7 @@ class TestSummarizationAgentEdgeCases:
                 "code_puppy.summarization_agent.ModelFactory.get_model"
             ) as mock_get_model,
             patch(
-                "code_puppy.summarization_agent.get_global_model_name"
+                "code_puppy.summarization_agent.get_model_for_role"
             ) as mock_get_name,
             patch("pydantic_ai.durable_exec.dbos.DBOSAgent") as mock_dbos_agent,
         ):
@@ -670,7 +670,7 @@ class TestSummarizationAgentEdgeCases:
                 "code_puppy.summarization_agent.ModelFactory.get_model"
             ) as mock_get_model,
             patch(
-                "code_puppy.summarization_agent.get_global_model_name"
+                "code_puppy.summarization_agent.get_model_for_role"
             ) as mock_get_name,
             patch("code_puppy.summarization_agent.Agent") as mock_agent_class,
         ):
@@ -712,7 +712,7 @@ class TestSummarizationAgentEdgeCases:
                 "code_puppy.summarization_agent.ModelFactory.get_model"
             ) as mock_get_model,
             patch(
-                "code_puppy.summarization_agent.get_global_model_name"
+                "code_puppy.summarization_agent.get_model_for_role"
             ) as mock_get_name,
             patch("code_puppy.summarization_agent.Agent") as mock_agent_class,
         ):

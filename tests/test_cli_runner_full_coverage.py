@@ -54,7 +54,6 @@ def _apply_patches(stack, patches_dict):
 def _base_main_patches():
     """Return a dict of common patches needed for main() / AppRunner.run()."""
     return {
-        "code_puppy.app_runner.find_available_port": MagicMock(return_value=8090),
         "code_puppy.app_runner.ensure_config_exists": MagicMock(),
         "code_puppy.app_runner.validate_cancel_agent_key": MagicMock(),
         "code_puppy.app_runner.initialize_command_history_file": MagicMock(),
@@ -181,7 +180,7 @@ class TestMain:
         mock_exec = AsyncMock()
         await self._run_main(
             ["code-puppy", "-p", "hello world"],
-            extra_patches={"code_puppy.app_runner.execute_single_prompt": mock_exec},
+            extra_patches={"code_puppy.prompt_runner.execute_single_prompt": mock_exec},
         )
         mock_exec.assert_called_once()
 
@@ -191,7 +190,7 @@ class TestMain:
         await self._run_main(
             ["code-puppy"],
             extra_patches={
-                "code_puppy.app_runner.interactive_mode": mock_inter,
+                "code_puppy.app_runner._get_interactive_mode": MagicMock(return_value=mock_inter),
                 "pyfiglet.figlet_format": MagicMock(return_value="LOGO\n\n"),
             },
         )
@@ -203,22 +202,11 @@ class TestMain:
         await self._run_main(
             ["code-puppy", "do", "something"],
             extra_patches={
-                "code_puppy.app_runner.interactive_mode": mock_inter,
+                "code_puppy.app_runner._get_interactive_mode": MagicMock(return_value=mock_inter),
                 "pyfiglet.figlet_format": MagicMock(return_value="LOGO\n\n"),
             },
         )
         assert mock_inter.call_args[1]["initial_command"] == "do something"
-
-    @pytest.mark.anyio
-    async def test_no_available_port(self):
-        await self._run_main(
-            ["code-puppy", "-p", "test"],
-            base_overrides={
-                "code_puppy.app_runner.find_available_port": MagicMock(
-                    return_value=None
-                ),
-            },
-        )
 
     @pytest.mark.anyio
     async def test_keymap_error(self):
@@ -240,7 +228,7 @@ class TestMain:
         await self._run_main(
             ["code-puppy", "-m", "gpt-5", "-p", "hi"],
             extra_patches={
-                "code_puppy.app_runner.execute_single_prompt": AsyncMock(),
+                "code_puppy.prompt_runner.execute_single_prompt": AsyncMock(),
                 "code_puppy.config.set_model_name": mock_set,
                 "code_puppy.config._validate_model_exists": MagicMock(
                     return_value=True
@@ -284,7 +272,7 @@ class TestMain:
         await self._run_main(
             ["code-puppy", "-a", "code-puppy", "-p", "hi"],
             extra_patches={
-                "code_puppy.app_runner.execute_single_prompt": AsyncMock(),
+                "code_puppy.prompt_runner.execute_single_prompt": AsyncMock(),
                 "code_puppy.agents.agent_manager.get_available_agents": MagicMock(
                     return_value={"code-puppy": {}}
                 ),
@@ -352,7 +340,7 @@ class TestMain:
             )
             stack.enter_context(
                 patch(
-                    "code_puppy.app_runner.execute_single_prompt",
+                    "code_puppy.prompt_runner.execute_single_prompt",
                     new_callable=AsyncMock,
                 )
             )
@@ -397,7 +385,7 @@ class TestMain:
             )
             stack.enter_context(
                 patch(
-                    "code_puppy.app_runner.execute_single_prompt",
+                    "code_puppy.prompt_runner.execute_single_prompt",
                     new_callable=AsyncMock,
                 )
             )
@@ -408,6 +396,12 @@ class TestMain:
 
     @pytest.mark.anyio
     async def test_dbos_enabled(self):
+        # Skip if dbos module is not installed (optional dependency)
+        try:
+            import dbos  # noqa: F401
+        except ImportError:
+            pytest.skip("dbos module not installed")
+
         mock_dbos_cls = MagicMock()
         await self._run_main(
             ["code-puppy", "-p", "hi"],
@@ -415,14 +409,20 @@ class TestMain:
                 "code_puppy.app_runner.get_use_dbos": MagicMock(return_value=True),
             },
             extra_patches={
-                "code_puppy.app_runner.execute_single_prompt": AsyncMock(),
-                "code_puppy.app_runner.DBOS": mock_dbos_cls,
+                "code_puppy.prompt_runner.execute_single_prompt": AsyncMock(),
+                "dbos.DBOS": mock_dbos_cls,
             },
         )
         mock_dbos_cls.launch.assert_called_once()
 
     @pytest.mark.anyio
     async def test_dbos_init_error(self):
+        # Skip if dbos module is not installed (optional dependency)
+        try:
+            import dbos  # noqa: F401
+        except ImportError:
+            pytest.skip("dbos module not installed")
+
         mock_dbos_cls = MagicMock(side_effect=RuntimeError("db fail"))
         with pytest.raises(SystemExit):
             await self._run_main(
@@ -431,7 +431,8 @@ class TestMain:
                     "code_puppy.app_runner.get_use_dbos": MagicMock(return_value=True),
                 },
                 extra_patches={
-                    "code_puppy.app_runner.DBOS": mock_dbos_cls,
+                    "dbos.DBOS": mock_dbos_cls,
+                    "code_puppy.prompt_runner.execute_single_prompt": AsyncMock(),
                 },
             )
 
@@ -446,10 +447,11 @@ class TestMain:
                 raise ImportError("no pyfiglet")
             return real_import(name, *args, **kwargs)
 
+        mock_inter = AsyncMock()
         await self._run_main(
             ["code-puppy"],
             extra_patches={
-                "code_puppy.app_runner.interactive_mode": AsyncMock(),
+                "code_puppy.app_runner._get_interactive_mode": MagicMock(return_value=mock_inter),
                 "builtins.__import__": fake_import,
             },
         )
@@ -555,10 +557,10 @@ class TestInteractiveMode:
             fake_input,
             agent=agent,
             extra_patches={
-                "code_puppy.interactive_loop.get_current_agent": MagicMock(
+                "code_puppy.agents.agent_manager.get_current_agent": MagicMock(
                     return_value=agent
                 ),
-                "code_puppy.interactive_loop.get_clipboard_manager": MagicMock(
+                "code_puppy.command_line.clipboard.get_clipboard_manager": MagicMock(
                     return_value=_mock_clipboard([b"img"])
                 ),
             },
@@ -790,7 +792,7 @@ class TestInteractiveMode:
             agent=agent,
             initial_command="do stuff",
             extra_patches={
-                "code_puppy.interactive_loop.get_current_agent": MagicMock(
+                "code_puppy.agents.agent_manager.get_current_agent": MagicMock(
                     return_value=agent
                 ),
                 "code_puppy.interactive_loop.run_prompt_with_attachments": AsyncMock(
@@ -811,7 +813,7 @@ class TestInteractiveMode:
             agent=agent,
             initial_command="do stuff",
             extra_patches={
-                "code_puppy.interactive_loop.get_current_agent": MagicMock(
+                "code_puppy.agents.agent_manager.get_current_agent": MagicMock(
                     return_value=agent
                 ),
                 "code_puppy.interactive_loop.run_prompt_with_attachments": AsyncMock(
@@ -832,7 +834,7 @@ class TestInteractiveMode:
             agent=agent,
             initial_command="do stuff",
             extra_patches={
-                "code_puppy.interactive_loop.get_current_agent": MagicMock(
+                "code_puppy.agents.agent_manager.get_current_agent": MagicMock(
                     return_value=agent
                 ),
                 "code_puppy.interactive_loop.run_prompt_with_attachments": AsyncMock(
@@ -947,7 +949,7 @@ class TestInteractiveMode:
                     ),
                     "code_puppy.config.set_current_autosave_from_session_name": MagicMock(),
                     "code_puppy.command_line.autosave_menu.display_resumed_history": MagicMock(),
-                    "code_puppy.interactive_loop.get_current_agent": MagicMock(
+                    "code_puppy.agents.agent_manager.get_current_agent": MagicMock(
                         return_value=agent
                     ),
                 },
@@ -1350,10 +1352,10 @@ class TestInteractiveMode:
             fake_input,
             agent=agent,
             extra_patches={
-                "code_puppy.interactive_loop.get_current_agent": MagicMock(
+                "code_puppy.agents.agent_manager.get_current_agent": MagicMock(
                     return_value=agent
                 ),
-                "code_puppy.interactive_loop.get_clipboard_manager": MagicMock(
+                "code_puppy.command_line.clipboard.get_clipboard_manager": MagicMock(
                     return_value=_mock_clipboard()
                 ),
             },
@@ -1473,7 +1475,7 @@ class TestInteractiveModeEdgeCases:
             fake_input,
             agent=agent,
             extra_patches={
-                "code_puppy.interactive_loop.get_current_agent": MagicMock(
+                "code_puppy.agents.agent_manager.get_current_agent": MagicMock(
                     return_value=agent
                 ),
                 "code_puppy.command_line.clipboard.get_clipboard_manager": MagicMock(
@@ -1597,7 +1599,7 @@ class TestMainUvxAndEdgeCases:
             )
             stack.enter_context(
                 patch(
-                    "code_puppy.app_runner.execute_single_prompt",
+                    "code_puppy.prompt_runner.execute_single_prompt",
                     new_callable=AsyncMock,
                 )
             )
@@ -1636,7 +1638,7 @@ class TestMainUvxAndEdgeCases:
             agent=agent,
             initial_command="do stuff",
             extra_patches={
-                "code_puppy.interactive_loop.get_current_agent": MagicMock(
+                "code_puppy.agents.agent_manager.get_current_agent": MagicMock(
                     return_value=agent
                 ),
                 "code_puppy.interactive_loop.run_prompt_with_attachments": AsyncMock(
@@ -1674,7 +1676,7 @@ class TestMainUvxAndEdgeCases:
             agent=agent,
             initial_command="do stuff",
             extra_patches={
-                "code_puppy.interactive_loop.get_current_agent": MagicMock(
+                "code_puppy.agents.agent_manager.get_current_agent": MagicMock(
                     return_value=agent
                 ),
                 "code_puppy.interactive_loop.run_prompt_with_attachments": AsyncMock(
@@ -1813,7 +1815,7 @@ class TestImportErrorFallbacks:
             )
             stack.enter_context(
                 patch(
-                    "code_puppy.interactive_loop.get_current_agent", return_value=agent
+                    "code_puppy.agents.agent_manager.get_current_agent", return_value=agent
                 )
             )
             stack.enter_context(
