@@ -255,6 +255,12 @@ class ChatGPTCodexAsyncClient(RequestCacheMixin, httpx.AsyncClient):
         unsupported_params = ["max_output_tokens", "max_tokens", "verbosity"]
         for param in unsupported_params:
             if param in data:
+                logger.warning(
+                    "Removing unsupported parameter '%s' for Codex API. "
+                    "Token limits are not respected by the Responses API."
+                    " Use reasoning.effort to control output length.",
+                    param,
+                )
                 del data[param]
                 modified = True
 
