@@ -83,17 +83,15 @@ def get_indexer_status() -> dict:
     status = NativeBackend.get_status()
     repo_index_status = status.get(NativeBackend.Capabilities.REPO_INDEX)
 
-    # bd-83: Report actual backend source (elixir/python), not stale "turbo_ops"
-    backend_source = "python"
-    if repo_index_status and repo_index_status.active:
-        # Get actual source from NativeBackend if available
-        if hasattr(NativeBackend, "_get_file_ops_source"):
-            backend_source = NativeBackend._get_file_ops_source()
-        else:
-            backend_source = "elixir"  # Default when active
+    # bd-111: Report actual repo_index backend source, not file_ops source.
+    # Use _last_source[REPO_INDEX] which tracks which backend actually served.
+    backend_source = NativeBackend._last_source.get(
+        NativeBackend.Capabilities.REPO_INDEX,
+        "elixir" if NativeBackend._is_elixir_available() else "python",
+    )
 
     return {
-        "rust_available": repo_index_status.available if repo_index_status else False,
+        "elixir_available": NativeBackend._is_elixir_available(),
         "backend": backend_source,
         "native_backend_status": repo_index_status.status
         if repo_index_status
