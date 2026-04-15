@@ -100,22 +100,6 @@ class TestEffectiveMax:
         assert plugin._effective_max() == 7
 
 
-class TestPromptAddition:
-    def test_returns_string_with_max_parallel_agents(self):
-        plugin = _reload_plugin()
-        plugin._cached_config = 2
-        result = plugin._prompt_addition()
-        assert result is not None
-        assert "MAX_PARALLEL_AGENTS" in result
-        assert "2" in result
-
-    def test_reflects_session_override(self):
-        plugin = _reload_plugin()
-        plugin._session_max = 4
-        result = plugin._prompt_addition()
-        assert result is not None
-        assert "4" in result
-
 
 class TestHandleCommand:
     def setup_method(self):

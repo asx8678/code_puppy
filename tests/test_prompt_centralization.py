@@ -294,53 +294,6 @@ class TestJSONAgentLoadPrompt:
 
 
 # =============================================================================
-# Test 5: Pack parallelism injection still works
-# =============================================================================
-
-class TestPackParallelismInjection:
-    """Verify pack_parallelism content appears in agent prompts via load_prompt."""
-
-    def test_pack_parallelism_in_prompt(self):
-        """Verify MAX_PARALLEL_AGENTS appears in pack-leader prompt."""
-        agent = PackLeaderAgent()
-        
-        # Import and ensure pack_parallelism plugin is loaded
-        try:
-            import code_puppy.plugins.pack_parallelism.register_callbacks as _pp
-        except ImportError:
-            pytest.skip("pack_parallelism plugin not available")
-        
-        # Get full prompt (this triggers load_prompt callbacks)
-        full_prompt = agent.get_full_system_prompt()
-        
-        # Pack parallelism should be injected via load_prompt
-        assert "MAX_PARALLEL_AGENTS" in full_prompt
-
-    def test_pack_parallelism_limit_value_present(self):
-        """Verify the actual numeric limit appears in the prompt."""
-        agent = PackLeaderAgent()
-        
-        # Import and ensure pack_parallelism plugin is loaded
-        try:
-            import code_puppy.plugins.pack_parallelism.register_callbacks as _pp
-        except ImportError:
-            pytest.skip("pack_parallelism plugin not available")
-        
-        full_prompt = agent.get_full_system_prompt()
-        
-        # Should contain the limit number (default is 6)
-        # Look for pattern like "MAX_PARALLEL_AGENTS = 6"
-        import re
-        match = re.search(r"MAX_PARALLEL_AGENTS\s*=\s*(\d+)", full_prompt)
-        assert match is not None, "MAX_PARALLEL_AGENTS with numeric value not found in prompt"
-        
-        # The value should be a positive integer
-        limit_value = int(match.group(1))
-        assert limit_value > 0
-        assert limit_value <= 32  # Sanity check based on plugin implementation
-
-
-# =============================================================================
 # Test 6: Full prompt assembly order
 # =============================================================================
 

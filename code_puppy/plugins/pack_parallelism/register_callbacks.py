@@ -1,10 +1,9 @@
 """
 Pack Leader max-parallelism constraint plugin.
 
-Reads a configured ``max_parallelism`` value and injects it into every
-agent system prompt via the ``load_prompt`` hook, exposes a
-``/pack-parallel N`` slash command to override it per-session, and
-enforces the limit at runtime via RunLimiter.
+Reads a configured ``max_parallelism`` value and exposes a
+``/pack-parallel N`` slash command to override it per-session, while
+enforcing the limit at runtime via RunLimiter.
 
 Permanent config (TOML):
     ~/.code_puppy/pack_parallelism.toml
@@ -234,26 +233,6 @@ def _effective_max() -> int:
     if _session_max is not None:
         return _session_max
     return _read_config_max()
-
-
-# ---------------------------------------------------------------------------
-# load_prompt hook — injected into every agent's system prompt
-# ---------------------------------------------------------------------------
-
-
-def _prompt_addition() -> str | None:
-    """Return parallelism constraint for system prompt, only when session-override is active."""
-    if _session_max is None:
-        return None
-    return (
-        f"\n\n## ⚡ Pack Leader Parallelism Limit"
-        f"\n**`MAX_PARALLEL_AGENTS = {_session_max}`**"
-        f"\nNever invoke more than **{_session_max}** agent(s) simultaneously."
-        f" Run `/pack-parallel` to adjust."
-    )
-
-
-register_callback("load_prompt", _prompt_addition)
 
 
 # ---------------------------------------------------------------------------
