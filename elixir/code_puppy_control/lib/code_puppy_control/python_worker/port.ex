@@ -504,6 +504,24 @@ defmodule CodePuppyControl.PythonWorker.Port do
     Protocol.encode_response(%{"results" => results, "count" => length(results)}, nil)
   end
 
+  defp handle_file_request("index_directory", params) do
+    root = Map.get(params, "root", ".")
+    max_files = Map.get(params, "max_files", 40)
+    max_symbols_per_file = Map.get(params, "max_symbols_per_file", 8)
+
+    case CodePuppyControl.Indexer.index(root,
+           max_files: max_files,
+           max_symbols_per_file: max_symbols_per_file
+         ) do
+      {:ok, summaries} ->
+        result = CodePuppyControl.Indexer.FileSummary.to_maps(summaries)
+        Protocol.encode_response(%{"files" => result, "count" => length(result)}, nil)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Index failed: #{inspect(reason)}", nil, nil)
+    end
+  end
+
   defp handle_file_request("history_get", params) do
     session_id = params["session_id"]
     opts = []

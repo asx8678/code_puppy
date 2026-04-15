@@ -83,7 +83,7 @@ class NativeBackend:
 
         MESSAGE_CORE = "message_core"  # code_puppy_core
         FILE_OPS = "file_ops"  # Elixir FileOps / Python fallback
-        REPO_INDEX = "repo_index"  # Python indexer (Elixir planned)
+        REPO_INDEX = "repo_index"  # Repository indexing (Elixir + Python fallback)
         PARSE = "parse"  # turbo_parse
 
     _turbo_parse_imports: dict[str, Any] | None = None
@@ -486,7 +486,11 @@ class NativeBackend:
             },
             "repo_index": {
                 "available": True,  # Python fallback always available
-                "source": "elixir" if cls._is_elixir_available() else "python",
+                "elixir_available": cls._is_elixir_available(),
+                "source": cls._last_source.get(
+                    cls.Capabilities.REPO_INDEX,
+                    "elixir" if cls._is_elixir_available() else "python",
+                ),
             },
             "parse": {
                 "available": turbo_parse.get("available", False)
@@ -1077,7 +1081,24 @@ class NativeBackend:
         if not cls.is_active(cls.Capabilities.REPO_INDEX):
             _prefer_native = False
 
-        # Python indexer via repo_compass (turbo_ops removed in bd-76)
+        # bd-108: Try Elixir first if preferred and available
+        if _prefer_native and cls._should_use_elixir(cls.Capabilities.REPO_INDEX):
+            try:
+                result = cls._call_elixir(
+                    "index_directory",
+                    {
+                        "root": root,
+                        "max_files": max_files,
+                        "max_symbols_per_file": max_symbols_per_file,
+                    },
+                )
+                if "error" not in result:
+                    cls._last_source[cls.Capabilities.REPO_INDEX] = "elixir"
+                    return result.get("files", [])
+            except Exception as e:
+                logger.debug(f"Elixir index_directory failed, falling back to Python: {e}")
+
+        # Python fallback via repo_compass
         try:
             from pathlib import Path
 
@@ -1088,6 +1109,7 @@ class NativeBackend:
             py_results = python_build_structure_map(
                 Path(root), max_files, max_symbols_per_file
             )
+            cls._last_source[cls.Capabilities.REPO_INDEX] = "python"
             return [
                 {
                     "path": r.path,

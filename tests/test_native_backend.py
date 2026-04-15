@@ -865,6 +865,67 @@ class TestElixirRouting:
                 assert "matches" in result or "error" in result
 
 
+    def test_index_directory_routes_through_elixir(self, tmp_path: Path):
+        """Test index_directory calls Elixir when available (bd-108)."""
+        NativeBackend.set_backend_preference(BackendPreference.ELIXIR_FIRST)
+
+        mock_result = {
+            "files": [
+                {"path": "src/main.py", "kind": "python", "symbols": ["main"]},
+                {"path": "README.md", "kind": "project-file", "symbols": []},
+            ],
+            "count": 2,
+        }
+
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            with patch("code_puppy.plugins.elixir_bridge.call_method", return_value=mock_result) as mock_call:
+                result = NativeBackend.index_directory(str(tmp_path), max_files=10, max_symbols_per_file=5)
+
+                mock_call.assert_called_once_with(
+                    "index_directory",
+                    {"root": str(tmp_path), "max_files": 10, "max_symbols_per_file": 5},
+                )
+                assert isinstance(result, list)
+                assert len(result) == 2
+                assert result[0]["path"] == "src/main.py"
+
+    def test_index_directory_falls_back_when_elixir_fails(self, tmp_path: Path):
+        """Test index_directory falls back to Python when Elixir raises exception."""
+        (tmp_path / "test.py").write_text("def hello(): pass")
+        NativeBackend.set_backend_preference(BackendPreference.ELIXIR_FIRST)
+
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            with patch("code_puppy.plugins.elixir_bridge.call_method", side_effect=ConnectionError("down")):
+                result = NativeBackend.index_directory(str(tmp_path), max_files=10)
+
+                assert isinstance(result, list)
+                # Falls back to Python (may or may not find files)
+
+    def test_index_directory_skips_elixir_when_python_only(self, tmp_path: Path):
+        """Test index_directory skips Elixir when preference is PYTHON_ONLY."""
+        (tmp_path / "test.py").write_text("def hello(): pass")
+        NativeBackend.set_backend_preference(BackendPreference.PYTHON_ONLY)
+
+        with patch("code_puppy.plugins.elixir_bridge.call_method") as mock_call:
+            result = NativeBackend.index_directory(str(tmp_path), max_files=10)
+
+            mock_call.assert_not_called()
+            assert isinstance(result, list)
+
+    def test_index_directory_falls_back_on_elixir_error_response(self, tmp_path: Path):
+        """Test index_directory falls back when Elixir returns error."""
+        (tmp_path / "test.py").write_text("def hello(): pass")
+        NativeBackend.set_backend_preference(BackendPreference.ELIXIR_FIRST)
+
+        mock_error = {"error": "indexer unavailable"}
+
+        with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
+            with patch("code_puppy.plugins.elixir_bridge.call_method", return_value=mock_error):
+                result = NativeBackend.index_directory(str(tmp_path), max_files=10)
+
+                assert isinstance(result, list)
+
+
 @pytest.mark.xdist_group("elixir_routing")
 class TestElixirStatusIntegration:
     """Integration tests for Elixir status reporting (bd-62).
