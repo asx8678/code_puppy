@@ -273,19 +273,4 @@ class MockLLMClient:
         return self._response
 
 
-class SyncMockLLMClient:
-    """Synchronous mock LLM client for simpler testing."""
 
-    def __init__(self, response: str | None = None) -> None:
-        """Initialize with optional fixed response.
-
-        Args:
-            response: Fixed response to return, or None for default empty array
-        """
-        self._response = response or "[]"
-        self.calls: list[str] = []
-
-    def complete(self, prompt: str) -> str:
-        """Record the call and return the mock response."""
-        self.calls.append(prompt)
-        return self._response
