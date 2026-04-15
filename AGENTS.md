@@ -22,21 +22,27 @@ That's it. The plugin loader auto-discovers `register_callbacks.py` in subdirs.
 > They are imported and executed during plugin discovery with the same local privileges as Code Puppy itself.
 > There is currently no isolated safe mode for user plugins, so do not install untrusted plugins.
 
-## Rust Acceleration Stack
+## Native Acceleration Stack (Fast Puppy)
 
-Code Puppy has 3 Rust crates providing acceleration. The `fast_puppy` plugin auto-builds them on startup (see `builder.py` `CRATES` registry):
+Code Puppy has a **runtime backend selector** called `fast_puppy` that routes performance-critical operations to the optimal native backend:
 
-| Crate | Bridge | Use When... |
-|-------|--------|-------------|
-| `code_puppy_core` | `_core_bridge` | Message serialization, pruning, hashing |
-| `turbo_ops` | Direct import | Batch file ops (`list_files`, `grep`, `read_file`) |
-| `turbo_parse` | `turbo_parse_bridge` | Tree-sitter parsing, symbols, diagnostics |
+| Capability | Rust Crate | Elixir Service | Purpose |
+|------------|-----------|----------------|---------|
+| `message_core` | `code_puppy_core` | — | Message serialization, pruning, hashing |
+| `file_ops` | `turbo_ops` | `file_service` | Batch file ops (`list_files`, `grep`, `read_file`) |
+| `repo_index` | — | `repo_index` | Repository indexing |
+| `parse` | `turbo_parse` | — | Tree-sitter parsing, symbols, diagnostics |
+
+**Phase 3 Reality:** Fast Puppy is now a **runtime selector**, not a crate builder:
+- `/fast_puppy profile elixir_first` → Prefer Elixir backends (default)
+- `/fast_puppy profile rust_only` → Use only Rust crates
+- `/fast_puppy profile python_only` → Pure Python fallback
 
 **Agent Guidelines:**
-- Prefer Rust versions when available (check bridge availability flags)
-- All bridges provide Python stubs — fall back gracefully
-- Don't manually edit `fast_puppy/` — add new crates to `CRATES` in `builder.py`
-- To test without Rust: set `disable_rust_autobuild=true` in `puppy.cfg`
+- Check capability availability via bridge flags (not just Rust availability)
+- All backends provide Python stubs — fall back gracefully
+- Don't manually edit `fast_puppy/` — add new capabilities via `NATIVE_BACKENDS` registry
+- To test without native acceleration: set `disable_rust_autobuild=true` and `enable_elixir_control=false` in `puppy.cfg`
 
 ## Available Hooks
 

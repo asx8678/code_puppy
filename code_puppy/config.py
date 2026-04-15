@@ -778,13 +778,15 @@ def get_default_config_keys():
         "cancel_agent_key",
         # Add resume message count configuration
         "resume_message_count",
-        # Add fast puppy (Rust acceleration) control key
+        # DEPRECATED: enable_fast_puppy (bd-92) - migrated to per-capability keys on first load
+        # Legacy key kept for backward compatibility migration only
+        # @deprecated - use fast_puppy.<capability> instead
         "enable_fast_puppy",
-        # bd-63: Per-capability Fast Puppy control keys
-        "fast_puppy.message_core",
-        "fast_puppy.file_ops",
-        "fast_puppy.repo_index",
-        "fast_puppy.parse",
+        # bd-63: Per-capability Fast Puppy control keys (replacement for deprecated enable_fast_puppy)
+        "fast_puppy.message_core",     # Rust: Message serialization, hashing, pruning
+        "fast_puppy.file_ops",         # Elixir: Fast file listing, grep, reading
+        "fast_puppy.repo_index",       # Elixir: Repository indexing
+        "fast_puppy.parse",            # Rust: Tree-sitter code parsing
         # SECURITY FIX c9z0: User plugin security settings
         "enable_user_plugins",
         "allowed_user_plugins",

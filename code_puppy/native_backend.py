@@ -200,7 +200,8 @@ class NativeBackend:
             cls._legacy_global_enabled = enabled
             for cap in cls._capability_enabled:
                 cls._capability_enabled[cap] = enabled
-            logger.debug(f"Loaded legacy enable_fast_puppy={enabled}")
+            logger.info(f"bd-92: Migrating legacy enable_fast_puppy={enabled} to per-capability keys")
+            # Migration will save per-capability keys on next config update
             return
 
         # Load per-capability preferences

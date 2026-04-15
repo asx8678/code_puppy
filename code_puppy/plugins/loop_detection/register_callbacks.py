@@ -490,7 +490,7 @@ def get_loop_stats(session_id: str | None = None) -> dict[str, Any]:
         }
 
 
-def _on_agent_run_end(agent_name, model_name, session_id=None, **kwargs):
+def _on_agent_run_end(agent_name, model_name, session_id=None, *args, **kwargs):
     """Clean up loop detection state when an agent run ends."""
     if session_id:
         reset_loop_detection(str(session_id))

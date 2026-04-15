@@ -7,14 +7,17 @@ Persists capability preferences to puppy.cfg so they survive restarts.
 
 bd-63: Rewritten for capability-based profiles.
 bd-86: Removed turbo_ops references — file_ops now uses Elixir/Python.
+bd-92: Profile-focused UX — default view is concise, profile is primary action.
 
 Usage:
-    /fast_puppy                     → show current status
-    /fast_puppy enable [cap]      → enable all or specific capability
-    /fast_puppy disable [cap]     → disable all or specific capability
-    /fast_puppy status              → detailed diagnostics
-    /fast_puppy build [name|--all] → rebuild Rust crate(s)
+    /fast_puppy                      → show profile + capabilities (concise default)
+    /fast_puppy profile [name]       → switch/show runtime profile (THE primary action)
+    /fast_puppy enable [cap]         → enable capability
+    /fast_puppy disable [cap]        → disable capability
+    /fast_puppy status               → detailed diagnostics
+    /fast_puppy build [name|--all]   → build Rust crates (advanced)
 
+Profiles: elixir_first, rust_first, python_only
 Capabilities: message_core, file_ops, repo_index, parse
 """
 
@@ -25,75 +28,37 @@ from code_puppy.callbacks import register_callback
 from code_puppy.config_package import get_puppy_config
 from code_puppy.messaging import emit_info
 
-# Import builder module (may be split into builder.py for line count)
-# bd-91: Added get_available_backends import
+# Import discovery functions from builder.py (bd-91: split from rust_builder.py)
 from code_puppy.plugins.fast_puppy.builder import (
     _find_crate_dir,
     _find_repo_root,
-    _has_maturin,
-    _has_rust_toolchain,
-    _try_auto_build,
-    _try_auto_build_all,
-    build_single_crate,
     get_all_crate_status,
     get_available_backends,
     CRATES,
 )
 
+# Import build functions from rust_builder.py (bd-91: new module)
+from code_puppy.plugins.fast_puppy.rust_builder import (
+    _has_maturin,
+    _has_rust_toolchain,
+    build_single_crate,
+    notify_build_complete,
+)
+
 # Re-export for backward compatibility (tests)
-# bd-91: Added get_available_backends
+# bd-91: Split into builder.py (discovery) and rust_builder.py (build)
+# bd-92: Cleaned up - removed legacy functions
 __all__ = [
-    "_find_crate_dir",
-    "_find_repo_root",
-    "_has_maturin",
-    "_has_rust_toolchain",
-    "_try_auto_build",
-    "_try_auto_build_all",
     "_handle_fast_puppy",
     "_on_startup",
-    "_read_persisted_preference",
-    "_write_persisted_preference",
     "_handle_enable",
     "_handle_disable",
     "_handle_status",
+    "_handle_profile",
     "get_available_backends",
 ]
 
 logger = logging.getLogger(__name__)
-
-CONFIG_KEY = "enable_fast_puppy"
-
-# bd-63: Capability name mapping for user commands
-CAPABILITY_MAP = {
-    "message_core": "message_core",
-    "file_ops": "file_ops",
-    "repo_index": "repo_index",
-    "parse": "parse",
-}
-
-
-def _read_persisted_preference() -> bool | None:
-    """Read the saved preference from puppy.cfg."""
-    try:
-        from code_puppy.config import get_value
-
-        val = get_value(CONFIG_KEY)
-        if val is None:
-            return None
-        return str(val).strip().lower() in {"1", "true", "yes", "on"}
-    except Exception:
-        return None
-
-
-def _write_persisted_preference(enabled: bool) -> None:
-    """Save the legacy preference to puppy.cfg (for backward compat)."""
-    try:
-        from code_puppy.config import set_config_value
-
-        set_config_value(CONFIG_KEY, str(enabled).lower())
-    except Exception:
-        logger.warning("Failed to persist fast_puppy preference to config")
-
 
 # bd-63: New capability-based handlers
 
@@ -209,16 +174,48 @@ def _handle_profile(args: list[str]) -> str:
     )
 
 
+def _handle_default_view() -> str:
+    """Concise default view showing profile and capability matrix.
+
+    bd-92: Phase 3 - profile-focused UX.
+    """
+    from code_puppy.native_backend import NativeBackend
+
+    lines = []
+
+    # Current profile (prominent)
+    profile = NativeBackend.get_backend_preference()
+    lines.append(f"⚡ Profile: {profile.value}")
+    lines.append("")
+
+    # Capability matrix (compact)
+    cap_status = NativeBackend.get_status()
+    lines.append("Capabilities:")
+    for cap, info in cap_status.items():
+        icon = "✅" if info.active else ("💤" if info.status == "disabled" else "❌")
+        lines.append(f"  {icon} {cap}")
+
+    # Quick actions hint
+    lines.append("")
+    lines.append("Commands: /fast_puppy profile | enable | disable | status | build")
+
+    return "\n".join(lines)
+
+
 def _handle_status() -> str:
-    """Get detailed status for all capabilities.
+    """Get detailed status for all capabilities including infrastructure.
+
+    bd-92: Full diagnostics with crate status, toolchain, and infrastructure.
 
     Returns:
         Formatted status string.
     """
     from code_puppy.native_backend import NativeBackend
+    from code_puppy._core_bridge import get_rust_status
     # bd-69: _core_bridge imports removed — NativeBackend.get_status() used instead
     # bd-90: Updated to show Elixir-first architecture details
     # bd-88: Improved to show actual backend in use and actionable next steps
+    # bd-92: Full diagnostics merged from old default view
 
     # bd-88: Show backend preference and Elixir connection status
     preference = NativeBackend.get_backend_preference()
@@ -226,6 +223,11 @@ def _handle_status() -> str:
 
     # bd-88: Get actual source tracking from NativeBackend
     last_sources = getattr(NativeBackend, "_last_source", {})
+
+    # Get crate build status (bd-92: merged from old default view)
+    crate_statuses = get_all_crate_status()
+    rust_status = get_rust_status()
+    repo_root = _find_repo_root()
 
     lines = ["⚡ Fast Puppy Status", ""]
 
@@ -290,6 +292,40 @@ def _handle_status() -> str:
                 f"    {icon} {cap}: {info.configured} {source_arrow} ({status})"
             )
 
+    # bd-92: Infrastructure section (merged from old default view)
+    lines.append("")
+    lines.append("  Infrastructure:")
+    lines.append(
+        f"    {'Rust toolchain:':16} {'✅ rustc found' if _has_rust_toolchain() else '❌ not found'}"
+    )
+    lines.append(f"    {'maturin:':16} {'✅ found' if _has_maturin() else '❌ not found'}")
+    lines.append(
+        f"    {'Crate source:':16} {'✅ workspace found at ' + str(repo_root) if repo_root else '❌ not found'}"
+    )
+
+    # bd-92: Crate build status (merged from old default view)
+    lines.append("")
+    lines.append("  Crate Build Status:")
+    for status in crate_statuses:
+        name = status["name"]
+        if status["active"]:
+            state = "✅ installed, fresh, active"
+        elif status["installed"] and status["fresh"]:
+            state = "✅ installed, fresh"
+        elif status["installed"] and not status["fresh"]:
+            state = (
+                "⚠️  installed, STALE (src newer than binary) → run /fast_puppy build "
+                + name
+            )
+        elif status["crate_dir_found"]:
+            state = "❌ not installed (run /fast_puppy build " + name + ")"
+        else:
+            state = "❌ crate dir not found"
+
+        # Pad names for alignment
+        name_padded = f"{name}:"
+        lines.append(f"    {name_padded:16} {state}")
+
     # bd-88: Add actionable suggestions
     lines.append("")
     lines.append("  💡 Next steps:")
@@ -333,90 +369,62 @@ def _handle_status() -> str:
     return "\n".join(lines)
 
 
+def _emit_startup_banner(backend_status: dict, profile) -> None:
+    """Emit a concise startup banner based on available backends.
+
+    bd-92: New helper for clean startup messaging.
+    """
+    from code_puppy.native_backend import BackendPreference
+
+    elixir = backend_status.get("elixir_available", False)
+    rust = backend_status.get("rust_installed", False)
+
+    profile_name = profile.value if hasattr(profile, 'value') else str(profile)
+
+    if elixir and rust:
+        emit_info(f"🐕⚡ Fast Puppy: {profile_name} profile | Elixir ✅ Rust ✅")
+    elif elixir:
+        emit_info(f"🐕⚡ Fast Puppy: {profile_name} profile | Elixir ✅")
+    elif rust:
+        emit_info(f"🐕⚡ Fast Puppy: {profile_name} profile | Rust ✅")
+    else:
+        emit_info("🐕 Fast Puppy: Python fallback (no native backends)")
+
+
 def _on_startup():
-    """Detect available backends on startup, then respect user preferences."""
-    # bd-91: Removed auto-build — now detects available backends instead
+    """Detect available backends on startup and show status banner.
+
+    bd-92: Phase 3 rewrite - pure discovery, no builds, no reloads.
+    """
     try:
-        # bd-63: Load capability preferences first
         from code_puppy.native_backend import NativeBackend
 
+        # 1. Load user preferences from config
         NativeBackend.load_preferences()
 
-        # bd-91: Detect available backends without building
+        # 2. Detect available backends (discovery only, no builds)
         backend_status = get_available_backends()
 
-        # Check if any capabilities are enabled by user
-        any_enabled = any(
-            NativeBackend.is_enabled(cap)
-            for cap in [
-                NativeBackend.Capabilities.MESSAGE_CORE,
-                NativeBackend.Capabilities.FILE_OPS,
-                NativeBackend.Capabilities.REPO_INDEX,
-                NativeBackend.Capabilities.PARSE,
-            ]
-        )
+        # 3. Get current profile for display
+        profile = NativeBackend.get_backend_preference()
 
-        if not any_enabled:
-            # bd-90: Updated messaging to use "native backends" terminology
-            emit_info(
-                "🐕💤 Fast Puppy: All native backends disabled by puppy.cfg "
-                "— run /fast_puppy enable to re-enable"
-            )
-            return
+        # 4. Emit concise status banner
+        _emit_startup_banner(backend_status, profile)
 
-        # bd-91: Emit summary banner based on detected backends
-        elixir_available = backend_status.get("elixir_available", False)
-        python_fallback = backend_status.get("python_fallback", True)
-
-        if elixir_available:
-            emit_info("🐕⚡ Fast Puppy: Native backend active (Elixir) 🚀")
-        elif python_fallback:
-            emit_info("🐕 Fast Puppy: Native backend active (Python fallback)")
-        else:
-            emit_info(
-                "🐕 Fast Puppy: No native backends available "
-                "(install Elixir or Rust to enable acceleration)"
-            )
     except Exception as e:
         logger.warning("Fast Puppy startup error: %s", e)
-        emit_info(
-            "🐕 Fast Puppy: startup hiccup — run /fast_puppy status for diagnostics"
-        )
+        emit_info("🐕 Fast Puppy: startup error — run /fast_puppy status for details")
 
 
 def _custom_help():
-    # bd-90: Updated help text to reflect Elixir-first architecture
-    # bd-88: Enhanced help text with clearer descriptions and profile command
+    # bd-92: Profile-focused help - profile is THE primary action
     return [
-        (
-            "fast_puppy",
-            "Show current status with backend preferences and active sources",
-        ),
-        ("fast_puppy status", "Detailed diagnostics with actionable next steps"),
-        (
-            "fast_puppy enable [cap]",
-            "Enable all native backends or specific: message_core, file_ops, repo_index, parse",
-        ),
-        (
-            "fast_puppy disable [cap]",
-            "Disable all native backends or specific (fallback to Python)",
-        ),
-        (
-            "fast_puppy profile",
-            "Show current backend preference profile",
-        ),
-        (
-            "fast_puppy profile elixir_first",
-            "Set Elixir as preferred backend (faster for file ops)",
-        ),
-        (
-            "fast_puppy profile python_only",
-            "Use only Python implementations (no native acceleration)",
-        ),
-        (
-            "fast_puppy build [name|--all]",
-            "Rebuild native Rust crates (code_puppy_core, turbo_parse)",
-        ),
+        ("fast_puppy", "Show current profile and capability status"),
+        ("fast_puppy profile [name]", "Switch profile: elixir_first, rust_first, python_only"),
+        ("fast_puppy enable [cap]", "Enable capability: message_core, file_ops, repo_index, parse"),
+        ("fast_puppy disable [cap]", "Disable capability (fallback to Python)"),
+        ("fast_puppy status", "Detailed diagnostics with infrastructure info"),
+        ("fast_puppy build [--all|name]", "Build Rust crates (advanced)"),
     ]
 
 
@@ -430,8 +438,16 @@ def _handle_fast_puppy(command: str, name: str):
     )
 
     parts = command.strip().split()
-    subcommand = parts[1] if len(parts) > 1 else "status"
+    subcommand = parts[1] if len(parts) > 1 else ""
     args = parts[2:] if len(parts) > 2 else []
+
+    known_subcommands = {"profile", "enable", "disable", "status", "build"}
+
+    # Default: show concise view
+    if subcommand in ("", None) or subcommand not in known_subcommands:
+        result = _handle_default_view()
+        emit_info(result)
+        return True
 
     if subcommand == "build":
         # Parse crate name or --all
@@ -455,7 +471,13 @@ def _handle_fast_puppy(command: str, name: str):
 
             emit_info("🐕⚡ Fast Puppy: Building all native Rust modules...")  # bd-88
 
-            results = _try_auto_build_all()
+            # bd-91: Build each crate individually (no auto-build, explicit only)
+            results: dict[str, bool] = {}
+            for crate_spec in CRATES:
+                crate_name = crate_spec["name"]
+                success = build_single_crate(crate_name)
+                results[crate_name] = success
+
             active_count = sum(1 for v in results.values() if v)
             total_count = len(CRATES)
 
@@ -470,16 +492,19 @@ def _handle_fast_puppy(command: str, name: str):
                     status = "✅" if results.get(name, False) else "❌"
                     emit_info(f"   {status} {name}")
 
-            # Reload status and enable
-            if results.get("code_puppy_core", False):
-                import code_puppy._core_bridge as bridge
-
-                importlib.reload(bridge)
-                set_rust_enabled(True)
-                _write_persisted_preference(True)
+            # bd-91: Notify that restart may be needed for changes to take effect
+            if active_count > 0:
+                emit_info("")
                 emit_info(
-                    "🐕⚡ Fast Puppy: Native backend is ON."
-                )  # bd-88: Updated terminology
+                    "💡 Note: Restart code-puppy to activate newly built crates"
+                )
+
+            # bd-91: No runtime reload - require restart
+            # The old importlib.reload() approach is deprecated for safety
+            if results.get("code_puppy_core", False):
+                emit_info(
+                    "🐕⚡ Fast Puppy: code_puppy_core built. Restart to enable native backend."
+                )
             return True
         else:
             # Build single crate
@@ -500,18 +525,9 @@ def _handle_fast_puppy(command: str, name: str):
             success = build_single_crate(crate_name)
 
             if success:
+                # bd-91: Use notify_build_complete instead of runtime reload
                 emit_info(f"🐕⚡ Fast Puppy: ✅ {crate_name} built successfully!")
-                # If we built code_puppy_core, enable it
-                if crate_name == "code_puppy_core":
-                    import code_puppy._core_bridge as bridge
-
-                    importlib.reload(bridge)
-                    if bridge.RUST_AVAILABLE:
-                        bridge.set_rust_enabled(True)
-                        _write_persisted_preference(True)
-                        emit_info(
-                            "🐕⚡ Fast Puppy: Native backend is ON."
-                        )  # bd-88: Updated terminology
+                emit_info(notify_build_complete(crate_name))
             else:
                 emit_info(f"🐕 Fast Puppy: ❌ {crate_name} build failed")
             return True
@@ -538,109 +554,9 @@ def _handle_fast_puppy(command: str, name: str):
         emit_info(result)
         return True
 
-    # Default: show comprehensive status (bd-63: combined old + new status)
-    from code_puppy.native_backend import NativeBackend
-
-    # Get crate build status
-    crate_statuses = get_all_crate_status()
-
-    # Get runtime status from core bridge
-    rust_status = get_rust_status()
-    _ = (
-        _read_persisted_preference()
-    )  # Legacy: kept for reference but not used (bd-63 uses per-capability)
-
-    # Check config values for status display
-    try:
-        cfg = get_puppy_config()
-        _ = cfg.rust_autobuild_disabled  # Kept for future use
-    except Exception:
-        pass
-
-    repo_root = _find_repo_root()
-
-    # Header
-    emit_info("🐕⚡ Fast Puppy Status:")
-    emit_info("")
-
-    # bd-63: New capability status section
-    emit_info("Capabilities (bd-63):")
-    cap_status = NativeBackend.get_status()
-    for cap, info in cap_status.items():
-        if info.active:
-            icon = "✅"
-            status = "active"
-        elif info.status == "disabled":
-            icon = "💤"
-            status = "disabled"
-        else:
-            icon = "❌"
-            status = "unavailable"
-
-        # Show capability + config source + user preference
-        enabled_str = "enabled" if NativeBackend.is_enabled(cap) else "disabled"
-        emit_info(f"   {icon} {cap}: {info.configured} ({status}, user: {enabled_str})")
-
-    emit_info("")
-
-    # Per-crate build status
-    emit_info("Crate Build Status:")
-    for status in crate_statuses:
-        name = status["name"]
-        if status["active"]:
-            state = "✅ installed, fresh, active"
-        elif status["installed"] and status["fresh"]:
-            state = "✅ installed, fresh"
-        elif status["installed"] and not status["fresh"]:
-            state = (
-                "⚠️  installed, STALE (src newer than binary) → run /fast_puppy build "
-                + name
-            )
-        elif status["crate_dir_found"]:
-            state = "❌ not installed (run /fast_puppy build " + name + ")"
-        else:
-            state = "❌ crate dir not found"
-
-        # Pad names for alignment
-        name_padded = f"{name}:"
-        emit_info(f"   {name_padded:16} {state}")
-
-    # Toolchain and infrastructure
-    emit_info("")
-    emit_info("Infrastructure:")
-    emit_info(
-        f"   {'Rust toolchain:':16} {'✅ rustc found' if _has_rust_toolchain() else '❌ not found'}"
-    )
-    emit_info(f"   {'maturin:':16} {'✅ found' if _has_maturin() else '❌ not found'}")
-    emit_info(
-        f"   {'Crate source:':16} {'✅ workspace found at ' + str(repo_root) if repo_root else '❌ not found'}"
-    )
-
-    # Legacy bridge status for backward compatibility
-    emit_info("")
-    emit_info("Legacy bridge:")
-    emit_info(
-        f"   {'code_puppy_core:':16} {'✅ available' if rust_status['installed'] else '❌ not installed'}, {'✅ enabled' if rust_status['enabled'] else '💤 disabled'}"
-    )
-
-    # Summary line
-    # bd-90: Updated summary to use "Native backends" terminology
-    emit_info("")
-    if all(s["active"] for s in crate_statuses):
-        emit_info("→ ALL SYSTEMS GO — full native backend acceleration active! 🚀")
-    elif any(s["active"] for s in crate_statuses):
-        active_count = sum(1 for s in crate_statuses if s["active"])
-        emit_info(f"→ {active_count}/3 native backends active")
-    else:
-        if not _has_rust_toolchain():
-            emit_info(
-                "→ Pure Python mode — install Elixir or Rust to enable native acceleration"  # bd-88
-            )
-        else:
-            emit_info(
-                "→ Toolchain found but no native backends active — run /fast_puppy build"
-            )
-
+    # bd-92: Should not reach here due to known_subcommands check above
+    result = _handle_default_view()
+    emit_info(result)
     return True
 
 

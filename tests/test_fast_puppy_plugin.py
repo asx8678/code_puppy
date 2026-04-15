@@ -2,24 +2,23 @@
 
 Covers the bug fixes:
   - _has_maturin() must check subprocess returncode, not just absence of exception.
-  - _try_auto_build() must bail out when pip-installing maturin fails.
+
+bd-91: _try_auto_build() removed - auto-build eliminated, explicit build only.
 """
 
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# We only import the two helper functions we need to test.
+# We only import the helper functions we need to test.
 # Importing the full module is safe — it only registers callbacks at module
 # scope and doesn't trigger builds unless startup fires.
 from code_puppy.plugins.fast_puppy.register_callbacks import (
     _handle_fast_puppy,
     _on_startup,
 )
-from code_puppy.plugins.fast_puppy.builder import (
-    _has_maturin,
-    _try_auto_build,
-)
+# bd-91: _has_maturin moved to rust_builder.py
+from code_puppy.plugins.fast_puppy.rust_builder import _has_maturin
 
 
 # ---------------------------------------------------------------------------
@@ -30,16 +29,16 @@ from code_puppy.plugins.fast_puppy.builder import (
 class TestHasMaturin:
     """_has_maturin should return True only when maturin is genuinely available."""
 
-    @patch("code_puppy.plugins.fast_puppy.builder.shutil.which")
+    @patch("code_puppy.plugins.fast_puppy.rust_builder.shutil.which")
     def test_returns_true_when_in_path(self, mock_which: MagicMock) -> None:
         mock_which.return_value = "/usr/bin/maturin"
         assert _has_maturin() is True
 
     @patch(
-        "code_puppy.plugins.fast_puppy.builder.shutil.which",
+        "code_puppy.plugins.fast_puppy.rust_builder.shutil.which",
         return_value=None,
     )
-    @patch("code_puppy.plugins.fast_puppy.builder.subprocess.run")
+    @patch("code_puppy.plugins.fast_puppy.rust_builder.subprocess.run")
     def test_returns_true_on_zero_rc(
         self, mock_run: MagicMock, _mock_which: MagicMock
     ) -> None:
@@ -54,10 +53,10 @@ class TestHasMaturin:
         assert "env" in call_args[1]
 
     @patch(
-        "code_puppy.plugins.fast_puppy.builder.shutil.which",
+        "code_puppy.plugins.fast_puppy.rust_builder.shutil.which",
         return_value=None,
     )
-    @patch("code_puppy.plugins.fast_puppy.builder.subprocess.run")
+    @patch("code_puppy.plugins.fast_puppy.rust_builder.subprocess.run")
     def test_returns_false_on_nonzero_rc(
         self, mock_run: MagicMock, _mock_which: MagicMock
     ) -> None:
@@ -66,11 +65,11 @@ class TestHasMaturin:
         assert _has_maturin() is False
 
     @patch(
-        "code_puppy.plugins.fast_puppy.builder.shutil.which",
+        "code_puppy.plugins.fast_puppy.rust_builder.shutil.which",
         return_value=None,
     )
     @patch(
-        "code_puppy.plugins.fast_puppy.builder.subprocess.run",
+        "code_puppy.plugins.fast_puppy.rust_builder.subprocess.run",
         side_effect=FileNotFoundError,
     )
     def test_returns_false_on_exception(
@@ -79,103 +78,9 @@ class TestHasMaturin:
         assert _has_maturin() is False
 
 
-# ---------------------------------------------------------------------------
-# _try_auto_build()
-# ---------------------------------------------------------------------------
-
-
-class TestTryAutoBuild:
-    """_try_auto_build must not proceed to build when maturin install fails."""
-
-    @patch("code_puppy.plugins.fast_puppy.builder.emit_info")
-    @patch("code_puppy.plugins.fast_puppy.builder._build_crate")
-    @patch(
-        "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain",
-        return_value=True,
-    )
-    @patch("code_puppy.plugins.fast_puppy.builder._find_crate_dir")
-    @patch(
-        "code_puppy.plugins.fast_puppy.builder._has_maturin",
-        return_value=False,
-    )
-    @patch("code_puppy.plugins.fast_puppy.builder.subprocess.run")
-    def test_bails_on_failed_pip_install(
-        self,
-        mock_run: MagicMock,
-        mock_has_maturin: MagicMock,
-        mock_find_crate: MagicMock,
-        mock_rust: MagicMock,
-        mock_build: MagicMock,
-        mock_emit: MagicMock,
-    ) -> None:
-        """When pip install maturin fails, _try_auto_build returns False and
-        never calls _build_crate."""
-        with patch("code_puppy._core_bridge.RUST_AVAILABLE", False):
-            # Simulate pip install failure
-            mock_run.return_value = MagicMock(
-                returncode=1, stderr="ERROR: Could not install maturin", stdout=""
-            )
-            mock_find_crate.return_value = Path("/fake/code_puppy_core")
-
-            result = _try_auto_build()
-
-            assert result is False
-            mock_build.assert_not_called()
-
-    @patch("code_puppy.plugins.fast_puppy.builder.emit_info")
-    @patch(
-        "code_puppy.plugins.fast_puppy.builder._build_crate",
-        return_value=(True, ""),
-    )
-    @patch(
-        "code_puppy.plugins.fast_puppy.builder._is_crate_fresh",
-        return_value=False,
-    )
-    @patch(
-        "code_puppy.plugins.fast_puppy.builder._is_crate_installed",
-        return_value=False,
-    )
-    @patch(
-        "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain",
-        return_value=True,
-    )
-    @patch("code_puppy.plugins.fast_puppy.builder._find_crate_dir")
-    @patch("code_puppy.plugins.fast_puppy.builder._find_repo_root")
-    @patch(
-        "code_puppy.plugins.fast_puppy.builder._has_maturin",
-        return_value=False,
-    )
-    @patch(
-        "code_puppy.plugins.fast_puppy.builder._check_disable_autobuild",
-        return_value=False,
-    )
-    @patch("code_puppy.plugins.fast_puppy.builder.subprocess.run")
-    def test_proceeds_on_successful_pip_install(
-        self,
-        mock_run: MagicMock,
-        mock_check_disable: MagicMock,
-        mock_has_maturin: MagicMock,
-        mock_repo_root: MagicMock,
-        mock_find_crate: MagicMock,
-        mock_rust: MagicMock,
-        mock_installed: MagicMock,
-        mock_fresh: MagicMock,
-        mock_build: MagicMock,
-        mock_emit: MagicMock,
-    ) -> None:
-        """When pip install succeeds, _build_crate should be called for code_puppy_core."""
-        with patch("code_puppy._core_bridge.RUST_AVAILABLE", False):
-            mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
-            # All crate dirs return the same path in this mock setup
-            mock_find_crate.return_value = Path("/fake/code_puppy_core")
-            mock_repo_root.return_value = Path("/fake/repo")
-
-            _try_auto_build()
-
-            # Legacy _try_auto_build calls _try_auto_build_all which builds all crates
-            # Check that code_puppy_core was among the calls
-            mock_build.assert_any_call(Path("/fake/code_puppy_core"), "code_puppy_core")
-
+# bd-91: _try_auto_build() and auto-build functionality removed
+# Tests removed as _try_auto_build() was eliminated when auto-build was removed.
+# Build functionality now only available via /fast_puppy build command.
 
 # ---------------------------------------------------------------------------
 # _handle_fast_puppy()
@@ -189,9 +94,6 @@ class TestHandleFastPuppy:
         result = _handle_fast_puppy("/something_else", "something_else")
         assert result is None
 
-    @patch(
-        "code_puppy.plugins.fast_puppy.register_callbacks._read_persisted_preference"
-    )
     @patch("code_puppy.plugins.fast_puppy.register_callbacks._has_rust_toolchain")
     @patch("code_puppy.plugins.fast_puppy.register_callbacks._find_crate_dir")
     @patch("code_puppy._core_bridge.get_rust_status")
@@ -203,12 +105,10 @@ class TestHandleFastPuppy:
         mock_status: MagicMock,
         mock_find: MagicMock,
         mock_rust: MagicMock,
-        mock_pref: MagicMock,
     ) -> None:
         mock_status.return_value = {"active": True, "installed": True, "enabled": True}
         mock_rust.return_value = True
         mock_find.return_value = Path("/fake/crate")
-        mock_pref.return_value = True
 
         result = _handle_fast_puppy("/fast_puppy", "fast_puppy")
         assert result is True
@@ -291,14 +191,14 @@ class TestOnStartup:
     @patch("code_puppy.plugins.fast_puppy.register_callbacks.emit_info")
     @patch("code_puppy.native_backend.NativeBackend.load_preferences")
     @patch("code_puppy.native_backend.NativeBackend.is_enabled")
-    def test_startup_shows_disabled_when_all_capabilities_off(
+    def test_startup_shows_python_fallback_when_no_native_backends(
         self,
         mock_is_enabled: MagicMock,
         mock_load_prefs: MagicMock,
         mock_emit: MagicMock,
         mock_get_backends: MagicMock,
     ) -> None:
-        """When all capabilities disabled, shows disabled message."""
+        """When no native backends available, shows Python fallback message."""
         mock_is_enabled.return_value = False  # All capabilities disabled
         mock_get_backends.return_value = {
             "elixir_available": False,
@@ -310,4 +210,5 @@ class TestOnStartup:
 
         mock_emit.assert_called_once()
         call_args = mock_emit.call_args[0][0]
-        assert "disabled" in call_args.lower() or "💤" in call_args
+        # bd-92: _emit_startup_banner outputs "Python fallback (no native backends)"
+        assert "Python fallback" in call_args or "🐕" in call_args

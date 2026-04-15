@@ -29,6 +29,30 @@ from code_puppy.native_backend import (
 )
 
 
+@pytest.fixture(autouse=True)
+def reset_backend_state():
+    """Reset backend state after each test to ensure isolation.
+    
+    This is critical for parallel test execution (pytest-xdist) where
+    one test's state change could affect another test.
+    
+    Resets:
+    - _backend_preference (routing preference)
+    - _capability_enabled (per-capability enabled state)
+    - _last_source (last routing source tracking)
+    - _turbo_parse_imports (cached imports)
+    """
+    original_preference = NativeBackend._backend_preference
+    original_enabled = NativeBackend._capability_enabled.copy()
+    original_last_source = NativeBackend._last_source.copy()
+    original_turbo_parse = NativeBackend._turbo_parse_imports
+    yield
+    NativeBackend._backend_preference = original_preference
+    NativeBackend._capability_enabled = original_enabled
+    NativeBackend._last_source = original_last_source
+    NativeBackend._turbo_parse_imports = original_turbo_parse
+
+
 class TestCapabilityInfo:
     """Tests for the CapabilityInfo dataclass."""
 
@@ -522,9 +546,14 @@ class TestBackendPreference:
         NativeBackend.set_backend_preference(BackendPreference.PYTHON_ONLY)
         assert NativeBackend.get_backend_preference() == BackendPreference.PYTHON_ONLY
 
-
+@pytest.mark.xdist_group("elixir_routing")
 class TestParseElixirRouting:
-    """Tests for Elixir routing of parse operations (bd-64)."""
+    """Tests for Elixir routing of parse operations (bd-64).
+    
+    These tests are marked with xdist_group to ensure they run serially,
+    as they modify global backend state that can cause flakiness in 
+    parallel execution.
+    """
 
     def test_parse_file_routes_through_elixir_when_preferred(self, tmp_path: Path):
         """Test parse_file routes through Elixir when ELIXIR_FIRST preference."""
@@ -678,8 +707,14 @@ class TestParseElixirRouting:
                 assert status["parse"]["rust_available"] is False
 
 
+@pytest.mark.xdist_group("elixir_routing")
 class TestElixirRouting:
-    """Tests for Elixir control plane routing (bd-62)."""
+    """Tests for Elixir control plane routing (bd-62).
+    
+    These tests are marked with xdist_group to ensure they run serially,
+    as they modify global backend state that can cause flakiness in 
+    parallel execution.
+    """
 
     def test_is_elixir_available_import_error(self):
         """Test _is_elixir_available returns False when import fails."""
@@ -830,8 +865,14 @@ class TestElixirRouting:
                 assert "matches" in result or "error" in result
 
 
+@pytest.mark.xdist_group("elixir_routing")
 class TestElixirStatusIntegration:
-    """Integration tests for Elixir status reporting (bd-62)."""
+    """Integration tests for Elixir status reporting (bd-62).
+    
+    These tests are marked with xdist_group to ensure they run serially,
+    as they modify global backend state that can cause flakiness in 
+    parallel execution.
+    """
 
     def test_get_detailed_status_includes_elixir(self):
         """Test that get_detailed_status includes Elixir availability."""

@@ -254,23 +254,47 @@ Please review this code for security issues." > .claude/commands/review.md
 /review with focus on authentication
 ```
 
-## Rust Acceleration
+## ⚡ Fast Puppy (Native Acceleration)
 
-Code Puppy ships as a pure-Python package and works perfectly without Rust. If you want extra speed, three optional Rust extensions accelerate key hot paths:
+Code Puppy uses native backends for performance-critical operations:
 
-| Crate | Purpose | Speedup |
-|-------|---------|---------|
-| `code_puppy_core` | Message serialization, hashing, pruning | 10-30x per LLM turn |
-| `turbo_ops` | Batch file operations (`list_files`, `grep`, `read_file`) | 5-20x on large repos |
-| `turbo_parse` | Tree-sitter parsing (symbols, folds, highlights, diagnostics) | 10-50x on source analysis |
+| Capability | Backend | Purpose |
+|------------|---------|---------|
+| `message_core` | Rust | Message serialization, hashing, pruning |
+| `file_ops` | Elixir | Fast file listing, grep, reading |
+| `repo_index` | Elixir | Repository indexing |
+| `parse` | Rust | Tree-sitter code parsing |
+
+**Quick Start:**
+```bash
+# Check current status
+/fast_puppy
+
+# Switch profile (primary action)
+/fast_puppy profile elixir_first   # Prefer Elixir (default)
+/fast_puppy profile python_only     # Pure Python mode
+
+# Enable/disable capabilities
+/fast_puppy enable message_core
+/fast_puppy disable parse
+
+# Detailed diagnostics
+/fast_puppy status
+
+# Build Rust crates (advanced)
+/fast_puppy build --all
+```
+
+Python fallback is always available - native backends are optional acceleration.
 
 ### Automatic Build (Zero Config)
 
-On first startup, if a Rust toolchain is present, the `fast_puppy` plugin will automatically build all three crates:
+On first startup, native backends are automatically built if their toolchains are present:
 
-- **Cached builds**: Subsequent startups skip rebuild unless `.rs` sources changed (mtime check)
-- **First build**: ~2-5 minutes (`turbo_parse` pulls in ~5 tree-sitter grammars)
-- **No Rust? No problem**: Gracefully degrades to pure Python — no errors, no fuss
+- **Rust crates**: Built when Rust toolchain detected (~2-5 minutes first build)
+- **Elixir control plane**: Started via Docker or local Elixir if available
+- **Cached builds**: Subsequent startups skip rebuild unless source changed
+- **No native toolchain? No problem**: Gracefully degrades to pure Python
 
 ### Using uvx with Rust Acceleration
 
@@ -292,7 +316,7 @@ uvx --from codepp code-puppy
 # Prereq: Rust toolchain (https://rustup.rs)
 # (uv will install maturin automatically if needed)
 
-# Build all 3 crates via cargo workspace + maturin (recommended)
+# Build all Rust crates via cargo workspace + maturin (recommended)
 cargo build --release --workspace
 uv run maturin develop --release --manifest-path code_puppy_core/Cargo.toml
 uv run maturin develop --release --manifest-path turbo_ops/Cargo.toml
@@ -304,12 +328,13 @@ uv run maturin develop --release --manifest-path turbo_parse/Cargo.toml
 ### `/fast_puppy` Commands
 
 ```
-/fast_puppy              → show status for all 3 crates
-/fast_puppy status       → detailed per-crate status
-/fast_puppy build        → rebuild all crates
-/fast_puppy build turbo_ops → rebuild just turbo_ops
-/fast_puppy enable       → enable message-processing Rust acceleration
-/fast_puppy disable      → disable message-processing Rust acceleration
+/fast_puppy                        → show status for all capabilities
+/fast_puppy status                 → detailed per-capability status
+/fast_puppy profile <name>         → switch runtime profile
+/fast_puppy build                  → build all Rust crates
+/fast_puppy build turbo_ops        → build specific crate
+/fast_puppy enable <capability>    → enable a capability
+/fast_puppy disable <capability>   → disable a capability
 ```
 
 ### Opt-Out (Air-Gapped CI, etc.)

@@ -1,0 +1,306 @@
+@startuml CodePuppy Architecture
+!define RECTANGLE class
+
+skinparam backgroundColor #FEFEFE
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+skinparam class {
+    BackgroundColor #E8F4FD
+    ArrowColor #2196F3
+    BorderColor #1976D2
+}
+
+skinparam package {
+    BackgroundColor #F5F5F5
+    BorderColor #9E9E9E
+}
+
+skinparam rectangle {
+    BackgroundColor #FFF3E0
+    BorderColor #F57C00
+}
+
+title Code Puppy Architecture Schema
+
+package "Core Layer" {
+    class AppRunner {
+        +parse_args()
+        +setup_renderers()
+        +show_logo()
+        +run()
+    }
+
+    class NativeBackend {
+        +Capabilites: MESSAGE_CORE, FILE_OPS, REPO_INDEX, PARSE
+        +get_status()
+        +list_files()
+        +grep()
+        +read_file()
+        +serialize_messages()
+    }
+
+    class CallbackSystem {
+        +register_callback(phase, func)
+        +on_startup/shutdown/invoke_agent
+        +on_pre_tool_call/post_tool_call
+        +on_agent_run_start/end
+    }
+
+    class ConfigSystem {
+        +get_value()
+        +get_global_model_name()
+        +get_agent_pinned_model()
+        +get_acceleration_config()
+    }
+
+    class ModelFactory {
+        +create_model(model_name)
+        +make_model_settings()
+        +resolve_max_output_tokens()
+    }
+}
+
+package "Agent Layer" {
+    abstract class BaseAgent {
+        +name: str
+        +description: str
+        +system_prompt: str
+        +run(task, message_history)
+        +get_system_prompt()
+        #_execute_with_model()
+    }
+
+    class AgentManager {
+        +discover_agents()
+        +get_available_agents()
+        +set_current_agent()
+    }
+
+    class AgentRuntimeState {
+        +message_history
+        +caches
+        +token_counts
+    }
+
+    class AgentPromptMixin {
+        +get_full_system_prompt()
+        +get_system_prompt()
+    }
+
+    class PackLeader {
+        +MAX_PARALLEL_AGENTS = 8
+        +delegate_task()
+        +manage_agent_pool()
+    }
+
+    package "Agent Types" {
+        class CodePuppyAgent
+        class CodeReviewerAgent
+        class SecurityAuditorAgent
+        class PythonProgrammerAgent
+        class TerminalQAAgent
+        class TurboExecutorAgent
+        class CodeScoutAgent
+        class QAKittenAgent
+        class HeliosAgent
+        class CreatorAgent
+    }
+
+    package "Pack System" {
+        class Bloodhound
+        class Retriever
+        class Shepherd
+        class Terrier
+        class Watchdog
+    }
+}
+
+package "Tool Layer" {
+    class ToolRegistry {
+        +register_tool()
+        +get_registered_tools()
+    }
+
+    package "File Tools" {
+        class list_files
+        class read_file
+        class grep
+        class replace_in_file
+        class create_file
+        class delete_snippet
+        class delete_file
+    }
+
+    package "Agent Tools" {
+        class invoke_agent
+        class list_agents
+    }
+
+    package "Execution Tools" {
+        class agent_run_shell_command
+        class command_runner
+    }
+
+    package "User Interaction" {
+        class ask_user_question
+        class terminal_ui
+    }
+}
+
+package "Plugin System" {
+    class PluginLoader {
+        +discover_plugins()
+        +load_register_callbacks()
+    }
+
+    package "Core Plugins" {
+        class fast_puppy
+        class file_mentions
+        class repo_compass
+        class pack_parallelism
+        class agent_trace
+        class agent_memory
+    }
+
+    package "Auth Plugins" {
+        class claude_code_oauth
+        class chatgpt_oauth
+    }
+
+    package "Feature Plugins" {
+        class adversarial_planning
+        class agent_skills
+        class turbo_executor
+        class shell_safety
+        class code_explorer
+    }
+}
+
+package "MCP Layer" {
+    class MCPManager {
+        +get_mcp_manager()
+        +add_server()
+        +remove_server()
+    }
+
+    class ManagedMCPServer {
+        +config: ServerConfig
+        +state: ServerState
+        +execute(tool_name, args)
+    }
+
+    class CircuitBreaker {
+        +state: CLOSED/OPEN/HALF_OPEN
+        +record_success/failure()
+    }
+
+    class MCPSecurity {
+        +validate_command_whitelist()
+        +detect_shell_injection()
+    }
+}
+
+package "Model/AI Layer" {
+    class PydanticAgent {
+        +run(user_prompt, message_history)
+    }
+
+    class ModelSwitching {
+        +resolve_model()
+        +apply_agent_pinned_model()
+    }
+
+    class AdaptiveRateLimiter {
+        +ModelRateLimitState
+        +record_attempt()
+        +get_delay_until_next_request()
+    }
+
+    class TokenLedger {
+        +record_usage()
+        +get_context_window_status()
+    }
+}
+
+package "API Layer" {
+    class FastAPIApp {
+        +app: FastAPI
+    }
+
+    class WebSocketHandler {
+        +handle_terminal_ws()
+    }
+
+    class SessionRouter {
+        +get_session()
+        +create_session()
+        +execute_command()
+    }
+}
+
+package "Storage Layer" {
+    class SessionStorage {
+        +load_session()
+        +save_session()
+    }
+
+    class PersistenceManager {
+        +checkpoint_state()
+        +restore_state()
+    }
+}
+
+' Relationships
+AppRunner --> CallbackSystem : triggers
+AppRunner --> AgentManager : uses
+
+CallbackSystem --> PluginLoader : calls hooks
+
+AgentManager --> BaseAgent : manages
+AgentManager --> AgentRuntimeState : tracks state
+
+BaseAgent --> AgentPromptMixin : inherits
+BaseAgent --> ModelFactory : uses
+BaseAgent --> PydanticAgent : wraps
+BaseAgent --> ToolRegistry : has tools
+BaseAgent --> TokenLedger : tracks tokens
+
+PackLeader --> BaseAgent : delegates to
+PackLeader --> pack_parallelism : manages limits
+
+' Plugin relationships
+PluginLoader --> Core_Plugins : loads
+PluginLoader --> Auth_Plugins : loads
+PluginLoader --> Feature_Plugins : loads
+
+' Tool relationships
+ToolRegistry --> File_Tools : contains
+ToolRegistry --> Agent_Tools : contains
+ToolRegistry --> Execution_Tools : contains
+ToolRegistry --> User_Interaction : contains
+
+' Native acceleration
+NativeBackend --> list_files : accelerates
+NativeBackend --> grep : accelerates
+NativeBackend --> read_file : accelerates
+
+' MCP relationships
+MCPManager --> ManagedMCPServer : manages
+ManagedMCPServer --> CircuitBreaker : protected by
+ManagedMCPServer --> MCPSecurity : validated by
+
+' Model relationships
+ModelFactory --> AdaptiveRateLimiter : consults
+PydanticAgent --> ModelSwitching : uses
+BaseAgent --> AdaptiveRateLimiter : respects
+
+' API relationships
+FastAPIApp --> WebSocketHandler : includes
+FastAPIApp --> SessionRouter : routes
+
+' Storage relationships
+BaseAgent --> SessionStorage : persists history
+BaseAgent --> PersistenceManager : checkpoints
+
+@enduml

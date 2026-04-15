@@ -1,9 +1,10 @@
-"""Tests for the fast_puppy multi-crate builder module.
+"""Tests for the fast_puppy builder and rust_builder modules.
 
-This module tests the builder.py module which provides:
-- Crate discovery and status checking
-- Freshness detection (binary vs source mtime)
-- Auto-building functionality
+This module tests:
+- builder.py: Crate discovery and status checking, freshness detection
+- rust_builder.py: Build-related functionality
+
+bd-91: Module was split - discovery in builder.py, builds in rust_builder.py
 """
 
 from pathlib import Path
@@ -12,23 +13,25 @@ import os
 
 import pytest
 
+# Discovery functions from builder.py
 from code_puppy.plugins.fast_puppy.builder import (
     CRATES,
-    _build_crate,
-    _build_env,
-    _check_disable_autobuild,
     _find_crate_dir,
     _find_repo_root,
+    _is_crate_fresh,
+    _is_crate_installed,
+    get_all_crate_status,
+)
+
+# Build functions from rust_builder.py (bd-91: new module)
+from code_puppy.plugins.fast_puppy.rust_builder import (
+    _build_crate,
+    _build_env,
     _get_maturin_command,
     _has_maturin,
     _has_rust_toolchain,
-    _is_crate_fresh,
-    _is_crate_installed,
     _prewarm_workspace,
-    _try_auto_build,
-    _try_auto_build_all,
     build_single_crate,
-    get_all_crate_status,
 )
 
 
@@ -340,7 +343,7 @@ class TestBuildSingleCrate:
     def test_build_single_crate_returns_false_without_toolchain(self):
         """Returns False when no Rust toolchain."""
         with patch(
-            "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain",
+            "code_puppy.plugins.fast_puppy.rust_builder._has_rust_toolchain",
             return_value=False,
         ):
             result = build_single_crate("turbo_parse")
@@ -348,34 +351,9 @@ class TestBuildSingleCrate:
 
 
 
-class TestTryAutoBuildAll:
-    """Tests for _try_auto_build_all() helper."""
-
-    def test_try_auto_build_all_respects_disable_flag(self):
-        """Mocks config disable_rust_autobuild=true and verifies no build attempted."""
-        with patch(
-            "code_puppy.plugins.fast_puppy.builder._check_disable_autobuild",
-            return_value=True,
-        ):
-            with patch(
-                "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain"
-            ) as mock_has_rust:
-                result = _try_auto_build_all()
-                mock_has_rust.assert_not_called()
-                assert result == {}
-
-    def test_try_auto_build_all_returns_empty_without_toolchain(self):
-        """Returns empty dict when no Rust toolchain."""
-        with patch(
-            "code_puppy.plugins.fast_puppy.builder._check_disable_autobuild",
-            return_value=False,
-        ):
-            with patch(
-                "code_puppy.plugins.fast_puppy.builder._has_rust_toolchain",
-                return_value=False,
-            ):
-                result = _try_auto_build_all()
-                assert result == {}
+# bd-91: Removed auto-build tests - functionality moved to /fast_puppy build command only
+# Tests for _try_auto_build_all, _try_auto_build, _check_disable_autobuild removed
+# as these functions were removed when auto-build was eliminated.
 
 
 class TestPrewarmWorkspace:
@@ -396,33 +374,7 @@ class TestPrewarmWorkspace:
             assert "--workspace" in call_args
 
 
-class TestCheckDisableAutobuild:
-    """Tests for _check_disable_autobuild() helper."""
 
-    def test_check_disable_autobuild_returns_true_when_set(self):
-        """Returns True when config has disable_rust_autobuild=true."""
-        with patch("code_puppy.config.get_value", return_value="true"):
-            result = _check_disable_autobuild()
-            assert result is True
-
-    def test_check_disable_autobuild_returns_false_when_not_set(self):
-        """Returns False when config value is not set."""
-        with patch("code_puppy.config.get_value", return_value=None):
-            result = _check_disable_autobuild()
-            assert result is False
-
-
-class TestTryAutoBuildLegacy:
-    """Tests for _try_auto_build() backward compatibility."""
-
-    def test_try_auto_build_calls_auto_build_all(self):
-        """Legacy function should call _try_auto_build_all and return code_puppy_core result."""
-        with patch(
-            "code_puppy.plugins.fast_puppy.builder._try_auto_build_all",
-            return_value={"code_puppy_core": True, "turbo_ops": False},
-        ):
-            result = _try_auto_build()
-            assert result is True
 
 
 class TestBuildEnv:
@@ -523,20 +475,25 @@ class TestBuildEnv:
 class TestFullBuildCycle:
     """Integration test that actually exercises the build cycle.
 
+    bd-91: Updated to use explicit build via build_single_crate per crate.
     This test is marked as slow because it may run actual builds.
     It only runs if a Rust toolchain is available.
     """
 
     def test_full_build_cycle(self):
-        """If Rust toolchain available, runs _try_auto_build_all() and verifies all 3 modules."""
+        """If Rust toolchain available, builds all crates and verifies results."""
         if not _has_rust_toolchain():
             pytest.skip("Rust toolchain not available")
 
         if not _has_maturin():
             pytest.skip("maturin not available")
 
-        # Run the full auto-build
-        results = _try_auto_build_all()
+        # bd-91: Use explicit build loop instead of _try_auto_build_all
+        results: dict[str, bool] = {}
+        for crate_spec in CRATES:
+            crate_name = crate_spec["name"]
+            success = build_single_crate(crate_name)
+            results[crate_name] = success
 
         # We don't assert all succeed (they may not be committed/ready)
         # but we verify the structure of the results
@@ -559,7 +516,7 @@ class TestBuildEnv:
     def test_sets_virtual_env_from_sys_prefix(self):
         """When sys.prefix != sys.base_prefix (in a venv), sets VIRTUAL_ENV."""
         with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
-            with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
+            with patch("code_puppy.plugins.fast_puppy.rust_builder.sys") as mock_sys:
                 mock_sys.prefix = "/some/.venv"
                 mock_sys.base_prefix = "/usr"
                 env = _build_env()
@@ -568,11 +525,11 @@ class TestBuildEnv:
     def test_no_virtual_env_when_not_in_venv(self, tmp_path):
         """When sys.prefix == sys.base_prefix and no .venv dir, VIRTUAL_ENV is not set."""
         with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
-            with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
+            with patch("code_puppy.plugins.fast_puppy.rust_builder.sys") as mock_sys:
                 mock_sys.prefix = "/usr"
                 mock_sys.base_prefix = "/usr"
                 with patch(
-                    "code_puppy.plugins.fast_puppy.builder.Path.cwd",
+                    "code_puppy.plugins.fast_puppy.rust_builder.Path.cwd",
                     return_value=tmp_path,
                 ):
                     env = _build_env()
@@ -587,12 +544,12 @@ class TestBuildEnv:
         (bin_dir / "python").touch()
 
         with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
-            with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
+            with patch("code_puppy.plugins.fast_puppy.rust_builder.sys") as mock_sys:
                 mock_sys.prefix = "/usr"
                 mock_sys.base_prefix = "/usr"
                 mock_sys.platform = "darwin"
                 with patch(
-                    "code_puppy.plugins.fast_puppy.builder.Path.cwd",
+                    "code_puppy.plugins.fast_puppy.rust_builder.Path.cwd",
                     return_value=tmp_path,
                 ):
                     env = _build_env()
@@ -607,12 +564,12 @@ class TestBuildEnv:
         (scripts_dir / "python.exe").touch()
 
         with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
-            with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
+            with patch("code_puppy.plugins.fast_puppy.rust_builder.sys") as mock_sys:
                 mock_sys.prefix = "C:\\Python311"
                 mock_sys.base_prefix = "C:\\Python311"
                 mock_sys.platform = "win32"
                 with patch(
-                    "code_puppy.plugins.fast_puppy.builder.Path.cwd",
+                    "code_puppy.plugins.fast_puppy.rust_builder.Path.cwd",
                     return_value=tmp_path,
                 ):
                     env = _build_env()
@@ -627,12 +584,12 @@ class TestBuildEnv:
         (bin_dir / "python").touch()
 
         with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
-            with patch("code_puppy.plugins.fast_puppy.builder.sys") as mock_sys:
+            with patch("code_puppy.plugins.fast_puppy.rust_builder.sys") as mock_sys:
                 mock_sys.prefix = "C:\\Python311"
                 mock_sys.base_prefix = "C:\\Python311"
                 mock_sys.platform = "win32"
                 with patch(
-                    "code_puppy.plugins.fast_puppy.builder.Path.cwd",
+                    "code_puppy.plugins.fast_puppy.rust_builder.Path.cwd",
                     return_value=tmp_path,
                 ):
                     env = _build_env()
@@ -659,7 +616,7 @@ class TestBuildCrateWarningFiltering:
 
         with patch("subprocess.Popen", return_value=mock_proc):
             with patch(
-                "code_puppy.plugins.fast_puppy.builder._get_maturin_command",
+                "code_puppy.plugins.fast_puppy.rust_builder._get_maturin_command",
                 return_value=["maturin"],
             ):
                 success, error_msg = _build_crate(crate_dir, "test_crate")
@@ -682,7 +639,7 @@ class TestBuildCrateWarningFiltering:
 
         with patch("subprocess.Popen", return_value=mock_proc):
             with patch(
-                "code_puppy.plugins.fast_puppy.builder._get_maturin_command",
+                "code_puppy.plugins.fast_puppy.rust_builder._get_maturin_command",
                 return_value=["maturin"],
             ):
                 success, error_msg = _build_crate(crate_dir, "test_crate")
@@ -703,7 +660,7 @@ class TestBuildCrateWarningFiltering:
 
         with patch("subprocess.Popen", return_value=mock_proc):
             with patch(
-                "code_puppy.plugins.fast_puppy.builder._get_maturin_command",
+                "code_puppy.plugins.fast_puppy.rust_builder._get_maturin_command",
                 return_value=["maturin"],
             ):
                 success, error_msg = _build_crate(crate_dir, "test_crate")
@@ -725,7 +682,7 @@ class TestBuildCrateWarningFiltering:
 
         with patch("subprocess.Popen", return_value=mock_proc):
             with patch(
-                "code_puppy.plugins.fast_puppy.builder._get_maturin_command",
+                "code_puppy.plugins.fast_puppy.rust_builder._get_maturin_command",
                 return_value=["maturin"],
             ):
                 success, error_msg = _build_crate(crate_dir, "test_crate")
@@ -748,7 +705,7 @@ class TestBuildCratePassesEnvToSubprocess:
 
         with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
             with patch(
-                "code_puppy.plugins.fast_puppy.builder._get_maturin_command",
+                "code_puppy.plugins.fast_puppy.rust_builder._get_maturin_command",
                 return_value=["maturin"],
             ):
                 _build_crate(crate_dir, "test_crate")
