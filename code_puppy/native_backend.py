@@ -1583,6 +1583,14 @@ def parse_batch(
     return NativeBackend.parse_batch(paths, language)
 
 
+def create_message_batch(messages: list) -> Any:
+    """Create a MessageBatchHandle for batch Rust operations.
+
+    Convenience wrapper around NativeBackend.create_message_batch().
+    """
+    return NativeBackend.create_message_batch(messages)
+
+
 __all__ = [
     # Main class
     "NativeBackend",
@@ -1610,4 +1618,7 @@ __all__ = [
     "parse_batch",
     # Index operations
     "index_directory",
+    # Message batch operations
+    "create_message_batch",
+    "MessageBatchHandle",
 ]
