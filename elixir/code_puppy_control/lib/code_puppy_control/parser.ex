@@ -29,11 +29,8 @@ defmodule CodePuppyControl.Parser do
   def extract_symbols(source, language) do
     cond do
       nif_available?() and TurboParseNif.is_language_supported(language) ->
-        # Use NIF for supported languages
-        case TurboParseNif.extract_symbols(source, language) do
-          json when is_binary(json) -> Jason.decode(json)
-          other -> {:ok, other}
-        end
+        # NIF returns {:ok, result} directly — no Jason.decode needed
+        TurboParseNif.extract_symbols(source, language)
 
       language in ["python", "elixir"] ->
         # Use SymbolExtractor for regex-based fallback on known languages
@@ -70,10 +67,8 @@ defmodule CodePuppyControl.Parser do
 
     cond do
       nif_available?() and is_binary(lang) and TurboParseNif.is_language_supported(lang) ->
-        case TurboParseNif.extract_symbols_from_file(path, lang) do
-          json when is_binary(json) -> Jason.decode(json)
-          other -> {:ok, other}
-        end
+        # NIF returns {:ok, result} directly
+        TurboParseNif.extract_symbols_from_file(path, lang)
 
       is_binary(lang) and lang in ["python", "elixir"] ->
         # Fallback: read file and use regex extraction
@@ -95,10 +90,7 @@ defmodule CodePuppyControl.Parser do
   Parse source code.
   """
   def parse_source(source, language) do
-    case TurboParseNif.parse_source(source, language) do
-      json when is_binary(json) -> Jason.decode(json)
-      other -> {:ok, other}
-    end
+    TurboParseNif.parse_source(source, language)
   rescue
     e -> {:error, Exception.message(e)}
   end
@@ -107,10 +99,7 @@ defmodule CodePuppyControl.Parser do
   Parse a file.
   """
   def parse_file(path, language \\ nil) do
-    case TurboParseNif.parse_file(path, language) do
-      json when is_binary(json) -> Jason.decode(json)
-      other -> {:ok, other}
-    end
+    TurboParseNif.parse_file(path, language)
   rescue
     e -> {:error, Exception.message(e)}
   end
@@ -119,10 +108,7 @@ defmodule CodePuppyControl.Parser do
   Extract syntax diagnostics (errors, warnings) from source code.
   """
   def extract_syntax_diagnostics(source, language) do
-    case TurboParseNif.extract_syntax_diagnostics(source, language) do
-      json when is_binary(json) -> Jason.decode(json)
-      other -> {:ok, other}
-    end
+    TurboParseNif.extract_syntax_diagnostics(source, language)
   rescue
     e -> {:error, Exception.message(e)}
   end
@@ -131,10 +117,7 @@ defmodule CodePuppyControl.Parser do
   Get fold ranges for code folding.
   """
   def get_folds(source, language) do
-    case TurboParseNif.get_folds(source, language) do
-      json when is_binary(json) -> Jason.decode(json)
-      other -> {:ok, other}
-    end
+    TurboParseNif.get_folds(source, language)
   rescue
     e -> {:error, Exception.message(e)}
   end
@@ -143,10 +126,7 @@ defmodule CodePuppyControl.Parser do
   Get fold ranges from a file.
   """
   def get_folds_from_file(path, language \\ nil) do
-    case TurboParseNif.get_folds_from_file(path, language) do
-      json when is_binary(json) -> Jason.decode(json)
-      other -> {:ok, other}
-    end
+    TurboParseNif.get_folds_from_file(path, language)
   rescue
     e -> {:error, Exception.message(e)}
   end
@@ -155,10 +135,7 @@ defmodule CodePuppyControl.Parser do
   Get syntax highlights.
   """
   def get_highlights(source, language) do
-    case TurboParseNif.get_highlights(source, language) do
-      json when is_binary(json) -> Jason.decode(json)
-      other -> {:ok, other}
-    end
+    TurboParseNif.get_highlights(source, language)
   rescue
     e -> {:error, Exception.message(e)}
   end
@@ -167,10 +144,7 @@ defmodule CodePuppyControl.Parser do
   Get syntax highlights from a file.
   """
   def get_highlights_from_file(path, language \\ nil) do
-    case TurboParseNif.get_highlights_from_file(path, language) do
-      json when is_binary(json) -> Jason.decode(json)
-      other -> {:ok, other}
-    end
+    TurboParseNif.get_highlights_from_file(path, language)
   rescue
     e -> {:error, Exception.message(e)}
   end
@@ -184,6 +158,69 @@ defmodule CodePuppyControl.Parser do
     else
       ["python", "elixir"]
     end
+  end
+
+  @doc """
+  Get the turbo_parse version string.
+  """
+  def version do
+    if nif_available?() do
+      TurboParseNif.version()
+    else
+      "unavailable"
+    end
+  rescue
+    _ -> "unavailable"
+  end
+
+  @doc """
+  Normalize a language name (aliases to canonical name).
+
+  Examples:
+    normalize_language("py")  => "python"
+    normalize_language("js")  => "javascript"
+    normalize_language("jsx") => "javascript"
+  """
+  def normalize_language(language) do
+    if nif_available?() do
+      TurboParseNif.normalize_language(language)
+    else
+      # Fallback normalization
+      case String.downcase(language) do
+        "py" -> "python"
+        "js" -> "javascript"
+        "jsx" -> "javascript"
+        "ts" -> "typescript"
+        "ex" -> "elixir"
+        "exs" -> "elixir"
+        other -> other
+      end
+    end
+  end
+
+  @doc """
+  Get language metadata (name, available query types).
+
+  Returns {:ok, info} or {:error, :unsupported_language}.
+  """
+  def get_language_info(language) do
+    if nif_available?() do
+      TurboParseNif.get_language_info(language)
+    else
+      if language in ["python", "elixir"] do
+        {:ok,
+         %{
+           "name" => language,
+           "highlights_available" => true,
+           "folds_available" => true,
+           "indents_available" => true
+         }}
+      else
+        {:error, :unsupported_language}
+      end
+    end
+  rescue
+    _ -> {:error, :unsupported_language}
   end
 
   # ---------------------------------------------------------------------------

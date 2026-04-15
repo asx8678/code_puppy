@@ -44,7 +44,8 @@ pub use diagnostics::extract_diagnostics;
 pub use folds::{get_folds, get_folds_from_file, FoldContext};
 pub use highlights::{get_highlights, get_highlights_from_file, HighlightContext};
 pub use parser::{parse_file, parse_source};
-pub use queries::{get_folds_query, get_highlights_query, get_indents_query, is_language_supported, normalize_language};
+pub use queries::{get_folds_query, get_highlights_query, get_indents_query, get_language_info, is_language_supported, normalize_language, LanguageInfo};
+
 pub use registry::{get_language, list_supported_languages, LanguageRegistry};
 pub use types::{RegistryError, QueryError};
 pub use symbols::{extract_symbols, extract_symbols_from_file};

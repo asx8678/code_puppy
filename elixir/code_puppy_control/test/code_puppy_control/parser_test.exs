@@ -18,6 +18,70 @@ defmodule CodePuppyControl.ParserTest do
     end
   end
 
+  describe "version/0" do
+    test "returns a version string" do
+      version = Parser.version()
+      assert is_binary(version)
+      assert version != ""
+    end
+  end
+
+  describe "normalize_language/1" do
+    test "normalizes py to python" do
+      assert Parser.normalize_language("py") == "python"
+    end
+
+    test "normalizes js to javascript" do
+      assert Parser.normalize_language("js") == "javascript"
+    end
+
+    test "normalizes jsx to javascript" do
+      assert Parser.normalize_language("jsx") == "javascript"
+    end
+
+    test "normalizes ts to typescript" do
+      assert Parser.normalize_language("ts") == "typescript"
+    end
+
+    test "normalizes ex to elixir" do
+      assert Parser.normalize_language("ex") == "elixir"
+    end
+
+    test "normalizes exs to elixir" do
+      assert Parser.normalize_language("exs") == "elixir"
+    end
+
+    test "passes through canonical names unchanged" do
+      assert Parser.normalize_language("python") == "python"
+      assert Parser.normalize_language("rust") == "rust"
+      assert Parser.normalize_language("elixir") == "elixir"
+    end
+
+    test "handles case insensitivity" do
+      assert Parser.normalize_language("PY") == "python"
+      assert Parser.normalize_language("Python") == "python"
+    end
+  end
+
+  describe "get_language_info/1" do
+    test "returns info for supported language" do
+      {:ok, info} = Parser.get_language_info("python")
+      assert info["name"] == "python"
+      assert info["highlights_available"] == true
+      assert info["folds_available"] == true
+      assert info["indents_available"] == true
+    end
+
+    test "returns error for unsupported language" do
+      assert {:error, :unsupported_language} = Parser.get_language_info("go")
+    end
+
+    test "normalizes language name in info" do
+      {:ok, info} = Parser.get_language_info("py")
+      assert info["name"] == "python"
+    end
+  end
+
   describe "extract_symbols/2" do
     test "extracts Python function" do
       source = """
@@ -148,6 +212,96 @@ defmodule CodePuppyControl.ParserTest do
         {:ok, outline} = Parser.extract_symbols_from_file(path)
         # Should work even with fallback
         assert is_map(outline)
+      after
+        File.rm(path)
+      end
+    end
+  end
+
+  describe "parse_file/2" do
+    test "parses a temporary Python file with auto-detected language" do
+      path = Path.join(System.tmp_dir!(), "test_parse_#{:rand.uniform(10000)}.py")
+      File.write!(path, "def hello():\n    return 42\n")
+
+      try do
+        {:ok, result} = Parser.parse_file(path)
+        assert is_map(result)
+        assert result["success"] == true
+        assert result["language"] == "python"
+      after
+        File.rm(path)
+      end
+    end
+
+    test "parses a temporary Elixir file with explicit language" do
+      path = Path.join(System.tmp_dir!(), "test_parse_#{:rand.uniform(10000)}.ex")
+      File.write!(path, "defmodule Foo do\n  def bar, do: :ok\nend\n")
+
+      try do
+        {:ok, result} = Parser.parse_file(path, "elixir")
+        assert is_map(result)
+        assert result["success"] == true
+        assert result["language"] == "elixir"
+      after
+        File.rm(path)
+      end
+    end
+  end
+
+  describe "get_folds_from_file/2" do
+    test "extracts fold ranges from a Python file with auto-detected language" do
+      path = Path.join(System.tmp_dir!(), "test_folds_#{:rand.uniform(10000)}.py")
+      File.write!(path, "def outer():\n    def inner():\n        pass\n    return inner\n")
+
+      try do
+        {:ok, result} = Parser.get_folds_from_file(path)
+        assert is_map(result)
+        assert result["success"] == true
+        assert is_list(result["folds"])
+      after
+        File.rm(path)
+      end
+    end
+
+    test "extracts fold ranges from a Python file with explicit language" do
+      path = Path.join(System.tmp_dir!(), "test_folds_#{:rand.uniform(10000)}.py")
+      File.write!(path, "def outer():\n    def inner():\n        pass\n    return inner\n")
+
+      try do
+        {:ok, result} = Parser.get_folds_from_file(path, "python")
+        assert is_map(result)
+        assert result["success"] == true
+        assert is_list(result["folds"])
+      after
+        File.rm(path)
+      end
+    end
+  end
+
+  describe "get_highlights_from_file/2" do
+    test "extracts highlight captures from a Python file with auto-detected language" do
+      path = Path.join(System.tmp_dir!(), "test_highlights_#{:rand.uniform(10000)}.py")
+      File.write!(path, "def hello():\n    return \"world\"\n")
+
+      try do
+        {:ok, result} = Parser.get_highlights_from_file(path)
+        assert is_map(result)
+        assert result["success"] == true
+        assert is_list(result["captures"])
+      after
+        File.rm(path)
+      end
+    end
+
+    test "extracts highlight captures from a Python file with explicit language" do
+      path = Path.join(System.tmp_dir!(), "test_highlights_#{:rand.uniform(10000)}.py")
+      File.write!(path, "def hello():\n    return \"world\"\n")
+
+      try do
+        {:ok, result} = Parser.get_highlights_from_file(path, "python")
+        assert is_map(result)
+        assert result["success"] == true
+        assert is_list(result["captures"])
       after
         File.rm(path)
       end

@@ -55,4 +55,16 @@ defmodule CodePuppyControl.TurboParseNif do
   @doc "Get syntax highlights from a file"
   @spec get_highlights_from_file(String.t(), String.t() | nil) :: {:ok, map()} | {:error, term()}
   def get_highlights_from_file(_path, _language \\ nil), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc "Get the turbo_parse crate version"
+  @spec version() :: String.t()
+  def version(), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc "Normalize a language name (aliases to canonical name)"
+  @spec normalize_language(String.t()) :: String.t()
+  def normalize_language(_language), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc "Get language metadata (name, available query types)"
+  @spec get_language_info(String.t()) :: {:ok, map()} | {:error, :unsupported_language}
+  def get_language_info(_language), do: :erlang.nif_error(:nif_not_loaded)
 end

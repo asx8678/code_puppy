@@ -69,7 +69,8 @@ defmodule CodePuppyControl.PythonWorker.Port do
   Sends multiple JSON-RPC requests as a batch (bd-103).
   Batching reduces IPC overhead by combining N requests into a single write.
   """
-  @spec call_batch(String.t(), list({String.t(), map()}), timeout()) :: list({:ok, term()} | {:error, term()})
+  @spec call_batch(String.t(), list({String.t(), map()}), timeout()) ::
+          list({:ok, term()} | {:error, term()})
   def call_batch(run_id, calls, timeout \\ 30_000) do
     GenServer.call(via_tuple(run_id), {:call_batch, calls, timeout}, timeout + 5000)
   end
