@@ -242,16 +242,14 @@ def _effective_max() -> int:
 
 
 def _prompt_addition() -> str | None:
-    """Return a parallelism constraint block for the Pack Leader system prompt."""
-    max_p = _effective_max()
+    """Return parallelism constraint for system prompt, only when session-override is active."""
+    if _session_max is None:
+        return None
     return (
-        f"\n\n## ⚡ Pack Leader Parallelism Limit\n"
-        f"**`MAX_PARALLEL_AGENTS = {max_p}`**\n\n"
-        f"Never invoke more than **{max_p}** agent(s) simultaneously.\n"
-        f"When `bd ready` returns more than {max_p} issues, work through them\n"
-        f"in batches of {max_p}, waiting for each batch to complete before\n"
-        f"starting the next.\n\n"
-        f"*(Override for this session with `/pack-parallel N`)*"
+        f"\n\n## ⚡ Pack Leader Parallelism Limit"
+        f"\n**`MAX_PARALLEL_AGENTS = {_session_max}`**"
+        f"\nNever invoke more than **{_session_max}** agent(s) simultaneously."
+        f" Run `/pack-parallel` to adjust."
     )
 
 

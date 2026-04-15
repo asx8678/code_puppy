@@ -8,82 +8,53 @@ import pytest
 
 
 class TestDelegationPrompt:
-    """Test that delegation guidance is added to agent prompts."""
+    """Test that a brief delegation hint is added to agent prompts."""
 
-    def test_load_turbo_prompt_returns_guidance(self):
-        """Test that _load_turbo_prompt returns delegation guidance."""
+    def test_load_turbo_prompt_returns_hint(self):
+        """Test that _load_turbo_prompt returns a brief hint."""
         from code_puppy.plugins.turbo_executor.register_callbacks import (
             _load_turbo_prompt,
         )
 
         prompt = _load_turbo_prompt()
 
-        # Should contain delegation guidance
-        assert "Turbo Executor Delegation" in prompt
+        assert "Turbo Executor" in prompt
         assert "turbo-executor" in prompt
         assert "invoke_agent" in prompt
-
-    def test_prompt_contains_when_to_delegate(self):
-        """Test that prompt explains when to delegate."""
-        from code_puppy.plugins.turbo_executor.register_callbacks import (
-            _load_turbo_prompt,
-        )
-
-        prompt = _load_turbo_prompt()
-
-        assert "When to Delegate" in prompt
-        assert "Exploring large codebases" in prompt
-        assert "Reading many files" in prompt
-
-    def test_prompt_contains_how_to_delegate(self):
-        """Test that prompt explains how to delegate."""
-        from code_puppy.plugins.turbo_executor.register_callbacks import (
-            _load_turbo_prompt,
-        )
-
-        prompt = _load_turbo_prompt()
-
-        assert "How to Delegate" in prompt
-        assert "invoke_agent" in prompt
-        assert "turbo-executor" in prompt
-
-    def test_prompt_contains_options(self):
-        """Test that prompt explains two delegation options."""
-        from code_puppy.plugins.turbo_executor.register_callbacks import (
-            _load_turbo_prompt,
-        )
-
-        prompt = _load_turbo_prompt()
-
-        assert "Two Options for Batch Operations" in prompt
-        assert "Option 1" in prompt
-        assert "Option 2" in prompt
         assert "turbo_execute" in prompt
 
-    def test_prompt_contains_scenarios(self):
-        """Test that prompt contains example scenarios."""
+    def test_prompt_is_concise(self):
+        """Test that prompt is concise (not the old 60+ line block)."""
         from code_puppy.plugins.turbo_executor.register_callbacks import (
             _load_turbo_prompt,
         )
 
         prompt = _load_turbo_prompt()
 
-        assert "Example Delegation Scenarios" in prompt
-        assert "Scenario 1" in prompt
-        assert "Scenario 2" in prompt
+        # Should be under 300 chars (was 2000+ before compression)
+        assert len(prompt) < 300
+        assert "batch file ops" in prompt.lower()
 
-    def test_prompt_contains_remember_section(self):
-        """Test that prompt has a remember section with thresholds."""
+    def test_prompt_references_help(self):
+        """Test that prompt references /turbo help for details."""
         from code_puppy.plugins.turbo_executor.register_callbacks import (
             _load_turbo_prompt,
         )
 
         prompt = _load_turbo_prompt()
 
-        assert "Remember" in prompt
-        assert "Small tasks" in prompt
-        assert "Medium tasks" in prompt
-        assert "Large tasks" in prompt
+        assert "/turbo help" in prompt
+
+    def test_prompt_contains_both_invocation_methods(self):
+        """Test that prompt mentions both invoke_agent and turbo_execute."""
+        from code_puppy.plugins.turbo_executor.register_callbacks import (
+            _load_turbo_prompt,
+        )
+
+        prompt = _load_turbo_prompt()
+
+        assert "invoke_agent" in prompt
+        assert "turbo_execute" in prompt
 
 
 class TestAgentRegistration:
@@ -209,7 +180,7 @@ class TestDelegationIntegration:
 
         result = _load_turbo_prompt()
         assert isinstance(result, str)
-        assert len(result) > 100  # Should be substantial content
+        assert len(result) > 50  # Brief hint, not massive block
 
     @pytest.mark.skip(reason="Requires mcp package to be installed")
     def test_agent_registration_callback_returns_list(self):
@@ -238,100 +209,32 @@ class TestDelegationIntegration:
 
 
 class TestDelegationThresholds:
-    """Test that delegation thresholds are clear in the prompt."""
+    """Test that delegation threshold is mentioned in the prompt."""
 
-    def test_small_task_threshold(self):
-        """Test that small task threshold is documented."""
+    def test_delegation_threshold_mentioned(self):
+        """Test that the >5 file threshold is mentioned."""
         from code_puppy.plugins.turbo_executor.register_callbacks import (
             _load_turbo_prompt,
         )
 
         prompt = _load_turbo_prompt()
-
-        # Should mention < 5 file operations for small tasks
-        assert "< 5" in prompt or "small" in prompt.lower()
-
-    def test_medium_task_threshold(self):
-        """Test that medium task threshold is documented."""
-        from code_puppy.plugins.turbo_executor.register_callbacks import (
-            _load_turbo_prompt,
-        )
-
-        prompt = _load_turbo_prompt()
-
-        # Should mention 5-10 operations for medium tasks
-        assert "5-10" in prompt or "medium" in prompt.lower()
-
-    def test_large_task_threshold(self):
-        """Test that large task threshold is documented."""
-        from code_puppy.plugins.turbo_executor.register_callbacks import (
-            _load_turbo_prompt,
-        )
-
-        prompt = _load_turbo_prompt()
-
-        # Should mention > 10 operations for large tasks
-        assert "> 10" in prompt or "large" in prompt.lower()
-
-    def test_1m_context_window_mentioned(self):
-        """Test that 1M context window is mentioned."""
-        from code_puppy.plugins.turbo_executor.register_callbacks import (
-            _load_turbo_prompt,
-        )
-
-        prompt = _load_turbo_prompt()
-
-        # Should mention the 1M context window
-        assert "1M" in prompt or "1 Million" in prompt
+        assert ">5 files" in prompt or ">5" in prompt
 
 
 class TestDelegationExamples:
-    """Test that delegation examples are practical."""
+    """Test that the prompt reference is practical."""
 
-    def test_example_contains_invoke_agent(self):
-        """Test that examples show invoke_agent usage."""
+    def test_prompt_mentions_invoke_agent(self):
+        """Test that prompt shows invoke_agent usage."""
         from code_puppy.plugins.turbo_executor.register_callbacks import (
             _load_turbo_prompt,
         )
 
         prompt = _load_turbo_prompt()
 
-        # Should have code examples with invoke_agent
+        # Should reference invoke_agent
         assert "invoke_agent(" in prompt
         assert "turbo-executor" in prompt
-
-    def test_example_shows_session_id(self):
-        """Test that examples show session_id usage."""
-        from code_puppy.plugins.turbo_executor.register_callbacks import (
-            _load_turbo_prompt,
-        )
-
-        prompt = _load_turbo_prompt()
-
-        # Should show session_id parameter
-        assert "session_id=" in prompt or "session_id" in prompt
-
-    def test_scenario_1_mentions_codebase_exploration(self):
-        """Test that scenario 1 is about codebase exploration."""
-        from code_puppy.plugins.turbo_executor.register_callbacks import (
-            _load_turbo_prompt,
-        )
-
-        prompt = _load_turbo_prompt()
-
-        # Should mention exploring codebases
-        assert "codebase" in prompt.lower() or "exploring" in prompt.lower()
-
-    def test_scenario_2_mentions_refactoring(self):
-        """Test that scenario 2 is about refactoring."""
-        from code_puppy.plugins.turbo_executor.register_callbacks import (
-            _load_turbo_prompt,
-        )
-
-        prompt = _load_turbo_prompt()
-
-        # Should mention refactoring
-        assert "refactoring" in prompt.lower() or "deprecated" in prompt.lower()
 
 
 class TestCallbackRegistration:

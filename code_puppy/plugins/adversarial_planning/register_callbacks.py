@@ -81,58 +81,15 @@ def _handle_command(command: str, name: str) -> str | bool | None:
 
 
 def _load_prompt() -> str:
-    """Load plugin-specific instructions into system prompt.
-    
-    Returns:
-        Prompt text to append to system prompt
+    """Load a brief adversarial planning reference into system prompt.
+
+    Compressed from ~30 lines. Full docs available via /help.
     """
-    return '''
-## ⚔️ Adversarial Planning Available
-
-Use `/ap <task>` for evidence-first, multi-agent adversarial planning.
-
-### How it works:
-1. **Researcher** surveys workspace and classifies evidence
-2. **Two isolated planners** propose materially different solutions:
-   - Planner A: Conservative, proven patterns
-   - Planner B: Contrarian, challenges assumptions
-3. **Adversarial review** falsifies weak claims
-4. **Arbiter** synthesizes the best of both plans
-5. **Red team** stress-tests (deep mode)
-6. **Decision** produces go/no-go with evidence
-
-### Modes:
-- **Auto** (`/ap`): Detects task complexity, selects mode
-- **Standard** (`/ap-standard`): 0A → 0B → 1 → 2 → (3 if needed) → 4 → 6 (faster)
-- **Deep** (`/ap-deep`): Adds Phase 5 (Red Team) and Phase 7 (Change-Sets, go only)
-
-Phase 3 (Rebuttal) runs when reviews strongly disagree (any mode).
-Phase 7 (Change-Sets) only runs in deep mode with 'go' verdict.
-
-### Best for:
-- Migrations and replatforming
-- Architecture changes
-- Security-critical work
-- Production-risky launches
-- Cross-team dependencies
-
-### Commands:
-| Command | Description |
-|---------|-------------|
-| `/ap <task>` | Auto mode planning |
-| `/ap-standard <task>` | Standard mode |
-| `/ap-deep <task>` | Deep mode with stress testing |
-| `/ap-status` | Check session status |
-| `/ap-abort` | Stop current session |
-
-**Evidence classification:**
-- VERIFIED (90-100%): Directly observed, supports irreversible work
-- INFERENCE (70-89%): Reasonable conclusion, reversible probes only
-- ASSUMPTION (50-69%): Must become task/gate/blocker
-- UNKNOWN (<50%): Must be blocker/gate/out-of-scope
-'''
-
-
+    return (
+        "\n\n## ⚔️ Adversarial Planning"
+        "\nFor complex tasks (migrations, security, architecture), use `/ap <task>`."
+        " See `/ap-status` and `/help` for details."
+    )
 # =============================================================================
 # Register all callbacks
 # =============================================================================

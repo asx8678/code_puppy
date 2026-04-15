@@ -343,95 +343,15 @@ def _register_turbo_execute_tool(agent):
 
 
 def _load_turbo_prompt() -> str:
-    """Add delegation guidance for turbo-executor.
+    """Add a brief delegation hint for turbo-executor.
 
-    This is called via the 'load_prompt' callback to add instructions
-    to all agent system prompts about when and how to delegate to
-    the turbo-executor agent for batch file operations.
-
-    Returns:
-        Prompt section with delegation guidance.
+    Compressed from ~60 lines. Full docs available via /turbo help.
     """
-    return """\
-
-## 🚀 Turbo Executor Delegation
-
-**For batch file operations, delegate to the turbo-executor agent!**
-
-The `turbo-executor` agent is a specialized agent with a 1M context window,
-designed for high-performance batch file operations. Use it when you need to:
-
-### When to Delegate
-
-1. **Exploring large codebases**: Multiple list_files + grep operations
-2. **Reading many files**: More than 5-10 files to read at once
-3. **Complex search patterns**: Multiple grep operations across directories
-4. **Batch analysis**: Operations that would benefit from parallel execution
-
-### How to Delegate
-
-Use `invoke_agent` with the turbo-executor:
-
-```python
-# Example: Batch exploration of a codebase
-invoke_agent(
-    "turbo-executor",
-    "Explore the codebase structure and find all test files:\n"
-    "\n"
-    "1. List the src/ directory structure\n"
-    "2. Search for files containing 'def test_'\n"
-    "3. Read the first 5 test files found\n"
-    "\n"
-    "Return a summary of the test file organization.",
-    session_id="explore-tests"
-)
-```
-
-### Two Options for Batch Operations
-
-**Option 1: Use turbo_execute tool directly** (if available)
-- Best for: Programmatic batch operations within your current agent
-- Use `turbo_execute` with a plan JSON containing list_files, grep, read_files operations
-
-**Option 2: Invoke turbo-executor agent** (always available)
-- Best for: Complex analysis tasks, large-scale exploration
-- Use `invoke_agent("turbo-executor", prompt)` with natural language instructions
-- The turbo-executor will plan and execute efficient batch operations
-
-### Example Delegation Scenarios
-
-**Scenario 1: Understanding a new codebase**
-```python
-# Instead of:
-list_files(".")
-grep("class ", ".")
-grep("def ", ".")
-read_file("src/main.py")
-read_file("src/utils.py")
-# ... many more operations
-
-# Delegate to turbo-executor:
-invoke_agent("turbo-executor", "Explore this codebase and give me an overview of the main classes and their relationships")
-```
-
-**Scenario 2: Batch refactoring analysis**
-```python
-# Instead of:
-for file in all_files:
-    read_file(file)
-    # analyze each file individually
-
-# Delegate to turbo-executor:
-invoke_agent("turbo-executor", "Find all files using the deprecated 'old_function' and report their locations and usage patterns")
-```
-
-### Remember
-
-- **Small tasks** (< 5 file operations): Do them directly
-- **Medium tasks** (5-10 operations): Consider turbo_execute tool
-- **Large tasks** (> 10 operations or complex exploration): Delegate to turbo-executor agent
-- The turbo-executor has a 1M context window - it can process entire codebases at once!
-"""
+    return (
+        "\n\n## 🚀 Turbo Executor"
+        "\nFor batch file ops (>5 files), use `invoke_agent(\"turbo-executor\", prompt)`"
+        " or the `turbo_execute` tool. Run `/turbo help` for details."
+    )
 
 
 def _register_turbo_agents():
