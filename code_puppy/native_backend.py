@@ -90,7 +90,8 @@ class NativeBackend:
     _turbo_parse_imports: dict[str, Any] | None = None
 
     # bd-62: Backend preference for routing decisions
-    _backend_preference: BackendPreference = BackendPreference.RUST_FIRST
+    # bd-89: Default changed to ELIXIR_FIRST for runtime profile persistence
+    _backend_preference: BackendPreference = BackendPreference.ELIXIR_FIRST
 
     # bd-63: Per-capability enabled state (user can disable even if available)
     _capability_enabled: dict[str, bool] = {
@@ -189,6 +190,7 @@ class NativeBackend:
         """Load capability preferences from config.
 
         bd-63: Supports both legacy global toggle and per-capability settings.
+        bd-89: Added backend_preference loading for runtime profile persistence.
         """
         from code_puppy.config import get_value
 
@@ -207,14 +209,32 @@ class NativeBackend:
             key = f"fast_puppy.{cap}"
             value = get_value(key)
             if value is not None:
-                cls._capability_enabled[cap] = str(value).strip().lower() in ("true", "1", "yes", "on")
+                cls._capability_enabled[cap] = str(value).strip().lower() in (
+                    "true",
+                    "1",
+                    "yes",
+                    "on",
+                )
                 logger.debug(f"Loaded preference {key}={cls._capability_enabled[cap]}")
+
+        # bd-89: Load backend preference for runtime profile persistence
+        backend_pref = get_value("native_backend_preference")
+        if backend_pref is not None:
+            pref_str = str(backend_pref).strip().lower()
+            try:
+                cls._backend_preference = BackendPreference(pref_str)
+                logger.debug(f"Loaded backend_preference={pref_str}")
+            except ValueError:
+                logger.warning(
+                    f"Invalid backend_preference value: {pref_str}, keeping default"
+                )
 
     @classmethod
     def save_preferences(cls) -> None:
         """Save capability preferences to config.
 
         bd-63: Saves per-capability settings (not legacy global toggle).
+        bd-89: Added backend_preference saving for runtime profile persistence.
         """
         from code_puppy.config import set_config_value
 
@@ -222,6 +242,10 @@ class NativeBackend:
             key = f"fast_puppy.{cap}"
             set_config_value(key, "true" if enabled else "false")
             logger.debug(f"Saved preference {key}={enabled}")
+
+        # bd-89: Save backend preference for runtime profile persistence
+        set_config_value("native_backend_preference", cls._backend_preference.value)
+        logger.debug(f"Saved backend_preference={cls._backend_preference.value}")
 
     @classmethod
     def set_capabilities_from_legacy(cls, enabled: bool) -> None:
@@ -254,6 +278,11 @@ class NativeBackend:
             return is_connected()
         except ImportError:
             return False
+
+    @classmethod
+    def is_elixir_connected(cls) -> bool:
+        """Check if Elixir bridge is connected.  # bd-90"""
+        return cls._is_elixir_available()
 
     @classmethod
     def _call_elixir(cls, method: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -328,7 +357,12 @@ class NativeBackend:
     def _get_turbo_parse(cls) -> dict[str, Any]:
         """Lazy-load turbo_parse imports with fallback handling."""
         if cls._turbo_parse_imports is None:
-            imports: dict[str, Any] = {"available": False, "parse_file": None, "parse_source": None, "extract_symbols": None}
+            imports: dict[str, Any] = {
+                "available": False,
+                "parse_file": None,
+                "parse_source": None,
+                "extract_symbols": None,
+            }
             try:
                 from turbo_parse import parse_file, parse_source, extract_symbols
 
@@ -336,7 +370,7 @@ class NativeBackend:
                 imports["parse_source"] = parse_source
                 imports["extract_symbols"] = extract_symbols
                 imports["available"] = True
-            except (ImportError, SystemError):
+            except ImportError, SystemError:
                 logger.debug("turbo_parse not available, will use Python fallbacks")
 
             cls._turbo_parse_imports = imports
@@ -364,7 +398,9 @@ class NativeBackend:
         elixir_available = cls._is_elixir_available()
 
         # bd-76: file_ops availability — Elixir or Python fallback (turbo_ops removed)
-        file_ops_tech_available = elixir_available or True  # Python fallback always available
+        file_ops_tech_available = (
+            elixir_available or True
+        )  # Python fallback always available
         file_ops_user_enabled = cls.is_enabled(cls.Capabilities.FILE_OPS)
         file_ops_active = file_ops_tech_available and file_ops_user_enabled
 
@@ -377,7 +413,9 @@ class NativeBackend:
         msg_core_tech_available = RUST_AVAILABLE
         msg_core_user_enabled = cls.is_enabled(cls.Capabilities.MESSAGE_CORE)
         # Legacy: also respect _core_bridge.is_rust_enabled() for backward compat
-        msg_core_active = msg_core_tech_available and msg_core_user_enabled and is_rust_enabled()
+        msg_core_active = (
+            msg_core_tech_available and msg_core_user_enabled and is_rust_enabled()
+        )
 
         # Determine parse technical availability (bd-64: include Elixir)
         parse_tech_available = TURBO_PARSE_AVAILABLE or cls._is_elixir_available()
@@ -390,28 +428,36 @@ class NativeBackend:
                 configured=config.get("puppy_core", "python"),
                 available=msg_core_tech_available,
                 active=msg_core_active,
-                status="active" if msg_core_active else ("disabled" if not msg_core_user_enabled else "unavailable"),
+                status="active"
+                if msg_core_active
+                else ("disabled" if not msg_core_user_enabled else "unavailable"),
             ),
             cls.Capabilities.FILE_OPS: CapabilityInfo(
                 name=cls.Capabilities.FILE_OPS,
                 configured="elixir",
                 available=file_ops_tech_available,
                 active=file_ops_active,
-                status="active" if file_ops_active else ("disabled" if not file_ops_user_enabled else "unavailable"),
+                status="active"
+                if file_ops_active
+                else ("disabled" if not file_ops_user_enabled else "unavailable"),
             ),
             cls.Capabilities.REPO_INDEX: CapabilityInfo(
                 name=cls.Capabilities.REPO_INDEX,
                 configured="elixir",
                 available=repo_index_tech_available,
                 active=repo_index_active,
-                status="active" if repo_index_active else ("disabled" if not repo_index_user_enabled else "unavailable"),
+                status="active"
+                if repo_index_active
+                else ("disabled" if not repo_index_user_enabled else "unavailable"),
             ),
             cls.Capabilities.PARSE: CapabilityInfo(
                 name=cls.Capabilities.PARSE,
                 configured=config.get("turbo_parse", "python"),
                 available=parse_tech_available,
                 active=parse_active,
-                status="active" if parse_active else ("disabled" if not parse_user_enabled else "unavailable"),
+                status="active"
+                if parse_active
+                else ("disabled" if not parse_user_enabled else "unavailable"),
             ),
         }
 
@@ -443,7 +489,8 @@ class NativeBackend:
                 "source": "elixir" if cls._is_elixir_available() else "python",
             },
             "parse": {
-                "available": turbo_parse.get("available", False) or cls._is_elixir_available(),
+                "available": turbo_parse.get("available", False)
+                or cls._is_elixir_available(),
                 "rust_available": turbo_parse.get("available", False),
                 "elixir_available": cls._is_elixir_available(),
                 "source": cls._last_source.get(cls.Capabilities.PARSE, "unknown"),
@@ -457,6 +504,7 @@ class NativeBackend:
             return "disabled"
         try:
             from code_puppy._core_bridge import is_rust_enabled
+
             if is_rust_enabled():
                 return "rust"
         except ImportError:
@@ -579,20 +627,28 @@ class NativeBackend:
         # bd-62: Try Elixir first if preferred and available
         if _prefer_native and cls._should_use_elixir("file_ops"):
             try:
-                result = cls._call_elixir("file_list", {
-                    "directory": directory,
-                    "recursive": recursive,
-                })
+                result = cls._call_elixir(
+                    "file_list",
+                    {
+                        "directory": directory,
+                        "recursive": recursive,
+                    },
+                )
                 # Normalize Elixir response format
                 if result.get("success", True):
                     return {
-                        "files": [f.get("path", f) if isinstance(f, dict) else f for f in result.get("files", [])],
+                        "files": [
+                            f.get("path", f) if isinstance(f, dict) else f
+                            for f in result.get("files", [])
+                        ],
                         "count": result.get("file_count", len(result.get("files", []))),
                         "total_size": result.get("total_size", 0),
                         "source": "elixir",
                     }
                 else:
-                    logger.debug(f"Elixir file_list returned error: {result.get('error')}")
+                    logger.debug(
+                        f"Elixir file_list returned error: {result.get('error')}"
+                    )
             except NotImplementedError:
                 # Elixir transport not yet implemented, fall through
                 logger.debug("Elixir transport not implemented, falling back")
@@ -607,9 +663,19 @@ class NativeBackend:
 
             # Check if directory exists
             if not os.path.exists(dir_path):
-                return {"error": f"Directory '{dir_path}' does not exist", "files": [], "count": 0, "source": "python_fallback"}
+                return {
+                    "error": f"Directory '{dir_path}' does not exist",
+                    "files": [],
+                    "count": 0,
+                    "source": "python_fallback",
+                }
             if not os.path.isdir(dir_path):
-                return {"error": f"'{dir_path}' is not a directory", "files": [], "count": 0, "source": "python_fallback"}
+                return {
+                    "error": f"'{dir_path}' is not a directory",
+                    "files": [],
+                    "count": 0,
+                    "source": "python_fallback",
+                }
 
             try:
                 files = []
@@ -625,9 +691,18 @@ class NativeBackend:
                         if os.path.isfile(full_path):
                             files.append(entry)
 
-                return {"files": files, "count": len(files), "source": "python_fallback"}
+                return {
+                    "files": files,
+                    "count": len(files),
+                    "source": "python_fallback",
+                }
             except Exception as e:
-                return {"error": str(e), "files": [], "count": 0, "source": "python_fallback"}
+                return {
+                    "error": str(e),
+                    "files": [],
+                    "count": 0,
+                    "source": "python_fallback",
+                }
 
         return _python_fallback(directory, recursive)
 
@@ -659,10 +734,13 @@ class NativeBackend:
         # bd-62: Try Elixir first if preferred and available
         if _prefer_native and cls._should_use_elixir("file_ops"):
             try:
-                result = cls._call_elixir("grep_search", {
-                    "search_string": pattern,
-                    "directory": directory,
-                })
+                result = cls._call_elixir(
+                    "grep_search",
+                    {
+                        "search_string": pattern,
+                        "directory": directory,
+                    },
+                )
                 # Normalize Elixir response format
                 if result.get("success", True):
                     matches = result.get("matches", [])
@@ -673,7 +751,9 @@ class NativeBackend:
                         "source": "elixir",
                     }
                 else:
-                    logger.debug(f"Elixir grep_search returned error: {result.get('error')}")
+                    logger.debug(
+                        f"Elixir grep_search returned error: {result.get('error')}"
+                    )
             except NotImplementedError:
                 logger.debug("Elixir transport not implemented, falling back")
             except Exception as e:
@@ -689,23 +769,51 @@ class NativeBackend:
                 regex = re.compile(pat)
                 for root, _dirs, files in os.walk(dir_path):
                     for filename in files:
-                        if filename.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.rs', '.go', '.rb')):
+                        if filename.endswith(
+                            (
+                                ".py",
+                                ".js",
+                                ".ts",
+                                ".java",
+                                ".c",
+                                ".cpp",
+                                ".h",
+                                ".rs",
+                                ".go",
+                                ".rb",
+                            )
+                        ):
                             filepath = os.path.join(root, filename)
                             try:
-                                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                                with open(
+                                    filepath, "r", encoding="utf-8", errors="ignore"
+                                ) as f:
                                     for line_num, line in enumerate(f, 1):
                                         if regex.search(line):
-                                            matches.append({
-                                                "file_path": filepath,
-                                                "line_number": line_num,
-                                                "line_content": line.strip()[:200],  # Limit line length
-                                            })
+                                            matches.append(
+                                                {
+                                                    "file_path": filepath,
+                                                    "line_number": line_num,
+                                                    "line_content": line.strip()[
+                                                        :200
+                                                    ],  # Limit line length
+                                                }
+                                            )
                             except Exception:
                                 continue
 
-                return {"matches": matches, "total_matches": len(matches), "source": "python_fallback"}
+                return {
+                    "matches": matches,
+                    "total_matches": len(matches),
+                    "source": "python_fallback",
+                }
             except Exception as e:
-                return {"error": str(e), "matches": [], "total_matches": 0, "source": "python_fallback"}
+                return {
+                    "error": str(e),
+                    "matches": [],
+                    "total_matches": 0,
+                    "source": "python_fallback",
+                }
 
         return _python_fallback(pattern, directory)
 
@@ -758,7 +866,9 @@ class NativeBackend:
                         "source": "elixir",
                     }
                 else:
-                    logger.debug(f"Elixir file_read returned error: {result.get('error')}")
+                    logger.debug(
+                        f"Elixir file_read returned error: {result.get('error')}"
+                    )
             except NotImplementedError:
                 logger.debug("Elixir transport not implemented, falling back")
             except Exception as e:
@@ -772,24 +882,40 @@ class NativeBackend:
                 file_path = os.path.abspath(os.path.expanduser(file_path))
 
                 if not os.path.exists(file_path):
-                    return {"error": f"File not found: {file_path}", "content": None, "num_tokens": 0, "source": "python_fallback"}
+                    return {
+                        "error": f"File not found: {file_path}",
+                        "content": None,
+                        "num_tokens": 0,
+                        "source": "python_fallback",
+                    }
 
-                with open(file_path, 'r', encoding='utf-8', errors='surrogateescape') as f:
+                with open(
+                    file_path, "r", encoding="utf-8", errors="surrogateescape"
+                ) as f:
                     if start is not None and num is not None:
                         import itertools
 
                         start_idx = start - 1
                         lines = list(itertools.islice(f, start_idx, start_idx + num))
-                        content = ''.join(lines)
+                        content = "".join(lines)
                     else:
                         content = f.read()
 
                 # Estimate tokens (rough approximation: 4 chars ≈ 1 token)
                 num_tokens = len(content) // 4
 
-                return {"content": content, "num_tokens": num_tokens, "source": "python_fallback"}
+                return {
+                    "content": content,
+                    "num_tokens": num_tokens,
+                    "source": "python_fallback",
+                }
             except Exception as e:
-                return {"error": str(e), "content": None, "num_tokens": 0, "source": "python_fallback"}
+                return {
+                    "error": str(e),
+                    "content": None,
+                    "num_tokens": 0,
+                    "source": "python_fallback",
+                }
 
         return _python_fallback(path, start_line, num_lines)
 
@@ -836,27 +962,38 @@ class NativeBackend:
                     return {
                         "files": files,
                         "total_files": len(paths),
-                        "successful_reads": sum(1 for f in files if f.get("success", False)),
+                        "successful_reads": sum(
+                            1 for f in files if f.get("success", False)
+                        ),
                         "source": "elixir",
                     }
                 else:
-                    logger.debug(f"Elixir file_read_batch returned error: {result.get('error')}")
+                    logger.debug(
+                        f"Elixir file_read_batch returned error: {result.get('error')}"
+                    )
             except NotImplementedError:
-                logger.debug("Elixir transport not implemented, falling back to sequential")
+                logger.debug(
+                    "Elixir transport not implemented, falling back to sequential"
+                )
             except Exception as e:
                 logger.debug(f"Elixir file_read_batch failed, falling back: {e}")
 
         # Fall back to sequential reads (Rust or Python per file)
         results = []
         for path in paths:
-            result = cls.read_file(path, start_line, num_lines, _prefer_native=_prefer_native)
-            results.append({
-                "file_path": path,
-                "content": result.get("content"),
-                "num_tokens": result.get("num_tokens", 0),
-                "error": result.get("error"),
-                "success": result.get("error") is None and result.get("content") is not None,
-            })
+            result = cls.read_file(
+                path, start_line, num_lines, _prefer_native=_prefer_native
+            )
+            results.append(
+                {
+                    "file_path": path,
+                    "content": result.get("content"),
+                    "num_tokens": result.get("num_tokens", 0),
+                    "error": result.get("error"),
+                    "success": result.get("error") is None
+                    and result.get("content") is not None,
+                }
+            )
 
         return {
             "files": results,
@@ -949,7 +1086,9 @@ class NativeBackend:
                 build_structure_map as python_build_structure_map,
             )
 
-            py_results = python_build_structure_map(Path(root), max_files, max_symbols_per_file)
+            py_results = python_build_structure_map(
+                Path(root), max_files, max_symbols_per_file
+            )
             return [
                 {
                     "path": r.path,
@@ -993,10 +1132,13 @@ class NativeBackend:
         # bd-64: Try Elixir first if preferred and available
         if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE):
             try:
-                result = cls._call_elixir("parse_file", {
-                    "path": path,
-                    "language": language,
-                })
+                result = cls._call_elixir(
+                    "parse_file",
+                    {
+                        "path": path,
+                        "language": language,
+                    },
+                )
                 if "error" not in result:
                     cls._last_source[cls.Capabilities.PARSE] = "elixir"
                     return result
@@ -1048,10 +1190,13 @@ class NativeBackend:
         # bd-64: Try Elixir first if preferred and available
         if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE):
             try:
-                result = cls._call_elixir("parse_source", {
-                    "source": source,
-                    "language": language,
-                })
+                result = cls._call_elixir(
+                    "parse_source",
+                    {
+                        "source": source,
+                        "language": language,
+                    },
+                )
                 if "error" not in result:
                     cls._last_source[cls.Capabilities.PARSE] = "elixir"
                     return result
@@ -1098,10 +1243,13 @@ class NativeBackend:
         # bd-64: Try Elixir first if preferred and available
         if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE):
             try:
-                result = cls._call_elixir("extract_symbols", {
-                    "source": source,
-                    "language": language,
-                })
+                result = cls._call_elixir(
+                    "extract_symbols",
+                    {
+                        "source": source,
+                        "language": language,
+                    },
+                )
                 symbols = result.get("symbols", [])
                 if symbols:
                     cls._last_source[cls.Capabilities.PARSE] = "elixir"
@@ -1184,7 +1332,17 @@ class NativeBackend:
                 pass
 
         # Basic fallback for common languages
-        supported = {"python", "javascript", "typescript", "rust", "go", "c", "cpp", "java", "ruby"}
+        supported = {
+            "python",
+            "javascript",
+            "typescript",
+            "rust",
+            "go",
+            "c",
+            "cpp",
+            "java",
+            "ruby",
+        }
         return language.lower() in supported
 
 
@@ -1209,7 +1367,9 @@ def grep(pattern: str, directory: str = ".") -> dict[str, Any]:
     return NativeBackend.grep(pattern, directory)
 
 
-def read_file(path: str, start_line: int | None = None, num_lines: int | None = None) -> dict[str, Any]:
+def read_file(
+    path: str, start_line: int | None = None, num_lines: int | None = None
+) -> dict[str, Any]:
     """Read file (convenience function)."""
     return NativeBackend.read_file(path, start_line, num_lines)
 

@@ -1,6 +1,6 @@
-"""Fast Puppy — toggle Rust acceleration on/off at runtime.
+"""Fast Puppy — toggle native backend acceleration on/off at runtime.
 
-Auto-builds all Rust modules (code_puppy_core, turbo_parse)
+Auto-builds native modules (code_puppy_core, turbo_parse, Elixir FileOps)
 on first startup if toolchain is available.
 File operations now route through NativeBackend (Elixir or Python fallback).
 Persists capability preferences to puppy.cfg so they survive restarts.
@@ -26,6 +26,7 @@ from code_puppy.config_package import get_puppy_config
 from code_puppy.messaging import emit_info
 
 # Import builder module (may be split into builder.py for line count)
+# bd-91: Added get_available_backends import
 from code_puppy.plugins.fast_puppy.builder import (
     _find_crate_dir,
     _find_repo_root,
@@ -35,10 +36,12 @@ from code_puppy.plugins.fast_puppy.builder import (
     _try_auto_build_all,
     build_single_crate,
     get_all_crate_status,
+    get_available_backends,
     CRATES,
 )
 
 # Re-export for backward compatibility (tests)
+# bd-91: Added get_available_backends
 __all__ = [
     "_find_crate_dir",
     "_find_repo_root",
@@ -53,6 +56,7 @@ __all__ = [
     "_handle_enable",
     "_handle_disable",
     "_handle_status",
+    "get_available_backends",
 ]
 
 logger = logging.getLogger(__name__)
@@ -107,21 +111,24 @@ def _handle_enable(args: list[str]) -> str:
 
     if not args:
         # Enable all
+        # bd-90: Updated messaging to reflect Elixir-first architecture
         NativeBackend.enable_all()
         NativeBackend.save_preferences()
-        return "✅ All native acceleration enabled"
+        return "✅ All native backends enabled (Elixir preferred)"
 
     # Enable specific capability
     cap = args[0].lower()
+    # bd-90: Updated capability descriptions to show backend type
     cap_map = {
-        "message_core": NativeBackend.Capabilities.MESSAGE_CORE,
-        "file_ops": NativeBackend.Capabilities.FILE_OPS,
-        "repo_index": NativeBackend.Capabilities.REPO_INDEX,
-        "parse": NativeBackend.Capabilities.PARSE,
+        "message_core": NativeBackend.Capabilities.MESSAGE_CORE,  # bd-90: Message processing (Rust)
+        "file_ops": NativeBackend.Capabilities.FILE_OPS,  # bd-90: File operations (Elixir)
+        "repo_index": NativeBackend.Capabilities.REPO_INDEX,  # bd-90: Repository indexing (Elixir)
+        "parse": NativeBackend.Capabilities.PARSE,  # bd-90: Tree-sitter parsing (Rust)
     }
     if cap in cap_map:
         NativeBackend.enable_capability(cap_map[cap])
         NativeBackend.save_preferences()
+        # bd-90: Updated messaging to reflect Elixir-first
         return f"✅ {cap} enabled"
     return (
         f"❌ Unknown capability: {cap}. Use: message_core, file_ops, repo_index, parse"
@@ -141,17 +148,19 @@ def _handle_disable(args: list[str]) -> str:
 
     if not args:
         # Disable all
+        # bd-90: Updated messaging to reflect native backend terminology
         NativeBackend.disable_all()
         NativeBackend.save_preferences()
-        return "✅ All native acceleration disabled (Python-only mode)"
+        return "✅ All native backends disabled (Python fallback)"
 
     # Disable specific capability
     cap = args[0].lower()
+    # bd-90: Updated capability descriptions to show backend type
     cap_map = {
-        "message_core": NativeBackend.Capabilities.MESSAGE_CORE,
-        "file_ops": NativeBackend.Capabilities.FILE_OPS,
-        "repo_index": NativeBackend.Capabilities.REPO_INDEX,
-        "parse": NativeBackend.Capabilities.PARSE,
+        "message_core": NativeBackend.Capabilities.MESSAGE_CORE,  # bd-90: Message processing (Rust)
+        "file_ops": NativeBackend.Capabilities.FILE_OPS,  # bd-90: File operations (Elixir)
+        "repo_index": NativeBackend.Capabilities.REPO_INDEX,  # bd-90: Repository indexing (Elixir)
+        "parse": NativeBackend.Capabilities.PARSE,  # bd-90: Tree-sitter parsing (Rust)
     }
     if cap in cap_map:
         NativeBackend.disable_capability(cap_map[cap])
@@ -159,6 +168,44 @@ def _handle_disable(args: list[str]) -> str:
         return f"✅ {cap} disabled"
     return (
         f"❌ Unknown capability: {cap}. Use: message_core, file_ops, repo_index, parse"
+    )
+
+
+def _handle_profile(args: list[str]) -> str:
+    """Handle runtime profile switching and display.
+
+    bd-89: Runtime profile handler for persistence.
+
+    Args:
+        args: List of command arguments. If empty, shows current profile.
+            If contains a profile name, sets it as the active profile.
+
+    Returns:
+        Status message string.
+    """
+    from code_puppy.native_backend import NativeBackend, BackendPreference
+
+    valid_profiles = {
+        "elixir_first": BackendPreference.ELIXIR_FIRST,
+        "rust_first": BackendPreference.RUST_FIRST,
+        "python_only": BackendPreference.PYTHON_ONLY,
+    }
+
+    if not args:
+        # Show current profile
+        current = NativeBackend.get_backend_preference()
+        return f"Current profile: {current.value}\nValid profiles: elixir_first, rust_first, python_only"
+
+    # Set profile
+    profile_name = args[0].lower()
+    if profile_name in valid_profiles:
+        NativeBackend.set_backend_preference(profile_name)
+        NativeBackend.save_preferences()
+        return f"✅ Profile set to: {profile_name} (persisted to config)"
+
+    return (
+        f"❌ Unknown profile: {profile_name}. "
+        f"Use: elixir_first, rust_first (legacy), python_only"
     )
 
 
@@ -170,24 +217,112 @@ def _handle_status() -> str:
     """
     from code_puppy.native_backend import NativeBackend
     # bd-69: _core_bridge imports removed — NativeBackend.get_status() used instead
+    # bd-90: Updated to show Elixir-first architecture details
+    # bd-88: Improved to show actual backend in use and actionable next steps
+
+    # bd-88: Show backend preference and Elixir connection status
+    preference = NativeBackend.get_backend_preference()
+    elixir_connected = NativeBackend.is_elixir_connected()
+
+    # bd-88: Get actual source tracking from NativeBackend
+    last_sources = getattr(NativeBackend, "_last_source", {})
 
     lines = ["⚡ Fast Puppy Status", ""]
+
+    # bd-88: Show backend preference prominently
+    lines.append(f"  Backend preference: {preference.value}")
+    lines.append(
+        f"  Elixir connection: {'✅ connected' if elixir_connected else '❌ not connected'}"
+    )
+    # bd-88: Always show Python fallback as available
+    lines.append("  Python fallback: ✅ always available")
+    lines.append("")
 
     # Get NativeBackend capability status
     cap_status = NativeBackend.get_status()
 
-    for cap, info in cap_status.items():
-        if info.active:
-            icon = "✅"
-            status = "active"
-        elif info.status == "disabled":
-            icon = "💤"
-            status = "disabled"
-        else:
-            icon = "❌"
-            status = "unavailable"
+    # bd-88: Group capabilities by backend type with actual usage
+    lines.append("  Capabilities by configured backend (→ shows actual in use):")
+    lines.append("")
 
-        lines.append(f"  {icon} {cap}: {info.configured} ({status})")
+    # bd-88: Elixir-backed capabilities with actual source
+    lines.append("  📁 Elixir backends:")
+    elixir_caps = ["file_ops", "repo_index"]
+    for cap in elixir_caps:
+        if cap in cap_status:
+            info = cap_status[cap]
+            actual = last_sources.get(cap, info.configured if info.active else "python")
+            if info.active:
+                icon = "✅"
+                status = "active"
+            elif info.status == "disabled":
+                icon = "💤"
+                status = "disabled"
+            else:
+                icon = "❌"
+                status = "unavailable"
+            # bd-88: Show configured → actual backend
+            source_arrow = f"→ {actual}" if actual != info.configured else ""
+            lines.append(
+                f"    {icon} {cap}: {info.configured} {source_arrow} ({status})"
+            )
+
+    # bd-88: Rust-backed capabilities with actual source
+    lines.append("")
+    lines.append("  🦀 Rust backends:")
+    rust_caps = ["message_core", "parse"]
+    for cap in rust_caps:
+        if cap in cap_status:
+            info = cap_status[cap]
+            actual = last_sources.get(cap, info.configured if info.active else "python")
+            if info.active:
+                icon = "✅"
+                status = "active"
+            elif info.status == "disabled":
+                icon = "💤"
+                status = "disabled"
+            else:
+                icon = "❌"
+                status = "unavailable"
+            # bd-88: Show configured → actual backend
+            source_arrow = f"→ {actual}" if actual != info.configured else ""
+            lines.append(
+                f"    {icon} {cap}: {info.configured} {source_arrow} ({status})"
+            )
+
+    # bd-88: Add actionable suggestions
+    lines.append("")
+    lines.append("  💡 Next steps:")
+
+    # Check if any capabilities are unavailable but enabled
+    unavailable_enabled = []
+    for cap, info in cap_status.items():
+        if info.status == "unavailable" and NativeBackend.is_enabled(cap):
+            unavailable_enabled.append(cap)
+
+    if unavailable_enabled:
+        lines.append(
+            f"    • Enable: /fast_puppy enable {', '.join(unavailable_enabled)}"
+        )
+
+    # Check if Elixir is not connected but preference is elixir_first
+    if preference.value == "elixir_first" and not elixir_connected:
+        lines.append("    • Start Elixir backend for acceleration: mix run --no-halt")
+
+    # Suggest checking profile if rust_first is set
+    if preference.value == "rust_first":
+        lines.append(
+            "    • Consider switching to elixir_first: /fast_puppy profile elixir_first"
+        )
+
+    # Always show the build suggestion
+    rust_unavailable = any(
+        cap_status[cap].status == "unavailable"
+        for cap in ["message_core", "parse"]
+        if cap in cap_status
+    )
+    if rust_unavailable:
+        lines.append("    • Build Rust crates: /fast_puppy build --all")
 
     # Legacy bridge status
     lines.append("")
@@ -199,14 +334,16 @@ def _handle_status() -> str:
 
 
 def _on_startup():
-    """Auto-build Rust modules if needed, then respect user preferences."""
+    """Detect available backends on startup, then respect user preferences."""
+    # bd-91: Removed auto-build — now detects available backends instead
     try:
         # bd-63: Load capability preferences first
         from code_puppy.native_backend import NativeBackend
 
         NativeBackend.load_preferences()
 
-        results = _try_auto_build_all()
+        # bd-91: Detect available backends without building
+        backend_status = get_available_backends()
 
         # Check if any capabilities are enabled by user
         any_enabled = any(
@@ -220,28 +357,25 @@ def _on_startup():
         )
 
         if not any_enabled:
+            # bd-90: Updated messaging to use "native backends" terminology
             emit_info(
-                "🐕💤 Fast Puppy: All native acceleration disabled by puppy.cfg "
+                "🐕💤 Fast Puppy: All native backends disabled by puppy.cfg "
                 "— run /fast_puppy enable to re-enable"
             )
             return
 
-        # Emit summary banner based on results
-        active_count = sum(1 for v in results.values() if v)
-        total_count = len(results)
-        expected_count = len(CRATES)  # Should be 2
-        if results and active_count == expected_count:
-            emit_info("🐕⚡ Fast Puppy: All Rust accelerators active — zoom! zoom! 🚀")
-        elif active_count > 0:
-            missing = [k for k, v in results.items() if not v]
-            emit_info(
-                f"🐕⚡ Fast Puppy: {active_count}/{total_count} Rust accelerators active "
-                f"(missing: {', '.join(missing)} — see /fast_puppy status)"
-            )
+        # bd-91: Emit summary banner based on detected backends
+        elixir_available = backend_status.get("elixir_available", False)
+        python_fallback = backend_status.get("python_fallback", True)
+
+        if elixir_available:
+            emit_info("🐕⚡ Fast Puppy: Native backend active (Elixir) 🚀")
+        elif python_fallback:
+            emit_info("🐕 Fast Puppy: Native backend active (Python fallback)")
         else:
             emit_info(
-                "🐕 Fast Puppy: Pure Python mode "
-                "(install Rust toolchain to enable acceleration)"
+                "🐕 Fast Puppy: No native backends available "
+                "(install Elixir or Rust to enable acceleration)"
             )
     except Exception as e:
         logger.warning("Fast Puppy startup error: %s", e)
@@ -251,15 +385,38 @@ def _on_startup():
 
 
 def _custom_help():
+    # bd-90: Updated help text to reflect Elixir-first architecture
+    # bd-88: Enhanced help text with clearer descriptions and profile command
     return [
-        ("fast_puppy", "Toggle Rust acceleration / show status"),
-        ("fast_puppy build [name|--all]", "Rebuild Rust crate(s)"),
-        ("fast_puppy status", "Show detailed capability status"),
+        (
+            "fast_puppy",
+            "Show current status with backend preferences and active sources",
+        ),
+        ("fast_puppy status", "Detailed diagnostics with actionable next steps"),
         (
             "fast_puppy enable [cap]",
-            "Enable all or specific capability (message_core, file_ops, repo_index, parse)",
+            "Enable all native backends or specific: message_core, file_ops, repo_index, parse",
         ),
-        ("fast_puppy disable [cap]", "Disable all or specific capability"),
+        (
+            "fast_puppy disable [cap]",
+            "Disable all native backends or specific (fallback to Python)",
+        ),
+        (
+            "fast_puppy profile",
+            "Show current backend preference profile",
+        ),
+        (
+            "fast_puppy profile elixir_first",
+            "Set Elixir as preferred backend (faster for file ops)",
+        ),
+        (
+            "fast_puppy profile python_only",
+            "Use only Python implementations (no native acceleration)",
+        ),
+        (
+            "fast_puppy build [name|--all]",
+            "Rebuild native Rust crates (code_puppy_core, turbo_parse)",
+        ),
     ]
 
 
@@ -296,7 +453,7 @@ def _handle_fast_puppy(command: str, name: str):
                 emit_info("🐕 Fast Puppy: Workspace not found (no Cargo.toml)")
                 return True
 
-            emit_info("🐕⚡ Fast Puppy: Building all Rust modules...")
+            emit_info("🐕⚡ Fast Puppy: Building all native Rust modules...")  # bd-88
 
             results = _try_auto_build_all()
             active_count = sum(1 for v in results.values() if v)
@@ -320,7 +477,9 @@ def _handle_fast_puppy(command: str, name: str):
                 importlib.reload(bridge)
                 set_rust_enabled(True)
                 _write_persisted_preference(True)
-                emit_info("🐕⚡ Fast Puppy: Rust acceleration is ON.")
+                emit_info(
+                    "🐕⚡ Fast Puppy: Native backend is ON."
+                )  # bd-88: Updated terminology
             return True
         else:
             # Build single crate
@@ -350,7 +509,9 @@ def _handle_fast_puppy(command: str, name: str):
                     if bridge.RUST_AVAILABLE:
                         bridge.set_rust_enabled(True)
                         _write_persisted_preference(True)
-                        emit_info("🐕⚡ Fast Puppy: Rust acceleration is ON.")
+                        emit_info(
+                            "🐕⚡ Fast Puppy: Native backend is ON."
+                        )  # bd-88: Updated terminology
             else:
                 emit_info(f"🐕 Fast Puppy: ❌ {crate_name} build failed")
             return True
@@ -368,6 +529,12 @@ def _handle_fast_puppy(command: str, name: str):
 
     if subcommand == "status":
         result = _handle_status()
+        emit_info(result)
+        return True
+
+    # bd-89: Runtime profile subcommand
+    if subcommand == "profile":
+        result = _handle_profile(args)
         emit_info(result)
         return True
 
@@ -457,20 +624,21 @@ def _handle_fast_puppy(command: str, name: str):
     )
 
     # Summary line
+    # bd-90: Updated summary to use "Native backends" terminology
     emit_info("")
     if all(s["active"] for s in crate_statuses):
-        emit_info("→ ALL SYSTEMS GO — full Rust acceleration active! 🚀")
+        emit_info("→ ALL SYSTEMS GO — full native backend acceleration active! 🚀")
     elif any(s["active"] for s in crate_statuses):
         active_count = sum(1 for s in crate_statuses if s["active"])
-        emit_info(f"→ {active_count}/3 Rust accelerators active")
+        emit_info(f"→ {active_count}/3 native backends active")
     else:
         if not _has_rust_toolchain():
             emit_info(
-                "→ Pure Python mode — install Rust toolchain to enable acceleration"
+                "→ Pure Python mode — install Elixir or Rust to enable native acceleration"  # bd-88
             )
         else:
             emit_info(
-                "→ Rust toolchain found but no accelerators active — run /fast_puppy build"
+                "→ Toolchain found but no native backends active — run /fast_puppy build"
             )
 
     return True

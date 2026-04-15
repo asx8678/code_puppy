@@ -763,3 +763,46 @@ def build_single_crate(crate_name: str) -> bool:
     else:
         logger.debug("Build error for %s: %s", crate_name, error_msg)
         return False
+
+
+# bd-91: New function to detect available backends without building
+def get_available_backends() -> dict[str, bool]:
+    """Detect available backends without triggering any builds.
+
+    Returns a dict with:
+        - elixir_available: True if Elixir bridge is connected
+        - rust_installed: True if Rust crates are installed (not built, just checked)
+        - python_fallback: Always True (Python is always available as fallback)
+
+    This function is used during startup to show backend status without
+    the performance penalty of auto-building Rust crates.
+    """
+    status: dict[str, bool] = {
+        "elixir_available": False,
+        "rust_installed": False,
+        "python_fallback": True,
+    }
+
+    # Check if Elixir bridge is connected
+    try:
+        from code_puppy.native_backend import NativeBackend
+
+        cap_status = NativeBackend.get_status()
+        # Elixir is available if any capability is active (meaning bridge is connected)
+        status["elixir_available"] = any(info.active for info in cap_status.values())
+    except Exception:
+        status["elixir_available"] = False
+
+    # Check if Rust crates are installed (without building)
+    rust_count = 0
+    for crate_spec in CRATES:
+        probe = crate_spec["probe"]
+        if _is_crate_installed(probe):
+            rust_count += 1
+    # Consider Rust "installed" if at least one crate is available
+    status["rust_installed"] = rust_count > 0
+
+    # Python fallback is always available
+    status["python_fallback"] = True
+
+    return status

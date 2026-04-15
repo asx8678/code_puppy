@@ -1563,7 +1563,93 @@
         "Claimed by planning-agent-019d8d",
         "Complete: Created tests/integration/test_file_ops_elixir_backend.py with 29 tests covering list_files, grep, read_file, read_files, fallback behavior, and security gates."
       ]
+    },
+    "bd-88": {
+      "id": "bd-88",
+      "title": "Phase 3.4: Update fast_puppy status UX and help text",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-90"
+        ]
+      },
+      "created_at": "2026-04-15T06:49:04.152273",
+      "updated_at": "2026-04-15T06:59:12.174244",
+      "comments": [
+        "Claimed by planning-agent-019d8d",
+        "Complete: Added Python fallback status, actionable next steps in status, improved help text for all subcommands including profile."
+      ]
+    },
+    "bd-89": {
+      "id": "bd-89",
+      "title": "Phase 3.2: Add runtime profiles (elixir_first, python_only, legacy_rust)",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T06:49:04.159604",
+      "updated_at": "2026-04-15T06:54:00.776243",
+      "comments": [
+        "Add RuntimeProfile enum to NativeBackend: ELIXIR_FIRST (default), PYTHON_ONLY, LEGACY_RUST. Profile determines routing priority. Persist to puppy.cfg. Add /fast_puppy profile <name> command.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Default changed to ELIXIR_FIRST. Added persistence for backend_preference. Added /fast_puppy profile command."
+      ]
+    },
+    "bd-90": {
+      "id": "bd-90",
+      "title": "Phase 3.3: Update /fast_puppy command for Elixir-first reality",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-89"
+        ]
+      },
+      "created_at": "2026-04-15T06:49:04.160921",
+      "updated_at": "2026-04-15T06:56:01.761756",
+      "comments": [
+        "Update /fast_puppy command: rename capabilities to match Elixir reality (file_ops uses Elixir, parse uses Rust). Update enable/disable to work with new profiles. Remove Rust-centric language.",
+        "Claimed by planning-agent-019d8d"
+      ]
+    },
+    "bd-91": {
+      "id": "bd-91",
+      "title": "Phase 3.1: Remove Rust crate auto-build on startup",
+      "description": "",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-3"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T06:49:04.167456",
+      "updated_at": "2026-04-15T06:51:27.968838",
+      "comments": [
+        "Remove _try_auto_build_all() call from _on_startup(). Keep the build command for manual use. Add config option to completely disable Rust path. The startup should just detect what's available, not try to build.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Removed _try_auto_build_all() from startup. Added get_available_backends() for detection without building. Updated banners to Elixir-first messaging."
+      ]
     }
   },
-  "counter": 87
+  "counter": 91
 }
