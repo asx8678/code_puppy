@@ -249,6 +249,17 @@ class TestInjectCodexFields:
         assert "verbosity" not in data
         assert data["temperature"] == 0.7  # Preserved
 
+    def test_stripping_unsupported_params_logs_warning(self):
+        """Test that stripping unsupported params emits a warning."""
+        body = json.dumps({"max_tokens": 1000, "temperature": 0.7}).encode()
+        with patch(
+            "code_puppy.chatgpt_codex_client.logger"
+        ) as mock_logger:
+            ChatGPTCodexAsyncClient._inject_codex_fields(body)
+            mock_logger.warning.assert_called()
+            call_args = mock_logger.warning.call_args
+            assert "max_tokens" in call_args[0][1]  # param name in format arg
+
     def test_invalid_json_returns_none(self):
         """Test that invalid JSON returns (None, False)."""
         body = b"not valid json"
