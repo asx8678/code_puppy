@@ -4,7 +4,7 @@ defmodule CodePuppyControl.MCP.Server do
 
   This process:
   1. Spawns an MCP server directly via Elixir Port
-  2. Communicates using JSON-RPC with Content-Length framing
+  2. Communicates using JSON-RPC with newline-delimited JSON framing
   3. Handles health monitoring and circuit breakers
   4. Implements quarantine with exponential backoff for failing servers
   5. Manages pending requests for async response handling
@@ -215,7 +215,7 @@ defmodule CodePuppyControl.MCP.Server do
           request_id
         )
 
-      Port.command(state.port, Protocol.frame(message))
+      Port.command(state.port, Protocol.frame_newline(message))
 
       # Track pending request with timing info for telemetry
       pending =
@@ -266,9 +266,10 @@ defmodule CodePuppyControl.MCP.Server do
 
   @impl true
   def handle_info({port, {:data, data}}, %{port: port, receive_buffer: buffer} = state) do
+    # bd-114: newline-delimited JSON — just accumulate and split on newlines
     new_buffer = buffer <> data
 
-    case Protocol.parse_framed(new_buffer) do
+    case Protocol.parse_newline(new_buffer) do
       {[], rest} ->
         # Incomplete message, need more data
         {:noreply, %{state | receive_buffer: rest}}
@@ -364,12 +365,13 @@ defmodule CodePuppyControl.MCP.Server do
         1
       )
 
-    Port.command(port, Protocol.frame(init_request))
+    # bd-114: Use newline-delimited JSON for MCP stdio transport
+    Port.command(port, Protocol.frame_newline(init_request))
 
     # Wait for initialize response
     receive do
       {^port, {:data, data}} ->
-        case Protocol.parse_framed(data) do
+        case Protocol.parse_newline(data) do
           {[], _rest} ->
             Port.close(port)
             {:error, :incomplete_response}
@@ -381,7 +383,8 @@ defmodule CodePuppyControl.MCP.Server do
                 initialized_notification =
                   Protocol.encode_notification("notifications/initialized", %{})
 
-                Port.command(port, Protocol.frame(initialized_notification))
+                # bd-114: Use newline-delimited JSON for MCP stdio transport
+                Port.command(port, Protocol.frame_newline(initialized_notification))
                 {:ok, port}
 
               %{"error" => error} ->
@@ -409,11 +412,12 @@ defmodule CodePuppyControl.MCP.Server do
       _info ->
         # Send tools/list as a lightweight health probe
         message = Protocol.encode_request("tools/list", %{}, nil)
-        Port.command(state.port, Protocol.frame(message))
+        # bd-114: Use newline-delimited JSON for MCP stdio transport
+        Port.command(state.port, Protocol.frame_newline(message))
 
         receive do
           {port, {:data, data}} when port == state.port ->
-            case Protocol.parse_framed(data) do
+            case Protocol.parse_newline(data) do
               {[], _rest} ->
                 {:error, :incomplete_response}
 

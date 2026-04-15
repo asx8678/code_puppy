@@ -6,20 +6,30 @@ defmodule CodePuppyControl.Protocol do
   - JSON-RPC 2.0 request/response/notification encoding
   - Content-Length HTTP-style framing for Port communication
   - Batch message support (bd-103)
+  - Newline-delimited JSON framing for MCP stdio transport (bd-114)
 
-  ## Framing Format
+  ## Framing Format (Content-Length)
 
       Content-Length: <bytes>\r\n
+
 
       \r\n
 
       <json_rpc_message>
+
+  ## Framing Format (Newline-Delimited JSON)
+
+      <json_rpc_message>\n
+
+  MCP servers built with the Node.js SDK default to newline-delimited JSON
+  rather than Content-Length framing.
 
   ## Batch Format (bd-103)
 
   JSON-RPC 2.0 batch format sends an array of messages:
 
       Content-Length: <bytes>\r\n
+
 
       \r\n
 
@@ -213,6 +223,45 @@ defmodule CodePuppyControl.Protocol do
   end
 
   @doc """
+  Frames a JSON-RPC message as newline-delimited JSON for MCP stdio transport.
+
+  MCP servers using the Node.js SDK default to newline-delimited JSON
+  rather than Content-Length framing. Each message is a single JSON
+  object terminated by a newline character.
+
+  ## Examples
+
+      iex> Protocol.frame_newline(%{"jsonrpc" => "2.0", "id" => 1, "method" => "test"})
+      "{\\"jsonrpc\\":\\"2.0\\",\\"id\\":1,\\"method\\":\\"test\\"}\\n"
+  """
+  @spec frame_newline(json_rpc_message()) :: String.t()
+  def frame_newline(message) do
+    Jason.encode!(message) <> "\n"
+  end
+
+  @doc """
+  Parses newline-delimited JSON messages from a buffer.
+
+  Returns `{messages, rest_buffer}` where messages is a list of decoded JSON-RPC
+  messages and rest_buffer contains any incomplete trailing data.
+
+  ## Examples
+
+      iex> Protocol.parse_newline("{\\"jsonrpc\\":\\"2.0\\",\\"id\\":1}\\n")
+      {[%{"jsonrpc" => "2.0", "id" => 1}], ""}
+
+      iex> Protocol.parse_newline("{\\"jsonrpc\\":\\"2.0\\",\\"id\\":1}\\n{\\"jsonrpc\\":\\"2.0\\",\\"id\\":2}\\n")
+      {[%{"jsonrpc" => "2.0", "id" => 1}, %{"jsonrpc" => "2.0", "id" => 2}], ""}
+
+      iex> Protocol.parse_newline("{\\"jsonrpc\\":\\"2.0\\",\\"id\\":1}\\n{\\"partial")
+      {[%{"jsonrpc" => "2.0", "id" => 1}], "{\\"partial"}
+  """
+  @spec parse_newline(String.t()) :: {list(map()), String.t()}
+  def parse_newline(buffer) when is_binary(buffer) do
+    parse_newline_loop(buffer, [])
+  end
+
+  @doc """
   Checks if a decoded message is a notification (has no id).
   """
   @spec notification?(map()) :: boolean()
@@ -316,6 +365,36 @@ defmodule CodePuppyControl.Protocol do
       {:ok, _} = result -> result
       nil -> {:error, :missing_content_length}
       error -> error
+    end
+  end
+
+  # Private: parse newline-delimited JSON loop
+  defp parse_newline_loop(buffer, acc) do
+    case String.split(buffer, "\n", parts: 2) do
+      [line, rest] when byte_size(line) > 0 ->
+        case Jason.decode(line) do
+          {:ok, message} when is_map(message) ->
+            parse_newline_loop(rest, [message | acc])
+
+          {:ok, messages} when is_list(messages) ->
+            # Batch JSON-RPC
+            parse_newline_loop(rest, Enum.reverse(messages) ++ acc)
+
+          {:error, _reason} ->
+            # Skip malformed line
+            parse_newline_loop(rest, acc)
+        end
+
+      ["" | _] ->
+        # Empty buffer or trailing newline
+        {Enum.reverse(acc), ""}
+
+      [_incomplete] ->
+        # Incomplete line - return as rest buffer
+        {Enum.reverse(acc), buffer}
+
+      _ ->
+        {Enum.reverse(acc), ""}
     end
   end
 end
