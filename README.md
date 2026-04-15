@@ -58,7 +58,7 @@ This fork adds significant capabilities to the original code_puppy, transforming
 | Feature | Description | Speedup/Impact |
 |---------|-------------|----------------|
 | 🎯 Adversarial Planning | Multi-agent evidence-first planning with 6 specialized agents | Reduced error risk |
-| 🦀 Rust Acceleration | PyO3 crates for message processing, file ops, parsing | 10-50x faster |
+| ⚡ Native Acceleration | Elixir-first with Rust/Python fallback for message processing, parsing | 10-50x faster |
 | 🐕 Pack Parallelism | 8-agent concurrent execution with intelligent queuing | 8x throughput |
 | 📚 Progressive Skills | Metadata-only skill injection until needed | Zero context cost |
 | 🔍 Supervisor Review | Quality-gated multi-agent review loops | Higher quality |
