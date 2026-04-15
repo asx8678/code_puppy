@@ -302,7 +302,7 @@ async def call_elixir_mcp(
         raise ConnectionError("Elixir control plane not connected")
 
     # Call through to Elixir control plane
-    return call_method(method, params, timeout=timeout)
+    return await asyncio.to_thread(call_method, method, params, timeout=timeout)
 
 
 async def call_elixir_rate_limiter(
@@ -541,8 +541,6 @@ def notify_elixir_event(
         run_id: Optional run identifier (determines topic)
         session_id: Optional session identifier (included in payload)
     """
-    import threading
-
     # Determine topic based on scope
     if run_id:
         topic = f"run:{run_id}"
