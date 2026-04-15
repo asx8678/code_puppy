@@ -83,7 +83,7 @@ class NativeBackend:
 
         MESSAGE_CORE = "message_core"  # code_puppy_core
         FILE_OPS = "file_ops"  # Elixir FileOps / Python fallback
-        REPO_INDEX = "repo_index"  # Python indexer (Elixir planned)
+        REPO_INDEX = "repo_index"  # Repository indexing (Elixir + Python fallback)
         PARSE = "parse"  # turbo_parse
 
     _turbo_parse_imports: dict[str, Any] | None = None
