@@ -122,18 +122,6 @@ class ExecutionResult:
 
 
 @dataclass
-class HookGroup:
-    """A group of hooks that share the same matcher."""
-
-    matcher: str
-    hooks: list[HookConfig] = field(default_factory=list)
-
-    def __post_init__(self):
-        if not self.matcher:
-            raise ValueError("Hook group matcher cannot be empty")
-
-
-@dataclass
 class HookRegistry:
     """Registry of all hooks organized by event type."""
 
