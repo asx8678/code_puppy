@@ -1,10 +1,10 @@
 defmodule CodePuppyControl.MCP.Server do
   @moduledoc """
-  GenServer managing a single MCP server via Zig process runner.
+  GenServer managing a single MCP server via direct Elixir Port.
 
   This process:
-  1. Spawns an MCP server via the Zig process runner using Port
-  2. Communicates using JSON-RPC with Content-Length framing
+  1. Spawns an MCP server directly via Elixir Port
+  2. Communicates using JSON-RPC with newline-delimited JSON framing
   3. Handles health monitoring and circuit breakers
   4. Implements quarantine with exponential backoff for failing servers
   5. Manages pending requests for async response handling
@@ -180,7 +180,7 @@ defmodule CodePuppyControl.MCP.Server do
       error_count: 0
     }
 
-    # Start MCP server via Zig runner
+    # Start MCP server directly via Port
     case start_mcp_server(state) do
       {:ok, port} ->
         schedule_health_check()
@@ -204,19 +204,17 @@ defmodule CodePuppyControl.MCP.Server do
       request_id = generate_request_id()
       start_time = System.monotonic_time(:millisecond)
 
-      # Send request to Zig runner
       message =
         Protocol.encode_request(
-          "mcp_request",
+          "tools/call",
           %{
-            server_id: state.server_id,
-            method: method,
-            params: params
+            "name" => method,
+            "arguments" => params
           },
           request_id
         )
 
-      Port.command(state.port, Protocol.frame(message))
+      Port.command(state.port, Protocol.frame_newline(message))
 
       # Track pending request with timing info for telemetry
       pending =
@@ -267,9 +265,10 @@ defmodule CodePuppyControl.MCP.Server do
 
   @impl true
   def handle_info({port, {:data, data}}, %{port: port, receive_buffer: buffer} = state) do
+    # bd-114: newline-delimited JSON — just accumulate and split on newlines
     new_buffer = buffer <> data
 
-    case Protocol.parse_framed(new_buffer) do
+    case Protocol.parse_newline(new_buffer) do
       {[], rest} ->
         # Incomplete message, need more data
         {:noreply, %{state | receive_buffer: rest}}
@@ -323,11 +322,6 @@ defmodule CodePuppyControl.MCP.Server do
     Logger.info("Terminating MCP server #{state.name}")
 
     if state.port do
-      # Send shutdown to Zig runner
-      message =
-        Protocol.encode_notification("mcp_stop", %{server_id: state.server_id})
-
-      Port.command(state.port, Protocol.frame(message))
       Port.close(state.port)
     end
 
@@ -340,53 +334,64 @@ defmodule CodePuppyControl.MCP.Server do
   # Private functions
 
   defp start_mcp_server(state) do
-    zig_runner =
-      Application.get_env(:code_puppy_control, :zig_runner_path, "zig-out/bin/process_runner")
-
-    unless File.exists?(zig_runner) do
-      Logger.warning("Zig runner not found at #{zig_runner}")
-    end
+    # Convert env map to list of tuples for Port
+    env_list =
+      state.env
+      |> Map.to_list()
+      |> Enum.map(fn {k, v} -> {to_charlist(k), to_charlist(v)} end)
 
     port =
-      Port.open({:spawn_executable, zig_runner}, [
+      Port.open({:spawn_executable, to_charlist(state.command)}, [
         :binary,
-        :exit_status
-        # NOTE: No {:packet, 4} - we use Content-Length framing at application level
+        :exit_status,
+        :stderr_to_stdout,
+        args: state.args,
+        env: env_list
       ])
 
-    # Send mcp_start command
-    message =
+    # MCP initialize handshake
+    init_request =
       Protocol.encode_request(
-        "mcp_start",
+        "initialize",
         %{
-          server_id: state.server_id,
-          command: state.command,
-          args: state.args,
-          env: state.env
+          "protocolVersion" => "2024-11-05",
+          "capabilities" => %{},
+          "clientInfo" => %{
+            "name" => "code_puppy_control",
+            "version" => "0.1.0"
+          }
         },
-        nil
+        1
       )
 
-    Port.command(port, Protocol.frame(message))
+    # bd-114: Use newline-delimited JSON for MCP stdio transport
+    Port.command(port, Protocol.frame_newline(init_request))
 
-    # Wait for acknowledgment
+    # Wait for initialize response
     receive do
       {^port, {:data, data}} ->
-        case Protocol.parse_framed(data) do
+        case Protocol.parse_newline(data) do
           {[], _rest} ->
-            # Incomplete - wait a bit more (shouldn't happen in blocking context)
             Port.close(port)
             {:error, :incomplete_response}
 
           {[message | _], _rest} ->
             case message do
-              %{"result" => %{"status" => "started"}} ->
+              %{"result" => %{"serverInfo" => _server_info}} ->
+                # Send notifications/initialized to complete handshake
+                initialized_notification =
+                  Protocol.encode_notification("notifications/initialized", %{})
+
+                # bd-114: Use newline-delimited JSON for MCP stdio transport
+                Port.command(port, Protocol.frame_newline(initialized_notification))
                 {:ok, port}
 
               %{"error" => error} ->
+                Port.close(port)
                 {:error, error}
 
               other ->
+                Port.close(port)
                 {:error, {:unexpected_response, other}}
             end
         end
@@ -398,23 +403,33 @@ defmodule CodePuppyControl.MCP.Server do
   end
 
   defp do_health_check(state) do
-    message = Protocol.encode_request("ping", %{}, nil)
-    Port.command(state.port, Protocol.frame(message))
+    # Check port is alive
+    case Port.info(state.port) do
+      nil ->
+        {:error, :port_dead}
 
-    receive do
-      {port, {:data, data}} when port == state.port ->
-        case Protocol.parse_framed(data) do
-          {[], _rest} ->
-            {:error, :incomplete_response}
+      _info ->
+        # Send tools/list as a lightweight health probe
+        message = Protocol.encode_request("tools/list", %{}, nil)
+        # bd-114: Use newline-delimited JSON for MCP stdio transport
+        Port.command(state.port, Protocol.frame_newline(message))
 
-          {[message | _], _rest} ->
-            case message do
-              %{"result" => _} -> :ok
-              _ -> {:error, :invalid_response}
+        receive do
+          {port, {:data, data}} when port == state.port ->
+            case Protocol.parse_newline(data) do
+              {[], _rest} ->
+                {:error, :incomplete_response}
+
+              {[msg | _], _rest} ->
+                case msg do
+                  %{"result" => _} -> :ok
+                  %{"error" => _} -> {:error, :mcp_error}
+                  _ -> {:error, :invalid_response}
+                end
             end
+        after
+          5_000 -> {:error, :timeout}
         end
-    after
-      5_000 -> {:error, :timeout}
     end
   end
 

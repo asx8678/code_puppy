@@ -23,9 +23,7 @@ defmodule CodePuppyControl.Indexer.Constants do
                   ".vscode",
                   ".DS_Store",
                   "_build",
-                  "deps",
-                  "zig-out",
-                  ".zig-cache"
+                  "deps"
                 ])
 
   @important_files MapSet.new([

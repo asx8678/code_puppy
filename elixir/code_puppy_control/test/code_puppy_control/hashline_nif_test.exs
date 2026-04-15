@@ -196,7 +196,8 @@ defmodule CodePuppyControl.HashlineNifTest do
       # Verify against known values to catch algorithm drift
       result = HashlineNif.compute_line_hash(0, "hello world")
       assert String.length(result) == 2
-      assert result == HashlineNif.compute_line_hash(0, "hello world")  # determinism check
+      # determinism check
+      assert result == HashlineNif.compute_line_hash(0, "hello world")
     end
   end
 
