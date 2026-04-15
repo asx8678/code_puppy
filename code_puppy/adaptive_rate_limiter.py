@@ -17,7 +17,6 @@ The module is a **singleton** – all state lives in a ``_RateLimiterState``
 instance, matching the pattern used by ``concurrency_limits.py``.
 """
 
-
 import asyncio
 import functools
 import logging
@@ -528,10 +527,35 @@ async def record_success(model_name: str) -> None:
     requests.
 
     In CLOSED state this is a no-op.
+
+    bd-101: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
     """
     key = _normalize_model_name(model_name)
     if key is None:
         return
+
+    # bd-101: Notify Elixir bridge if connected (fire-and-forget)
+    try:
+        from code_puppy.plugins.elixir_bridge import (
+            is_connected,
+            call_elixir_rate_limiter,
+        )
+
+        if is_connected():
+            import asyncio
+
+            try:
+                asyncio.create_task(
+                    call_elixir_rate_limiter(
+                        "rate_limiter.record_success",
+                        {"model_name": model_name},
+                        timeout=1.0,
+                    )
+                )
+            except Exception:
+                pass  # Ignore errors for fire-and-forget
+    except ImportError:
+        pass
 
     lock = _ensure_lock()
     should_close = False
@@ -597,10 +621,35 @@ async def record_rate_limit(model_name: str) -> None:
     The concurrency limit for this model is immediately reduced by 50 %
     (but never below ``min_limit``).  The circuit breaker also opens,
     queuing all new requests until the cooldown elapses.
+
+    bd-101: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
     """
     key = _normalize_model_name(model_name)
     if key is None:
         return
+
+    # bd-101: Notify Elixir bridge if connected (fire-and-forget)
+    try:
+        from code_puppy.plugins.elixir_bridge import (
+            is_connected,
+            call_elixir_rate_limiter,
+        )
+
+        if is_connected():
+            import asyncio
+
+            try:
+                asyncio.create_task(
+                    call_elixir_rate_limiter(
+                        "rate_limiter.record_limit",
+                        {"model_name": model_name},
+                        timeout=1.0,
+                    )
+                )
+            except Exception:
+                pass  # Ignore errors for fire-and-forget
+    except ImportError:
+        pass
 
     _ensure_recovery_task()
     lock = _ensure_lock()
@@ -788,6 +837,9 @@ def is_circuit_open(model_name: str) -> bool:
     If the circuit is open, requests are queued until the cooldown elapses
     and the circuit transitions to HALF_OPEN.
 
+    bd-101: Bridge-aware - tries Elixir bridge first if connected,
+    falls back to local state.
+
     Args:
         model_name: The model to check circuit state for.
 
@@ -799,11 +851,39 @@ def is_circuit_open(model_name: str) -> bool:
     if key is None:
         return False  # Unknown model = no throttling
 
+    # bd-101: Try Elixir bridge first if connected
+    try:
+        from code_puppy.plugins.elixir_bridge import (
+            is_connected,
+            call_elixir_rate_limiter,
+        )
+        import asyncio
+
+        if is_connected():
+            try:
+                # Try to get circuit status from Elixir (with short timeout)
+                result = asyncio.run(
+                    call_elixir_rate_limiter(
+                        "rate_limiter.circuit_status",
+                        {"model_name": model_name},
+                        timeout=1.0,
+                    )
+                )
+                if result.get("status") == "ok" and "circuit_open" in result:
+                    return bool(result["circuit_open"])
+            except Exception:
+                pass  # Fallback to local on any error
+    except ImportError:
+        pass
+
+    # Fallback to local state
     state = _state.model_states.get(key)
     if state is None:
         return False  # No state = no circuit yet
 
-    return _state.cfg_circuit_breaker_enabled and state.circuit_state == CircuitState.OPEN
+    return (
+        _state.cfg_circuit_breaker_enabled and state.circuit_state == CircuitState.OPEN
+    )
 
 
 def check_model_slot(model_name: str) -> bool:
@@ -842,6 +922,58 @@ def check_model_slot(model_name: str) -> bool:
 
     # Check concurrency slot availability
     return state.active_count < math.ceil(state.current_limit)
+
+
+def get_current_limit(model_name: str) -> float:
+    """Get the current concurrency limit for *model_name*.
+
+    Returns the current adaptive limit for the model. If the model has
+    not been rate-limited, returns the initial limit.
+
+    bd-101: Bridge-aware - tries Elixir bridge first if connected,
+    falls back to local state.
+
+    Args:
+        model_name: The model to get limit for.
+
+    Returns:
+        Current concurrency limit for the model (0 if unknown).
+    """
+    key = _normalize_model_name(model_name)
+    if key is None:
+        return 0.0
+
+    # bd-101: Try Elixir bridge first if connected
+    try:
+        from code_puppy.plugins.elixir_bridge import (
+            is_connected,
+            call_elixir_rate_limiter,
+        )
+        import asyncio
+
+        if is_connected():
+            try:
+                # Try to get limit from Elixir (with short timeout)
+                # Use run_async_sync pattern for sync-in-async scenario
+                result = asyncio.run(
+                    call_elixir_rate_limiter(
+                        "rate_limiter.get_limit",
+                        {"model_name": model_name},
+                        timeout=1.0,
+                    )
+                )
+                if result.get("status") == "ok" and "limit" in result:
+                    return float(result["limit"])
+            except Exception:
+                pass  # Fallback to local on any error
+    except ImportError:
+        pass
+
+    # Fallback to local state
+    state = _state.model_states.get(key)
+    if state is None:
+        return float(_state.cfg_initial_limit)
+    return state.current_limit
 
 
 def get_model_semaphore(model_name: str) -> ModelRateLimitState | None:

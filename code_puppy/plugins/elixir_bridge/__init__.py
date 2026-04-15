@@ -111,7 +111,9 @@ def get_connection_url() -> str | None:
     return _elixir_control_plane_url
 
 
-def call_method(method: str, params: dict[str, Any], timeout: float = 30.0) -> dict[str, Any]:
+def call_method(
+    method: str, params: dict[str, Any], timeout: float = 30.0
+) -> dict[str, Any]:
     """Call a method on the Elixir control plane via JSON-RPC.
 
     Sends a JSON-RPC 2.0 request to the Elixir control plane and waits
@@ -182,7 +184,9 @@ def call_method(method: str, params: dict[str, Any], timeout: float = 30.0) -> d
             _pending_responses.pop(request_id, None)
 
 
-async def call_elixir_concurrency(method: str, params: dict[str, Any], timeout: float = 30.0) -> dict[str, Any]:
+async def call_elixir_concurrency(
+    method: str, params: dict[str, Any], timeout: float = 30.0
+) -> dict[str, Any]:
     """Call a concurrency method on the Elixir control plane (bd-77).
 
     Specialized wrapper around call_method for concurrency operations.
@@ -209,7 +213,39 @@ async def call_elixir_concurrency(method: str, params: dict[str, Any], timeout: 
         return {"status": "timeout", "fallback": True}
 
 
-async def call_elixir_mcp(method: str, params: dict[str, Any], timeout: float = 30.0) -> dict[str, Any]:
+async def call_elixir_run_limiter(
+    method: str, params: dict[str, Any], timeout: float = 30.0
+) -> dict[str, Any]:
+    """Call a run limiter method on the Elixir control plane (bd-100).
+
+    Specialized wrapper around call_method for run limiting operations.
+    Used by RunLimiter to delegate counter operations to Elixir when connected.
+    Falls back to local execution on timeout/connection errors.
+
+    Args:
+        method: Run limiter method name (e.g., "run_limiter.acquire")
+        params: Method parameters dict
+        timeout: Maximum seconds to wait for response
+
+    Returns:
+        Response result dict from Elixir, or fallback result on timeout
+
+    Raises:
+        ConnectionError: If Elixir control plane is not connected (not raised on timeout)
+    """
+    if not is_connected():
+        raise ConnectionError("Elixir control plane not connected")
+
+    try:
+        return await call_method(method, params, timeout=timeout)
+    except TimeoutError:
+        # Return a fallback result that signals local handling
+        return {"status": "timeout", "fallback": True}
+
+
+async def call_elixir_mcp(
+    method: str, params: dict[str, Any], timeout: float = 30.0
+) -> dict[str, Any]:
     """Call an MCP method on the Elixir control plane (bd-81).
 
     Specialized wrapper around call_method for MCP server management operations.
@@ -233,6 +269,70 @@ async def call_elixir_mcp(method: str, params: dict[str, Any], timeout: float = 
 
     # Call through to Elixir control plane
     return await call_method(method, params, timeout=timeout)
+
+
+async def call_elixir_rate_limiter(
+    method: str, params: dict[str, Any], timeout: float = 10.0
+) -> dict[str, Any]:
+    """Call a rate limiter method on the Elixir control plane (bd-101).
+
+    Specialized wrapper around call_method for adaptive rate limiting operations.
+    Used to delegate rate limit coordination to the Elixir control plane when available.
+    Falls back to local execution on timeout/connection errors.
+
+    Args:
+        method: Rate limiter method name (e.g., "rate_limiter.record_limit",
+                "rate_limiter.record_success", "rate_limiter.get_limit",
+                "rate_limiter.circuit_status")
+        params: Method parameters dict (e.g., {"model_name": "gpt-4"})
+        timeout: Maximum seconds to wait for response
+
+    Returns:
+        Response result dict from Elixir, or fallback result on timeout
+
+    Raises:
+        ConnectionError: If Elixir control plane is not connected (not raised on timeout)
+    """
+    if not is_connected():
+        raise ConnectionError("Elixir control plane not connected")
+
+    try:
+        return await call_method(method, params, timeout=timeout)
+    except TimeoutError:
+        # Return a fallback result that signals local handling
+        return {"status": "timeout", "fallback": True}
+
+
+async def call_elixir_agent_manager(
+    method: str, params: dict[str, Any], timeout: float = 10.0
+) -> dict[str, Any]:
+    """Call an agent manager method on the Elixir control plane (bd-102).
+
+    Specialized wrapper around call_method for agent management operations.
+    Used to delegate agent management to the Elixir control plane when available.
+    Falls back to local execution on timeout/connection errors.
+
+    Args:
+        method: Agent manager method name (e.g., "agent_manager.register",
+                "agent_manager.list", "agent_manager.get_current",
+                "agent_manager.set_current")
+        params: Method parameters dict
+        timeout: Maximum seconds to wait for response
+
+    Returns:
+        Response result dict from Elixir, or fallback result on timeout
+
+    Raises:
+        ConnectionError: If Elixir control plane is not connected (not raised on timeout)
+    """
+    if not is_connected():
+        raise ConnectionError("Elixir control plane not connected")
+
+    try:
+        return await call_method(method, params, timeout=timeout)
+    except TimeoutError:
+        # Return a fallback result that signals local handling
+        return {"status": "timeout", "fallback": True}
 
 
 def _send_request_to_elixir(request: dict[str, Any]) -> None:
@@ -368,8 +468,14 @@ __all__ = [
     "handle_response",
     # Concurrency bridge support (bd-77)
     "call_elixir_concurrency",
+    # Run limiter bridge support (bd-100)
+    "call_elixir_run_limiter",
     # MCP bridge support (bd-81)
     "call_elixir_mcp",
     # EventBus bridge support (bd-79)
     "notify_elixir_event",
+    # Adaptive rate limiter bridge support (bd-101)
+    "call_elixir_rate_limiter",
+    # Agent manager bridge support (bd-102)
+    "call_elixir_agent_manager",
 ]

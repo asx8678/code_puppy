@@ -144,6 +144,9 @@ class RunLimiter:
         Reentrant: if the current task already holds a slot,
         this is a no-op bypass (just increments the depth counter).
 
+        bd-100: Bridge-aware - delegates counter operations to Elixir when connected,
+        falls back to local semaphore. Reentrancy handling stays in Python.
+
         Args:
             timeout: Max seconds to wait (None = use config default = 600s)
 
@@ -151,6 +154,7 @@ class RunLimiter:
             RunConcurrencyLimitError: On timeout
         """
         # Reentrancy check — bypass if current task already holds a slot
+        # bd-100: Keep reentrancy handling in Python regardless of bridge state
         depth = _get_reentrancy_depth()
         if depth > 0:
             _set_reentrancy_depth(depth + 1)
@@ -158,6 +162,34 @@ class RunLimiter:
                 "RunLimiter: reentrant acquire bypassed (depth now %d)", depth + 1
             )
             return
+
+        # bd-100: Try Elixir bridge first for global counter coordination
+        try:
+            from code_puppy.plugins.elixir_bridge import (
+                is_connected,
+                call_elixir_run_limiter,
+            )
+
+            if is_connected():
+                params = {}
+                if timeout is not None:
+                    params["timeout"] = timeout
+                result = await call_elixir_run_limiter(
+                    "run_limiter.acquire",
+                    params,
+                    timeout=timeout if timeout is not None else 30.0,
+                )
+                if result.get("status") == "ok":
+                    _set_reentrancy_depth(1)
+                    logger.debug("RunLimiter: slot acquired via Elixir bridge")
+                    return
+                # On fallback/timeout, continue to local semaphore
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(
+                "RunLimiter: bridge acquire failed, falling back to local: %s", e
+            )
 
         # Effective timeout
         effective_timeout = (
@@ -334,16 +366,41 @@ class RunLimiter:
         Reentrancy-aware: if called from a context where depth > 1,
         only decrements the depth counter without releasing the actual slot.
 
+        bd-100: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
+        Reentrancy handling stays in Python; Elixir handles global counter state.
+
         CRITICAL FIX: The depth reset to 0 when depth == 1 is hoisted into a
         finally block to ensure it always happens, even in sync-fallback paths
         where no active slot was found on either side (prevents depth leak).
         """
         # Check async reentrancy first
+        # bd-100: Keep reentrancy handling in Python regardless of bridge state
         depth = _get_reentrancy_depth()
         if depth > 1:
             _set_reentrancy_depth(depth - 1)
             logger.debug("RunLimiter: reentrant release (depth now %d)", depth - 1)
             return
+
+        # bd-100: Notify Elixir bridge if connected (fire-and-forget)
+        try:
+            from code_puppy.plugins.elixir_bridge import (
+                is_connected,
+                call_elixir_run_limiter,
+            )
+
+            if is_connected():
+                # Fire-and-forget: don't wait for response, ignore errors
+                try:
+                    asyncio.create_task(
+                        call_elixir_run_limiter("run_limiter.release", {}, timeout=1.0)
+                    )
+                    logger.debug(
+                        "RunLimiter: release notification sent to Elixir bridge"
+                    )
+                except Exception:
+                    pass  # Ignore errors for fire-and-forget
+        except ImportError:
+            pass
 
         # Detect async vs sync context
         in_async = False

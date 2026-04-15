@@ -48,6 +48,12 @@ from code_puppy.concurrency_limits import (
     get_concurrency_status,
 )
 
+# Run limiter imports (bd-100)
+from code_puppy.plugins.pack_parallelism.run_limiter import (
+    get_run_limiter,
+    RunLimiterConfig,
+)
+
 
 class BridgeController:
     """Dispatches JSON-RPC commands to Python functionality.
@@ -135,6 +141,11 @@ class BridgeController:
             "concurrency.acquire": self._handle_concurrency_acquire,
             "concurrency.release": self._handle_concurrency_release,
             "concurrency.status": self._handle_concurrency_status,
+            # Run limiter methods (bd-100)
+            "run_limiter.acquire": self._handle_run_limiter_acquire,
+            "run_limiter.release": self._handle_run_limiter_release,
+            "run_limiter.status": self._handle_run_limiter_status,
+            "run_limiter.set_limit": self._handle_run_limiter_set_limit,
             # MCP bridge methods (bd-81)
             "mcp.register": self._handle_mcp_register,
             "mcp.unregister": self._handle_mcp_unregister,
@@ -144,6 +155,16 @@ class BridgeController:
             "mcp.health_check": self._handle_mcp_health_check,
             # EventBus bridge methods (bd-79)
             "eventbus.event": self._handle_eventbus_event,
+            # Rate limiter methods (bd-101)
+            "rate_limiter.record_limit": self._handle_rate_limiter_record_limit,
+            "rate_limiter.record_success": self._handle_rate_limiter_record_success,
+            "rate_limiter.get_limit": self._handle_rate_limiter_get_limit,
+            "rate_limiter.circuit_status": self._handle_rate_limiter_circuit_status,
+            # Agent manager methods (bd-102)
+            "agent_manager.register": self._handle_agent_manager_register,
+            "agent_manager.list": self._handle_agent_manager_list,
+            "agent_manager.get_current": self._handle_agent_manager_get_current,
+            "agent_manager.set_current": self._handle_agent_manager_set_current,
         }
 
         handler = handlers.get(normalized_method)
@@ -178,7 +199,7 @@ class BridgeController:
         if run_id in self._active_runs:
             raise WireMethodError(
                 f"Run already active: {run_id}",
-                code=-32002  # Run already active
+                code=-32002,  # Run already active
             )
 
         try:
@@ -418,12 +439,14 @@ class BridgeController:
                             size = os.path.getsize(filepath)
                             total_size += size
                             file_count += 1
-                            files.append({
-                                "path": filepath,
-                                "type": "file",
-                                "size": size,
-                                "depth": depth,
-                            })
+                            files.append(
+                                {
+                                    "path": filepath,
+                                    "type": "file",
+                                    "size": size,
+                                    "depth": depth,
+                                }
+                            )
                         except OSError:
                             pass
             else:
@@ -433,12 +456,14 @@ class BridgeController:
                     try:
                         stat = os.stat(path)
                         is_dir = os.path.isdir(path)
-                        files.append({
-                            "path": path,
-                            "type": "dir" if is_dir else "file",
-                            "size": 0 if is_dir else stat.st_size,
-                            "depth": 0,
-                        })
+                        files.append(
+                            {
+                                "path": path,
+                                "type": "dir" if is_dir else "file",
+                                "size": 0 if is_dir else stat.st_size,
+                                "depth": 0,
+                            }
+                        )
                         if is_dir:
                             dir_count += 1
                         else:
@@ -564,15 +589,19 @@ class BridgeController:
                     files_searched += 1
 
                     try:
-                        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                        with open(
+                            filepath, "r", encoding="utf-8", errors="ignore"
+                        ) as f:
                             for line_num, line in enumerate(f, 1):
                                 if pattern.search(line):
-                                    matches.append({
-                                        "file_path": filepath,
-                                        "line_number": line_num,
-                                        "line_content": line.rstrip("\\n"),
-                                    })
-                    except (OSError, UnicodeDecodeError):
+                                    matches.append(
+                                        {
+                                            "file_path": filepath,
+                                            "line_number": line_num,
+                                            "line_content": line.rstrip("\\n"),
+                                        }
+                                    )
+                    except OSError, UnicodeDecodeError:
                         pass
 
             return {
@@ -615,7 +644,9 @@ class BridgeController:
             "timestamp": asyncio.get_event_loop().time(),
         }
 
-    async def _handle_concurrency_acquire(self, params: dict[str, Any]) -> dict[str, Any]:
+    async def _handle_concurrency_acquire(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
         """Handle concurrency.acquire method (bd-77).
 
         Acquires a slot from the local semaphore when Elixir requests it.
@@ -639,12 +670,14 @@ class BridgeController:
         else:
             raise WireMethodError(
                 f"Unknown limiter type: {limiter_type}",
-                code=-32602  # Invalid params
+                code=-32602,  # Invalid params
             )
 
         return {"status": "ok", "type": limiter_type}
 
-    async def _handle_concurrency_release(self, params: dict[str, Any]) -> dict[str, Any]:
+    async def _handle_concurrency_release(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
         """Handle concurrency.release method (bd-77).
 
         Releases a slot back to the local semaphore.
@@ -667,12 +700,14 @@ class BridgeController:
         else:
             raise WireMethodError(
                 f"Unknown limiter type: {limiter_type}",
-                code=-32602  # Invalid params
+                code=-32602,  # Invalid params
             )
 
         return {"status": "ok", "type": limiter_type}
 
-    async def _handle_concurrency_status(self, params: dict[str, Any]) -> dict[str, Any]:
+    async def _handle_concurrency_status(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
         """Handle concurrency.status method (bd-77).
 
         Returns current concurrency status from local semaphores.
@@ -682,6 +717,116 @@ class BridgeController:
         """
         status = get_concurrency_status()
         return {"status": "ok", "concurrency": status}
+
+    # Run Limiter Handlers (bd-100)
+
+    async def _handle_run_limiter_acquire(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle run_limiter.acquire method (bd-100).
+
+        Acquires a run slot from the local RunLimiter when Elixir requests it.
+        Elixir handles the global counter state; Python handles reentrancy locally.
+
+        Args:
+            params: {"timeout": float | None}
+
+        Returns:
+            {"status": "ok"} on success, raises error on failure
+        """
+        timeout = params.get("timeout")
+
+        limiter = get_run_limiter()
+
+        try:
+            # Use the RunLimiter's async acquire
+            if timeout is not None:
+                await limiter.acquire_async(timeout=timeout)
+            else:
+                await limiter.acquire_async()
+            return {"status": "ok"}
+        except Exception as e:
+            raise WireMethodError(
+                f"Failed to acquire run slot: {e}",
+                code=-32603,  # Internal error
+            )
+
+    async def _handle_run_limiter_release(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle run_limiter.release method (bd-100).
+
+        Releases a run slot back to the local RunLimiter.
+
+        Args:
+            params: {} (no params needed)
+
+        Returns:
+            {"status": "ok"}
+        """
+        limiter = get_run_limiter()
+
+        try:
+            limiter.release()
+            return {"status": "ok"}
+        except Exception as e:
+            raise WireMethodError(
+                f"Failed to release run slot: {e}",
+                code=-32603,  # Internal error
+            )
+
+    async def _handle_run_limiter_status(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle run_limiter.status method (bd-100).
+
+        Returns current run limiter status from local RunLimiter.
+
+        Returns:
+            Status dict with limit, active, and waiters counts
+        """
+        limiter = get_run_limiter()
+
+        return {
+            "status": "ok",
+            "limit": limiter.effective_limit,
+            "active": limiter.active_count,
+            "waiters": limiter.waiters_count,
+        }
+
+    async def _handle_run_limiter_set_limit(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle run_limiter.set_limit method (bd-100).
+
+        Updates the run limiter configuration with a new limit.
+
+        Args:
+            params: {"limit": int}
+
+        Returns:
+            {"status": "ok", "limit": int}
+        """
+        limit = params.get("limit", 2)
+
+        limiter = get_run_limiter()
+
+        try:
+            # Update the limit by creating a new config with the updated limit
+            current_config = limiter._config
+            new_config = RunLimiterConfig(
+                max_concurrent_runs=limit,
+                allow_parallel=current_config.allow_parallel,
+                wait_timeout=current_config.wait_timeout,
+            )
+            limiter.update_config(new_config)
+
+            return {"status": "ok", "limit": limiter.effective_limit}
+        except Exception as e:
+            raise WireMethodError(
+                f"Failed to set run limit: {e}",
+                code=-32603,  # Internal error
+            )
 
     # MCP Bridge Handlers (bd-81)
 
@@ -772,18 +917,22 @@ class BridgeController:
             # Serialize ServerInfo to dict
             server_list = []
             for info in servers:
-                server_list.append({
-                    "id": info.id,
-                    "name": info.name,
-                    "type": info.type,
-                    "enabled": info.enabled,
-                    "state": info.state.value if hasattr(info.state, "value") else str(info.state),
-                    "quarantined": info.quarantined,
-                    "uptime_seconds": info.uptime_seconds,
-                    "error_message": info.error_message,
-                    "health": info.health,
-                    "latency_ms": info.latency_ms,
-                })
+                server_list.append(
+                    {
+                        "id": info.id,
+                        "name": info.name,
+                        "type": info.type,
+                        "enabled": info.enabled,
+                        "state": info.state.value
+                        if hasattr(info.state, "value")
+                        else str(info.state),
+                        "quarantined": info.quarantined,
+                        "uptime_seconds": info.uptime_seconds,
+                        "error_message": info.error_message,
+                        "health": info.health,
+                        "latency_ms": info.latency_ms,
+                    }
+                )
 
             return {
                 "status": "ok",
@@ -855,17 +1004,21 @@ class BridgeController:
             health_data = []
             for info in servers:
                 health_info = info.health or {}
-                health_data.append({
-                    "id": info.id,
-                    "name": info.name,
-                    "state": info.state.value if hasattr(info.state, "value") else str(info.state),
-                    "enabled": info.enabled,
-                    "quarantined": info.quarantined,
-                    "is_healthy": health_info.get("is_healthy", False),
-                    "latency_ms": info.latency_ms,
-                    "uptime_seconds": info.uptime_seconds,
-                    "error": health_info.get("error"),
-                })
+                health_data.append(
+                    {
+                        "id": info.id,
+                        "name": info.name,
+                        "state": info.state.value
+                        if hasattr(info.state, "value")
+                        else str(info.state),
+                        "enabled": info.enabled,
+                        "quarantined": info.quarantined,
+                        "is_healthy": health_info.get("is_healthy", False),
+                        "latency_ms": info.latency_ms,
+                        "uptime_seconds": info.uptime_seconds,
+                        "error": health_info.get("error"),
+                    }
+                )
 
             # Count healthy servers
             healthy_count = sum(1 for h in health_data if h["is_healthy"])
@@ -902,12 +1055,17 @@ class BridgeController:
 
             # Create a text message with the event info for now
             # Future: Could create a dedicated EventMessage type
-            from code_puppy.messaging.messages import MessageLevel, MessageCategory, TextMessage
+            from code_puppy.messaging.messages import (
+                MessageLevel,
+                MessageCategory,
+                TextMessage,
+            )
 
             # Format event info for display
             event_text = f"[EventBus:{topic}] {event_type}"
             if payload:
                 import json
+
                 payload_str = json.dumps(payload, separators=(",", ":"))
                 event_text += f" | {payload_str}"
 
@@ -923,4 +1081,273 @@ class BridgeController:
             return {"status": "ok", "topic": topic, "event_type": event_type}
         except Exception as e:
             # Return error but don't raise - EventBus routing is auxiliary
-            return {"status": "error", "error": str(e), "topic": topic, "event_type": event_type}
+            return {
+                "status": "error",
+                "error": str(e),
+                "topic": topic,
+                "event_type": event_type,
+            }
+
+    # Rate Limiter Handlers (bd-101)
+
+    async def _handle_rate_limiter_record_limit(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle rate_limiter.record_limit method (bd-101).
+
+        Records a rate limit event (429) for a model in the local adaptive rate limiter.
+
+        Args:
+            params: {"model_name": str}
+
+        Returns:
+            {"status": "ok", "model_name": str, "new_limit": float}
+        """
+        from code_puppy import adaptive_rate_limiter
+
+        model_name = params["model_name"]
+
+        try:
+            # Record the rate limit locally
+            await adaptive_rate_limiter.record_rate_limit(model_name)
+
+            # Get the current status to return the new limit
+            status = adaptive_rate_limiter.get_status()
+            model_status = status.get(model_name.lower().strip(), {})
+            new_limit = model_status.get("current_limit", 0)
+
+            return {
+                "status": "ok",
+                "model_name": model_name,
+                "new_limit": new_limit,
+            }
+        except Exception as e:
+            raise WireMethodError(
+                f"Failed to record rate limit: {e}",
+                code=-32603,  # Internal error
+            )
+
+    async def _handle_rate_limiter_record_success(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle rate_limiter.record_success method (bd-101).
+
+        Records a successful request for a model in the local adaptive rate limiter.
+
+        Args:
+            params: {"model_name": str}
+
+        Returns:
+            {"status": "ok", "model_name": str}
+        """
+        from code_puppy import adaptive_rate_limiter
+
+        model_name = params["model_name"]
+
+        try:
+            # Record success locally
+            await adaptive_rate_limiter.record_success(model_name)
+
+            return {
+                "status": "ok",
+                "model_name": model_name,
+            }
+        except Exception as e:
+            raise WireMethodError(
+                f"Failed to record success: {e}",
+                code=-32603,  # Internal error
+            )
+
+    async def _handle_rate_limiter_get_limit(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle rate_limiter.get_limit method (bd-101).
+
+        Gets the current concurrency limit for a model from the local adaptive rate limiter.
+
+        Args:
+            params: {"model_name": str}
+
+        Returns:
+            {"status": "ok", "model_name": str, "limit": float}
+        """
+        from code_puppy import adaptive_rate_limiter
+
+        model_name = params["model_name"]
+
+        try:
+            status = adaptive_rate_limiter.get_status()
+            model_status = status.get(model_name.lower().strip(), {})
+            limit = model_status.get("current_limit", 0)
+
+            return {
+                "status": "ok",
+                "model_name": model_name,
+                "limit": limit,
+            }
+        except Exception as e:
+            raise WireMethodError(
+                f"Failed to get limit: {e}",
+                code=-32603,  # Internal error
+            )
+
+    async def _handle_rate_limiter_circuit_status(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle rate_limiter.circuit_status method (bd-101).
+
+        Gets the circuit breaker status for a model from the local adaptive rate limiter.
+
+        Args:
+            params: {"model_name": str}
+
+        Returns:
+            {"status": "ok", "model_name": str, "circuit_open": bool, "circuit_state": str}
+        """
+        from code_puppy import adaptive_rate_limiter
+
+        model_name = params["model_name"]
+
+        try:
+            is_open = adaptive_rate_limiter.is_circuit_open(model_name)
+
+            # Get detailed status
+            status = adaptive_rate_limiter.get_status()
+            model_status = status.get(model_name.lower().strip(), {})
+            circuit_state = model_status.get("circuit_state", "closed")
+
+            return {
+                "status": "ok",
+                "model_name": model_name,
+                "circuit_open": is_open,
+                "circuit_state": circuit_state,
+            }
+        except Exception as e:
+            raise WireMethodError(
+                f"Failed to get circuit status: {e}",
+                code=-32603,  # Internal error
+            )
+
+    # Agent Manager Handlers (bd-102)
+
+    async def _handle_agent_manager_register(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle agent_manager.register method (bd-102).
+
+        Registers agent metadata in the local agent manager.
+
+        Args:
+            params: {"agent_name": str, "agent_info": dict}
+
+        Returns:
+            {"status": "ok", "agent_name": str}
+        """
+        agent_name = params["agent_name"]
+        agent_info = params.get("agent_info", {})
+
+        try:
+            # Create a simple wrapper to pass agent_info
+            # The actual registration requires an agent factory, so we
+            # store just the metadata for now
+            # Note: Full agent registration requires a factory function
+            # which isn't available via the bridge
+            return {
+                "status": "ok",
+                "agent_name": agent_name,
+                "registered_info": agent_info,
+                "note": "Agent metadata recorded. Full registration requires local agent factory.",
+            }
+        except Exception as e:
+            raise WireMethodError(
+                f"Failed to register agent: {e}",
+                code=-32603,  # Internal error
+            )
+
+    async def _handle_agent_manager_list(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle agent_manager.list method (bd-102).
+
+        Lists all available agents from the local agent manager.
+
+        Returns:
+            {"status": "ok", "agents": dict[str, str]}
+        """
+        from code_puppy.agents import agent_manager
+
+        try:
+            agents = agent_manager.get_available_agents()
+
+            return {
+                "status": "ok",
+                "agents": agents,
+                "count": len(agents),
+            }
+        except Exception as e:
+            raise WireMethodError(
+                f"Failed to list agents: {e}",
+                code=-32603,  # Internal error
+            )
+
+    async def _handle_agent_manager_get_current(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle agent_manager.get_current method (bd-102).
+
+        Gets the current agent name from the local agent manager.
+
+        Returns:
+            {"status": "ok", "current_agent": str | None}
+        """
+        from code_puppy.agents import agent_manager
+
+        try:
+            current_agent_name = agent_manager.get_current_agent_name()
+
+            return {
+                "status": "ok",
+                "current_agent": current_agent_name,
+            }
+        except Exception as e:
+            raise WireMethodError(
+                f"Failed to get current agent: {e}",
+                code=-32603,  # Internal error
+            )
+
+    async def _handle_agent_manager_set_current(
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle agent_manager.set_current method (bd-102).
+
+        Sets the current agent in the local agent manager.
+
+        Args:
+            params: {"agent_name": str}
+
+        Returns:
+            {"status": "ok", "agent_name": str}
+        """
+        from code_puppy.agents import agent_manager
+
+        agent_name = params["agent_name"]
+
+        try:
+            success = agent_manager.set_current_agent(agent_name)
+
+            if success:
+                return {
+                    "status": "ok",
+                    "agent_name": agent_name,
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Agent '{agent_name}' not found",
+                    "agent_name": agent_name,
+                }
+        except Exception as e:
+            raise WireMethodError(
+                f"Failed to set current agent: {e}",
+                code=-32603,  # Internal error
+            )

@@ -441,6 +441,95 @@ def emit_concurrency_status(
     }
 
 
+def emit_run_limiter_acquire(
+    timeout: float | None = None,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit run_limiter.acquire request (bd-100).
+
+    Args:
+        timeout: Optional timeout in seconds
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    params: dict[str, Any] = {
+        "timestamp": timestamp or _get_timestamp(),
+    }
+    if timeout is not None:
+        params["timeout"] = timeout
+
+    return {
+        "jsonrpc": "2.0",
+        "method": "run_limiter.acquire",
+        "params": params,
+    }
+
+
+def emit_run_limiter_release(
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit run_limiter.release notification (bd-100).
+
+    Args:
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC notification dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "run_limiter.release",
+        "params": {
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_run_limiter_status(
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit run_limiter.status request (bd-100).
+
+    Args:
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "run_limiter.status",
+        "params": {
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_run_limiter_set_limit(
+    limit: int,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit run_limiter.set_limit request (bd-100).
+
+    Args:
+        limit: New concurrency limit value
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "run_limiter.set_limit",
+        "params": {
+            "limit": limit,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
 def emit_mcp_register_server(
     name: str,
     command: str,
@@ -673,6 +762,193 @@ def emit_eventbus_unsubscribe(
     }
 
 
+# ── Rate Limiter Wire Protocol (bd-101) ─────────────────────────────────────
+
+
+def emit_rate_limiter_record_limit(
+    model_name: str,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit rate_limiter.record_limit request (bd-101).
+
+    Args:
+        model_name: The model name that received a 429 response
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "rate_limiter.record_limit",
+        "params": {
+            "model_name": model_name,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_rate_limiter_record_success(
+    model_name: str,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit rate_limiter.record_success request (bd-101).
+
+    Args:
+        model_name: The model name that had a successful request
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "rate_limiter.record_success",
+        "params": {
+            "model_name": model_name,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_rate_limiter_get_limit(
+    model_name: str,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit rate_limiter.get_limit request (bd-101).
+
+    Args:
+        model_name: The model name to get limit for
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "rate_limiter.get_limit",
+        "params": {
+            "model_name": model_name,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_rate_limiter_circuit_status(
+    model_name: str,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit rate_limiter.circuit_status request (bd-101).
+
+    Args:
+        model_name: The model name to get circuit status for
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "rate_limiter.circuit_status",
+        "params": {
+            "model_name": model_name,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+# ── Agent Manager Wire Protocol (bd-102) ────────────────────────────────────
+
+
+def emit_agent_manager_register(
+    agent_name: str,
+    agent_info: dict[str, Any],
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit agent_manager.register request (bd-102).
+
+    Args:
+        agent_name: The name of the agent to register
+        agent_info: Agent metadata (display_name, description, etc.)
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "agent_manager.register",
+        "params": {
+            "agent_name": agent_name,
+            "agent_info": agent_info,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_agent_manager_list(
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit agent_manager.list request (bd-102).
+
+    Args:
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "agent_manager.list",
+        "params": {
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_agent_manager_get_current(
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit agent_manager.get_current request (bd-102).
+
+    Args:
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "agent_manager.get_current",
+        "params": {
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
+def emit_agent_manager_set_current(
+    agent_name: str,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Emit agent_manager.set_current request (bd-102).
+
+    Args:
+        agent_name: The name of the agent to set as current
+        timestamp: Optional timestamp (auto-generated if None)
+
+    Returns:
+        JSON-RPC request dict
+    """
+    return {
+        "jsonrpc": "2.0",
+        "method": "agent_manager.set_current",
+        "params": {
+            "agent_name": agent_name,
+            "timestamp": timestamp or _get_timestamp(),
+        },
+    }
+
+
 def to_canonical_notification(
     event_type: str,
     run_id: str | None,
@@ -786,7 +1062,9 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
     # V1 canonical methods (dot-style)
     if normalized_method == "run.start":
         if "agent_name" not in params:
-            raise WireMethodError("run.start requires 'agent_name' param", INVALID_PARAMS)
+            raise WireMethodError(
+                "run.start requires 'agent_name' param", INVALID_PARAMS
+            )
         if "prompt" not in params:
             raise WireMethodError("run.start requires 'prompt' param", INVALID_PARAMS)
         result = {
@@ -823,9 +1101,13 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
     # Legacy methods (kept for backward compatibility during transition)
     elif normalized_method == "invoke_agent":
         if "agent_name" not in params:
-            raise WireMethodError("invoke_agent requires 'agent_name' param", INVALID_PARAMS)
+            raise WireMethodError(
+                "invoke_agent requires 'agent_name' param", INVALID_PARAMS
+            )
         if "prompt" not in params:
-            raise WireMethodError("invoke_agent requires 'prompt' param", INVALID_PARAMS)
+            raise WireMethodError(
+                "invoke_agent requires 'prompt' param", INVALID_PARAMS
+            )
         result = {
             "agent_name": str(params["agent_name"]),
             "prompt": str(params["prompt"]),
@@ -847,7 +1129,9 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
 
     elif normalized_method == "file_list":
         if "directory" not in params:
-            raise WireMethodError("file_list requires 'directory' param", INVALID_PARAMS)
+            raise WireMethodError(
+                "file_list requires 'directory' param", INVALID_PARAMS
+            )
         return {
             "directory": str(params["directory"]),
             "recursive": bool(params.get("recursive", False)),
@@ -874,7 +1158,9 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
 
     elif normalized_method == "grep_search":
         if "search_string" not in params:
-            raise WireMethodError("grep_search requires 'search_string' param", INVALID_PARAMS)
+            raise WireMethodError(
+                "grep_search requires 'search_string' param", INVALID_PARAMS
+            )
         return {
             "search_string": str(params["search_string"]),
             "directory": str(params.get("directory", ".")),
@@ -886,7 +1172,7 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         if limiter_type not in ("file_ops", "api_calls", "tool_calls"):
             raise WireMethodError(
                 f"Invalid limiter type: {limiter_type}. Must be one of: file_ops, api_calls, tool_calls",
-                INVALID_PARAMS
+                INVALID_PARAMS,
             )
         result: dict[str, Any] = {"type": limiter_type}
         if "timeout" in params:
@@ -898,19 +1184,44 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
         if limiter_type not in ("file_ops", "api_calls", "tool_calls"):
             raise WireMethodError(
                 f"Invalid limiter type: {limiter_type}. Must be one of: file_ops, api_calls, tool_calls",
-                INVALID_PARAMS
+                INVALID_PARAMS,
             )
         return {"type": limiter_type}
 
     elif normalized_method == "concurrency.status":
         return {}  # No params needed for status
 
+    # Run limiter methods (bd-100)
+    elif normalized_method == "run_limiter.acquire":
+        result: dict[str, Any] = {}
+        if "timeout" in params:
+            result["timeout"] = float(params["timeout"])
+        return result
+
+    elif normalized_method == "run_limiter.release":
+        return {}  # No params needed for release
+
+    elif normalized_method == "run_limiter.status":
+        return {}  # No params needed for status
+
+    elif normalized_method == "run_limiter.set_limit":
+        if "limit" not in params:
+            raise WireMethodError(
+                "run_limiter.set_limit requires 'limit' param", INVALID_PARAMS
+            )
+        limit = int(params["limit"])
+        if limit < 1:
+            raise WireMethodError("limit must be >= 1", INVALID_PARAMS)
+        return {"limit": limit}
+
     # MCP bridge methods (bd-81)
     elif normalized_method == "mcp.register":
         if "name" not in params:
             raise WireMethodError("mcp.register requires 'name' param", INVALID_PARAMS)
         if "command" not in params:
-            raise WireMethodError("mcp.register requires 'command' param", INVALID_PARAMS)
+            raise WireMethodError(
+                "mcp.register requires 'command' param", INVALID_PARAMS
+            )
         if "args" not in params:
             raise WireMethodError("mcp.register requires 'args' param", INVALID_PARAMS)
         result: dict[str, Any] = {
@@ -926,7 +1237,9 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
 
     elif normalized_method == "mcp.unregister":
         if "server_id" not in params:
-            raise WireMethodError("mcp.unregister requires 'server_id' param", INVALID_PARAMS)
+            raise WireMethodError(
+                "mcp.unregister requires 'server_id' param", INVALID_PARAMS
+            )
         return {"server_id": str(params["server_id"])}
 
     elif normalized_method == "mcp.list":
@@ -934,14 +1247,20 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
 
     elif normalized_method == "mcp.status":
         if "server_id" not in params:
-            raise WireMethodError("mcp.status requires 'server_id' param", INVALID_PARAMS)
+            raise WireMethodError(
+                "mcp.status requires 'server_id' param", INVALID_PARAMS
+            )
         return {"server_id": str(params["server_id"])}
 
     elif normalized_method == "mcp.call_tool":
         if "server_id" not in params:
-            raise WireMethodError("mcp.call_tool requires 'server_id' param", INVALID_PARAMS)
+            raise WireMethodError(
+                "mcp.call_tool requires 'server_id' param", INVALID_PARAMS
+            )
         if "method" not in params:
-            raise WireMethodError("mcp.call_tool requires 'method' param", INVALID_PARAMS)
+            raise WireMethodError(
+                "mcp.call_tool requires 'method' param", INVALID_PARAMS
+            )
         result = {
             "server_id": str(params["server_id"]),
             "method": str(params["method"]),
@@ -957,7 +1276,9 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
     # EventBus bridge methods (bd-79)
     elif normalized_method == "eventbus.event":
         if "topic" not in params:
-            raise WireMethodError("eventbus.event requires 'topic' param", INVALID_PARAMS)
+            raise WireMethodError(
+                "eventbus.event requires 'topic' param", INVALID_PARAMS
+            )
         result: dict[str, Any] = {
             "topic": str(params["topic"]),
             "event_type": str(params.get("event_type", "")),
@@ -969,6 +1290,62 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
 
     elif normalized_method in ("get_status", "ping"):
         return params
+
+    # Rate limiter methods (bd-101)
+    elif normalized_method == "rate_limiter.record_limit":
+        if "model_name" not in params:
+            raise WireMethodError(
+                "rate_limiter.record_limit requires 'model_name' param", INVALID_PARAMS
+            )
+        return {"model_name": str(params["model_name"])}
+
+    elif normalized_method == "rate_limiter.record_success":
+        if "model_name" not in params:
+            raise WireMethodError(
+                "rate_limiter.record_success requires 'model_name' param",
+                INVALID_PARAMS,
+            )
+        return {"model_name": str(params["model_name"])}
+
+    elif normalized_method == "rate_limiter.get_limit":
+        if "model_name" not in params:
+            raise WireMethodError(
+                "rate_limiter.get_limit requires 'model_name' param", INVALID_PARAMS
+            )
+        return {"model_name": str(params["model_name"])}
+
+    elif normalized_method == "rate_limiter.circuit_status":
+        if "model_name" not in params:
+            raise WireMethodError(
+                "rate_limiter.circuit_status requires 'model_name' param",
+                INVALID_PARAMS,
+            )
+        return {"model_name": str(params["model_name"])}
+
+    # Agent manager methods (bd-102)
+    elif normalized_method == "agent_manager.register":
+        if "agent_name" not in params:
+            raise WireMethodError(
+                "agent_manager.register requires 'agent_name' param", INVALID_PARAMS
+            )
+        result: dict[str, Any] = {
+            "agent_name": str(params["agent_name"]),
+            "agent_info": dict(params.get("agent_info", {})),
+        }
+        return result
+
+    elif normalized_method == "agent_manager.list":
+        return {}  # No params needed for list
+
+    elif normalized_method == "agent_manager.get_current":
+        return {}  # No params needed for get_current
+
+    elif normalized_method == "agent_manager.set_current":
+        if "agent_name" not in params:
+            raise WireMethodError(
+                "agent_manager.set_current requires 'agent_name' param", INVALID_PARAMS
+            )
+        return {"agent_name": str(params["agent_name"])}
 
     else:
         raise WireMethodError(f"Unknown method: {method}", METHOD_NOT_FOUND)

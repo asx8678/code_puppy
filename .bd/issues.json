@@ -1834,7 +1834,7 @@
       "id": "bd-100",
       "title": "Phase 6.1: Migrate RunLimiter to Elixir GenServer",
       "description": "",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -1844,16 +1844,18 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-15T07:03:47.609889",
-      "updated_at": "2026-04-15T07:04:34.810631",
+      "updated_at": "2026-04-15T07:20:18.836069",
       "comments": [
-        "Migrate RunLimiter from Python asyncio.Semaphore to Elixir GenServer. Similar to ConcurrencyLimits (bd-77) but for run-level concurrency. Wait for agent runtime migration."
+        "Migrate RunLimiter from Python asyncio.Semaphore to Elixir GenServer. Similar to ConcurrencyLimits (bd-77) but for run-level concurrency. Wait for agent runtime migration.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Added RunLimiter bridge following ConcurrencyLimits pattern. Wire protocol + handlers + bridge-aware acquire/release. Elixir handles counters, Python handles reentrancy."
       ]
     },
     "bd-101": {
       "id": "bd-101",
       "title": "Phase 6.2: Migrate AdaptiveRateLimiter to Elixir",
       "description": "",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -1867,16 +1869,18 @@
         ]
       },
       "created_at": "2026-04-15T07:03:47.649051",
-      "updated_at": "2026-04-15T07:04:54.910966",
+      "updated_at": "2026-04-15T07:24:27.464885",
       "comments": [
-        "Migrate AdaptiveRateLimiter circuit breaker pattern to Elixir. Tracks per-model rate limits with backoff. Needs cross-process visibility."
+        "Migrate AdaptiveRateLimiter circuit breaker pattern to Elixir. Tracks per-model rate limits with backoff. Needs cross-process visibility.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Added AdaptiveRateLimiter bridge. Wire protocol + handlers for record_limit, record_success, get_limit, circuit_status. Bridge-aware record and query methods."
       ]
     },
     "bd-102": {
       "id": "bd-102",
       "title": "Phase 6.3: Migrate AgentManager to Elixir",
       "description": "",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -1890,9 +1894,10 @@
         ]
       },
       "created_at": "2026-04-15T07:03:47.662982",
-      "updated_at": "2026-04-15T07:04:54.895412",
+      "updated_at": "2026-04-15T07:24:27.468880",
       "comments": [
-        "Migrate AgentManager registry to Elixir. Final piece - orchestrates agent lifecycle. Depends on RunLimiter and RateLimiter being in Elixir first."
+        "Migrate AgentManager registry to Elixir. Final piece - orchestrates agent lifecycle. Depends on RunLimiter and RateLimiter being in Elixir first.",
+        "Claimed by planning-agent-019d8d"
       ]
     }
   },

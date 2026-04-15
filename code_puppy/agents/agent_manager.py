@@ -91,7 +91,7 @@ def get_terminal_session_id() -> str:
         ppid = os.getppid()
         pid = os.getpid()
         return f"session_{ppid}_{pid}"
-    except (OSError, AttributeError):
+    except OSError, AttributeError:
         # Fallback to current process ID if PPID unavailable
         return f"fallback_{os.getpid()}"
 
@@ -138,7 +138,7 @@ def _is_process_alive(pid: int) -> bool:
     except PermissionError:
         # No permission to signal -> process exists
         return True
-    except (OSError, ProcessLookupError):
+    except OSError, ProcessLookupError:
         # Process does not exist
         return False
     except ValueError:
@@ -172,7 +172,7 @@ def _cleanup_dead_sessions(sessions: dict[str, str]) -> dict[str, str]:
                 if _is_process_alive(pid):
                     cleaned[session_id] = agent_name
                 # else: skip dead session
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 # Invalid session ID format, keep it anyway
                 cleaned[session_id] = agent_name
         else:
@@ -195,7 +195,7 @@ def _load_session_data() -> dict[str, str]:
                 # Clean up dead sessions while loading
                 return _cleanup_dead_sessions(data)
         return {}
-    except (json.JSONDecodeError, IOError, OSError):
+    except json.JSONDecodeError, IOError, OSError:
         # File corrupted or permission issues, start fresh
         return {}
 
@@ -222,7 +222,7 @@ def _save_session_data(sessions: dict[str, str]) -> None:
         # Atomic rename (works on all platforms)
         temp_file.replace(session_file)
 
-    except (IOError, OSError):
+    except IOError, OSError:
         # File permission issues, etc. - just continue without persistence
         pass
 
@@ -538,9 +538,37 @@ def _invalidate_agent_registry() -> None:
 def get_available_agents() -> dict[str, str]:
     """Get a dictionary of available agents with their display names.
 
+    bd-102: Bridge-aware - tries Elixir bridge first if connected,
+    falls back to local agent registry.
+
     Returns:
         Dict mapping agent names to display names.
     """
+    # bd-102: Try Elixir bridge first if connected
+    try:
+        from code_puppy.plugins.elixir_bridge import (
+            is_connected,
+            call_elixir_agent_manager,
+        )
+        import asyncio
+
+        if is_connected():
+            try:
+                # Try to get agents from Elixir (with short timeout)
+                result = asyncio.run(
+                    call_elixir_agent_manager(
+                        "agent_manager.list",
+                        {},
+                        timeout=1.0,
+                    )
+                )
+                if result.get("status") == "ok" and "agents" in result:
+                    return dict(result["agents"])
+            except Exception:
+                pass  # Fallback to local on any error
+    except ImportError:
+        pass
+
     from ..config import (
         PACK_AGENT_NAMES,
         UC_AGENT_NAMES,
@@ -576,10 +604,38 @@ def get_available_agents() -> dict[str, str]:
 def get_current_agent_name() -> str:
     """Get the name of the currently active agent for this terminal session.
 
+    bd-102: Bridge-aware - tries Elixir bridge first if connected,
+    falls back to local session/cache/config.
+
     Returns:
         The name of the current agent for this session.
         Priority: session agent > last selected agent > config default > 'code-puppy'.
     """
+    # bd-102: Try Elixir bridge first if connected
+    try:
+        from code_puppy.plugins.elixir_bridge import (
+            is_connected,
+            call_elixir_agent_manager,
+        )
+        import asyncio
+
+        if is_connected():
+            try:
+                # Try to get current agent from Elixir (with short timeout)
+                result = asyncio.run(
+                    call_elixir_agent_manager(
+                        "agent_manager.get_current",
+                        {},
+                        timeout=1.0,
+                    )
+                )
+                if result.get("status") == "ok" and result.get("current_agent"):
+                    return result["current_agent"]
+            except Exception:
+                pass  # Fallback to local on any error
+    except ImportError:
+        pass
+
     _ensure_session_cache_loaded()
     session_id = get_terminal_session_id()
 
@@ -607,6 +663,8 @@ def get_current_agent_name() -> str:
 
 def set_current_agent(agent_name: str) -> bool:
     """Set the current agent by name.
+
+    bd-102: Bridge-aware - notifies Elixir bridge if connected (fire-and-forget).
 
     Args:
         agent_name: The name of the agent to set as current.
@@ -639,6 +697,29 @@ def set_current_agent(agent_name: str) -> bool:
         # Restore a copy to avoid sharing the same list instance
         agent_obj.set_message_history(list(_state.agent_histories[agent_obj.name]))
     on_agent_reload(agent_obj.id, agent_name)
+
+    # bd-102: Notify Elixir bridge if connected (fire-and-forget)
+    try:
+        from code_puppy.plugins.elixir_bridge import (
+            is_connected,
+            call_elixir_agent_manager,
+        )
+        import asyncio
+
+        if is_connected():
+            try:
+                asyncio.create_task(
+                    call_elixir_agent_manager(
+                        "agent_manager.set_current",
+                        {"agent_name": agent_name},
+                        timeout=1.0,
+                    )
+                )
+            except Exception:
+                pass  # Ignore errors for fire-and-forget
+    except ImportError:
+        pass
+
     return True
 
 
