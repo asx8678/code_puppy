@@ -1929,8 +1929,16 @@ class BaseAgent(ABC, AgentPromptMixin):
         start_idx = 2 if skip_second else 1
         messages_to_scan = messages[start_idx:]
 
-        for msg in reversed(messages_to_scan):
-            num_tokens += self.estimate_tokens_for_message(msg)
+        use_cached = (
+            per_message_tokens is not None
+            and len(per_message_tokens) == len(messages)
+        )
+        for i, msg in enumerate(reversed(messages_to_scan)):
+            orig_idx = len(messages) - 1 - i
+            if use_cached and per_message_tokens[orig_idx] is not None:
+                num_tokens += per_message_tokens[orig_idx]
+            else:
+                num_tokens += self.estimate_tokens_for_message(msg)
             if num_tokens > protected_tokens:
                 break
             kept.append(msg)
