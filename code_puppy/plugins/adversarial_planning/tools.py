@@ -72,35 +72,3 @@ def register_adversarial_plan_tool(agent: Any) -> None:
         finally:
             unregister_session(orchestrator.session_id)
 
-
-# Additional tools for future implementation
-
-def tool_evidence_add(
-    session_id: str,
-    evidence_class: str,
-    claim: str,
-    source_kind: str,
-    source_locator: str,
-    confidence: int = 50
-) -> dict[str, Any]:
-    """Add evidence to a planning session.
-    
-    TODO(code_puppy-792): Implement evidence tool
-    """
-    raise NotImplementedError("Evidence tool not yet implemented")
-
-
-def tool_session_export(session_id: str, format: str = "json") -> str:
-    """Export a planning session to file.
-    
-    TODO(code_puppy-792): Implement export tool
-    """
-    raise NotImplementedError("Export tool not yet implemented")
-
-
-def tool_plan_diff(session_a: str, session_b: str) -> dict[str, Any]:
-    """Compare two planning sessions/plans.
-    
-    TODO(code_puppy-792): Implement diff tool
-    """
-    raise NotImplementedError("Diff tool not yet implemented")
