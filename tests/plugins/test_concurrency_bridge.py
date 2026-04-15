@@ -664,7 +664,6 @@ class TestCallElixirConcurrency:
         with patch("code_puppy.plugins.elixir_bridge.is_connected", return_value=True):
             with patch(
                 "code_puppy.plugins.elixir_bridge.call_method",
-                new_callable=AsyncMock,
                 return_value=mock_result,
             ):
                 result = await call_elixir_concurrency(

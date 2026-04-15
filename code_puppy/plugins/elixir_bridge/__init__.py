@@ -66,6 +66,8 @@ import time
 import uuid
 from typing import Any
 
+from .wire_protocol import _serialize_json
+
 # Bridge mode detection - used by register_callbacks to decide whether to activate
 BRIDGE_ENABLED = os.environ.get("CODE_PUPPY_BRIDGE", "").strip() == "1"
 BRIDGE_LOG_FILE = os.environ.get("CODE_PUPPY_BRIDGE_LOG")
@@ -83,12 +85,13 @@ class _ResponseSlot:
     Eliminates the 10ms polling floor that was adding latency.
     """
 
-    __slots__ = ("event", "result", "error")
+    __slots__ = ("event", "result", "error", "_lock")
 
     def __init__(self):
         self.event = threading.Event()
         self.result: Any = None
         self.error: Any = None
+        self._lock = threading.Lock()
 
     def wait(self, timeout: float) -> tuple[Any, Any]:
         """Wait for response with timeout. Returns (result, error)."""
@@ -98,21 +101,14 @@ class _ResponseSlot:
 
     def complete(self, result: Any, error: Any) -> None:
         """Mark response as complete."""
-        self.result = result
-        self.error = error
-        self.event.set()
+        with self._lock:
+            self.result = result
+            self.error = error
+            self.event.set()
 
 
 _pending_responses: dict[str, _ResponseSlot] = {}
 _response_lock = threading.Lock()
-
-# bd-103: Optional orjson support for faster serialization
-try:
-    import orjson
-
-    _HAS_ORJSON = True
-except ImportError:
-    _HAS_ORJSON = False
 
 
 def is_connected() -> bool:
@@ -152,33 +148,6 @@ def get_connection_url() -> str | None:
         The connection URL if set, None otherwise.
     """
     return _elixir_control_plane_url
-
-
-# bd-103: Serialization helpers for orjson optimization
-def _serialize_json(data: Any) -> bytes:
-    """Serialize data to JSON bytes, using orjson if available.
-
-    bd-103: orjson is 5-10x faster than stdlib json for serialization.
-    Falls back to stdlib json if orjson is not installed.
-    """
-    if _HAS_ORJSON:
-        return orjson.dumps(data, option=orjson.OPT_SERIALIZE_NUMPY)
-    import json
-
-    return json.dumps(data, separators=(",", ":")).encode("utf-8")
-
-
-def _deserialize_json(data: bytes) -> Any:
-    """Deserialize JSON bytes, using orjson if available.
-
-    bd-103: orjson is 5-10x faster than stdlib json for deserialization.
-    Falls back to stdlib json if orjson is not installed.
-    """
-    if _HAS_ORJSON:
-        return orjson.loads(data)
-    import json
-
-    return json.loads(data.decode("utf-8"))
 
 
 def call_method(
@@ -271,7 +240,7 @@ async def call_elixir_concurrency(
         raise ConnectionError("Elixir control plane not connected")
 
     try:
-        return await call_method(method, params, timeout=timeout)
+        return call_method(method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
         return {"status": "timeout", "fallback": True}
@@ -301,7 +270,7 @@ async def call_elixir_run_limiter(
         raise ConnectionError("Elixir control plane not connected")
 
     try:
-        return await call_method(method, params, timeout=timeout)
+        return call_method(method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
         return {"status": "timeout", "fallback": True}
@@ -332,7 +301,7 @@ async def call_elixir_mcp(
         raise ConnectionError("Elixir control plane not connected")
 
     # Call through to Elixir control plane
-    return await call_method(method, params, timeout=timeout)
+    return call_method(method, params, timeout=timeout)
 
 
 async def call_elixir_rate_limiter(
@@ -361,7 +330,7 @@ async def call_elixir_rate_limiter(
         raise ConnectionError("Elixir control plane not connected")
 
     try:
-        return await call_method(method, params, timeout=timeout)
+        return call_method(method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
         return {"status": "timeout", "fallback": True}
@@ -393,7 +362,7 @@ async def call_elixir_agent_manager(
         raise ConnectionError("Elixir control plane not connected")
 
     try:
-        return await call_method(method, params, timeout=timeout)
+        return call_method(method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
         return {"status": "timeout", "fallback": True}
@@ -625,7 +594,7 @@ def notify_elixir_event(
 __all__ = [
     "BRIDGE_ENABLED",
     "BRIDGE_LOG_FILE",
-    # Client mode (Python → Elixir)
+    # Client mode (Python -> Elixir)
     "is_connected",
     "set_connection_url",
     "get_connection_url",
