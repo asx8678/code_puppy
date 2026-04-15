@@ -470,9 +470,9 @@ class TestFallbackBehavior:
         assert result.status == PlanStatus.COMPLETED
         assert result.success_count == 1
 
-        # Check that native Python source is indicated in result
+        # bd-94: Check that Python fallback source is indicated in result
         op_result = result.operation_results[0]
-        assert op_result.data.get("source") == "native_python"
+        assert op_result.data.get("source") == "python"
 
     @pytest.mark.asyncio
     async def test_native_grep_execution(self, temp_dir_with_files):
@@ -493,9 +493,9 @@ class TestFallbackBehavior:
         assert result.status == PlanStatus.COMPLETED
         assert result.success_count == 1
 
-        # Check that native Python source is indicated
+        # bd-94: Check that Python fallback source is indicated
         op_result = result.operation_results[0]
-        assert op_result.data.get("source") == "native_python"
+        assert op_result.data.get("source") == "python"
 
     @pytest.mark.asyncio
     async def test_native_read_files_execution(self, temp_dir_with_files):
@@ -518,9 +518,9 @@ class TestFallbackBehavior:
         assert result.status == PlanStatus.COMPLETED
         assert result.success_count == 1
 
-        # Check that native Python source is indicated
+        # bd-94: Check that Python fallback source is indicated
         op_result = result.operation_results[0]
-        assert op_result.data.get("source") == "native_python"
+        assert op_result.data.get("source") == "python"
 
 
 class TestResultSummarization:

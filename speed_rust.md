@@ -10,7 +10,7 @@ The repository uses a Cargo workspace with pyo3 managed at the workspace level:
 
 ```toml
 [workspace]
-members = ["code_puppy_core", "turbo_ops", "turbo_parse"]
+members = ["code_puppy_core", "turbo_parse"]
 resolver = "2"
 
 [workspace.dependencies]

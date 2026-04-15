@@ -29,7 +29,7 @@ Code Puppy has a **runtime backend selector** called `fast_puppy` that routes pe
 | Capability | Rust Crate | Elixir Service | Purpose |
 |------------|-----------|----------------|---------|
 | `message_core` | `code_puppy_core` | — | Message serialization, pruning, hashing |
-| `file_ops` | `turbo_ops` | `file_service` | Batch file ops (`list_files`, `grep`, `read_file`) |
+| `file_ops` | — | `file_service` | Batch file ops (`list_files`, `grep`, `read_file`) |
 | `repo_index` | — | `repo_index` | Repository indexing |
 | `parse` | `turbo_parse` | `turbo_parse_nif` | Tree-sitter parsing, symbols, diagnostics |
 

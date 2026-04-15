@@ -81,8 +81,7 @@ class TurboOrchestrator:
             NativeBackend.is_available(NativeBackend.Capabilities.FILE_OPS)
             and not prefer_native_python
         )
-        # Backward compatibility: maintain old attribute name (bd-84)
-        self._turbo_ops_available = self._native_file_ops_available
+        # bd-94: Removed _turbo_ops_available - use _native_file_ops_available directly
         # bd-84: Track actual backend source for accurate reporting
         self._backend_source = (
             NativeBackend._get_file_ops_source()
@@ -305,7 +304,7 @@ class TurboOrchestrator:
             directory, recursive, _prefer_native=prefer_native
         )
 
-        # bd-84: Map source names to actual backend (elixir/python), not stale "turbo_ops"
+        # bd-94: Map source names to actual backend (elixir/python)
         actual_source = (
             NativeBackend._get_file_ops_source()
             if hasattr(NativeBackend, "_get_file_ops_source")
@@ -316,8 +315,7 @@ class TurboOrchestrator:
             "python_fallback": "python",
             "elixir": "elixir",
             "python": "python",
-            # Legacy mapping for backward compatibility
-            "turbo_ops": actual_source,
+            "file_ops": actual_source,
         }
         source = source_mapping.get(result.get("source"), actual_source)
 
@@ -356,7 +354,7 @@ class TurboOrchestrator:
             search_string, directory, _prefer_native=prefer_native
         )
 
-        # bd-84: Map source names to actual backend (elixir/python), not stale "turbo_ops"
+        # bd-94: Map source names to actual backend (elixir/python)
         actual_source = (
             NativeBackend._get_file_ops_source()
             if hasattr(NativeBackend, "_get_file_ops_source")
@@ -367,8 +365,7 @@ class TurboOrchestrator:
             "python_fallback": "python",
             "elixir": "elixir",
             "python": "python",
-            # Legacy mapping for backward compatibility
-            "turbo_ops": actual_source,
+            "file_ops": actual_source,
         }
         source = source_mapping.get(result.get("source"), actual_source)
 
@@ -447,7 +444,7 @@ class TurboOrchestrator:
             native_files = result.get("files", [])
             files_data.extend(native_files)
 
-            # bd-84: Map source names to actual backend (elixir/python), not stale "turbo_ops"
+            # bd-94: Map source names to actual backend (elixir/python)
             actual_source = (
                 NativeBackend._get_file_ops_source()
                 if hasattr(NativeBackend, "_get_file_ops_source")
@@ -458,8 +455,7 @@ class TurboOrchestrator:
                 "python_fallback": "python",
                 "elixir": "elixir",
                 "python": "python",
-                # Legacy mapping for backward compatibility
-                "turbo_ops": actual_source,
+                "file_ops": actual_source,
             }
             source = source_mapping.get(result.get("source"), actual_source)
 
@@ -472,7 +468,7 @@ class TurboOrchestrator:
                 "source": source,
             }
 
-        # No valid paths to read - still need to map source for consistency (bd-84)
+        # bd-94: Map source names to actual backend (elixir/python)
         actual_source = (
             NativeBackend._get_file_ops_source()
             if hasattr(NativeBackend, "_get_file_ops_source")

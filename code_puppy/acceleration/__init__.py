@@ -2,9 +2,7 @@
 
 bd-70: Simplified to route all queries through NativeBackend instead of
 importing directly from _core_bridge and turbo_parse_bridge.
-bd-99: Updated for Elixir-first architecture. File operations route through
-Elixir control plane by default. turbo_ops references remain for backward
-compatibility but operations are handled via Elixir FileOps.
+bd-94: Removed turbo_ops - file operations route through Elixir control plane.
 
 Configuration:
     Use environment variables to override backends:
@@ -34,7 +32,7 @@ from code_puppy._core_bridge import (
 from code_puppy.native_backend import NativeBackend
 
 # bd-70: Derive availability flags from NativeBackend
-# bd-99: Add ELIXIR_AVAILABLE for Elixir-first architecture
+# bd-94: Add ELIXIR_AVAILABLE for Elixir-first architecture (turbo_ops removed)
 RUST_AVAILABLE = NativeBackend.is_active(NativeBackend.Capabilities.MESSAGE_CORE)
 TURBO_PARSE_AVAILABLE = NativeBackend.is_active(NativeBackend.Capabilities.PARSE)
 ELIXIR_AVAILABLE = NativeBackend.is_elixir_connected()

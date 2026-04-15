@@ -40,10 +40,10 @@ def _on_startup():
     """Initialize the orchestrator on startup."""
     global _orchestrator
     _orchestrator = TurboOrchestrator()
-    # bd-86: Updated to reflect file_ops routing through Elixir/Python
+    # bd-94: Updated to use _native_file_ops_available
     ops_mode = (
         "native backend (Elixir)"
-        if _orchestrator._turbo_ops_available
+        if _orchestrator._native_file_ops_available
         else "Python fallback"
     )
     logger.info(f"Turbo Executor plugin initialized (using {ops_mode})")
@@ -78,10 +78,10 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         emit_info("🚀 Turbo Executor Status:")
         emit_info(f"   Orchestrator ready: {orch is not None}")
         emit_info(f"   Parallel mode: {orch.enable_parallel}")
-        # bd-86: Updated status message (file_ops routes through NativeBackend)
+        # bd-94: Updated to use _native_file_ops_available
         ops_source = (
             "native backend (Elixir)"
-            if orch._turbo_ops_available
+            if orch._native_file_ops_available
             else "Python fallback"
         )
         emit_info(f"   Operations source: {ops_source}")
@@ -90,10 +90,10 @@ def _handle_turbo_command(command: str, name: str) -> Any:
 
     if subcommand == "help":
         orch = _get_orchestrator()
-        # bd-86: Updated help text
+        # bd-94: Updated to use _native_file_ops_available
         ops_source = (
             "native backend (Elixir)"
-            if orch._turbo_ops_available
+            if orch._native_file_ops_available
             else "Python fallback"
         )
         emit_info("🚀 Turbo Executor — Batch File Operations")
@@ -115,7 +115,7 @@ def _handle_turbo_command(command: str, name: str) -> Any:
         emit_info("Operations: list_files, grep, read_files")
         emit_info("Priority: lower numbers execute first (default 100)")
         emit_info("")
-        emit_info(f"Backend: {ops_source}")  # bd-86: Updated backend description
+        emit_info(f"Backend: {ops_source}")  # bd-94: Updated backend description
         return True
 
     if subcommand == "plan":

@@ -319,7 +319,6 @@ uvx --from codepp code-puppy
 # Build all Rust crates via cargo workspace + maturin (recommended)
 cargo build --release --workspace
 uv run maturin develop --release --manifest-path code_puppy_core/Cargo.toml
-uv run maturin develop --release --manifest-path turbo_ops/Cargo.toml
 uv run maturin develop --release --manifest-path turbo_parse/Cargo.toml
 
 # OR: just start code-puppy and let fast_puppy auto-build on startup
@@ -332,7 +331,7 @@ uv run maturin develop --release --manifest-path turbo_parse/Cargo.toml
 /fast_puppy status                 → detailed per-capability status
 /fast_puppy profile <name>         → switch runtime profile
 /fast_puppy build                  → build all Rust crates
-/fast_puppy build turbo_ops        → build specific crate
+/fast_puppy build turbo_parse      → build specific crate
 /fast_puppy enable <capability>    → enable a capability
 /fast_puppy disable <capability>   → disable a capability
 ```
@@ -373,7 +372,7 @@ free_threading=true
 #### What You Get with Python 3.14 Free-Threading
 
 - **True Parallelism**: Multiple threads can execute Python bytecode simultaneously
-- **Rust Acceleration Synergy**: All three Rust crates (`code_puppy_core`, `turbo_ops`, `turbo_parse`) are built with PyO3's `free-threaded` feature
+- **Rust Acceleration Synergy**: Rust crates (`code_puppy_core`, `turbo_parse`) are built with PyO3's `free-threaded` feature
 - **Pack Parallelism Boost**: Run 8+ agents truly in parallel, not just concurrently
 - **No Code Changes Required**: Works transparently with existing Code Puppy features
 

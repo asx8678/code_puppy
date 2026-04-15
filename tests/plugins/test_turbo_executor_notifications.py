@@ -633,7 +633,7 @@ class TestIntegration:
         with (
             patch(
                 "code_puppy.plugins.turbo_executor.notifications.emit_info"
-            ) as mock_info,
+            ),
             patch(
                 "code_puppy.plugins.turbo_executor.notifications.emit_success"
             ) as mock_success,

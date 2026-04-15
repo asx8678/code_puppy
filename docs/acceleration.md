@@ -1,138 +1,143 @@
-# Rust Acceleration
+# Native Acceleration (Fast Puppy)
 
-> **Note**: As of the Elixir migration, file operations now route through Elixir by default. Rust acceleration remains for message processing (puppy_core) and parsing (turbo_parse). See the `elixir_first` profile for configuration.  # bd-97
+Code Puppy uses a **multi-backend acceleration stack** for native performance, with intelligent routing based on capability type.
 
-Code Puppy uses **Rust acceleration** for native performance, with PyO3 providing seamless Python integration.
-
-## Architecture Overview
+## Architecture Overview (Elixir-First)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Python Code Puppy                         │
-├─────────────────────────────────────────────────────────────┤
-│  code_puppy/acceleration/  ← Unified Bridge Module          │
-├─────────────────────────────────────────────────────────────┤
-│                    Rust (PyO3)                              │
-│  ┌─────────────────────┐  ┌─────────────────────┐          │
-│  │   puppy_core        │  │   turbo_ops         │          │
-│  │   - Message batch   │  │   - list_files      │          │
-│  │   - Token pruning   │  │   - grep            │          │
-│  │   - Session (de)ser │  │   - read_file       │          │
-│  ├─────────────────────┤  └─────────────────────┘          │
-│  │   turbo_parse       │                                  │
-│  │   - Tree-sitter     │                                  │
-│  │   - Symbol extract  │                                  │
-│  │   - Parsing         │                                  │
-│  └─────────────────────┘                                  │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    Python Code Puppy                             │
+├─────────────────────────────────────────────────────────────────┤
+│  NativeBackend (unified interface)                              │
+├─────────────────────────────────────────────────────────────────┤
+│                    Backend Routing                               │
+├───────────────┬───────────────────┬─────────────────────────────┤
+│  Elixir       │  Rust (PyO3)      │  Python (Fallback)          │
+│  ┌─────────┐  │  ┌─────────────┐  │  ┌─────────────────────┐   │
+│  │File Ops │  │  │message_core │  │  │list_files           │   │
+│  │Repo Idx │  │  │- batch      │  │  │grep                 │   │
+│  │Parse NIF│  │  │- pruning    │  │  │read_file            │   │
+│  └─────────┘  │  │- hashing    │  │  └─────────────────────┘   │
+│               │  │- serialize  │  │                             │
+│               │  ├─────────────┤  │                             │
+│               │  │turbo_parse  │  │                             │
+│               │  │- symbols    │  │                             │
+│               │  │- parsing    │  │                             │
+│               │  └─────────────┘  │                             │
+└───────────────┴───────────────────┴─────────────────────────────┘
 ```
 
-## Backend Assignment  # bd-97
+## Backend Assignment
 
-| Module | Backend | Rationale |
-|--------|---------|-----------|
-| `puppy_core` | **Rust** | Message processing is extremely FFI-sensitive; PyO3 provides minimal overhead |
-| `turbo_parse` | **Rust** | Tree-sitter has excellent Rust bindings; mature ecosystem |
-| `file_ops` | **Elixir** | File operations route through Elixir control plane for distributed coordination |
+| Capability | Primary Backend | Fallback | Purpose |
+|------------|-----------------|----------|---------|
+| `message_core` | **Rust** | Python | Message serialization, pruning, hashing |
+| `file_ops` | **Elixir** | Python | Batch file ops (`list_files`, `grep`, `read_file`) |
+| `repo_index` | **Elixir** | Python | Repository indexing |
+| `parse` | **Elixir NIF** → Rust | Python | Tree-sitter parsing, symbols, diagnostics |
 
-## Backend Profiles  # bd-97
+## Backend Profiles
 
-The `elixir_first` profile routes file operations through Elixir before falling back to Rust/Python:
+The runtime supports three backend profiles:
 
 ```python
-from code_puppy.native_backend import NativeBackend, BackendPreference
+from code_puppy.native_backend import NativeBackend
 
-# Use Elixir-first routing (default)
+# Elixir-first routing (default)
 NativeBackend.set_backend_preference("elixir_first")
 
-# Or use legacy Rust-first
-NativeBackend.set_backend_preference("rust_first")
+# Rust-only (no Elixir)
+NativeBackend.set_backend_preference("rust_only")
+
+# Python-only (no native acceleration)
+NativeBackend.set_backend_preference("python_only")
 ```
 
-## Why Rust?
+## Why This Architecture?
 
-1. **FFI Overhead**: PyO3 has minimal FFI overhead for hot paths
-2. **Ecosystem**: Tree-sitter has first-class Rust bindings
-3. **Safety**: Rust's ownership model catches memory issues at compile time
-4. **Maturity**: PyO3 is battle-tested with excellent Python interop
-5. **Performance**: Zero-cost abstractions with predictable performance
+| Backend | Best For | Rationale |
+|---------|----------|-----------|
+| **Elixir** | File operations, indexing | Distributed coordination, fault tolerance, BEAM VM |
+| **Rust** | Message processing | Minimal FFI overhead for hot paths, memory safety |
+| **Python** | Fallback | Always works, zero build requirements |
 
 ## Unified Bridge API
 
-The `code_puppy.acceleration` module provides a unified interface:
+The `NativeBackend` class provides a single interface:
 
 ```python
-from code_puppy.acceleration import (
-    # Backend info
-    RUST_AVAILABLE,
-    get_backend_info,
-    # Rust-backed operations
-    process_messages_batch,
-    prune_and_filter,
-    truncation_indices,
-    split_for_summarization,
-    serialize_session,
-    deserialize_session,
-    MessageBatchHandle,
-    list_files,
-    grep,
-)
+from code_puppy.native_backend import NativeBackend
 
 # Check backend status
-info = get_backend_info()
-# {'puppy_core': 'rust', 'turbo_parse': 'rust', 'turbo_ops': 'rust'}
+status = NativeBackend.get_status()
 
-# File operations use Rust when available
-result = list_files("src/", recursive=True)
-result = grep("def ", directory="src/")
+# File operations (route through Elixir)
+result = NativeBackend.list_files("src/", recursive=True)
+result = NativeBackend.grep("def ", directory="src/")
+
+# Message processing (route through Rust)
+result = NativeBackend.serialize_messages(messages)
+
+# Parsing (route through Elixir NIF → Rust)
+ast = NativeBackend.parse_file("main.py", language="python")
 ```
 
 ## Feature Flags
 
-The acceleration system respects these environment variables:
+Environment variables to control acceleration:
 
 | Variable | Effect |
 |----------|--------|
 | `PUP_DISABLE_RUST` | Force Python fallbacks for Rust-backed operations |
+| `PUP_DISABLE_ELIXIR` | Disable Elixir routing |
 | `PUP_DISABLE_ACCELERATION` | Disable all native acceleration |
 
 ## Fallback Chain
 
-Each operation has a fallback chain:
+Each operation follows this priority:
 
-1. **Try Rust** (via PyO3)
-2. **Python implementation**
-3. **Graceful degradation** (return empty/error result)
+1. **Try Elixir** (if `elixir_first` profile and available)
+2. **Try Rust** (if `rust_only` profile and available)
+3. **Python implementation**
+4. **Graceful degradation** (return empty/error result)
 
 ## Building
 
-### Rust (Required for acceleration)
+### Rust Components
 
 ```bash
-# Build all crates via cargo workspace
+# Build Rust crates
 cargo build --release --workspace
 
-# Or let fast_puppy plugin auto-build on startup
-# First build: ~2-5 minutes (turbo_parse pulls in tree-sitter grammars)
-# Subsequent: cached unless .rs sources change
+# Or use maturin for individual crates
+uv run maturin develop --release --manifest-path code_puppy_core/Cargo.toml
+uv run maturin develop --release --manifest-path turbo_parse/Cargo.toml
 ```
 
-Each crate can also be built individually with maturin:
+### Elixir Components
 
 ```bash
-uv run maturin develop --release --manifest-path code_puppy_core/Cargo.toml
-uv run maturin develop --release --manifest-path turbo_ops/Cargo.toml
-uv run maturin develop --release --manifest-path turbo_parse/Cargo.toml
+# Start the Elixir control plane
+cd elixir/
+mix deps.get
+iex -S mix
 ```
 
 ## Performance Notes
 
-- **Message processing**: Rust is ~5-10x faster than Python via PyO3
-- **File operations**: Rust batch operations are 5-20x faster on large repos
-- **Parsing**: Tree-sitter in Rust is 10-50x faster than pure Python parsing
+| Operation | Speedup | Backend |
+|-----------|---------|---------|
+| Message processing | 10-30x | Rust |
+| File operations | 5-20x | Elixir |
+| Parsing | 10-50x | Elixir NIF → Rust |
+
+## Migration Notes
+
+- **bd-93**: Parse operations now route through `NativeBackend` with Elixir-first routing
+- **bd-94**: Removed `turbo_ops` crate - file operations now route through Elixir
+- Direct `turbo_parse_bridge` imports are deprecated — use `NativeBackend`
 
 ## Future Considerations
 
-- Additional Rust crates: Evaluate based on hot path analysis
 - Python 3.14 free-threading: All crates support no-GIL operation
-- New accelerators: Evaluate based on FFI sensitivity and ecosystem maturity
+- Additional backends evaluated based on FFI sensitivity and ecosystem maturity
