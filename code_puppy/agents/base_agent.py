@@ -760,7 +760,10 @@ class BaseAgent(ABC, AgentPromptMixin):
                         total_tokens += self.estimate_token_count(schema_str)
                 except Exception as e:
                     # Log at warning level for visibility; don't silently undercount
-                    tool_name = tool_def.get("name", "unknown")
+                    try:
+                        tool_name = tool_def.get("name", "unknown")
+                    except Exception:
+                        tool_name = "unknown"
                     logger.warning(
                         "Failed to process MCP tool %r for token counting: %s",
                         tool_name, e, exc_info=logger.isEnabledFor(logging.DEBUG)

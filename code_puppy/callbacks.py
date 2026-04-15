@@ -1082,6 +1082,7 @@ async def on_agent_run_end(
         error,
         response_text,
         metadata,
+        ctx,
     )
 
 

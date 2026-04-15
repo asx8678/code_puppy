@@ -120,7 +120,6 @@
 │   (Repo mapping)   │                    │ • agent_memory (Persistence)         │
 │ • pack_parallelism │                    │ • code_explorer (Nav)                │
 │   (Limits)         │                    │ • loop_detection                     │
-│                    │                    │ • flow_visualizer                    │
 └────────────────────┴────────────────────┴────────────────────────────────────┘
     │
     ▼

@@ -1899,7 +1899,192 @@
         "Migrate AgentManager registry to Elixir. Final piece - orchestrates agent lifecycle. Depends on RunLimiter and RateLimiter being in Elixir first.",
         "Claimed by planning-agent-019d8d"
       ]
+    },
+    "bd-103": {
+      "id": "bd-103",
+      "title": "Legacy cleanup: Post-Zig MCP runner removal",
+      "description": "After Zig MCP runner replacement with direct Elixir Port (completed), perform final legacy cleanup to remove all misleading documentation, stale artifacts, and ensure regression guards are in place. This epic tracks the remaining cleanup work that was NOT covered by bd-60 (which handled config.py and acceleration/__init__.py).\\n\\nVerified evidence:\\n- Zig MCP runner \u2192 replaced by direct Elixir Port (elixir/code_puppy_control/lib/code_puppy_control/mcp/server.ex)\\n- validate_mvp.sh \u2192 no longer has Zig validation step\\n- scripts/bench_zig_vs_rust.py \u2192 removed\\n- build.zig / build.zig.zon \u2192 removed\\n\\nRemaining work:\\n- Repo artifacts: empty zig-out/, stray liblib.a, stale .gitignore entries\\n- Docs: ELIXIR_REMEDIATION.md still frames Zig removal as future\\n- Historical docs: fast_puppy_elixir_rewrite_plan.md still references zig_bridge\\n- ADR: ADR-001-elixir-python-worker-protocol.md still frames as Elixir/Zig migration\\n- Regression guards: Test assertions that no Zig references remain\\n\\nACCEPTANCE CRITERIA:\\n1. No active docs imply Zig is still current runtime architecture\\n2. Dead Zig artifacts removed or intentionally retained with justification\\n3. Remaining Zig references are only historical/intentional/test assertions\\n4. grep -r 'zig' across codebase returns only expected historical refs or test guards",
+      "status": "closed",
+      "priority": 2,
+      "type": "epic",
+      "labels": [
+        "cleanup",
+        "zig-removal",
+        "legacy",
+        "claimed-by-planning-agent-019d91"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-104",
+          "bd-105",
+          "bd-106"
+        ]
+      },
+      "created_at": "2026-04-15T15:31:03.233603",
+      "updated_at": "2026-04-15T15:58:11.960239",
+      "comments": [
+        "PRIOR WORK: bd-60 handled Zig cleanup in config.py, acceleration/__init__.py, and docs/acceleration.md.\\n\\nThis epic (bd-103) covers the remaining cleanup discovered after Zig MCP runner was actually removed:\\n- Physical artifacts (zig-out/, liblib.a) - tracked in bd-104\\n- Historical docs still framing Zig as future - tracked in bd-105\\n- Regression guards - tracked in bd-106\\n\\nRELATIONSHIP TO ELIXIR MIGRATION:\\nThis cleanup completes the Zig\u2192Elixir phase of the larger migration. The MCP runner now uses direct Elixir Port (see elixir/code_puppy_control/lib/code_puppy_control/mcp/server.ex).",
+        "Epic claimed by planning-agent-019d91. Child issues bd-104, bd-105, bd-106 identified as executable slices. bd-104 recommended as first slice.",
+        "COMPLETED by planning-agent-019d91:\\nAll child issues of post-Zig cleanup completed:\\n- bd-104: Physical artifacts removed (zig-out/, liblib.a, .gitignore cleaned)\\n- bd-105: Documentation updated to reflect historical Zig removal\\n- bd-106: Regression guard test added for Zig runtime references\\n\\nLegacy cleanup epic complete. No remaining Zig-related technical debt."
+      ]
+    },
+    "bd-104": {
+      "id": "bd-104",
+      "title": "Cleanup: Remove dead Zig repo artifacts",
+      "description": "Remove physical artifacts left over from Zig build system that create confusion about current architecture.\\n\\nTARGETS:\\n1. Remove empty zig-out/ directory from repo root (if truly empty)\\n2. Remove stray liblib.a from repo root\\n3. Update .gitignore to remove Zig entries: .zig-cache/, zig-out/, liblib.a\\n   - Consider keeping as HISTORICAL ENTRY with comment if useful for local dev cleanup\\n\\nSCOPE DECISIONS:\\n- If zig-out/ is NOT empty, audit contents before deletion\\n- If liblib.a has valid purpose (other than Zig), document and keep\\n- .gitignore: either remove entries entirely OR convert to commented \"# Historical: Zig build artifacts (no longer used)\"\\n\\nACCEPTANCE CRITERIA:\\n1. repo root has no zig-out/ directory (or documented justification if retained)\\n2. repo root has no liblib.a file (or documented purpose if retained)\\n3. .gitignore entries for Zig are removed or converted to historical comments\\n4. drwxr-xr-x@   3 adam2  staff       96 Apr 14 05:48 zig-out at repo root returns nothing",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "cleanup",
+        "zig-removal",
+        "claimed-by-planning-agent-019d91"
+      ],
+      "dependencies": {
+        "blocked-by": [
+          "bd-103"
+        ]
+      },
+      "created_at": "2026-04-15T15:31:08.575163",
+      "updated_at": "2026-04-15T15:58:09.061698",
+      "comments": [
+        "SCOPE NOTE: If zig-out/ is not empty during cleanup, audit contents and file bd-107 or appropriate child issue if additional cleanup needed beyond simple deletion.\\n\\nDISCOVERED-FROM: bd-105 (docs cleanup) - if docs still reference zig-out paths, coordinate with bd-105 before removing.",
+        "Claimed by planning-agent-019d91 for implementation work. Starting active session.",
+        "COMPLETED by planning-agent-019d91:\\n- Removed empty zig-out/ directory from repo root\\n- Removed stray liblib.a from repo root\\n- Cleaned .gitignore by removing Zig artifact block\\n\\nAll acceptance criteria satisfied. Physical Zig artifacts no longer present in repository."
+      ]
+    },
+    "bd-105": {
+      "id": "bd-105",
+      "title": "Cleanup: Fix stale documentation references to Zig",
+      "description": "Update documentation that incorrectly frames Zig as current or future architecture.\\n\\nTARGETS:\\n1. docs/ELIXIR_REMEDIATION.md:\\n   - Currently describes Zig removal as FUTURE work\\n   - Update to PAST TENSE: \"Zig runner was removed, replaced by...\"\\n   - Remove/update code examples showing zig_runner usage\\n   - Add ELIXIR_REMEDIATION_DONE.md or update to capture completed work\\n\\n2. fast_puppy_elixir_rewrite_plan.md:\\n   - Still references \"zig_bridge\" and Zig/Rust hybrid\\n   - Either delete (if fully superseded) OR add header banner: \"HISTORICAL: This plan has been superseded by [new doc]\"\\n   - Ensure no reader mistakes this for active plan\\n\\n3. docs/adr/ADR-001-elixir-python-worker-protocol.md:\\n   - Still frames context as hybrid Elixir/Zig migration\\n   - Update ADR status to superseded OR revise to reflect actual direct Elixir Port implementation\\n   - Key fix: protocol spec should describe Port, not Zig IPC\\n\\nACCEPTANCE CRITERIA:\\n1. ELIXIR_REMEDIATION.md uses past tense for Zig removal\\n2. fast_puppy_elixir_rewrite_plan.md has historical banner OR is deleted\\n3. ADR-001 reflects actual implementation (direct Port, not Zig)\\n4. grep -r 'zig' docs/ returns ONLY historical context or intentional mentions\\n5. No reader can mistake Zig for current active architecture",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "cleanup",
+        "docs",
+        "zig-removal",
+        "claimed-by-planning-agent-019d91"
+      ],
+      "dependencies": {
+        "blocked-by": [
+          "bd-103"
+        ]
+      },
+      "created_at": "2026-04-15T15:31:14.242594",
+      "updated_at": "2026-04-15T15:58:09.091360",
+      "comments": [
+        "CROSS-REF: bd-104 handles physical artifacts, bd-106 handles regression tests that may verify docs don't mention Zig. Coordinate completion order:\\n1. bd-104 removes artifacts\\n2. bd-105 updates docs to reflect removal\\n3. bd-106 verifies no accidental refs remain",
+        "IMPLEMENTATION APPROACH: Convert misleading Zig-era planning/docs into clearly historical or current-state language. Goal is clarity about what was (Zig existed, was removed) vs what is (current architecture), NOT to erase all historical context. Preserve the history, just don't misrepresent it as future work.",
+        "COMPLETED by planning-agent-019d91:\\n- Updated docs/ELIXIR_REMEDIATION.md: Zig removal clarified as historical/completed work\\n- Updated fast_puppy_elixir_rewrite_plan.md: Zig references marked as historical/current-state clarified\\n- Updated docs/adr/ADR-001-elixir-python-worker-protocol.md: Zig references properly contextualized\\n\\nAll misleading 'future tense' Zig references converted to past tense or clearly marked as historical context."
+      ]
+    },
+    "bd-106": {
+      "id": "bd-106",
+      "title": "Audit: Regression guard against Zig runtime references",
+      "description": "Ensure codebase has proper guards to prevent accidental reintroduction of Zig dependencies.\\n\\nVERIFIED EXISTING GUARDS:\\n- elixir/code_puppy_control/test/code_puppy_control/mcp/server_test.exs already contains assertions that no Zig references remain\\n\\nTASKS:\\n1. Verify existing server_test.exs assertions are comprehensive:\\n   - Check that test intentionally fails if Zig runtime references detected\\n   - Ensure coverage of: zig_runner, zig_bridge, Zig cache dirs, build.zig mentions\\n\\n2. Consider additional guard locations:\\n   - CI check: grep -r \"zig\" --include=\"*.ex\" --include=\"*.py\" fails if unexpected refs found\\n   - pre-commit hook for new Zig file patterns (build.zig, .zig-cache/)\\n   - code_puppy health check: warn if Zig artifacts detected at runtime\\n\\n3. Document the guard:\\n   - Add comment in server_test.exs explaining WHY (not just WHAT)\\n   - Reference this issue (bd-106) in test comment\\n\\nACCEPTANCE CRITERIA:\\n1. Test assertions exist that fail if Zig runtime references reappear\\n2. At least one automated check (CI or pre-commit) prevents accidental Zig reintroduction\\n3. Documentation exists explaining Zig removal and guard purpose\\n4. grep for \"zig_runner\" or \"zig_bridge\" in active source fails CI\\n5. Team understands Zig is not to be reintroduced without explicit epic discussion",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "audit",
+        "zig-removal",
+        "testing",
+        "claimed-by-planning-agent-019d91"
+      ],
+      "dependencies": {
+        "blocked-by": [
+          "bd-103"
+        ],
+        " discovered-from": [
+          "bd-105"
+        ]
+      },
+      "created_at": "2026-04-15T15:31:20.825409",
+      "updated_at": "2026-04-15T15:58:09.120250",
+      "comments": [
+        "VERIFIED EVIDENCE: elixir/code_puppy_control/test/code_puppy_control/mcp/server_test.exs already contains no-Zig assertions.\\n\\nCROSS-REF: bd-105 (docs) - if new guard tests depend on doc structure, coordinate changes.\\n\\nDISCOVERED-FROM: bd-105 - tests may need updating if bd-105 changes how docs refer to historical Zig usage.",
+        "Claimed by planning-agent-019d91 as next active slice under bd-103.\n\nIntent: Keep the guard lightweight and focused on disallowed Zig runtime references, not historical docs.",
+        "COMPLETED by planning-agent-019d91:\\n- Added regression guard test tests/test_zig_legacy_regression.py\\n- Test verifies no accidental Zig runtime reintroduction\\n- Guard is lightweight and focused on disallowed Zig runtime references\\n\\nRegression protection now in place for future CI runs."
+      ]
+    },
+    "bd-107": {
+      "id": "bd-107",
+      "title": "Slice: Finish repo_index Elixir routing",
+      "description": "Parent issue for completing the repo_index capability routing to Elixir backend. Currently index_directory() routes directly to Python repo_compass indexer, while docs claim Elixir is the primary backend. This creates inconsistency between tracker/code/docs.\n\nCurrent state (VERIFIED):\n- code_puppy/native_backend.py:1080-1100 still routes index_directory() directly to Python repo_compass\n- Status logic at line 408 hardcodes repo_index_tech_available = True (Python fallback)\n- Elixir indexer implementation exists at elixir/code_puppy_control/lib/code_puppy_control/indexer/\n- Docs claim repo_index is Elixir-backed (docs/acceleration.md table)\n- Bridge controller exposes file ops methods but not repo_index method yet\n\nGoal: NativeBackend.index_directory() tries Elixir first when available and falls back to Python cleanly, matching the parse_file Elixir-first pattern (bd-64).\n\nACCEPTANCE CRITERIA:\n- NativeBackend.index_directory() routes through Elixir first when _should_use_elixir() passes\n- Backend status/reporting for repo_index reflects real Elixir availability (not hardcoded True)\n- Elixir bridge exposes index_directory method via JSON-RPC handler\n- Integration tests prove Elixir-backed repo_index works and Python fallback still works\n- Docs/status story no longer contradicts implementation\n\nChild issues cover specific implementation areas.",
+      "status": "closed",
+      "priority": 1,
+      "type": "epic",
+      "labels": [
+        "migration"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T16:04:11.577649",
+      "updated_at": "2026-04-15T16:30:27.186672",
+      "comments": [
+        "Dependency/Order Notes:\n- bd-109 (Elixir bridge method) is the first issue to work on - exposes Elixir Indexer.index via JSON-RPC\n- bd-108 (NativeBackend routing) depends on bd-109 - adds Elixir-first routing and fixes status reporting\n- bd-110 (Integration tests) depends on bd-108 and bd-109 - proves both paths work, fixes docs\n\nAC provides context for planning-agent-019d91."
+      ]
+    },
+    "bd-108": {
+      "id": "bd-108",
+      "title": "NativeBackend repo_index routing and status alignment",
+      "description": "Update NativeBackend.index_directory() to follow Elixir-first routing pattern (bd-64 style) and fix status reporting.\n\nVERIFIED ISSUES:\n- native_backend.py line 1060: No Elixir routing - only Python indexer via repo_compass\n- native_backend.py line 408: repo_index_tech_available hardcoded True, ignores Elixir availability  \n- native_backend.py line 86 comment says Python indexer (Elixir planned) but Elixir exists\n\nSCOPE:\n1. Add Elixir routing to index_directory():\n   - Check _should_use_elixir(cls.Capabilities.REPO_INDEX)\n   - Call cls._call_elixir with method index_directory and params\n   - Convert Elixir result format to Python dict list\n   - Set _last_source[REPO_INDEX] = elixir\n   - Fall back to Python on Elixir failure\n\n2. Fix status reporting:\n   - Update repo_index_tech_available to check elixir_available\n   - Update class-level comment at line 86\n\n3. Add _get_repo_index_source() method\n\nACCEPTANCE:\n- index_directory() routes Elixir-first when _should_use_elixir returns True\n- Status reflects real Elixir availability\n- Python fallback works when Elixir fails or disabled\n- _last_source tracking works for repo_index",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-110",
+          "bd-107"
+        ]
+      },
+      "created_at": "2026-04-15T16:04:24.645384",
+      "updated_at": "2026-04-15T16:30:27.157844",
+      "comments": []
+    },
+    "bd-109": {
+      "id": "bd-109",
+      "title": "Elixir bridge index_directory method wiring",
+      "description": "Expose the Elixir Indexer.index function through the Python bridge JSON-RPC protocol.\n\nVERIFIED STATE:\n- Elixir Indexer module exists at elixir/code_puppy_control/lib/code_puppy_control/indexer.ex\n- DirectoryIndexer.index/2 accepts root path and opts keyword list\n- Bridge controller port.ex handles file_list, file_read, grep_search, parse_source but NOT index_directory\n\nSCOPE:\n1. Add handle_file_request clause for index_directory method in port.ex:\n   - Extract params: root, max_files, max_symbols_per_file\n   - Call Indexer.index(root, max_files: ..., max_symbols_per_file: ...)\n   - Return list of file summaries with path/kind/symbols\n   - Handle errors with Protocol.encode_error\n\n2. Verify result serialization - ensure FileSummary structs serialize correctly over JSON-RPC\n\n3. Add test in elixir tests for the new handler\n\nACCEPTANCE:\n- Python can call bridge method index_directory with params\n- Elixir Indexer.index is invoked with correct options\n- Results return as JSON-serializable list of file summary dicts\n- Errors are properly encoded and propagated to Python\n- No new dependencies required",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-108",
+          "bd-110",
+          "bd-107"
+        ]
+      },
+      "created_at": "2026-04-15T16:04:29.461877",
+      "updated_at": "2026-04-15T16:30:27.098483",
+      "comments": []
+    },
+    "bd-110": {
+      "id": "bd-110",
+      "title": "repo_index integration and regression validation",
+      "description": "Prove the repo_index Elixir routing works end-to-end and Python fallback still functions.\n\nVERIFIED ISSUE:\n- docs/acceleration.md claims repo_index is Elixir-backed but code contradicts this\n- Need integration tests that validate both paths work before docs discrepancy is fixed\n\nSCOPE:\n1. Add integration test for Elixir-backed repo_index:\n   - Test NativeBackend.index_directory with Elixir available\n   - Verify _last_source shows elixir\n   - Verify results match expected structure (path/kind/symbols)\n   - Test with real directory traversal\n\n2. Add regression test for Python fallback:\n   - Test NativeBackend.index_directory with Elixir unavailable/disabled\n   - Verify _prefer_native=False forces Python path\n   - Verify results match expected structure\n   - Ensure Python repo_compass indexer still works standalone\n\n3. Test edge cases:\n   - Empty directories\n   - Max files limit enforcement\n   - Max symbols per file limit\n   - Error handling when directory does not exist\n\n4. Update docs/acceleration.md to remove the discrepancy after implementation verified\n\n5. Update any inconsistent comments in native_backend.py docstrings\n\nACCEPTANCE:\n- Elixir-backed repo_index passes integration tests\n- Python fallback passes regression tests  \n- Docs match implementation (elixir_primary for repo_index)\n- Edge cases handled gracefully\n- All tests in CI pass",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,testing"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-107"
+        ]
+      },
+      "created_at": "2026-04-15T16:04:34.367098",
+      "updated_at": "2026-04-15T16:30:27.129179",
+      "comments": []
     }
   },
-  "counter": 102
+  "counter": 110
 }

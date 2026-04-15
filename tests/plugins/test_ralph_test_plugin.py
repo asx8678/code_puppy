@@ -197,6 +197,7 @@ class TestAgentRunEndCallback:
             error=None,
             response_text=None,
             metadata=None,
+            run_context=None,
         ):
             callback_data["agent_name"] = agent_name
             callback_data["model_name"] = model_name
@@ -236,6 +237,7 @@ class TestAgentRunEndCallback:
             error=None,
             response_text=None,
             metadata=None,
+            run_context=None,
         ):
             callback_data["agent_name"] = agent_name
             callback_data["response_text"] = response_text
@@ -264,6 +266,7 @@ class TestAgentRunEndCallback:
             error=None,
             response_text=None,
             metadata=None,
+            run_context=None,
         ):
             if response_text and "<promise>COMPLETE</promise>" in response_text:
                 detected_complete.append(agent_name)

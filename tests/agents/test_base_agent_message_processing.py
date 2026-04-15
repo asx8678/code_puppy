@@ -92,7 +92,8 @@ class TestBaseAgentMessageProcessing:
         part = MockPart(["Some text", binary])
         result = agent.stringify_message_part(part)
         assert "Some text" in result
-        assert "BinaryContent=" in result
+        # BinaryContent is now represented as a token-estimate placeholder of X chars
+        assert "X" in result
 
     def test_is_tool_call_part_with_tool_call_part(self, agent):
         """Test _is_tool_call_part recognizes ToolCallPart."""

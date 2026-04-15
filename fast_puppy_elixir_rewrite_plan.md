@@ -1,5 +1,8 @@
 # Fast Puppy rewrite plan (Elixir-first)
 
+> **Historical document**: This is a migration planning document from early 2026, preserved for historical reference. Any Zig references describe the pre-cleanup architecture state; Zig has since been removed from the active runtime.
+
+
 Assumption: `code_puppy_core` is already migrated and stable in native Elixir, so this plan excludes it from the remaining rewrite scope.
 
 ## Why the rewrite needs a reset first

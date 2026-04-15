@@ -1,8 +1,12 @@
 # Elixir Control Plane Remediation Plan
+> **Historical note**: This document predates the removal of the Zig MCP runner from the runtime. It is preserved for reference. The MCP server now uses a direct Elixir Port; Zig is not on the active runtime path.
+
 
 ## Executive Summary
 
 **Current State**: 5.5/10 implementation quality
+
+**Current reality**: The MCP server now uses a direct Elixir Port; Zig is not on the active runtime path.
 
 The Elixir control plane (`elixir/code_puppy_control/`) implements the coordination layer between Python agent workers and the Phoenix/WebSocket frontend. While the architecture is sound, the implementation suffers from protocol drift, OTP anti-patterns, and correctness bugs that must be addressed before the system is production-ready.
 
@@ -11,7 +15,7 @@ The Elixir control plane (`elixir/code_puppy_control/`) implements the coordinat
 2. **Critical Correctness Bugs**: Run ID confusion, request tracking race conditions, and atom exhaustion vulnerabilities
 3. **OTP Anti-Patterns**: Polling instead of event-driven state machines, insufficient supervision strategies, and unbounded memory growth vectors
 
-**Recommended Path**: **Fix before expand**. The current foundation is too unstable to build upon. Zig should be removed from the critical path immediately.
+**Recommended Path**: **Fix before expand**. The current foundation is too unstable to build upon. Zig has been removed from the critical path; the MCP server now uses a direct Elixir Port.
 
 ---
 
@@ -24,7 +28,7 @@ Based on the hybrid migration ADR and current implementation audit:
 | **Python** | Keep | ~75% | CLI and agent runtime remain primary; no changes needed |
 | **Rust** | Keep & Expand | ~20% | Acceleration layer (turbo_ops, turbo_parse) is working well |
 | **Elixir** | Fix & Keep Optional | ~5% | Control plane is valuable but must stabilize first |
-| **Zig** | Remove from mainline | ~0% | process_runner can remain temporarily; no new Zig code |
+| **Zig** | Removed (historical) | 0% | No longer on the active runtime path; references below are historical |
 
 **Key Decision**: Elixir should remain as an *optional* control plane, not a *required* dependency. The Python CLI must continue to work standalone.
 
@@ -620,20 +624,18 @@ Also add this to `EventStore` if not already present (it has `@max_events_per_se
 - Bounded memory usage
 - Proper state machine visualization possible
 
-### Phase 4: Zig Removal (Week 4)
+### Phase 4: Zig Removal (Historical — Completed)
 
-**Goals**: Remove Zig from mainline, keep only process_runner temporarily
+> **Note**: This phase has been completed. The Zig MCP runner and its build dependencies have been fully removed. The MCP server now uses a direct Elixir Port. The items below are preserved as a historical record of the removal work.
 
-**Tasks**:
-1. Remove Zig build dependencies from main build
-2. Move MCP server launching to direct command execution (remove Zig wrapper)
-3. Document migration path for Zig removal
-4. Update architecture docs
+**What was done**:
+- Zig build dependencies were removed from the main build
+- MCP server launching was moved to direct Elixir Port execution (Zig wrapper removed)
+- Architecture docs were updated to reflect the simplified runtime
 
-**Success Criteria**:
-- `mix compile` doesn't require Zig
+**Outcome**:
+- `mix compile` no longer requires Zig
 - All tests pass without Zig components
-- Process runner still works if available
 
 ---
 

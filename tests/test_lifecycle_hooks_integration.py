@@ -227,7 +227,7 @@ class TestLifecycleHooksIntegration:
         """Test on_agent_run_end with error parameter."""
         received_error = None
 
-        async def capture_error(agent_name, model_name, session_id, success, error, response_text, metadata):
+        async def capture_error(agent_name, model_name, session_id, success, error, response_text, metadata, run_context=None):
             nonlocal received_error
             received_error = error
             return {"captured": True}

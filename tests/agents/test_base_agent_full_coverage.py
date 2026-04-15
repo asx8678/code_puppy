@@ -1950,8 +1950,9 @@ class TestRunWithMcpAdditional:
             patch("code_puppy.agents.base_agent.log_error"),
         ):
             mock_prep.return_value = MagicMock(user_prompt="prompt")
-            # The exception is caught inside run_agent_task via except*
-            await agent.run_with_mcp("test")
+            # The exception is caught and re-raised by run_agent_task
+            with pytest.raises(RuntimeError, match="boom"):
+                await agent.run_with_mcp("test")
 
     @pytest.mark.asyncio
     async def test_none_result(self, agent):
