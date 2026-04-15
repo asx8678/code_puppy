@@ -854,6 +854,36 @@ class BaseAgent(ABC, AgentPromptMixin):
         has_content_delta = getattr(part, "content_delta", None) is not None
         return bool(has_content or has_content_delta)
 
+
+    def _check_token_budgets(self, estimated_input: int) -> None:
+        """Check hard token budgets before making an API call.
+
+        bd-113: Enforce per-session and per-run token limits.
+        Raises RuntimeError if budgets are exceeded.
+        """
+        from code_puppy.config import get_max_session_tokens, get_max_run_tokens
+
+        max_session = get_max_session_tokens()
+        max_run = get_max_run_tokens()
+
+        if max_session <= 0 and max_run <= 0:
+            return
+
+        ledger = self._state.get_token_ledger()
+        session_total = ledger.total_estimated_input + ledger.total_estimated_output
+
+        if max_session > 0 and session_total >= max_session:
+            raise RuntimeError(
+                f"Session token budget exceeded: {session_total} estimated tokens "
+                f"(limit: {max_session}). Use /reset to start a new session."
+            )
+
+        if max_run > 0 and estimated_input >= max_run:
+            raise RuntimeError(
+                f"Run token budget exceeded: {estimated_input} estimated input tokens "
+                f"(limit: {max_run}). Consider shorter prompts or /compact."
+            )
+
     def _check_context_budget_before_send(self, prompt_payload: str | list[Any]) -> None:
         """Pre-send assertion: validate context fits within model token budget.
 
@@ -2734,6 +2764,19 @@ class BaseAgent(ABC, AgentPromptMixin):
                 with _mcp_injection(), workflow_ctx:
                     # Pre-send context budget check (bd-18)
                     self._check_context_budget_before_send(prompt_payload)
+
+                    # bd-113: Check hard token budgets
+                    try:
+                        _pre_est = (
+                            self.estimate_context_overhead_tokens()
+                            + self._estimate_batch_tokens(self.get_message_history())
+                        )
+                        self._check_token_budgets(_pre_est)
+                    except RuntimeError:
+                        raise
+                    except Exception:
+                        logger.debug("Token budget check failed, continuing", exc_info=True)
+
 
                     # bd-115: Pre-compute estimated tokens for ledger reporting
                     try:

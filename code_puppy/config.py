@@ -2591,3 +2591,18 @@ def set_acceleration_backend(backend_name: str, language: str) -> None:
 
     # Store in config for persistence (without the prefix)
     set_config_value(f"accel_backend_{backend_name}", language)
+
+# bd-113: Hard token budgets for session and run
+get_max_session_tokens = _make_int_getter(
+    "max_session_tokens",
+    0,
+    min_val=0,
+    doc="Hard token budget per session (0=disabled).",
+)
+
+get_max_run_tokens = _make_int_getter(
+    "max_run_tokens",
+    0,
+    min_val=0,
+    doc="Hard token budget per run (0=disabled).",
+)
