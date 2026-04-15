@@ -401,23 +401,32 @@ defmodule CodePuppyControl.MCP.Server do
   end
 
   defp do_health_check(state) do
-    message = Protocol.encode_request("ping", %{}, nil)
-    Port.command(state.port, Protocol.frame(message))
+    # Check port is alive
+    case Port.info(state.port) do
+      nil ->
+        {:error, :port_dead}
 
-    receive do
-      {port, {:data, data}} when port == state.port ->
-        case Protocol.parse_framed(data) do
-          {[], _rest} ->
-            {:error, :incomplete_response}
+      _info ->
+        # Send tools/list as a lightweight health probe
+        message = Protocol.encode_request("tools/list", %{}, nil)
+        Port.command(state.port, Protocol.frame(message))
 
-          {[message | _], _rest} ->
-            case message do
-              %{"result" => _} -> :ok
-              _ -> {:error, :invalid_response}
+        receive do
+          {port, {:data, data}} when port == state.port ->
+            case Protocol.parse_framed(data) do
+              {[], _rest} ->
+                {:error, :incomplete_response}
+
+              {[msg | _], _rest} ->
+                case msg do
+                  %{"result" => _} -> :ok
+                  %{"error" => _} -> {:error, :mcp_error}
+                  _ -> {:error, :invalid_response}
+                end
             end
+        after
+          5_000 -> {:error, :timeout}
         end
-    after
-      5_000 -> {:error, :timeout}
     end
   end
 
