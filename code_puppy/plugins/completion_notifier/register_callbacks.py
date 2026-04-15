@@ -134,6 +134,7 @@ def _on_agent_run_end(
     response_text: str | None = None,
     metadata: dict[str, Any] | None = None,
     run_context: Any | None = None,
+    **kwargs: Any,
 ) -> None:
     """Emit a completion sound for *top-level* runs only."""
     try:
