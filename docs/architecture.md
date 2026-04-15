@@ -638,7 +638,7 @@ Entry Point:
 | **Rust Core** | PyO3 | Python bindings |
 | **Rust Parsing** | tree-sitter | Syntax analysis |
 | **Rust Parallelism** | Rayon | Data parallelism |
-| **Process Runner** | Zig | MCP server management |
+| **Process Runner** | Elixir | MCP server management |
 
 ### Python Dependencies
 
