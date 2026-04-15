@@ -864,18 +864,21 @@ class BaseAgent(ABC, AgentPromptMixin):
         """
         try:
             model_name = self.get_model_name()
-            max_tokens = resolve_max_output_tokens(model_name)
+            model_configs = ModelFactory.load_config()
+            model_config = model_configs.get(model_name, {})
+            max_output_tokens = resolve_max_output_tokens(model_name, model_config)
+            context_length = int(model_config.get("context_length", 128000))
         except Exception:
             # Fallback if resolve_max_output_tokens unavailable or fails
             logger.debug("Could not resolve max_output_tokens, skipping budget check")
             return
 
-        if max_tokens is None:
+        if max_output_tokens is None:
             return
 
         try:
-            # Calculate current context size
-            estimated_input = self.estimate_tokens_for_context()
+            # Calculate current context size (overhead + message history)
+            estimated_input = self.estimate_context_overhead_tokens() + self._estimate_batch_tokens(self._message_history)
 
             # Estimate prompt payload tokens
             if isinstance(prompt_payload, str):
@@ -895,19 +898,21 @@ class BaseAgent(ABC, AgentPromptMixin):
             estimated_prompt = self.estimate_token_count(prompt_text)
             total_estimated = estimated_input + estimated_prompt
 
-            # Safety margin: allow 10% buffer for estimation error
-            safe_limit = int(max_tokens * 0.9)
+            # Check: input + expected output must fit within context window
+            safe_limit = int(context_length * 0.9)
+            projected_total = total_estimated + max_output_tokens
 
-            if total_estimated > safe_limit:
+            if projected_total > safe_limit:
                 raise RuntimeError(
                     f"Context budget exceeded for {model_name}: "
-                    f"estimated {total_estimated} tokens "
-                    f"(limit: {max_tokens}, safe: {safe_limit}). "
+                    f"estimated {total_estimated} input + {max_output_tokens} output = {projected_total} tokens "
+                    f"(context: {context_length}, safe: {safe_limit}). "
                     f"Consider summarizing or clearing message history."
                 )
 
             logger.debug(
-                "Context budget check passed: %d/%d tokens", total_estimated, max_tokens
+                "Context budget check passed: %d input + %d output = %d/%d tokens",
+                total_estimated, max_output_tokens, projected_total, context_length,
             )
         except Exception as exc:
             # Don't let budget check failures block the send
