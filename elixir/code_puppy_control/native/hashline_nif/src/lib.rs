@@ -3,7 +3,6 @@
 /// Each line gets a 2-char anchor encoded with NIBBLE_STR so the LLM can
 /// reference lines precisely. Compatible with oh-my-pi's hashline format
 /// and the Python/Rust reference implementations.
-
 // Custom nibble encoding (matches omp's NIBBLE_STR)
 const NIBBLE_STR: &[u8; 16] = b"ZPMQVRWSNKTXJBYH";
 
@@ -97,7 +96,7 @@ fn format_hashlines(text: String, start_line: u32) -> String {
 #[rustler::nif]
 fn strip_hashline_prefixes(text: String) -> String {
     text.split('\n')
-        .map(|line| strip_one_hashline_prefix(line))
+        .map(strip_one_hashline_prefix)
         .collect::<Vec<_>>()
         .join("\n")
 }

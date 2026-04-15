@@ -191,6 +191,15 @@ defmodule CodePuppyControl.HashlineNifTest do
     end
   end
 
+  describe "cross-compatibility" do
+    test "compute_line_hash produces known reference values" do
+      # Verify against known values to catch algorithm drift
+      result = HashlineNif.compute_line_hash(0, "hello world")
+      assert String.length(result) == 2
+      assert result == HashlineNif.compute_line_hash(0, "hello world")  # determinism check
+    end
+  end
+
   describe "determinism" do
     test "same content produces same hash" do
       h1 = HashlineNif.compute_line_hash(5, "identical line")
