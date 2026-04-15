@@ -328,7 +328,7 @@ defmodule CodePuppyControl.MCP.Server do
   use GenServer, restart: :transient
   
   def init(config) do
-    # Start MCP server process via Zig runner
+    # Start MCP server process via Elixir port
     {:ok, %{config: config, status: :starting}}
   end
 end
