@@ -2735,6 +2735,23 @@ class BaseAgent(ABC, AgentPromptMixin):
                     # Pre-send context budget check (bd-18)
                     self._check_context_budget_before_send(prompt_payload)
 
+                    # bd-115: Pre-compute estimated tokens for ledger reporting
+                    try:
+                        _est_input = (
+                            self.estimate_context_overhead_tokens()
+                            + self._estimate_batch_tokens(self.get_message_history())
+                        )
+                        if isinstance(prompt_payload, str):
+                            _est_input += self.estimate_token_count(prompt_payload)
+                        elif isinstance(prompt_payload, list):
+                            for _item in prompt_payload:
+                                if isinstance(_item, str):
+                                    _est_input += self.estimate_token_count(_item)
+                                elif hasattr(_item, "content") and isinstance(_item.content, str):
+                                    _est_input += self.estimate_token_count(_item.content)
+                    except Exception:
+                        _est_input = 0
+
                     # Code Puppy retry loop: wraps pydantic-ai's run() to track
                     # retry costs in the token ledger. Pydantic-ai's internal
                     # retries=3 handles output validation retries, but those are
@@ -2762,6 +2779,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                                     cache_read = details.get('cached_content_tokens')
                                 self._state.get_token_ledger().record(TokenAttempt(
                                     model=self.get_model_name(),
+                                    estimated_input_tokens=_est_input,
+                                    estimated_output_tokens=getattr(usage, 'output_tokens', None) or 0,
                                     provider_input_tokens=getattr(usage, 'input_tokens', None),
                                     provider_output_tokens=getattr(usage, 'output_tokens', None),
                                     cache_read_tokens=getattr(usage, 'cache_read_tokens', None) or cache_read,
@@ -2780,6 +2799,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                             try:
                                 self._state.get_token_ledger().record(TokenAttempt(
                                     model=self.get_model_name(),
+                                    estimated_input_tokens=_est_input,
+                                    estimated_output_tokens=0,
                                     success=False,
                                     error=_error_msg,
                                     retry_number=_retry_number,
@@ -2857,6 +2878,8 @@ class BaseAgent(ABC, AgentPromptMixin):
                             try:
                                 self._state.get_token_ledger().record(TokenAttempt(
                                     model=self.get_model_name(),
+                                    estimated_input_tokens=_est_input,
+                                    estimated_output_tokens=0,
                                     success=False,
                                     error=error_msg[:200],
                                     is_overflow=True,
