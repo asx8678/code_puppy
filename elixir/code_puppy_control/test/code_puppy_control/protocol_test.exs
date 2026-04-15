@@ -193,4 +193,87 @@ defmodule CodePuppyControl.ProtocolTest do
       refute Protocol.response?(%{"jsonrpc" => "2.0", "id" => 1, "method" => "test"})
     end
   end
+
+  # bd-106: Batch support tests
+  describe "frame_batch/1" do
+    test "frames multiple messages as JSON array" do
+      messages = [
+        %{"jsonrpc" => "2.0", "id" => 1, "method" => "file_read", "params" => %{"path" => "a.py"}},
+        %{"jsonrpc" => "2.0", "id" => 2, "method" => "file_read", "params" => %{"path" => "b.py"}}
+      ]
+
+      framed = Protocol.frame_batch(messages)
+
+      assert String.starts_with?(framed, "Content-Length:")
+      assert String.contains?(framed, "\r\n\r\n")
+
+      [header, body] = String.split(framed, "\r\n\r\n", parts: 2)
+      assert {:ok, decoded} = Jason.decode(body)
+      assert is_list(decoded)
+      assert length(decoded) == 2
+
+      [_, length_str] = String.split(header, "Content-Length: ")
+      {length, _} = Integer.parse(length_str)
+      assert length == byte_size(body)
+    end
+
+    test "handles single-element batch" do
+      messages = [%{"jsonrpc" => "2.0", "id" => 1, "method" => "ping"}]
+
+      framed = Protocol.frame_batch(messages)
+      [_, body] = String.split(framed, "\r\n\r\n", parts: 2)
+      assert {:ok, [decoded]} = Jason.decode(body)
+      assert decoded["id"] == 1
+    end
+
+    test "handles empty batch" do
+      framed = Protocol.frame_batch([])
+      [_, body] = String.split(framed, "\r\n\r\n", parts: 2)
+      assert {:ok, []} = Jason.decode(body)
+    end
+  end
+
+  describe "decode/1 batch support" do
+    test "decodes JSON array (batch format)" do
+      json = ~s([{"jsonrpc":"2.0","id":1},{"jsonrpc":"2.0","id":2}])
+      assert {:ok, decoded} = Protocol.decode(json)
+      assert is_list(decoded)
+      assert length(decoded) == 2
+    end
+
+    test "rejects batch with invalid messages" do
+      json = ~s([{"jsonrpc":"2.0","id":1},{"id":2}])
+      assert {:error, {:invalid_jsonrpc, _}} = Protocol.decode(json)
+    end
+  end
+
+  describe "parse_framed/1 batch support" do
+    test "parses batch message from buffer" do
+      messages = [
+        %{"jsonrpc" => "2.0", "id" => 1, "result" => %{"a" => 1}},
+        %{"jsonrpc" => "2.0", "id" => 2, "result" => %{"b" => 2}}
+      ]
+
+      framed = Protocol.frame_batch(messages)
+      assert {[decoded], ""} = Protocol.parse_framed(framed)
+      assert is_list(decoded)
+      assert length(decoded) == 2
+    end
+
+    test "parses batch followed by single message" do
+      batch = Protocol.frame_batch([
+        %{"jsonrpc" => "2.0", "id" => 1, "result" => %{}},
+        %{"jsonrpc" => "2.0", "id" => 2, "result" => %{}}
+      ])
+
+      single = Protocol.frame(%{"jsonrpc" => "2.0", "id" => 3, "result" => %{}})
+
+      buffer = batch <> single
+
+      assert {[decoded_batch, decoded_single], ""} = Protocol.parse_framed(buffer)
+      assert is_list(decoded_batch)
+      assert length(decoded_batch) == 2
+      assert decoded_single["id"] == 3
+    end
+  end
 end
