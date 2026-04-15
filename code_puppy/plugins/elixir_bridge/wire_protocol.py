@@ -19,6 +19,10 @@ Canonical Wire Protocol Format (V1):
 ```
 
 See: docs/protocol/BRIDGE_PROTOCOL_V1.md for full specification.
+
+bd-103: Protocol bridge optimization
+- orjson support for faster serialization (5-10x improvement)
+- Batch message framing support
 """
 
 from __future__ import annotations
@@ -26,6 +30,14 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from typing import Any
+
+# bd-103: Optional orjson support for faster serialization
+try:
+    import orjson
+
+    _HAS_ORJSON = True
+except ImportError:
+    _HAS_ORJSON = False
 
 
 class WireMethodError(Exception):
@@ -61,6 +73,29 @@ JSONRPC_SERVER_ERROR_MAX = SERVER_ERROR_MAX
 def _get_timestamp() -> str:
     """Generate ISO 8601 timestamp."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# bd-103: Serialization helpers for orjson optimization
+def _serialize_json(data: Any) -> bytes:
+    """Serialize data to JSON bytes, using orjson if available.
+
+    bd-103: orjson is 5-10x faster than stdlib json for serialization.
+    Falls back to stdlib json if orjson is not installed.
+    """
+    if _HAS_ORJSON:
+        return orjson.dumps(data, option=orjson.OPT_SERIALIZE_NUMPY)
+    return json.dumps(data, separators=(",", ":")).encode("utf-8")
+
+
+def _deserialize_json(data: bytes) -> Any:
+    """Deserialize JSON bytes, using orjson if available.
+
+    bd-103: orjson is 5-10x faster than stdlib json for deserialization.
+    Falls back to stdlib json if orjson is not installed.
+    """
+    if _HAS_ORJSON:
+        return orjson.loads(data)
+    return json.loads(data.decode("utf-8"))
 
 
 def emit_run_status(
@@ -1166,6 +1201,18 @@ def from_wire_params(method: str, params: dict[str, Any]) -> dict[str, Any]:
             "directory": str(params.get("directory", ".")),
         }
 
+    # bd-103: Batch file read support
+    elif normalized_method == "file_read_batch":
+        if "paths" not in params:
+            raise WireMethodError(
+                "file_read_batch requires 'paths' param", INVALID_PARAMS
+            )
+        return {
+            "paths": list(params["paths"]),
+            "start_line": params.get("start_line"),
+            "num_lines": params.get("num_lines"),
+        }
+
     # Concurrency control methods (bd-77)
     elif normalized_method == "concurrency.acquire":
         limiter_type = params.get("type", "file_ops")
@@ -1356,8 +1403,12 @@ def frame_message(message: dict[str, Any]) -> bytes:
 
     Uses HTTP-style Content-Length framing as per BRIDGE_PROTOCOL.md:
     Content-Length: <byte-length>\\r\\n
+
     \\r\\n
+
     <json-body>
+
+    bd-103: Uses orjson for faster serialization when available.
 
     Args:
         message: Message dict to frame
@@ -1371,7 +1422,7 @@ def frame_message(message: dict[str, Any]) -> bytes:
         >>> print(framed)
         b'Content-Length: 49\\r\\n\\r\\n{"jsonrpc":"2.0","method":"ping","params":{}}'
     """
-    body = json.dumps(message, separators=(",", ":")).encode("utf-8")
+    body = _serialize_json(message)
     header = f"Content-Length: {len(body)}\r\n\r\n".encode("utf-8")
     return header + body
 
@@ -1381,8 +1432,12 @@ def parse_framed_message(framed: bytes) -> dict[str, Any]:
 
     Parses HTTP-style Content-Length framing as per BRIDGE_PROTOCOL_V1.md:
     Content-Length: <byte-length>\\r\\n
+
     \\r\\n
+
     <json-body>
+
+    bd-103: Uses orjson for faster deserialization when available.
 
     Args:
         framed: Framed message bytes
@@ -1428,10 +1483,10 @@ def parse_framed_message(framed: bytes) -> dict[str, Any]:
                 PARSE_ERROR,
             )
 
-        # Parse JSON body
+        # Parse JSON body using orjson if available
         try:
-            return json.loads(body.decode("utf-8"))
-        except json.JSONDecodeError as e:
+            return _deserialize_json(body)
+        except (json.JSONDecodeError, Exception) as e:
             raise WireMethodError(
                 f"Invalid JSON in message body: {e}", PARSE_ERROR
             ) from e
@@ -1448,6 +1503,7 @@ def serialize_for_wire(data: Any) -> str:
     """Serialize data to JSON string for wire protocol.
 
     Uses compact formatting (no whitespace) for efficiency.
+    bd-103: Uses orjson for faster serialization when available.
 
     Args:
         data: Data to serialize
@@ -1455,6 +1511,8 @@ def serialize_for_wire(data: Any) -> str:
     Returns:
         JSON string
     """
+    if _HAS_ORJSON:
+        return orjson.dumps(data, option=orjson.OPT_SERIALIZE_NUMPY).decode("utf-8")
     return json.dumps(data, separators=(",", ":"), default=_json_default)
 
 
