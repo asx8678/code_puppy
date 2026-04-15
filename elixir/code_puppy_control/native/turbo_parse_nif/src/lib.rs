@@ -21,7 +21,7 @@ use turbo_parse_core::{
 fn to_elixir_term<'a>(env: Env<'a>, value: &impl Serialize) -> NifResult<Term<'a>> {
     let json = serde_json::to_string(value)
         .map_err(|e| rustler::Error::Term(Box::new(format!("JSON serialization error: {}", e))))?;
-    
+
     // Parse JSON string to Elixir term using rustler_json-like approach
     // For simplicity, we encode as a binary and let Elixir decode it
     Ok(json.encode(env))
@@ -99,13 +99,13 @@ fn extract_syntax_diagnostics<'a>(
     };
 
     let diagnostics = extract_diagnostics(&source, &ts_language);
-    
+
     let result = serde_json::json!({
         "diagnostics": diagnostics.diagnostics,
         "error_count": diagnostics.error_count(),
         "warning_count": diagnostics.warning_count(),
     });
-    
+
     to_elixir_term(env, &result)
 }
 
@@ -147,19 +147,4 @@ fn get_highlights_from_file<'a>(
     to_elixir_term(env, &result)
 }
 
-rustler::init!(
-    "Elixir.CodePuppyControl.TurboParseNif",
-    [
-        is_language_supported,
-        supported_languages,
-        extract_symbols,
-        extract_symbols_from_file,
-        parse_source,
-        parse_file,
-        extract_syntax_diagnostics,
-        get_folds,
-        get_folds_from_file,
-        get_highlights,
-        get_highlights_from_file,
-    ]
-);
+rustler::init!("Elixir.CodePuppyControl.TurboParseNif");

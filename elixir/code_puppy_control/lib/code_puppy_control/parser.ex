@@ -96,6 +96,8 @@ defmodule CodePuppyControl.Parser do
       json when is_binary(json) -> Jason.decode(json)
       other -> {:ok, other}
     end
+  rescue
+    e -> {:error, Exception.message(e)}
   end
 
   @doc """
@@ -106,6 +108,8 @@ defmodule CodePuppyControl.Parser do
       json when is_binary(json) -> Jason.decode(json)
       other -> {:ok, other}
     end
+  rescue
+    e -> {:error, Exception.message(e)}
   end
 
   @doc """
@@ -116,6 +120,8 @@ defmodule CodePuppyControl.Parser do
       json when is_binary(json) -> Jason.decode(json)
       other -> {:ok, other}
     end
+  rescue
+    e -> {:error, Exception.message(e)}
   end
 
   @doc """
@@ -126,6 +132,8 @@ defmodule CodePuppyControl.Parser do
       json when is_binary(json) -> Jason.decode(json)
       other -> {:ok, other}
     end
+  rescue
+    e -> {:error, Exception.message(e)}
   end
 
   @doc """
@@ -136,6 +144,8 @@ defmodule CodePuppyControl.Parser do
       json when is_binary(json) -> Jason.decode(json)
       other -> {:ok, other}
     end
+  rescue
+    e -> {:error, Exception.message(e)}
   end
 
   @doc """
@@ -146,6 +156,8 @@ defmodule CodePuppyControl.Parser do
       json when is_binary(json) -> Jason.decode(json)
       other -> {:ok, other}
     end
+  rescue
+    e -> {:error, Exception.message(e)}
   end
 
   @doc """
@@ -156,6 +168,8 @@ defmodule CodePuppyControl.Parser do
       json when is_binary(json) -> Jason.decode(json)
       other -> {:ok, other}
     end
+  rescue
+    e -> {:error, Exception.message(e)}
   end
 
   @doc """

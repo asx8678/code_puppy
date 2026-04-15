@@ -5,6 +5,7 @@
 //! compile time using `include_str!` for performance.
 
 use crate::types::{QueryError, QueryType};
+use serde::Serialize;
 use std::collections::HashMap;
 
 /// Get the highlights query for a language.
@@ -142,7 +143,7 @@ pub fn get_language_info(language: &str) -> Option<LanguageInfo> {
 }
 
 /// Information about available queries for a language.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct LanguageInfo {
     /// The normalized language name.
     pub name: String,
