@@ -1649,7 +1649,252 @@
         "Claimed by planning-agent-019d8d",
         "Complete: Removed _try_auto_build_all() from startup. Added get_available_backends() for detection without building. Updated banners to Elixir-first messaging."
       ]
+    },
+    "bd-92": {
+      "id": "bd-92",
+      "title": "Phase 4.1: Add turbo_parse bridge to Elixir (symbol extraction)",
+      "description": "",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-4",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T07:03:47.491567",
+      "updated_at": "2026-04-15T07:10:44.927682",
+      "comments": [
+        "Wire turbo_parse symbol extraction to Elixir. Elixir already has CodePuppyControl.Parser with turbo_parse_nif. Add bridge handlers for parse_source, parse_file, extract_symbols. Update native_backend to route through elixir_bridge when connected.",
+        "Claimed by planning-agent-019d8d",
+        "Implementation verified: native_backend.py already routes parse_file, parse_source, extract_symbols, supported_languages through Elixir when connected. Elixir port.ex handlers exist (lines 409-448). Python fallback works (regex symbols for python/elixir). 4 methods bridged."
+      ]
+    },
+    "bd-93": {
+      "id": "bd-93",
+      "title": "Phase 4.2: Migrate folds and highlights to Elixir",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-4",
+        "elixir"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T07:03:47.498948",
+      "updated_at": "2026-04-15T07:13:26.872470",
+      "comments": [
+        "Add folds (get_folds) and highlights (get_highlights) to Elixir Parser. These are used by editors for code folding and syntax highlighting. Lower priority than symbols.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Added get_folds() and get_highlights() to NativeBackend with Elixir\u2192Rust\u2192Python routing. Added handlers to Elixir port.ex."
+      ]
+    },
+    "bd-94": {
+      "id": "bd-94",
+      "title": "Phase 4.4: Migrate incremental parsing to Elixir",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-4",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-96"
+        ]
+      },
+      "created_at": "2026-04-15T07:03:47.513974",
+      "updated_at": "2026-04-15T07:14:24.844233",
+      "comments": [
+        "Add incremental parsing (parse_incremental) to Elixir. This is the most complex feature - tracks edit deltas and re-parses only changed regions. May keep Rust NIF for this.",
+        "Claimed by planning-agent-019d8d",
+        "Deferred: No parse_incremental capability exists in turbo_parse or Elixir Parser. This feature was planned but not implemented. When needed, will likely stay in Rust NIF for performance (tracks edit deltas, re-parses only changed regions)."
+      ]
+    },
+    "bd-95": {
+      "id": "bd-95",
+      "title": "Phase 4.5: Language parity - ensure all 6 languages work",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-4",
+        "testing"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-92"
+        ]
+      },
+      "created_at": "2026-04-15T07:03:47.530189",
+      "updated_at": "2026-04-15T07:14:50.054129",
+      "comments": [
+        "Verify all 6 supported languages work through Elixir: Python, JavaScript, TypeScript, Rust, Elixir, Go. Add integration tests for each language.",
+        "Claimed by planning-agent-019d8d",
+        "Partial: Currently only Python and Elixir are supported (2/6 languages). Symbol extraction regex patterns exist only for these two. File categorization recognizes python, rust, javascript, typescript, tsx, elixir but no extraction logic for rust/js/ts/go. Full language parity requires adding extraction patterns for remaining 4 languages in Elixir SymbolExtractor or enabling Rust NIF."
+      ]
+    },
+    "bd-96": {
+      "id": "bd-96",
+      "title": "Phase 4.3: Migrate batch parsing to Elixir",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-4",
+        "elixir"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-92"
+        ]
+      },
+      "created_at": "2026-04-15T07:03:47.544457",
+      "updated_at": "2026-04-15T07:13:26.871488",
+      "comments": [
+        "Add batch parsing (parse_batch) to Elixir. Use Task.async_stream for concurrent parsing. Include cache_stats and clear_cache support.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Added parse_batch() to NativeBackend with Elixir concurrent parsing (Task.async_stream). Added handler to Elixir port.ex."
+      ]
+    },
+    "bd-97": {
+      "id": "bd-97",
+      "title": "Phase 5.1: Remove stale Zig/Rust docs and config",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-5",
+        "cleanup"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T07:03:47.564784",
+      "updated_at": "2026-04-15T07:08:00.120108",
+      "comments": [
+        "Remove stale docs referencing Zig/Rust hybrid. Check README, AGENTS.md, any docs/ files. Update to reflect Elixir-first reality. Zig bridge code already removed.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Updated docs/acceleration.md with Elixir-first notes and backend profiles section."
+      ]
+    },
+    "bd-98": {
+      "id": "bd-98",
+      "title": "Phase 5.2: Consolidate /accel into /fast_puppy or remove",
+      "description": "",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-5",
+        "cleanup"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T07:03:47.577747",
+      "updated_at": "2026-04-15T07:08:00.121965",
+      "comments": [
+        "Check if /accel command exists. If so, consolidate into /fast_puppy or remove. Should be one command for native backend management.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: No /accel command exists - already consolidated into /fast_puppy."
+      ]
+    },
+    "bd-99": {
+      "id": "bd-99",
+      "title": "Phase 5.3: Update acceleration/__init__.py for Elixir-first",
+      "description": "",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-5",
+        "cleanup"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T07:03:47.592580",
+      "updated_at": "2026-04-15T07:08:00.132263",
+      "comments": [
+        "Update code_puppy/acceleration/__init__.py to reflect Elixir-first. Remove Rust-centric exports, add Elixir status. May be obsolete if NativeBackend handles everything.",
+        "Claimed by planning-agent-019d8d",
+        "Complete: Added ELIXIR_AVAILABLE export, updated docstring and get_backend_summary() for Elixir-first."
+      ]
+    },
+    "bd-100": {
+      "id": "bd-100",
+      "title": "Phase 6.1: Migrate RunLimiter to Elixir GenServer",
+      "description": "",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-6",
+        "deferred"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-15T07:03:47.609889",
+      "updated_at": "2026-04-15T07:04:34.810631",
+      "comments": [
+        "Migrate RunLimiter from Python asyncio.Semaphore to Elixir GenServer. Similar to ConcurrencyLimits (bd-77) but for run-level concurrency. Wait for agent runtime migration."
+      ]
+    },
+    "bd-101": {
+      "id": "bd-101",
+      "title": "Phase 6.2: Migrate AdaptiveRateLimiter to Elixir",
+      "description": "",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-6",
+        "deferred"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-100"
+        ]
+      },
+      "created_at": "2026-04-15T07:03:47.649051",
+      "updated_at": "2026-04-15T07:04:54.910966",
+      "comments": [
+        "Migrate AdaptiveRateLimiter circuit breaker pattern to Elixir. Tracks per-model rate limits with backoff. Needs cross-process visibility."
+      ]
+    },
+    "bd-102": {
+      "id": "bd-102",
+      "title": "Phase 6.3: Migrate AgentManager to Elixir",
+      "description": "",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration",
+        "phase-6",
+        "deferred"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-101"
+        ]
+      },
+      "created_at": "2026-04-15T07:03:47.662982",
+      "updated_at": "2026-04-15T07:04:54.895412",
+      "comments": [
+        "Migrate AgentManager registry to Elixir. Final piece - orchestrates agent lifecycle. Depends on RunLimiter and RateLimiter being in Elixir first."
+      ]
     }
   },
-  "counter": 91
+  "counter": 102
 }

@@ -1,5 +1,7 @@
 # Rust Acceleration
 
+> **Note**: As of the Elixir migration, file operations now route through Elixir by default. Rust acceleration remains for message processing (puppy_core) and parsing (turbo_parse). See the `elixir_first` profile for configuration.  # bd-97
+
 Code Puppy uses **Rust acceleration** for native performance, with PyO3 providing seamless Python integration.
 
 ## Architecture Overview
@@ -25,13 +27,27 @@ Code Puppy uses **Rust acceleration** for native performance, with PyO3 providin
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Backend Assignment
+## Backend Assignment  # bd-97
 
 | Module | Backend | Rationale |
 |--------|---------|-----------|
 | `puppy_core` | **Rust** | Message processing is extremely FFI-sensitive; PyO3 provides minimal overhead |
 | `turbo_parse` | **Rust** | Tree-sitter has excellent Rust bindings; mature ecosystem |
-| `turbo_ops` | **Rust** | Batch file operations benefit from Rust's performance and safety |
+| `file_ops` | **Elixir** | File operations route through Elixir control plane for distributed coordination |
+
+## Backend Profiles  # bd-97
+
+The `elixir_first` profile routes file operations through Elixir before falling back to Rust/Python:
+
+```python
+from code_puppy.native_backend import NativeBackend, BackendPreference
+
+# Use Elixir-first routing (default)
+NativeBackend.set_backend_preference("elixir_first")
+
+# Or use legacy Rust-first
+NativeBackend.set_backend_preference("rust_first")
+```
 
 ## Why Rust?
 

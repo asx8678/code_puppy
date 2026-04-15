@@ -450,6 +450,57 @@ defmodule CodePuppyControl.PythonWorker.Port do
     Protocol.encode_response(%{"languages" => languages}, nil)
   end
 
+  # bd-93: Get fold ranges for code folding
+  defp handle_file_request("get_folds", params) do
+    source = params["source"]
+    language = params["language"]
+
+    case CodePuppyControl.Parser.get_folds(source, language) do
+      {:ok, result} ->
+        Protocol.encode_response(result, nil)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Get folds failed: #{inspect(reason)}", nil, nil)
+    end
+  end
+
+  # bd-93: Get syntax highlights
+  defp handle_file_request("get_highlights", params) do
+    source = params["source"]
+    language = params["language"]
+
+    case CodePuppyControl.Parser.get_highlights(source, language) do
+      {:ok, result} ->
+        Protocol.encode_response(result, nil)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Get highlights failed: #{inspect(reason)}", nil, nil)
+    end
+  end
+
+  # bd-96: Parse multiple files in batch using Task.async_stream
+  defp handle_file_request("parse_batch", params) do
+    paths = params["paths"] || []
+    language = params["language"]
+
+    results =
+      paths
+      |> Task.async_stream(
+        fn path ->
+          case CodePuppyControl.Parser.parse_file(path, language) do
+            {:ok, result} -> %{"path" => path, "result" => result, "error" => nil}
+            {:error, reason} -> %{"path" => path, "result" => nil, "error" => inspect(reason)}
+          end
+        end,
+        max_concurrency: 4,
+        timeout: 30_000
+      )
+      |> Enum.to_list()
+      |> Enum.map(fn {:ok, result} -> result end)
+
+    Protocol.encode_response(%{"results" => results, "count" => length(results)}, nil)
+  end
+
   # bd-78: History/EventStore bridge methods for Python SessionHistoryBuffer migration
   defp handle_file_request("history_get", params) do
     session_id = params["session_id"]

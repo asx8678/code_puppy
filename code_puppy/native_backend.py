@@ -25,7 +25,6 @@ from code_puppy.config import get_acceleration_config
 # Re-export message core types for consumers routing through NativeBackend (bd-67)
 from code_puppy._core_bridge import (
     MessageBatchHandle,
-    create_message_batch,
 )
 
 logger = logging.getLogger(__name__)
@@ -1033,7 +1032,6 @@ class NativeBackend:
         Returns:
             MessageBatchHandle for batch operations.
         """
-        from code_puppy._core_bridge import MessageBatchHandle
 
         return MessageBatchHandle(messages)
 
@@ -1275,6 +1273,161 @@ class NativeBackend:
         return []
 
     @classmethod
+    def get_folds(cls, source: str, language: str) -> dict:
+        """Get code fold ranges.  # bd-93
+
+        Routing: Elixir → Rust turbo_parse → Python stub
+
+        Args:
+            source: Source code string.
+            language: Language identifier.
+
+        Returns:
+            Dict with fold ranges or error info.
+        """
+        if not cls.is_active(cls.Capabilities.PARSE):
+            return {"error": "Parse capability not active", "folds": []}
+
+        # Try Elixir
+        if cls._should_use_elixir(cls.Capabilities.PARSE):
+            try:
+                result = cls._call_elixir(
+                    "get_folds",
+                    {"source": source, "language": language},
+                )
+                if "error" not in result:
+                    cls._last_source[cls.Capabilities.PARSE] = "elixir"
+                    return result
+            except Exception as e:
+                logger.debug(f"Elixir get_folds failed: {e}")
+
+        # Try Rust turbo_parse
+        turbo_parse = cls._get_turbo_parse()
+        if turbo_parse["available"]:
+            try:
+                native_func = turbo_parse["get_folds"]
+                result = native_func(source, language)
+                cls._last_source[cls.Capabilities.PARSE] = "turbo_parse"
+                if isinstance(result, dict):
+                    return result
+                return {"folds": result if isinstance(result, list) else []}
+            except Exception as e:
+                logger.debug(f"turbo_parse.get_folds failed: {e}")
+
+        cls._last_source[cls.Capabilities.PARSE] = "python_fallback"
+        return {"error": "No fold backend available", "folds": []}
+
+    @classmethod
+    def get_highlights(cls, source: str, language: str) -> dict:
+        """Get syntax highlights.  # bd-93
+
+        Routing: Elixir → Rust turbo_parse → Python stub
+
+        Args:
+            source: Source code string.
+            language: Language identifier.
+
+        Returns:
+            Dict with highlight ranges or error info.
+        """
+        if not cls.is_active(cls.Capabilities.PARSE):
+            return {"error": "Parse capability not active", "highlights": []}
+
+        # Try Elixir
+        if cls._should_use_elixir(cls.Capabilities.PARSE):
+            try:
+                result = cls._call_elixir(
+                    "get_highlights",
+                    {"source": source, "language": language},
+                )
+                if "error" not in result:
+                    cls._last_source[cls.Capabilities.PARSE] = "elixir"
+                    return result
+            except Exception as e:
+                logger.debug(f"Elixir get_highlights failed: {e}")
+
+        # Try Rust turbo_parse
+        turbo_parse = cls._get_turbo_parse()
+        if turbo_parse["available"]:
+            try:
+                native_func = turbo_parse["get_highlights"]
+                result = native_func(source, language)
+                cls._last_source[cls.Capabilities.PARSE] = "turbo_parse"
+                if isinstance(result, dict):
+                    return result
+                return {"highlights": result if isinstance(result, list) else []}
+            except Exception as e:
+                logger.debug(f"turbo_parse.get_highlights failed: {e}")
+
+        cls._last_source[cls.Capabilities.PARSE] = "python_fallback"
+        return {"error": "No highlight backend available", "highlights": []}
+
+    @classmethod
+    def parse_batch(
+        cls,
+        paths: list[str],
+        language: str | None = None,
+    ) -> dict:
+        """Parse multiple files in batch.  # bd-96
+
+        Routing: Elixir (Task.async_stream) → Rust → sequential Python
+
+        Args:
+            paths: List of file paths to parse.
+            language: Optional language identifier (auto-detected if not provided).
+
+        Returns:
+            Dict with results list and count.
+        """
+        if not cls.is_active(cls.Capabilities.PARSE):
+            return {"error": "Parse capability not active", "results": [], "count": 0}
+
+        # Try Elixir (uses Task.async_stream for concurrency)
+        if cls._should_use_elixir(cls.Capabilities.PARSE):
+            try:
+                result = cls._call_elixir(
+                    "parse_batch",
+                    {"paths": paths, "language": language},
+                )
+                if "error" not in result:
+                    cls._last_source[cls.Capabilities.PARSE] = "elixir"
+                    return result
+            except Exception as e:
+                logger.debug(f"Elixir parse_batch failed: {e}")
+
+        # Try Rust turbo_parse (sequential)
+        turbo_parse = cls._get_turbo_parse()
+        if turbo_parse["available"]:
+            try:
+                native_func = turbo_parse["parse_file"]
+                results = []
+                for path in paths:
+                    try:
+                        file_result = native_func(path, language)
+                        results.append(
+                            {"path": path, "result": file_result, "error": None}
+                        )
+                    except Exception as e:
+                        results.append(
+                            {"path": path, "result": None, "error": str(e)}
+                        )
+                cls._last_source[cls.Capabilities.PARSE] = "turbo_parse"
+                return {"results": results, "count": len(results)}
+            except Exception as e:
+                logger.debug(f"turbo_parse parse_batch failed: {e}")
+
+        # Python fallback (sequential with basic parse)
+        cls._last_source[cls.Capabilities.PARSE] = "python_fallback"
+        results = []
+        for path in paths:
+            try:
+                file_result = cls.parse_file(path, language or "unknown")
+                results.append({"path": path, "result": file_result, "error": None})
+            except Exception as e:
+                results.append({"path": path, "result": None, "error": str(e)})
+        return {"results": results, "count": len(results)}
+
+    @classmethod
     def supported_languages(cls) -> list[str]:
         """Get list of supported languages for parsing.
 
@@ -1413,6 +1566,23 @@ def index_directory(
     return NativeBackend.index_directory(root, max_files, max_symbols_per_file)
 
 
+def get_folds(source: str, language: str) -> dict:
+    """Get code fold ranges (convenience function).  # bd-93"""
+    return NativeBackend.get_folds(source, language)
+
+
+def get_highlights(source: str, language: str) -> dict:
+    """Get syntax highlights (convenience function).  # bd-93"""
+    return NativeBackend.get_highlights(source, language)
+
+
+def parse_batch(
+    paths: list[str], language: str | None = None
+) -> dict:
+    """Parse multiple files in batch (convenience function).  # bd-96"""
+    return NativeBackend.parse_batch(paths, language)
+
+
 __all__ = [
     # Main class
     "NativeBackend",
@@ -1433,6 +1603,11 @@ __all__ = [
     "parse_source",
     "extract_symbols",
     "supported_languages",
+    # Fold/Highlight operations  # bd-93
+    "get_folds",
+    "get_highlights",
+    # Batch operations  # bd-96
+    "parse_batch",
     # Index operations
     "index_directory",
 ]
