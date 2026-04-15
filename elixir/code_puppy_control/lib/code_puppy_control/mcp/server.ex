@@ -207,11 +207,10 @@ defmodule CodePuppyControl.MCP.Server do
 
       message =
         Protocol.encode_request(
-          "mcp_request",
+          "tools/call",
           %{
-            server_id: state.server_id,
-            method: method,
-            params: params
+            "name" => method,
+            "arguments" => params
           },
           request_id
         )
