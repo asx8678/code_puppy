@@ -24,8 +24,6 @@ defmodule CodePuppyControl.Indexer.Constants do
                   ".DS_Store",
                   "_build",
                   "deps",
-                  "zig-out",
-                  ".zig-cache"
                 ])
 
   @important_files MapSet.new([
