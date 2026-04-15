@@ -1,9 +1,43 @@
 """Bridge to turbo_parse Rust extension module with Python fallback.
 
 Provides graceful degradation when the Rust extension is not available.
+
+DEPRECATED (bd-93): This module is deprecated in favor of NativeBackend.
+Direct imports from turbo_parse_bridge are discouraged. Use instead:
+  from code_puppy.native_backend import NativeBackend
+  
+Migration guide:
+- turbo_parse_bridge.is_language_supported(lang) → NativeBackend.is_language_supported(lang)
+- turbo_parse_bridge.extract_syntax_diagnostics(src, lang) → NativeBackend.extract_syntax_diagnostics(src, lang)
+- turbo_parse_bridge.health_check() → NativeBackend.parse_health_check()
+- turbo_parse_bridge.stats() → NativeBackend.parse_stats()
+- turbo_parse_bridge.parse_source(src, lang) → NativeBackend.parse_source(src, lang)
+- turbo_parse_bridge.parse_file(path, lang) → NativeBackend.parse_file(path, lang)
+- turbo_parse_bridge.extract_symbols(src, lang) → NativeBackend.extract_symbols(src, lang)
+- turbo_parse_bridge.supported_languages() → NativeBackend.supported_languages()
+- turbo_parse_bridge.get_folds(src, lang) → NativeBackend.get_folds(src, lang)
+- turbo_parse_bridge.get_highlights(src, lang) → NativeBackend.get_highlights(src, lang)
+- turbo_parse_bridge.TURBO_PARSE_AVAILABLE → NativeBackend.is_available(NativeBackend.Capabilities.PARSE)
+
+NativeBackend provides Elixir-first routing and unified acceleration access.
 """
 
 from typing import Any
+
+# bd-93: Deprecation warning infrastructure (not yet active to avoid noise)
+# import warnings
+#
+# def _emit_deprecation_warning(func_name: str) -> None:
+#     """Emit deprecation warning for direct turbo_parse_bridge usage.
+#
+#     DEPRECATED (bd-93): Use NativeBackend instead for Elixir-first routing.
+#     """
+#     warnings.warn(
+#         f"Direct import of {func_name} from turbo_parse_bridge is deprecated. "
+#         f"Use NativeBackend.{func_name}() instead for Elixir-first routing.",
+#         DeprecationWarning,
+#         stacklevel=3,
+#     )
 
 try:
     from turbo_parse import (

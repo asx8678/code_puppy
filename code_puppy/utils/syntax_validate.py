@@ -18,6 +18,9 @@ Usage:
     if result.status is ValidationStatus.INVALID:
         # Surface result.errors back to the agent
         ...
+
+bd-93: Migrated from direct turbo_parse_bridge to NativeBackend for
+Elixir-first routing and unified acceleration access.
 """
 
 import logging
@@ -108,43 +111,45 @@ def _get_language_from_ext(path: str) -> str | None:
     return _EXT_TO_LANGUAGE.get(Path(path).suffix.lower())
 
 
-def _validate_via_turbo_parse(path: str, content: str) -> ValidationResult:
-    """Attempt to validate using turbo_parse's extract_syntax_diagnostics.
+def _validate_via_native_backend(path: str, content: str) -> ValidationResult:
+    """Attempt to validate using NativeBackend's extract_syntax_diagnostics.
+
+    bd-93: Migrated from direct turbo_parse_bridge to NativeBackend for
+    Elixir-first routing and unified acceleration access.
 
     Interpretation:
-    - If turbo_parse returns diagnostics with error_count == 0, treat as VALID.
+    - If NativeBackend returns diagnostics with error_count == 0, treat as VALID.
     - If diagnostics have errors, surface them as INVALID with markers.
-    - If turbo_parse is unavailable, treat as PARSER_UNAVAILABLE.
+    - If NativeBackend is unavailable, treat as PARSER_UNAVAILABLE.
     - Any exception is treated as PARSER_UNAVAILABLE (fail open).
     """
     try:
-        from code_puppy import turbo_parse_bridge
+        from code_puppy.native_backend import NativeBackend
     except ImportError:
         return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
 
-    # Check if bridge is actually functional
-    diag_fn = getattr(turbo_parse_bridge, "extract_syntax_diagnostics", None)
-    if diag_fn is None:
+    # bd-93: Check if PARSE capability is available via NativeBackend
+    if not NativeBackend.is_available(NativeBackend.Capabilities.PARSE):
         return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
 
     language = _get_language_from_ext(path)
     if language is None:
         return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
 
-    # Check if the language is supported by turbo_parse
-    is_supported_fn = getattr(turbo_parse_bridge, "is_language_supported", None)
-    if is_supported_fn is not None and not is_supported_fn(language):
+    # bd-93: Check if the language is supported via NativeBackend
+    if not NativeBackend.is_language_supported(language):
         return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
 
     try:
-        result = diag_fn(content, language)
+        # bd-93: Use NativeBackend for syntax diagnostics (Elixir-first routing)
+        result = NativeBackend.extract_syntax_diagnostics(content, language)
 
-        # Check for turbo_parse unavailability in result
+        # Check for backend unavailability in result
         if isinstance(result, dict) and result.get("error"):
-            # turbo_parse is available but couldn't parse this file
+            # Backend is available but couldn't parse this file
             # This could be a parser limitation, not syntax error
             error_msg = result.get("error", "")
-            if "not available" in error_msg.lower():
+            if "not available" in error_msg.lower() or "disabled" in error_msg.lower():
                 return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
 
         # Check for actual syntax errors
@@ -209,11 +214,11 @@ def validate_file_sync(
     if not _ext_is_validatable(path):
         return ValidationResult(status=ValidationStatus.PARSER_UNAVAILABLE)
 
-    # Run the parser in a thread with a timeout
+    # bd-93: Run the parser in a thread with a timeout via NativeBackend
     import concurrent.futures
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(_validate_via_turbo_parse, path, content)
+        future = executor.submit(_validate_via_native_backend, path, content)
         try:
             return future.result(timeout=timeout_s)
         except concurrent.futures.TimeoutError:

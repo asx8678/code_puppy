@@ -31,7 +31,15 @@ Code Puppy has a **runtime backend selector** called `fast_puppy` that routes pe
 | `message_core` | `code_puppy_core` | — | Message serialization, pruning, hashing |
 | `file_ops` | `turbo_ops` | `file_service` | Batch file ops (`list_files`, `grep`, `read_file`) |
 | `repo_index` | — | `repo_index` | Repository indexing |
-| `parse` | `turbo_parse` | — | Tree-sitter parsing, symbols, diagnostics |
+| `parse` | `turbo_parse` | `turbo_parse_nif` | Tree-sitter parsing, symbols, diagnostics |
+
+**Phase 4 Update:** All parse operations now route through `NativeBackend` with **Elixir-first routing** (bd-93):
+- Elixir NIF (`turbo_parse_nif`) → Rust crate (`turbo_parse`) → Python fallback
+- Direct `turbo_parse_bridge` imports are **deprecated** — use `NativeBackend` instead
+- New `NativeBackend` methods for parsing:
+  - `extract_syntax_diagnostics(file_path, code, language)` — Extract syntax errors/warnings
+  - `parse_health_check()` — Check parse backend health
+  - `parse_stats()` — Get parse operation statistics
 
 **Phase 3 Reality:** Fast Puppy is now a **runtime selector**, not a crate builder:
 - `/fast_puppy profile elixir_first` → Prefer Elixir backends (default)
@@ -42,6 +50,7 @@ Code Puppy has a **runtime backend selector** called `fast_puppy` that routes pe
 - Check capability availability via bridge flags (not just Rust availability)
 - All backends provide Python stubs — fall back gracefully
 - Don't manually edit `fast_puppy/` — add new capabilities via `NATIVE_BACKENDS` registry
+- **Migration rule:** Import from `fast_puppy.native_backend` instead of direct bridge imports
 - To test without native acceleration: set `disable_rust_autobuild=true` and `enable_elixir_control=false` in `puppy.cfg`
 
 ## Available Hooks

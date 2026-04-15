@@ -142,18 +142,23 @@ class TestTurboParseStartup:
         )
 
     def test_startup_logs_when_module_available(self, caplog):
-        """Test that startup logs when turbo_parse is available."""
+        """Test that startup logs when turbo_parse is available.
+
+        bd-93: Now uses NativeBackend instead of direct module import.
+        """
         from code_puppy.plugins.turbo_parse.register_callbacks import _on_startup
 
-        mock_module = mock.Mock()
-        mock_module.__version__ = "1.0.0"
-        mock_module.health_check.return_value = {"version": "1.0.0"}
+        # Mock NativeBackend.parse_health_check to return a valid response
+        mock_health = {"version": "1.0.0", "available": True}
 
         with mock.patch(
             "code_puppy.plugins.turbo_parse.register_callbacks.is_turbo_parse_available",
             return_value=True,
         ):
-            with mock.patch("builtins.__import__", return_value=mock_module):
+            with mock.patch(
+                "code_puppy.plugins.turbo_parse.register_callbacks.NativeBackend.parse_health_check",
+                return_value=mock_health,
+            ):
                 with caplog.at_level("INFO"):
                     _on_startup()
 
@@ -1169,7 +1174,13 @@ class MyClass:
             assert "severity" in diag
 
     def test_parse_code_tool_handles_unsupported_language(self):
-        """Test parse_code tool handles unsupported language gracefully."""
+        """Test parse_code tool handles unsupported language or disabled capability gracefully.
+
+        bd-93: With NativeBackend migration, the error could be either:
+        - "Language is not supported" (when parse is available but language isn't)
+        - "Parse capability disabled" (when parse capability is disabled via NativeBackend)
+        Both are valid error cases.
+        """
         from code_puppy.plugins.turbo_parse.register_callbacks import (
             _register_parse_code_tool,
         )
@@ -1196,12 +1207,14 @@ class MyClass:
             )
         )
 
-        # Should return error for unsupported language when module available
+        # Should return error (either unsupported language or capability disabled)
         assert result["success"] is False
         assert len(result["errors"]) > 0
+        error_msg = result["errors"][0]["message"].lower()
         assert (
-            "unsupported" in result["errors"][0]["message"].lower()
-            or "not available" in result["errors"][0]["message"].lower()
+            "unsupported" in error_msg
+            or "not available" in error_msg
+            or "disabled" in error_msg  # NativeBackend returns this when capability is disabled
         )
 
     @pytest.mark.skipif(

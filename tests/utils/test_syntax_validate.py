@@ -80,7 +80,10 @@ def test_format_validation_errors_caps_at_five():
 
 def test_mocked_parser_returns_invalid():
     """When the parser raises, we should return INVALID (not crash)."""
-    with patch("code_puppy.utils.syntax_validate._validate_via_turbo_parse") as mock_vp:
+    # bd-93: Updated to mock _validate_via_native_backend
+    with patch(
+        "code_puppy.utils.syntax_validate._validate_via_native_backend"
+    ) as mock_vp:
         mock_vp.return_value = ValidationResult(
             status=ValidationStatus.INVALID,
             errors=["Bad syntax"],
@@ -92,7 +95,10 @@ def test_mocked_parser_returns_invalid():
 
 def test_validator_fails_open_on_unexpected_error():
     """If the validator itself crashes, we should still return (not raise)."""
-    with patch("code_puppy.utils.syntax_validate._validate_via_turbo_parse") as mock_vp:
+    # bd-93: Updated to mock _validate_via_native_backend
+    with patch(
+        "code_puppy.utils.syntax_validate._validate_via_native_backend"
+    ) as mock_vp:
         mock_vp.side_effect = RuntimeError("boom")
         result = validate_file_sync("test.py", "x = 1")
     # Should return something (not raise)
@@ -101,7 +107,8 @@ def test_validator_fails_open_on_unexpected_error():
 
 
 def test_invalid_status_from_diagnostics():
-    """Test that we correctly parse INVALID from turbo_parse diagnostics."""
+    """Test that we correctly parse INVALID from NativeBackend diagnostics."""
+    # bd-93: Updated to mock NativeBackend instead of turbo_parse_bridge
     mock_result = {
         "diagnostics": [
             {
@@ -121,12 +128,19 @@ def test_invalid_status_from_diagnostics():
         "warning_count": 1,
     }
 
-    with patch("code_puppy.turbo_parse_bridge.extract_syntax_diagnostics") as mock_diag:
+    with patch(
+        "code_puppy.native_backend.NativeBackend.extract_syntax_diagnostics"
+    ) as mock_diag:
         with patch(
-            "code_puppy.turbo_parse_bridge.is_language_supported", return_value=True
+            "code_puppy.native_backend.NativeBackend.is_language_supported",
+            return_value=True,
         ):
-            mock_diag.return_value = mock_result
-            result = validate_file_sync("test.py", "def foo(:\n  pass")
+            with patch(
+                "code_puppy.native_backend.NativeBackend.is_available",
+                return_value=True,
+            ):
+                mock_diag.return_value = mock_result
+                result = validate_file_sync("test.py", "def foo(:\n  pass")
 
     assert result.status is ValidationStatus.INVALID
     assert len(result.errors) == 1  # Only errors, not warnings
@@ -134,19 +148,27 @@ def test_invalid_status_from_diagnostics():
 
 
 def test_valid_status_from_diagnostics():
-    """Test that we correctly parse VALID from turbo_parse diagnostics."""
+    """Test that we correctly parse VALID from NativeBackend diagnostics."""
+    # bd-93: Updated to mock NativeBackend instead of turbo_parse_bridge
     mock_result = {
         "diagnostics": [],
         "error_count": 0,
         "warning_count": 0,
     }
 
-    with patch("code_puppy.turbo_parse_bridge.extract_syntax_diagnostics") as mock_diag:
+    with patch(
+        "code_puppy.native_backend.NativeBackend.extract_syntax_diagnostics"
+    ) as mock_diag:
         with patch(
-            "code_puppy.turbo_parse_bridge.is_language_supported", return_value=True
+            "code_puppy.native_backend.NativeBackend.is_language_supported",
+            return_value=True,
         ):
-            mock_diag.return_value = mock_result
-            result = validate_file_sync("test.py", "def foo():\n    pass\n")
+            with patch(
+                "code_puppy.native_backend.NativeBackend.is_available",
+                return_value=True,
+            ):
+                mock_diag.return_value = mock_result
+                result = validate_file_sync("test.py", "def foo():\n    pass\n")
 
     assert result.status is ValidationStatus.VALID
     assert result.errors == []
@@ -155,6 +177,7 @@ def test_valid_status_from_diagnostics():
 
 def test_deduplicates_errors():
     """Test that duplicate errors are deduplicated."""
+    # bd-93: Updated to mock NativeBackend instead of turbo_parse_bridge
     mock_result = {
         "diagnostics": [
             {"severity": "error", "line": 3, "column": 5, "message": "Same error"},
@@ -164,12 +187,19 @@ def test_deduplicates_errors():
         "warning_count": 0,
     }
 
-    with patch("code_puppy.turbo_parse_bridge.extract_syntax_diagnostics") as mock_diag:
+    with patch(
+        "code_puppy.native_backend.NativeBackend.extract_syntax_diagnostics"
+    ) as mock_diag:
         with patch(
-            "code_puppy.turbo_parse_bridge.is_language_supported", return_value=True
+            "code_puppy.native_backend.NativeBackend.is_language_supported",
+            return_value=True,
         ):
-            mock_diag.return_value = mock_result
-            result = validate_file_sync("test.py", "bad code")
+            with patch(
+                "code_puppy.native_backend.NativeBackend.is_available",
+                return_value=True,
+            ):
+                mock_diag.return_value = mock_result
+                result = validate_file_sync("test.py", "bad code")
 
     assert result.status is ValidationStatus.INVALID
     assert len(result.errors) == 1  # Deduplicated

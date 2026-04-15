@@ -2,9 +2,9 @@
 
 Provides fast code parsing capabilities using the turbo_parse Rust module.
 Falls back to pure Python implementations when Rust module is unavailable.
-"""
 
-import importlib.util
+bd-93: Phase 4 - Now routes through NativeBackend for unified Elixir-first routing.
+"""
 
 __version__ = "0.1.0"
 
@@ -16,9 +16,13 @@ __all__ = [
 
 
 def is_turbo_parse_available() -> bool:
-    """Check if the turbo_parse Rust module is available.
+    """Check if parsing capability is available through NativeBackend.
+
+    bd-93: Phase 4 - Now delegates to NativeBackend for unified capability checking.
 
     Returns:
-        True if the Rust module is installed and functional, False otherwise.
+        True if parse capability is available (via Rust, Elixir, or Python).
     """
-    return importlib.util.find_spec("turbo_parse") is not None
+    from code_puppy.native_backend import NativeBackend
+
+    return NativeBackend.is_available(NativeBackend.Capabilities.PARSE)

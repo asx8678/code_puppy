@@ -1,10 +1,12 @@
 """Turbo Parse Plugin — Callback Registration.
 
 Registers the turbo_parse parsing system with code_puppy's callback hooks:
-- startup: Check turbo_parse Rust module availability and log status
+- startup: Check parse capability availability and log status
 - register_tools: Register parsing tools for code analysis operations
 - custom_command: Register the /parse slash command with subcommands
 - custom_command_help: Register help text for the /parse command
+
+bd-93: Phase 4 - Migrated to use NativeBackend for unified Elixir-first routing.
 
 ## Available Tools
 
@@ -57,7 +59,7 @@ extraction_time_ms, success, language, errors
 
 ## /parse Slash Command
 
-The /parse command provides CLI access to the turbo_parse functionality:
+The /parse command provides CLI access to the parsing functionality:
 
 ### Subcommands
 
@@ -84,60 +86,108 @@ from pydantic_ai import RunContext
 
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info, emit_error
+from code_puppy.native_backend import NativeBackend
 from code_puppy.plugins.turbo_parse import is_turbo_parse_available
-from code_puppy.turbo_parse_bridge import (
-    parse_source as _parse_source,
-    parse_file as _parse_file,
-    parse_files_batch as _parse_files_batch,
-    extract_symbols as _extract_symbols,
-    extract_syntax_diagnostics as _extract_diagnostics,
-    get_folds as _get_folds,
-    get_highlights as _get_highlights,
-    is_language_supported,
-    supported_languages,
-    health_check,
-    stats,
-    TURBO_PARSE_AVAILABLE,
-)
 from code_puppy.utils.symbol_hierarchy import build_symbol_hierarchy
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Wrapper Functions for Backward Compatibility (bd-93)
+# ============================================================================
+# These wrappers provide backward compatibility while routing through NativeBackend
+# for unified Elixir-first routing.
+
+def _parse_source(source: str, language: str) -> dict:
+    """Parse source code - routes through NativeBackend."""
+    return NativeBackend.parse_source(source, language)
+
+
+def _parse_file(path: str, language: str | None = None) -> dict:
+    """Parse file - routes through NativeBackend."""
+    return NativeBackend.parse_file(path, language)
+
+
+def _parse_files_batch(paths: list[str]) -> dict:
+    """Parse multiple files in batch - routes through NativeBackend."""
+    return NativeBackend.parse_batch(paths)
+
+
+def _extract_symbols(source: str, language: str) -> dict:
+    """Extract symbols - routes through NativeBackend."""
+    return NativeBackend.extract_symbols(source, language)
+
+
+def _extract_diagnostics(source: str, language: str) -> dict:
+    """Extract syntax diagnostics - routes through NativeBackend."""
+    return NativeBackend.extract_syntax_diagnostics(source, language)
+
+
+def _get_folds(source: str, language: str) -> dict:
+    """Get code folds - routes through NativeBackend."""
+    return NativeBackend.get_folds(source, language)
+
+
+def _get_highlights(source: str, language: str) -> dict:
+    """Get syntax highlights - routes through NativeBackend."""
+    return NativeBackend.get_highlights(source, language)
+
+
+def is_language_supported(language: str) -> bool:
+    """Check if language is supported - routes through NativeBackend."""
+    return NativeBackend.is_language_supported(language)
+
+
+def supported_languages() -> dict:
+    """Get supported languages - routes through NativeBackend."""
+    langs = NativeBackend.supported_languages()
+    return {"languages": langs, "count": len(langs)}
+
+
+def health_check() -> dict:
+    """Get health check - routes through NativeBackend."""
+    return NativeBackend.parse_health_check()
+
+
+def stats() -> dict:
+    """Get parse statistics - routes through NativeBackend."""
+    return NativeBackend.parse_stats()
+
+
+# Check availability through NativeBackend (bd-93)
+TURBO_PARSE_AVAILABLE = NativeBackend.is_available(NativeBackend.Capabilities.PARSE)
 
 
 def _on_startup():
     """Initialize the turbo_parse plugin on startup.
 
-    Attempts to import the turbo_parse Rust module and logs availability status.
-    Gracefully falls back to pure Python if the Rust module is not available.
+    bd-93: Phase 4 - Uses NativeBackend to check parse capability availability.
+    Gracefully falls back to pure Python if no native backends are available.
     """
     if is_turbo_parse_available():
         try:
-            import turbo_parse
+            # Get health check via NativeBackend
+            health = NativeBackend.parse_health_check()
+            version = health.get("version", "unknown")
 
-            version = getattr(turbo_parse, "__version__", "unknown")
+            # Get current source from NativeBackend
+            from code_puppy.native_backend import NativeBackend as NB
+            last_source = NB._last_source.get(NB.Capabilities.PARSE, "unknown")
 
-            # Try to call health_check if available
-            try:
-                health = turbo_parse.health_check()
-                logger.info(
-                    f"🚀 Turbo Parse: Rust module available (version: {health.get('version', 'unknown')})"
-                )
-            except AttributeError:
-                logger.info(
-                    f"🚀 Turbo Parse: Rust module available (version: {version})"
-                )
-            except Exception as e:
-                logger.warning(
-                    f"🚀 Turbo Parse: Rust module available but health check failed: {e}"
-                )
+            if last_source == "elixir":
+                logger.info(f"🚀 Turbo Parse: Elixir backend active (version: {version})")
+            elif last_source == "rust" or (version and version != "elixir"):
+                logger.info(f"🚀 Turbo Parse: Rust module available (version: {version})")
+            else:
+                logger.info("🚀 Turbo Parse: Parse capability active")
         except Exception as e:
             logger.warning(
-                f"⚠️ Turbo Parse: Unexpected error loading Rust module: {e}. "
-                f"Using pure Python fallback."
+                f"⚠️ Turbo Parse: Health check failed: {e}. "
+                f"Using fallback backend."
             )
     else:
         logger.info(
-            "🐍 Turbo Parse: Rust module not available, using pure Python fallback"
+            "🐍 Turbo Parse: Parse capability disabled, using pure Python fallback"
         )
 
 
@@ -270,6 +320,14 @@ def _register_parse_code_tool(agent):
             # Parse the source code
             parse_result = _parse_source(source, normalized_lang)
 
+            # Build errors list from both "errors" and "error" keys
+            errors = parse_result.get("errors", [])
+            if not errors and parse_result.get("error"):
+                # bd-93: Handle NativeBackend error format (single error key)
+                errors = [
+                    {"message": parse_result.get("error"), "severity": "error"}
+                ]
+
             # Build the response
             result = {
                 "success": parse_result.get("success", False),
@@ -280,7 +338,7 @@ def _register_parse_code_tool(agent):
                     "parse_time_ms", (time.time() - start_time) * 1000
                 ),
                 "language": parse_result.get("language", normalized_lang),
-                "errors": parse_result.get("errors", []),
+                "errors": errors,
             }
 
             # Extract symbols if requested

@@ -649,17 +649,26 @@ class TestPluginStartupBehavior:
     def test_startup_logs_when_module_available(
         self, caplog, mock_turbo_parse_available
     ):
-        """Test startup logs appropriate message when module is available."""
+        """Test startup logs appropriate message when module is available.
+
+        bd-93: Uses NativeBackend instead of direct module import.
+        """
         from code_puppy.plugins.turbo_parse.register_callbacks import _on_startup
+
+        # Mock NativeBackend.parse_health_check to return a valid response
+        mock_health = {"version": "1.0.0-test", "available": True}
 
         with mock.patch(
             "code_puppy.plugins.turbo_parse.register_callbacks.is_turbo_parse_available"
         ) as mock_avail:
             mock_avail.return_value = True
 
-            # Mock the actual turbo_parse module import
-            with caplog.at_level("INFO"):
-                _on_startup()
+            with mock.patch(
+                "code_puppy.plugins.turbo_parse.register_callbacks.NativeBackend.parse_health_check",
+                return_value=mock_health,
+            ):
+                with caplog.at_level("INFO"):
+                    _on_startup()
 
         # Should have logged availability
         availability_logs = [
@@ -685,10 +694,14 @@ class TestPluginStartupBehavior:
             for r in caplog.records
         )
 
-    def test_startup_handles_import_error_gracefully(
+    def test_startup_handles_health_check_error_gracefully(
         self, caplog, mock_turbo_parse_available
     ):
-        """Test startup handles import error gracefully."""
+        """Test startup handles NativeBackend health check error gracefully.
+
+        bd-93: Uses NativeBackend instead of direct module import, so tests
+        health check failures rather than import errors.
+        """
         from code_puppy.plugins.turbo_parse.register_callbacks import _on_startup
 
         with mock.patch(
@@ -696,9 +709,10 @@ class TestPluginStartupBehavior:
         ) as mock_avail:
             mock_avail.return_value = True
 
-            # Mock import to raise exception
+            # Mock NativeBackend.parse_health_check to raise exception
             with mock.patch(
-                "builtins.__import__", side_effect=ImportError("Simulated import error")
+                "code_puppy.plugins.turbo_parse.register_callbacks.NativeBackend.parse_health_check",
+                side_effect=Exception("Simulated health check error"),
             ):
                 with caplog.at_level("WARNING"):
                     _on_startup()
@@ -716,16 +730,27 @@ class TestParseCodeToolBothPaths:
     """Tests for parse_code tool behavior in both available and fallback scenarios."""
 
     def test_parse_code_tool_structure_always_available(self):
-        """Test that parse_code tool exists and can be registered regardless of turbo_parse availability."""
+        """Test that parse_code tool exists and can be registered regardless of turbo_parse availability.
+
+        bd-93: Now registers 4 tools: parse_code, get_highlights, get_folds, get_outline.
+        """
         from code_puppy.plugins.turbo_parse.register_callbacks import (
             _register_tools,
             _register_parse_code_tool,
         )
 
         tools = _register_tools()
-        assert len(tools) == 1
-        assert tools[0]["name"] == "parse_code"
-        assert callable(tools[0]["register_func"])
+        # bd-93: Should have 4 tools registered
+        assert len(tools) == 4
+        tool_names = [t["name"] for t in tools]
+        assert "parse_code" in tool_names
+        assert "get_highlights" in tool_names
+        assert "get_folds" in tool_names
+        assert "get_outline" in tool_names
+
+        # All tools should have callable register functions
+        for tool in tools:
+            assert callable(tool["register_func"])
 
         # Tool registration function exists
         assert callable(_register_parse_code_tool)

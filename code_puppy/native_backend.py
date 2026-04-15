@@ -1499,6 +1499,129 @@ class NativeBackend:
         }
         return language.lower() in supported
 
+    @classmethod
+    def extract_syntax_diagnostics(cls, source: str, language: str) -> dict[str, Any]:
+        """Extract syntax diagnostics from source code.
+
+        bd-93: Phase 4 - Elixir-first routing for diagnostics.
+
+        Args:
+            source: Source code to analyze
+            language: Programming language identifier
+
+        Returns:
+            Dict with diagnostics list, error_count, warning_count, success
+        """
+        # bd-63: Check capability first
+        if not cls.is_active(cls.Capabilities.PARSE):
+            return {
+                "diagnostics": [],
+                "error_count": 0,
+                "warning_count": 0,
+                "success": False,
+                "error": "Parse capability disabled",
+            }
+
+        # Try Elixir first
+        if cls._should_use_elixir(cls.Capabilities.PARSE):
+            try:
+                result = cls._call_elixir(
+                    "extract_syntax_diagnostics",
+                    {"source": source, "language": language},
+                )
+                if "error" not in result:
+                    cls._last_source[cls.Capabilities.PARSE] = "elixir"
+                    return result
+            except Exception as e:
+                logger.debug(f"Elixir diagnostics failed: {e}")
+
+        # Try Rust turbo_parse
+        turbo_parse = cls._get_turbo_parse()
+        if turbo_parse["available"]:
+            try:
+                from turbo_parse import extract_syntax_diagnostics as rust_diagnostics
+
+                result = rust_diagnostics(source, language)
+                cls._last_source[cls.Capabilities.PARSE] = "rust"
+                return result
+            except Exception as e:
+                logger.debug(f"Rust diagnostics failed: {e}")
+
+        # Python fallback
+        cls._last_source[cls.Capabilities.PARSE] = "python"
+        return {
+            "diagnostics": [],
+            "error_count": 0,
+            "warning_count": 0,
+            "success": False,
+            "error": "No parse backend available",
+        }
+
+    @classmethod
+    def parse_health_check(cls) -> dict[str, Any]:
+        """Get health check info for parse capability.
+
+        bd-93: Phase 4 - NativeBackend method for turbo_parse health.
+
+        Returns:
+            Dict with available, version, languages, cache_available
+        """
+        # Try Rust first since health_check is Rust-specific
+        turbo_parse = cls._get_turbo_parse()
+        if turbo_parse["available"]:
+            try:
+                from turbo_parse import health_check
+
+                return health_check()
+            except Exception:
+                pass
+
+        # Elixir doesn't have health_check, return basic info
+        if cls._is_elixir_available():
+            return {
+                "available": True,
+                "version": "elixir",
+                "languages": ["python", "javascript", "typescript", "rust", "elixir"],
+                "cache_available": False,
+            }
+
+        return {
+            "available": False,
+            "version": None,
+            "languages": [],
+            "cache_available": False,
+        }
+
+    @classmethod
+    def parse_stats(cls) -> dict[str, Any]:
+        """Get parsing statistics.
+
+        bd-93: Phase 4 - NativeBackend method for turbo_parse stats.
+
+        Returns:
+            Dict with total_parses, cache_hits, cache_misses, etc.
+        """
+        # Try Rust first since stats is Rust-specific
+        turbo_parse = cls._get_turbo_parse()
+        if turbo_parse["available"]:
+            try:
+                from turbo_parse import stats
+
+                return stats()
+            except Exception:
+                pass
+
+        # Return empty stats for Elixir/Python
+        return {
+            "total_parses": 0,
+            "average_parse_time_ms": 0.0,
+            "languages_used": {},
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "cache_evictions": 0,
+            "cache_hit_ratio": 0.0,
+        }
+
 
 # Convenience module-level functions for direct import
 def get_backend_status() -> dict[str, CapabilityInfo]:
@@ -1577,11 +1700,29 @@ def get_highlights(source: str, language: str) -> dict:
     return NativeBackend.get_highlights(source, language)
 
 
-def parse_batch(
-    paths: list[str], language: str | None = None
-) -> dict:
-    """Parse multiple files in batch (convenience function).  # bd-96"""
+def parse_batch(paths: list[str], language: str | None = None) -> dict:
+    """Parse multiple files in batch (convenience function).  # bd-93"""
     return NativeBackend.parse_batch(paths, language)
+
+
+def is_language_supported(language: str) -> bool:
+    """Check if language is supported for parsing (convenience function).  # bd-93"""
+    return NativeBackend.is_language_supported(language)
+
+
+def extract_syntax_diagnostics(source: str, language: str) -> dict[str, Any]:
+    """Extract syntax diagnostics (convenience function).  # bd-93"""
+    return NativeBackend.extract_syntax_diagnostics(source, language)
+
+
+def parse_health_check() -> dict[str, Any]:
+    """Get parse health check info (convenience function).  # bd-93"""
+    return NativeBackend.parse_health_check()
+
+
+def parse_stats() -> dict[str, Any]:
+    """Get parse statistics (convenience function).  # bd-93"""
+    return NativeBackend.parse_stats()
 
 
 def create_message_batch(messages: list) -> Any:
