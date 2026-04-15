@@ -174,6 +174,7 @@ def test_build_repo_context_includes_tech_stack_build_commands_and_decisions(
             (),
             {
                 "enabled": True,
+                "level": "full",
                 "max_files": 10,
                 "max_symbols_per_file": 5,
                 "max_prompt_chars": 500,
@@ -221,6 +222,7 @@ def test_build_repo_context_graceful_failure_when_detect_tech_stack_raises(
             (),
             {
                 "enabled": True,
+                "level": "full",
                 "max_files": 10,
                 "max_symbols_per_file": 5,
                 "max_prompt_chars": 500,

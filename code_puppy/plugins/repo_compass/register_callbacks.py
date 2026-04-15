@@ -90,14 +90,19 @@ def _format_decision_markers_section(root: Path, max_markers: int = 3) -> str | 
 
 def _build_repo_context(root: Path | None = None) -> str | None:
     cfg = load_config()
-    if not cfg.enabled:
+    if not cfg.enabled or cfg.level == "off":
         return None
 
     project_root = root or Path.cwd()
+    is_minimal = cfg.level == "minimal"
+
+    # In minimal mode, cap files lower to reduce overhead
+    effective_max_files = min(cfg.max_files, 10) if is_minimal else cfg.max_files
+
     try:
         summaries = build_structure_map(
             project_root,
-            max_files=cfg.max_files,
+            max_files=effective_max_files,
             max_symbols_per_file=cfg.max_symbols_per_file,
         )
         structure_text = format_structure_map(
@@ -107,7 +112,11 @@ def _build_repo_context(root: Path | None = None) -> str | None:
         if structure_text is None:
             return None
 
-        # Build additional context sections
+        # Minimal mode: structure map only, skip expensive scans
+        if is_minimal:
+            return structure_text
+
+        # Full mode: add supplementary context sections
         context_parts = [structure_text]
 
         # Tech stack (≈15 tokens)
@@ -120,7 +129,7 @@ def _build_repo_context(root: Path | None = None) -> str | None:
         if build_line:
             context_parts.append(build_line)
 
-        # Decision markers (≈30-50 tokens)
+        # Decision markers (≈30-50 tokens) - expensive I/O, full mode only
         decisions_section = _format_decision_markers_section(
             project_root, max_markers=3
         )
