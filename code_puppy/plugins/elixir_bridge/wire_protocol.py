@@ -83,7 +83,7 @@ def _serialize_json(data: Any) -> bytes:
     Falls back to stdlib json if orjson is not installed.
     """
     if _HAS_ORJSON:
-        return orjson.dumps(data, option=orjson.OPT_SERIALIZE_NUMPY)
+        return orjson.dumps(data)
     return json.dumps(data, separators=(",", ":")).encode("utf-8")
 
 
@@ -1512,7 +1512,7 @@ def serialize_for_wire(data: Any) -> str:
         JSON string
     """
     if _HAS_ORJSON:
-        return orjson.dumps(data, option=orjson.OPT_SERIALIZE_NUMPY).decode("utf-8")
+        return orjson.dumps(data).decode("utf-8")
     return json.dumps(data, separators=(",", ":"), default=_json_default)
 
 

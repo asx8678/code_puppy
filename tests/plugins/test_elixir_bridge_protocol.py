@@ -18,8 +18,6 @@ from __future__ import annotations
 import json
 import threading
 import time
-from typing import Any
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -460,8 +458,8 @@ class TestPerformance:
 
         per_call_us = (elapsed / iterations) * 1_000_000  # microseconds
         # Target: < 20μs per call (well within < 0.020ms target)
-        assert per_call_us < 200, (
-            f"Serialization took {per_call_us:.1f}μs/call, expected < 200μs"
+        assert per_call_us < 20, (
+            f"Serialization took {per_call_us:.1f}μs/call, expected < 20μs"
         )
 
     def test_deserialization_latency(self):
@@ -479,8 +477,8 @@ class TestPerformance:
         elapsed = time.perf_counter() - start
 
         per_call_us = (elapsed / iterations) * 1_000_000
-        assert per_call_us < 200, (
-            f"Deserialization took {per_call_us:.1f}μs/call, expected < 200μs"
+        assert per_call_us < 100, (
+            f"Deserialization took {per_call_us:.1f}μs/call, expected < 100μs"
         )
 
     def test_response_slot_notification_latency(self):
@@ -531,10 +529,262 @@ class TestPerformance:
 
             ops_per_sec = num_responses / elapsed
             # Target: > 100k ops/s
-            assert ops_per_sec > 50000, (
-                f"Throughput {ops_per_sec:.0f} ops/s, expected > 50k ops/s"
+            assert ops_per_sec > 100000, (
+                f"Throughput {ops_per_sec:.0f} ops/s, expected > 100k ops/s"
             )
         finally:
             with _response_lock:
                 for i in range(num_responses):
                     _pending_responses.pop(f"perf-{i}", None)
+
+
+# ── send_batch_to_elixir Tests ──────────────────────────────────────────────
+
+
+class TestSendBatchToElixir:
+    """Tests for send_batch_to_elixir() batch framing transport."""
+
+    def test_send_batch_writes_framed_json_array(self, monkeypatch):
+        """send_batch_to_elixir should write Content-Length framed JSON array to stdout."""
+        import io
+        import sys
+
+        from code_puppy.plugins.elixir_bridge import send_batch_to_elixir
+
+        # Enable bridge mode
+        monkeypatch.setattr("code_puppy.plugins.elixir_bridge.BRIDGE_ENABLED", True)
+
+        # Capture stdout buffer writes by replacing sys.stdout with a custom object
+        captured = io.BytesIO()
+
+        class FakeStdout:
+            buffer = captured
+
+        monkeypatch.setattr(sys, "stdout", FakeStdout())
+
+        requests = [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "file_list",
+                "params": {"directory": "."},
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "file_read",
+                "params": {"path": "a.py"},
+            },
+        ]
+
+        send_batch_to_elixir(requests)
+
+        output = captured.getvalue()
+        # Should have Content-Length framing
+        assert output.startswith(b"Content-Length: ")
+        assert b"\r\n\r\n" in output
+
+        # Extract and verify body
+        header, body = output.split(b"\r\n\r\n", 1)
+        content_length = int(header.split(b": ")[1])
+        assert content_length == len(body)
+
+        # Body should be JSON array
+        parsed = json.loads(body)
+        assert isinstance(parsed, list)
+        assert len(parsed) == 2
+        assert parsed[0]["method"] == "file_list"
+        assert parsed[1]["method"] == "file_read"
+
+    def test_send_batch_raises_when_bridge_disabled(self):
+        """send_batch_to_elixir should raise NotImplementedError when bridge is off."""
+        from code_puppy.plugins.elixir_bridge import send_batch_to_elixir
+
+        with pytest.raises(NotImplementedError):
+            send_batch_to_elixir([{"jsonrpc": "2.0", "id": 1, "method": "ping"}])
+
+    def test_send_batch_connection_error_on_write_failure(self, monkeypatch):
+        """send_batch_to_elixir should raise ConnectionError on write failure."""
+        import sys
+
+        from code_puppy.plugins.elixir_bridge import send_batch_to_elixir
+
+        monkeypatch.setattr("code_puppy.plugins.elixir_bridge.BRIDGE_ENABLED", True)
+
+        # Make stdout.buffer.write raise
+        class BrokenBuffer:
+            def write(self, _):
+                raise OSError("pipe broken")
+
+            def flush(self):
+                pass
+
+        class FakeStdout:
+            buffer = BrokenBuffer()
+
+        monkeypatch.setattr(sys, "stdout", FakeStdout())
+
+        with pytest.raises(ConnectionError, match="Failed to send batch"):
+            send_batch_to_elixir([{"jsonrpc": "2.0", "id": 1, "method": "ping"}])
+
+
+# ── call_batch Tests ─────────────────────────────────────────────────────────
+
+
+class TestCallBatch:
+    """Tests for call_batch() batch request/response matching."""
+
+    def test_call_batch_result_ordering(self, monkeypatch):
+        """call_batch should return results in same order as input calls."""
+        from code_puppy.plugins.elixir_bridge import call_batch
+
+        monkeypatch.setattr(
+            "code_puppy.plugins.elixir_bridge.is_connected", lambda: True
+        )
+
+        # Capture registered slots and request IDs so we can respond in order
+        registered_ids = []
+
+        def mock_send_batch(requests):
+            nonlocal registered_ids
+            registered_ids = [r["id"] for r in requests]
+
+        monkeypatch.setattr(
+            "code_puppy.plugins.elixir_bridge.send_batch_to_elixir", mock_send_batch
+        )
+
+        calls = [
+            ("file_list", {"directory": "/a"}),
+            ("file_list", {"directory": "/b"}),
+            ("file_list", {"directory": "/c"}),
+        ]
+
+        def run_batch():
+            return call_batch(calls, timeout=5.0)
+
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(run_batch)
+
+            # Wait for slots to be registered
+            deadline = time.time() + 2.0
+            while not registered_ids and time.time() < deadline:
+                time.sleep(0.001)
+
+            assert len(registered_ids) == 3
+
+            # Respond in reverse order
+            handle_response(
+                {"jsonrpc": "2.0", "id": registered_ids[2], "result": {"dir": "/c"}}
+            )
+            handle_response(
+                {"jsonrpc": "2.0", "id": registered_ids[0], "result": {"dir": "/a"}}
+            )
+            handle_response(
+                {"jsonrpc": "2.0", "id": registered_ids[1], "result": {"dir": "/b"}}
+            )
+
+            results = future.result(timeout=5.0)
+
+        # Results should be in original call order, not response order
+        assert results == [
+            {"dir": "/a"},
+            {"dir": "/b"},
+            {"dir": "/c"},
+        ]
+
+    def test_call_batch_timeout(self, monkeypatch):
+        """call_batch should raise TimeoutError if responses don't arrive in time."""
+        from code_puppy.plugins.elixir_bridge import call_batch
+
+        monkeypatch.setattr(
+            "code_puppy.plugins.elixir_bridge.is_connected", lambda: True
+        )
+        monkeypatch.setattr(
+            "code_puppy.plugins.elixir_bridge.send_batch_to_elixir",
+            lambda requests: None,  # No-op, no responses will come
+        )
+
+        calls = [("file_list", {"directory": "."})]
+
+        with pytest.raises(TimeoutError):
+            call_batch(calls, timeout=0.1)
+
+    def test_call_batch_cleans_up_pending_responses(self, monkeypatch):
+        """call_batch should clean up _pending_responses even on timeout."""
+        from code_puppy.plugins.elixir_bridge import call_batch
+
+        monkeypatch.setattr(
+            "code_puppy.plugins.elixir_bridge.is_connected", lambda: True
+        )
+        monkeypatch.setattr(
+            "code_puppy.plugins.elixir_bridge.send_batch_to_elixir",
+            lambda requests: None,
+        )
+
+        # Record how many pending responses exist before and after
+        before_count = len(_pending_responses)
+
+        calls = [("file_list", {"directory": "."})]
+
+        try:
+            call_batch(calls, timeout=0.05)
+        except TimeoutError:
+            pass
+
+        after_count = len(_pending_responses)
+        assert after_count == before_count, (
+            f"Pending responses leaked: {after_count - before_count} slots not cleaned up"
+        )
+
+    def test_call_batch_connection_error_when_disconnected(self, monkeypatch):
+        """call_batch should raise ConnectionError when not connected."""
+        from code_puppy.plugins.elixir_bridge import call_batch
+
+        monkeypatch.setattr(
+            "code_puppy.plugins.elixir_bridge.is_connected", lambda: False
+        )
+
+        with pytest.raises(ConnectionError, match="not connected"):
+            call_batch([("ping", {})])
+
+    def test_call_batch_error_propagation(self, monkeypatch):
+        """call_batch should raise RuntimeError with error from Elixir."""
+        from code_puppy.plugins.elixir_bridge import call_batch
+
+        monkeypatch.setattr(
+            "code_puppy.plugins.elixir_bridge.is_connected", lambda: True
+        )
+
+        registered_ids = []
+
+        def mock_send_batch(requests):
+            nonlocal registered_ids
+            registered_ids = [r["id"] for r in requests]
+
+        monkeypatch.setattr(
+            "code_puppy.plugins.elixir_bridge.send_batch_to_elixir", mock_send_batch
+        )
+
+        calls = [("file_read", {"path": "/nonexistent"})]
+
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(call_batch, calls, 5.0)
+
+            deadline = time.time() + 2.0
+            while not registered_ids and time.time() < deadline:
+                time.sleep(0.001)
+
+            handle_response(
+                {
+                    "jsonrpc": "2.0",
+                    "id": registered_ids[0],
+                    "error": {"code": -32000, "message": "File not found"},
+                }
+            )
+
+            with pytest.raises(RuntimeError, match="Elixir call failed"):
+                future.result(timeout=5.0)

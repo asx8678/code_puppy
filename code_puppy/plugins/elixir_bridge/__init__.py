@@ -60,6 +60,7 @@ bd-103: Protocol bridge optimization
 
 from __future__ import annotations
 
+import asyncio
 import os
 import threading
 import time
@@ -240,7 +241,7 @@ async def call_elixir_concurrency(
         raise ConnectionError("Elixir control plane not connected")
 
     try:
-        return call_method(method, params, timeout=timeout)
+        return await asyncio.to_thread(call_method, method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
         return {"status": "timeout", "fallback": True}
@@ -270,7 +271,7 @@ async def call_elixir_run_limiter(
         raise ConnectionError("Elixir control plane not connected")
 
     try:
-        return call_method(method, params, timeout=timeout)
+        return await asyncio.to_thread(call_method, method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
         return {"status": "timeout", "fallback": True}
@@ -330,7 +331,7 @@ async def call_elixir_rate_limiter(
         raise ConnectionError("Elixir control plane not connected")
 
     try:
-        return call_method(method, params, timeout=timeout)
+        return await asyncio.to_thread(call_method, method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
         return {"status": "timeout", "fallback": True}
@@ -362,7 +363,7 @@ async def call_elixir_agent_manager(
         raise ConnectionError("Elixir control plane not connected")
 
     try:
-        return call_method(method, params, timeout=timeout)
+        return await asyncio.to_thread(call_method, method, params, timeout=timeout)
     except TimeoutError:
         # Return a fallback result that signals local handling
         return {"status": "timeout", "fallback": True}
@@ -540,7 +541,6 @@ def notify_elixir_event(
         run_id: Optional run identifier (determines topic)
         session_id: Optional session identifier (included in payload)
     """
-    import asyncio
     import threading
 
     # Determine topic based on scope

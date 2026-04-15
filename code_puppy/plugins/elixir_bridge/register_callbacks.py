@@ -110,7 +110,10 @@ def _read_framed_message(reader: asyncio.StreamReader) -> dict | None:
         # Read exactly content_length bytes
         body_bytes = reader.read(content_length)
         if len(body_bytes) != content_length:
-            _log_bridge(f"Incomplete read: got {len(body_bytes)} bytes, expected {content_length}", "error")
+            _log_bridge(
+                f"Incomplete read: got {len(body_bytes)} bytes, expected {content_length}",
+                "error",
+            )
             return None
 
         return json.loads(body_bytes.decode("utf-8"))
@@ -191,9 +194,7 @@ async def _on_shutdown() -> None:
 
 
 def _on_stream_event(
-    event_type: str,
-    event_data: dict[str, Any],
-    agent_session_id: str | None = None
+    event_type: str, event_data: dict[str, Any], agent_session_id: str | None = None
 ) -> None:
     """Emit event to stdout in canonical JSON-RPC format.
 
@@ -292,8 +293,11 @@ async def _stdin_reader_loop() -> None:
             # Responses have "result" or "error" but no "method"
             if ("result" in request or "error" in request) and "method" not in request:
                 from code_puppy.plugins.elixir_bridge import handle_response
+
                 handle_response(request)
-                _log_bridge(f"Handled reverse-channel response id={request.get('id')}", "debug")
+                _log_bridge(
+                    f"Handled reverse-channel response id={request.get('id')}", "debug"
+                )
                 continue
 
             # Dispatch command
@@ -317,34 +321,25 @@ def _send_jsonrpc_response(request_id: Any, result: Any) -> None:
     Uses Content-Length framing for Elixir protocol compatibility.
     """
     try:
-        response = {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "result": result
-        }
+        response = {"jsonrpc": "2.0", "id": request_id, "result": result}
         _write_framed_message(response)
     except Exception as e:
         _log_bridge(f"Failed to send response: {e}", "error")
 
 
-def _send_jsonrpc_error(request_id: Any, code: int, message: str, data: Any = None) -> None:
+def _send_jsonrpc_error(
+    request_id: Any, code: int, message: str, data: Any = None
+) -> None:
     """Send a JSON-RPC error response.
 
     Uses Content-Length framing for Elixir protocol compatibility.
     """
     try:
-        error = {
-            "code": code,
-            "message": message
-        }
+        error = {"code": code, "message": message}
         if data is not None:
             error["data"] = data
 
-        response = {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "error": error
-        }
+        response = {"jsonrpc": "2.0", "id": request_id, "error": error}
         _write_framed_message(response)
     except Exception as e:
         _log_bridge(f"Failed to send error: {e}", "error")
