@@ -365,3 +365,75 @@ class TestBaseAgentComplexMethods:
         assert agent.hash_message(current_task_msg) in live_hashes, (
             "Current task message was incorrectly dropped by truncation."
         )
+
+    def test_truncation_per_message_tokens_cache_hit(self, agent):
+        """Regression: when per_message_tokens has matching length, truncation
+        uses cached token counts and skips estimate_tokens_for_message()."""
+        messages = [
+            ModelRequest(parts=[TextPart(content="System prompt")]),
+            ModelResponse(parts=[TextPart(content="Response 1")]),
+            ModelRequest(parts=[TextPart(content="User msg 2")]),
+        ]
+
+        # Token counts that all fit within budget
+        per_message_tokens = [50, 30, 20]
+        budget = 500  # big enough to keep everything
+
+        def _boom(msg):
+            raise AssertionError(
+                "estimate_tokens_for_message was called despite valid cache!"
+            )
+
+        with patch(
+            "code_puppy.agents.base_agent._rust_enabled", return_value=False
+        ), patch.object(
+            agent, "estimate_tokens_for_message", _boom
+        ):
+            result = agent.truncation(
+                messages,
+                protected_tokens=budget,
+                per_message_tokens=per_message_tokens,
+            )
+
+        # All messages should be kept when budget fits
+        assert len(result) == len(messages)
+        for got, want in zip(result, messages):
+            assert got == want
+
+    def test_truncation_per_message_tokens_cache_miss_length_mismatch(self, agent):
+        """When per_message_tokens length != len(messages), fall back to
+        estimate_tokens_for_message()."""
+        messages = [
+            ModelRequest(parts=[TextPart(content="System prompt")]),
+            ModelResponse(parts=[TextPart(content="Response 1")]),
+            ModelRequest(parts=[TextPart(content="User msg 2")]),
+        ]
+
+        # Mismatched length -- only 2 entries for 3 messages
+        per_message_tokens = [50, 30]
+        budget = 500
+
+        call_count = 0
+
+        def _count_estimate(msg):
+            nonlocal call_count
+            call_count += 1
+            return 10  # small enough to fit
+
+        with patch(
+            "code_puppy.agents.base_agent._rust_enabled", return_value=False
+        ), patch.object(
+            agent, "estimate_tokens_for_message", _count_estimate
+        ):
+            result = agent.truncation(
+                messages,
+                protected_tokens=budget,
+                per_message_tokens=per_message_tokens,
+            )
+
+        # estimate_tokens_for_message should have been called (cache miss)
+        assert call_count > 0, (
+            "estimate_tokens_for_message was NOT called despite mismatched cache length!"
+        )
+        # All messages should still be kept (budget is large)
+        assert len(result) == len(messages)
