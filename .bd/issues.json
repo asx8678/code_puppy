@@ -1,5 +1,5 @@
 {
-  "counter": 14,
+  "counter": 18,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -226,13 +226,71 @@
       "id": "bd-14",
       "title": "Split file_ops.ex below 600-line cap",
       "description": "file_ops.ex is currently 809 lines, well over the 600-line hard cap. Split into submodules: FileOps.Reader, FileOps.Grep, FileOps.Security, etc. Pre-existing debt flagged during bd-8 review.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "chore",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-16T11:09:24.049203",
-      "updated_at": "2026-04-16T11:09:24.049213",
+      "updated_at": "2026-04-16T11:36:17.613107",
+      "comments": [
+        "Claimed by planning-agent-019d95 \u2014 splitting file_ops.ex into Security, Lister, Grep, Reader submodules"
+      ]
+    },
+    "bd-15": {
+      "id": "bd-15",
+      "title": "FileOps.Security: case-variant path bypass on macOS",
+      "description": "",
+      "status": "open",
+      "priority": 1,
+      "type": "bug",
+      "labels": [
+        "security"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-16T11:36:09.461851",
+      "updated_at": "2026-04-16T11:36:09.461859",
+      "comments": []
+    },
+    "bd-16": {
+      "id": "bd-16",
+      "title": "FileOps.Security: symlink bypass allows reading blocked files",
+      "description": "",
+      "status": "open",
+      "priority": 1,
+      "type": "bug",
+      "labels": [
+        "security"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-16T11:36:10.907322",
+      "updated_at": "2026-04-16T11:36:10.907330",
+      "comments": []
+    },
+    "bd-17": {
+      "id": "bd-17",
+      "title": "FileOps.Grep: matches_file_pattern? does not support glob syntax",
+      "description": "",
+      "status": "open",
+      "priority": 3,
+      "type": "bug",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-16T11:36:13.094971",
+      "updated_at": "2026-04-16T11:36:13.094978",
+      "comments": []
+    },
+    "bd-18": {
+      "id": "bd-18",
+      "title": "FileOps: validate_path typespec says atom() but callers pass strings",
+      "description": "",
+      "status": "open",
+      "priority": 3,
+      "type": "chore",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-16T11:36:16.076369",
+      "updated_at": "2026-04-16T11:36:16.076376",
       "comments": []
     }
   }
