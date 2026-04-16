@@ -340,6 +340,131 @@ defmodule CodePuppyControl.FileOpsTest do
   end
 
   # ============================================================================
+  # Case-insensitive path matching tests (bd-15)
+  # ============================================================================
+
+  describe "case-insensitive path matching (bd-15)" do
+    test "blocks case-variant sensitive directory paths" do
+      # /etc should be blocked regardless of case on case-insensitive FS
+      assert FileOps.sensitive_path?("/ETC/shadow")
+      assert FileOps.sensitive_path?("/Etc/Passwd")
+      assert FileOps.sensitive_path?("/PRIVATE/ETC/sudoers")
+      assert FileOps.sensitive_path?("/ETC")
+      assert FileOps.sensitive_path?("/VAR/LOG")
+    end
+
+    test "blocks case-variant home directory paths" do
+      home = System.user_home!()
+      # Build a case-swapped version of the home path
+      upper_home = String.upcase(home)
+
+      assert FileOps.sensitive_path?(Path.join(upper_home, ".ssh/id_rsa"))
+      assert FileOps.sensitive_path?(Path.join(upper_home, ".aws/credentials"))
+      assert FileOps.sensitive_path?(Path.join(upper_home, ".gnupg/pubring.gpg"))
+    end
+
+    test "blocks case-variant exact file paths" do
+      assert FileOps.sensitive_path?("/ETC/SHADOW")
+      assert FileOps.sensitive_path?("/ETC/PASSWD")
+      assert FileOps.sensitive_path?("/PRIVATE/ETC/MASTER.PASSWD")
+    end
+
+    test "blocks case-variant sensitive extensions" do
+      assert FileOps.sensitive_path?("/path/to/cert.PEM")
+      assert FileOps.sensitive_path?("/path/to/key.KEY")
+      assert FileOps.sensitive_path?("/path/to/store.P12")
+      assert FileOps.sensitive_path?("/path/to/cert.Pem")
+    end
+
+    test "blocks case-variant .env files" do
+      assert FileOps.sensitive_path?("/project/.ENV")
+      assert FileOps.sensitive_path?("/project/.Env.Local")
+      # But still allows examples
+      refute FileOps.sensitive_path?("/project/.ENV.EXAMPLE")
+      refute FileOps.sensitive_path?("/project/.Env.Sample")
+    end
+
+    test "validate_path blocks case-variant sensitive paths" do
+      assert {:error, msg} = FileOps.validate_path("/ETC/passwd", "read")
+      assert msg =~ "sensitive path blocked"
+
+      assert {:error, _} = FileOps.validate_path("/PRIVATE/ETC/sudoers", "list")
+    end
+  end
+
+  # ============================================================================
+  # Symlink bypass tests (bd-16)
+  # ============================================================================
+
+  describe "symlink bypass protection (bd-16)" do
+    test "blocks symlink pointing to sensitive file by extension", %{test_dir: dir} do
+      secret = Path.join(dir, "secret.pem")
+      link = Path.join(dir, "innocent.txt")
+      File.write!(secret, "PRIVATE KEY DATA")
+      File.ln_s!(secret, link)
+
+      assert FileOps.sensitive_path?(link)
+      assert {:error, msg} = FileOps.validate_path(link, "read")
+      assert msg =~ "sensitive path blocked"
+    end
+
+    test "blocks symlink chain to sensitive target", %{test_dir: dir} do
+      # Create a chain: link1 -> link2 -> secret.pem
+      secret = Path.join(dir, "secret.key")
+      link2 = Path.join(dir, "step2.txt")
+      link1 = Path.join(dir, "step1.txt")
+      File.write!(secret, "KEY DATA")
+      File.ln_s!(secret, link2)
+      File.ln_s!(link2, link1)
+
+      assert FileOps.sensitive_path?(link1)
+    end
+
+    test "blocks symlink pointing to sensitive directory", %{test_dir: dir} do
+      link = Path.join(dir, "safe_looking")
+
+      # Only test if /etc exists (should on macOS/Linux)
+      if File.dir?("/etc") do
+        File.ln_s!("/etc", link)
+        assert FileOps.sensitive_path?(link)
+      end
+    end
+
+    test "read_file blocks symlink to sensitive file", %{test_dir: dir} do
+      secret = Path.join(dir, "my_key.pem")
+      link = Path.join(dir, "readme.txt")
+      File.write!(secret, "SECRET")
+      File.ln_s!(secret, link)
+
+      assert {:error, msg} = FileOps.read_file(link)
+      assert msg =~ "sensitive path blocked"
+    end
+
+    test "allows symlink to safe target", %{test_dir: dir} do
+      safe_file = Path.join(dir, "file1.txt")
+      link = Path.join(dir, "link_to_safe.txt")
+      File.ln_s!(safe_file, link)
+
+      refute FileOps.sensitive_path?(link)
+    end
+
+    test "handles broken symlinks gracefully", %{test_dir: dir} do
+      link = Path.join(dir, "broken_link")
+      File.ln_s!("/nonexistent/path/abc", link)
+
+      # Should not crash, and should not report as sensitive
+      # (can't resolve target, so check the link path itself)
+      refute FileOps.sensitive_path?(link)
+    end
+
+    test "handles non-existent paths gracefully" do
+      # Non-existent path can't be a symlink, just check the string
+      refute FileOps.sensitive_path?("/tmp/does_not_exist_12345.txt")
+      assert FileOps.sensitive_path?("/etc/does_not_exist_12345")
+    end
+  end
+
+  # ============================================================================
   # EOL normalization tests (bd-7)
   # ============================================================================
 
