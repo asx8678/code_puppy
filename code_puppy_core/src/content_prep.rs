@@ -1,9 +1,7 @@
 //! Content preparation: text detection, EOL normalization, and BOM stripping.
 //!
-//! Single-pass implementation for maximum performance. Scans bytes once to detect:
-//! - NUL bytes (binary detection)
-//! - CRLF sequences (line ending normalization)
-//! - UTF-8 BOM (strip if present)
+//! Multi-pass implementation using SIMD-accelerated scanning (memchr)
+//! for maximum throughput.
 
 use pyo3::prelude::*;
 
@@ -12,7 +10,7 @@ const BOM: &[u8] = b"\xef\xbb\xbf";
 
 /// Result of preparing content: text detection, BOM/CRLF handling.
 #[pyclass(frozen)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct PreparedContent {
     /// The processed content as a String (BOM stripped, CRLF normalized if text)
     #[pyo3(get)]
@@ -32,7 +30,7 @@ pub struct PreparedContent {
 ///
 /// Criteria:
 /// 1. No NUL bytes (\x00) anywhere — strongest binary signal
-/// 2. At least 90% of bytes are "printable" (0x20-0x7E) or common whitespace (\t, \n, \r)
+/// 2. At least 90% of bytes are ≥0x20 or common whitespace (\t, \n, \r)
 ///
 /// Empty content is considered text.
 pub fn looks_textish(raw: &[u8]) -> bool {
@@ -128,7 +126,8 @@ pub fn prepare_content(raw: &[u8]) -> PreparedContent {
     // If NUL found, it's binary - return as-is (but still decode for the string)
     if has_nul {
         // For binary, we still need to return a String. Use lossy UTF-8 conversion.
-        let content = String::from_utf8_lossy(raw).into_owned();
+        // Use content_bytes (BOM already stripped) to maintain invariant: had_bom == true means BOM is NOT in content
+        let content = String::from_utf8_lossy(content_bytes).into_owned();
         return PreparedContent {
             content,
             is_text: false,
@@ -142,7 +141,8 @@ pub fn prepare_content(raw: &[u8]) -> PreparedContent {
 
     if !is_text {
         // Binary-like but no NUL - still treat as binary
-        let content = String::from_utf8_lossy(raw).into_owned();
+        // Use content_bytes (BOM already stripped) to maintain invariant: had_bom == true means BOM is NOT in content
+        let content = String::from_utf8_lossy(content_bytes).into_owned();
         return PreparedContent {
             content,
             is_text: false,
@@ -245,6 +245,20 @@ mod tests {
         // Mix of control chars and some text
         let content = b"\x01\x02\x03\x04\x05Hello\x06\x07\x08\x09\x10";
         assert!(!looks_textish(content));
+    }
+
+    #[test]
+    fn test_looks_textish_exactly_90_percent() {
+        let mut input = vec![b'a'; 9];
+        input.push(b'\x01');
+        assert!(looks_textish(&input)); // 90% = text
+    }
+
+    #[test]
+    fn test_looks_textish_just_below_90_percent() {
+        let mut input = vec![b'a'; 89];
+        input.extend(vec![b'\x01'; 11]);
+        assert!(!looks_textish(&input)); // 89% = binary
     }
 
     #[test]
@@ -397,5 +411,14 @@ mod tests {
         assert!(result.is_text);
         // had_crlf tracks CRLF sequences; orphan CRs don't set this
         assert!(!result.had_crlf);
+    }
+
+    #[test]
+    fn test_prepare_content_binary_with_bom() {
+        let input = b"\xef\xbb\xbfHello\x00World";
+        let result = prepare_content(input);
+        assert!(!result.is_text);
+        assert!(result.had_bom);
+        assert!(!result.content.starts_with('\u{FEFF}'));
     }
 }
