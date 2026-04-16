@@ -7,6 +7,7 @@ mod pruning;
 mod serialization;
 mod token_estimation;
 mod types;
+mod unified_diff;
 
 use hashline::{
     compute_line_hash as compute_line_hash_impl,
@@ -24,6 +25,7 @@ use serialization::{
 use token_estimation::process_messages_batch_core;
 use token_estimation::process_messages_batch_impl;
 use types::{Message, ToolDefinition};
+use unified_diff::unified_diff_impl;
 
 // ── Result types exposed to Python ──────────────────────────────────────────
 
@@ -335,5 +337,20 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(format_hashlines, m)?)?;
     m.add_function(wrap_pyfunction!(strip_hashline_prefixes, m)?)?;
     m.add_function(wrap_pyfunction!(validate_hashline_anchor, m)?)?;
+    m.add_function(wrap_pyfunction!(make_unified_diff, m)?)?;
     Ok(())
+}
+
+/// Python-facing unified_diff function
+#[pyfunction]
+#[pyo3(name = "unified_diff")]
+#[pyo3(signature = (old, new, context_lines, from_file, to_file))]
+fn make_unified_diff(
+    old: &str,
+    new: &str,
+    context_lines: usize,
+    from_file: &str,
+    to_file: &str,
+) -> PyResult<String> {
+    Ok(unified_diff_impl(old, new, context_lines, from_file, to_file))
 }
