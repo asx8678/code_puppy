@@ -1,5 +1,5 @@
 {
-  "counter": 42,
+  "counter": 87,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -760,6 +760,872 @@
         "Watchdog QA (round 2): APPROVE \u2705 \u2014 18/18 tests pass, ruff check clean.",
         "Shepherd review (round 2): APPROVE \u2705 \u2014 Autouse fixture, skip guards, flexible assertions, lint clean, 245 lines."
       ]
+    },
+    "bd-43": {
+      "id": "bd-43",
+      "title": "Full Rust+Python \u2192 Pure Elixir migration",
+      "description": "End state: retire the entire Rust workspace (Cargo.toml, code_puppy_core/, turbo_parse/, turbo_parse_core/, turbo_parse_bridge/) and collapse Python to a thin shell (TUI + CLI entry + pydantic-ai agent loop only). All runtime services, state, tools, compaction, routing, config, and native logic move to the Elixir control plane (elixir/code_puppy_control/). Per directive: pure Elixir \u2014 no Rustler NIF fallback for hot paths; accept performance regressions and mitigate with ETS caching.\n\nFiled by planning-agent-019d97. Supersedes the 'keep in Rust' guidance in MIGRATION_STATUS.md Phase N.\n\nRISKS:\n- Token estimation 5\u201310\u00d7 slower in pure Elixir (mitigate: ETS memoization).\n- Tree-sitter C core is unavoidable; issue 1.6 must decide if a minimal C-linked NIF shim is acceptable under 'pure Elixir'.\n- config.py is 87KB with heavy coupling \u2014 parallel operation + feature flags required.\n- pydantic-ai coupling defines the Python 'thin shell' floor.\n- Per-tool-call Python\u2194Elixir transport overhead; may need batching.\n\nSUCCESS CRITERIA:\n- Cargo.toml workspace deleted\n- code_puppy/acceleration/, native_backend.py, _core_bridge.py deleted\n- pyproject.toml has no maturin/pyo3 build deps\n- Python codebase < 30% of current LOC\n- All tool calls route through Elixir transport\n- CI green without Rust build steps",
+      "status": "open",
+      "priority": 3,
+      "type": "epic",
+      "labels": [
+        "migration",
+        "elixir",
+        "rust-retirement",
+        "python-retirement"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-16T17:51:11.493289",
+      "updated_at": "2026-04-16T17:51:13.544010",
+      "comments": []
+    },
+    "bd-44": {
+      "id": "bd-44",
+      "title": "Port code_puppy_core::token_estimation to pure Elixir",
+      "description": "Replace token_estimation.rs with CodePuppyControl.Tokens.Estimator. Includes line-sampling (SAMPLING_THRESHOLD=500) and code-detection heuristics. Mitigate 5\u201310\u00d7 slowdown with ETS memoization keyed on content hash.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,rust-retirement,phase-1"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:18.611401",
+      "updated_at": "2026-04-16T17:51:18.611409",
+      "comments": []
+    },
+    "bd-45": {
+      "id": "bd-45",
+      "title": "Port code_puppy_core::pruning to pure Elixir",
+      "description": "Replace code_puppy_core/src/pruning.rs with CodePuppyControl.Messages.Pruner. Covers single-pass pruning, tool-call pair matching, truncation. Accept perf regression; cache results by message-batch hash.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,rust-retirement,phase-1"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:18.622628",
+      "updated_at": "2026-04-16T17:51:18.622635",
+      "comments": []
+    },
+    "bd-46": {
+      "id": "bd-46",
+      "title": "Port code_puppy_core::hashline to pure Elixir",
+      "description": "Replace both code_puppy_core/src/hashline.rs AND elixir/code_puppy_control/native/hashline_nif/ with pure Elixir. Options: port xxHash32 to Elixir, or switch to :erlang.phash2 (breaks compat with omp format \u2014 needs decision). Preserve NIBBLE_STR encoding.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,rust-retirement,phase-1"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:18.626913",
+      "updated_at": "2026-04-16T17:51:18.626920",
+      "comments": []
+    },
+    "bd-47": {
+      "id": "bd-47",
+      "title": "Port code_puppy_core::serialization to pure Elixir",
+      "description": "Replace rmp-serde session serialization with msgpax. Round-trip test against existing Python sessions.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,rust-retirement,phase-1"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:18.635771",
+      "updated_at": "2026-04-16T17:51:18.635778",
+      "comments": []
+    },
+    "bd-48": {
+      "id": "bd-48",
+      "title": "Port code_puppy_core::message_hashing to pure Elixir",
+      "description": "Merge into Pruner module or standalone CodePuppyControl.Messages.Hasher.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,rust-retirement,phase-1"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:18.641261",
+      "updated_at": "2026-04-16T17:51:18.641269",
+      "comments": []
+    },
+    "bd-49": {
+      "id": "bd-49",
+      "title": "Delete Rust workspace",
+      "description": "Remove Cargo.toml, Cargo.lock, code_puppy_core/, turbo_parse/, turbo_parse_core/, turbo_parse_bridge/, target/. \n\nBLOCKED by 1.1\u20131.6 (bd-44, bd-45, bd-46, bd-47, bd-48, bd-49).\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,rust-retirement,phase-1"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43",
+          "bd-44",
+          "bd-45",
+          "bd-46",
+          "bd-47",
+          "bd-48",
+          "bd-49",
+          "bd-51"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:24.208709",
+      "updated_at": "2026-04-16T17:51:38.451870",
+      "comments": []
+    },
+    "bd-50": {
+      "id": "bd-50",
+      "title": "Remove Python-side Rust integration",
+      "description": "Delete code_puppy/_core_bridge.py, code_puppy/acceleration/, Rust branches in code_puppy/native_backend.py. Migrate all callers to Elixir transport.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,rust-retirement,phase-1"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:24.212263",
+      "updated_at": "2026-04-16T17:51:24.212270",
+      "comments": []
+    },
+    "bd-51": {
+      "id": "bd-51",
+      "title": "Port turbo_parse_core + turbo_parse to Elixir \u2014 DECISION REQUIRED",
+      "description": "BLOCKER DECISION: does 'pure Elixir' permit a minimal C-linked NIF shim for tree-sitter? Tree-sitter grammars are C libraries; there is no pure-Elixir tree-sitter.\n\nOptions:\n(a) Use tree_sitter hex pkg (still C via NIF, but Elixir-owned)\n(b) Accept and retain C NIF shim under elixir/native/turbo_parse_nif/ but rewritten to NOT depend on Rust (C-only)\n(c) Drop tree-sitter entirely; use regex-based symbol extraction (massive feature regression)\n\nRecommend (a). Must retire turbo_parse_core and turbo_parse Rust crates regardless.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "migration,rust-retirement,phase-1,blocker,needs-decision"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:32.712084",
+      "updated_at": "2026-04-16T17:51:32.712094",
+      "comments": []
+    },
+    "bd-52": {
+      "id": "bd-52",
+      "title": "Port persistence & session storage to Elixir (Ecto)",
+      "description": "Sources: code_puppy/persistence.py (9KB), code_puppy/session_storage.py (27KB). Target: Ecto schemas + SQLite/Postgres. Must preserve session format compat during cutover.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-2"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:38.465554",
+      "updated_at": "2026-04-16T17:51:38.465578",
+      "comments": []
+    },
+    "bd-53": {
+      "id": "bd-53",
+      "title": "Consolidate concurrency limits into Elixir",
+      "description": "Source: code_puppy/concurrency_limits.py (14KB). Extend existing elixir/.../concurrency/limiter.ex.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-2"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:38.475568",
+      "updated_at": "2026-04-16T17:51:38.475576",
+      "comments": []
+    },
+    "bd-54": {
+      "id": "bd-54",
+      "title": "Port token ledger to Elixir",
+      "description": "Sources: code_puppy/token_ledger.py, token_counting.py, token_utils.py. Target: Tokens.Ledger GenServer with ETS backing.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-2"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:38.476196",
+      "updated_at": "2026-04-16T17:51:38.476202",
+      "comments": []
+    },
+    "bd-55": {
+      "id": "bd-55",
+      "title": "Port adaptive rate limiter to Elixir",
+      "description": "Source: code_puppy/adaptive_rate_limiter.py (41KB). Target: GenServer + :telemetry metrics.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-2"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:38.485776",
+      "updated_at": "2026-04-16T17:51:38.485785",
+      "comments": []
+    },
+    "bd-56": {
+      "id": "bd-56",
+      "title": "Port resilience & circuit breakers to Elixir",
+      "description": "Sources: code_puppy/resilience.py (23KB), code_puppy/circuit_state.py. Target: :fuse library or custom supervisor-backed breaker.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-2"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:38.492744",
+      "updated_at": "2026-04-16T17:51:38.492753",
+      "comments": []
+    },
+    "bd-57": {
+      "id": "bd-57",
+      "title": "Port compaction orchestration to Elixir",
+      "description": "Source: code_puppy/compaction/ (30KB \u2014 file_ops_tracker, history_offload, thresholds, tool_arg_truncation). Target: CodePuppyControl.Compaction.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-2"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:42.482714",
+      "updated_at": "2026-04-16T17:51:42.482723",
+      "comments": []
+    },
+    "bd-58": {
+      "id": "bd-58",
+      "title": "Port request cache to Elixir",
+      "description": "Source: code_puppy/request_cache.py (18KB). Target: ETS / Cachex.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-2"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:42.484375",
+      "updated_at": "2026-04-16T17:51:42.484383",
+      "comments": []
+    },
+    "bd-59": {
+      "id": "bd-59",
+      "title": "Port workflow state to Elixir",
+      "description": "Source: code_puppy/workflow_state.py (12KB). Target: Workflow.State GenServer.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-2"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:42.485751",
+      "updated_at": "2026-04-16T17:51:42.485758",
+      "comments": []
+    },
+    "bd-60": {
+      "id": "bd-60",
+      "title": "Port routing strategies to Elixir",
+      "description": "Source: code_puppy/routing/. Target: CodePuppyControl.Routing.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-2"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:42.489400",
+      "updated_at": "2026-04-16T17:51:42.489411",
+      "comments": []
+    },
+    "bd-61": {
+      "id": "bd-61",
+      "title": "Port hook engine to Elixir",
+      "description": "Source: code_puppy/hook_engine/ (46KB \u2014 engine, executor, matcher, models, registry, validator, aliases). Target: CodePuppyControl.Hooks dispatcher. Keep Python callbacks.py as thin client.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-2"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:42.500064",
+      "updated_at": "2026-04-16T17:51:42.500073",
+      "comments": []
+    },
+    "bd-62": {
+      "id": "bd-62",
+      "title": "Retire Python scheduler",
+      "description": "Source: code_puppy/scheduler/ (24KB). Elixir scheduler already exists; delete Python side after cutover.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-2"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:44.795393",
+      "updated_at": "2026-04-16T17:51:44.795401",
+      "comments": []
+    },
+    "bd-63": {
+      "id": "bd-63",
+      "title": "Port reflection & policy engine to Elixir",
+      "description": "Sources: reflection.py, policy_engine.py (12KB), policy_config.py. Target: Elixir modules.\n\nPart of Phase 2 \u2014 Python runtime services retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-2"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:44.797943",
+      "updated_at": "2026-04-16T17:51:44.797949",
+      "comments": []
+    },
+    "bd-64": {
+      "id": "bd-64",
+      "title": "Port command runner to Elixir",
+      "description": "Source: code_puppy/tools/command_runner.py (65KB). Target: Elixir Port-based subprocess runner with streaming stdout/stderr.\n\nPart of Phase 3 \u2014 Python tools retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-3"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:48.507065",
+      "updated_at": "2026-04-16T17:51:48.507073",
+      "comments": []
+    },
+    "bd-65": {
+      "id": "bd-65",
+      "title": "Port agent tools to Elixir",
+      "description": "Source: tools/agent_tools.py (40KB). Target: Elixir tool registry.\n\nPart of Phase 3 \u2014 Python tools retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-3"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:48.509788",
+      "updated_at": "2026-04-16T17:51:48.509796",
+      "comments": []
+    },
+    "bd-66": {
+      "id": "bd-66",
+      "title": "Retire Python file operations",
+      "description": "Sources: tools/file_operations.py (38KB), tools/file_modifications.py (35KB). Blocked by bd-7, bd-8 (EOL + gitignore parity). Delete Python after parity.\n\nPart of Phase 3 \u2014 Python tools retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-3"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:48.514668",
+      "updated_at": "2026-04-16T17:51:48.514674",
+      "comments": []
+    },
+    "bd-67": {
+      "id": "bd-67",
+      "title": "Port scheduler tools to Elixir",
+      "description": "Source: tools/scheduler_tools.py (14KB).\n\nPart of Phase 3 \u2014 Python tools retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-3"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:48.527466",
+      "updated_at": "2026-04-16T17:51:48.527476",
+      "comments": []
+    },
+    "bd-68": {
+      "id": "bd-68",
+      "title": "Port universal constructor to Elixir",
+      "description": "Source: tools/universal_constructor.py (30KB).\n\nPart of Phase 3 \u2014 Python tools retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-3"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:50.549926",
+      "updated_at": "2026-04-16T17:51:50.549936",
+      "comments": []
+    },
+    "bd-69": {
+      "id": "bd-69",
+      "title": "Port HTTP client to Elixir",
+      "description": "Sources: reopenable_async_client.py (8KB), http_utils.py (13KB). Target: Finch/Req.\n\nPart of Phase 3 \u2014 Python tools retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-3"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:50.554198",
+      "updated_at": "2026-04-16T17:51:50.554207",
+      "comments": []
+    },
+    "bd-70": {
+      "id": "bd-70",
+      "title": "Port model factory + packs to Elixir",
+      "description": "Sources: model_factory.py (38KB), model_packs.py (13KB), model_availability.py, model_utils.py, model_config.py. Target: Elixir model registry.\n\nPart of Phase 4 \u2014 Config & model management.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-4"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:59.563814",
+      "updated_at": "2026-04-16T17:51:59.563821",
+      "comments": []
+    },
+    "bd-71": {
+      "id": "bd-71",
+      "title": "Port round-robin model to Elixir",
+      "description": "Source: round_robin_model.py (9KB).\n\nPart of Phase 4 \u2014 Config & model management.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-4"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:59.578339",
+      "updated_at": "2026-04-16T17:51:59.578346",
+      "comments": []
+    },
+    "bd-72": {
+      "id": "bd-72",
+      "title": "Port agent model pinning to Elixir",
+      "description": "Source: agent_model_pinning.py (6KB).\n\nPart of Phase 4 \u2014 Config & model management.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-4"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:59.589732",
+      "updated_at": "2026-04-16T17:51:59.589739",
+      "comments": []
+    },
+    "bd-73": {
+      "id": "bd-73",
+      "title": "Port config system to Elixir",
+      "description": "Source: config.py (87KB), config_package/, config_presets.py (8KB). Target: CodePuppyControl.Config (partial exists). HIGH RISK \u2014 heavy coupling; parallel operation + feature flags.\n\nPart of Phase 4 \u2014 Config & model management.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-4,high-risk"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:59.607797",
+      "updated_at": "2026-04-16T17:51:59.607805",
+      "comments": []
+    },
+    "bd-74": {
+      "id": "bd-74",
+      "title": "Port models.dev parser to Elixir",
+      "description": "Source: models_dev_parser.py (24KB).\n\nPart of Phase 4 \u2014 Config & model management.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-4"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:51:59.622744",
+      "updated_at": "2026-04-16T17:51:59.622752",
+      "comments": []
+    },
+    "bd-75": {
+      "id": "bd-75",
+      "title": "Port runtime state to Elixir",
+      "description": "Source: runtime_state.py (5KB). Target: RuntimeState GenServer.\n\nPart of Phase 4 \u2014 Config & model management.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-4"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:02.217017",
+      "updated_at": "2026-04-16T17:52:02.217026",
+      "comments": []
+    },
+    "bd-76": {
+      "id": "bd-76",
+      "title": "Define 'thin shell' contract",
+      "description": "Document what Python retains: tui/, main.py, cli_runner.py, interactive_loop.py, pydantic-ai agent driver, repl_session.py. All else deletable.\n\nPart of Phase 5 \u2014 Thin Python shell.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,phase-5,docs"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:10.719866",
+      "updated_at": "2026-04-16T17:52:10.719874",
+      "comments": []
+    },
+    "bd-77": {
+      "id": "bd-77",
+      "title": "Route ALL tool calls through Elixir transport",
+      "description": "No Python-side tool implementations. Audit tools/__init__.py registration.\n\nPart of Phase 5 \u2014 Thin Python shell.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,phase-5"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:10.735702",
+      "updated_at": "2026-04-16T17:52:10.735714",
+      "comments": []
+    },
+    "bd-78": {
+      "id": "bd-78",
+      "title": "Plugin system reshape",
+      "description": "code_puppy/plugins/ hooks call into Elixir Hook dispatcher (2.9 / bd-61) via bridge.\n\nPart of Phase 5 \u2014 Thin Python shell.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,phase-5"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43",
+          "bd-61"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:10.740191",
+      "updated_at": "2026-04-16T17:52:10.740197",
+      "comments": []
+    },
+    "bd-79": {
+      "id": "bd-79",
+      "title": "Delete now-redundant Python modules",
+      "description": "Targets for deletion: _backlog.py, _edit_bridge.py, staged_changes.py (if moved), _core_bridge.py, etc.\n\nPart of Phase 5 \u2014 Thin Python shell.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,phase-5"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:10.753390",
+      "updated_at": "2026-04-16T17:52:10.753401",
+      "comments": []
+    },
+    "bd-80": {
+      "id": "bd-80",
+      "title": "Update MIGRATION_STATUS.md for 'no Rust, thin Python' end state",
+      "description": "Supersede Phase N 'keep in Rust' rows.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,phase-6,docs"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:14.793998",
+      "updated_at": "2026-04-16T17:52:14.794006",
+      "comments": []
+    },
+    "bd-81": {
+      "id": "bd-81",
+      "title": "Clean CI",
+      "description": "Update lefthook.yml and CI config \u2014 drop Rust build/test steps.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,phase-6"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:14.799410",
+      "updated_at": "2026-04-16T17:52:14.799423",
+      "comments": []
+    },
+    "bd-82": {
+      "id": "bd-82",
+      "title": "Refresh architecture docs",
+      "description": "Update ARCHITECTURE.md, architecture_mermaid.md, architecture_uml.puml, architecture_components.puml.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,phase-6,docs"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:14.805923",
+      "updated_at": "2026-04-16T17:52:14.805930",
+      "comments": []
+    },
+    "bd-83": {
+      "id": "bd-83",
+      "title": "Clean pyproject.toml",
+      "description": "Drop maturin/pyo3 build deps and Rust extension config.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,phase-6"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:14.814564",
+      "updated_at": "2026-04-16T17:52:14.814575",
+      "comments": []
+    },
+    "bd-84": {
+      "id": "bd-84",
+      "title": "Archive ELIXIR_MIGRATION_ROADMAP.md",
+      "description": "Final archival note.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,phase-6,docs"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:14.824804",
+      "updated_at": "2026-04-16T17:52:14.824813",
+      "comments": []
+    },
+    "bd-85": {
+      "id": "bd-85",
+      "title": "Route ALL state reads through Elixir",
+      "description": "No Python-side persistence or state. Depends on 2.1, 2.7, 2.8, 4.3 (bd-52, bd-59, bd-58, bd-75).\n\nPart of Phase 5 \u2014 Thin Python shell.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,phase-5"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43",
+          "bd-52",
+          "bd-59",
+          "bd-58",
+          "bd-75"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:29.811005",
+      "updated_at": "2026-04-16T17:52:29.811011",
+      "comments": []
+    },
+    "bd-86": {
+      "id": "bd-86",
+      "title": "Remove acceleration layer",
+      "description": "Delete code_puppy/acceleration/, native_backend.py, bridge modules.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "migration,phase-6"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:29.814509",
+      "updated_at": "2026-04-16T17:52:29.814517",
+      "comments": []
+    },
+    "bd-87": {
+      "id": "bd-87",
+      "title": "Port code context explorer to Elixir",
+      "description": "Source: code_puppy/code_context/ (23KB). Ties into Repo Compass indexer (bd-9).\n\nPart of Phase 3 \u2014 Python tools retirement.",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "migration,python-retirement,phase-3"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-43"
+        ]
+      },
+      "created_at": "2026-04-16T17:52:35.031464",
+      "updated_at": "2026-04-16T17:52:35.031472",
+      "comments": []
     }
   }
 }
