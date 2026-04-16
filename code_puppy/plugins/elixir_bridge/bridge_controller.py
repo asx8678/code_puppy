@@ -601,7 +601,7 @@ class BridgeController:
                                             "line_content": line.rstrip("\\n"),
                                         }
                                     )
-                    except OSError, UnicodeDecodeError:
+                    except (OSError, UnicodeDecodeError):
                         pass
 
             return {

@@ -1,5 +1,5 @@
 {
-  "counter": 28,
+  "counter": 33,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -488,6 +488,87 @@
       "comments": [
         "Merged to main at 15f38003. Shepherd: APPROVE, Watchdog: APPROVE."
       ]
+    },
+    "bd-29": {
+      "id": "bd-29",
+      "title": "Fix Python 2 except syntax bugs (18 instances across 5 files)",
+      "description": "18 instances of `except X, Y:` without parentheses. Python 3.14 accepts this but with WRONG semantics: catches ONLY the first exception, shadows the second name as a local variable. The second exception type is NEVER caught.\n\nConfirmed by runtime test \u2014 `except ImportError, SystemError:` only catches ImportError and rebinds the name SystemError to the caught exception object.\n\nFiles affected:\n- code_puppy/config.py (10 instances: lines 305, 350, 1221, 1277, 1340, 1602, 1681, 1697, 1818, 1839)\n- code_puppy/agents/agent_manager.py (5 instances: lines 94, 141, 175, 198, 225)\n- code_puppy/plugins/elixir_bridge/register_callbacks.py (1 instance: line 100)\n- code_puppy/plugins/elixir_bridge/bridge_controller.py (1 instance: line 604)\n- code_puppy/content_prep_bridge.py (1 instance: line 16)\n\nFix: Add parentheses \u2014 `except (ValueError, TypeError):`\nRisk: Low \u2014 purely additive fix, adds catching of previously-missed exception types.",
+      "status": "open",
+      "priority": 0,
+      "type": "bug",
+      "labels": [
+        "bug,cleanup,silent-failure"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-16T14:18:07.672006",
+      "updated_at": "2026-04-16T14:20:12.163169",
+      "comments": [
+        "Claimed by planning-agent-019d96. Starting fix."
+      ]
+    },
+    "bd-30": {
+      "id": "bd-30",
+      "title": "Fix typo in exception name: Typeype \u2192 TypeError",
+      "description": "code_puppy/plugins/agent_memory/signal_safeguards.py line 145:\n    except (ValueError, Typeype):\n\nTypeype is not a valid exception class \u2014 this will raise NameError at runtime if that except clause is reached. Fix: Typeype \u2192 TypeError.",
+      "status": "closed",
+      "priority": 1,
+      "type": "bug",
+      "labels": [
+        "bug,cleanup,typo"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-16T14:18:09.717294",
+      "updated_at": "2026-04-16T14:21:12.799945",
+      "comments": []
+    },
+    "bd-31": {
+      "id": "bd-31",
+      "title": "Evaluate orphaned bridge modules (no production consumers)",
+      "description": "Three bridge modules have ZERO production consumers \u2014 created but never wired in:\n\n- content_prep_bridge.py (7.2 KB) \u2014 0 prod imports, 1 test import\n- path_classify_bridge.py (3.1 KB) \u2014 0 prod imports, 1 test import  \n- turbo_parse_bridge.py (8.5 KB) \u2014 DEPRECATED per bd-93, 0 prod imports, 30+ test imports\n\nOptions:\nA) Wire them into production code (they have value, just no callers yet)\nB) Remove modules + their tests (if superseded by NativeBackend)\nC) Keep for now, add TODO markers tracking integration debt\n\nNote: content_prep_bridge and path_classify_bridge were created in the last 10 commits (bd-22 through bd-28 work). turbo_parse_bridge is explicitly deprecated.",
+      "status": "open",
+      "priority": 2,
+      "type": "cleanup",
+      "labels": [
+        "cleanup,dead-code,bridges"
+      ],
+      "dependencies": {
+        "discovered-from": [
+          "bd-29"
+        ]
+      },
+      "created_at": "2026-04-16T14:18:11.967648",
+      "updated_at": "2026-04-16T14:18:43.138624",
+      "comments": []
+    },
+    "bd-32": {
+      "id": "bd-32",
+      "title": "Clean up dead directories and disk artifacts (~101 MB)",
+      "description": "Untracked directories and files wasting disk space:\n\n- MagicMock/ (388 KB) \u2014 pytest mock state artifacts, already .gitignored\n- fast_puppy/ (12 KB) \u2014 empty dir, only .DS_Store\n- fast_puppy_core/ (99 MB!) \u2014 Rust target/ build artifacts, not tracked\n- 10x .coverage.air.* files (~1.5 MB) \u2014 parallel test coverage artifacts\n- code_puppy/.coverage (52 KB) \u2014 stale coverage data\n\nTotal recoverable: ~101 MB\nAction: rm -rf MagicMock/ fast_puppy/ fast_puppy_core/ .coverage.air.* code_puppy/.coverage",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "cleanup,housekeeping"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-16T14:18:14.307136",
+      "updated_at": "2026-04-16T14:18:14.307145",
+      "comments": []
+    },
+    "bd-33": {
+      "id": "bd-33",
+      "title": "Clean up stale tracked documentation files",
+      "description": "Several tracked docs are stale or misplaced:\n\n- terminal_display_changes.txt \u2014 one-time PR change notes for a landed commit (a511dcf0). Should be removed.\n- mutmut-config.md \u2014 mutation testing config docs. Keep if mutmut active, else remove.\n- benchmark_results_2026-04-14.md \u2014 point-in-time benchmarks. Consider moving to docs/.\n- benchmark_results_bd103.md \u2014 point-in-time benchmarks. Consider moving to docs/.\n- fast_puppy_elixir_rewrite_plan.md \u2014 migration planning. Consider moving to docs/.\n- speed_rust.md \u2014 Rust performance notes. Consider moving to docs/.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "cleanup,docs"
+      ],
+      "dependencies": {},
+      "created_at": "2026-04-16T14:18:16.627408",
+      "updated_at": "2026-04-16T14:18:16.627415",
+      "comments": []
     }
   }
 }

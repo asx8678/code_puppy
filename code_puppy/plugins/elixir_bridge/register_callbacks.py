@@ -97,7 +97,7 @@ def _read_framed_message(reader: asyncio.StreamReader) -> dict | None:
 
         try:
             content_length = int(header_str.split(":", 1)[1].strip())
-        except ValueError, IndexError:
+        except (ValueError, IndexError):
             _log_bridge(f"Failed to parse Content-Length from: {header_str}", "error")
             return None
 

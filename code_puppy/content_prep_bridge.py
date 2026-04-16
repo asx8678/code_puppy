@@ -13,7 +13,7 @@ try:
     from _code_puppy_core import format_line_numbers as _rust_format_line_numbers
 
     RUST_AVAILABLE = True
-except ImportError, SystemError:
+except (ImportError, SystemError):
     RUST_AVAILABLE = False
 
 __all__ = [
