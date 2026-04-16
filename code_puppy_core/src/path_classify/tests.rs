@@ -273,3 +273,17 @@ fn test_dir_only_vs_all() {
     assert!(!c.should_ignore("main.py"));
     assert!(!c.should_ignore_dir("main.py"));
 }
+
+#[test]
+fn test_hidden_check_edge_cases() {
+    let c = get_classifier();
+    // Parent directory is NOT treated as hidden
+    assert!(!c.should_ignore(".."));
+    assert!(!c.should_ignore("foo/.."));
+    
+    // Double-dot prefix names ARE hidden (parity with Python **/.* pattern)
+    assert!(c.should_ignore("..hidden"));
+    assert!(c.should_ignore("...hidden"));
+    assert!(c.should_ignore("project/..hidden"));
+    assert!(c.should_ignore("project/...hidden"));
+}

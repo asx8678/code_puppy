@@ -113,9 +113,13 @@ impl PathClassifier {
         // We do this check in code rather than via glob patterns because globset
         // incorrectly interprets ".*" as "match everything" (regex semantics)
         // instead of "literal dot followed by anything" (glob semantics).
+        // Note: The bare "." (current dir) is treated as hidden here too,
+        // which matches Python's **/.* behavior.
         for part in &parts {
             if let Some(s) = part.to_str() {
-                if s.starts_with('.') && !s.starts_with("..") {
+                // Only exclude the literal ".." (parent dir navigation).
+                // Names like "..hidden" or "...hidden" ARE hidden (start with dot).
+                if s.starts_with('.') && s != ".." {
                     return true;
                 }
             }
