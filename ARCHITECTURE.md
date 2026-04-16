@@ -112,10 +112,10 @@
 ├────────────────────┬────────────────────┬────────────────────────────────────┤
 │   CORE PLUGINS     │   AUTH PLUGINS     │     FEATURE PLUGINS                  │
 ├────────────────────┼────────────────────┼────────────────────────────────────┤
-│ • fast_puppy       │ • claude_code_oauth│ • adversarial_planning (Phases 0-7)  │
-│   (Rust builder)   │ • chatgpt_oauth    │ • agent_skills (Skill install)       │
-│ • file_mentions    │                    │ • turbo_executor (Batch ops)         │
-│   (@file support)  │                    │ • shell_safety (Cmd filter)          │
+│ • fast_puppy       │ • claude_code_oauth│ • agent_skills (Skill install)       │
+│   (Rust builder)   │ • chatgpt_oauth    │ • turbo_executor (Batch ops)         │
+│ • file_mentions    │                    │ • shell_safety (Cmd filter)          │
+│   (@file support)  │                    │ • agent_trace (Analytics)            │
 │ • repo_compass     │                    │ • agent_trace (Analytics)            │
 │   (Repo mapping)   │                    │ • agent_memory (Persistence)         │
 │ • pack_parallelism │                    │ • code_explorer (Nav)                │

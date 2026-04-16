@@ -26,7 +26,7 @@ As documented in AGENTS.md:
 | `AgentPlanning` | `code_puppy/agents/agent_planning.py:161` | Called in `get_system_prompt()` |
 | `PromptReviewer` | `code_puppy/agents/prompt_reviewer.py:140` | Called in `get_system_prompt()` |
 | Pack agents | `bloodhound.py`, `retriever.py`, `shepherd.py`, `watchdog.py`, `terrier.py` | Called in `get_system_prompt()` |
-| `BaseAdversarialAgent` | `code_puppy/plugins/adversarial_planning/agents/base_adversarial_agent.py:160` | Called in `_build_system_prompt()` |
+
 
 **Agents that do NOT call `on_load_prompt()` (missing additions):**
 | Agent | Location | Issue |
@@ -57,7 +57,7 @@ def get_full_system_prompt(self) -> str:
 | `turbo_executor` | Add delegation guidance | Agents that invoke sub-agents |
 | `ttsr` | Inject triggered rules | Per-rule targeting |
 | `file_permission_handler` | Add file permission guidelines | Universal |
-| `adversarial_planning` | Add ADR context guidance | Adversarial agents only |
+
 
 ### Merge Semantics
 
@@ -147,27 +147,6 @@ instructions = agent_config.get_full_system_prompt()
 
 **Key requirement**: Temporary agent builders should continue to receive the same load_prompt additions as direct agents, ensuring consistent behavior regardless of how an agent is invoked.
 
-### BaseAdversarialAgent
-
-**Location**: `code_puppy/plugins/adversarial_planning/agents/base_adversarial_agent.py:158-165`
-
-**Current (manual call with custom additions):**
-```python
-def _build_system_prompt(self) -> str:
-    # 1. Layer-specific prompts
-    result = self.layer1_model_persona() + self.layer2_adversarial_rules()
-    # ... layers 3-7 ...
-    
-    # 8. Standard prompt additions from plugins
-    prompt_additions = callbacks.on_load_prompt()
-    if prompt_additions:
-        result += "\n" + "\n".join(prompt_additions)
-    return result
-```
-
-**After ADR:**
-BaseAdversarialAgent bypasses the standard prompt assembly (it has its own layered prompt construction). It should continue calling `on_load_prompt()` manually, but this is the **exception**, not the rule.
-
 ### Chained get_model_system_prompt Handlers
 
 **Location**: `code_puppy/callbacks.py:900-936`
@@ -203,7 +182,6 @@ Layer 5: on_get_model_system_prompt()           → Final dict transformation
    - `code_puppy/agents/agent_planning.py:161`
    - `code_puppy/agents/prompt_reviewer.py:140`
    - `code_puppy/agents/pack/*.py` (5 pack agents)
-   - Keep BaseAdversarialAgent's manual call (it's a special case)
 
 3. **Update `agent_tools.py` temporary builders** (2 locations)
    - Remove explicit `on_load_prompt()` calls from `invoke_agent` subagent construction

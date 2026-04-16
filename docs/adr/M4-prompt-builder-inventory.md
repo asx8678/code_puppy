@@ -21,7 +21,6 @@
 | `pack/terrier.py` | :283 | session | get_system_prompt |
 | `pack/retriever.py` | :389 | session | get_system_prompt |
 | `pack/shepherd.py` | :341 | session | get_system_prompt |
-| `base_adversarial_agent.py` | :160 | session | plugin agent |
 
 ## Agents WITHOUT on_load_prompt (7)
 
@@ -42,7 +41,6 @@
 | Plugin | Callback |
 |--------|----------|
 | file_mentions | _on_load_prompt |
-| adversarial_planning | _load_prompt |
 | ttsr | inject_triggered_rules |
 | prompt_store | load_custom_prompt |
 | file_permission_handler | get_file_permission_prompt_additions |

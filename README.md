@@ -57,7 +57,6 @@ This fork adds significant capabilities to the original code_puppy, transforming
 
 | Feature | Description | Speedup/Impact |
 |---------|-------------|----------------|
-| 🎯 Adversarial Planning | Multi-agent evidence-first planning with 6 specialized agents | Reduced error risk |
 | ⚡ Native Acceleration | Elixir-first with Rust/Python fallback for message processing, parsing | 10-50x faster |
 | 🐕 Pack Parallelism | 8-agent concurrent execution with intelligent queuing | 8x throughput |
 | 📚 Progressive Skills | Metadata-only skill injection until needed | Zero context cost |
@@ -119,60 +118,6 @@ For local development with graceful multi-service shutdown:
 [📋 View the full changelog on Kittylog](https://kittylog.app/c/mpfaffenberger/code_puppy)
 
 ## Usage
-
-### Adversarial Planning Quick Guide ⚔️
-
-**What is it?** Adversarial planning is Code Puppy's way of tackling high-stakes changes safely. Instead of jumping straight to solutions, multiple specialized agents work together: one investigates your codebase (researcher), two planners create independent approaches (conservative + contrarian), reviewers attack the plans to find flaws, and an arbiter synthesizes the best surviving approach. In deep mode, a red team stress-tests everything before execution.
-
-**When to use which command:**
-
-| Command | When to Use | Example |
-|---------|-------------|---------|
-| `/ap <task>` | **Auto mode** — let Code Puppy pick standard vs deep based on risk keywords (database, auth, migrate, deploy) | `/ap Add user authentication` |
-| `/ap-standard <task>` | **Fast mode** for routine work — skips red team and detailed change-set synthesis | `/ap-standard Add dark mode toggle` |
-| `/ap-deep <task>` | **Thorough mode** for migrations, security work, production changes, high blast radius | `/ap-deep Migrate from REST to GraphQL` |
-| `/ap-status` | Check active planning sessions and their progress | `/ap-status` |
-| `/ap-abort` | Stop all running adversarial planning sessions | `/ap-abort` |
-
-**Quick rule of thumb:**
-- **Standard** = faster, good for normal feature work
-- **Deep** = slower but safer, required for database changes, security work, production deployments
-- **Auto** = Code Puppy reads your task and chooses (detects keywords like "migrate", "database", "OAuth", "deploy")
-
-**The flow at a glance:**
-```
-/ap command
-    ↓
-Researcher (discovers evidence)
-    ↓
-Planner A (conservative)  +  Planner B (contrarian)  ← isolated, don't see each other
-    ↓                            ↓
-Reviewers attack both plans to falsify weak claims
-    ↓
-Arbiter merges what survived
-    ↓
-Red team stress test (deep mode only) → go / conditional-go / no-go verdict
-```
-
-**Example model setup for AP roles:**
-
-> ⚠️ This is an **EXAMPLE** setup, not a hard requirement. Use what you have!
-
-| Agent | Suggested Model | Why |
-|-------|-----------------|-----|
-| `ap-researcher` | GPT-5.4 | Strong at code analysis and evidence gathering |
-| `ap-planner-a` | Claude Opus 4.6 | Conservative planner—use latest Claude for proven patterns |
-| `ap-planner-b` | Claude Opus 4.5 | Contrarian planner—different model = more divergent thinking |
-| `ap-reviewer` | GPT-5.4 | Fast, thorough critique; good at spotting flaws |
-| `ap-arbiter` | GPT-5.4 | Balanced synthesis and decision-making |
-| `ap-red-team` | Claude Opus 4.6 | Deep stress testing needs best available reasoning |
-
-**Key tips:**
-- Using **different strong models** for Planner A and Planner B produces more meaningfully different plans—encourages genuine creative divergence.
-- Only have **one strong model**? You can still run AP! Use the same model for both planners—it still works, just with less natural diversity.
-- Start with auto mode (`/ap`) and let Code Puppy pick standard vs deep based on your task.
-
-📖 **For the full deep dive**, see the [plugin documentation](code_puppy/plugins/adversarial_planning/README.md).
 
 ### Adding Models from models.dev 🆕
 
