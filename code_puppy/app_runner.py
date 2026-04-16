@@ -43,7 +43,7 @@ def _get_interactive_mode() -> Callable:
     return _interactive_mode
 
 
-def _get_execute_single_prompt() -> callable:
+def _get_execute_single_prompt() -> Callable:
     """Lazy import execute_single_prompt to defer heavy dependencies."""
     global _execute_single_prompt
     if _execute_single_prompt is None:
@@ -65,7 +65,9 @@ def _log_gil_status() -> None:
     if not gil_enabled:
         emit_info("🧵 Free-threaded Python active (GIL disabled)")
     else:
-        emit_info("🔒 GIL enabled (set PYTHON_GIL=0 or use python3.14t for free-threading)")
+        emit_info(
+            "🔒 GIL enabled (set PYTHON_GIL=0 or use python3.14t for free-threading)"
+        )
 
 
 class AppRunner:
@@ -383,6 +385,7 @@ class AppRunner:
                 # Fire background version check (non-blocking refresh)
                 import asyncio
                 from code_puppy.version_checker import check_version_background
+
                 asyncio.create_task(check_version_background(current_version))
 
         await callbacks.on_startup()
