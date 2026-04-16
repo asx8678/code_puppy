@@ -32,12 +32,13 @@ package "Core Layer" {
     }
 
     class NativeBackend {
-        +Capabilites: MESSAGE_CORE, FILE_OPS, REPO_INDEX, PARSE
+        +Capabilites: ELIXIR_CONTROL, FILE_OPS, REPO_INDEX, PARSE
+        +Profile: ELIXIR_FIRST (Phase 6)
         +get_status()
-        +list_files()
-        +grep()
-        +read_file()
-        +serialize_messages()
+        +list_files() → Elixir File Service
+        +grep() → Elixir File Service
+        +read_file() → Elixir File Service
+        +serialize_messages() → Elixir
     }
 
     class CallbackSystem {
@@ -251,6 +252,28 @@ package "Storage Layer" {
     }
 }
 
+package "Elixir Backend Services" {
+    class FileService
+    class ParseService
+    class SchedulerService
+}
+
+package "Retiring Rust (bd-43)" #FFCDD2 {
+    class RustCore {
+        +code_puppy_core (PyO3)
+        +RETIRING
+    }
+    class TurboParse {
+        +turbo_parse crate
+        +RETIRING
+    }
+    note right of RustCore
+        All Rust components scheduled
+        for retirement. Functionality
+        migrating to Elixir.
+    end note
+}
+
 ' Relationships
 AppRunner --> CallbackSystem : triggers
 AppRunner --> AgentManager : uses
@@ -280,10 +303,12 @@ ToolRegistry --> Agent_Tools : contains
 ToolRegistry --> Execution_Tools : contains
 ToolRegistry --> User_Interaction : contains
 
-' Native acceleration
-NativeBackend --> list_files : accelerates
-NativeBackend --> grep : accelerates
-NativeBackend --> read_file : accelerates
+' Native acceleration (Elixir-first)
+NativeBackend --> FileService : routes to
+NativeBackend --> ParseService : routes to
+NativeBackend --> SchedulerService : routes to
+NativeBackend -.-> RustCore : legacy (retiring)
+NativeBackend -.-> TurboParse : legacy (retiring)
 
 ' MCP relationships
 MCPManager --> ManagedMCPServer : manages

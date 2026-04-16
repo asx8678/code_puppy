@@ -6,6 +6,20 @@ skinparam linetype ortho
 
 title Code Puppy Component Architecture & Data Flow
 
+legend right
+    |= Color |= Meaning |
+    | <#E8F5E9> | Elixir Backend (Primary) |
+    | <#FFEBEE> | Retiring (bd-43 migration) |
+    | <#FFF3E0> | Python Shell (Thin) |
+endlegend
+
+note top of Entry
+    Phase 6 Vision (2026-04-16):
+    Python → Thin shell (TUI + CLI + agent loop)
+    Elixir → ALL runtime operations
+    Rust → Scheduled for complete retirement
+end note
+
 package "Entry Points" {
     [CLI Entry] as CLI
     [API Server] as API
@@ -40,10 +54,16 @@ package "Tools" {
     [User Prompt] as AskUser
 }
 
-package "Acceleration" {
+package "Elixir Runtime Backend (Phase 6)" #E8F5E9 {
     [Native Backend] as Native
+    [File Service] as FileSvc
+    [Parse Service] as ParseSvc
+    [Scheduler] as SchedSvc
+    [Elixir Control Plane] as Elixir
+}
+
+package "Retiring Rust (bd-43)" #FFEBEE {
     [Rust Core] as Rust
-    [Elixir Bridge] as Elixir
     [Turbo Parse] as Parse
 }
 
@@ -88,13 +108,17 @@ ModelFact --> RateLimit : check
 Invoke --> Pack : request slot
 Pack --> Base : delegate
 
-FileOps --> Native : accelerate
-Shell --> Native : accelerate
-Invoke --> Native : accelerate
+FileOps --> Native : route to Elixir
+Shell --> Native : route to Elixir
+Invoke --> Native : route to Elixir
 
-Native --> Rust : (optional)
-Native --> Elixir : (optional)
-Native --> Parse : (optional)
+Native --> Elixir : primary
+Elixir --> FileSvc : file ops
+Elixir --> ParseSvc : parsing
+Elixir --> SchedSvc : scheduling
+
+Native -.-> Rust : retiring (bd-43)
+ParseSvc -.-> Parse : NIF (transitional)
 
 FileOps --> MCPMgr : fallback
 Invoke --> MCPMgr : external tools
