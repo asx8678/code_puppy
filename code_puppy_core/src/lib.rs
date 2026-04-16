@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 
+mod content_prep;
 mod hashline;
 mod message_hashing;
 mod pruning;
@@ -335,5 +336,6 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(format_hashlines, m)?)?;
     m.add_function(wrap_pyfunction!(strip_hashline_prefixes, m)?)?;
     m.add_function(wrap_pyfunction!(validate_hashline_anchor, m)?)?;
+    content_prep::register(m)?;
     Ok(())
 }
