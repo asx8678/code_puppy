@@ -17,3 +17,4 @@ rmp-serde = "1"
 xxhash-rust = { version = "0.8", features = ["xxh32"] }
 globset = "0.4"
 dirs = "6"
+memchr = "2"

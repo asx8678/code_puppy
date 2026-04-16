@@ -152,6 +152,7 @@ version = "0.1.0"
 dependencies = [
  "dirs",
  "globset",
+ "memchr",
  "pyo3",
  "rmp-serde",
  "rustc-hash",

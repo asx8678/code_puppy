@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 
+mod content_prep;
 mod fuzzy_match;
 mod hashline;
 mod message_hashing;
@@ -369,6 +370,7 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(validate_hashline_anchor, m)?)?;
     m.add_function(wrap_pyfunction!(fuzzy_match_window, m)?)?;
     m.add_function(wrap_pyfunction!(make_unified_diff, m)?)?;
+    content_prep::register(m)?;
     Ok(())
 }
 
