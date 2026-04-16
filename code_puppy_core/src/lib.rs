@@ -4,6 +4,7 @@ use pyo3::types::PyList;
 mod content_prep;
 mod fuzzy_match;
 mod hashline;
+mod line_numbers;
 mod message_hashing;
 mod path_classify;
 mod pruning;
@@ -19,6 +20,7 @@ use hashline::{
     strip_hashline_prefixes as strip_hashline_prefixes_impl,
     validate_hashline_anchor as validate_hashline_anchor_impl,
 };
+use line_numbers::format_line_numbers as format_line_numbers_impl;
 use pruning::{
     prune_and_filter_core, prune_and_filter_impl,
     split_for_summarization_core, split_for_summarization_impl, truncation_indices_impl,
@@ -196,6 +198,19 @@ fn fuzzy_match_window(haystack_lines: Vec<String>, needle: String) -> PyResult<F
 }
 
 
+// ── Line numbers functions ─────────────────────────────────────────────────
+
+#[pyfunction]
+#[pyo3(signature = (content, start_line=1, max_line_length=5000, line_number_width=6))]
+fn format_line_numbers(
+    content: &str,
+    start_line: usize,
+    max_line_length: usize,
+    line_number_width: usize,
+) -> String {
+    format_line_numbers_impl(content, start_line, max_line_length, line_number_width)
+}
+
 // ── MessageBatch pyclass ───────────────────────────────────────────────────
 
 use std::sync::Mutex;
@@ -371,6 +386,7 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fuzzy_match_window, m)?)?;
     m.add_function(wrap_pyfunction!(make_unified_diff, m)?)?;
     content_prep::register(m)?;
+    m.add_function(wrap_pyfunction!(format_line_numbers, m)?)?;
     Ok(())
 }
 
