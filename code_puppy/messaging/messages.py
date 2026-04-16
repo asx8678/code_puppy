@@ -114,7 +114,7 @@ class FileEntry(BaseModel):
     type: Literal["file", "dir"] = Field(
         description="Whether this is a file or directory"
     )
-    size: int = Field(ge=0, description="Size in bytes (0 for directories)")
+    size: int = Field(ge=-1, description="Size in bytes (0 for directories, -1 for unknown in fast mode)")
     depth: int = Field(ge=0, description="Nesting depth from listing root")
 
     model_config = {"frozen": True, "extra": "forbid"}

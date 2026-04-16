@@ -46,6 +46,9 @@ from code_puppy.utils.eol import normalize_eol, strip_bom
 # Maximum files to collect in list_files before early exit
 # This prevents memory exhaustion on huge repos
 MAX_LIST_FILES_ENTRIES = 10000
+# PERFORMANCE bd-5: Skip per-file stat() above this threshold
+# Stats on 1000 files is fast; 10000 is not
+FAST_MODE_THRESHOLD = 1000
 from code_puppy.utils.file_display import (
     format_content_with_line_numbers,
     truncate_with_guidance,
@@ -300,6 +303,7 @@ async def _list_files(
 
     # PERFORMANCE: Track whether we truncated due to too many files
     truncated_early = False
+    use_fast_mode = False  # Will be set to True in recursive mode if file count > threshold
 
     try:
         # Find ripgrep executable - first check system PATH, then virtual environment
@@ -348,6 +352,9 @@ async def _list_files(
                 files = files[:MAX_LIST_FILES_ENTRIES]
                 truncated_early = True
 
+            # PERFORMANCE bd-5: Use fast mode (skip stat) for large file sets
+            use_fast_mode = len(files) > FAST_MODE_THRESHOLD
+
             # Create ListedFile objects with metadata
             for full_path in files:
                 if not full_path:  # Skip empty lines
@@ -359,22 +366,27 @@ async def _list_files(
                 else:
                     file_path = full_path
 
-                # Single stat call for type and size - avoids 3-5 syscalls per file
-                try:
-                    stat_info = os.stat(full_path)
-                except (FileNotFoundError, OSError):
-                    continue
-
-                # Derive type from stat mode bits
-                if stat.S_ISREG(stat_info.st_mode):
+                # Fast mode: skip stat, assume file (ripgrep only returns files anyway)
+                if use_fast_mode:
                     entry_type = "file"
-                    size = stat_info.st_size
-                elif stat.S_ISDIR(stat_info.st_mode):
-                    entry_type = "directory"
-                    size = 0
+                    size = -1  # -1 indicates "unknown" in fast mode
                 else:
-                    # Skip if it's neither a file nor directory
-                    continue
+                    # Single stat call for type and size - avoids 3-5 syscalls per file
+                    try:
+                        stat_info = os.stat(full_path)
+                    except (FileNotFoundError, OSError):
+                        continue
+
+                    # Derive type from stat mode bits
+                    if stat.S_ISREG(stat_info.st_mode):
+                        entry_type = "file"
+                        size = stat_info.st_size
+                    elif stat.S_ISDIR(stat_info.st_mode):
+                        entry_type = "directory"
+                        size = 0
+                    else:
+                        # Skip if it's neither a file nor directory
+                        continue
 
                 # Calculate depth based on the relative path
                 depth = file_path.count(os.sep)
@@ -490,7 +502,8 @@ async def _list_files(
             dir_count += 1
         else:
             file_count += 1
-            total_size += item.size
+            if item.size >= 0:  # Only count known sizes (skip fast mode -1)
+                total_size += item.size
 
     def _sort_key(item):
         """Sort by path components to keep children grouped under parents.
@@ -527,8 +540,11 @@ async def _list_files(
         if item.type == "directory":
             output_lines.append(f"{indent}{name}/")
         else:
-            size_str = format_size(item.size)
-            output_lines.append(f"{indent}{name} ({size_str})")
+            if item.size == -1:
+                output_lines.append(f"{indent}{name}")  # No size shown in fast mode
+            else:
+                size_str = format_size(item.size)
+                output_lines.append(f"{indent}{name} ({size_str})")
 
     # PERFORMANCE: Cap file_entries to prevent huge structured messages
     if len(file_entries) > MAX_LIST_FILES_ENTRIES:
@@ -546,8 +562,13 @@ async def _list_files(
     get_message_bus().emit(file_listing_msg)
 
     # Add summary
+    # Add fast mode indicator
+    if use_fast_mode:
+        output_lines.append("\n⚡ FAST MODE: File sizes not computed for performance")
+
     output_lines.append(
-        f"\nSummary: {dir_count} directories, {file_count} files ({format_size(total_size)} total)"
+        f"\nSummary: {dir_count} directories, {file_count} files ({format_size(total_size)} total)" if total_size > 0
+        else f"\nSummary: {dir_count} directories, {file_count} files"
     )
 
     return ListFileOutput(content="\n".join(output_lines))
