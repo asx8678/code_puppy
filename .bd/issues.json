@@ -693,7 +693,7 @@
       "id": "bd-40",
       "title": "Slim down code_puppy_core after Elixir migration",
       "description": "After Phase 1-3 migrations complete, clean up code_puppy_core Cargo.toml and lib.rs.\n\nREMOVE from lib.rs:\n- content_prep module\n- path_classify module\n- line_numbers module (format_line_numbers PyO3 export)\n- fuzzy_match module\n- replace_engine module\n- unified_diff module\n\nREMOVE Cargo.toml deps (if no longer needed):\n- similar (used by unified_diff)\n- globset (used by path_classify)\n- dirs (used by path_classify)\n- memchr (used by content_prep)\n\nKEEP: token_estimation, pruning, serialization, message_hashing, types, hashline\n\nRESULT: code_puppy_core shrinks from ~148 KB to ~26 KB of Rust.\n\nEFFORT: ~1 day",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -710,7 +710,7 @@
         ]
       },
       "created_at": "2026-04-16T14:40:55.997290",
-      "updated_at": "2026-04-16T16:08:09.669874",
+      "updated_at": "2026-04-16T16:55:34.718746",
       "comments": [
         "## Execution Plan (planning-agent-019d96)\n\n### Audit Findings (2026-04-16)\nAfter bd-39 completed, replace_engine.rs is already deleted. 5 modules remain to remove.\n\nDead code (no Python consumer at all \u2014 safe to delete immediately):\n- content_prep.rs (12.7 KB) \u2014 bridge removed in bd-31\n- path_classify/ (30.1 KB) \u2014 bridge removed in bd-31\n- line_numbers.rs (14.8 KB) \u2014 registered in PyO3 but NO Python file imports it\n\nNeeds bd-41 first (still has live Python consumers):\n- fuzzy_match.rs (12.8 KB) \u2014 imported by _edit_bridge.py\n- unified_diff.rs (7.7 KB) \u2014 imported by _edit_bridge.py\n\n### Phase 1: Delete dead-code modules (~30 min)\nCan start BEFORE bd-41 \u2014 no Python consumer exists.\n- [ ] Delete content_prep.rs, remove mod + use + pyfunction from lib.rs\n- [ ] Delete path_classify/ directory, remove mod + PathClassifier class + pyfunction from lib.rs\n- [ ] Delete line_numbers.rs, remove mod + use + format_line_numbers pyfunction from lib.rs\n- [ ] cargo check && cargo test\n\n### Phase 2: Delete bridge-dependent modules (AFTER bd-41)\n- [ ] Delete fuzzy_match.rs, remove mod + use + fuzzy_match_window + FuzzyMatchResult from lib.rs\n- [ ] Delete unified_diff.rs, remove mod + use + make_unified_diff from lib.rs\n- [ ] Remove FuzzyMatchResult import from _edit_bridge.py\n- [ ] Remove make_unified_diff import from _edit_bridge.py\n- [ ] cargo check && cargo test\n- [ ] python -m pytest tests/ -x\n\n### Phase 3: Clean Cargo.toml (~15 min)\n- [ ] Remove deps no longer needed: similar, globset, dirs, memchr\n- [ ] cargo build --release (verify clean build)\n\n### Phase 4: Verify final state\n- [ ] code_puppy_core should contain ONLY: token_estimation, pruning, serialization, message_hashing, types, hashline\n- [ ] Expected shrink: ~128 KB \u2192 ~37 KB\n- [ ] Update MIGRATION_STATUS.md\n\n### Execution order: Phase 1 (independent) \u2192 wait for bd-41 \u2192 Phase 2 \u2192 Phase 3 \u2192 Phase 4"
       ]
