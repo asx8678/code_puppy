@@ -13,7 +13,6 @@ When unavailable, the bridge falls back to the Python implementations.
 from __future__ import annotations
 
 import difflib
-from typing import TYPE_CHECKING
 
 from code_puppy._core_bridge import is_rust_enabled
 

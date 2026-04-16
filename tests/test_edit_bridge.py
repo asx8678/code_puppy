@@ -11,8 +11,7 @@ from __future__ import annotations
 import difflib
 import sys
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -21,7 +20,7 @@ code_puppy_path = Path(__file__).parent.parent
 if str(code_puppy_path) not in sys.path:
     sys.path.insert(0, str(code_puppy_path))
 
-from code_puppy._edit_bridge import (
+from code_puppy._edit_bridge import (  # noqa: E402
     RUST_ACTIVE,
     RUST_AVAILABLE,
     fuzzy_match_window,
@@ -444,6 +443,113 @@ class TestRustPythonParity:
             # Modified content should be identical
             assert py_result["modified"] == rust_result["modified"]
             assert py_result["success"] == rust_result["success"]
+
+
+class TestRustActiveBridgePaths:
+    """Tests that monkeypatch Rust availability to verify conversion logic."""
+
+    def test_fuzzy_match_window_rust_conversion(self, monkeypatch):
+        """Verify FuzzyMatchResult → ((start, end), score) conversion."""
+        from unittest.mock import MagicMock
+
+        # Create a mock FuzzyMatchResult with the expected attributes
+        mock_result = MagicMock()
+        mock_result.start = 2
+        mock_result.end = 5
+        mock_result.score = 0.98
+
+        mock_rust_fn = MagicMock(return_value=mock_result)
+
+        import code_puppy._edit_bridge as bridge
+
+        monkeypatch.setattr(bridge, "_rust_fuzzy_match_window", mock_rust_fn)
+        monkeypatch.setattr(bridge, "RUST_AVAILABLE", True)
+        monkeypatch.setattr(bridge, "is_rust_enabled", lambda: True)
+
+        result = bridge.fuzzy_match_window(["line1", "line2", "line3"], "needle")
+        assert result == ((2, 5), 0.98)
+
+    def test_fuzzy_match_window_rust_no_match(self, monkeypatch):
+        """Verify FuzzyMatchResult with end=None → (None, score) conversion."""
+        from unittest.mock import MagicMock
+
+        mock_result = MagicMock()
+        mock_result.start = 0
+        mock_result.end = None
+        mock_result.score = 0.3
+
+        mock_rust_fn = MagicMock(return_value=mock_result)
+
+        import code_puppy._edit_bridge as bridge
+
+        monkeypatch.setattr(bridge, "_rust_fuzzy_match_window", mock_rust_fn)
+        monkeypatch.setattr(bridge, "RUST_AVAILABLE", True)
+        monkeypatch.setattr(bridge, "is_rust_enabled", lambda: True)
+
+        result = bridge.fuzzy_match_window(["line1"], "needle")
+        assert result == (None, 0.3)
+
+    def test_replace_in_content_rust_success(self, monkeypatch):
+        """Verify ReplaceResult → dict conversion on success."""
+        from unittest.mock import MagicMock
+
+        mock_result = MagicMock()
+        mock_result.modified = "modified content"
+        mock_result.diff = "--- a\n+++ b\n"
+        mock_result.success = True
+        mock_result.error = None
+        mock_result.jw_score = None
+
+        mock_rust_fn = MagicMock(return_value=mock_result)
+
+        import code_puppy._edit_bridge as bridge
+
+        monkeypatch.setattr(bridge, "_rust_replace_in_content", mock_rust_fn)
+        monkeypatch.setattr(bridge, "RUST_AVAILABLE", True)
+        monkeypatch.setattr(bridge, "is_rust_enabled", lambda: True)
+
+        result = bridge.replace_in_content("content", [("old", "new")])
+        assert result["success"] is True
+        assert result["modified"] == "modified content"
+
+    def test_replace_in_content_rust_failure(self, monkeypatch):
+        """Verify ReplaceResult → dict conversion on JW failure."""
+        from unittest.mock import MagicMock
+
+        mock_result = MagicMock()
+        mock_result.modified = "content"
+        mock_result.diff = ""
+        mock_result.success = False
+        mock_result.error = "No suitable match (JW 0.500 < 0.95)"
+        mock_result.jw_score = 0.5
+
+        mock_rust_fn = MagicMock(return_value=mock_result)
+
+        import code_puppy._edit_bridge as bridge
+
+        monkeypatch.setattr(bridge, "_rust_replace_in_content", mock_rust_fn)
+        monkeypatch.setattr(bridge, "RUST_AVAILABLE", True)
+        monkeypatch.setattr(bridge, "is_rust_enabled", lambda: True)
+
+        result = bridge.replace_in_content("content", [("old", "new")])
+        assert result["success"] is False
+        assert result["jw_score"] == 0.5
+
+    def test_unified_diff_rust_delegation(self, monkeypatch):
+        """Verify unified_diff delegates to Rust when active."""
+        from unittest.mock import MagicMock
+
+        mock_rust_fn = MagicMock(return_value="--- a\n+++ b\n")
+
+        import code_puppy._edit_bridge as bridge
+
+        monkeypatch.setattr(bridge, "_rust_unified_diff", mock_rust_fn)
+        monkeypatch.setattr(bridge, "RUST_AVAILABLE", True)
+        monkeypatch.setattr(bridge, "is_rust_enabled", lambda: True)
+
+        result = bridge.unified_diff("old", "new", 3, "a.py", "b.py")
+        assert result == "--- a\n+++ b\n"
+        mock_rust_fn.assert_called_once_with("old", "new", 3, "a.py", "b.py")
 
 
 if __name__ == "__main__":

@@ -1103,7 +1103,7 @@ async def get_user_approval_async(
         from code_puppy.messaging.spinner import pause_all_spinners
 
         pause_all_spinners()
-    except (ImportError, Exception):
+    except ImportError, Exception:
         pass
 
     await asyncio.sleep(0.05)  # Let spinners fully stop (CM-M1: reduced from 0.3)
@@ -1150,7 +1150,7 @@ async def get_user_approval_async(
             if not user_feedback:
                 user_feedback = None
 
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt, EOFError:
         emit_error("Cancelled by user")
         confirmed = False
 
@@ -1186,7 +1186,7 @@ async def get_user_approval_async(
         from code_puppy.messaging.spinner import resume_all_spinners
 
         resume_all_spinners()
-    except (ImportError, Exception):
+    except ImportError, Exception:
         pass
 
     return confirmed, user_feedback
@@ -1212,7 +1212,11 @@ def _find_best_window(
     """
     # Try Rust path first (only if no Python-only caches are provided)
     if _needle_lines_cache is None and _needle_len_cache is None:
-        from code_puppy._edit_bridge import fuzzy_match_window as _rust_fuzzy, RUST_ACTIVE
+        from code_puppy._edit_bridge import (
+            RUST_ACTIVE,
+            fuzzy_match_window as _rust_fuzzy,
+        )
+
         if RUST_ACTIVE():
             return _rust_fuzzy(haystack_lines, needle)
 
