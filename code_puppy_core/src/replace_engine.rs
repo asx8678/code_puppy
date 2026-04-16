@@ -104,7 +104,13 @@ pub fn replace_in_content(content: &str, replacements: &[(String, String)]) -> R
         let end = match_result.end.unwrap();
 
         // Parse new_str into lines for splicing
-        let new_lines: Vec<String> = new_str.trim_end_matches('\n').split('\n').map(String::from).collect();
+        // Handle empty new_str: Rust "".split('\n') produces [""] but Python splitlines() produces []
+        let trimmed = new_str.trim_end_matches('\n');
+        let new_lines: Vec<String> = if trimmed.is_empty() {
+            vec![]
+        } else {
+            trimmed.split('\n').map(String::from).collect()
+        };
 
         // Splice replacement into lines: replace [start, end) with new_lines
         let lines_mut = modified_lines.as_mut().unwrap();
@@ -118,12 +124,13 @@ pub fn replace_in_content(content: &str, replacements: &[(String, String)]) -> R
     }
 
     // Rebuild modified string from cached lines if needed (fuzzy path)
-    if modified.is_empty() && modified_lines.is_some() {
-        let lines = modified_lines.unwrap();
-        modified = lines.join("\n");
-        // Preserve trailing newline if original had one
-        if original.ends_with('\n') && !modified.ends_with('\n') {
-            modified.push('\n');
+    if modified.is_empty() {
+        if let Some(lines) = modified_lines {
+            modified = lines.join("\n");
+            // Preserve trailing newline if original had one
+            if original.ends_with('\n') && !modified.ends_with('\n') {
+                modified.push('\n');
+            }
         }
     }
 
@@ -354,5 +361,23 @@ mod tests {
         assert!(result.jw_score.unwrap() >= FUZZY_THRESHOLD);
         assert!(result.modified.contains("def qux():"));
         assert!(!result.modified.contains("def bar():"));
+    }
+
+    #[test]
+    fn test_empty_new_str_fuzzy_deletion() {
+        // Empty new_str should delete matched lines (parity with Python splitlines behavior)
+        // Fuzzy match only matches the lines that correspond to the pattern
+        let content = "def foo():\n    pass\ndef bar():\n    return 1\n";
+        // Fuzzy match "def baz():" to "def bar():" and replace with empty (delete the line)
+        let replacements = vec![("def baz():".to_string(), "".to_string())];
+        let result = replace_in_content(content, &replacements);
+
+        assert!(result.success);
+        assert!(result.jw_score.unwrap() >= FUZZY_THRESHOLD);
+        // The "def bar():" line should be deleted (it matched the fuzzy pattern)
+        assert!(!result.modified.contains("def bar():"));
+        // "def foo():" and "return 1" should remain (unmatched parts)
+        assert!(result.modified.contains("def foo():"));
+        assert!(result.modified.contains("return 1"));
     }
 }
