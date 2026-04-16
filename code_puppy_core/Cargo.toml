@@ -12,6 +12,8 @@ pyo3 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 rustc-hash = "2"
+similar = "2"
 rmp-serde = "1"
 xxhash-rust = { version = "0.8", features = ["xxh32"] }
-similar = "2"
+globset = "0.4"
+dirs = "6"

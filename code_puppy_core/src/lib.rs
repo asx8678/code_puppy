@@ -4,6 +4,7 @@ use pyo3::types::PyList;
 mod fuzzy_match;
 mod hashline;
 mod message_hashing;
+mod path_classify;
 mod pruning;
 mod serialization;
 mod token_estimation;
@@ -354,6 +355,7 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SplitResult>()?;
     m.add_class::<MessageBatch>()?;
     m.add_class::<FuzzyMatchResult>()?;
+    m.add_class::<path_classify::PathClassifier>()?;
     m.add_function(wrap_pyfunction!(process_messages_batch, m)?)?;
     m.add_function(wrap_pyfunction!(prune_and_filter, m)?)?;
     m.add_function(wrap_pyfunction!(truncation_indices, m)?)?;
