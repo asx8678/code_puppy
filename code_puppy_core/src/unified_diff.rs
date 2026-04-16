@@ -3,31 +3,7 @@
 //! Provides a Rust implementation to replace Python's `difflib.unified_diff`.
 //! Matches the standard unified diff format with ---/+++ headers and @@ hunk markers.
 
-use similar::{ChangeTag, TextDiff};
-
-/// Split text into lines, preserving line endings like Python's splitlines(keepends=True).
-fn split_lines_keep_ends(text: &str) -> Vec<&str> {
-    if text.is_empty() {
-        return Vec::new();
-    }
-
-    let mut lines = Vec::new();
-    let mut start = 0;
-
-    for (i, ch) in text.char_indices() {
-        if ch == '\n' {
-            lines.push(&text[start..=i]);
-            start = i + 1;
-        }
-    }
-
-    // Handle last line if no trailing newline
-    if start < text.len() {
-        lines.push(&text[start..]);
-    }
-
-    lines
-}
+use similar::TextDiff;
 
 /// Generate a unified diff between two texts.
 ///
@@ -47,206 +23,15 @@ pub fn unified_diff_impl(
     from_file: &str,
     to_file: &str,
 ) -> String {
-    // Handle edge case: identical content
     if old == new {
         return String::new();
     }
-
-    let old_lines = split_lines_keep_ends(old);
-    let new_lines = split_lines_keep_ends(new);
-
-    // Handle empty old (file creation)
-    if old_lines.is_empty() {
-        let mut output = String::new();
-        output.push_str(&format!("--- {}\n", from_file));
-        output.push_str(&format!("+++ {}\n", to_file));
-        output.push_str(&format!("@@ -0,0 +1,{} @@\n", new_lines.len()));
-
-        for line in &new_lines {
-            output.push('+');
-            output.push_str(line);
-        }
-        return output;
-    }
-
-    // Handle empty new (file deletion)
-    if new_lines.is_empty() {
-        let mut output = String::new();
-        output.push_str(&format!("--- {}\n", from_file));
-        output.push_str(&format!("+++ {}\n", to_file));
-        output.push_str(&format!("@@ -1,{} +0,0 @@\n", old_lines.len()));
-
-        for line in &old_lines {
-            output.push('-');
-            output.push_str(line);
-        }
-        return output;
-    }
-
-    // For normal diffs, use TextDiff
-    // Note: TextDiff will include newlines in the diff, so we handle that
-    let diff = TextDiff::from_slices(&old_lines, &new_lines);
-
-    let mut output = String::new();
-    output.push_str(&format!("--- {}\n", from_file));
-    output.push_str(&format!("+++ {}\n", to_file));
-
-    // Collect all hunks
-    let mut all_hunks: Vec<Hunk> = Vec::new();
-    let mut current_hunk: Option<Hunk> = None;
-
-    for change in diff.iter_all_changes() {
-        let old_idx = change.old_index();
-        let new_idx = change.new_index();
-        let tag = change.tag();
-        let value = change.value();
-
-        // Check if we need to start a new hunk
-        let need_new_hunk = if let Some(ref h) = current_hunk {
-            // Check if there's a gap larger than context_lines
-            let old_pos = old_idx.unwrap_or(h.old_start + h.old_count);
-            let new_pos = new_idx.unwrap_or(h.new_start + h.new_count);
-
-            let old_gap = old_pos.saturating_sub(h.old_start + h.old_count);
-            let new_gap = new_pos.saturating_sub(h.new_start + h.new_count);
-
-            // Start new hunk if gap exceeds context_lines
-            old_gap > context_lines || new_gap > context_lines
-        } else {
-            true
-        };
-
-        if need_new_hunk {
-            // Finish current hunk if exists
-            if let Some(mut h) = current_hunk.take() {
-                // Add trailing context
-                add_trailing_context(&mut h, &old_lines, context_lines);
-                all_hunks.push(h);
-            }
-
-            // Calculate hunk start with context
-            let old_start = old_idx.unwrap_or(0).saturating_sub(context_lines);
-            let new_start = new_idx.unwrap_or(0).saturating_sub(context_lines);
-
-            let mut new_hunk = Hunk::new(old_start, new_start);
-
-            // Add context lines before this change
-            for i in old_start..old_idx.unwrap_or(old_start).min(old_lines.len()) {
-                new_hunk.add_line(ChangeTag::Equal, old_lines[i]);
-            }
-
-            // Add the actual change
-            new_hunk.add_line(tag, value);
-
-            current_hunk = Some(new_hunk);
-        } else {
-            // Add context lines between changes
-            if let Some(ref mut h) = current_hunk {
-                let prev_old_end = h.old_start + h.old_count;
-                let old_pos = old_idx.unwrap_or(prev_old_end);
-
-                for i in prev_old_end..old_pos.min(old_lines.len()) {
-                    h.add_line(ChangeTag::Equal, old_lines[i]);
-                }
-
-                h.add_line(tag, value);
-            }
-        }
-    }
-
-    // Push final hunk
-    if let Some(mut h) = current_hunk {
-        add_trailing_context(&mut h, &old_lines, context_lines);
-        all_hunks.push(h);
-    }
-
-    // Render all hunks
-    for hunk in &all_hunks {
-        hunk.render(&mut output);
-    }
-
-    output
-}
-
-fn add_trailing_context<'a>(hunk: &mut Hunk<'a>, old_lines: &[&'a str], context_lines: usize) {
-    let trailing_start = hunk.old_start + hunk.old_count;
-    let trailing_end = (trailing_start + context_lines).min(old_lines.len());
-
-    for i in trailing_start..trailing_end {
-        hunk.add_line(ChangeTag::Equal, old_lines[i]);
-    }
-}
-
-/// A hunk in a unified diff
-struct Hunk<'a> {
-    old_start: usize,
-    new_start: usize,
-    old_count: usize,
-    new_count: usize,
-    lines: Vec<(ChangeTag, &'a str)>,
-}
-
-impl<'a> Hunk<'a> {
-    fn new(old_start: usize, new_start: usize) -> Self {
-        Self {
-            old_start,
-            new_start,
-            old_count: 0,
-            new_count: 0,
-            lines: Vec::new(),
-        }
-    }
-
-    fn add_line(&mut self, tag: ChangeTag, line: &'a str) {
-        match tag {
-            ChangeTag::Equal => {
-                self.old_count += 1;
-                self.new_count += 1;
-            }
-            ChangeTag::Delete => {
-                self.old_count += 1;
-            }
-            ChangeTag::Insert => {
-                self.new_count += 1;
-            }
-        }
-        self.lines.push((tag, line));
-    }
-
-    fn render(&self, output: &mut String) {
-        // Unified diff uses 1-based line numbers
-        let old_start_1based = self.old_start + 1;
-        let new_start_1based = self.new_start + 1;
-
-        // For empty start, show 0 (only for new files where count is 0)
-        let old_start_display = if self.old_count == 0 && self.old_start == 0 {
-            0
-        } else {
-            old_start_1based
-        };
-        let new_start_display = if self.new_count == 0 && self.new_start == 0 {
-            0
-        } else {
-            new_start_1based
-        };
-
-        output.push_str(&format!(
-            "@@ -{},{} +{},{} @@\n",
-            old_start_display, self.old_count, new_start_display, self.new_count
-        ));
-
-        for (tag, line) in &self.lines {
-            let prefix = match tag {
-                ChangeTag::Equal => ' ',
-                ChangeTag::Delete => '-',
-                ChangeTag::Insert => '+',
-            };
-            output.push(prefix);
-            output.push_str(line);
-            // Note: line already includes trailing newline from split_lines_keep_ends
-            // or is the last line without newline
-        }
-    }
+    let diff = TextDiff::from_lines(old, new);
+    diff.unified_diff()
+        .context_radius(context_lines)
+        .header(from_file, to_file)
+        .missing_newline_hint(false)
+        .to_string()
 }
 
 #[cfg(test)]
@@ -254,134 +39,201 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_split_lines_keep_ends() {
-        assert_eq!(split_lines_keep_ends(""), Vec::<&str>::new());
-        assert_eq!(split_lines_keep_ends("line 1\n"), vec!["line 1\n"]);
-        assert_eq!(
-            split_lines_keep_ends("line 1\nline 2\n"),
-            vec!["line 1\n", "line 2\n"]
-        );
-        assert_eq!(
-            split_lines_keep_ends("line 1\nline 2"),
-            vec!["line 1\n", "line 2"]
-        );
-        assert_eq!(split_lines_keep_ends("no newline"), vec!["no newline"]);
-    }
-
-    #[test]
     fn test_identical_strings() {
         let old = "line 1\nline 2\nline 3";
         let new = "line 1\nline 2\nline 3";
         let result = unified_diff_impl(old, new, 3, "a/file.txt", "b/file.txt");
-        assert!(result.is_empty());
+        assert_eq!(result, "");
     }
 
     #[test]
-    fn test_single_line_change() {
-        let old = "line 1\nline 2\nline 3";
-        let new = "line 1\nmodified line 2\nline 3";
+    fn test_single_line_change_exact() {
+        let old = "line 1\nline 2\nline 3\n";
+        let new = "line 1\nmodified line 2\nline 3\n";
         let result = unified_diff_impl(old, new, 3, "a/file.txt", "b/file.txt");
 
-        assert!(result.contains("--- a/file.txt"));
-        assert!(result.contains("+++ b/file.txt"));
-        // Header format: @@ -old_start,old_count +new_start,new_count @@
-        assert!(result.contains("@@ -1,"));
-        assert!(result.contains("+1,"));
-        assert!(result.contains("@@"));
-        assert!(result.contains(" line 1") || result.contains("line 1\n")); // Context line
-        assert!(result.contains("-line 2"));
-        assert!(result.contains("+modified line 2"));
+        // Note: similar's UnifiedDiff uses space prefix for context lines (standard format)
+        let expected = concat!(
+            "--- a/file.txt\n",
+            "+++ b/file.txt\n",
+            "@@ -1,3 +1,3 @@\n",
+            " line 1\n",
+            "-line 2\n",
+            "+modified line 2\n",
+            " line 3\n"
+        );
+        assert_eq!(result, expected);
     }
 
     #[test]
-    fn test_addition() {
-        let old = "line 1\nline 2";
-        let new = "line 1\nline 2\nline 3";
+    fn test_addition_exact() {
+        let old = "line 1\nline 2\n";
+        let new = "line 1\nline 2\nline 3\n";
         let result = unified_diff_impl(old, new, 3, "a/file.txt", "b/file.txt");
 
-        assert!(result.contains("@@"));
-        assert!(result.contains("+line 3"));
+        // Note: similar's UnifiedDiff uses space prefix for context lines (standard format)
+        let expected = concat!(
+            "--- a/file.txt\n",
+            "+++ b/file.txt\n",
+            "@@ -1,2 +1,3 @@\n",
+            " line 1\n",
+            " line 2\n",
+            "+line 3\n"
+        );
+        assert_eq!(result, expected);
     }
 
     #[test]
-    fn test_deletion() {
-        let old = "line 1\nline 2\nline 3";
-        let new = "line 1\nline 3";
+    fn test_deletion_exact() {
+        let old = "line 1\nline 2\nline 3\n";
+        let new = "line 1\nline 3\n";
         let result = unified_diff_impl(old, new, 3, "a/file.txt", "b/file.txt");
 
-        assert!(result.contains("@@"));
-        assert!(result.contains("-line 2"));
+        // Note: similar's UnifiedDiff uses space prefix for context lines (standard format)
+        let expected = concat!(
+            "--- a/file.txt\n",
+            "+++ b/file.txt\n",
+            "@@ -1,3 +1,2 @@\n",
+            " line 1\n",
+            "-line 2\n",
+            " line 3\n"
+        );
+        assert_eq!(result, expected);
     }
 
     #[test]
-    fn test_empty_old() {
+    fn test_empty_old_exact() {
         let old = "";
-        let new = "line 1\nline 2";
+        let new = "line 1\nline 2\n";
         let result = unified_diff_impl(old, new, 3, "a/file.txt", "b/file.txt");
 
-        assert!(result.contains("--- a/file.txt"));
-        assert!(result.contains("+++ b/file.txt"));
-        assert!(result.contains("@@ -0,0 +1,2 @@"));
-        assert!(result.contains("+line 1"));
-        assert!(result.contains("+line 2"));
+        let expected = concat!(
+            "--- a/file.txt\n",
+            "+++ b/file.txt\n",
+            "@@ -0,0 +1,2 @@\n",
+            "+line 1\n",
+            "+line 2\n"
+        );
+        assert_eq!(result, expected);
     }
 
     #[test]
-    fn test_empty_new() {
-        let old = "line 1\nline 2";
+    fn test_empty_new_exact() {
+        let old = "line 1\nline 2\n";
         let new = "";
         let result = unified_diff_impl(old, new, 3, "a/file.txt", "b/file.txt");
 
-        assert!(result.contains("--- a/file.txt"));
-        assert!(result.contains("+++ b/file.txt"));
-        // For deletion, should show old lines deleted
-        assert!(result.contains("@@"));
-        assert!(result.contains("-line 1"));
-        assert!(result.contains("-line 2"));
+        let expected = concat!(
+            "--- a/file.txt\n",
+            "+++ b/file.txt\n",
+            "@@ -1,2 +0,0 @@\n",
+            "-line 1\n",
+            "-line 2\n"
+        );
+        assert_eq!(result, expected);
     }
 
     #[test]
-    fn test_completely_different() {
-        let old = "aaa\nbbb\nccc";
-        let new = "xxx\nyyy\nzzz";
+    fn test_completely_different_exact() {
+        let old = "aaa\nbbb\nccc\n";
+        let new = "xxx\nyyy\nzzz\n";
         let result = unified_diff_impl(old, new, 3, "a/file.txt", "b/file.txt");
 
-        // Verify that removed lines are marked with - and added lines with +
-        assert!(result.contains("-aaa") || result.contains("-bbb") || result.contains("-ccc"));
-        assert!(result.contains("+xxx") || result.contains("+yyy") || result.contains("+zzz"));
+        // When everything changes, there are no context lines (no space prefix on any line)
+        let expected = concat!(
+            "--- a/file.txt\n",
+            "+++ b/file.txt\n",
+            "@@ -1,3 +1,3 @@\n",
+            "-aaa\n",
+            "-bbb\n",
+            "-ccc\n",
+            "+xxx\n",
+            "+yyy\n",
+            "+zzz\n"
+        );
+        assert_eq!(result, expected);
     }
 
+    /// Multi-hunk test: changes separated by > 2*context lines MUST produce separate hunks.
+    /// With context=3, changes at line 3 and line 17 have a gap of 14 lines,
+    /// which is > 6 (2*context), so they should be in separate hunks.
     #[test]
-    fn test_format_matches_difflib() {
-        // Test that our format matches what difflib would produce
-        let old = "first\nsecond\nthird";
-        let new = "first\nmodified\nthird";
+    fn test_multi_hunk_produces_separate_hunks() {
+        // Lines 1-20, we'll change line 3 and line 17
+        let old = "line 1\nline 2\nline 3\nline 4\nline 5\n\
+                   line 6\nline 7\nline 8\nline 9\nline 10\n\
+                   line 11\nline 12\nline 13\nline 14\nline 15\n\
+                   line 16\nline 17\nline 18\nline 19\nline 20\n";
+        let new = "line 1\nline 2\nMODIFIED 3\nline 4\nline 5\n\
+                   line 6\nline 7\nline 8\nline 9\nline 10\n\
+                   line 11\nline 12\nline 13\nline 14\nline 15\n\
+                   line 16\nMODIFIED 17\nline 18\nline 19\nline 20\n";
+
+        let result = unified_diff_impl(old, new, 3, "a/file.txt", "b/file.txt");
+
+        // Count hunk headers - should be exactly 2
+        let hunk_count = result.matches("@@ -").count();
+        assert_eq!(
+            hunk_count, 2,
+            "Expected 2 separate hunks, but got {}. Output:\n{}",
+            hunk_count, result
+        );
+
+        // Verify first hunk contains the first change
+        assert!(result.contains("-line 3\n"), "First hunk should show removal of line 3");
+        assert!(
+            result.contains("+MODIFIED 3\n"),
+            "First hunk should show addition of MODIFIED 3"
+        );
+
+        // Verify second hunk contains the second change
+        assert!(result.contains("-line 17\n"), "Second hunk should show removal of line 17");
+        assert!(
+            result.contains("+MODIFIED 17\n"),
+            "Second hunk should show addition of MODIFIED 17"
+        );
+    }
+
+    /// Parity test: verify output matches expected unified diff format exactly
+    /// This matches Python's difflib.unified_diff output
+    #[test]
+    fn test_parity_with_difflib() {
+        // Standard unified diff format test case
+        let old = "first\nsecond\nthird\n";
+        let new = "first\nmodified\nthird\n";
         let result = unified_diff_impl(old, new, 3, "a/test.py", "b/test.py");
 
-        // Verify the format
-        let lines: Vec<&str> = result.lines().collect();
-        assert_eq!(lines[0], "--- a/test.py");
-        assert_eq!(lines[1], "+++ b/test.py");
-        assert!(lines[2].starts_with("@@"));
-        assert!(lines[2].contains("@@"));
+        // Note: similar's UnifiedDiff uses space prefix for context lines (standard format)
+        // The " first" and " third" lines have 1 leading space (context line prefix)
+        let expected = concat!(
+            "--- a/test.py\n",
+            "+++ b/test.py\n",
+            "@@ -1,3 +1,3 @@\n",
+            " first\n",
+            "-second\n",
+            "+modified\n",
+            " third\n"
+        );
 
-        // Check markers
-        assert!(result.contains("-second"));
-        assert!(result.contains("+modified"));
+        assert_eq!(
+            result, expected,
+            "Output should match standard unified diff format exactly"
+        );
     }
 
+    /// Test that context lines parameter is respected
     #[test]
-    fn test_exact_match_difflib_simple() {
-        // This is a basic comparison to verify key aspects match Python's behavior
-        let old = "line 1\nline 2\nline 3";
-        let new = "line 1\nmodified\nline 3";
-        let result = unified_diff_impl(old, new, 3, "a/file.txt", "b/file.txt");
+    fn test_context_lines_parameter() {
+        let old = "a\nb\nc\nd\ne\n";
+        let new = "a\nB\nc\nd\ne\n";
 
-        // Check exact expected output
-        assert!(result.starts_with("--- a/file.txt\n"));
-        assert!(result.contains("+++ b/file.txt\n"));
+        // With context=1, only 1 line of context around change
+        let result = unified_diff_impl(old, new, 1, "old", "new");
+
+        // Should have @@ -2,1 +2,1 @@ (only 1 context line before and after)
+        // and only show lines b/B with 1 context line on each side
         assert!(result.contains("@@"));
-        assert!(result.contains("-line 2\n"));
-        assert!(result.contains("+modified\n"));
+        assert!(result.contains("-b\n"));
+        assert!(result.contains("+B\n"));
     }
 }
