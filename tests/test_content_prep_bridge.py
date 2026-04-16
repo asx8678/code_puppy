@@ -6,8 +6,6 @@ Rust-accelerated (when available) and Python fallback paths.
 
 from __future__ import annotations
 
-import pytest
-
 from code_puppy.content_prep_bridge import (
     RUST_AVAILABLE,
     format_line_numbers,
@@ -30,7 +28,7 @@ class TestRustAvailableFlag:
     def test_rust_available_flag_exists(self) -> None:
         """RUST_AVAILABLE flag must exist as a boolean."""
         assert isinstance(RUST_AVAILABLE, bool)
-    
+
     def test_rust_available_is_defined(self) -> None:
         """Flag should be defined as True or False."""
         # Just verify it's defined (may be True or False depending on env)
@@ -49,7 +47,7 @@ class TestPrepareContentPlainText:
         """Plain ASCII text should be detected as text with no flags."""
         raw = b"Hello, World!"
         result = prepare_content(raw)
-        
+
         assert result["text"] == "Hello, World!"
         assert result["is_binary"] is False
         assert result["had_bom"] is False
@@ -60,7 +58,7 @@ class TestPrepareContentPlainText:
         """Multi-line text should preserve line structure."""
         raw = b"Line 1\nLine 2\nLine 3\n"
         result = prepare_content(raw)
-        
+
         assert result["text"] == "Line 1\nLine 2\nLine 3\n"
         assert result["is_binary"] is False
         assert result["had_bom"] is False
@@ -69,7 +67,7 @@ class TestPrepareContentPlainText:
     def test_empty_content(self) -> None:
         """Empty content should return empty text, text mode."""
         result = prepare_content(b"")
-        
+
         assert result["text"] == ""
         assert result["is_binary"] is False
         assert result["had_bom"] is False
@@ -84,7 +82,7 @@ class TestPrepareContentBOM:
         """UTF-8 BOM should be detected and stripped."""
         raw = b"\xef\xbb\xbfHello World"
         result = prepare_content(raw)
-        
+
         assert result["text"] == "Hello World"
         assert result["had_bom"] is True
         assert result["is_binary"] is False
@@ -93,7 +91,7 @@ class TestPrepareContentBOM:
         """Content that is only BOM should result in empty text."""
         raw = b"\xef\xbb\xbf"
         result = prepare_content(raw)
-        
+
         assert result["text"] == ""
         assert result["had_bom"] is True
 
@@ -101,7 +99,7 @@ class TestPrepareContentBOM:
         """BOM with multi-line content should be handled correctly."""
         raw = b"\xef\xbb\xbfLine 1\nLine 2\n"
         result = prepare_content(raw)
-        
+
         assert result["text"] == "Line 1\nLine 2\n"
         assert result["had_bom"] is True
 
@@ -113,7 +111,7 @@ class TestPrepareContentCRLF:
         """CRLF sequences should be detected and normalized to LF."""
         raw = b"Line 1\r\nLine 2\r\n"
         result = prepare_content(raw)
-        
+
         assert result["text"] == "Line 1\nLine 2\n"
         assert result["had_crlf"] is True
         assert result["is_binary"] is False
@@ -122,7 +120,7 @@ class TestPrepareContentCRLF:
         """Mixed CRLF and LF should all become LF."""
         raw = b"Line 1\r\nLine 2\nLine 3\r\n"
         result = prepare_content(raw)
-        
+
         assert result["text"] == "Line 1\nLine 2\nLine 3\n"
         assert result["had_crlf"] is True
 
@@ -130,7 +128,7 @@ class TestPrepareContentCRLF:
         """Orphan CR (not part of CRLF) should be normalized too."""
         raw = b"Line 1\rLine 2\r"
         result = prepare_content(raw)
-        
+
         # Orphan CRs get normalized to LF
         assert "\n" in result["text"]
         assert "\r" not in result["text"]
@@ -143,7 +141,7 @@ class TestPrepareContentBinary:
         """NUL bytes anywhere in content should mark as binary."""
         raw = b"Hello\x00World"
         result = prepare_content(raw)
-        
+
         assert result["is_binary"] is True
         # NUL bytes are valid UTF-8, so they remain in the decoded text
         # The key is that is_binary=True, not that NULs get replaced
@@ -152,7 +150,7 @@ class TestPrepareContentBinary:
         """Single NUL byte marks content as binary."""
         raw = b"\x00"
         result = prepare_content(raw)
-        
+
         assert result["is_binary"] is True
 
     def test_high_control_char_ratio(self) -> None:
@@ -160,14 +158,14 @@ class TestPrepareContentBinary:
         # 8 control chars + 2 printable = 20% control → binary
         raw = b"\x01\x02\x03\x04\x05\x06\x07\x08ab"
         result = prepare_content(raw)
-        
+
         assert result["is_binary"] is True
 
     def test_binary_with_bom(self) -> None:
         """Binary content that has BOM should still be detected as binary."""
         raw = b"\xef\xbb\xbfHello\x00World"
         result = prepare_content(raw)
-        
+
         assert result["is_binary"] is True
         assert result["had_bom"] is True
         assert not result["text"].startswith("\ufeff")  # BOM stripped even for binary
@@ -176,7 +174,7 @@ class TestPrepareContentBinary:
         """Binary content should pass through without EOL normalization."""
         raw = b"PK\x03\x04\r\n\x00\x00\x00"  # Zip-like binary header
         result = prepare_content(raw)
-        
+
         assert result["is_binary"] is True
         # Binary content: CRLF detected but NOT normalized in output
         assert result["had_crlf"] is True
@@ -191,7 +189,7 @@ class TestPrepareContentUnicode:
         text = "Hello 世界 🌍"
         raw = text.encode("utf-8")
         result = prepare_content(raw)
-        
+
         assert result["text"] == text
         assert result["is_binary"] is False
         assert result["encoding"] == "utf-8"
@@ -201,7 +199,7 @@ class TestPrepareContentUnicode:
         text = "Line 1\r\n世界\r\n🌍"
         raw = text.encode("utf-8")
         result = prepare_content(raw)
-        
+
         expected = "Line 1\n世界\n🌍"
         assert result["text"] == expected
         assert result["had_crlf"] is True
@@ -240,7 +238,7 @@ class TestFormatLineNumbersBasic:
         """Simple 2-line content gets numbered output."""
         content = "hello\nworld"
         result = format_line_numbers(content)
-        
+
         assert "     1\thello" in result
         assert "     2\tworld" in result
 
@@ -248,20 +246,20 @@ class TestFormatLineNumbersBasic:
         """Single line without newline still gets numbered."""
         content = "hello"
         result = format_line_numbers(content)
-        
+
         assert "     1\thello" == result
 
     def test_empty_content(self) -> None:
         """Empty content produces single numbered empty line."""
         result = format_line_numbers("")
-        
+
         assert result == "     1\t"
 
     def test_trailing_newline(self) -> None:
         """Content ending with newline gets empty line numbered."""
         content = "hello\n"
         result = format_line_numbers(content)
-        
+
         lines = result.split("\n")
         assert len(lines) == 2
         assert "     1\thello" == lines[0]
@@ -275,7 +273,7 @@ class TestFormatLineNumbersStartLine:
         """Line numbers should start at custom value."""
         content = "line1\nline2"
         result = format_line_numbers(content, start_line=100)
-        
+
         assert "   100\tline1" in result
         assert "   101\tline2" in result
 
@@ -283,7 +281,7 @@ class TestFormatLineNumbersStartLine:
         """Large line numbers should format correctly."""
         content = "line1\nline2"
         result = format_line_numbers(content, start_line=1000)
-        
+
         assert "  1000\tline1" in result
         assert "  1001\tline2" in result
 
@@ -295,7 +293,7 @@ class TestFormatLineNumbersContinuation:
         """Long line (12000 chars) should split into 3 chunks."""
         long_line = "a" * 12000
         result = format_line_numbers(long_line)
-        
+
         assert "     1\t" in result  # First chunk
         assert "   1.1\t" in result  # Second chunk
         assert "   1.2\t" in result  # Third chunk
@@ -304,7 +302,7 @@ class TestFormatLineNumbersContinuation:
         """Line exactly at boundary should NOT be split."""
         line = "a" * 5000
         result = format_line_numbers(line)
-        
+
         assert ".1" not in result
         assert result == f"     1\t{line}"
 
@@ -312,7 +310,7 @@ class TestFormatLineNumbersContinuation:
         """Line just over boundary (5001 chars) should split into 2 chunks."""
         line = "a" * 5001
         result = format_line_numbers(line)
-        
+
         lines = result.split("\n")
         assert len(lines) == 2
         assert lines[0].startswith("     1\t")
@@ -322,7 +320,7 @@ class TestFormatLineNumbersContinuation:
         """Multiple long lines get separate continuation numbering."""
         content = "x" * 7500 + "\n" + "y" * 6000
         result = format_line_numbers(content)
-        
+
         # Line 1: x * 7500 → split into 2 chunks: 1 and 1.1
         # Line 2: y * 6000 → split into 2 chunks: 2 and 2.1
         assert "     1\t" in result
@@ -338,7 +336,7 @@ class TestFormatLineNumbersCustomOptions:
         """Custom max_line_length should be respected."""
         line = "a" * 30
         result = format_line_numbers(line, max_line_length=10)
-        
+
         # Should be split into 3 chunks (30 / 10)
         lines = result.split("\n")
         assert len(lines) == 3
@@ -347,7 +345,7 @@ class TestFormatLineNumbersCustomOptions:
         """Custom line_number_width should affect padding."""
         content = "hello"
         result = format_line_numbers(content, line_number_width=4)
-        
+
         # Should have "   1\t" (3 spaces + 1)
         assert "   1\t" in result
 
@@ -355,7 +353,7 @@ class TestFormatLineNumbersCustomOptions:
         """Continuation markers should work with large line numbers."""
         long_line = "a" * 10000  # 2 chunks needed
         result = format_line_numbers(long_line, start_line=1000)
-        
+
         # "1000.1" marker should be present
         assert "1000.1" in result
 
@@ -367,13 +365,13 @@ class TestFormatLineNumbersUnicode:
         """Unicode content should be handled correctly."""
         content = "héllo\nwörld"
         result = format_line_numbers(content)
-        
+
         assert "     1\théllo" in result
         assert "     2\twörld" in result
 
     def test_unicode_long_line_char_based(self) -> None:
         """Long lines with unicode should use CHARACTER-based chunking.
-        
+
         Python: len('£' * 3000) == 3000 characters
         Even though it's 6000 bytes in UTF-8.
         """
@@ -381,7 +379,7 @@ class TestFormatLineNumbersUnicode:
         # Should NOT be split (character-based, not byte-based)
         line = "£" * 3000
         result = format_line_numbers(line)
-        
+
         # Single line, no continuation
         assert ".1\t" not in result
         assert "     1\t" in result
@@ -390,7 +388,7 @@ class TestFormatLineNumbersUnicode:
         """5001 '£' chars > 5000 limit should get continuation."""
         line = "£" * 5001
         result = format_line_numbers(line)
-        
+
         assert "   1.1\t" in result
 
 
@@ -469,21 +467,21 @@ class TestPythonPrepareContent:
     def test_python_fallback_plain(self) -> None:
         raw = b"Hello World"
         result = _python_prepare_content(raw)
-        
+
         assert result["text"] == "Hello World"
         assert result["is_binary"] is False
 
     def test_python_fallback_bom(self) -> None:
         raw = b"\xef\xbb\xbfHello"
         result = _python_prepare_content(raw)
-        
+
         assert result["text"] == "Hello"
         assert result["had_bom"] is True
 
     def test_python_fallback_crlf(self) -> None:
         raw = b"Line 1\r\nLine 2"
         result = _python_prepare_content(raw)
-        
+
         assert result["text"] == "Line 1\nLine 2"
         assert result["had_crlf"] is True
 
@@ -493,7 +491,7 @@ class TestPythonFormatLineNumbers:
 
     def test_python_fallback_simple(self) -> None:
         result = _python_format_line_numbers("hello\nworld")
-        
+
         assert "     1\thello" in result
         assert "     2\tworld" in result
 
@@ -504,7 +502,7 @@ class TestPythonFormatLineNumbers:
     def test_python_fallback_continuation(self) -> None:
         long_line = "a" * 12000
         result = _python_format_line_numbers(long_line)
-        
+
         assert "   1.1\t" in result
         assert "   1.2\t" in result
 
@@ -523,7 +521,7 @@ class TestBridgeIntegration:
         result1 = prepare_content(b"test")
         assert isinstance(result1, dict)
         assert "text" in result1
-        
+
         # format_line_numbers
         result2 = format_line_numbers("test")
         assert isinstance(result2, str)
@@ -531,7 +529,7 @@ class TestBridgeIntegration:
     def test_result_dict_has_all_keys(self) -> None:
         """prepare_content result should have all required keys."""
         result = prepare_content(b"test")
-        
+
         required_keys = ["text", "is_binary", "had_bom", "had_crlf", "encoding"]
         for key in required_keys:
             assert key in result, f"Missing key: {key}"
@@ -544,8 +542,8 @@ class TestBridgeIntegration:
     def test_roundtrip_consistency(self) -> None:
         """Calling twice on same input should produce same output."""
         raw = b"Hello\r\nWorld\n\xef\xbb\xbfNotBOM"
-        
+
         result1 = prepare_content(raw)
         result2 = prepare_content(raw)
-        
+
         assert result1 == result2
