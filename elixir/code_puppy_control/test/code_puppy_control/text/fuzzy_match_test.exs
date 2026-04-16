@@ -385,6 +385,59 @@ defmodule CodePuppyControl.Text.FuzzyMatchTest do
   end
 
   # ============================================================================
+  # Regression tests for critical bugs (bd-38)
+  # ============================================================================
+
+  describe "regression tests (bd-38)" do
+    test "multi-codepoint graphemes are not identical in Jaro-Winkler" do
+      # BUG: JaroWinkler.similarity("🇺🇸a", "🇺🇸b") returned 1.0 (WRONG)
+      # String.length/1 counted graphemes but String.to_charlist/1 produced codepoints.
+      # The fix ensures lengths are derived from the SAME representation (tuple of codepoints).
+      assert JaroWinkler.similarity("🇺🇸a", "🇺🇸b") < 1.0
+      assert JaroWinkler.similarity("e\u0301x", "e\u0301y") < 1.0
+    end
+
+    test "preserves best score even when below threshold" do
+      # BUG: find_best_window/3 returned {nil, 0.0} unconditionally on :no_match.
+      # Rust returns the best score even when no span clears threshold.
+      # Use a search where at least one candidate passes the pre-filters
+      # but scores below the specified threshold.
+      # First character 'd' matches 'd' in "def abc():", and similar lengths.
+      haystack = ["def abc():", "    pass", "other content"]
+      # "def xyz():" has similar prefix and length to "def abc():"
+      # but scores below high threshold
+      {span, score} = FuzzyMatch.find_best_window(haystack, "def xyz():", threshold: 0.95)
+      # Below threshold, so no span returned
+      assert span == nil
+      # Score should be actual similarity (approx 0.8-0.9), not hardcoded 0.0
+      assert score > 0.0
+      # Confirm it's below threshold
+      assert score < 0.95
+    end
+
+    test "threshold 0.0 does not crash" do
+      # BUG: When every candidate scored 0.0 and threshold was 0.0, best_end stayed nil
+      # but arithmetic (best_end - best_start) was attempted, causing ArithmeticError.
+      result = FuzzyMatch.fuzzy_match_window(["abc"], "xyz", threshold: 0.0)
+      # Should return :no_match (all scores below threshold), not crash
+      assert result == :no_match
+    end
+
+    test "combining characters handled correctly" do
+      # NFC form: "é" as single codepoint (U+00E9)
+      # NFD form: "e" + combining acute accent (U+0065 U+0301)
+      # Both should compute correctly based on their codepoint representation
+      nfc = "café"
+      nfd = "cafe\u0301"
+
+      # Similarity should reflect actual codepoint differences
+      sim = JaroWinkler.similarity(nfc, nfd)
+      # These are different byte sequences, so similarity should be < 1.0
+      assert sim < 1.0
+    end
+  end
+
+  # ============================================================================
   # Performance sanity checks
   # ============================================================================
 

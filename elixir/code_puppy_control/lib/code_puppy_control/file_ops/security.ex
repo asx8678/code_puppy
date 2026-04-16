@@ -69,7 +69,9 @@ defmodule CodePuppyControl.FileOps.Security do
 
   # Pre-compute lowercased versions for case-insensitive comparison (bd-15)
   @sensitive_dir_prefixes_lower Enum.map(@sensitive_dir_prefixes, &String.downcase/1)
-  @sensitive_exact_files_lower @sensitive_exact_files |> Enum.map(&String.downcase/1) |> MapSet.new()
+  @sensitive_exact_files_lower @sensitive_exact_files
+                               |> Enum.map(&String.downcase/1)
+                               |> MapSet.new()
 
   # Maximum symlink chain depth to prevent infinite loops
   @max_symlink_depth 20
@@ -100,8 +102,8 @@ defmodule CodePuppyControl.FileOps.Security do
       expanded = Path.expand(file_path)
 
       # Check the user-supplied path (case-insensitive) — fixes bd-15
+      # Also check the symlink target if it resolves differently — fixes bd-16
       path_is_sensitive?(expanded) or
-        # Also check the symlink target if it resolves differently — fixes bd-16
         symlink_target_is_sensitive?(expanded)
     end
   end
