@@ -108,7 +108,9 @@ class TestTUIModeSkipsSignalSetup:
             )
             # Mock signal setup to verify it's NOT called - patch before creating runner
             mock_setup_signals = MagicMock()
-            stack.enter_context(patch.object(runner, "setup_signals", mock_setup_signals))
+            stack.enter_context(
+                patch.object(runner, "setup_signals", mock_setup_signals)
+            )
             stack.enter_context(
                 patch(
                     "code_puppy.tui.launcher.textual_interactive_mode",
@@ -132,12 +134,16 @@ class TestBridgeModeEnvironment:
         patches = _base_main_patches()
 
         # Start with clean environment
-        env_without_bridge = {k: v for k, v in os.environ.items() if k != "CODE_PUPPY_BRIDGE"}
+        env_without_bridge = {
+            k: v for k, v in os.environ.items() if k != "CODE_PUPPY_BRIDGE"
+        }
 
         with ExitStack() as stack:
             stack.enter_context(patch.dict(os.environ, env_without_bridge, clear=True))
             stack.enter_context(patch.dict(os.environ, {"NO_VERSION_UPDATE": "1"}))
-            stack.enter_context(patch("sys.argv", ["code-puppy", "--bridge-mode", "-p", "test"]))
+            stack.enter_context(
+                patch("sys.argv", ["code-puppy", "--bridge-mode", "-p", "test"])
+            )
             stack.enter_context(
                 patch(
                     "code_puppy.messaging.SynchronousInteractiveRenderer",
@@ -179,9 +185,14 @@ class TestBridgeModeEnvironment:
 
         with ExitStack() as stack:
             stack.enter_context(
-                patch.dict(os.environ, {"CODE_PUPPY_BRIDGE": "existing", "NO_VERSION_UPDATE": "1"})
+                patch.dict(
+                    os.environ,
+                    {"CODE_PUPPY_BRIDGE": "existing", "NO_VERSION_UPDATE": "1"},
+                )
             )
-            stack.enter_context(patch("sys.argv", ["code-puppy", "--bridge-mode", "-p", "test"]))
+            stack.enter_context(
+                patch("sys.argv", ["code-puppy", "--bridge-mode", "-p", "test"])
+            )
             stack.enter_context(
                 patch(
                     "code_puppy.messaging.SynchronousInteractiveRenderer",
@@ -315,7 +326,7 @@ class TestDBOSShutdownCleanup:
             await runner.run()
 
             # Verify DBOS.destroy() was NOT called
-            mock_dbos_cls.destroy.assert_not_called()
+            setup_dbos_mock.DBOS.destroy.assert_not_called()
 
 
 # =============================================================================
@@ -360,7 +371,9 @@ class TestAppRunnerArgumentParsing:
                 else:
                     args = runner.parse_args()
                     for attr, expected in expected_attrs.items():
-                        assert getattr(args, attr) == expected, f"Failed for argv={argv}"
+                        assert getattr(args, attr) == expected, (
+                            f"Failed for argv={argv}"
+                        )
 
 
 class TestAppRunnerShowLogo:
@@ -435,10 +448,18 @@ class TestAppRunnerSetupRenderers:
         runner = AppRunner()
 
         with patch("code_puppy.console.build_console", return_value=MagicMock()):
-            with patch("code_puppy.messaging.get_global_queue", return_value=MagicMock()):
-                with patch("code_puppy.messaging.get_message_bus", return_value=MagicMock()):
-                    with patch("code_puppy.messaging.SynchronousInteractiveRenderer") as mock_sync:
-                        with patch("code_puppy.messaging.RichConsoleRenderer") as mock_rich:
+            with patch(
+                "code_puppy.messaging.get_global_queue", return_value=MagicMock()
+            ):
+                with patch(
+                    "code_puppy.messaging.get_message_bus", return_value=MagicMock()
+                ):
+                    with patch(
+                        "code_puppy.messaging.SynchronousInteractiveRenderer"
+                    ) as mock_sync:
+                        with patch(
+                            "code_puppy.messaging.RichConsoleRenderer"
+                        ) as mock_rich:
                             mock_sync.return_value = MagicMock()
                             mock_rich.return_value = MagicMock()
 
@@ -511,10 +532,15 @@ class TestAppRunnerConfigureAgent:
         assert exc_info.value.code == 1
 
     @patch("code_puppy.config.set_model_name")
-    @patch("code_puppy.config._validate_model_exists", side_effect=RuntimeError("validation error"))
+    @patch(
+        "code_puppy.config._validate_model_exists",
+        side_effect=RuntimeError("validation error"),
+    )
     @patch("code_puppy.messaging.emit_error")
     @patch("code_puppy.error_logging.log_error")
-    def test_configure_agent_validation_exception(self, mock_log, mock_emit, mock_validate, mock_set):
+    def test_configure_agent_validation_exception(
+        self, mock_log, mock_emit, mock_validate, mock_set
+    ):
         """Test configure_agent with exception during validation."""
         from code_puppy.app_runner import AppRunner
 
@@ -530,10 +556,15 @@ class TestAppRunnerConfigureAgent:
         assert exc_info.value.code == 1
         mock_log.assert_called_once()
 
-    @patch("code_puppy.agents.agent_manager.get_available_agents", return_value={"code-puppy": {}})
+    @patch(
+        "code_puppy.agents.agent_manager.get_available_agents",
+        return_value={"code-puppy": {}},
+    )
     @patch("code_puppy.agents.agent_manager.set_current_agent")
     @patch("code_puppy.messaging.emit_system_message")
-    def test_configure_agent_valid_agent(self, mock_emit, mock_set_agent, mock_get_agents):
+    def test_configure_agent_valid_agent(
+        self, mock_emit, mock_set_agent, mock_get_agents
+    ):
         """Test configure_agent with valid agent."""
         from code_puppy.app_runner import AppRunner
 
@@ -548,10 +579,15 @@ class TestAppRunnerConfigureAgent:
         mock_set_agent.assert_called_once_with("code-puppy")
         mock_emit.assert_called()
 
-    @patch("code_puppy.agents.agent_manager.get_available_agents", return_value={"code-puppy": {}})
+    @patch(
+        "code_puppy.agents.agent_manager.get_available_agents",
+        return_value={"code-puppy": {}},
+    )
     @patch("code_puppy.messaging.emit_error")
     @patch("code_puppy.messaging.emit_system_message")
-    def test_configure_agent_invalid_agent_exits(self, mock_emit_sys, mock_emit_err, mock_get_agents):
+    def test_configure_agent_invalid_agent_exits(
+        self, mock_emit_sys, mock_emit_err, mock_get_agents
+    ):
         """Test configure_agent with invalid agent causes sys.exit."""
         from code_puppy.app_runner import AppRunner
 
@@ -566,10 +602,15 @@ class TestAppRunnerConfigureAgent:
 
         assert exc_info.value.code == 1
 
-    @patch("code_puppy.agents.agent_manager.get_available_agents", side_effect=RuntimeError("agent error"))
+    @patch(
+        "code_puppy.agents.agent_manager.get_available_agents",
+        side_effect=RuntimeError("agent error"),
+    )
     @patch("code_puppy.messaging.emit_error")
     @patch("code_puppy.error_logging.log_error")
-    def test_configure_agent_agent_exception(self, mock_log, mock_emit, mock_get_agents):
+    def test_configure_agent_agent_exception(
+        self, mock_log, mock_emit, mock_get_agents
+    ):
         """Test configure_agent with exception during agent lookup."""
         from code_puppy.app_runner import AppRunner
 

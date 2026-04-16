@@ -272,11 +272,78 @@ class TestMainEntry:
     def test_keyboard_interrupt_with_dbos(self, mock_run):
         from code_puppy.cli_runner import main_entry
 
+        # Mock DBOS using sys.modules approach since imports are deferred
+        mock_dbos_module = MagicMock()
+        mock_dbos_module.DBOS = MagicMock()
+        mock_dbos_module.DBOS.destroy = MagicMock()
+
         with (
             patch("code_puppy.cli_runner.reset_unix_terminal"),
-            patch("code_puppy.cli_runner.get_use_dbos", return_value=True),
-            patch("dbos.DBOS") as mock_dbos,
+            patch("code_puppy.config.get_use_dbos", return_value=True),
+            patch.dict("sys.modules", {"dbos": mock_dbos_module}),
         ):
             result = main_entry()
         assert result == 0
-        mock_dbos.destroy.assert_called_once()
+        mock_dbos_module.DBOS.destroy.assert_called_once()
+
+    @patch("code_puppy.cli_runner._run_full")
+    def test_help_fast_path(self, mock_run_full):
+        """Test that --help triggers fast path and _run_full is NOT called."""
+        from code_puppy.cli_runner import main_entry
+
+        with patch("sys.argv", ["code-puppy", "--help"]):
+            result = main_entry()
+
+        # _run_full should NOT be called for --help (fast path)
+        mock_run_full.assert_not_called()
+        # main_entry returns None after printing help
+        assert result is None
+
+    @patch("code_puppy.cli_runner._run_full")
+    def test_version_fast_path(self, mock_run_full):
+        """Test that --version triggers fast path and _run_full is NOT called."""
+        from code_puppy.cli_runner import main_entry
+
+        with patch("sys.argv", ["code-puppy", "--version"]):
+            result = main_entry()
+
+        # _run_full should NOT be called for --version (fast path)
+        mock_run_full.assert_not_called()
+        # main_entry returns None after printing version
+        assert result is None
+
+    @patch("code_puppy.cli_runner._run_full")
+    def test_help_short_flag_fast_path(self, mock_run_full):
+        """Test that -h triggers fast path and _run_full is NOT called."""
+        from code_puppy.cli_runner import main_entry
+
+        with patch("sys.argv", ["code-puppy", "-h"]):
+            result = main_entry()
+
+        # _run_full should NOT be called for -h (fast path)
+        mock_run_full.assert_not_called()
+        assert result is None
+
+    @patch("code_puppy.cli_runner._run_full")
+    def test_version_short_flag_v_fast_path(self, mock_run_full):
+        """Test that -v triggers fast path and _run_full is NOT called."""
+        from code_puppy.cli_runner import main_entry
+
+        with patch("sys.argv", ["code-puppy", "-v"]):
+            result = main_entry()
+
+        # _run_full should NOT be called for -v (fast path)
+        mock_run_full.assert_not_called()
+        assert result is None
+
+    @patch("code_puppy.cli_runner._run_full")
+    def test_version_short_flag_capital_v_fast_path(self, mock_run_full):
+        """Test that -V triggers fast path and _run_full is NOT called."""
+        from code_puppy.cli_runner import main_entry
+
+        with patch("sys.argv", ["code-puppy", "-V"]):
+            result = main_entry()
+
+        # _run_full should NOT be called for -V (fast path)
+        mock_run_full.assert_not_called()
+        assert result is None

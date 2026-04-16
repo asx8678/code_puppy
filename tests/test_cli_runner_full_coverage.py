@@ -52,21 +52,23 @@ def _apply_patches(stack, patches_dict):
 
 
 def _base_main_patches():
-    """Return a dict of common patches needed for main() / AppRunner.run()."""
+    """Return a dict of common patches needed for main() / AppRunner.run().
+
+    Note: These patch the ORIGINAL modules (not app_runner) since
+    imports are deferred inside methods for fast --help/--version.
+    """
     return {
-        "code_puppy.app_runner.ensure_config_exists": MagicMock(),
-        "code_puppy.app_runner.validate_cancel_agent_key": MagicMock(),
-        "code_puppy.app_runner.initialize_command_history_file": MagicMock(),
-        "code_puppy.app_runner.get_use_dbos": MagicMock(return_value=False),
-        "code_puppy.app_runner.default_version_mismatch_behavior": MagicMock(),
+        "code_puppy.config.ensure_config_exists": MagicMock(),
+        "code_puppy.keymap.validate_cancel_agent_key": MagicMock(),
+        "code_puppy.config.initialize_command_history_file": MagicMock(),
+        "code_puppy.config.get_use_dbos": MagicMock(return_value=False),
+        "code_puppy.version_checker.default_version_mismatch_behavior": MagicMock(),
         "code_puppy.cli_runner.reset_unix_terminal": MagicMock(),
-        "code_puppy.app_runner.reset_windows_terminal_full": MagicMock(),
-        "code_puppy.app_runner.callbacks": MagicMock(
-            on_startup=AsyncMock(),
-            on_shutdown=AsyncMock(),
-            on_version_check=AsyncMock(),
-            get_callbacks=MagicMock(return_value=[]),
-        ),
+        "code_puppy.terminal_utils.reset_windows_terminal_full": MagicMock(),
+        "code_puppy.callbacks.on_startup": AsyncMock(),
+        "code_puppy.callbacks.on_shutdown": AsyncMock(),
+        "code_puppy.callbacks.on_version_check": AsyncMock(),
+        "code_puppy.callbacks.get_callbacks": MagicMock(return_value=[]),
         "code_puppy.config.load_api_keys_to_environment": MagicMock(),
     }
 
@@ -190,7 +192,9 @@ class TestMain:
         await self._run_main(
             ["code-puppy"],
             extra_patches={
-                "code_puppy.app_runner._get_interactive_mode": MagicMock(return_value=mock_inter),
+                "code_puppy.app_runner._get_interactive_mode": MagicMock(
+                    return_value=mock_inter
+                ),
                 "pyfiglet.figlet_format": MagicMock(return_value="LOGO\n\n"),
             },
         )
@@ -202,7 +206,9 @@ class TestMain:
         await self._run_main(
             ["code-puppy", "do", "something"],
             extra_patches={
-                "code_puppy.app_runner._get_interactive_mode": MagicMock(return_value=mock_inter),
+                "code_puppy.app_runner._get_interactive_mode": MagicMock(
+                    return_value=mock_inter
+                ),
                 "pyfiglet.figlet_format": MagicMock(return_value="LOGO\n\n"),
             },
         )
@@ -216,7 +222,7 @@ class TestMain:
             await self._run_main(
                 ["code-puppy", "-p", "test"],
                 base_overrides={
-                    "code_puppy.app_runner.validate_cancel_agent_key": MagicMock(
+                    "code_puppy.keymap.validate_cancel_agent_key": MagicMock(
                         side_effect=KeymapError("bad key")
                     ),
                 },
@@ -314,7 +320,10 @@ class TestMain:
             get_callbacks=MagicMock(return_value=[lambda: None]),
         )
         patches = _base_main_patches()
-        patches["code_puppy.app_runner.callbacks"] = cb_mock
+        patches["code_puppy.callbacks.on_startup"] = cb_mock.on_startup
+        patches["code_puppy.callbacks.on_shutdown"] = cb_mock.on_shutdown
+        patches["code_puppy.callbacks.on_version_check"] = cb_mock.on_version_check
+        patches["code_puppy.callbacks.get_callbacks"] = cb_mock.get_callbacks
         with ExitStack() as stack:
             stack.enter_context(
                 patch.dict(os.environ, {"NO_VERSION_UPDATE": ""}, clear=False)
@@ -354,12 +363,6 @@ class TestMain:
     async def test_version_check_no_callbacks(self):
         """Version check falls back to default_version_mismatch_behavior."""
         patches = _base_main_patches()
-        patches["code_puppy.app_runner.callbacks"] = MagicMock(
-            on_startup=AsyncMock(),
-            on_shutdown=AsyncMock(),
-            on_version_check=AsyncMock(),
-            get_callbacks=MagicMock(return_value=[]),
-        )
         with ExitStack() as stack:
             stack.enter_context(
                 patch.dict(os.environ, {"NO_VERSION_UPDATE": ""}, clear=False)
@@ -406,7 +409,7 @@ class TestMain:
         await self._run_main(
             ["code-puppy", "-p", "hi"],
             base_overrides={
-                "code_puppy.app_runner.get_use_dbos": MagicMock(return_value=True),
+                "code_puppy.config.get_use_dbos": MagicMock(return_value=True),
             },
             extra_patches={
                 "code_puppy.prompt_runner.execute_single_prompt": AsyncMock(),
@@ -428,7 +431,7 @@ class TestMain:
             await self._run_main(
                 ["code-puppy", "-p", "hi"],
                 base_overrides={
-                    "code_puppy.app_runner.get_use_dbos": MagicMock(return_value=True),
+                    "code_puppy.config.get_use_dbos": MagicMock(return_value=True),
                 },
                 extra_patches={
                     "dbos.DBOS": mock_dbos_cls,
@@ -451,7 +454,9 @@ class TestMain:
         await self._run_main(
             ["code-puppy"],
             extra_patches={
-                "code_puppy.app_runner._get_interactive_mode": MagicMock(return_value=mock_inter),
+                "code_puppy.app_runner._get_interactive_mode": MagicMock(
+                    return_value=mock_inter
+                ),
                 "builtins.__import__": fake_import,
             },
         )
@@ -1815,7 +1820,8 @@ class TestImportErrorFallbacks:
             )
             stack.enter_context(
                 patch(
-                    "code_puppy.agents.agent_manager.get_current_agent", return_value=agent
+                    "code_puppy.agents.agent_manager.get_current_agent",
+                    return_value=agent,
                 )
             )
             stack.enter_context(
