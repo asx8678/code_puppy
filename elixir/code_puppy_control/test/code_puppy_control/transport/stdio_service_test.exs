@@ -581,6 +581,78 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
   end
 
   # ============================================================================
+  # Text Replace Tests (bd-39)
+  # ============================================================================
+
+  describe "text_replace" do
+    test "exact replacement succeeds" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "text_replace",
+        "params" => %{
+          "content" => "hello world\nfoo bar\n",
+          "replacements" => [%{"old_str" => "world", "new_str" => "universe"}]
+        }
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      assert response["result"]["success"] == true
+      assert response["result"]["modified"] == "hello universe\nfoo bar\n"
+      assert response["result"]["diff"] != ""
+      assert response["result"]["error"] == nil
+      assert response["result"]["jw_score"] == nil
+    end
+
+    test "fuzzy match failure returns error in result" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 2,
+        "method" => "text_replace",
+        "params" => %{
+          "content" => "completely different\n",
+          "replacements" => [%{"old_str" => "xyz-nomatch", "new_str" => "replacement"}]
+        }
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      assert response["result"]["success"] == false
+      assert response["result"]["error"] =~ "JW"
+      assert response["result"]["modified"] == "completely different\n"
+    end
+
+    test "missing content param returns error" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 3,
+        "method" => "text_replace",
+        "params" => %{
+          "replacements" => [%{"old_str" => "a", "new_str" => "b"}]
+        }
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      response = Jason.decode!(output)
+      assert response["error"]["code"] == -32602
+      assert response["error"]["message"] =~ "content"
+    end
+  end
+
+  # ============================================================================
   # Helper Functions
   # ============================================================================
 

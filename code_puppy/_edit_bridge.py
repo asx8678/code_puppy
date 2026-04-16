@@ -1,11 +1,14 @@
-"""Bridge to Rust edit engine with Python fallback.
+"""Bridge to Elixir/Rust edit engine with Python fallback.
 
 This module provides transparent routing for edit operations:
 - fuzzy_match_window: Find best matching window using Jaro-Winkler similarity
 - replace_in_content: Apply replacements with exact/fuzzy matching + diff generation
 - unified_diff: Generate unified diff between two content strings
 
-When the Rust extension _code_puppy_core is available, all operations
+Routing priority for replace_in_content (bd-39): Elixir → Rust → Python
+
+When the Elixir file_service is available and enabled, it is tried first.
+When the Rust extension _code_puppy_core is available, operations
 are routed through the native implementations for maximum performance.
 When unavailable, the bridge falls back to the Python implementations.
 """
@@ -48,6 +51,44 @@ def RUST_ACTIVE() -> bool:
     return RUST_AVAILABLE and is_rust_enabled()
 
 
+def _try_elixir_replace(
+    content: str,
+    replacements: list[tuple[str, str]],
+) -> dict | None:
+    """Try to route replace_in_content through Elixir (bd-39).
+
+    Returns the result dict if Elixir is available and succeeds,
+    or None to signal fallback to Rust/Python.
+    """
+    try:
+        from code_puppy.native_backend import NativeBackend
+
+        if not NativeBackend._should_use_elixir("file_ops"):
+            return None
+
+        # Convert tuple list to the JSON-RPC format Elixir expects
+        elixir_replacements = [
+            {"old_str": old, "new_str": new} for old, new in replacements
+        ]
+
+        result = NativeBackend._call_elixir(
+            "text_replace",
+            {"content": content, "replacements": elixir_replacements},
+        )
+
+        # Elixir returns the same dict shape we need
+        return {
+            "modified": result.get("modified", content),
+            "diff": result.get("diff", ""),
+            "success": result.get("success", False),
+            "error": result.get("error"),
+            "jw_score": result.get("jw_score"),
+        }
+    except Exception:
+        # Any failure → fall through to Rust/Python
+        return None
+
+
 def fuzzy_match_window(
     haystack_lines: list[str],
     needle: str,
@@ -87,7 +128,9 @@ def replace_in_content(
     content: str,
     replacements: list[tuple[str, str]],
 ) -> dict:
-    """Bridge to Rust replace_in_content with Python fallback.
+    """Bridge to Elixir/Rust replace_in_content with Python fallback.
+
+    Routing priority (bd-39): Elixir → Rust → Python
 
     Returns dict with: modified, diff, success, error, jw_score
     matching the format _apply_replacements returns.
@@ -104,6 +147,11 @@ def replace_in_content(
         - error: str | None - error message if fuzzy match failed
         - jw_score: float | None - the JW score if fuzzy match was attempted
     """
+    # bd-39: Try Elixir first
+    elixir_result = _try_elixir_replace(content, replacements)
+    if elixir_result is not None:
+        return elixir_result
+
     if RUST_ACTIVE():
         result: ReplaceResult = _rust_replace_in_content(content, replacements)
         return {

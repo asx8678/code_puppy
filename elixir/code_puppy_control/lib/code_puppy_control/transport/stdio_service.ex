@@ -45,6 +45,9 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `file_read_batch` - Read multiple files
   - `grep_search` - Search for patterns in files
 
+  ### Text Operations
+  - `text_replace` - Apply replacements with exact/fuzzy matching
+
   ### Utility
   - `health_check` - Service health status
   - `ping` - Simple ping/pong
@@ -371,6 +374,54 @@ defmodule CodePuppyControl.Transport.StdioService do
             id
           )
       end
+    end
+  end
+
+  # text_replace - Apply replacements with exact/fuzzy matching (bd-39)
+  defp handle_request("text_replace", params, id) do
+    content = params["content"]
+    replacements_raw = params["replacements"]
+
+    cond do
+      is_nil(content) ->
+        Protocol.encode_error(-32602, "Missing required param: content", nil, id)
+
+      is_nil(replacements_raw) or not is_list(replacements_raw) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: replacements", nil, id)
+
+      true ->
+        replacements =
+          Enum.map(replacements_raw, fn rep ->
+            {rep["old_str"] || "", rep["new_str"] || ""}
+          end)
+
+        alias CodePuppyControl.Text.ReplaceEngine
+
+        case ReplaceEngine.replace_in_content(content, replacements) do
+          {:ok, %{modified: modified, diff: diff, jw_score: jw_score}} ->
+            Protocol.encode_response(
+              %{
+                "modified" => modified,
+                "diff" => diff,
+                "success" => true,
+                "error" => nil,
+                "jw_score" => jw_score
+              },
+              id
+            )
+
+          {:error, %{reason: reason, jw_score: jw_score, original: original}} ->
+            Protocol.encode_response(
+              %{
+                "modified" => original,
+                "diff" => "",
+                "success" => false,
+                "error" => reason,
+                "jw_score" => jw_score
+              },
+              id
+            )
+        end
     end
   end
 

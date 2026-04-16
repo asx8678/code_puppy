@@ -670,11 +670,12 @@
       "id": "bd-39",
       "title": "Migrate replace_engine.rs to pure Elixir (Text.ReplaceEngine)",
       "description": "Migrate code_puppy_core/src/replace_engine.rs (14 KB) to pure Elixir.\n\nDEPENDS ON: unified_diff (Text.Diff) + fuzzy_match (Text.FuzzyMatch) \u2014 both must be completed first.\n\nCore logic:\n- Exact match \u2192 replace\n- Fuzzy match fallback (uses FuzzyMatch)\n- Generate unified diff of changes (uses Diff)\n- Handle multi-line replacements\n\nFILES TO CREATE/MODIFY:\n- Create: elixir/.../text/replace_engine.ex\n- Create: test/.../text/replace_engine_test.exs\n- Modify: _edit_bridge.py \u2014 route replace_in_content to Elixir\n- Delete: code_puppy_core/src/replace_engine.rs\n\nVALIDATION: End-to-end test with real file edits through full bridge path.\n\nEFFORT: ~5 days",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
-        "migration,elixir,rust-removal,phase-3,edit-engine"
+        "migration,elixir,rust-removal,phase-3,edit-engine",
+        "claimed"
       ],
       "dependencies": {
         "blocks": [
@@ -683,8 +684,10 @@
         ]
       },
       "created_at": "2026-04-16T14:40:31.017982",
-      "updated_at": "2026-04-16T14:41:22.461150",
-      "comments": []
+      "updated_at": "2026-04-16T15:55:24.695100",
+      "comments": [
+        "## Execution Plan Filed by planning-agent-019d96\n\n### Phase 1: Elixir Implementation (~2 hours)\n- Create CodePuppyControl.Text.ReplaceEngine module\n- File: elixir/code_puppy_control/lib/code_puppy_control/text/replace_engine.ex\n- Port exact match \u2192 fuzzy fallback \u2192 diff pipeline from Rust\n- Use @fuzzy_threshold 0.95 (stricter than FuzzyMatch default 0.6)\n- Handle: empty replacements, empty old_str, trailing newline preservation\n- Must use String.split(content, \"\\n\") to match Rust split behavior\n- Stay under 600-line cap\n\n### Phase 2: Elixir Tests (~1.5 hours)\n- File: elixir/code_puppy_control/test/code_puppy_control/text/replace_engine_test.exs\n- Port all 17 Rust tests from replace_engine.rs\n- Validation: cd elixir/code_puppy_control && mix test test/code_puppy_control/text/replace_engine_test.exs\n\n### Phase 3: Expose via StdioService (~1 hour)\n- Add text_replace method to StdioService (first text_* method in dispatcher)\n- File: elixir/code_puppy_control/lib/code_puppy_control/transport/stdio_service.ex\n- Params: %{content => str, replacements => [%{old_str => str, new_str => str}]}\n- Response: %{modified => str, diff => str, success => bool, error => str|nil, jw_score => float|nil}\n- Add StdioService round-trip test\n\n### Phase 4: Python Bridge Update (~1.5 hours)\n- Update code_puppy/_edit_bridge.py to route through Elixir\n- Routing priority: Elixir \u2192 Rust \u2192 Python fallback\n- Keep Python fallback intact for python_only profile\n- Update code_puppy/native_backend.py if routing through NativeBackend\n\n### Phase 5: Rust Removal (~30 min)\n- Delete: code_puppy_core/src/replace_engine.rs\n- Modify: code_puppy_core/src/lib.rs (remove mod replace_engine, use, pyfunction, ReplaceResult pyclass)\n- Verify: cargo build && cargo test\n\n### Phase 6: Integration & Validation (~1 hour)\n- mix test (full Elixir suite)\n- pytest tests/ -x (full Python suite)\n- E2E: Python \u2192 Elixir \u2192 Text.ReplaceEngine \u2192 response\n- Code review: elixir-reviewer + python-reviewer\n- Update MIGRATION_STATUS.md\n\n### Risks\n1. Trailing newline semantics - port all 17 Rust tests precisely\n2. FuzzyMatch end_line exclusive vs inclusive - verify against Rust behavior\n3. First text_* method in StdioService - follow file_read/grep_search pattern\n4. Performance acceptable - replace engine is NOT hot-path (once per edit)\n5. Bridge routing - use NativeBackend.is_available(text_ops) pattern\n\n### Dependencies (both satisfied)\n- bd-37 Text.Diff: CLOSED\n- bd-38 Text.FuzzyMatch: CLOSED"
+      ]
     },
     "bd-40": {
       "id": "bd-40",

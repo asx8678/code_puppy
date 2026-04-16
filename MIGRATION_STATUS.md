@@ -20,6 +20,7 @@
 | **Tree-sitter Parsing** | 🔄 IN-PROGRESS | Rust NIF | bd-11 | NativeBackend contract complete |
 | **Message Core** | ✅ DONE | Rust | — | `code_puppy_core` stable |
 | **Elixir Transport** | 📋 TODO | Elixir | bd-10 | Standalone outside bridge mode |
+| **Replace Engine** | ✅ DONE | Elixir | bd-39 | Migrated from Rust, 2026-04-16 |
 | **Token Estimation** | 🚫 NO MIGRATION | Rust | — | Too hot path, keep Rust |
 | **Message Pruning** | 🚫 NO MIGRATION | Rust | — | Performance-critical, keep Rust |
 
@@ -157,6 +158,7 @@
 | bd-11 | Parse contract verification | Phase 3 | 🔄 Open |
 | bd-13 | NativeBackend routing fix | Phase 1 | ✅ Closed |
 | bd-12 | Doc consolidation | — | ✅ Closed |
+| bd-39 | Replace Engine | Phase 3 | ✅ Closed |
 
 ---
 

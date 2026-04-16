@@ -8,13 +8,12 @@ mod line_numbers;
 mod message_hashing;
 mod path_classify;
 mod pruning;
-mod replace_engine;
+
 mod serialization;
 mod token_estimation;
 mod types;
 mod unified_diff;
 use fuzzy_match::fuzzy_match_window_impl;
-use replace_engine::replace_in_content as replace_in_content_impl;
 
 use hashline::{
     compute_line_hash as compute_line_hash_impl,
@@ -83,21 +82,6 @@ pub struct SplitResult {
     pub protected_indices: Vec<usize>,
     #[pyo3(get)]
     pub protected_token_count: i64,
-}
-
-#[pyclass(frozen)]
-#[derive(Debug, Clone)]
-pub struct ReplaceResult {
-    #[pyo3(get)]
-    pub modified: String,
-    #[pyo3(get)]
-    pub diff: String,
-    #[pyo3(get)]
-    pub success: bool,
-    #[pyo3(get)]
-    pub error: Option<String>,
-    #[pyo3(get)]
-    pub jw_score: Option<f64>,
 }
 
 // ── Helper: parse list[dict] → Vec<Message> ─────────────────────────────────
@@ -214,24 +198,6 @@ fn fuzzy_match_window(haystack_lines: Vec<String>, needle: String) -> PyResult<F
     })
 }
 
-
-// ── Replace engine functions ──────────────────────────────────────────────
-
-#[pyfunction]
-#[pyo3(signature = (content, replacements))]
-fn replace_in_content(
-    content: &str,
-    replacements: Vec<(String, String)>,
-) -> PyResult<ReplaceResult> {
-    let result = replace_in_content_impl(content, &replacements);
-    Ok(ReplaceResult {
-        modified: result.modified,
-        diff: result.diff,
-        success: result.success,
-        error: result.error,
-        jw_score: result.jw_score,
-    })
-}
 
 // ── Line numbers functions ─────────────────────────────────────────────────
 
@@ -404,7 +370,6 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ProcessResult>()?;
     m.add_class::<PruneResult>()?;
     m.add_class::<SplitResult>()?;
-    m.add_class::<ReplaceResult>()?;
     m.add_class::<MessageBatch>()?;
     m.add_class::<FuzzyMatchResult>()?;
     m.add_class::<path_classify::PathClassifier>()?;
@@ -421,7 +386,6 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(validate_hashline_anchor, m)?)?;
     m.add_function(wrap_pyfunction!(fuzzy_match_window, m)?)?;
     m.add_function(wrap_pyfunction!(make_unified_diff, m)?)?;
-    m.add_function(wrap_pyfunction!(replace_in_content, m)?)?;
     content_prep::register(m)?;
     m.add_function(wrap_pyfunction!(format_line_numbers, m)?)?;
     Ok(())
