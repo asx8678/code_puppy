@@ -49,6 +49,10 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `text_fuzzy_match` - Find best matching window using fuzzy matching
   - `text_unified_diff` - Generate unified diff between two strings
   - `text_replace` - Apply replacements with exact/fuzzy matching
+  - `hashline_compute` - Compute 2-char hash anchor for a line
+  - `hashline_format` - Format text with hashline prefixes
+  - `hashline_strip` - Strip hashline prefixes from text
+  - `hashline_validate` - Validate hashline anchor
 
   ### Utility
   - `health_check` - Service health status
@@ -489,6 +493,68 @@ defmodule CodePuppyControl.Transport.StdioService do
         )
 
         Protocol.encode_response(%{"diff" => result}, id)
+    end
+  end
+
+  # hashline_compute - Compute 2-char hash anchor for a line (bd-88)
+  defp handle_request("hashline_compute", params, id) do
+    idx = params["idx"]
+    line = params["line"]
+
+    cond do
+      is_nil(idx) or not is_integer(idx) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: idx", nil, id)
+      is_nil(line) or not is_binary(line) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: line", nil, id)
+      true ->
+        hash = CodePuppyControl.HashlineNif.compute_line_hash(idx, line)
+        Protocol.encode_response(%{"hash" => hash}, id)
+    end
+  end
+
+  # hashline_format - Format text with hashline prefixes (bd-88)
+  defp handle_request("hashline_format", params, id) do
+    text = params["text"]
+    start_line = params["start_line"] || 1
+
+    cond do
+      is_nil(text) or not is_binary(text) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: text", nil, id)
+      true ->
+        result = CodePuppyControl.HashlineNif.format_hashlines(text, start_line)
+        Protocol.encode_response(%{"formatted" => result}, id)
+    end
+  end
+
+  # hashline_strip - Strip hashline prefixes from text (bd-88)
+  defp handle_request("hashline_strip", params, id) do
+    text = params["text"]
+
+    cond do
+      is_nil(text) or not is_binary(text) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: text", nil, id)
+      true ->
+        result = CodePuppyControl.HashlineNif.strip_hashline_prefixes(text)
+        Protocol.encode_response(%{"stripped" => result}, id)
+    end
+  end
+
+  # hashline_validate - Validate hashline anchor (bd-88)
+  defp handle_request("hashline_validate", params, id) do
+    idx = params["idx"]
+    line = params["line"]
+    expected_hash = params["expected_hash"]
+
+    cond do
+      is_nil(idx) or not is_integer(idx) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: idx", nil, id)
+      is_nil(line) or not is_binary(line) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: line", nil, id)
+      is_nil(expected_hash) or not is_binary(expected_hash) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: expected_hash", nil, id)
+      true ->
+        valid = CodePuppyControl.HashlineNif.validate_hashline_anchor(idx, line, expected_hash)
+        Protocol.encode_response(%{"valid" => valid}, id)
     end
   end
 

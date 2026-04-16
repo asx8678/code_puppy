@@ -51,24 +51,6 @@ except (ImportError, SystemError):
 
 
 
-# --- Hashline acceleration --------------------------------------------------
-try:
-    from _code_puppy_core import (
-        compute_line_hash,
-        format_hashlines,
-        strip_hashline_prefixes,
-        validate_hashline_anchor,
-    )
-
-    HASHLINE_RUST_AVAILABLE = True
-except (ImportError, SystemError):
-    HASHLINE_RUST_AVAILABLE = False
-    compute_line_hash = None  # type: ignore[assignment]
-    format_hashlines = None  # type: ignore[assignment]
-    strip_hashline_prefixes = None  # type: ignore[assignment]
-    validate_hashline_anchor = None  # type: ignore[assignment]
-# ---------------------------------------------------------------------------
-
 
 # --- Fast Puppy toggle ---------------------------------------------------
 # When True (default), Rust acceleration is used at runtime if the module
@@ -311,12 +293,6 @@ __all__ = [
     "is_rust_enabled",
     "set_rust_enabled",
     "get_rust_status",
-    # Hashline acceleration
-    "HASHLINE_RUST_AVAILABLE",
-    "compute_line_hash",
-    "format_hashlines",
-    "strip_hashline_prefixes",
-    "validate_hashline_anchor",
     # Rust types (for type hints)
     "ProcessResult",
     "PruneResult",
