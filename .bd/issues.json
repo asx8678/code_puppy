@@ -821,7 +821,7 @@
       "id": "bd-46",
       "title": "Port code_puppy_core::hashline to pure Elixir",
       "description": "Replace both code_puppy_core/src/hashline.rs AND elixir/code_puppy_control/native/hashline_nif/ with pure Elixir. Options: port xxHash32 to Elixir, or switch to :erlang.phash2 (breaks compat with omp format \u2014 needs decision). Preserve NIBBLE_STR encoding.\n\nPart of Phase 1 \u2014 Rust workspace retirement.",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -833,7 +833,7 @@
         ]
       },
       "created_at": "2026-04-16T17:51:18.626913",
-      "updated_at": "2026-04-16T17:51:18.626920",
+      "updated_at": "2026-04-16T18:00:31.074453",
       "comments": []
     },
     "bd-47": {

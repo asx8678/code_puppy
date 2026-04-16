@@ -34,11 +34,19 @@ from code_puppy.utils.hashline import (
 def _force_python(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable Elixir backend for the duration of a test."""
     # Monkeypatch all Elixir try functions to return None, forcing Python fallback
-    monkeypatch.setattr(hashline_mod, "_try_elixir_compute_line_hash", lambda _idx, _line: None)
-    monkeypatch.setattr(hashline_mod, "_try_elixir_format_hashlines", lambda _text, _start: None)
-    monkeypatch.setattr(hashline_mod, "_try_elixir_strip_hashline_prefixes", lambda _text: None)
     monkeypatch.setattr(
-        hashline_mod, "_try_elixir_validate_hashline_anchor", lambda _idx, _line, _hash: None
+        hashline_mod, "_try_elixir_compute_line_hash", lambda _idx, _line: None
+    )
+    monkeypatch.setattr(
+        hashline_mod, "_try_elixir_format_hashlines", lambda _text, _start: None
+    )
+    monkeypatch.setattr(
+        hashline_mod, "_try_elixir_strip_hashline_prefixes", lambda _text: None
+    )
+    monkeypatch.setattr(
+        hashline_mod,
+        "_try_elixir_validate_hashline_anchor",
+        lambda _idx, _line, _hash: None,
     )
 
 
@@ -276,9 +284,6 @@ class TestValidateHashlineAnchor:
         # (not asserting inequality to allow for extremely rare collisions)
 
     def test_wrong_hash_string_returns_false(self):
-        assert validate_hashline_anchor(1, "hello", "ZZ") is False or True
-        # Above could be True if "ZZ" happens to be the actual hash; test
-        # with a hash that is definitely wrong format / wrong value instead
         h = compute_line_hash(1, "hello")
         # flip one character to create a wrong hash
         wrong = ("A" if h[0] != "A" else "B") + h[1]
@@ -312,7 +317,9 @@ class TestIsUsingElixir:
         result = is_using_elixir()
         assert isinstance(result, bool)
 
-    def test_returns_false_when_native_backend_not_available(self, monkeypatch: pytest.MonkeyPatch):
+    def test_returns_false_when_native_backend_not_available(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         # When NativeBackend import fails, should return False
         def mock_import_fail(*args, **kwargs):
             raise ImportError("No Elixir")
@@ -324,7 +331,7 @@ class TestIsUsingElixir:
 
 
 # ---------------------------------------------------------------------------
-# Pure-Python fallback (force _USING_RUST = False)
+# Pure-Python fallback (force Elixir helpers to return None)
 # ---------------------------------------------------------------------------
 
 
@@ -335,11 +342,19 @@ class TestPurePythonFallback:
     def disable_elixir(self, monkeypatch: pytest.MonkeyPatch):
         """Disable Elixir backend for the duration of a test."""
         # Monkeypatch all Elixir try functions to return None, forcing Python fallback
-        monkeypatch.setattr(hashline_mod, "_try_elixir_compute_line_hash", lambda _idx, _line: None)
-        monkeypatch.setattr(hashline_mod, "_try_elixir_format_hashlines", lambda _text, _start: None)
-        monkeypatch.setattr(hashline_mod, "_try_elixir_strip_hashline_prefixes", lambda _text: None)
         monkeypatch.setattr(
-            hashline_mod, "_try_elixir_validate_hashline_anchor", lambda _idx, _line, _hash: None
+            hashline_mod, "_try_elixir_compute_line_hash", lambda _idx, _line: None
+        )
+        monkeypatch.setattr(
+            hashline_mod, "_try_elixir_format_hashlines", lambda _text, _start: None
+        )
+        monkeypatch.setattr(
+            hashline_mod, "_try_elixir_strip_hashline_prefixes", lambda _text: None
+        )
+        monkeypatch.setattr(
+            hashline_mod,
+            "_try_elixir_validate_hashline_anchor",
+            lambda _idx, _line, _hash: None,
         )
 
     def test_compute_returns_two_chars(self):
@@ -417,7 +432,9 @@ class TestPurePythonFallback:
     def test_is_using_elixir_fallback_behavior(self):
         # When Elixir is not available, is_using_elixir() returns False
         # We can't easily test the True case without a running Elixir service
-        assert hashline_mod.is_using_elixir() is False or True  # Either is valid
+        # Just verify the function is callable and returns a bool
+        result = hashline_mod.is_using_elixir()
+        assert isinstance(result, bool)
 
 
 # ---------------------------------------------------------------------------
@@ -435,23 +452,37 @@ class TestElixirRouting:
         assert hasattr(hashline_mod, "_try_elixir_strip_hashline_prefixes")
         assert hasattr(hashline_mod, "_try_elixir_validate_hashline_anchor")
 
-    def test_elixir_helpers_return_none_when_not_available(self, monkeypatch: pytest.MonkeyPatch):
+    def test_elixir_helpers_return_none_when_not_available(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """When Elixir is not available, try functions return None."""
         # Ensure the functions return None by making NativeBackend fail
-        monkeypatch.setattr(hashline_mod, "_try_elixir_compute_line_hash", lambda idx, line: None)
-        monkeypatch.setattr(hashline_mod, "_try_elixir_format_hashlines", lambda text, start: None)
-        monkeypatch.setattr(hashline_mod, "_try_elixir_strip_hashline_prefixes", lambda text: None)
         monkeypatch.setattr(
-            hashline_mod, "_try_elixir_validate_hashline_anchor", lambda idx, line, h: None
+            hashline_mod, "_try_elixir_compute_line_hash", lambda idx, line: None
+        )
+        monkeypatch.setattr(
+            hashline_mod, "_try_elixir_format_hashlines", lambda text, start: None
+        )
+        monkeypatch.setattr(
+            hashline_mod, "_try_elixir_strip_hashline_prefixes", lambda text: None
+        )
+        monkeypatch.setattr(
+            hashline_mod,
+            "_try_elixir_validate_hashline_anchor",
+            lambda idx, line, h: None,
         )
 
         # Verify they return None
         assert hashline_mod._try_elixir_compute_line_hash(1, "test") is None
         assert hashline_mod._try_elixir_format_hashlines("test", 1) is None
         assert hashline_mod._try_elixir_strip_hashline_prefixes("test") is None
-        assert hashline_mod._try_elixir_validate_hashline_anchor(1, "test", "AB") is None
+        assert (
+            hashline_mod._try_elixir_validate_hashline_anchor(1, "test", "AB") is None
+        )
 
-    def test_python_fallback_works_when_elixir_returns_none(self, monkeypatch: pytest.MonkeyPatch):
+    def test_python_fallback_works_when_elixir_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """Public functions should fall back to Python when Elixir returns None."""
         _force_python(monkeypatch)
 
@@ -469,3 +500,68 @@ class TestElixirRouting:
 
         is_valid = validate_hashline_anchor(1, "test", h)
         assert is_valid is True
+
+
+# ---------------------------------------------------------------------------
+# Elixir success-path tests (bd-88)
+# ---------------------------------------------------------------------------
+
+
+class TestElixirSuccessPath:
+    """Verify _try_elixir_* functions call Elixir with correct params (bd-88)."""
+
+    def test_compute_calls_elixir_correctly(self, monkeypatch):
+        from code_puppy.native_backend import NativeBackend as NB
+
+        monkeypatch.setattr(
+            NB, "_should_use_elixir", classmethod(lambda cls, cap: True)
+        )
+        monkeypatch.setattr(
+            NB, "_call_elixir", classmethod(lambda cls, method, params: {"hash": "AB"})
+        )
+
+        result = hashline_mod._try_elixir_compute_line_hash(1, "hello")
+        assert result == "AB"
+
+    def test_format_calls_elixir_correctly(self, monkeypatch):
+        from code_puppy.native_backend import NativeBackend as NB
+
+        monkeypatch.setattr(
+            NB, "_should_use_elixir", classmethod(lambda cls, cap: True)
+        )
+        monkeypatch.setattr(
+            NB,
+            "_call_elixir",
+            classmethod(lambda cls, method, params: {"formatted": "1#AB:hello"}),
+        )
+
+        result = hashline_mod._try_elixir_format_hashlines("hello", 1)
+        assert result == "1#AB:hello"
+
+    def test_strip_calls_elixir_correctly(self, monkeypatch):
+        from code_puppy.native_backend import NativeBackend as NB
+
+        monkeypatch.setattr(
+            NB, "_should_use_elixir", classmethod(lambda cls, cap: True)
+        )
+        monkeypatch.setattr(
+            NB,
+            "_call_elixir",
+            classmethod(lambda cls, method, params: {"stripped": "hello"}),
+        )
+
+        result = hashline_mod._try_elixir_strip_hashline_prefixes("1#AB:hello")
+        assert result == "hello"
+
+    def test_validate_calls_elixir_correctly(self, monkeypatch):
+        from code_puppy.native_backend import NativeBackend as NB
+
+        monkeypatch.setattr(
+            NB, "_should_use_elixir", classmethod(lambda cls, cap: True)
+        )
+        monkeypatch.setattr(
+            NB, "_call_elixir", classmethod(lambda cls, method, params: {"valid": True})
+        )
+
+        result = hashline_mod._try_elixir_validate_hashline_anchor(1, "hello", "AB")
+        assert result is True

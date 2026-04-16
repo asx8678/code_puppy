@@ -47,7 +47,9 @@ def _try_elixir_compute_line_hash(idx: int, line: str) -> str | None:
 
         if not NativeBackend._should_use_elixir("edit_ops"):
             return None
-        result = NativeBackend._call_elixir("hashline_compute", {"idx": idx, "line": line})
+        result = NativeBackend._call_elixir(
+            "hashline_compute", {"idx": idx, "line": line}
+        )
         return result.get("hash")
     except Exception:
         return None
@@ -60,7 +62,9 @@ def _try_elixir_format_hashlines(text: str, start_line: int) -> str | None:
 
         if not NativeBackend._should_use_elixir("edit_ops"):
             return None
-        result = NativeBackend._call_elixir("hashline_format", {"text": text, "start_line": start_line})
+        result = NativeBackend._call_elixir(
+            "hashline_format", {"text": text, "start_line": start_line}
+        )
         return result.get("formatted")
     except Exception:
         return None
@@ -79,7 +83,9 @@ def _try_elixir_strip_hashline_prefixes(text: str) -> str | None:
         return None
 
 
-def _try_elixir_validate_hashline_anchor(idx: int, line: str, expected_hash: str) -> bool | None:
+def _try_elixir_validate_hashline_anchor(
+    idx: int, line: str, expected_hash: str
+) -> bool | None:
     """Try Elixir hashline_validate, return None on failure."""
     try:
         from code_puppy.native_backend import NativeBackend
@@ -87,11 +93,13 @@ def _try_elixir_validate_hashline_anchor(idx: int, line: str, expected_hash: str
         if not NativeBackend._should_use_elixir("edit_ops"):
             return None
         result = NativeBackend._call_elixir(
-            "hashline_validate", {"idx": idx, "line": line, "expected_hash": expected_hash}
+            "hashline_validate",
+            {"idx": idx, "line": line, "expected_hash": expected_hash},
         )
         return result.get("valid")
     except Exception:
         return None
+
 
 # ---------------------------------------------------------------------------
 # Pure-Python fallback implementations
@@ -101,7 +109,7 @@ def _try_elixir_validate_hashline_anchor(idx: int, line: str, expected_hash: str
 def _py_compute_line_hash(idx: int, line: str) -> str:
     """Pure-Python fallback using ``zlib.crc32`` instead of xxHash32.
 
-    The algorithm mirrors the Rust version except the hash primitive:
+    The algorithm mirrors the Elixir/Rust NIF version except the hash primitive:
     - Strip trailing whitespace / ``\\r``
     - If no alphanumeric characters: seed = idx, else seed = 0
     - ``zlib.crc32(bytes, seed) & 0xFF`` → encode low byte via NIBBLE_STR
@@ -151,7 +159,7 @@ def _py_validate_hashline_anchor(idx: int, line: str, expected_hash: str) -> boo
 
 
 # ---------------------------------------------------------------------------
-# Public API  (dispatch to Rust or Python depending on availability)
+# Public API  (dispatch to Elixir or Python depending on availability)
 # ---------------------------------------------------------------------------
 
 

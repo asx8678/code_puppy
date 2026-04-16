@@ -653,6 +653,140 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
   end
 
   # ============================================================================
+  # Hashline Tests (bd-88)
+  # ============================================================================
+
+  describe "hashline_compute (bd-88)" do
+    test "returns hash for valid input" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "hashline_compute",
+        "params" => %{"idx" => 1, "line" => "hello"}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      result = Jason.decode!(output)
+      assert result["id"] == 1
+      assert is_binary(result["result"]["hash"])
+      assert String.length(result["result"]["hash"]) == 2
+    end
+
+    test "returns error for missing idx" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 2,
+        "method" => "hashline_compute",
+        "params" => %{"line" => "hello"}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      result = Jason.decode!(output)
+      assert result["error"]["code"] == -32602
+    end
+  end
+
+  describe "hashline_format (bd-88)" do
+    test "formats text with hashline prefixes" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 3,
+        "method" => "hashline_format",
+        "params" => %{"text" => "hello\nworld", "start_line" => 1}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      result = Jason.decode!(output)
+      assert is_binary(result["result"]["formatted"])
+      # Should contain line numbers and hash anchors
+      assert result["result"]["formatted"] =~ ~r/1#[A-Z]{2}:hello/
+    end
+  end
+
+  describe "hashline_strip (bd-88)" do
+    test "strips hashline prefixes" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 4,
+        "method" => "hashline_strip",
+        "params" => %{"text" => "1#AB:hello\n2#CD:world"}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      result = Jason.decode!(output)
+      assert result["result"]["stripped"] == "hello\nworld"
+    end
+  end
+
+  describe "hashline_validate (bd-88)" do
+    test "validates matching anchor" do
+      # First compute the hash
+      compute_req = %{
+        "jsonrpc" => "2.0",
+        "id" => 5,
+        "method" => "hashline_compute",
+        "params" => %{"idx" => 1, "line" => "hello"}
+      }
+
+      compute_output =
+        capture_stdio([Jason.encode!(compute_req)], fn ->
+          StdioService.run()
+        end)
+
+      hash = Jason.decode!(compute_output)["result"]["hash"]
+
+      # Then validate it
+      validate_req = %{
+        "jsonrpc" => "2.0",
+        "id" => 6,
+        "method" => "hashline_validate",
+        "params" => %{"idx" => 1, "line" => "hello", "expected_hash" => hash}
+      }
+
+      validate_output =
+        capture_stdio([Jason.encode!(validate_req)], fn ->
+          StdioService.run()
+        end)
+
+      result = Jason.decode!(validate_output)
+      assert result["result"]["valid"] == true
+    end
+
+    test "rejects invalid anchor" do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 7,
+        "method" => "hashline_validate",
+        "params" => %{"idx" => 1, "line" => "hello", "expected_hash" => "ZZ"}
+      }
+
+      output =
+        capture_stdio([Jason.encode!(request)], fn ->
+          StdioService.run()
+        end)
+
+      result = Jason.decode!(output)
+      assert result["result"]["valid"] == false
+    end
+  end
+
+  # ============================================================================
   # Helper Functions
   # ============================================================================
 
