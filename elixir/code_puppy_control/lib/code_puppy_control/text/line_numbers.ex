@@ -10,9 +10,12 @@ defmodule CodePuppyControl.Text.LineNumbers do
 
   ## Key Behavior
 
-  - CHARACTER-BASED chunking (not byte-based) to match Python's `len()`
-  - Elixir's `String.length/1` counts graphemes, matching Python behavior
-  - For UTF-8 content, this means £ counts as 1 char, not 2 bytes
+  - GRAPHEME-BASED chunking (not byte-based or codepoint-based)
+  - Elixir's `String.length/1` counts graphemes (visual characters)
+  - This differs from Python's `len()` which counts codepoints:
+    - Most characters: 1 grapheme = 1 codepoint (same behavior)
+    - Combining characters: `e` + `\u0300` = 1 grapheme (Elixir) vs 2 codepoints (Python)
+  - For typical source code, the behavior matches; combining chars are rare
   - Lines exceeding `max_line_length` are split with markers like "5.1", "5.2"
 
   ## Examples
@@ -59,7 +62,7 @@ defmodule CodePuppyControl.Text.LineNumbers do
       "     1\\théllo\\n     2\\twörld"
   """
   @spec format_line_numbers(binary(), keyword()) :: binary()
-  def format_line_numbers(content, opts \\ []) do
+  def format_line_numbers(content, opts \\ []) when is_binary(content) do
     max_line_length = Keyword.get(opts, :max_line_length, @default_max_line_length)
     start_line = Keyword.get(opts, :start_line, 1)
     num_lines = Keyword.get(opts, :num_lines, nil)
@@ -102,13 +105,15 @@ defmodule CodePuppyControl.Text.LineNumbers do
       format_single_chunk(line_num, line, line_number_width)
     else
       # Long line: split into chunks with continuation markers
+      # Pre-compute graphemes once for efficiency (avoids repeated String.graphemes/1 calls)
+      graphemes = String.graphemes(line)
       num_chunks = div_ceil(char_len, max_line_length)
 
       0..(num_chunks - 1)
       |> Enum.map(fn chunk_idx ->
         start_char = chunk_idx * max_line_length
         end_char = min(start_char + max_line_length, char_len)
-        chunk = slice_by_chars(line, start_char, end_char)
+        chunk = slice_by_chars(graphemes, start_char, end_char)
 
         if chunk_idx == 0 do
           format_single_chunk(line_num, chunk, line_number_width)
@@ -133,11 +138,10 @@ defmodule CodePuppyControl.Text.LineNumbers do
     "#{formatted_marker}\t#{content}"
   end
 
-  # Slice a string by character indices (grapheme-based, not byte-based)
-  # This matches Python's behavior where len('£') == 1, not 2 bytes
-  defp slice_by_chars(string, start_char, end_char) do
-    string
-    |> String.graphemes()
+  # Slice by character indices (grapheme-based, not byte-based)
+  # Accepts pre-computed graphemes list for efficiency on long lines
+  defp slice_by_chars(graphemes, start_char, end_char) when is_list(graphemes) do
+    graphemes
     |> Enum.slice(start_char, end_char - start_char)
     |> Enum.join()
   end

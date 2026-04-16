@@ -266,6 +266,20 @@ defmodule CodePuppyControl.Text.LineNumbersTest do
       result = LineNumbers.format_line_numbers("Hello, 世界!")
       assert result == "     1\tHello, 世界!"
     end
+
+    test "combining characters counted as graphemes (diverges from Python codepoints)" do
+      # e + combining grave = 1 grapheme (Elixir) vs 2 codepoints (Python)
+      # This is intentional Elixir-native behavior - combining chars are rare in source code
+      combining = "e" <> <<0xCC, 0x80>>
+      assert String.length(combining) == 1
+      assert byte_size(combining) == 3
+
+      # Verify the line is formatted correctly (single grapheme = no continuation)
+      result = LineNumbers.format_line_numbers(combining, max_line_length: 1)
+      # At limit 1, 1 grapheme should NOT trigger continuation
+      refute String.contains?(result, ".1\t")
+      assert String.contains?(result, "     1\t" <> combining)
+    end
   end
 
   # ============================================================================

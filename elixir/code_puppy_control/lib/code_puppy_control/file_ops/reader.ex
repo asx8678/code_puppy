@@ -41,7 +41,8 @@ defmodule CodePuppyControl.FileOps.Reader do
       iex> FileOps.read_file("/path/to/file.txt", normalize_eol: true)
       {:ok, %{path: "file.txt", content: "...", num_lines: 100, size: 1234, truncated: false, bom: <<0xEF, 0xBB, 0xBF>>}}
   """
-  @spec read_file(String.t(), keyword()) :: {:ok, CodePuppyControl.FileOps.read_result()} | {:error, term()}
+  @spec read_file(String.t(), keyword()) ::
+          {:ok, CodePuppyControl.FileOps.read_result()} | {:error, term()}
   def read_file(path, opts \\ []) do
     start_line = Keyword.get(opts, :start_line)
     num_lines = Keyword.get(opts, :num_lines)
