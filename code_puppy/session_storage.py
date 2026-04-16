@@ -30,6 +30,41 @@ from typing import Any
 # The executor's internal work queue provides sufficient backpressure with max_workers=1.
 _autosave_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="autosave")
 
+# Autosave deduplication state (bd-6 fix)
+_last_autosave_len: int = 0
+_last_autosave_hash: str = ""
+_last_autosave_time: float = 0.0
+AUTOSAVE_DEBOUNCE_SECONDS: float = 2.0
+
+
+def _compute_history_fingerprint(history: list) -> tuple[int, str]:
+    """Compute fingerprint of history for deduplication."""
+    if not history:
+        return (0, "")
+    last_msg = str(history[-1])
+    msg_hash = hashlib.sha256(last_msg.encode()).hexdigest()[:16]
+    return (len(history), msg_hash)
+
+
+def should_skip_autosave(history: list) -> bool:
+    """Check if we should skip this autosave (no changes or too soon)."""
+    global _last_autosave_len, _last_autosave_hash, _last_autosave_time
+    import time
+    now = time.time()
+    if now - _last_autosave_time < AUTOSAVE_DEBOUNCE_SECONDS:
+        return True
+    new_len, new_hash = _compute_history_fingerprint(history)
+    if new_len == _last_autosave_len and new_hash == _last_autosave_hash:
+        return True
+    return False
+
+
+def mark_autosave_complete(history: list) -> None:
+    """Update tracking state after successful autosave."""
+    global _last_autosave_len, _last_autosave_hash, _last_autosave_time
+    import time
+    _last_autosave_len, _last_autosave_hash = _compute_history_fingerprint(history)
+    _last_autosave_time = time.time()
 
 def _autosave_shutdown():
     """Shutdown handler: flush pending saves before exit.
@@ -85,6 +120,7 @@ def save_session_async(
                 compacted_hashes=compacted_hashes_snapshot,
                 precomputed_total=precomputed_total,
             )
+            mark_autosave_complete(history_snapshot)
         except Exception as exc:
             logger.warning("Async session save failed: %s", exc)
 

@@ -2164,6 +2164,11 @@ def auto_save_session_if_enabled() -> bool:
         if not history:
             return False
 
+        # Check if save is needed (deduplication + debounce) - bd-6 fix
+        from code_puppy.session_storage import should_skip_autosave
+        if should_skip_autosave(history):
+            return False
+
         now = datetime.datetime.now()
         session_name = get_current_autosave_session_name()
         autosave_dir = pathlib.Path(AUTOSAVE_DIR)

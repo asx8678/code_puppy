@@ -94,7 +94,7 @@
       "id": "bd-6",
       "title": "Autosave rewrites entire session every turn - O(total history)",
       "description": "config.py autosave grabs full history on every save. session_storage.py:73-91 copies entire history list. session_storage.py:324-394 serializes whole payload and recomputes total tokens with sum(). Background thread avoids blocking but doesn't remove CPU/memory/disk cost. Gets expensive in long sessions.\n\nFix: Debounce autosave, skip if history length and tail hash unchanged, maintain incremental token total, consider append-only or chunked session storage.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "bug",
       "labels": [
@@ -104,8 +104,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T04:53:59.212522",
-      "updated_at": "2026-04-16T04:53:59.212529",
-      "comments": []
+      "updated_at": "2026-04-16T05:34:53.196840",
+      "comments": [
+        "**bd-6 - Autosave O(N) per turn:**\n- Added debouncing (2s minimum between saves)\n- Added fingerprint-based deduplication (history length + SHA256 of last message)\n- should_skip_autosave() checks both conditions before any heavy work\n- mark_autosave_complete() updates tracking state after successful save\n- Skips unnecessary saves when history unchanged\n\nResult: Long sessions no longer spam disk with redundant saves."
+      ]
     }
   }
 }
