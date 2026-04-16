@@ -1,30 +1,40 @@
-# Fast Puppy rewrite plan (Elixir-first)
+# Fast Puppy rewrite plan (Elixir-first) — ARCHIVED
 
-> **Historical document**: This is a migration planning document from early 2026, preserved for historical reference. Any Zig references describe the pre-cleanup architecture state; Zig has since been removed from the active runtime.
+> **⚠️ HISTORICAL DOCUMENT — ARCHIVED 2026-04-16**
+> 
+> This document is preserved for historical reference only. It describes the migration planning state **before** the Zig cleanup (early 2026).
+> 
+> **Current status:** See `MIGRATION_STATUS.md` for the single source of truth.
+> 
+> **Note on Zig references:** Any Zig references in this document describe the pre-cleanup architecture state. Zig has been removed from the active runtime as of early 2026.
 
 
-Assumption: `code_puppy_core` is already migrated and stable in native Elixir, so this plan excludes it from the remaining rewrite scope.
+## Why the rewrite needed a reset (Historical Context)
 
-## Why the rewrite needs a reset first
+> This section describes the state of the repository **before** the Zig cleanup and `NativeBackend` unification (bd-13).
 
-The repo currently has a split-brain Fast Puppy story:
+The repo previously had a split-brain Fast Puppy story:
 
-- `code_puppy/plugins/fast_puppy/builder.py` and `README.md` treat **all three** accelerators as Rust crates: `code_puppy_core`, `turbo_ops`, `turbo_parse`.
-- `code_puppy/acceleration/__init__.py`, `code_puppy/config.py`, `code_puppy/plugins/accel_status/register_callbacks.py`, and `docs/acceleration.md` still describe a **hybrid Zig/Rust** model with `turbo_ops` on Zig.
-- `code_puppy/plugins/turbo_executor/orchestrator.py` and `code_puppy/plugins/repo_compass/turbo_indexer_bridge.py` already import **Rust `turbo_ops` directly**, bypassing the “hybrid” abstraction.
-- There is already an Elixir-native seed for repository indexing in `elixir/code_puppy_control/lib/code_puppy_control/indexer*`, but it only covers part of the `turbo_ops` surface.
+- `code_puppy/plugins/fast_puppy/builder.py` and `README.md` treated **all three** accelerators as Rust crates: `code_puppy_core`, `turbo_ops`, `turbo_parse`.
+- `code_puppy/acceleration/__init__.py`, `code_puppy/config.py`, and related docs described a **hybrid Zig/Rust** model with `turbo_ops` on Zig. *(Zig has since been removed)*
+- `code_puppy/plugins/turbo_executor/orchestrator.py` and `code_puppy/plugins/repo_compass/turbo_indexer_bridge.py` imported **Rust `turbo_ops` directly**, bypassing the "hybrid" abstraction.
+- There was already an Elixir-native seed for repository indexing in `elixir/code_puppy_control/lib/code_puppy_control/indexer*`, but it only covered part of the `turbo_ops` surface.
 
-## Target state
+**Resolution (completed):** `NativeBackend` was created as the single Python entry point (bd-13). Zig was removed. See `MIGRATION_STATUS.md` for current state.
 
-Fast Puppy becomes a **single Elixir-owned native runtime surface** with Python fallbacks, not a crate-builder plus multiple competing bridges.
+## Target State (Achieved ✅)
 
-### Desired properties
+> **2026-04-16 Update:** The target state described here has been achieved. See `MIGRATION_STATUS.md` for current details.
 
-- One backend contract for Python consumers.
-- One status/config story for `/fast_puppy` and `/accel`.
-- Elixir-native implementations for repo/file acceleration where practical.
-- Python-only CLI still works when the Elixir control plane is absent.
-- No runtime monkey-patching as the primary activation mechanism.
+Fast Puppy is now a **single Elixir-owned native runtime surface** with Python fallbacks, not a crate-builder plus multiple competing bridges.
+
+### Desired Properties (All Achieved ✅)
+
+- ✅ One backend contract for Python consumers (`NativeBackend`)
+- ✅ One status/config story for `/fast_puppy`
+- ✅ Elixir-native implementations for repo/file acceleration
+- ✅ Python-only CLI still works when the Elixir control plane is absent
+- ✅ No runtime monkey-patching as the primary activation mechanism
 
 ## Rewrite phases
 
@@ -138,18 +148,20 @@ If strict pure Elixir proves too expensive for tree-sitter-grade parsing, keep t
 - Required language tiers pass parity tests.
 - Feature flags can disable unfinished parse capabilities cleanly.
 
-### Phase 5 — delete the hybrid leftovers
+### Phase 5 — delete the hybrid leftovers (✅ COMPLETED)
 
-After `turbo_ops` is migrated and `turbo_parse` is either migrated or fully hidden behind the Elixir boundary:
+> **Historical note:** This phase was completed in early 2026. The Zig runtime has been removed.
 
-- remove or archive `code_puppy/zig_bridge/`
-- remove Zig-first config defaults from `code_puppy/config.py`
-- rewrite `code_puppy/acceleration/__init__.py` to reflect the new truth
-- update `/accel` or fold it into `/fast_puppy`
-- remove stale docs that still describe the old Zig/Rust split
-- retire build paths that only exist for dead backends
+After `turbo_ops` was migrated and `turbo_parse` was placed behind the Elixir boundary:
 
-**Exit criteria**
+- ✅ Removed `code_puppy/zig_bridge/`
+- ✅ Removed Zig-first config defaults from `code_puppy/config.py`
+- ✅ Rewrote `code_puppy/acceleration/__init__.py` to reflect the new truth (see `NativeBackend`)
+- ✅ Updated `/accel` and `/fast_puppy` commands
+- ✅ Removed stale docs describing the Zig/Rust split (see `MIGRATION_STATUS.md`)
+- ✅ Retired build paths for dead backends
+
+**Exit criteria** (Achieved)
 
 - The repo has one coherent backend story.
 - Docs, commands, config, and runtime behavior all match.

@@ -1,4 +1,12 @@
-# Code Puppy: practical Python → Elixir rewrite plan
+# Code Puppy: practical Python → Elixir rewrite plan — ARCHIVED
+
+> **⚠️ HISTORICAL DOCUMENT — ARCHIVED 2026-04-16**
+> 
+> This document is preserved for historical reference. It describes the practical PR sequence for Python → Elixir migration.
+> 
+> **Current status:** See `MIGRATION_STATUS.md` for the single source of truth and current work status.
+> 
+> **Note:** Some items described here have been completed (e.g., `NativeBackend` unification in bd-13), while others are in progress (EOL normalization in bd-7, gitignore in bd-8).
 
 This repo already has a real Elixir control plane in `elixir/code_puppy_control/`, plus a Python ↔ Elixir bridge and a `NativeBackend` adapter. That means the rewrite should **not** start with agents, prompts, or the CLI. The right first moves are the places where Elixir is already the natural home: file IO, supervision, concurrency, scheduling, and repository indexing.
 

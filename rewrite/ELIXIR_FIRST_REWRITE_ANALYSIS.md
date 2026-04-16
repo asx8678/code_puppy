@@ -1,4 +1,12 @@
-# Elixir-first rewrite analysis
+# Elixir-first rewrite analysis — ARCHIVED
+
+> **⚠️ HISTORICAL DOCUMENT — ARCHIVED 2026-04-16**
+> 
+> This document is preserved for historical reference. It describes the rationale for selecting Repo Compass as the first Python → Elixir migration slice.
+> 
+> **Current status:** See `MIGRATION_STATUS.md` for the single source of truth.
+> 
+> **Status of this work:** The Repo Compass Elixir indexer exists and is awaiting promotion to production (bd-9).
 
 ## What should be rewritten first?
 
