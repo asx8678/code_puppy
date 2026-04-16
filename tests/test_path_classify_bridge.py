@@ -133,6 +133,16 @@ class TestClassifyPath:
         # id_rsa should be sensitive but not necessarily ignored
         assert is_sensitive is True
 
+    def test_classify_path_matches_component_functions(self):
+        """classify_path should match calling component functions individually."""
+        paths = ["src/main.py", "node_modules/foo", "~/.ssh/id_rsa", ".env", "README.md"]
+        for path in paths:
+            expected = (
+                bridge.should_ignore_path(path),
+                bridge.is_sensitive_path(path)
+            )
+            assert bridge.classify_path(path) == expected
+
     def test_classify_neither(self):
         """Regular source files should be neither ignored nor sensitive."""
         is_ignored, is_sensitive = bridge.classify_path("src/main.py")
@@ -145,29 +155,32 @@ class TestEdgeCases:
 
     def test_empty_string(self):
         """Empty string should not crash."""
-        result = bridge.should_ignore_path("")
-        assert isinstance(result, bool)
+        assert bridge.should_ignore_path("") is False
+        assert bridge.should_ignore_dir_path("") is False
+        assert bridge.is_sensitive_path("") is False
+        assert bridge.classify_path("") == (False, False)
 
     def test_absolute_path(self):
         """Absolute paths should work."""
-        result = bridge.should_ignore_path("/home/user/project/src/main.py")
-        assert isinstance(result, bool)
+        assert bridge.should_ignore_path("/home/user/project/src/main.py") is False
+        assert bridge.should_ignore_path("/home/user/project/node_modules/foo") is True
 
     def test_path_with_spaces(self):
         """Paths with spaces should work."""
-        result = bridge.should_ignore_path("my project/src/main.py")
-        assert isinstance(result, bool)
+        assert bridge.should_ignore_path("my project/src/main.py") is False
+        assert bridge.should_ignore_path("my project/node_modules/foo") is True
 
     def test_deeply_nested_path(self):
         """Deeply nested paths should work."""
         deep_path = "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/file.txt"
-        result = bridge.should_ignore_path(deep_path)
-        assert isinstance(result, bool)
+        assert bridge.should_ignore_path(deep_path) is False
+        deep_ignore_path = "a/b/node_modules/c/d/file.txt"
+        assert bridge.should_ignore_path(deep_ignore_path) is True
 
     def test_unicode_path(self):
         """Unicode paths should work."""
-        result = bridge.should_ignore_path("src/café.py")
-        assert isinstance(result, bool)
+        assert bridge.should_ignore_path("src/café.py") is False
+        assert bridge.is_sensitive_path("src/café.py") is False
 
 
 class TestFallbackBehavior:
@@ -179,25 +192,51 @@ class TestFallbackBehavior:
         # The actual Rust availability depends on the environment
         assert hasattr(bridge, "RUST_AVAILABLE")
 
-    def test_functions_work_without_rust(self):
-        """All functions should work via fallback."""
-        # These calls should succeed regardless of Rust availability
-        bridge.should_ignore_path("node_modules")
-        bridge.should_ignore_dir_path("__pycache__")
-        bridge.is_sensitive_path(".env")
-        bridge.classify_path("src/main.py")
-        # No assertion needed - test passes if no exception raised
+    def test_functions_work_without_rust(self, monkeypatch):
+        """Verify functions work in fallback mode."""
+        monkeypatch.setattr(bridge, "RUST_AVAILABLE", False)
+        monkeypatch.setattr(bridge, "_classifier", None)
+        # These should work via Python fallback
+        assert isinstance(bridge.should_ignore_path("src/main.py"), bool)
+        assert bridge.should_ignore_path("node_modules/foo") is True
+        assert bridge.should_ignore_path("src/main.py") is False
 
 
-def test_rust_path_routing(monkeypatch):
-    """Verify Rust path is used when RUST_AVAILABLE is True."""
+def test_rust_routing_should_ignore_path(monkeypatch):
+    """Verify Rust routing for should_ignore_path."""
     mock_classifier = type('MockClassifier', (), {
         'py_should_ignore': staticmethod(lambda path: True),
-        'py_should_ignore_dir': staticmethod(lambda path: True),
-        'py_is_sensitive': staticmethod(lambda path: False),
-        'py_classify_path': staticmethod(lambda path: (True, False)),
     })()
     monkeypatch.setattr(bridge, 'RUST_AVAILABLE', True)
     monkeypatch.setattr(bridge, '_classifier', mock_classifier)
     assert bridge.should_ignore_path("anything") is True
+
+
+def test_rust_routing_should_ignore_dir(monkeypatch):
+    """Verify Rust routing for should_ignore_dir_path."""
+    mock_classifier = type('MockClassifier', (), {
+        'py_should_ignore_dir': staticmethod(lambda path: True),
+    })()
+    monkeypatch.setattr(bridge, 'RUST_AVAILABLE', True)
+    monkeypatch.setattr(bridge, '_classifier', mock_classifier)
+    assert bridge.should_ignore_dir_path("anything") is True
+
+
+def test_rust_routing_is_sensitive(monkeypatch):
+    """Verify Rust routing for is_sensitive_path."""
+    mock_classifier = type('MockClassifier', (), {
+        'py_is_sensitive': staticmethod(lambda path: True),
+    })()
+    monkeypatch.setattr(bridge, 'RUST_AVAILABLE', True)
+    monkeypatch.setattr(bridge, '_classifier', mock_classifier)
+    assert bridge.is_sensitive_path("anything") is True
+
+
+def test_rust_routing_classify_path(monkeypatch):
+    """Verify Rust routing for classify_path."""
+    mock_classifier = type('MockClassifier', (), {
+        'py_classify_path': staticmethod(lambda path: (True, False)),
+    })()
+    monkeypatch.setattr(bridge, 'RUST_AVAILABLE', True)
+    monkeypatch.setattr(bridge, '_classifier', mock_classifier)
     assert bridge.classify_path("anything") == (True, False)
