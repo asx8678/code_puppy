@@ -5,7 +5,7 @@ between planning phases. Evidence classes enforce the confidence
 hierarchy: verified > inference > assumption > unknown.
 """
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Literal
 from enum import Enum
 
@@ -64,8 +64,8 @@ class Evidence(BaseModel):
             return EvidenceClass(v)
         return v
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(
+    populate_by_name=True)
 
 
 class CriticalUnknown(BaseModel):

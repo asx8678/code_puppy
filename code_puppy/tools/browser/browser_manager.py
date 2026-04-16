@@ -122,7 +122,7 @@ class BrowserManager:
         # Default to headless=True (no browser spam during tests)
         # Override with BROWSER_HEADLESS=false to see the browser
         # Note: BROWSER_HEADLESS=false means headless=False, so we invert the bool
-        self.headless = not env_bool("BROWSER_HEADLESS", default=True)
+        self.headless = not env_bool("BROWSER_HEADLESS", default=False)
         self.homepage = "https://www.google.com"
 
         # Unique profile directory per session for browser state
