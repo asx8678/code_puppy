@@ -1,5 +1,5 @@
 {
-  "counter": 27,
+  "counter": 28,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -464,6 +464,19 @@
       "description": "Python bridge for content preparation. Deps bd-25, bd-26 now closed.",
       "created_at": "2026-04-16T12:22:34",
       "updated_at": "2026-04-16T12:22:34",
+      "comments": []
+    },
+    "bd-28": {
+      "id": "bd-28",
+      "title": "Fix hidden file pattern parity gap in Rust classify_path",
+      "description": "Python includes **/.*  pattern (ignoring hidden files). Rust omits it. Need design decision.",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-16T13:19:02.894323",
+      "updated_at": "2026-04-16T13:19:02.894330",
       "comments": []
     }
   }
