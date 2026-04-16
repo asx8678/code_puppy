@@ -2143,6 +2143,83 @@ def parse_stats() -> dict[str, Any]:
     return NativeBackend.parse_stats()
 
 
+def get_turbo_parse_status() -> dict[str, Any]:
+    """Return diagnostic info for turbo_parse.
+
+    bd-86: Moved from acceleration module after wrapper removal.
+    bd-13-fix-semantics: Turbo_parse-specific and routing-aware status:
+        - installed = turbo_parse Rust backend available (any entrypoint)
+        - enabled = turbo_parse is allowed as a candidate (parse enabled, not PYTHON_ONLY)
+        - active = actual selected parse backend IS turbo_parse (not just available)
+        - will_use = "turbo_parse" only if turbo_parse IS selected, otherwise "disabled"
+        - parse_backend = the generic selected parse backend (elixir|turbo_parse|python_fallback)
+
+    Returns:
+        Dict with installed, enabled, active, will_use, parse_backend, stats, etc.
+    """
+    try:
+        # Check actual turbo_parse availability (any entrypoint)
+        turbo = NativeBackend._get_turbo_parse()
+        turbo_available = turbo.get("available", False)
+
+        # Use entrypoint-aware routing for conservative status
+        # "parse_file" is the primary entrypoint - if it's missing, turbo is not usable
+        routing = NativeBackend.get_capability_routing(
+            NativeBackend.Capabilities.PARSE, entrypoint="parse_file"
+        )
+        selected_backend = routing.get(
+            "will_use"
+        )  # Could be "elixir", "turbo_parse", "python_fallback", or "disabled"
+
+        # Get health and stats only if turbo_parse is relevant
+        health = NativeBackend.parse_health_check() if turbo_available else {}
+        stats = (
+            NativeBackend.parse_stats()
+            if turbo_available
+            else {"total_parses": 0, "backend": "none"}
+        )
+
+        # Determine enabled/active status for turbo_parse specifically
+        parse_enabled = NativeBackend.is_enabled(NativeBackend.Capabilities.PARSE)
+        is_python_only = NativeBackend.get_backend_preference() == BackendPreference.PYTHON_ONLY
+
+        # enabled: parse capability enabled AND not PYTHON_ONLY (turbo_parse is a candidate)
+        # active: turbo_parse IS the selected backend (not just available)
+        turbo_is_enabled = parse_enabled and not is_python_only
+        turbo_is_active = turbo_available and selected_backend == "turbo_parse"
+
+        # will_use is turbo_parse-specific: only report "turbo_parse" if it's selected
+        # If turbo_parse is not the selected backend, report "disabled"
+        will_use = "turbo_parse" if turbo_is_active else "disabled"
+
+        return {
+            "installed": turbo_available,
+            "enabled": turbo_is_enabled,
+            "active": turbo_is_active,
+            "will_use": will_use,
+            "parse_backend": selected_backend,
+            "preference": NativeBackend.get_backend_preference().value,
+            "version": health.get("version") if turbo_available else None,
+            "languages": health.get("languages", []) if turbo_available else [],
+            "cache_available": health.get("cache_available", False)
+            if turbo_available
+            else False,
+            "stats": stats if turbo_available else {"total_parses": 0, "backend": "none"},
+            "backend_type": "turbo_parse",
+        }
+    except Exception as e:
+        logger.debug(f"Error getting turbo_parse status: {e}")
+        return {
+            "installed": False,
+            "enabled": False,
+            "active": False,
+            "will_use": "disabled",
+            "parse_backend": None,
+            "error": str(e),
+            "backend_type": "turbo_parse",
+        }
+
+
 def create_message_batch(messages: list) -> Any:
     """Create a MessageBatchHandle for batch Rust operations.
 
@@ -2181,4 +2258,6 @@ __all__ = [
     # Message batch operations
     "create_message_batch",
     "MessageBatchHandle",
+    # Status introspection  # bd-86
+    "get_turbo_parse_status",
 ]

@@ -1563,7 +1563,7 @@ class TestTurboParseStatusSemantics:
             with patch.object(NativeBackend, "parse_health_check", return_value={
                 "available": True, "version": "1.0.0", "languages": ["python"]
             }):
-                from code_puppy.acceleration import get_turbo_parse_status
+                from code_puppy.native_backend import get_turbo_parse_status
                 status = get_turbo_parse_status()
                 
                 assert status["installed"] is True
@@ -1572,7 +1572,7 @@ class TestTurboParseStatusSemantics:
     def test_turbo_parse_status_installed_false_when_not_available(self):
         """Test that 'installed' is False when turbo_parse is not available."""
         with patch.object(NativeBackend, "_get_turbo_parse", return_value={"available": False}):
-            from code_puppy.acceleration import get_turbo_parse_status
+            from code_puppy.native_backend import get_turbo_parse_status
             status = get_turbo_parse_status()
             
             assert status["installed"] is False
@@ -1586,7 +1586,7 @@ class TestTurboParseStatusSemantics:
             NativeBackend.enable_capability(NativeBackend.Capabilities.PARSE)
             
             with patch.object(NativeBackend, "_get_turbo_parse", return_value={"available": True}):
-                from code_puppy.acceleration import get_turbo_parse_status
+                from code_puppy.native_backend import get_turbo_parse_status
                 status = get_turbo_parse_status()
                 
                 assert status["enabled"] is False
@@ -1625,7 +1625,7 @@ class TestTurboParseStatusSemantics:
                             "parse_stats",
                             return_value={"total_parses": 10, "backend": "turbo_parse"},
                         ):
-                            from code_puppy.acceleration import get_turbo_parse_status
+                            from code_puppy.native_backend import get_turbo_parse_status
 
                             status = get_turbo_parse_status()
 
@@ -1651,7 +1651,7 @@ class TestTurboParseStatusSemantics:
             # Mock Elixir AVAILABLE - this means turbo_parse won't be selected
             with patch.object(NativeBackend, "_is_elixir_available", return_value=True):
                 with patch.object(NativeBackend, "_get_turbo_parse", return_value={"available": True}):
-                    from code_puppy.acceleration import get_turbo_parse_status
+                    from code_puppy.native_backend import get_turbo_parse_status
                     status = get_turbo_parse_status()
                     
                     # turbo_parse is installed and enabled as a candidate, but NOT selected
