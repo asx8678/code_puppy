@@ -37,6 +37,8 @@ defmodule CodePuppyControl.Text.ContentPrep do
     :original_bom
   ]
 
+  @enforce_keys [:content, :is_text, :had_bom, :had_crlf]
+
   @typedoc """
   Result of preparing content.
 
@@ -82,14 +84,12 @@ defmodule CodePuppyControl.Text.ContentPrep do
       %ContentPrepResult{content: <<0x00, "nul">>, is_text: false, had_bom: false, had_crlf: false, original_bom: nil}
   """
   @spec prepare_content(binary(), keyword()) :: t()
-  def prepare_content(raw, opts \\ []) do
+  def prepare_content(raw, opts \\ [])
+  def prepare_content("", _opts), do: return_empty_result()
+
+  def prepare_content(raw, opts) when is_binary(raw) do
     normalize = Keyword.get(opts, :normalize, true)
     strip_bom = Keyword.get(opts, :strip_bom, true)
-
-    # Handle empty input
-    if raw == "" do
-      return_empty_result()
-    end
 
     # Strip BOM first if present (and requested)
     {content_bytes, had_bom, original_bom} =
@@ -108,13 +108,10 @@ defmodule CodePuppyControl.Text.ContentPrep do
     # Check for CRLF sequences
     has_crlf = :binary.match(content_bytes, "\r\n") != :nomatch
 
-    # If NUL found, it's binary - return as-is (but still decode for string)
+    # If NUL found, it's binary - return as-is
     if has_nul do
-      # For binary, we still return the content. Use lossy UTF-8 conversion.
-      content = decode_binary(content_bytes)
-
       %__MODULE__{
-        content: content,
+        content: content_bytes,
         is_text: false,
         had_bom: had_bom,
         had_crlf: has_crlf,
@@ -122,29 +119,24 @@ defmodule CodePuppyControl.Text.ContentPrep do
       }
     else
       # It's text - check printable ratio for extra safety
-      is_text = looks_textish_bytes(content_bytes)
+      is_text = EOL.looks_textish(content_bytes)
 
       if !is_text do
         # Binary-like but no NUL - still treat as binary
-        content = decode_binary(content_bytes)
-
         %__MODULE__{
-          content: content,
+          content: content_bytes,
           is_text: false,
           had_bom: had_bom,
           had_crlf: has_crlf,
           original_bom: original_bom
         }
       else
-        # It's confirmed text - decode and normalize
-        text = decode_binary(content_bytes)
-
-        # Normalize line endings if requested
+        # It's confirmed text - normalize line endings if requested
         content =
           if normalize do
-            normalize_eol_text(text)
+            EOL.normalize_eol(content_bytes)
           else
-            text
+            content_bytes
           end
 
         %__MODULE__{
@@ -236,49 +228,5 @@ defmodule CodePuppyControl.Text.ContentPrep do
       had_crlf: false,
       original_bom: nil
     }
-  end
-
-  # Internal version of looks_textish that operates on the bytes after BOM stripping
-  # This mirrors the logic in Text.EOL but operates on already-stripped bytes
-  defp looks_textish_bytes(""), do: true
-
-  defp looks_textish_bytes(content) when is_binary(content) do
-    cond do
-      # 1. NUL byte → binary
-      :binary.match(content, <<0>>) != :nomatch ->
-        false
-
-      # 2. Invalid UTF-8 → binary
-      not String.valid?(content) ->
-        false
-
-      true ->
-        # 3. Printable-ratio check (same as EOL)
-        chars = String.to_charlist(content)
-        total = length(chars)
-
-        printable = Enum.count(chars, &printable_char?/1)
-
-        printable / total >= 0.90
-    end
-  end
-
-  defp printable_char?(ch) when ch >= 0x20, do: true
-  defp printable_char?(?\t), do: true
-  defp printable_char?(?\n), do: true
-  defp printable_char?(?\r), do: true
-  defp printable_char?(_), do: false
-
-  # For binary content, preserve the original bytes unchanged.
-  # This matches the Rust behavior where binary content is returned as-is.
-  defp decode_binary(bytes) when is_binary(bytes) do
-    bytes
-  end
-
-  # Normalize EOL for text content (internal helper)
-  defp normalize_eol_text(text) when is_binary(text) do
-    text
-    |> String.replace("\r\n", "\n")
-    |> String.replace("\r", "\n")
   end
 end
