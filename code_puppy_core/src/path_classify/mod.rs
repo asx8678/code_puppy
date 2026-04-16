@@ -108,6 +108,19 @@ impl PathClassifier {
             }
         }
 
+        // bd-28: Check for hidden files/directories (dotfiles/dotdirs)
+        // This implements the "**/.*" pattern requested for Python parity.
+        // We do this check in code rather than via glob patterns because globset
+        // incorrectly interprets ".*" as "match everything" (regex semantics)
+        // instead of "literal dot followed by anything" (glob semantics).
+        for part in &parts {
+            if let Some(s) = part.to_str() {
+                if s.starts_with('.') && !s.starts_with("..") {
+                    return true;
+                }
+            }
+        }
+
         false
     }
 

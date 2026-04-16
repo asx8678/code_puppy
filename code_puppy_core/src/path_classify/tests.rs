@@ -80,11 +80,27 @@ fn test_ignore_npm_logs() {
 #[test]
 fn test_ignore_hidden_files() {
     let c = get_classifier();
-    // Note: "**/.*" is commented out in Python as "too aggressive"
-    // We have explicit patterns for common hidden files like .DS_Store
+    // bd-28: "**/.*" pattern added for parity with Python (was commented out there)
+    // This catches generic dotfiles/dotdirs
+    assert!(c.should_ignore(".hidden_file"));
+    assert!(c.should_ignore("./.hidden_file"));
+    assert!(c.should_ignore("project/.hidden_file"));
+
+    // Common hidden files still work
     assert!(c.should_ignore(".DS_Store"));
     assert!(c.should_ignore("./.DS_Store"));
     assert!(c.should_ignore("project/.DS_Store"));
+}
+
+#[test]
+fn test_ignore_hidden_directories() {
+    let c = get_classifier();
+    // bd-28: Hidden directories should be ignored via "**/.*" pattern
+    assert!(c.should_ignore(".hidden_dir"));
+    assert!(c.should_ignore("./.hidden_dir"));
+    assert!(c.should_ignore("project/.hidden_dir"));
+    assert!(c.should_ignore("path/to/.hidden_dir/file"));
+    assert!(c.should_ignore("path/to/.hidden_dir/nested/path/file"));
 }
 
 #[test]

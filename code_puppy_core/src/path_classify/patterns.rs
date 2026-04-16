@@ -163,7 +163,11 @@ pub const DIR_PATTERNS: &[&str] = &[
     // Backup files
     "**/*.backup",
     "**/*.save",
-    // Note: "**/.*" is commented out in Python as "too aggressive"
+    // bd-28: Note on hidden files
+    // The pattern "**/.*" was requested for parity with Python (where it's commented
+    // out as "too aggressive"). We implement hidden file detection in the matching
+    // logic rather than via glob patterns, because globset incorrectly interprets
+    // ".*" as regex "any characters" rather than "literal dot followed by anything".
 ];
 
 /// File extension patterns (binary/non-text files).
