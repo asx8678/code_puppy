@@ -106,4 +106,18 @@ defmodule CodePuppyControl.Indexer.RepoCompassTest do
 
     assert {:error, {:not_a_directory, ^missing}} = RepoCompass.index(missing)
   end
+
+  test "class at end of file preserves method order", %{tmp_dir: tmp_dir} do
+    File.write!(
+      Path.join(tmp_dir, "eof_class.py"),
+      "class Eof:\n" <>
+        "    def alpha(self):\n" <>
+        "        pass\n\n" <>
+        "    def beta(self):\n" <>
+        "        pass\n"
+    )
+
+    assert {:ok, [summary]} = RepoCompass.index(tmp_dir)
+    assert Enum.any?(summary.symbols, &String.contains?(&1, "methods=alpha,beta"))
+  end
 end

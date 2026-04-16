@@ -262,7 +262,7 @@ defmodule CodePuppyControl.Indexer.RepoCompass do
           {:cont, acc}
 
         indent <= class_indent ->
-          {:halt, Enum.reverse(acc)}
+          {:halt, acc}
 
         true ->
           case Regex.run(@indented_method_regex, line) do
@@ -270,7 +270,7 @@ defmodule CodePuppyControl.Indexer.RepoCompass do
               next_acc = if method_name in acc, do: acc, else: [method_name | acc]
 
               if length(next_acc) >= @max_class_methods do
-                {:halt, Enum.reverse(next_acc)}
+                {:halt, next_acc}
               else
                 {:cont, next_acc}
               end
@@ -280,6 +280,7 @@ defmodule CodePuppyControl.Indexer.RepoCompass do
           end
       end
     end)
+    |> Enum.reverse()
   end
 
   defp format_class_symbol(class_name, []), do: "class #{class_name}"

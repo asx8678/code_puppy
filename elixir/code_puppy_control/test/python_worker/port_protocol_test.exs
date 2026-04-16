@@ -248,4 +248,61 @@ defmodule CodePuppyControl.PythonWorker.PortProtocolTest do
       end
     end
   end
+
+  describe "bd-9: repo_compass_index request protocol" do
+    test "repo_compass_index request is properly formatted" do
+      request =
+        Protocol.encode_request(
+          "repo_compass_index",
+          %{"root" => "/tmp/test", "max_files" => 40, "max_symbols_per_file" => 8},
+          "req-compass-1"
+        )
+
+      assert request["jsonrpc"] == "2.0"
+      assert request["id"] == "req-compass-1"
+      assert request["method"] == "repo_compass_index"
+      assert request["params"]["root"] == "/tmp/test"
+      assert request["params"]["max_files"] == 40
+      assert request["params"]["max_symbols_per_file"] == 8
+    end
+
+    test "repo_compass_index response encodes files and count" do
+      # Simulate a typical Repo Compass response
+      result = %{
+        "files" => [
+          %{"path" => "README.md", "kind" => "project-file", "symbols" => []},
+          %{"path" => "src/main.py", "kind" => "python", "symbols" => ["def main()"]},
+          %{
+            "path" => "src/utils.py",
+            "kind" => "python",
+            "symbols" => ["class Helper methods=foo,bar"]
+          }
+        ],
+        "count" => 3
+      }
+
+      response = Protocol.encode_response(result, "req-compass-1")
+
+      assert response["jsonrpc"] == "2.0"
+      assert response["id"] == "req-compass-1"
+      assert response["result"]["count"] == 3
+      assert length(response["result"]["files"]) == 3
+      assert Enum.any?(response["result"]["files"], &(&1["path"] == "README.md"))
+    end
+
+    test "repo_compass_index framed message can be parsed" do
+      request =
+        Protocol.encode_request(
+          "repo_compass_index",
+          %{"root" => "/tmp/test"},
+          "req-compass-2"
+        )
+
+      framed = Protocol.frame(request)
+      {[parsed], ""} = Protocol.parse_framed(framed)
+
+      assert parsed["method"] == "repo_compass_index"
+      assert parsed["params"]["root"] == "/tmp/test"
+    end
+  end
 end

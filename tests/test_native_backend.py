@@ -1066,7 +1066,7 @@ class TestElixirRouting:
                 result = NativeBackend.index_directory(str(tmp_path), max_files=10, max_symbols_per_file=5)
 
                 mock_call.assert_called_once_with(
-                    "index_directory",
+                    "repo_compass_index",
                     {"root": str(tmp_path), "max_files": 10, "max_symbols_per_file": 5},
                 )
                 assert isinstance(result, list)
