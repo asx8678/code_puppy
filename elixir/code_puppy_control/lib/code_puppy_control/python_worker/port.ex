@@ -456,6 +456,27 @@ defmodule CodePuppyControl.PythonWorker.Port do
     Protocol.encode_response(%{"languages" => languages}, nil)
   end
 
+  # bd-11: Added handlers for missing parse contract methods
+  defp handle_file_request("is_language_supported", params) do
+    language = params["language"]
+    supported = CodePuppyControl.Parser.nif_available?() and
+                CodePuppyControl.TurboParseNif.is_language_supported(language)
+    Protocol.encode_response(%{"supported" => supported}, nil)
+  end
+
+  defp handle_file_request("extract_syntax_diagnostics", params) do
+    source = params["source"]
+    language = params["language"]
+
+    case CodePuppyControl.Parser.extract_syntax_diagnostics(source, language) do
+      {:ok, result} ->
+        Protocol.encode_response(result, nil)
+
+      {:error, reason} ->
+        Protocol.encode_error(-32000, "Extract diagnostics failed: #{inspect(reason)}", nil, nil)
+    end
+  end
+
   defp handle_file_request("get_folds", params) do
     source = params["source"]
     language = params["language"]

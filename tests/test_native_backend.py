@@ -2,7 +2,7 @@
 
 bd-61: Tests for Phase 1 of Fast Puppy rewrite — native backend adapter.
 bd-62: Tests for Phase 2 — Elixir control plane routing.
-bd-64: Tests for Phase 4 — Elixir NIF routing for parse operations.
+bd-11: Tests for Phase 4 — Complete parse contract with Elixir NIF routing.
 """
 
 import sys
@@ -397,17 +397,17 @@ class TestModuleLevelFunctions:
         assert isinstance(result, dict)
 
     def test_parse_source_module_level(self):
-        """Test module-level parse_source function (bd-64)."""
+        """Test module-level parse_source function (bd-11)."""
         result = parse_source("def hello(): pass", "python")
         assert isinstance(result, dict)
 
     def test_extract_symbols_module_level(self):
-        """Test module-level extract_symbols function (bd-64)."""
+        """Test module-level extract_symbols function (bd-11)."""
         result = extract_symbols("def hello(): pass", "python")
         assert isinstance(result, list)
 
     def test_supported_languages_module_level(self):
-        """Test module-level supported_languages function (bd-64)."""
+        """Test module-level supported_languages function (bd-11)."""
         result = supported_languages()
         assert isinstance(result, list)
         assert "python" in result
@@ -731,7 +731,7 @@ class TestDetailedStatus:
 
 @pytest.mark.xdist_group("elixir_routing")
 class TestParseElixirRouting:
-    """Tests for Elixir routing of parse operations (bd-64).
+    """Tests for Elixir routing of parse operations (bd-11).
     
     These tests are marked with xdist_group to ensure they run serially,
     as they modify global backend state that can cause flakiness in 

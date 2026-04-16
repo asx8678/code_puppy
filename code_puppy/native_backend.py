@@ -16,7 +16,7 @@ Backend Preference (bd-13):
 
 bd-61: Phase 1 of Fast Puppy rewrite — native backend adapter.
 bd-62: Phase 2 — Add Elixir control plane routing for file operations.
-bd-64: Phase 4 — Add Elixir NIF routing for parse operations.
+bd-11: Phase 4 — Add Elixir NIF routing for parse operations.
 bd-13: Fix RUST_FIRST semantics, explicit capability routing, cache all turbo_parse imports.
 """
 
@@ -118,7 +118,7 @@ class NativeBackend:
     # bd-63: Legacy global toggle for backward compatibility
     _legacy_global_enabled: bool | None = None
 
-    # bd-64: Track last source used for each capability
+    # bd-11: Track last source used for each capability
     _last_source: dict[str, str] = {}
 
     # -------------------------------------------------------------------------
@@ -630,7 +630,7 @@ class NativeBackend:
             msg_core_tech_available and msg_core_user_enabled and is_rust_enabled()
         )
 
-        # Determine parse technical availability (bd-64: include Elixir)
+        # Determine parse technical availability (bd-11: include Elixir)
         parse_tech_available = TURBO_PARSE_AVAILABLE or cls._is_elixir_available()
         parse_user_enabled = cls.is_enabled(cls.Capabilities.PARSE)
         parse_active = parse_tech_available and parse_user_enabled
@@ -1344,7 +1344,30 @@ class NativeBackend:
             return []
 
     # -------------------------------------------------------------------------
-    # Parse (from turbo_parse) — can be stubbed for now
+    # Parse Contract (bd-11) — Complete routing through NativeBackend
+    #
+    # Elixir-first routing (default):
+    #   1. Elixir NIF (turbo_parse_nif) - calls Rust tree-sitter via NIF
+    #   2. Rust turbo_parse - direct Python bindings (fallback)
+    #   3. Python fallback - minimal implementation
+    #
+    # Rust-first routing (optional):
+    #   1. Rust turbo_parse - direct Python bindings
+    #   2. Elixir NIF - fallback to NIF when Rust unavailable
+    #   3. Python fallback
+    #
+    # Methods:
+    #   - parse_file()          → Elixir NIF → Rust → Python error stub
+    #   - parse_source()        → Elixir NIF → Rust → Python error stub
+    #   - extract_symbols()     → Elixir NIF → Rust → Python (regex fallback for py/ex)
+    #   - extract_syntax_diagnostics() → Elixir NIF → Rust → Python empty
+    #   - get_folds()           → Elixir NIF → Rust → Python empty
+    #   - get_highlights()      → Elixir NIF → Rust → Python empty
+    #   - parse_batch()         → Elixir (Task.async_stream) → Rust → Python
+    #   - supported_languages() → Elixir NIF → Rust → Python ["python", "elixir"]
+    #   - is_language_supported() → Elixir NIF → Rust → Python set lookup
+    #   - parse_health_check()  → Rust turbo_parse only (diagnostic)
+    #   - parse_stats()         → Rust turbo_parse only (diagnostic)
     # -------------------------------------------------------------------------
 
     @classmethod
@@ -1357,7 +1380,17 @@ class NativeBackend:
     ) -> dict[str, Any]:
         """Parse file for symbols/AST.
 
-        bd-64: Now routes through Elixir control plane when available and preferred.
+        bd-11: Routes through Elixir control plane when available and preferred.
+
+        Routing priority (ELIXIR_FIRST):
+            1. Elixir NIF (turbo_parse_nif)
+            2. Rust turbo_parse (direct Python bindings)
+            3. Python fallback (returns error stub)
+
+        Routing priority (RUST_FIRST):
+            1. Rust turbo_parse
+            2. Elixir NIF
+            3. Python fallback
 
         Args:
             path: Path to file to parse.
@@ -1372,7 +1405,7 @@ class NativeBackend:
         if not cls.is_enabled(cls.Capabilities.PARSE):
             return {"error": "Parse capability disabled", "path": path}
 
-        # bd-64: Try Elixir first if preferred and available
+        # bd-11: Try Elixir first if preferred and available
         # bd-13-fix: _should_use_elixir now handles PYTHON_ONLY internally
         # bd-13-partial-fix: Pass specific entrypoint for accurate RUST_FIRST fallback
         if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="parse_file"):
@@ -1420,7 +1453,7 @@ class NativeBackend:
     ) -> dict[str, Any]:
         """Parse source code for symbols/AST.
 
-        bd-64: Now routes through Elixir control plane when available and preferred.
+        bd-11: Routes through Elixir control plane when available and preferred.
 
         Args:
             source: Source code string to parse.
@@ -1478,7 +1511,7 @@ class NativeBackend:
     ) -> list[dict]:
         """Extract symbols from source code.
 
-        bd-64: Now routes through Elixir control plane when available and preferred.
+        bd-11: Routes through Elixir control plane when available and preferred.
 
         Args:
             source: Source code string to extract symbols from.
@@ -1632,9 +1665,11 @@ class NativeBackend:
         paths: list[str],
         language: str | None = None,
     ) -> dict:
-        """Parse multiple files in batch.  # bd-96
+        """Parse multiple files in batch.  # bd-11
 
         Routing: Elixir (Task.async_stream) → Rust → sequential Python
+        
+        bd-11: Complete parse contract with Elixir NIF routing.
 
         Args:
             paths: List of file paths to parse.
@@ -1701,14 +1736,14 @@ class NativeBackend:
     def supported_languages(cls) -> list[str]:
         """Get list of supported languages for parsing.
 
-        bd-64: Routes through Elixir when available, then tries Rust.
+        bd-11: Routes through Elixir when available, then tries Rust.
         bd-13-fix: Respects PYTHON_ONLY mode and capability state.
 
         Returns:
             List of supported language identifiers.
         """
         # Try Elixir
-        # bd-13-fix: Use _should_use_elixir to respect PYTHON_ONLY and capability state
+        # bd-11: Use _should_use_elixir to respect PYTHON_ONLY and capability state
         # bd-13-partial-fix: Pass specific entrypoint for accurate RUST_FIRST fallback
         if cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="supported_languages"):
             try:
@@ -1784,7 +1819,9 @@ class NativeBackend:
     def extract_syntax_diagnostics(cls, source: str, language: str) -> dict[str, Any]:
         """Extract syntax diagnostics from source code.
 
-        bd-93: Phase 4 - Elixir-first routing for diagnostics.
+        bd-11: Complete parse contract - Elixir-first routing for diagnostics.
+
+        Routing: Elixir NIF → Rust turbo_parse → Python fallback
 
         Args:
             source: Source code to analyze
