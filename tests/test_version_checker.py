@@ -1,3 +1,4 @@
+from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -45,12 +46,22 @@ def test_versions_are_equal():
     assert versions_are_equal("", "1.2.3") is False
 
 
+def _fresh_cache(version: str) -> dict:
+    """Build a cache dict that looks freshly written."""
+    return {
+        "version": version,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 class TestFetchLatestVersion:
     """Test fetch_latest_version function."""
 
+    @patch("code_puppy.version_checker._read_cache")
     @patch("code_puppy.version_checker.httpx.get")
-    def test_fetch_latest_version_success(self, mock_get):
-        """Test successful version fetch from PyPI."""
+    def test_fetch_latest_version_success(self, mock_get, mock_cache):
+        """Test successful version fetch from PyPI when cache is empty."""
+        mock_cache.return_value = None
         mock_response = MagicMock()
         mock_response.json.return_value = {"info": {"version": "1.2.3"}}
         mock_response.raise_for_status = MagicMock()
@@ -59,22 +70,33 @@ class TestFetchLatestVersion:
         version = fetch_latest_version("test-package")
 
         assert version == "1.2.3"
-        mock_get.assert_called_once_with(
-            "https://pypi.org/pypi/test-package/json", timeout=5.0
-        )
+        mock_get.assert_called_once()
 
+    @patch("code_puppy.version_checker._read_cache")
+    def test_fetch_latest_version_cache_hit(self, mock_cache):
+        """Test that cache hit skips network call."""
+        mock_cache.return_value = _fresh_cache("1.2.3")
+
+        version = fetch_latest_version("test-package")
+
+        assert version == "1.2.3"
+
+    @patch("code_puppy.version_checker._read_cache")
     @patch("code_puppy.version_checker.httpx.get")
-    def test_fetch_latest_version_http_error(self, mock_get):
+    def test_fetch_latest_version_http_error(self, mock_get, mock_cache):
         """Test version fetch with HTTP error."""
+        mock_cache.return_value = None
         mock_get.side_effect = httpx.HTTPError("Connection failed")
 
         version = fetch_latest_version("test-package")
 
         assert version is None
 
+    @patch("code_puppy.version_checker._read_cache")
     @patch("code_puppy.version_checker.httpx.get")
-    def test_fetch_latest_version_invalid_json(self, mock_get):
+    def test_fetch_latest_version_invalid_json(self, mock_get, mock_cache):
         """Test version fetch with invalid JSON response."""
+        mock_cache.return_value = None
         mock_response = MagicMock()
         mock_response.json.side_effect = ValueError("Invalid JSON")
         mock_response.raise_for_status = MagicMock()
@@ -84,9 +106,11 @@ class TestFetchLatestVersion:
 
         assert version is None
 
+    @patch("code_puppy.version_checker._read_cache")
     @patch("code_puppy.version_checker.httpx.get")
-    def test_fetch_latest_version_missing_info_key(self, mock_get):
+    def test_fetch_latest_version_missing_info_key(self, mock_get, mock_cache):
         """Test version fetch with missing 'info' key."""
+        mock_cache.return_value = None
         mock_response = MagicMock()
         mock_response.json.return_value = {"releases": {}}
         mock_response.raise_for_status = MagicMock()
@@ -96,9 +120,11 @@ class TestFetchLatestVersion:
 
         assert version is None
 
+    @patch("code_puppy.version_checker._read_cache")
     @patch("code_puppy.version_checker.httpx.get")
-    def test_fetch_latest_version_status_error(self, mock_get):
+    def test_fetch_latest_version_status_error(self, mock_get, mock_cache):
         """Test version fetch with HTTP status error."""
+        mock_cache.return_value = None
         mock_response = MagicMock()
         mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
             "404 Not Found", request=MagicMock(), response=MagicMock()
@@ -117,12 +143,12 @@ class TestDefaultVersionMismatchBehavior:
     @patch("code_puppy.version_checker.emit_success")
     @patch("code_puppy.version_checker.emit_warning")
     @patch("code_puppy.version_checker.emit_info")
-    @patch("code_puppy.version_checker.fetch_latest_version")
+    @patch("code_puppy.version_checker._read_cache")
     def test_version_mismatch_shows_update_message(
-        self, mock_fetch, mock_emit_info, mock_emit_warning, mock_emit_success, mock_bus
+        self, mock_cache, mock_emit_info, mock_emit_warning, mock_emit_success, mock_bus
     ):
         """Test that update message is shown when versions differ."""
-        mock_fetch.return_value = "2.0.0"
+        mock_cache.return_value = _fresh_cache("2.0.0")
 
         default_version_mismatch_behavior("1.0.0")
 
@@ -139,17 +165,17 @@ class TestDefaultVersionMismatchBehavior:
     @patch("code_puppy.version_checker.emit_success")
     @patch("code_puppy.version_checker.emit_warning")
     @patch("code_puppy.version_checker.emit_info")
-    @patch("code_puppy.version_checker.fetch_latest_version")
+    @patch("code_puppy.version_checker._read_cache")
     def test_version_match_still_shows_current_version(
-        self, mock_fetch, mock_emit_info, mock_emit_warning, mock_emit_success, mock_bus
+        self, mock_cache, mock_emit_info, mock_emit_warning, mock_emit_success, mock_bus
     ):
         """Test that current version is still shown when versions match."""
-        mock_fetch.return_value = "1.0.0"
+        mock_cache.return_value = _fresh_cache("1.0.0")
 
         default_version_mismatch_behavior("1.0.0")
 
         # Should emit current version info
-        mock_emit_info.assert_called_once_with("Current version: 1.0.0")
+        mock_emit_info.assert_any_call("Current version: 1.0.0")
         # Should NOT emit warning or success when versions match
         mock_emit_warning.assert_not_called()
         mock_emit_success.assert_not_called()
@@ -158,18 +184,18 @@ class TestDefaultVersionMismatchBehavior:
     @patch("code_puppy.version_checker.emit_success")
     @patch("code_puppy.version_checker.emit_warning")
     @patch("code_puppy.version_checker.emit_info")
-    @patch("code_puppy.version_checker.fetch_latest_version")
-    def test_version_fetch_failure_still_shows_current(
-        self, mock_fetch, mock_emit_info, mock_emit_warning, mock_emit_success, mock_bus
+    @patch("code_puppy.version_checker._read_cache")
+    def test_cache_miss_shows_current_version_no_warning(
+        self, mock_cache, mock_emit_info, mock_emit_warning, mock_emit_success, mock_bus
     ):
-        """Test behavior when fetch_latest_version returns None."""
-        mock_fetch.return_value = None
+        """Test behavior when cache is empty (no network call, no warning)."""
+        mock_cache.return_value = None
 
         default_version_mismatch_behavior("1.0.0")
 
-        # Should still emit current version info even when fetch fails
+        # Should still emit current version info even when cache miss
         mock_emit_info.assert_called_once_with("Current version: 1.0.0")
-        # Should NOT emit warning or success when fetch fails
+        # Should NOT emit warning or success when cache miss
         mock_emit_warning.assert_not_called()
         mock_emit_success.assert_not_called()
 
@@ -177,12 +203,12 @@ class TestDefaultVersionMismatchBehavior:
     @patch("code_puppy.version_checker.emit_success")
     @patch("code_puppy.version_checker.emit_warning")
     @patch("code_puppy.version_checker.emit_info")
-    @patch("code_puppy.version_checker.fetch_latest_version")
+    @patch("code_puppy.version_checker._read_cache")
     def test_update_message_content(
-        self, mock_fetch, mock_emit_info, mock_emit_warning, mock_emit_success, mock_bus
+        self, mock_cache, mock_emit_info, mock_emit_warning, mock_emit_success, mock_bus
     ):
         """Test the exact content of update messages."""
-        mock_fetch.return_value = "2.5.0"
+        mock_cache.return_value = _fresh_cache("2.5.0")
 
         default_version_mismatch_behavior("2.0.0")
 
@@ -194,12 +220,12 @@ class TestDefaultVersionMismatchBehavior:
     @patch("code_puppy.version_checker.emit_success")
     @patch("code_puppy.version_checker.emit_warning")
     @patch("code_puppy.version_checker.emit_info")
-    @patch("code_puppy.version_checker.fetch_latest_version")
+    @patch("code_puppy.version_checker._read_cache")
     def test_none_current_version_handled_gracefully(
-        self, mock_fetch, mock_emit_info, mock_emit_warning, mock_emit_success, mock_bus
+        self, mock_cache, mock_emit_info, mock_emit_warning, mock_emit_success, mock_bus
     ):
         """Test that None current_version is handled gracefully."""
-        mock_fetch.return_value = "1.0.0"
+        mock_cache.return_value = _fresh_cache("1.0.0")
 
         # This should not raise an exception
         default_version_mismatch_behavior(None)

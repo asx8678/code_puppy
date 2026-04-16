@@ -362,6 +362,10 @@ class AppRunner:
                 await callbacks.on_version_check(current_version)
             else:
                 default_version_mismatch_behavior(current_version)
+                # Fire background version check (non-blocking refresh)
+                import asyncio
+                from code_puppy.version_checker import check_version_background
+                asyncio.create_task(check_version_background(current_version))
 
         await callbacks.on_startup()
 
