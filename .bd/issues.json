@@ -1,5 +1,5 @@
 {
-  "counter": 13,
+  "counter": 14,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -128,7 +128,7 @@
       "id": "bd-8",
       "title": "Port gitignore-aware filtering to Elixir FileOps",
       "description": "Python FileOps has gitignore-aware filtering via code_puppy/utils/gitignore.py (using pathspec library). Elixir FileOps currently walks directories without respecting .gitignore patterns, causing divergence in list_files and grep results between Python and Elixir backends.\n\n**References:**\n- Python source: code_puppy/utils/gitignore.py\n- Elixir target: elixir/code_puppy_control/lib/code_puppy_control/file_ops.ex\n- Usage: GitignoreMatcher.for_directory() caches compiled pathspec\n\n**Acceptance criteria:**\n1. Create CodePuppyControl.Gitignore module for pattern matching\n2. Implement ancestor-walking to collect all applicable .gitignore files\n3. Add pattern compilation caching (similar to Python LRU cache)\n4. Integrate filtering into list_files and grep operations\n5. Parity tests against Python fixtures with same .gitignore patterns\n\n**Open questions:**\n- Use nimble_parsec for pattern parsing or shell out to git check-ignore?\n- Support .plandexignore/.cpignore later (out of scope for this issue)\n\n**Priority reason:** Blocking FileOps parity - users see different file lists depending on backend (code_puppy_python_to_elixir_plan.md PR 3)",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [],
@@ -138,14 +138,14 @@
         ]
       },
       "created_at": "2026-04-16T07:16:25.434979",
-      "updated_at": "2026-04-16T07:16:39.459353",
+      "updated_at": "2026-04-16T11:09:24.036093",
       "comments": []
     },
     "bd-9": {
       "id": "bd-9",
       "title": "Promote Repo Compass Elixir indexer from rewrite/ to production",
       "description": "The Repo Compass Elixir indexer was developed in rewrite/ folder (repo_compass.ex, indexer.ex, port.ex, repo_compass_test.exs) but never integrated into the production Elixir tree. The Python indexer in code_puppy/plugins/repo_compass/indexer.py remains the default.\n\n**References:**\n- Orphaned files: rewrite/repo_compass.ex, rewrite/indexer.ex, rewrite/port.ex, rewrite/repo_compass_test.exs\n- Python entry: code_puppy/plugins/repo_compass/indexer.py\n- NativeBackend route: code_puppy/native_backend.py::index_directory()\n- Analysis: rewrite/ELIXIR_FIRST_REWRITE_ANALYSIS.md\n\n**Acceptance criteria:**\n1. Move rewrite/repo_compass.ex to elixir/code_puppy_control/lib/code_puppy_control/indexer/repo_compass.ex\n2. Update rewrite/indexer.ex delegates and move to production\n3. Ensure repo_compass_index/2 and repo_compass_index!/2 are exported\n4. Route NativeBackend.index_directory() through Elixir when available\n5. Verify parity: Python-style symbol summaries (class Greeter methods=hello,later, def wave(person, times))\n6. Run integration tests and update port.ex routing if needed\n\n**Dependencies:**\n- Should follow bd-8 (gitignore support) for consistent file filtering\n\n**Priority reason:** ELIXIR_FIRST_REWRITE_ANALYSIS.md identified this as highest-leverage first slice. Currently orphaned work.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [],
@@ -155,8 +155,10 @@
         ]
       },
       "created_at": "2026-04-16T07:16:30.972936",
-      "updated_at": "2026-04-16T07:16:33.101461",
-      "comments": []
+      "updated_at": "2026-04-16T11:09:24.058654",
+      "comments": [
+        "Merged to main. Repo Compass Elixir indexer promoted from rewrite/ to production."
+      ]
     },
     "bd-10": {
       "id": "bd-10",
@@ -219,6 +221,19 @@
         "Claimed by planning-agent-019d95 for implementation.",
         "Completed by planning-agent-019d95. All 4 acceptance criteria met:\n1. Profile semantics match names (RUST_FIRST/ELIXIR_FIRST/PYTHON_ONLY) \u2014 done in prior work, verified\n2. Zero direct bridge imports outside NativeBackend adapter \u2014 ~60 imports migrated, lint guard added\n3. Capability routing table documented and verified at runtime \u2014 docs/acceleration.md + verify_routing()\n4. Tests confirm correct backend selection per profile/capability \u2014 145 tests pass (routing + fast_puppy + lint guard)\n\nChanges pushed in commit 681e957e."
       ]
+    },
+    "bd-14": {
+      "id": "bd-14",
+      "title": "Split file_ops.ex below 600-line cap",
+      "description": "file_ops.ex is currently 809 lines, well over the 600-line hard cap. Split into submodules: FileOps.Reader, FileOps.Grep, FileOps.Security, etc. Pre-existing debt flagged during bd-8 review.",
+      "status": "open",
+      "priority": 2,
+      "type": "chore",
+      "labels": [],
+      "dependencies": {},
+      "created_at": "2026-04-16T11:09:24.049203",
+      "updated_at": "2026-04-16T11:09:24.049213",
+      "comments": []
     }
   }
 }
