@@ -173,13 +173,13 @@
       "id": "bd-11",
       "title": "Complete parse contract in NativeBackend (bd-64 follow-through)",
       "description": "NativeBackend has parse methods (parse_file, parse_source, parse_batch, parse_health_check, parse_stats) with bd-64 ghost reference in code, but the Elixir NIF routing may not be complete. The turbo_parse_nif.ex exists but integration status is unclear.\n\n**Ghost reference:** native_backend.py line 64: 'bd-64: Phase 4 \u2014 Add Elixir NIF routing for parse operations'\n\n**Current state:**\n- turbo_parse_nif.ex exists: elixir/code_puppy_control/lib/code_puppy_control/turbo_parse_nif.ex\n- NativeBackend.parse_* methods exist\n- Phase 4 was described as 'Parse operations now route through NativeBackend with Elixir-first routing' in system prompt\n- NativeBackend methods: parse_file (line 1130), parse_source (line 1189), parse_batch (line 1389)\n\n**Verification needed:**\n1. Does NativeBackend.parse_file actually route to Elixir NIF when elixir_first profile active?\n2. Are parse_health_check and parse_stats implemented on Elixir side?\n3. Does extract_syntax_diagnostics exist in NativeBackend?\n4. Compare turbo_parse_bridge direct usage vs NativeBackend routing\n\n**Acceptance criteria:**\n1. Verify parse methods route to Elixir when available (elixir_first profile)\n2. Add missing NativeBackend.extract_syntax_diagnostics wrapper\n3. Ensure parse_stats/parse_health_check parity\n4. Document which parse features use Elixir vs Rust vs Python\n5. Remove ghost bd-64 reference or file follow-up issue\n\n**Priority reason:** Phase 4 is claimed done in docs but verify actual implementation completeness.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-16T07:16:49.961366",
-      "updated_at": "2026-04-16T07:16:49.961373",
+      "updated_at": "2026-04-16T09:56:50.938227",
       "comments": []
     },
     "bd-12": {
