@@ -580,7 +580,7 @@
       "id": "bd-34",
       "title": "Migrate content_prep.rs to pure Elixir (Text.ContentPrep)",
       "description": "Migrate code_puppy_core/src/content_prep.rs (12.7 KB) to pure Elixir.\n\nWHAT EXISTS: Elixir Text.EOL already implements looks_textish/1, normalize_eol/1, strip_bom/1 \u2014 covers ~80% of the Rust module.\n\nWHAT'S MISSING: A unified prepare_content/1 function returning {content, is_text, had_bom, had_crlf} as a single pass. The Rust version uses SIMD-accelerated scanning (memchr) for NUL detection.\n\nFILES TO CREATE/MODIFY:\n- Extend or create: elixir/.../text/content_prep.ex (or extend eol.ex)\n- Create: test/.../text/content_prep_test.exs\n- Modify: code_puppy/native_backend.py \u2014 route content_prep through Elixir transport\n- Delete: code_puppy_core/src/content_prep.rs + remove from lib.rs\n\nVALIDATION: Port existing Rust tests. Cross-check binary/BOM/CRLF edge cases against Python fallback.\n\nEFFORT: ~2 days",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -588,7 +588,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:39:49.623410",
-      "updated_at": "2026-04-16T15:10:42.026280",
+      "updated_at": "2026-04-16T15:26:39.203346",
       "comments": [
         "CLAIMED by pack-leader-019d96 \u2192 assigned to code-puppy-clone-5 (content_prep, ~80% exists in Text.EOL)",
         "Shepherd review: REQUEST_CHANGES - fake early return, 3 DRY violations vs EOL, dead code"
@@ -598,7 +598,7 @@
       "id": "bd-35",
       "title": "Migrate path_classify/ to pure Elixir (FileOps.PathClassifier)",
       "description": "Migrate code_puppy_core/src/path_classify/ (21.4 KB: mod.rs, patterns.rs, sensitive.rs, tests.rs) to pure Elixir.\n\nWHAT EXISTS: Elixir FileOps.Security (path validation, sensitive detection) + Gitignore (pattern matching) cover significant ground.\n\nWHAT'S MISSING: Unified PathClassifier with should_ignore/2, is_sensitive/2, classify_path/2. The Rust version uses pre-compiled globset patterns.\n\nKEY CONCERN: Pattern lists in patterns.rs (DIR_PATTERNS, FILE_PATTERNS) and sensitive.rs (SensitivePathData) must be exactly ported.\n\nFILES TO CREATE/MODIFY:\n- Create: elixir/.../file_ops/path_classifier.ex\n- Port: patterns.rs glob lists to Elixir\n- Port: sensitive.rs to extend Security module\n- Create: test/.../file_ops/path_classifier_test.exs\n- Modify: native_backend.py \u2014 route classify_path through Elixir\n- Delete: code_puppy_core/src/path_classify/ directory\n\nVALIDATION: Property-based tests comparing Elixir vs Python fallback on real repo trees.\n\nEFFORT: ~3 days",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -606,7 +606,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:39:53.143955",
-      "updated_at": "2026-04-16T15:10:42.055852",
+      "updated_at": "2026-04-16T15:26:39.238526",
       "comments": [
         "CLAIMED by pack-leader-019d96 \u2192 assigned to elixir-dev-clone-1 (path_classify)",
         "Elixir-reviewer: REQUEST_CHANGES - symlink resolution missing (security gap), struct cosmetic, stale docs"
@@ -616,7 +616,7 @@
       "id": "bd-36",
       "title": "Migrate line_numbers.rs to pure Elixir (Text.LineNumbers)",
       "description": "Migrate code_puppy_core/src/line_numbers.rs (14.8 KB) to pure Elixir.\n\nCore logic: cat -n style formatting with continuation markers for long lines (>5000 chars split into 5.1, 5.2, 5.3).\n\nKEY SUBTLETY: Must use character-based chunking (not byte-based) for UTF-8 parity with Python. Elixir String.length/1 counts graphemes \u2014 verify parity with Python len().\n\nFILES TO CREATE/MODIFY:\n- Create: elixir/.../text/line_numbers.ex\n- Create: test/.../text/line_numbers_test.exs\n- Modify: native_backend.py \u2014 route format_line_numbers through Elixir\n- Delete: code_puppy_core/src/line_numbers.rs\n\nVALIDATION: UTF-8 edge cases (emoji, CJK, combining chars). Port Rust tests + property tests.\n\nEFFORT: ~2 days",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -624,7 +624,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:39:58.000778",
-      "updated_at": "2026-04-16T15:10:42.084306",
+      "updated_at": "2026-04-16T15:26:39.275065",
       "comments": [
         "CLAIMED by pack-leader-019d96 \u2192 assigned to elixir-dev-clone-3 (line_numbers)",
         "Shepherd review: REQUEST_CHANGES - misleading docs (grapheme vs codepoint), missing is_binary guard"
@@ -642,7 +642,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:40:24.419494",
-      "updated_at": "2026-04-16T15:10:42.113103",
+      "updated_at": "2026-04-16T15:26:39.309184",
       "comments": [
         "CLAIMED by pack-leader-019d96 \u2192 assigned to elixir-dev-clone-2 (unified_diff)",
         "Shepherd review: REQUEST_CHANGES - CRITICAL: context trimming broken, split_lines drops content, O(n2) list ops"
@@ -660,7 +660,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:40:28.187314",
-      "updated_at": "2026-04-16T15:10:42.141934",
+      "updated_at": "2026-04-16T15:26:39.344088",
       "comments": [
         "CLAIMED by pack-leader-019d96 \u2192 assigned to elixir-dev (fuzzy_match, HARDEST)",
         "Elixir-reviewer: REQUEST_CHANGES - CRITICAL: unicode bug in JaroWinkler, threshold=0.0 crash, score lost, perf regression"
