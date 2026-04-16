@@ -1,5 +1,5 @@
 {
-  "counter": 18,
+  "counter": 27,
   "issues": {
     "bd-1": {
       "id": "bd-1",
@@ -300,6 +300,171 @@
       "comments": [
         "Claimed by planning-agent-019d95"
       ]
+    },
+    "bd-19": {
+      "id": "bd-19",
+      "title": "Rust: fuzzy_match_window() \u2014 port _find_best_window to Rust",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "rust,edit-engine"
+      ],
+      "dependencies": {},
+      "description": "COMPLETED. Port sliding-window Jaro-Winkler fuzzy matcher to Rust in code_puppy_core.",
+      "created_at": "2026-04-16T12:22:16",
+      "updated_at": "2026-04-16T15:00:00",
+      "comments": [
+        "Merged to main: e6aa77fe"
+      ]
+    },
+    "bd-20": {
+      "id": "bd-20",
+      "title": "Rust: unified_diff() \u2014 replace difflib.unified_diff with Rust",
+      "status": "closed",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "rust,edit-engine"
+      ],
+      "dependencies": {},
+      "description": "COMPLETED. Unified diff using similar crate built-in formatter.",
+      "created_at": "2026-04-16T12:22:18",
+      "updated_at": "2026-04-16T15:00:00",
+      "comments": [
+        "Merged to main: a2532baa"
+      ]
+    },
+    "bd-21": {
+      "id": "bd-21",
+      "title": "Rust: replace_in_content() \u2014 bundle full replace engine",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "rust,edit-engine"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-19",
+          "bd-20"
+        ]
+      },
+      "description": "Bundle full replace engine. Deps bd-19, bd-20 now closed.",
+      "created_at": "2026-04-16T12:22:20",
+      "updated_at": "2026-04-16T12:22:20",
+      "comments": []
+    },
+    "bd-22": {
+      "id": "bd-22",
+      "title": "Python bridge: code_puppy_edit integration",
+      "status": "open",
+      "priority": 1,
+      "type": "task",
+      "labels": [
+        "python,bridge"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-19",
+          "bd-20",
+          "bd-21"
+        ]
+      },
+      "description": "Python bridge for edit integration.",
+      "created_at": "2026-04-16T12:22:22",
+      "updated_at": "2026-04-16T12:22:22",
+      "comments": []
+    },
+    "bd-23": {
+      "id": "bd-23",
+      "title": "Rust: classify_path() \u2014 port ignore + sensitive path matching",
+      "status": "closed",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "rust,path-ops"
+      ],
+      "dependencies": {},
+      "description": "COMPLETED. Port classify_path using globset. Note: **/.*  pattern parity gap needs follow-up.",
+      "created_at": "2026-04-16T12:22:25",
+      "updated_at": "2026-04-16T15:00:00",
+      "comments": [
+        "Merged to main: fcaac2ce"
+      ]
+    },
+    "bd-24": {
+      "id": "bd-24",
+      "title": "Python bridge: path classification integration",
+      "status": "open",
+      "priority": 2,
+      "type": "task",
+      "labels": [
+        "python,bridge"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-23"
+        ]
+      },
+      "description": "Python bridge for path classification. Dep bd-23 now closed.",
+      "created_at": "2026-04-16T12:22:27",
+      "updated_at": "2026-04-16T12:22:27",
+      "comments": []
+    },
+    "bd-25": {
+      "id": "bd-25",
+      "title": "Rust: prepare_content() \u2014 port EOL/BOM/text-detection",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "rust,content-prep"
+      ],
+      "dependencies": {},
+      "description": "COMPLETED. Port prepare_content with memchr for SIMD scanning.",
+      "created_at": "2026-04-16T12:22:29",
+      "updated_at": "2026-04-16T15:00:00",
+      "comments": [
+        "Merged to main: 3f484a05"
+      ]
+    },
+    "bd-26": {
+      "id": "bd-26",
+      "title": "Rust: format_line_numbers() \u2014 port line number formatting",
+      "status": "closed",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "rust,content-prep"
+      ],
+      "dependencies": {},
+      "description": "COMPLETED. Port format_line_numbers with char-based chunking for Python parity.",
+      "created_at": "2026-04-16T12:22:32",
+      "updated_at": "2026-04-16T15:00:00",
+      "comments": [
+        "Merged to main: 564bd10c"
+      ]
+    },
+    "bd-27": {
+      "id": "bd-27",
+      "title": "Python bridge: content preparation integration",
+      "status": "open",
+      "priority": 3,
+      "type": "task",
+      "labels": [
+        "python,bridge"
+      ],
+      "dependencies": {
+        "blocks": [
+          "bd-25",
+          "bd-26"
+        ]
+      },
+      "description": "Python bridge for content preparation. Deps bd-25, bd-26 now closed.",
+      "created_at": "2026-04-16T12:22:34",
+      "updated_at": "2026-04-16T12:22:34",
+      "comments": []
     }
   }
 }
