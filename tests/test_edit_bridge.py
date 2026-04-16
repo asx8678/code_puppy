@@ -1,9 +1,11 @@
 """Tests for the edit bridge module.
 
 Tests the code_puppy._edit_bridge module which provides:
-- fuzzy_match_window: Fuzzy matching with Rust fallback
-- replace_in_content: Content replacement with Rust fallback
-- unified_diff: Diff generation with Rust fallback
+- fuzzy_match_window: Fuzzy matching with Elixir/Python fallback
+- replace_in_content: Content replacement with Elixir/Python fallback
+- unified_diff: Diff generation with Elixir/Python fallback
+
+bd-41: Rust modules removed. Routing is now Elixir → Python.
 """
 
 from __future__ import annotations
@@ -21,33 +23,10 @@ if str(code_puppy_path) not in sys.path:
     sys.path.insert(0, str(code_puppy_path))
 
 from code_puppy._edit_bridge import (  # noqa: E402
-    RUST_ACTIVE,
-    RUST_AVAILABLE,
     fuzzy_match_window,
     replace_in_content,
     unified_diff,
 )
-
-
-class TestBridgeAvailability:
-    """Test bridge availability detection."""
-
-    def test_rust_available_flag_exists(self) -> None:
-        """RUST_AVAILABLE should be a boolean."""
-        assert isinstance(RUST_AVAILABLE, bool)
-
-    def test_rust_active_returns_bool(self) -> None:
-        """RUST_ACTIVE() should return a boolean."""
-        assert isinstance(RUST_ACTIVE(), bool)
-
-    def test_rust_active_respects_core_bridge_toggle(self) -> None:
-        """RUST_ACTIVE should respect is_rust_enabled() from _core_bridge."""
-        # This test verifies the integration with _core_bridge
-        from code_puppy._core_bridge import is_rust_enabled
-
-        if RUST_AVAILABLE:
-            # When Rust is available, RUST_ACTIVE should follow is_rust_enabled
-            assert RUST_ACTIVE() == is_rust_enabled()
 
 
 class TestFuzzyMatchWindow:
@@ -403,153 +382,90 @@ class TestEdgeCases:
         assert "A B C D E F G H I J" in result["modified"]
 
 
-class TestRustPythonParity:
-    """Test that Rust and Python implementations produce equivalent results."""
+class TestElixirBridgePaths:
+    """Tests for Elixir routing in the edit bridge (bd-41)."""
 
-    @pytest.mark.skipif(not RUST_AVAILABLE, reason="Rust not available")
-    def test_fuzzy_match_rust_python_parity(self) -> None:
-        """Rust and Python should produce similar fuzzy match results."""
-        # Force Python path
-        with patch("code_puppy._edit_bridge.is_rust_enabled", return_value=False):
-            haystack = ["def foo():", "    pass", "def bar():", "    return 1"]
-            needle = "def baz():\n    return 1"
-            py_result = fuzzy_match_window(haystack, needle)
-
-        # Allow Rust path
-        if RUST_ACTIVE():
-            rust_result = fuzzy_match_window(haystack, needle)
-            # Both should find similar matches (might differ slightly in score)
-            py_span, py_score = py_result
-            rust_span, rust_score = rust_result
-            if py_span is not None and rust_span is not None:
-                assert py_span[0] == rust_span[0]  # Start should match
-                assert py_span[1] == rust_span[1]  # End should match
-            # Scores should be close (within tolerance)
-            assert abs(py_score - rust_score) < 0.01
-
-    @pytest.mark.skipif(not RUST_AVAILABLE, reason="Rust not available")
-    def test_replace_in_content_rust_python_parity(self) -> None:
-        """Rust and Python should produce identical replacement results."""
-        content = "hello world\ndef bar():\n    pass\n"
-        replacements = [("world", "universe"), ("def baz():", "def qux():")]
-
-        # Force Python path
-        with patch("code_puppy._edit_bridge.is_rust_enabled", return_value=False):
-            py_result = replace_in_content(content, replacements)
-
-        # Allow Rust path
-        if RUST_ACTIVE():
-            rust_result = replace_in_content(content, replacements)
-            # Modified content should be identical
-            assert py_result["modified"] == rust_result["modified"]
-            assert py_result["success"] == rust_result["success"]
-
-
-class TestRustActiveBridgePaths:
-    """Tests that monkeypatch Rust availability to verify conversion logic."""
-
-    def test_fuzzy_match_window_rust_conversion(self, monkeypatch):
-        """Verify FuzzyMatchResult → ((start, end), score) conversion."""
+    def test_elixir_fuzzy_match_called_when_enabled(self, monkeypatch):
+        """Verify fuzzy_match_window calls Elixir when enabled."""
         from unittest.mock import MagicMock
 
-        # Create a mock FuzzyMatchResult with the expected attributes
-        mock_result = MagicMock()
-        mock_result.start = 2
-        mock_result.end = 5
-        mock_result.score = 0.98
-
-        mock_rust_fn = MagicMock(return_value=mock_result)
+        mock_elixir_result = {"start": 0, "end": 2, "score": 0.98, "matched_text": "line1\nline2"}
 
         import code_puppy._edit_bridge as bridge
+        from code_puppy.native_backend import NativeBackend
 
-        monkeypatch.setattr(bridge, "_rust_fuzzy_match_window", mock_rust_fn)
-        monkeypatch.setattr(bridge, "RUST_AVAILABLE", True)
-        monkeypatch.setattr(bridge, "is_rust_enabled", lambda: True)
+        # Mock _call_elixir to return our test result
+        mock_call_elixir = MagicMock(return_value=mock_elixir_result)
+        monkeypatch.setattr(NativeBackend, "_call_elixir", mock_call_elixir)
+        monkeypatch.setattr(NativeBackend, "_should_use_elixir", classmethod(lambda cls, cap: True))
 
-        result = bridge.fuzzy_match_window(["line1", "line2", "line3"], "needle")
-        assert result == ((2, 5), 0.98)
+        result = bridge.fuzzy_match_window(["line1", "line2", "line3"], "line1\nline2")
+        assert result == ((0, 2), 0.98)
+        mock_call_elixir.assert_called_once()
+        call_args = mock_call_elixir.call_args
+        assert call_args[0][0] == "text_fuzzy_match"
 
-    def test_fuzzy_match_window_rust_no_match(self, monkeypatch):
-        """Verify FuzzyMatchResult with end=None → (None, score) conversion."""
+    def test_elixir_replace_called_when_enabled(self, monkeypatch):
+        """Verify replace_in_content calls Elixir when enabled."""
         from unittest.mock import MagicMock
 
-        mock_result = MagicMock()
-        mock_result.start = 0
-        mock_result.end = None
-        mock_result.score = 0.3
-
-        mock_rust_fn = MagicMock(return_value=mock_result)
-
-        import code_puppy._edit_bridge as bridge
-
-        monkeypatch.setattr(bridge, "_rust_fuzzy_match_window", mock_rust_fn)
-        monkeypatch.setattr(bridge, "RUST_AVAILABLE", True)
-        monkeypatch.setattr(bridge, "is_rust_enabled", lambda: True)
-
-        result = bridge.fuzzy_match_window(["line1"], "needle")
-        assert result == (None, 0.3)
-
-    def test_replace_in_content_rust_success(self, monkeypatch):
-        """Verify ReplaceResult → dict conversion on success."""
-        from unittest.mock import MagicMock
-
-        mock_result = MagicMock()
-        mock_result.modified = "modified content"
-        mock_result.diff = "--- a\n+++ b\n"
-        mock_result.success = True
-        mock_result.error = None
-        mock_result.jw_score = None
-
-        mock_rust_fn = MagicMock(return_value=mock_result)
+        mock_elixir_result = {
+            "modified": "hello universe",
+            "diff": "--- a\n+++ b\n",
+            "success": True,
+            "error": None,
+            "jw_score": None,
+        }
 
         import code_puppy._edit_bridge as bridge
+        from code_puppy.native_backend import NativeBackend
 
-        monkeypatch.setattr(bridge, "_rust_replace_in_content", mock_rust_fn)
-        monkeypatch.setattr(bridge, "RUST_AVAILABLE", True)
-        monkeypatch.setattr(bridge, "is_rust_enabled", lambda: True)
+        mock_call_elixir = MagicMock(return_value=mock_elixir_result)
+        monkeypatch.setattr(NativeBackend, "_call_elixir", mock_call_elixir)
+        monkeypatch.setattr(NativeBackend, "_should_use_elixir", classmethod(lambda cls, cap: True))
 
-        result = bridge.replace_in_content("content", [("old", "new")])
+        result = bridge.replace_in_content("hello world", [("world", "universe")])
         assert result["success"] is True
-        assert result["modified"] == "modified content"
+        assert result["modified"] == "hello universe"
+        mock_call_elixir.assert_called_once()
+        call_args = mock_call_elixir.call_args
+        assert call_args[0][0] == "text_replace"
 
-    def test_replace_in_content_rust_failure(self, monkeypatch):
-        """Verify ReplaceResult → dict conversion on JW failure."""
+    def test_elixir_unified_diff_called_when_enabled(self, monkeypatch):
+        """Verify unified_diff calls Elixir when enabled."""
         from unittest.mock import MagicMock
 
-        mock_result = MagicMock()
-        mock_result.modified = "content"
-        mock_result.diff = ""
-        mock_result.success = False
-        mock_result.error = "No suitable match (JW 0.500 < 0.95)"
-        mock_result.jw_score = 0.5
-
-        mock_rust_fn = MagicMock(return_value=mock_result)
+        mock_elixir_result = {"diff": "--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new\n"}
 
         import code_puppy._edit_bridge as bridge
+        from code_puppy.native_backend import NativeBackend
 
-        monkeypatch.setattr(bridge, "_rust_replace_in_content", mock_rust_fn)
-        monkeypatch.setattr(bridge, "RUST_AVAILABLE", True)
-        monkeypatch.setattr(bridge, "is_rust_enabled", lambda: True)
+        mock_call_elixir = MagicMock(return_value=mock_elixir_result)
+        monkeypatch.setattr(NativeBackend, "_call_elixir", mock_call_elixir)
+        monkeypatch.setattr(NativeBackend, "_should_use_elixir", classmethod(lambda cls, cap: True))
 
-        result = bridge.replace_in_content("content", [("old", "new")])
-        assert result["success"] is False
-        assert result["jw_score"] == 0.5
+        result = bridge.unified_diff("old", "new", 3, "a", "b")
+        assert result == "--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new\n"
+        mock_call_elixir.assert_called_once()
+        call_args = mock_call_elixir.call_args
+        assert call_args[0][0] == "text_unified_diff"
 
-    def test_unified_diff_rust_delegation(self, monkeypatch):
-        """Verify unified_diff delegates to Rust when active."""
-        from unittest.mock import MagicMock
-
-        mock_rust_fn = MagicMock(return_value="--- a\n+++ b\n")
-
+    def test_python_fallback_when_elixir_disabled(self, monkeypatch):
+        """Verify Python fallback works when Elixir is disabled."""
         import code_puppy._edit_bridge as bridge
+        from code_puppy.native_backend import NativeBackend
 
-        monkeypatch.setattr(bridge, "_rust_unified_diff", mock_rust_fn)
-        monkeypatch.setattr(bridge, "RUST_AVAILABLE", True)
-        monkeypatch.setattr(bridge, "is_rust_enabled", lambda: True)
+        # Disable Elixir routing
+        monkeypatch.setattr(NativeBackend, "_should_use_elixir", classmethod(lambda cls, cap: False))
 
-        result = bridge.unified_diff("old", "new", 3, "a.py", "b.py")
-        assert result == "--- a\n+++ b\n"
-        mock_rust_fn.assert_called_once_with("old", "new", 3, "a.py", "b.py")
+        # This should use Python fallback (no Elixir call attempted)
+        result = bridge.fuzzy_match_window(["line1", "line2", "line3"], "line2")
+        span, score = result
+        assert span is not None
+        start, end = span
+        assert start == 1
+        assert end == 2
+        assert score >= 0.95
 
 
 if __name__ == "__main__":
