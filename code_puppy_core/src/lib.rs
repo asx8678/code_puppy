@@ -8,8 +8,9 @@ mod pruning;
 mod serialization;
 mod token_estimation;
 mod types;
-
+mod unified_diff;
 use fuzzy_match::fuzzy_match_window_impl;
+
 use hashline::{
     compute_line_hash as compute_line_hash_impl,
     format_hashlines as format_hashlines_impl,
@@ -26,6 +27,7 @@ use serialization::{
 use token_estimation::process_messages_batch_core;
 use token_estimation::process_messages_batch_impl;
 use types::{Message, ToolDefinition};
+use unified_diff::unified_diff_impl;
 
 // ── Result types exposed to Python ──────────────────────────────────────────
 
@@ -177,7 +179,6 @@ fn strip_hashline_prefixes(text: &str) -> String {
 fn validate_hashline_anchor(idx: u32, line: &str, expected_hash: &str) -> bool {
     validate_hashline_anchor_impl(idx, line, expected_hash)
 }
-
 // ── Fuzzy match functions ─────────────────────────────────────────────────
 
 #[pyfunction]
@@ -191,6 +192,7 @@ fn fuzzy_match_window(haystack_lines: Vec<String>, needle: String) -> PyResult<F
         score: result.score,
     })
 }
+
 
 // ── MessageBatch pyclass ───────────────────────────────────────────────────
 
@@ -351,6 +353,7 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PruneResult>()?;
     m.add_class::<SplitResult>()?;
     m.add_class::<MessageBatch>()?;
+    m.add_class::<FuzzyMatchResult>()?;
     m.add_function(wrap_pyfunction!(process_messages_batch, m)?)?;
     m.add_function(wrap_pyfunction!(prune_and_filter, m)?)?;
     m.add_function(wrap_pyfunction!(truncation_indices, m)?)?;
@@ -362,7 +365,21 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(format_hashlines, m)?)?;
     m.add_function(wrap_pyfunction!(strip_hashline_prefixes, m)?)?;
     m.add_function(wrap_pyfunction!(validate_hashline_anchor, m)?)?;
-    m.add_class::<FuzzyMatchResult>()?;
     m.add_function(wrap_pyfunction!(fuzzy_match_window, m)?)?;
+    m.add_function(wrap_pyfunction!(make_unified_diff, m)?)?;
     Ok(())
+}
+
+/// Python-facing unified_diff function
+#[pyfunction]
+#[pyo3(name = "unified_diff")]
+#[pyo3(signature = (old, new, context_lines, from_file, to_file))]
+fn make_unified_diff(
+    old: &str,
+    new: &str,
+    context_lines: usize,
+    from_file: &str,
+    to_file: &str,
+) -> PyResult<String> {
+    Ok(unified_diff_impl(old, new, context_lines, from_file, to_file))
 }
