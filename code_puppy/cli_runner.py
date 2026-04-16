@@ -83,11 +83,14 @@ def main_entry() -> None:
     Full path: All other invocations load the full runtime.
     """
     # Fast path: handle --help and --version without heavy imports
-    args = sys.argv[1:]
-    if "--help" in args or "-h" in args:
+    # Only check the first positional argument (sys.argv[1]) to avoid
+    # misinterpreting --help/--version when used as argument values
+    # (e.g., `code-puppy -p --help` should treat --help as prompt, not trigger help)
+    first_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    if first_arg in ("--help", "-h"):
         _print_help_fast()
         return
-    if "--version" in args or "-V" in args or "-v" in args:
+    if first_arg in ("--version", "-V", "-v"):
         _print_version_fast()
         return
 

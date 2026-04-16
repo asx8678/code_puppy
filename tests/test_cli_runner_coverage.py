@@ -347,3 +347,73 @@ class TestMainEntry:
         # _run_full should NOT be called for -V (fast path)
         mock_run_full.assert_not_called()
         assert result is None
+
+    @patch("code_puppy.cli_runner._run_full")
+    def test_help_not_triggered_as_prompt_value(self, mock_run_full):
+        """--help as -p value should NOT trigger fast path (bd-3 regression test)."""
+        from code_puppy.cli_runner import main_entry
+
+        # sys.argv = ["code-puppy", "-p", "--help"]
+        # Should NOT print help, should try to run the prompt
+        with patch("sys.argv", ["code-puppy", "-p", "--help"]):
+            main_entry()
+
+        # _run_full SHOULD be called because --help is a prompt value, not a flag
+        mock_run_full.assert_called_once()
+
+    @patch("code_puppy.cli_runner._run_full")
+    def test_version_not_triggered_as_prompt_value(self, mock_run_full):
+        """--version as -p value should NOT trigger fast path (bd-3 regression test)."""
+        from code_puppy.cli_runner import main_entry
+
+        # sys.argv = ["code-puppy", "-p", "--version"]
+        # Should NOT print version, should try to run the prompt
+        with patch("sys.argv", ["code-puppy", "-p", "--version"]):
+            main_entry()
+
+        # _run_full SHOULD be called because --version is a prompt value, not a flag
+        mock_run_full.assert_called_once()
+
+    @patch("code_puppy.cli_runner._run_full")
+    def test_help_not_triggered_as_value_after_other_flags(self, mock_run_full):
+        """--help after any flag should NOT trigger fast path."""
+        from code_puppy.cli_runner import main_entry
+
+        # Various edge cases where --help appears but not as first arg
+        test_cases = [
+            ["code-puppy", "-m", "claude-sonnet", "--help"],
+            ["code-puppy", "--model", "gpt-4", "--help"],
+            ["code-puppy", "some-arg", "--help"],
+            ["code-puppy", "-i", "--help"],
+        ]
+
+        for argv in test_cases:
+            mock_run_full.reset_mock()
+            with patch("sys.argv", argv):
+                main_entry()
+            # Should always call _run_full, NOT trigger fast path
+            mock_run_full.assert_called_once()
+
+    @patch("code_puppy.cli_runner._run_full")
+    def test_short_help_not_triggered_as_value(self, mock_run_full):
+        """-h as a value (e.g., after -p) should NOT trigger fast path."""
+        from code_puppy.cli_runner import main_entry
+
+        with patch("sys.argv", ["code-puppy", "-p", "-h"]):
+            main_entry()
+
+        # _run_full SHOULD be called because -h is a prompt value, not a flag
+        mock_run_full.assert_called_once()
+
+    @patch("code_puppy.cli_runner._run_full")
+    def test_short_version_not_triggered_as_value(self, mock_run_full):
+        """-v/-V as a value (e.g., after -p) should NOT trigger fast path."""
+        from code_puppy.cli_runner import main_entry
+
+        for version_flag in ["-v", "-V"]:
+            mock_run_full.reset_mock()
+            with patch("sys.argv", ["code-puppy", "-p", version_flag]):
+                main_entry()
+
+            # _run_full SHOULD be called because -v/-V is a prompt value, not a flag
+            mock_run_full.assert_called_once()
