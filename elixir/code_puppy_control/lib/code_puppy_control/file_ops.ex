@@ -14,6 +14,7 @@ defmodule CodePuppyControl.FileOps do
   require Logger
 
   alias CodePuppyControl.Indexer.Constants
+  alias CodePuppyControl.Text.EOL
 
   @type file_info :: %{
           path: String.t(),
@@ -36,7 +37,8 @@ defmodule CodePuppyControl.FileOps do
           num_lines: non_neg_integer(),
           size: non_neg_integer(),
           truncated: boolean(),
-          error: String.t() | nil
+          error: String.t() | nil,
+          bom: binary() | nil
         }
 
   # Maximum entries to prevent memory exhaustion
@@ -511,6 +513,9 @@ defmodule CodePuppyControl.FileOps do
   - :start_line - integer, 1-based
   - :num_lines - integer limit
   - :encoding - atom, default :utf8
+  - :normalize_eol - boolean, default false. When true, strips BOM and
+    normalizes CRLF/CR to LF for text files. Returns the BOM that was
+    stripped in the result for later restoration.
 
   ## Examples
 
@@ -519,19 +524,23 @@ defmodule CodePuppyControl.FileOps do
 
       iex> FileOps.read_file("/path/to/file.ex", start_line: 1, num_lines: 10)
       {:ok, %{path: "file.ex", content: "...", num_lines: 10, size: 500, truncated: true}}
+
+      iex> FileOps.read_file("/path/to/file.txt", normalize_eol: true)
+      {:ok, %{path: "file.txt", content: "...", num_lines: 100, size: 1234, truncated: false, bom: <<0xEF, 0xBB, 0xBF>>}}
   """
   @spec read_file(String.t(), keyword()) :: {:ok, read_result()} | {:error, term()}
   def read_file(path, opts \\ []) do
     start_line = Keyword.get(opts, :start_line)
     num_lines = Keyword.get(opts, :num_lines)
+    normalize_eol = Keyword.get(opts, :normalize_eol, false)
 
     with {:ok, file_path} <- validate_path(path, "read"),
-         {:ok, result} <- do_read_file(file_path, start_line, num_lines) do
+         {:ok, result} <- do_read_file(file_path, start_line, num_lines, normalize_eol) do
       {:ok, result}
     end
   end
 
-  defp do_read_file(file_path, start_line, num_lines) do
+  defp do_read_file(file_path, start_line, num_lines, normalize_eol) do
     cond do
       not File.exists?(file_path) ->
         {:error, "File not found: #{file_path}"}
@@ -549,14 +558,14 @@ defmodule CodePuppyControl.FileOps do
             content_result =
               case File.read(file_path) do
                 {:ok, content} ->
-                  process_content(content, start_line, num_lines)
+                  process_content(content, start_line, num_lines, normalize_eol)
 
                 {:error, reason} ->
                   {:error, "Failed to read file: #{inspect(reason)}"}
               end
 
             case content_result do
-              {:ok, {content, truncated}} ->
+              {:ok, {content, truncated, bom}} ->
                 {:ok,
                  %{
                    path: file_path,
@@ -564,7 +573,8 @@ defmodule CodePuppyControl.FileOps do
                    num_lines: count_lines(content),
                    size: stat.size,
                    truncated: truncated,
-                   error: nil
+                   error: nil,
+                   bom: bom
                  }}
 
               {:error, reason} ->
@@ -577,26 +587,36 @@ defmodule CodePuppyControl.FileOps do
     end
   end
 
-  defp process_content(content, nil, nil) do
-    {:ok, {content, false}}
-  end
+  defp process_content(content, start_line, num_lines, normalize_eol) do
+    # Apply EOL normalization if requested (before line extraction)
+    {content_for_processing, bom} =
+      if normalize_eol do
+        EOL.normalize_with_bom(content)
+      else
+        {content, nil}
+      end
 
-  defp process_content(content, start_line, num_lines) do
-    lines = String.split(content, "\n")
-    total_lines = length(lines)
-
-    effective_start = max(start_line || 1, 1)
-    effective_num = num_lines || total_lines
-
-    if effective_start > total_lines do
-      {:ok, {"", true}}
+    # Handle line range extraction if requested
+    if is_nil(start_line) and is_nil(num_lines) do
+      # No line range specified, return full normalized content
+      {:ok, {content_for_processing, false, bom}}
     else
-      end_line = min(effective_start + effective_num - 1, total_lines)
-      selected = Enum.slice(lines, effective_start - 1, end_line - effective_start + 1)
-      result = Enum.join(selected, "\n")
-      truncated = end_line < total_lines or effective_start > 1
+      lines = String.split(content_for_processing, "\n")
+      total_lines = length(lines)
 
-      {:ok, {result, truncated}}
+      effective_start = max(start_line || 1, 1)
+      effective_num = num_lines || total_lines
+
+      if effective_start > total_lines do
+        {:ok, {"", true, bom}}
+      else
+        end_line = min(effective_start + effective_num - 1, total_lines)
+        selected = Enum.slice(lines, effective_start - 1, end_line - effective_start + 1)
+        result = Enum.join(selected, "\n")
+        truncated = end_line < total_lines or effective_start > 1
+
+        {:ok, {result, truncated, bom}}
+      end
     end
   end
 
@@ -613,6 +633,8 @@ defmodule CodePuppyControl.FileOps do
   Options:
   - :max_concurrency - integer, default System.schedulers_online()
   - :timeout - milliseconds per file
+  - :normalize_eol - boolean, default false. Applies EOL normalization
+    to all files being read.
 
   ## Examples
 
@@ -623,7 +645,7 @@ defmodule CodePuppyControl.FileOps do
   def read_files(paths, opts \\ []) do
     max_concurrency = Keyword.get(opts, :max_concurrency, System.schedulers_online())
     timeout = Keyword.get(opts, :timeout, 30_000)
-    read_opts = Keyword.take(opts, [:start_line, :num_lines])
+    read_opts = Keyword.take(opts, [:start_line, :num_lines, :normalize_eol])
 
     # Validate all paths first - split into valid and invalid
     {valid_paths, invalid_results} =
@@ -635,7 +657,15 @@ defmodule CodePuppyControl.FileOps do
           {:error, reason} ->
             {valid,
              [
-               %{path: path, content: nil, num_lines: 0, size: 0, truncated: false, error: reason}
+               %{
+                 path: path,
+                 content: nil,
+                 num_lines: 0,
+                 size: 0,
+                 truncated: false,
+                 error: reason,
+                 bom: nil
+               }
                | invalid
              ]}
         end
@@ -661,7 +691,8 @@ defmodule CodePuppyControl.FileOps do
                   num_lines: 0,
                   size: 0,
                   truncated: false,
-                  error: reason
+                  error: reason,
+                  bom: nil
                 }
             end
           end,
@@ -681,7 +712,8 @@ defmodule CodePuppyControl.FileOps do
               num_lines: 0,
               size: 0,
               truncated: false,
-              error: "Task failed: #{inspect(reason)}"
+              error: "Task failed: #{inspect(reason)}",
+              bom: nil
             }
         end)
 

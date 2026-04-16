@@ -340,6 +340,106 @@ defmodule CodePuppyControl.FileOpsTest do
   end
 
   # ============================================================================
+  # EOL normalization tests (bd-7)
+  # ============================================================================
+
+  describe "EOL normalization" do
+    test "read_file strips BOM when normalize_eol is true", %{test_dir: dir} do
+      # Create file with BOM
+      file_path = Path.join(dir, "bom_file.txt")
+      File.write!(file_path, <<0xEF, 0xBB, 0xBF, "Hello World">>)
+
+      assert {:ok, result} = FileOps.read_file(file_path, normalize_eol: true)
+
+      assert result.content == "Hello World"
+      assert result.bom == <<0xEF, 0xBB, 0xBF>>
+      assert result.error == nil
+    end
+
+    test "read_file normalizes CRLF when normalize_eol is true", %{test_dir: dir} do
+      file_path = Path.join(dir, "crlf_file.txt")
+      File.write!(file_path, "Line 1\r\nLine 2\r\nLine 3")
+
+      assert {:ok, result} = FileOps.read_file(file_path, normalize_eol: true)
+
+      assert result.content == "Line 1\nLine 2\nLine 3"
+      assert result.bom == nil
+    end
+
+    test "read_file normalizes CR when normalize_eol is true", %{test_dir: dir} do
+      file_path = Path.join(dir, "cr_file.txt")
+      File.write!(file_path, "Line 1\rLine 2\rLine 3")
+
+      assert {:ok, result} = FileOps.read_file(file_path, normalize_eol: true)
+
+      assert result.content == "Line 1\nLine 2\nLine 3"
+    end
+
+    test "read_file handles BOM + CRLF together", %{test_dir: dir} do
+      file_path = Path.join(dir, "bom_crlf.txt")
+      File.write!(file_path, <<0xEF, 0xBB, 0xBF, "Header\r\nLine1\r\nLine2">>)
+
+      assert {:ok, result} = FileOps.read_file(file_path, normalize_eol: true)
+
+      assert result.content == "Header\nLine1\nLine2"
+      assert result.bom == <<0xEF, 0xBB, 0xBF>>
+    end
+
+    test "read_file leaves binary files unchanged", %{test_dir: dir} do
+      file_path = Path.join(dir, "binary.bin")
+      # Binary content with some bytes that look like CRLF but aren't text
+      File.write!(file_path, <<0x00, 0x0D, 0x0A, 0x01, 0x02, 0x03>>)
+
+      assert {:ok, result} = FileOps.read_file(file_path, normalize_eol: true)
+
+      # Binary files should not be normalized (contains NUL)
+      assert result.content == <<0x00, 0x0D, 0x0A, 0x01, 0x02, 0x03>>
+    end
+
+    test "read_file without normalize_eol preserves BOM in content", %{test_dir: dir} do
+      file_path = Path.join(dir, "raw_bom.txt")
+      File.write!(file_path, <<0xEF, 0xBB, 0xBF, "content">>)
+
+      assert {:ok, result} = FileOps.read_file(file_path, normalize_eol: false)
+
+      # BOM is part of content when not normalizing
+      assert result.content == <<0xEF, 0xBB, 0xBF, "content">>
+      assert result.bom == nil
+    end
+
+    test "read_file with line range and EOL normalization", %{test_dir: dir} do
+      file_path = Path.join(dir, "range_crlf.txt")
+      File.write!(file_path, "Line1\r\nLine2\r\nLine3\r\nLine4\r\nLine5")
+
+      assert {:ok, result} =
+               FileOps.read_file(file_path, start_line: 2, num_lines: 2, normalize_eol: true)
+
+      assert result.content == "Line2\nLine3"
+      assert result.num_lines == 2
+      assert result.truncated == true
+    end
+
+    test "read_files with normalize_eol applies to all files", %{test_dir: dir} do
+      file1 = Path.join(dir, "file1_bom.txt")
+      file2 = Path.join(dir, "file2_crlf.txt")
+
+      File.write!(file1, <<0xEF, 0xBB, 0xBF, "File1">>)
+      File.write!(file2, "File2\r\nContent")
+
+      assert {:ok, results} = FileOps.read_files([file1, file2], normalize_eol: true)
+
+      result1 = Enum.find(results, &(&1.path == file1))
+      result2 = Enum.find(results, &(&1.path == file2))
+
+      assert result1.content == "File1"
+      assert result1.bom == <<0xEF, 0xBB, 0xBF>>
+
+      assert result2.content == "File2\nContent"
+      assert result2.bom == nil
+    end
+  end
+
+  # ============================================================================
   # validate_path tests
   # ============================================================================
 
