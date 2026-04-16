@@ -398,7 +398,7 @@
     "bd-24": {
       "id": "bd-24",
       "title": "Python bridge: path classification integration",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "task",
       "labels": [
@@ -411,8 +411,10 @@
       },
       "description": "Python bridge for path classification. Dep bd-23 now closed.",
       "created_at": "2026-04-16T12:22:27",
-      "updated_at": "2026-04-16T12:22:27",
-      "comments": []
+      "updated_at": "2026-04-16T13:46:09.796145",
+      "comments": [
+        "Merged to main at 6f2d4ace. Shepherd: APPROVE, Watchdog: APPROVE (3rd round)."
+      ]
     },
     "bd-25": {
       "id": "bd-25",
@@ -451,7 +453,7 @@
     "bd-27": {
       "id": "bd-27",
       "title": "Python bridge: content preparation integration",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "task",
       "labels": [
@@ -465,8 +467,10 @@
       },
       "description": "Python bridge for content preparation. Deps bd-25, bd-26 now closed.",
       "created_at": "2026-04-16T12:22:34",
-      "updated_at": "2026-04-16T12:22:34",
-      "comments": []
+      "updated_at": "2026-04-16T13:45:46.763341",
+      "comments": [
+        "Merged to main at 5ffc54e9. Shepherd: APPROVE, Watchdog: APPROVE."
+      ]
     },
     "bd-28": {
       "id": "bd-28",
@@ -478,8 +482,10 @@
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-16T13:19:02.894323",
-      "updated_at": "2026-04-16T13:31:49.690007",
-      "comments": []
+      "updated_at": "2026-04-16T13:45:46.757873",
+      "comments": [
+        "Merged to main at 15f38003. Shepherd: APPROVE, Watchdog: APPROVE."
+      ]
     }
   }
 }
