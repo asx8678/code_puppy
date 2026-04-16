@@ -47,6 +47,25 @@ defmodule CodePuppyControl.Text.DiffTest do
     test "returns empty string for empty strings" do
       assert Diff.unified_diff("", "", from_file: "a", to_file: "b") == ""
     end
+
+    test "handles content without trailing newline vs different content" do
+      # Critical bug fix: split_lines used to drop content without trailing newline
+      # unified_diff("hello", "world") would return "" (identical when they differ!)
+      result = Diff.unified_diff("hello", "world", from_file: "a", to_file: "b")
+      assert result =~ "--- a\n"
+      assert result =~ "+++ b\n"
+      assert result =~ "-hello"
+      assert result =~ "+world"
+    end
+
+    test "handles content without trailing newline in multi-line" do
+      # unified_diff("a\nb", "a\nchanged") used to silently ignore changes
+      result = Diff.unified_diff("a\nb", "a\nchanged", from_file: "a", to_file: "b")
+      assert result =~ "--- a\n"
+      assert result =~ "+++ b\n"
+      assert result =~ "-b"
+      assert result =~ "+changed"
+    end
   end
 
   describe "single line changes" do
@@ -354,6 +373,56 @@ defmodule CodePuppyControl.Text.DiffTest do
       # With only 1 context line, we shouldn't see 'a' or 'c' as context
       # Actually let's verify the hunk header format
       assert result =~ ~r/@@ -\d+,\d+ \+\d+,\d+ @@/
+    end
+
+    test "context_lines: 0 shows only changed lines" do
+      result = Diff.unified_diff("a\nb\nc\nd\ne\n", "a\nB\nc\nd\ne\n", context_lines: 0)
+
+      expected =
+        concat([
+          "--- a\n",
+          "+++ b\n",
+          "@@ -2,1 +2,1 @@\n",
+          "-b\n",
+          "+B\n"
+        ])
+
+      assert result == expected
+    end
+
+    test "context_lines: 1 shows 1 line of context" do
+      result = Diff.unified_diff("a\nb\nc\nd\ne\n", "a\nB\nc\nd\ne\n", context_lines: 1)
+
+      expected =
+        concat([
+          "--- a\n",
+          "+++ b\n",
+          "@@ -1,3 +1,3 @@\n",
+          " a\n",
+          "-b\n",
+          "+B\n",
+          " c\n"
+        ])
+
+      assert result == expected
+    end
+
+    test "context_lines: 2 shows 2 lines of context" do
+      result = Diff.unified_diff("a\nb\nc\nd\ne\n", "a\nB\nc\nd\ne\n", context_lines: 2)
+
+      expected =
+        concat([
+          "--- a\n",
+          "+++ b\n",
+          "@@ -1,4 +1,4 @@\n",
+          " a\n",
+          "-b\n",
+          "+B\n",
+          " c\n",
+          " d\n"
+        ])
+
+      assert result == expected
     end
 
     test "context_lines=0 (minimal context)" do
