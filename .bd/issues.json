@@ -38,7 +38,7 @@
       "id": "bd-3",
       "title": "CLI bootstrap does eager work that blocks --help/--version",
       "description": "cli_runner.py immediately applies patches, imports config helpers, terminal_utils, and loads plugins BEFORE argument parsing. app_runner.py imports callbacks, config, console, keymap, version_checker at module level. terminal_utils.py has eager Rich import. This delays every invocation including --help, --version, shell completion.\n\nFix: Make main_entry() a tiny bootstrap that parses only enough to decide help/version, defer apply_all_patches(), load_plugin_callbacks(), and most app_runner imports to real execution path.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "bug",
       "labels": [
@@ -48,7 +48,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T04:53:59.201963",
-      "updated_at": "2026-04-16T05:26:36.785353",
+      "updated_at": "2026-04-16T10:31:46.645506",
       "comments": [
         "**Resolution:** Made main_entry() a minimal bootstrap with fast path for --help/--version. Moved apply_all_patches(), plugin loading, and heavy imports to _run_full(). Made Rich import lazy in terminal_utils.py (behind TYPE_CHECKING). --help and --version now use only stdlib (importlib.metadata)."
       ]
@@ -113,14 +113,16 @@
       "id": "bd-7",
       "title": "Integrate EOL normalization overlay into Elixir FileOps",
       "description": "The eol.ex module exists in rewrite/code_puppy_elixir_rewrite_bundle/overlay/ but is orphaned and not in the production Elixir tree. This issue tracks integrating BOM stripping and CRLF\u2192LF normalization into the main FileOps implementation.\n\n**References:**\n- Overlay file: rewrite/code_puppy_elixir_rewrite_bundle/overlay/elixir/code_puppy_control/lib/code_puppy_control/text/eol.ex\n- Python source: code_puppy/utils/eol.py (normalize_eol, strip_bom, restore_bom, looks_textish)\n\n**Acceptance criteria:**\n1. Move/adapt eol.ex to elixir/code_puppy_control/lib/code_puppy_control/text/eol.ex\n2. Add tests at elixir/code_puppy_control/test/code_puppy_control/text/eol_test.exs\n3. Update FileOps.read_file to optionally apply EOL normalization\n4. Ensure parity with Python heuristic (90% printable threshold, NUL detection)\n5. Add integration test for BOM stripping on file read\n\n**Priority reason:** FileOps parity blocker for Python\u2192Elixir migration (code_puppy_python_to_elixir_plan.md PR 2)",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-16T07:16:21.437333",
-      "updated_at": "2026-04-16T07:16:21.437340",
-      "comments": []
+      "updated_at": "2026-04-16T10:26:57.057904",
+      "comments": [
+        "Merged to main (commit 47709981). EOL normalization integrated into Elixir FileOps."
+      ]
     },
     "bd-8": {
       "id": "bd-8",
@@ -160,14 +162,16 @@
       "id": "bd-10",
       "title": "Implement standalone Elixir transport outside bridge mode",
       "description": "Currently Elixir functionality is only available through PythonWorker.Port (bridge mode) which requires Python \u2194 Elixir integration. For full turbo_ops parity, Elixir file operations need to be accessible via standalone transport for non-Python consumers or direct usage.\n\n**Current state:**\n- Elixir control plane in elixir/code_puppy_control/\n- Only entry point: CodePuppyControl.PythonWorker.Port.handle_file_request/3\n- No standalone stdio service or socket interface\n\n**References:**\n- Current bridge: elixir/code_puppy_control/lib/code_puppy_control/python_worker/port.ex\n- Target API: list_files, grep, read_file (equivalent to Python turbo_ops)\n- fast_puppy_elixir_rewrite_plan.md Phase 2\n\n**Acceptance criteria:**\n1. Design transport protocol (stdio line JSON, Unix socket, or TCP)\n2. Implement standalone service module in Elixir\n3. Support request/response JSON-RPC style protocol\n4. Maintain same security validations (sensitive path checks)\n5. Python client adapter that mimics current FileOps API\n6. Document when to use bridge vs standalone mode\n\n**Open questions:**\n- Keep Port for embedded use case, add service for standalone?\n- Single-shot (CLI style) vs persistent daemon mode?\n\n**Priority reason:** fast_puppy_elixir_rewrite_plan.md: Elixir becomes single native runtime surface, not just a bridge target",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "feature",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-16T07:16:45.205484",
-      "updated_at": "2026-04-16T07:16:45.205493",
-      "comments": []
+      "updated_at": "2026-04-16T10:31:35.971957",
+      "comments": [
+        "Merged to main. Standalone JSON-RPC transport for Elixir FileOps implemented."
+      ]
     },
     "bd-11": {
       "id": "bd-11",
@@ -179,8 +183,10 @@
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-16T07:16:49.961366",
-      "updated_at": "2026-04-16T09:56:50.938227",
-      "comments": []
+      "updated_at": "2026-04-16T10:26:57.084031",
+      "comments": [
+        "Merged to main (commit 811dc3a5). Parse contract completed in NativeBackend."
+      ]
     },
     "bd-12": {
       "id": "bd-12",
@@ -192,8 +198,10 @@
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-16T07:16:56.047151",
-      "updated_at": "2026-04-16T09:54:01.568538",
-      "comments": []
+      "updated_at": "2026-04-16T10:26:57.087398",
+      "comments": [
+        "Merged to main (commit 5624b694). Migration docs consolidated into MIGRATION_STATUS.md."
+      ]
     },
     "bd-13": {
       "id": "bd-13",
