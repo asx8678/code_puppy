@@ -15,5 +15,4 @@ rustc-hash = "2"
 rmp-serde = "1"
 xxhash-rust = { version = "0.8", features = ["xxh32"] }
 globset = "0.4"
-aho-corasick = "1"
 dirs = "6"

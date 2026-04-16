@@ -54,7 +54,7 @@ pub fn format_hashlines(text: &str, start_line: u32) -> String {
 /// Other lines pass through unchanged.
 pub fn strip_hashline_prefixes(text: &str) -> String {
     text.split('\n')
-        .map(|line| strip_one_hashline_prefix(line))
+        .map(strip_one_hashline_prefix)
         .collect::<Vec<_>>()
         .join("\n")
 }
