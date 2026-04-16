@@ -3,13 +3,17 @@
 Handles Windows console mode resets and Unix terminal sanity restoration.
 """
 
+from __future__ import annotations
+
 import os
 import platform
 import subprocess
 import sys
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from rich.console import Console
+if TYPE_CHECKING:
+    from rich.console import Console
 
 # Store the original console ctrl handler so we can restore it if needed
 _original_ctrl_handler: Callable | None = None

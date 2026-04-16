@@ -1,41 +1,27 @@
 """CLI runner for Code Puppy.
 
-This module is the public entry-point shim. It applies pydantic-ai patches
-*before* any pydantic-ai imports occur, loads plugin callbacks, then
-provides lazy access to the public API so that simple CLI operations
-(like --help) are fast without loading heavy dependencies.
+This module is the public entry-point shim. It provides lazy access to the
+public API so that simple CLI operations (--help, --version) are fast
+without loading heavy dependencies.
 
 Actual application logic lives in:
-  - code_puppy.app_runner   – AppRunner class and main()
-  - code_puppy.interactive_loop – interactive_mode() REPL
-  - code_puppy.prompt_runner    – run_prompt_with_attachments(), execute_single_prompt()
+  - code_puppy.app_runner   - AppRunner class and main()
+  - code_puppy.interactive_loop - interactive_mode() REPL
+  - code_puppy.prompt_runner    - run_prompt_with_attachments(), execute_single_prompt()
 
-Import-time optimization:
-- Heavy imports are deferred until first use via __getattr__
-- --help is fast because it only parses args without loading models
-- Tests that import from cli_runner don't trigger heavy deps unless used
+Bootstrap strategy:
+- main_entry() pre-parses sys.argv to detect --help/--version BEFORE heavy imports
+- --help and --version use only stdlib (no Rich, no pydantic, no plugins)
+- Full runtime (patches, plugins, config) only loads inside _run_full()
+- Heavy submodules are deferred via __getattr__ for backward compat
 """
 
-import asyncio
 import sys
-import traceback
-from typing import TYPE_CHECKING
 
-# Apply pydantic-ai patches BEFORE any pydantic-ai imports (these are lightweight)
-from code_puppy.pydantic_patches import apply_all_patches
-
-apply_all_patches()
-
-from code_puppy import plugins
+# Lightweight imports only - these modules don't pull in heavy deps
 from code_puppy.config import get_use_dbos
 from code_puppy.errors import FatalError
 from code_puppy.terminal_utils import reset_unix_terminal
-
-plugins.load_plugin_callbacks()
-
-if TYPE_CHECKING:
-    # Type hints for static analysis — not loaded at runtime
-    pass
 
 # -----------------------------------------------------------------------------
 # Lazy import registry: attribute -> import spec
@@ -91,9 +77,87 @@ def __dir__() -> list[str]:
 
 
 def main_entry() -> None:
-    """Entry point for the installed CLI tool."""
+    """Entry point for the installed CLI tool.
+
+    Fast path: --help and --version are handled with minimal imports.
+    Full path: All other invocations load the full runtime.
+    """
+    # Fast path: handle --help and --version without heavy imports
+    args = sys.argv[1:]
+    if "--help" in args or "-h" in args:
+        _print_help_fast()
+        return
+    if "--version" in args or "-V" in args or "-v" in args:
+        _print_version_fast()
+        return
+
+    # Full path: load everything and run
+    return _run_full()
+
+
+def _print_version_fast() -> None:
+    """Print version using minimal imports."""
     try:
-        # Lazy import main to avoid heavy deps for --help
+        import importlib.metadata
+
+        version = importlib.metadata.version("codepp")
+    except Exception:
+        version = "0.0.0-dev"
+    print(f"code-puppy {version}")
+
+
+def _print_help_fast() -> None:
+    """Print help text without Rich formatting."""
+    try:
+        import importlib.metadata
+
+        version = importlib.metadata.version("codepp")
+    except Exception:
+        version = "0.0.0-dev"
+
+    help_text = f"""code-puppy {version} - AI-powered coding assistant
+
+Usage: pup [OPTIONS] [PROMPT]
+
+Options:
+  -h, --help            Show this help message and exit
+  -v, -V, --version     Show version and exit
+  -m, --model MODEL     Model to use (default: from config)
+  -a, --agent AGENT     Agent to use (default: code-puppy)
+  -c, --continue        Continue last session
+  -p, --prompt PROMPT   Execute a single prompt and exit
+  -i, --interactive     Run in interactive mode
+  --bridge-mode         Enable Mana LiveView TCP bridge
+
+Examples:
+  pup                           Start interactive mode
+  pup "explain this code"       Run single prompt
+  pup -m claude-sonnet -c       Continue with specific model
+
+For more information: https://github.com/anthropics/code-puppy
+"""
+    print(help_text)
+
+
+def _run_full() -> int | None:
+    """Run the full application with all imports.
+
+    Returns:
+        0 on KeyboardInterrupt, None otherwise.
+    """
+    import asyncio
+    import traceback
+
+    # Heavy setup - only done for actual execution, not --help/--version
+    from code_puppy.pydantic_patches import apply_all_patches
+
+    apply_all_patches()
+
+    from code_puppy import plugins
+
+    plugins.load_plugin_callbacks()
+
+    try:
         from code_puppy.app_runner import main
 
         asyncio.run(main())
