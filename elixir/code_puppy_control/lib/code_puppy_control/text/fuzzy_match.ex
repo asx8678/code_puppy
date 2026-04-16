@@ -53,7 +53,6 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
   ## Options
 
   - `:threshold` - Minimum similarity score to return a match (default: 0.6)
-  - `:max_window_ratio` - Maximum window size ratio for length-based filtering
 
   ## Returns
 
@@ -111,11 +110,14 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
       :no_match
     else
       haystack_len = length(haystack_lines)
-      needle_len = String.length(needle_stripped)
+      # UNICODE PRE-FILTER PARITY: Use byte_size for length heuristics (matches Rust)
+      # Note: JaroWinkler computes its own length from codepoints, not using this value
+      needle_len = byte_size(needle_stripped)
 
       # Pre-extract first line for cheap pre-filtering
       needle_first_line = List.first(needle_lines)
-      needle_first_len = String.length(needle_first_line)
+      # UNICODE PRE-FILTER PARITY: Use byte_size for length heuristics (matches Rust)
+      needle_first_len = byte_size(needle_first_line)
       needle_first_char = String.first(needle_first_line)
 
       # Build prefix sum for O(1) window length estimation
@@ -153,7 +155,8 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
   defp do_build_prefix_sum([], acc, _current), do: acc
 
   defp do_build_prefix_sum([line | rest], acc, current) do
-    new_current = current + String.length(line)
+    # UNICODE PRE-FILTER PARITY: Use byte_size/1 to match Rust byte-length heuristics
+    new_current = current + byte_size(line)
     do_build_prefix_sum(rest, [new_current | acc], new_current)
   end
 
@@ -161,23 +164,46 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
   defp prefix_at(prefix_sum, i), do: elem(prefix_sum, i)
 
   # Main search loop - optimized with aggressive pre-filtering
+  # BUG FIX: Terminal clause with nil best_end - prevents ArithmeticError when threshold is 0.0
+  # and all scores are 0.0 (best_end never gets updated from nil).
+  defp find_best_match(
+         _haystack_lines,
+         _needle_stripped,
+         _needle_len,
+         _needle_first_len,
+         _needle_first_char,
+         _win_size,
+         max_start,
+         _prefix_sum,
+         _threshold,
+         start_idx,
+         _best_start,
+         nil,
+         _best_score
+       )
+       when start_idx >= max_start do
+    # No valid window found (best_end never updated)
+    :no_match
+  end
+
+  # BUG FIX: Terminal clause with non-nil best_end - safe to do arithmetic.
   defp find_best_match(
          haystack_lines,
-         needle_stripped,
-         needle_len,
-         needle_first_len,
-         needle_first_char,
-         win_size,
+         _needle_stripped,
+         _needle_len,
+         _needle_first_len,
+         _needle_first_char,
+         _win_size,
          max_start,
-         prefix_sum,
+         _prefix_sum,
          threshold,
-         i,
+         start_idx,
          best_start,
          best_end,
          best_score
        )
-       when i >= max_start do
-    # End of search - check threshold
+       when start_idx >= max_start do
+    # End of search - check threshold (best_end is guaranteed non-nil here)
     if best_score >= threshold do
       # Build the matched text
       window_lines = Enum.slice(haystack_lines, best_start, best_end - best_start)
@@ -195,6 +221,8 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
     end
   end
 
+  # Main search recursive clause - processes one window then recurses.
+  # NOTE: Some parameters are unused in terminal processing but kept for consistency.
   defp find_best_match(
          haystack_lines,
          needle_stripped,
@@ -205,17 +233,18 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
          max_start,
          prefix_sum,
          threshold,
-         i,
+         start_idx,
          best_start,
          best_end,
          best_score
        ) do
-    first_line = Enum.at(haystack_lines, i)
+    first_line = Enum.at(haystack_lines, start_idx)
 
     # Pre-filter 1: First-line length check (cheap rejection)
+    # UNICODE PRE-FILTER PARITY: Use byte_size/1 to match Rust byte-length heuristics
     passed_filter1 =
       if needle_first_len > 0 do
-        first_line_len = String.length(first_line)
+        first_line_len = byte_size(first_line)
         len_diff = abs(first_line_len - needle_first_len)
         len_diff <= needle_first_len * @length_threshold_ratio
       else
@@ -224,6 +253,7 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
 
     if passed_filter1 do
       # Pre-filter 2: First character check (ultra-cheap rejection)
+      # UNICODE FIX: Use String.first/1 for character comparison (works with Unicode)
       passed_filter2 =
         if needle_first_char != nil and needle_first_char != "" do
           first_char = String.first(first_line)
@@ -233,11 +263,11 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
         end
 
       if passed_filter2 do
-        window_end = i + win_size
+        window_end = start_idx + win_size
 
         # O(1) window length estimation using prefix sum
         window_chars =
-          prefix_at(prefix_sum, window_end) - prefix_at(prefix_sum, i) +
+          prefix_at(prefix_sum, window_end) - prefix_at(prefix_sum, start_idx) +
             max(win_size - 1, 0)
 
         # Pre-filter 3: Length ratio check
@@ -255,14 +285,14 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
           # Build window string (expensive, but only for promising candidates)
           window_buffer =
             haystack_lines
-            |> Enum.slice(i, win_size)
+            |> Enum.slice(start_idx, win_size)
             |> Enum.join("\n")
 
           # Compute Jaro-Winkler similarity
           score = JaroWinkler.similarity(window_buffer, needle_stripped)
 
           # Update best match if this is better
-          new_best_start = if score > best_score, do: i, else: best_start
+          new_best_start = if score > best_score, do: start_idx, else: best_start
           new_best_end = if score > best_score, do: window_end, else: best_end
           new_best_score = max(score, best_score)
 
@@ -291,7 +321,7 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
               max_start,
               prefix_sum,
               threshold,
-              i + 1,
+              start_idx + 1,
               new_best_start,
               new_best_end,
               new_best_score
@@ -309,7 +339,7 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
             max_start,
             prefix_sum,
             threshold,
-            i + 1,
+            start_idx + 1,
             best_start,
             best_end,
             best_score
@@ -327,7 +357,7 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
           max_start,
           prefix_sum,
           threshold,
-          i + 1,
+          start_idx + 1,
           best_start,
           best_end,
           best_score
@@ -345,7 +375,7 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
         max_start,
         prefix_sum,
         threshold,
-        i + 1,
+        start_idx + 1,
         best_start,
         best_end,
         best_score
@@ -371,11 +401,28 @@ defmodule CodePuppyControl.Text.FuzzyMatch do
   @spec find_best_window([String.t()], String.t(), keyword()) ::
           {{integer(), integer() | nil}, float()} | {nil, float()}
   def find_best_window(haystack_lines, needle, opts \\ []) do
-    case fuzzy_match_window(haystack_lines, needle, opts) do
+    # BUG FIX: Always return the actual best score, even when below threshold.
+    # Previously returned {nil, 0.0} unconditionally, but Rust returns the best score.
+    threshold = Keyword.get(opts, :threshold, @jw_threshold)
+
+    {best_span, best_score} = search_best_window(haystack_lines, needle, threshold)
+
+    if best_score >= threshold do
+      {best_span, best_score}
+    else
+      {nil, best_score}
+    end
+  end
+
+  # Internal function that always returns the best window found and its score,
+  # regardless of threshold. Used by find_best_window/3 to preserve scores.
+  defp search_best_window(haystack_lines, needle, _threshold) do
+    case fuzzy_match_window(haystack_lines, needle, threshold: 0.0) do
       {:ok, result} ->
         {{result.start_line, result.end_line}, result.similarity}
 
       :no_match ->
+        # No match found even with threshold 0.0
         {nil, 0.0}
     end
   end

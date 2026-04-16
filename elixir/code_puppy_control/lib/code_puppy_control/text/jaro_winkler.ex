@@ -65,21 +65,24 @@ defmodule CodePuppyControl.Text.JaroWinkler do
   def similarity(s1, s2) when s1 == s2, do: 1.0
 
   def similarity(s1, s2) when is_binary(s1) and is_binary(s2) do
-    len1 = String.length(s1)
-    len2 = String.length(s2)
+    # CRITICAL FIX: Use the SAME representation for length and indexing.
+    # String.length/1 counts graphemes but String.to_charlist/1 produces codepoints.
+    # They disagree for multi-codepoint graphemes (e.g., "🇺🇸", combining chars).
+    # We derive lengths from the tuple representation to ensure consistency.
+    chars1 = s1 |> String.to_charlist() |> List.to_tuple()
+    chars2 = s2 |> String.to_charlist() |> List.to_tuple()
+
+    len1 = tuple_size(chars1)
+    len2 = tuple_size(chars2)
 
     if len1 == 0 or len2 == 0 do
       0.0
     else
-      do_similarity(s1, s2, len1, len2)
+      do_similarity(chars1, chars2, len1, len2)
     end
   end
 
-  defp do_similarity(s1, s2, len1, len2) do
-    # Convert to tuples for O(1) index access
-    chars1 = string_to_tuple(s1)
-    chars2 = string_to_tuple(s2)
-
+  defp do_similarity(chars1, chars2, len1, len2) do
     # Match distance: characters within this distance are considered matching
     match_distance = max(div(max(len1, len2), 2) - 1, 0)
 
@@ -91,13 +94,6 @@ defmodule CodePuppyControl.Text.JaroWinkler do
     end
   end
 
-  # Convert string to tuple for O(1) indexing
-  defp string_to_tuple(s) do
-    s
-    |> String.to_charlist()
-    |> List.to_tuple()
-  end
-
   # Get character at index from tuple
   defp char_at(chars, i), do: elem(chars, i)
 
@@ -106,21 +102,18 @@ defmodule CodePuppyControl.Text.JaroWinkler do
   # defp in_bounds?(chars, i), do: i < tuple_size(chars)
 
   defp compute_jaro_winkler(chars1, chars2, len1, len2, match_distance) do
-    # Track matched characters using boolean tuples
-    s1_matched = List.duplicate(false, len1)
-    s2_matched = List.duplicate(false, len2)
+    # PERFORMANCE FIX: Use tuples for O(1) access instead of lists.
+    # Track matched characters using boolean tuples (initialized to false).
+    s1_matched = :erlang.make_tuple(len1, false)
+    s2_matched = :erlang.make_tuple(len2, false)
 
     # First pass: find matches
-    {matches, s1_matched_list, s2_matched_list} =
+    {matches, s1_matched_tuple, s2_matched_tuple} =
       find_matches(chars1, chars2, len1, len2, match_distance, s1_matched, s2_matched, 0, 0)
 
     if matches == 0 do
       0.0
     else
-      # Convert to tuples for faster access
-      s1_matched_tuple = List.to_tuple(s1_matched_list)
-      s2_matched_tuple = List.to_tuple(s2_matched_list)
-
       # Second pass: count transpositions
       transpositions =
         count_transpositions(chars1, chars2, len1, s1_matched_tuple, s2_matched_tuple)
@@ -145,6 +138,7 @@ defmodule CodePuppyControl.Text.JaroWinkler do
   end
 
   # Find matching characters - iterates through s1 and marks matches in s2
+  # PERFORMANCE FIX: Use put_elem/3 for O(1) tuple updates instead of List.replace_at/3 (O(n)).
   defp find_matches(
          _chars1,
          _chars2,
@@ -178,8 +172,9 @@ defmodule CodePuppyControl.Text.JaroWinkler do
 
     case find_match_in_range(chars2, start_pos, end_pos, s2_matched, c1) do
       {:found, pos} ->
-        s1_matched_new = List.replace_at(s1_matched, i, true)
-        s2_matched_new = List.replace_at(s2_matched, pos, true)
+        # Use put_elem/3 for O(1) tuple update
+        s1_matched_new = put_elem(s1_matched, i, true)
+        s2_matched_new = put_elem(s2_matched, pos, true)
 
         find_matches(
           chars1,
@@ -209,12 +204,13 @@ defmodule CodePuppyControl.Text.JaroWinkler do
   end
 
   # Search for a match of c1 in the range [start_pos, end_pos) of chars2
+  # PERFORMANCE FIX: Use elem/2 for O(1) tuple access instead of Enum.at/2 (O(n)).
   defp find_match_in_range(_chars2, pos, end_pos, _s2_matched, _c1) when pos >= end_pos do
     :not_found
   end
 
   defp find_match_in_range(chars2, pos, end_pos, s2_matched, c1) do
-    if not Enum.at(s2_matched, pos) and c1 == char_at(chars2, pos) do
+    if not elem(s2_matched, pos) and c1 == char_at(chars2, pos) do
       {:found, pos}
     else
       find_match_in_range(chars2, pos + 1, end_pos, s2_matched, c1)
