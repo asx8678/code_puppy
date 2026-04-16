@@ -308,7 +308,6 @@ class TestSynchronousInteractiveRendererInit:
         assert renderer.queue is queue
         assert renderer.console is console
         assert renderer._running is False
-        assert renderer._thread is None
 
     def test_init_with_default_console(self):
         """Test init with default console."""
@@ -324,8 +323,8 @@ class TestSynchronousInteractiveRendererInit:
 class TestSynchronousInteractiveRendererLifecycle:
     """Test start/stop lifecycle."""
 
-    def test_start_creates_thread(self):
-        """Test that start creates background thread."""
+    def test_start_activates_listener(self):
+        """Test that start registers as a queue listener."""
         queue = MessageQueue()
         output = StringIO()
         console = Console(file=output)
@@ -335,8 +334,6 @@ class TestSynchronousInteractiveRendererLifecycle:
 
         try:
             assert renderer._running is True
-            assert renderer._thread is not None
-            assert renderer._thread.is_alive()
             assert queue._has_active_renderer
         finally:
             renderer.stop()
@@ -349,18 +346,16 @@ class TestSynchronousInteractiveRendererLifecycle:
 
         renderer = SynchronousInteractiveRenderer(queue, console)
         renderer.start()
-        thread1 = renderer._thread
 
         renderer.start()  # Should be no-op
-        thread2 = renderer._thread
 
         try:
-            assert thread1 is thread2
+            assert renderer._running is True
         finally:
             renderer.stop()
 
-    def test_stop_stops_thread(self):
-        """Test that stop stops the thread."""
+    def test_stop_clears_running_state(self):
+        """Test that stop clears running state."""
         queue = MessageQueue()
         output = StringIO()
         console = Console(file=output)
@@ -373,9 +368,6 @@ class TestSynchronousInteractiveRendererLifecycle:
 
         assert renderer._running is False
         assert not queue._has_active_renderer
-        # Thread should have joined
-        time.sleep(0.1)
-        assert not renderer._thread.is_alive()
 
     def test_stop_without_start(self):
         """Test that stop without start is safe."""
@@ -665,45 +657,37 @@ class TestSynchronousInteractiveRendererHumanInput:
         assert "Please enter something" in output.getvalue()
 
 
-class TestSynchronousInteractiveRendererConsumeMessages:
-    """Test _consume_messages thread behavior."""
+class TestSynchronousInteractiveRendererListenerDelivery:
+    """Test message delivery via listener callback."""
 
-    def test_consume_messages_processes_queue(self):
-        """Test that _consume_messages processes messages from queue."""
+    def test_listener_receives_messages_from_queue(self):
         queue = MessageQueue()
+        queue.start()
         output = StringIO()
         console = Console(file=output, force_terminal=True)
-
         renderer = SynchronousInteractiveRenderer(queue, console)
         renderer.start()
-
         try:
-            # Emit a message
             msg = UIMessage(type=MessageType.INFO, content="Hello from queue!")
             queue.emit(msg)
-
-            # Give time for processing
             time.sleep(0.1)
-
             assert "Hello from queue" in output.getvalue()
         finally:
             renderer.stop()
+            queue.stop()
 
-    def test_consume_messages_sleeps_on_empty(self):
-        """Test that _consume_messages sleeps when queue is empty."""
+    def test_idle_queue_does_not_crash(self):
         queue = MessageQueue()
+        queue.start()
         output = StringIO()
         console = Console(file=output, force_terminal=True)
-
         renderer = SynchronousInteractiveRenderer(queue, console)
         renderer.start()
-
         try:
-            # Let it run with empty queue
             time.sleep(0.05)
-            # Should not crash
         finally:
             renderer.stop()
+            queue.stop()
 
 
 class TestSynchronousInteractiveRendererFlush:

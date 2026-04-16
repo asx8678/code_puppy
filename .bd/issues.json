@@ -48,14 +48,16 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T04:53:59.201963",
-      "updated_at": "2026-04-16T04:53:59.201970",
-      "comments": []
+      "updated_at": "2026-04-16T05:26:36.785353",
+      "comments": [
+        "**Resolution:** Made main_entry() a minimal bootstrap with fast path for --help/--version. Moved apply_all_patches(), plugin loading, and heavy imports to _run_full(). Made Rich import lazy in terminal_utils.py (behind TYPE_CHECKING). --help and --version now use only stdlib (importlib.metadata)."
+      ]
     },
     "bd-4": {
       "id": "bd-4",
       "title": "Message queue has duplicate consumer threads causing race condition",
       "description": "MessageQueue._process_messages() (line 90-97) starts worker thread that notifies listeners. But SynchronousInteractiveRenderer.start() (renderers.py:189-195) adds itself as listener AND starts its own _consume_messages() thread that polls get_nowait() every 10ms. Renderer thread can steal messages before queue thread processes them, making wait_for_empty() inaccurate and _pending_count wrong.\n\nFix: Remove renderer's _consume_messages() thread, rely only on queue worker + listener callback.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "bug",
       "labels": [
@@ -66,7 +68,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T04:53:59.204786",
-      "updated_at": "2026-04-16T04:53:59.204796",
+      "updated_at": "2026-04-16T05:26:33.522921",
       "comments": []
     },
     "bd-5": {

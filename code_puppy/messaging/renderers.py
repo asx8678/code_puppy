@@ -6,8 +6,6 @@ appropriately for their respective interfaces.
 """
 
 import asyncio
-import threading
-import time
 from abc import ABC, abstractmethod
 
 from rich.console import Console
@@ -170,7 +168,6 @@ class SynchronousInteractiveRenderer:
     async/await consistently and use InteractiveRenderer instead.
 
     Current responsibilities:
-    - Consumes messages from the queue in a background thread
     - Renders messages to the console in real-time without requiring async code
     - Registers as a direct listener to the message queue for immediate processing
     """
@@ -179,20 +176,17 @@ class SynchronousInteractiveRenderer:
         self.queue = queue
         self.console = console or Console()
         self._running = False
-        self._thread = None
 
     def start(self):
-        """Start the synchronous renderer in a background thread."""
+        """Start the synchronous renderer."""
         if self._running:
             return
 
         self._running = True
         # Mark the queue as having an active renderer
         self.queue.mark_renderer_active()
-        # Add ourselves as a listener for immediate processing
+        # Rely on listener callback only - no separate consumer thread
         self.queue.add_listener(self._render_message)
-        self._thread = threading.Thread(target=self._consume_messages, daemon=True)
-        self._thread.start()
 
     def stop(self):
         """Stop the synchronous renderer."""
@@ -201,18 +195,6 @@ class SynchronousInteractiveRenderer:
         self.queue.mark_renderer_inactive()
         # Remove ourselves as a listener
         self.queue.remove_listener(self._render_message)
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=1.0)
-
-    def _consume_messages(self):
-        """Consume messages synchronously."""
-        while self._running:
-            message = self.queue.get_nowait()
-            if message:
-                self._render_message(message)
-            else:
-                # No messages, sleep briefly
-                time.sleep(0.01)
 
     def _render_message(self, message: UIMessage):
         """Render a message using Rich console."""
