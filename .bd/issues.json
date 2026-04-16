@@ -525,7 +525,7 @@
       "id": "bd-31",
       "title": "Evaluate orphaned bridge modules (no production consumers)",
       "description": "Three bridge modules have ZERO production consumers \u2014 created but never wired in:\n\n- content_prep_bridge.py (7.2 KB) \u2014 0 prod imports, 1 test import\n- path_classify_bridge.py (3.1 KB) \u2014 0 prod imports, 1 test import  \n- turbo_parse_bridge.py (8.5 KB) \u2014 DEPRECATED per bd-93, 0 prod imports, 30+ test imports\n\nOptions:\nA) Wire them into production code (they have value, just no callers yet)\nB) Remove modules + their tests (if superseded by NativeBackend)\nC) Keep for now, add TODO markers tracking integration debt\n\nNote: content_prep_bridge and path_classify_bridge were created in the last 10 commits (bd-22 through bd-28 work). turbo_parse_bridge is explicitly deprecated.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "cleanup",
       "labels": [
@@ -537,7 +537,7 @@
         ]
       },
       "created_at": "2026-04-16T14:18:11.967648",
-      "updated_at": "2026-04-16T14:26:39.386059",
+      "updated_at": "2026-04-16T14:29:49.474274",
       "comments": [
         "Claimed by planning-agent-019d96. User chose: Remove all 3 bridges + tests."
       ]
@@ -571,8 +571,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:18:16.627408",
-      "updated_at": "2026-04-16T14:18:16.627415",
-      "comments": []
+      "updated_at": "2026-04-16T14:30:07.331483",
+      "comments": [
+        "Claimed by planning-agent-019d96. Starting cleanup."
+      ]
     }
   }
 }
