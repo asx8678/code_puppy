@@ -1,11 +1,8 @@
-/// Line number formatting with continuation markers for long lines.
-///
-/// Ports Python's format_content_with_line_numbers() from file_display.py.
-/// Provides cat -n style line numbering with continuation markers for
-/// lines exceeding the maximum length.
-
-const DEFAULT_MAX_LINE_LENGTH: usize = 5000;
-const DEFAULT_LINE_NUMBER_WIDTH: usize = 6;
+//! Line number formatting with continuation markers for long lines.
+//!
+//! Ports Python's format_content_with_line_numbers() from file_display.py.
+//! Provides cat -n style line numbering with continuation markers for
+//! lines exceeding the maximum length.
 
 /// Format content with line numbers (cat -n style).
 ///
@@ -35,10 +32,8 @@ pub fn format_line_numbers(
     let mut result = String::with_capacity(estimated_capacity);
 
     // Use split('\n') to match Python's behavior (keeps \r from CRLF endings)
-    let mut line_idx = 0_usize;
-    let lines: Vec<&str> = content.split('\n').collect();
-
-    for line in lines {
+    // Using enumerate() instead of manual counter (clippy fix)
+    for (line_idx, line) in content.split('\n').enumerate() {
         let line_num = start_line + line_idx;
         let line_len = line.len();
 
@@ -50,12 +45,27 @@ pub fn format_line_numbers(
             result.push_str(&format_line(line_num, line, line_number_width));
         } else {
             // Long line: split into chunks with continuation markers
-            let num_chunks = (line_len + max_line_length - 1) / max_line_length;
+            // Using div_ceil() instead of manual calculation (clippy fix)
+            let num_chunks = line_len.div_ceil(max_line_length);
 
+            // Track the actual byte position, accounting for char boundary adjustments
+            let mut byte_pos = 0_usize;
             for chunk_idx in 0..num_chunks {
-                let start = chunk_idx * max_line_length;
-                let end = ((start + max_line_length).min(line_len)).max(start);
+                // UTF-8 safe slicing: ensure we land on char boundaries
+                let mut start = byte_pos;
+                // Adjust start to next char boundary if needed
+                while start < line_len && !line.is_char_boundary(start) {
+                    start += 1;
+                }
+                let mut end = (start + max_line_length).min(line_len);
+                // Adjust end to previous char boundary if needed
+                while end > start && !line.is_char_boundary(end) {
+                    end -= 1;
+                }
+                // SAFETY: both start and end are now on char boundaries
                 let chunk = &line[start..end];
+                // Update byte_pos for next chunk (end might be < start+max_line_length)
+                byte_pos = end;
 
                 if line_idx > 0 || chunk_idx > 0 {
                     result.push('\n');
@@ -78,8 +88,6 @@ pub fn format_line_numbers(
                 }
             }
         }
-
-        line_idx += 1;
     }
 
     result
@@ -88,11 +96,6 @@ pub fn format_line_numbers(
 /// Format a single line with line number (cat -n style).
 fn format_line(line_num: usize, line: &str, width: usize) -> String {
     format!("{:width$}\t{}", line_num, line, width = width)
-}
-
-/// Convenience function with default parameters (for Python interop).
-pub fn format_line_numbers_default(content: &str, start_line: usize) -> String {
-    format_line_numbers(content, start_line, DEFAULT_MAX_LINE_LENGTH, DEFAULT_LINE_NUMBER_WIDTH)
 }
 
 #[cfg(test)]
@@ -243,8 +246,8 @@ mod tests {
 
     #[test]
     fn test_default_parameters() {
-        // Test the convenience function with defaults
-        let result = format_line_numbers_default("hello\nworld", 1);
+        // Test with explicit defaults (5000 for max_line_length, 6 for width)
+        let result = format_line_numbers("hello\nworld", 1, 5000, 6);
         assert_eq!(result, "     1\thello\n     2\tworld");
     }
 
@@ -264,5 +267,40 @@ mod tests {
 
         // "1000.1" is 6 chars, with width 6 it fits exactly
         assert!(result.contains("1000.1\t"));
+    }
+
+    #[test]
+    fn test_long_line_with_multibyte_utf8() {
+        // Create a line with multi-byte UTF-8 chars (é = 2 bytes in UTF-8)
+        // Start with 'a' (1 byte), then many é's (2 bytes each), then many a's (1 byte)
+        let line = format!("a{}{}", "é".repeat(2500), "a".repeat(2500));
+        // Total bytes: 1 + (2500 * 2) + 2500 = 1 + 5000 + 2500 = 7501 bytes
+        // This should trigger continuation markers
+
+        // Should not panic! (this was the bug - slicing mid-character would panic)
+        let result = format_line_numbers(&line, 1, 5000, 6);
+
+        // Verify basic structure
+        assert!(result.contains("     1\t"), "First chunk should have regular line number");
+        assert!(result.contains("   1.1\t"), "Should have continuation marker for overflow");
+    }
+
+    #[test]
+    fn test_multibyte_at_chunk_boundary() {
+        // Test when multi-byte char lands exactly on chunk boundary
+        // Create a line where the 5000-byte boundary might split a 3-byte UTF-8 char
+        // Using £ (2 bytes) repeated to create boundary conditions
+        let line = "£".repeat(3000); // 6000 bytes total
+        let result = format_line_numbers(&line, 1, 5000, 6);
+
+        // Should not panic and should have continuation
+        assert!(result.contains("     1\t"));
+        assert!(result.contains("   1.1\t"));
+
+        // Verify all characters are valid UTF-8 by checking we can iterate
+        for ch in result.chars() {
+            // If we got here without panic, the string is valid UTF-8
+            let _ = ch;
+        }
     }
 }
