@@ -6,7 +6,6 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
   use ExUnit.Case
 
   alias CodePuppyControl.Transport.StdioService
-  alias CodePuppyControl.Protocol
 
   @test_dir Path.join(
               System.tmp_dir!(),
@@ -575,53 +574,71 @@ defmodule CodePuppyControl.Transport.StdioServiceTest do
   # ============================================================================
 
   # Helper to capture stdio output during service execution
-  # Since stdio service uses actual stdin/stdout, we create a custom test path
+  # Uses explicit cd in the shell command to ensure mix finds mix.exs
   defp capture_stdio(inputs, _fun) do
-    # For unit testing, we'll create a mock IO device
-    # This is a simplified approach - in real integration tests we'd use actual pipes
+    do_capture_stdio(inputs)
+  end
 
-    # Create a temporary file for output
-    output_file =
-      Path.join(System.tmp_dir!(), "stdio_test_#{:erlang.unique_integer([:positive])}.jsonl")
-
-    # Write inputs to a temp file and use it as input
+  defp do_capture_stdio(inputs) do
+    # Write inputs to a temp file
     input_file =
       Path.join(System.tmp_dir!(), "stdio_input_#{:erlang.unique_integer([:positive])}.jsonl")
 
     File.write!(input_file, Enum.join(inputs, "\n") <> "\n")
 
-    # Run the mix task in a separate process
-    {output, exit_code} =
-      System.cmd(
-        "mix",
-        ["code_puppy.stdio_service"],
-        cd: Path.join(__DIR__, "../../../.."),
-        stdin: File.read!(input_file),
-        stderr_to_stdout: true
-      )
+    # Find the project root (where mix.exs lives)
+    # __DIR__ is test/code_puppy_control/transport/
+    # We need to go up to elixir/code_puppy_control/
+    project_path = Path.expand(Path.join(__DIR__, "../../../.."))
+
+    # Verify mix.exs exists
+    result =
+      if File.exists?(Path.join(project_path, "mix.exs")) do
+        # Use shell command with explicit cd to the project directory
+        {output, exit_code} =
+          System.cmd(
+            "sh",
+            [
+              "-c",
+              "cd #{project_path} && cat #{input_file} | mix code_puppy.stdio_service"
+            ],
+            stderr_to_stdout: true
+          )
+
+        if exit_code == 0 do
+          # Return first line of output (our response)
+          output
+          |> String.split("\n")
+          |> Enum.find(&(&1 != ""))
+          |> case do
+            nil -> "{}"
+            line -> line
+          end
+        else
+          # Return error structure for non-zero exit
+          Jason.encode!(%{
+            "jsonrpc" => "2.0",
+            "id" => nil,
+            "error" => %{
+              "code" => -32000,
+              "message" => "Service exited with code #{exit_code}: #{output}"
+            }
+          })
+        end
+      else
+        Jason.encode!(%{
+          "jsonrpc" => "2.0",
+          "id" => nil,
+          "error" => %{
+            "code" => -32000,
+            "message" => "Could not find mix.exs in #{project_path}"
+          }
+        })
+      end
 
     # Clean up
     File.rm(input_file)
 
-    if exit_code == 0 do
-      # Return first line of output (our response)
-      output
-      |> String.split("\n")
-      |> Enum.find(&(&1 != ""))
-      |> case do
-        nil -> "{}"
-        line -> line
-      end
-    else
-      # Return error structure for non-zero exit
-      Jason.encode!(%{
-        "jsonrpc" => "2.0",
-        "id" => nil,
-        "error" => %{
-          "code" => -32000,
-          "message" => "Service exited with code #{exit_code}: #{output}"
-        }
-      })
-    end
+    result
   end
 end

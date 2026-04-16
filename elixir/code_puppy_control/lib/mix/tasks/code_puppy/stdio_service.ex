@@ -13,8 +13,6 @@ defmodule Mix.Tasks.CodePuppy.StdioService do
   ## Environment Variables
 
   - `PUP_LOG_LEVEL` - Set log level (debug, info, warn, error). Default: info
-  - `PUP_MAX_LIST_FILES` - Max files in list_files. Default: 10000
-  - `PUP_MAX_GREP_MATCHES` - Max grep results. Default: 1000
 
   ## Protocol
 

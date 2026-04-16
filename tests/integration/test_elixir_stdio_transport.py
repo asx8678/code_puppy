@@ -15,9 +15,7 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
-import threading
 import time
 from pathlib import Path
 
@@ -95,7 +93,9 @@ def stdio_service(elixir_project_path):
 
             if process.poll() is not None:
                 stderr = process.stderr.read() if process.stderr else ""
-                pytest.fail(f"Service exited early with code {process.returncode}: {stderr[:500]}")
+                pytest.fail(
+                    f"Service exited early with code {process.returncode}: {stderr[:500]}"
+                )
 
             time.sleep(0.1)
 
@@ -106,7 +106,7 @@ def stdio_service(elixir_project_path):
         yield process
 
     finally:
-        if 'process' in locals() and process.poll() is None:
+        if "process" in locals() and process.poll() is None:
             try:
                 process.stdin.close()
                 process.wait(timeout=5)
@@ -206,7 +206,7 @@ class TestFileOperations:
             "jsonrpc": "2.0",
             "id": 10,
             "method": "file_list",
-            "params": {"directory": test_dir, "recursive": False}
+            "params": {"directory": test_dir, "recursive": False},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -232,7 +232,7 @@ class TestFileOperations:
             "jsonrpc": "2.0",
             "id": 11,
             "method": "file_list",
-            "params": {"directory": test_dir, "recursive": True}
+            "params": {"directory": test_dir, "recursive": True},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -254,7 +254,7 @@ class TestFileOperations:
             "jsonrpc": "2.0",
             "id": 12,
             "method": "file_read",
-            "params": {"path": file_path}
+            "params": {"path": file_path},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -280,7 +280,7 @@ class TestFileOperations:
             "jsonrpc": "2.0",
             "id": 13,
             "method": "file_read",
-            "params": {"path": file_path, "start_line": 2, "num_lines": 1}
+            "params": {"path": file_path, "start_line": 2, "num_lines": 1},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -300,7 +300,7 @@ class TestFileOperations:
             "jsonrpc": "2.0",
             "id": 14,
             "method": "file_read",
-            "params": {"path": file_path}
+            "params": {"path": file_path},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -313,12 +313,7 @@ class TestFileOperations:
 
     def test_file_read_missing_path_param(self, stdio_service):
         """Test that missing path parameter returns proper error."""
-        request = {
-            "jsonrpc": "2.0",
-            "id": 15,
-            "method": "file_read",
-            "params": {}
-        }
+        request = {"jsonrpc": "2.0", "id": 15, "method": "file_read", "params": {}}
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
 
@@ -344,7 +339,7 @@ class TestBatchOperations:
             "jsonrpc": "2.0",
             "id": 20,
             "method": "file_read_batch",
-            "params": {"paths": paths}
+            "params": {"paths": paths},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -372,7 +367,7 @@ class TestBatchOperations:
             "jsonrpc": "2.0",
             "id": 21,
             "method": "file_read_batch",
-            "params": {"paths": paths}
+            "params": {"paths": paths},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -395,7 +390,7 @@ class TestBatchOperations:
             "jsonrpc": "2.0",
             "id": 22,
             "method": "file_read_batch",
-            "params": {"paths": []}
+            "params": {"paths": []},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -416,7 +411,7 @@ class TestGrep:
             "jsonrpc": "2.0",
             "id": 30,
             "method": "grep_search",
-            "params": {"pattern": "def ", "directory": test_dir}
+            "params": {"pattern": "def ", "directory": test_dir},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -443,7 +438,7 @@ class TestGrep:
             "jsonrpc": "2.0",
             "id": 31,
             "method": "grep_search",
-            "params": {"pattern": "DEF ", "directory": test_dir}
+            "params": {"pattern": "DEF ", "directory": test_dir},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -461,7 +456,11 @@ class TestGrep:
             "jsonrpc": "2.0",
             "id": 32,
             "method": "grep_search",
-            "params": {"pattern": "DEF ", "directory": test_dir, "case_sensitive": False}
+            "params": {
+                "pattern": "DEF ",
+                "directory": test_dir,
+                "case_sensitive": False,
+            },
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -479,7 +478,7 @@ class TestGrep:
             "jsonrpc": "2.0",
             "id": 33,
             "method": "grep_search",
-            "params": {"pattern": "[invalid", "directory": test_dir}
+            "params": {"pattern": "[invalid", "directory": test_dir},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -503,7 +502,7 @@ class TestSecurity:
             "jsonrpc": "2.0",
             "id": 40,
             "method": "file_read",
-            "params": {"path": sensitive_path}
+            "params": {"path": sensitive_path},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()
@@ -520,7 +519,7 @@ class TestSecurity:
             "jsonrpc": "2.0",
             "id": 41,
             "method": "file_list",
-            "params": {"directory": "/etc"}
+            "params": {"directory": "/etc"},
         }
         stdio_service.stdin.write(json.dumps(request) + "\n")
         stdio_service.stdin.flush()

@@ -57,9 +57,7 @@ defmodule CodePuppyControl.Transport.StdioService do
 
   ## Configuration
 
-  Set via environment variables:
-  - `PUP_MAX_LIST_FILES` - Max files in list_files (default: 10_000)
-  - `PUP_MAX_GREP_MATCHES` - Max grep results (default: 1_000)
+  Set via environment variable:
   - `PUP_LOG_LEVEL` - Service log level (default: info)
   """
 
@@ -203,7 +201,12 @@ defmodule CodePuppyControl.Transport.StdioService do
       case Protocol.decode(line) do
         {:ok, message} ->
           response = handle_message(message)
-          write_response(response, state.io_device)
+          # Per JSON-RPC 2.0 spec: "The Server MUST NOT reply to a Notification"
+          # Notifications have no "id" field
+          unless notification?(message) do
+            write_response(response, state.io_device)
+          end
+
           %{state | request_counter: state.request_counter + 1}
 
         {:error, reason} ->
@@ -220,6 +223,12 @@ defmodule CodePuppyControl.Transport.StdioService do
       end
     end
   end
+
+  # Check if message is a notification (no "id" field per JSON-RPC 2.0 spec)
+  defp notification?(%{"id" => _}), do: false
+  defp notification?(%{}), do: true
+  defp notification?(messages) when is_list(messages), do: false
+  defp notification?(_), do: true
 
   # Batch request handling (array of messages)
   defp handle_message(messages) when is_list(messages) do
@@ -333,19 +342,10 @@ defmodule CodePuppyControl.Transport.StdioService do
     else
       opts = params_to_read_opts(params)
 
-      case FileOps.read_files(paths, opts) do
-        {:ok, results} ->
-          serialized = Enum.map(results, &serialize_read_result/1)
-          Protocol.encode_response(%{"files" => serialized}, id)
-
-        {:error, reason} ->
-          Protocol.encode_error(
-            -32000,
-            "Batch file read failed: #{format_error(reason)}",
-            nil,
-            id
-          )
-      end
+      # FileOps.read_files/2 always returns {:ok, results} - errors are in the results
+      {:ok, results} = FileOps.read_files(paths, opts)
+      serialized = Enum.map(results, &serialize_read_result/1)
+      Protocol.encode_response(%{"files" => serialized}, id)
     end
   end
 
@@ -499,8 +499,19 @@ defmodule CodePuppyControl.Transport.StdioService do
     |> to_string()
   end
 
+  # Map of known log levels - prevents atom exhaustion from user input
+  @log_levels %{
+    "debug" => :debug,
+    "info" => :info,
+    "warn" => :warn,
+    "warning" => :warn,
+    "error" => :error
+  }
+
   defp configure_logging do
-    log_level = System.get_env("PUP_LOG_LEVEL", "info") |> String.to_atom()
+    level_str = System.get_env("PUP_LOG_LEVEL", "info")
+    # Use safe mapping instead of String.to_atom to prevent atom exhaustion
+    log_level = Map.get(@log_levels, String.downcase(level_str), :info)
     Logger.configure(level: log_level)
 
     # Ensure logs go to stderr, not stdout, to avoid interfering with JSON-RPC protocol

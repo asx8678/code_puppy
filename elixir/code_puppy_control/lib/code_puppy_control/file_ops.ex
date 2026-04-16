@@ -621,7 +621,12 @@ defmodule CodePuppyControl.FileOps do
   end
 
   defp count_lines(""), do: 0
-  defp count_lines(content), do: String.split(content, "\n") |> length()
+
+  defp count_lines(content) do
+    parts = String.split(content, "\n")
+    # If content ends with newline, last element is empty - don't count it
+    if List.last(parts) == "", do: length(parts) - 1, else: length(parts)
+  end
 
   # ============================================================================
   # READ FILES (BATCH)
