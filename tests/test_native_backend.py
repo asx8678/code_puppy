@@ -330,9 +330,10 @@ class TestNativeBackendParseOperations:
 
     def test_is_language_supported_fallback(self):
         """Test is_language_supported uses fallback when turbo_parse unavailable."""
-        # Force fallback by using _prefer_native=False internally
-        result = NativeBackend.is_language_supported("python")
-        assert isinstance(result, bool)
+        # bd-11: Strengthened assertions to verify specific expected values
+        assert NativeBackend.is_language_supported("python") is True
+        assert NativeBackend.is_language_supported("elixir") is True
+        assert NativeBackend.is_language_supported("brainfuck") is False
 
 
 class TestModuleLevelFunctions:

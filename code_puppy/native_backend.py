@@ -1468,7 +1468,7 @@ class NativeBackend:
         if not cls.is_enabled(cls.Capabilities.PARSE):
             return {"error": "Parse capability disabled"}
 
-        # bd-64: Try Elixir first if preferred and available
+        # bd-11: Try Elixir first if preferred and available
         # bd-13-fix: _should_use_elixir now handles PYTHON_ONLY internally
         # bd-13-partial-fix: Pass specific entrypoint for accurate RUST_FIRST fallback
         if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="parse_source"):
@@ -1526,7 +1526,7 @@ class NativeBackend:
         if not cls.is_enabled(cls.Capabilities.PARSE):
             return []
 
-        # bd-64: Try Elixir first if preferred and available
+        # bd-11: Try Elixir first if preferred and available
         # bd-13-fix: _should_use_elixir now handles PYTHON_ONLY internally
         # bd-13-partial-fix: Pass specific entrypoint for accurate RUST_FIRST fallback
         if _prefer_native and cls._should_use_elixir(cls.Capabilities.PARSE, entrypoint="extract_symbols"):
@@ -1668,7 +1668,7 @@ class NativeBackend:
         """Parse multiple files in batch.  # bd-11
 
         Routing: Elixir (Task.async_stream) → Rust → sequential Python
-        
+
         bd-11: Complete parse contract with Elixir NIF routing.
 
         Args:
@@ -1801,9 +1801,10 @@ class NativeBackend:
             except Exception:
                 pass
 
-        # Basic fallback for common languages
+        # Basic fallback for common languages (must match supported_languages())
         supported = {
             "python",
+            "elixir",  # bd-11: Added to match supported_languages() fallback
             "javascript",
             "typescript",
             "rust",

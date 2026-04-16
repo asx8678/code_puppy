@@ -150,6 +150,17 @@ defmodule CodePuppyControl.Parser do
   end
 
   @doc """
+  Check if a language is supported for parsing.
+  """
+  def is_language_supported(language) do
+    if nif_available?() do
+      TurboParseNif.is_language_supported(language)
+    else
+      language in ["python", "elixir"]
+    end
+  end
+
+  @doc """
   Get supported languages.
   """
   def supported_languages do

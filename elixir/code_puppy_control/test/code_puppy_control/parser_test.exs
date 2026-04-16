@@ -12,6 +12,26 @@ defmodule CodePuppyControl.ParserTest do
     end
   end
 
+  describe "is_language_supported/1" do
+    test "returns true for supported languages" do
+      assert Parser.is_language_supported("python") == true
+      assert Parser.is_language_supported("elixir") == true
+      assert Parser.is_language_supported("rust") == true
+      assert Parser.is_language_supported("javascript") == true
+    end
+
+    test "normalizes language aliases" do
+      assert Parser.is_language_supported("py") == true
+      assert Parser.is_language_supported("ex") == true
+      assert Parser.is_language_supported("js") == true
+    end
+
+    test "returns false for unsupported languages" do
+      assert Parser.is_language_supported("brainfuck") == false
+      assert Parser.is_language_supported("unknown_language_xyz") == false
+    end
+  end
+
   describe "nif_available?/0" do
     test "returns boolean" do
       assert is_boolean(Parser.nif_available?())
