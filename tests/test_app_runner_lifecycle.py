@@ -28,22 +28,23 @@ def _mock_renderer():
 
 
 def _base_main_patches():
-    """Return common patches for AppRunner.run() tests."""
+    """Return common patches for AppRunner.run() tests.
+
+    Note: These patch the ORIGINAL modules (not app_runner) since
+    imports are deferred inside methods for fast --help/--version.
+    """
     return {
-        "code_puppy.app_runner.find_available_port": MagicMock(return_value=8090),
-        "code_puppy.app_runner.ensure_config_exists": MagicMock(),
-        "code_puppy.app_runner.validate_cancel_agent_key": MagicMock(),
-        "code_puppy.app_runner.initialize_command_history_file": MagicMock(),
-        "code_puppy.app_runner.get_use_dbos": MagicMock(return_value=False),
-        "code_puppy.app_runner.default_version_mismatch_behavior": MagicMock(),
+        "code_puppy.config.ensure_config_exists": MagicMock(),
+        "code_puppy.keymap.validate_cancel_agent_key": MagicMock(),
+        "code_puppy.config.initialize_command_history_file": MagicMock(),
+        "code_puppy.config.get_use_dbos": MagicMock(return_value=False),
+        "code_puppy.version_checker.default_version_mismatch_behavior": MagicMock(),
         "code_puppy.cli_runner.reset_unix_terminal": MagicMock(),
-        "code_puppy.app_runner.reset_windows_terminal_full": MagicMock(),
-        "code_puppy.app_runner.callbacks": MagicMock(
-            on_startup=AsyncMock(),
-            on_shutdown=AsyncMock(),
-            on_version_check=AsyncMock(),
-            get_callbacks=MagicMock(return_value=[]),
-        ),
+        "code_puppy.terminal_utils.reset_windows_terminal_full": MagicMock(),
+        "code_puppy.callbacks.on_startup": AsyncMock(),
+        "code_puppy.callbacks.on_shutdown": AsyncMock(),
+        "code_puppy.callbacks.on_version_check": AsyncMock(),
+        "code_puppy.callbacks.get_callbacks": MagicMock(return_value=[]),
         "code_puppy.config.load_api_keys_to_environment": MagicMock(),
     }
 
@@ -219,13 +220,22 @@ class TestBridgeModeEnvironment:
 class TestDBOSShutdownCleanup:
     """Test DBOS cleanup at shutdown (lines 383-385)."""
 
+    @pytest.fixture(autouse=True)
+    def setup_dbos_mock(self):
+        """Create a mock dbos module for testing."""
+        mock_dbos = MagicMock()
+        mock_dbos.DBOS = MagicMock()
+        mock_dbos.DBOS.destroy = MagicMock()
+        mock_dbos.DBOS.launch = MagicMock()
+        mock_dbos.DBOS.config = MagicMock()
+        with patch.dict("sys.modules", {"dbos": mock_dbos}):
+            yield mock_dbos
+
     @pytest.mark.anyio
-    async def test_dbos_destroy_called_on_shutdown(self):
+    async def test_dbos_destroy_called_on_shutdown(self, setup_dbos_mock):
         """Test that DBOS.destroy() is called during shutdown when DBOS is enabled."""
         patches = _base_main_patches()
-        patches["code_puppy.app_runner.get_use_dbos"] = MagicMock(return_value=True)
-
-        mock_dbos_cls = MagicMock()
+        patches["code_puppy.config.get_use_dbos"] = MagicMock(return_value=True)
 
         with ExitStack() as stack:
             stack.enter_context(patch.dict(os.environ, {"NO_VERSION_UPDATE": "1"}))
@@ -254,7 +264,6 @@ class TestDBOSShutdownCleanup:
                     new_callable=AsyncMock,
                 )
             )
-            stack.enter_context(patch("dbos.DBOS", mock_dbos_cls))
             _apply_patches(stack, patches)
 
             from code_puppy.app_runner import AppRunner
@@ -263,15 +272,13 @@ class TestDBOSShutdownCleanup:
             await runner.run()
 
             # Verify DBOS.destroy() was called
-            mock_dbos_cls.destroy.assert_called_once()
+            setup_dbos_mock.DBOS.destroy.assert_called_once()
 
     @pytest.mark.anyio
-    async def test_dbos_destroy_not_called_when_disabled(self):
+    async def test_dbos_destroy_not_called_when_disabled(self, setup_dbos_mock):
         """Test that DBOS.destroy() is NOT called when DBOS is disabled."""
         patches = _base_main_patches()
-        patches["code_puppy.app_runner.get_use_dbos"] = MagicMock(return_value=False)
-
-        mock_dbos_cls = MagicMock()
+        patches["code_puppy.config.get_use_dbos"] = MagicMock(return_value=False)
 
         with ExitStack() as stack:
             stack.enter_context(patch.dict(os.environ, {"NO_VERSION_UPDATE": "1"}))
@@ -300,7 +307,6 @@ class TestDBOSShutdownCleanup:
                     new_callable=AsyncMock,
                 )
             )
-            stack.enter_context(patch("dbos.DBOS", mock_dbos_cls))
             _apply_patches(stack, patches)
 
             from code_puppy.app_runner import AppRunner
@@ -428,7 +434,7 @@ class TestAppRunnerSetupRenderers:
 
         runner = AppRunner()
 
-        with patch("code_puppy.app_runner.build_console", return_value=MagicMock()):
+        with patch("code_puppy.console.build_console", return_value=MagicMock()):
             with patch("code_puppy.messaging.get_global_queue", return_value=MagicMock()):
                 with patch("code_puppy.messaging.get_message_bus", return_value=MagicMock()):
                     with patch("code_puppy.messaging.SynchronousInteractiveRenderer") as mock_sync:

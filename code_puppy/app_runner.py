@@ -5,6 +5,8 @@ argument parsing, renderer setup, logo display, signal handling,
 configuration/validation, and the top-level run dispatch.
 
 Import-time optimization notes:
+- All heavy imports (callbacks, config helpers, console, keymap, etc.) are
+  deferred to runtime (inside methods) to keep --help/--version fast
 - DBOS and heavy TUI imports are deferred to runtime (inside methods)
 - This allows --help to be fast (~0.1s) while full runtime pays the import cost
 - Rich console is only imported in setup_renderers() where it's used
@@ -13,23 +15,10 @@ Import-time optimization notes:
 import argparse
 import os
 import sys
-import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from code_puppy import __version__, callbacks
-from code_puppy.config import (
-    DBOS_DATABASE_URL,
-    ensure_config_exists,
-    get_use_dbos,
-    initialize_command_history_file,
-)
-from code_puppy.config_package import env_bool
-from code_puppy.console import build_console
-from code_puppy.keymap import KeymapError, validate_cancel_agent_key
-from code_puppy.terminal_utils import reset_windows_terminal_full
-from code_puppy.version_checker import default_version_mismatch_behavior
-from code_puppy.dbos_utils import is_dbos_initialized
+from code_puppy import __version__
 
 if TYPE_CHECKING:
     # Type-only imports for static analysis — not loaded at runtime
@@ -141,6 +130,7 @@ class AppRunner:
 
     def setup_renderers(self) -> tuple:
         """Create and start message renderers; returns (message_renderer, bus_renderer, display_console)."""
+        from code_puppy.console import build_console
         from code_puppy.messaging import (
             RichConsoleRenderer,
             SynchronousInteractiveRenderer,
@@ -206,14 +196,14 @@ class AppRunner:
     def setup_signals(self) -> None:
         """Configure OS signal handlers (Windows + uvx protective handler)."""
         try:
+            from code_puppy.terminal_utils import (
+                disable_windows_ctrl_c,
+                reset_windows_terminal_full,
+                set_keep_ctrl_c_disabled,
+            )
             from code_puppy.uvx_detection import should_use_alternate_cancel_key
 
             if should_use_alternate_cancel_key():
-                from code_puppy.terminal_utils import (
-                    disable_windows_ctrl_c,
-                    set_keep_ctrl_c_disabled,
-                )
-
                 disable_windows_ctrl_c()
                 set_keep_ctrl_c_disabled(True)
 
@@ -243,17 +233,34 @@ class AppRunner:
 
         load_api_keys_to_environment()
 
+    def _get_dbos_config(self, current_version: str) -> "DBOSConfig":
+        """Build DBOS configuration dict."""
+        import time
+
+        from code_puppy.config import DBOS_DATABASE_URL
+
+        dbos_app_version = os.environ.get(
+            "DBOS_APP_VERSION", f"{current_version}-{int(time.time() * 1000)}"
+        )
+        return {
+            "name": "dbos-code-puppy",
+            "system_database_url": DBOS_DATABASE_URL,
+            "run_admin_server": False,
+            "conductor_key": os.environ.get("DBOS_CONDUCTOR_KEY"),
+            "log_level": os.environ.get("DBOS_LOG_LEVEL", "ERROR"),
+            "application_version": dbos_app_version,
+        }
+
     # ------------------------------------------------------------------
     # Agent / model instantiation
     # ------------------------------------------------------------------
 
     def configure_agent(self, args: argparse.Namespace) -> None:
         """Validate and apply --model / --agent flags from the command line."""
+        from code_puppy.config import _validate_model_exists, set_model_name
         from code_puppy.messaging import emit_error, emit_system_message
 
         if args.model:
-            from code_puppy.config import _validate_model_exists, set_model_name
-
             model_name = args.model.strip()
             # Early-set model so config is initialised correctly
             set_model_name(model_name)
@@ -313,6 +320,17 @@ class AppRunner:
     async def run(self) -> None:
         """Full application lifecycle: parse → setup → validate → dispatch."""
         global shutdown_flag
+
+        # Deferred imports to keep --help/--version fast
+        from code_puppy import callbacks
+        from code_puppy.config import (
+            ensure_config_exists,
+            get_use_dbos,
+            initialize_command_history_file,
+        )
+        from code_puppy.config_package import env_bool
+        from code_puppy.keymap import KeymapError, validate_cancel_agent_key
+        from code_puppy.version_checker import default_version_mismatch_behavior
 
         args = self.parse_args()
 
@@ -381,19 +399,11 @@ class AppRunner:
         if get_use_dbos():
             from dbos import DBOS
 
-            dbos_app_version = os.environ.get(
-                "DBOS_APP_VERSION", f"{current_version}-{int(time.time() * 1000)}"
-            )
-            dbos_config: DBOSConfig = {
-                "name": "dbos-code-puppy",
-                "system_database_url": DBOS_DATABASE_URL,
-                "run_admin_server": False,
-                "conductor_key": os.environ.get("DBOS_CONDUCTOR_KEY"),
-                "log_level": os.environ.get("DBOS_LOG_LEVEL", "ERROR"),
-                "application_version": dbos_app_version,
-            }
+            from code_puppy.dbos_utils import is_dbos_initialized
+
+            dbos_config = self._get_dbos_config(current_version)
             try:
-                DBOS(config=dbos_config)
+                DBOS(config=dbos_config)  # type: ignore[arg-type]
                 DBOS.launch()
             except Exception as e:
                 emit_error(f"Error initializing DBOS: {e}")

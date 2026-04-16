@@ -75,14 +75,17 @@ class TestMainEntry:
         """Test main_entry() with KeyboardInterrupt when DBOS is enabled."""
         from code_puppy.cli_runner import main_entry
 
-        mock_dbos = MagicMock()
+        mock_dbos_module = MagicMock()
+        mock_dbos_cls = MagicMock()
+        mock_dbos_module.DBOS = mock_dbos_cls
+
         with patch("code_puppy.cli_runner.reset_unix_terminal"):
             with patch("code_puppy.cli_runner.get_use_dbos", return_value=True):
-                with patch("dbos.DBOS", mock_dbos):
+                with patch.dict("sys.modules", {"dbos": mock_dbos_module}):
                     result = main_entry()
 
         assert result == 0
-        mock_dbos.destroy.assert_called_once()
+        mock_dbos_cls.destroy.assert_called_once()
 
     @patch("asyncio.run", side_effect=RuntimeError("unexpected"))
     def test_main_entry_unexpected_error(self, mock_run):
