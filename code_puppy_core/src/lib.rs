@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 
+mod fuzzy_match;
 mod hashline;
 mod message_hashing;
 mod pruning;
@@ -8,6 +9,7 @@ mod serialization;
 mod token_estimation;
 mod types;
 
+use fuzzy_match::fuzzy_match_window_impl;
 use hashline::{
     compute_line_hash as compute_line_hash_impl,
     format_hashlines as format_hashlines_impl,
@@ -26,6 +28,17 @@ use token_estimation::process_messages_batch_impl;
 use types::{Message, ToolDefinition};
 
 // ── Result types exposed to Python ──────────────────────────────────────────
+
+#[pyclass(frozen)]
+#[derive(Debug)]
+pub struct FuzzyMatchResult {
+    #[pyo3(get)]
+    pub start: usize,
+    #[pyo3(get)]
+    pub end: Option<usize>,
+    #[pyo3(get)]
+    pub score: f64,
+}
 
 #[pyclass(frozen)]
 #[derive(Debug)]
@@ -163,6 +176,20 @@ fn strip_hashline_prefixes(text: &str) -> String {
 #[pyfunction]
 fn validate_hashline_anchor(idx: u32, line: &str, expected_hash: &str) -> bool {
     validate_hashline_anchor_impl(idx, line, expected_hash)
+}
+
+// ── Fuzzy match functions ─────────────────────────────────────────────────
+
+#[pyfunction]
+#[pyo3(signature = (haystack_lines, needle))]
+fn fuzzy_match_window(haystack_lines: Vec<String>, needle: String) -> PyResult<FuzzyMatchResult> {
+    let haystack_refs: Vec<&str> = haystack_lines.iter().map(|s| s.as_str()).collect();
+    let result = fuzzy_match_window_impl(&haystack_refs, &needle);
+    Ok(FuzzyMatchResult {
+        start: result.start,
+        end: result.end,
+        score: result.score,
+    })
 }
 
 // ── MessageBatch pyclass ───────────────────────────────────────────────────
@@ -335,5 +362,7 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(format_hashlines, m)?)?;
     m.add_function(wrap_pyfunction!(strip_hashline_prefixes, m)?)?;
     m.add_function(wrap_pyfunction!(validate_hashline_anchor, m)?)?;
+    m.add_class::<FuzzyMatchResult>()?;
+    m.add_function(wrap_pyfunction!(fuzzy_match_window, m)?)?;
     Ok(())
 }
