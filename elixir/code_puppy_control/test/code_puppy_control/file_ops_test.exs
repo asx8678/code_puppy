@@ -157,6 +157,22 @@ defmodule CodePuppyControl.FileOpsTest do
     test "returns error for invalid regex", %{test_dir: dir} do
       assert {:error, _} = FileOps.grep("[invalid", dir)
     end
+
+    test "supports glob file_pattern matching", %{test_dir: dir} do
+      # *.ex should match .ex files only
+      assert {:ok, matches} = FileOps.grep("defmodule", dir, file_pattern: "*.ex")
+      assert length(matches) >= 1
+      assert Enum.all?(matches, fn m -> String.ends_with?(m.file, ".ex") end)
+
+      # *.py should match .py files only
+      assert {:ok, py_matches} = FileOps.grep("def", dir, file_pattern: "*.py")
+      assert length(py_matches) >= 1
+      assert Enum.all?(py_matches, fn m -> String.ends_with?(m.file, ".py") end)
+
+      # *.txt should not find defmodule
+      assert {:ok, txt_matches} = FileOps.grep("defmodule", dir, file_pattern: "*.txt")
+      assert txt_matches == []
+    end
   end
 
   # ============================================================================

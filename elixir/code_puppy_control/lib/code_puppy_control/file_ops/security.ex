@@ -113,7 +113,7 @@ defmodule CodePuppyControl.FileOps.Security do
 
   Returns {:ok, normalized_path} or {:error, reason}.
   """
-  @spec validate_path(String.t(), atom()) :: {:ok, String.t()} | {:error, String.t()}
+  @spec validate_path(String.t(), String.t() | atom()) :: {:ok, String.t()} | {:error, String.t()}
   def validate_path(file_path, operation) when is_binary(file_path) do
     cond do
       file_path == "" ->

@@ -86,8 +86,19 @@ defmodule CodePuppyControl.FileOps.Grep do
   defp matches_file_pattern?(_path, "*"), do: true
 
   defp matches_file_pattern?(path, pattern) do
-    ext = Path.extname(path)
-    String.contains?(path, pattern) or ext == pattern
+    basename = Path.basename(path)
+
+    # Convert glob pattern to regex: escape special chars, then replace glob wildcards
+    regex_str =
+      pattern
+      |> Regex.escape()
+      |> String.replace("\\*", ".*")
+      |> String.replace("\\?", ".")
+
+    case Regex.compile("^" <> regex_str <> "$") do
+      {:ok, regex} -> Regex.match?(regex, basename)
+      {:error, _} -> String.contains?(path, pattern)
+    end
   end
 
   defp search_file(file_path, regex, context_lines, base_dir) do
