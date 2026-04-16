@@ -2,6 +2,14 @@
 
 ## High-Level System Architecture
 
+> **Phase 6 Vision (2026-04-16)**: Code Puppy is transitioning to a **thin Python shell** architecture.
+> 
+> - **Python layer**: TUI (Textual), CLI interface, pydantic-ai agent loop
+> - **Elixir layer**: ALL runtime operations (file ops, parsing, job scheduling)
+> - **Rust layer**: Scheduled for complete retirement (bd-43 migration epic)
+>
+> Current state: Python + Elixir hybrid | End state: Python shell → Elixir backend only
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                              USER INTERFACE LAYER                                │
@@ -84,17 +92,26 @@
          │              │                │                       │
          └──────────────┴────────────────┴───────────────────────┘
                               │
-                    ┌─────────┴──────────┐
-                    │   NATIVE BACKEND     │
-                    │  (Acceleration)      │
-                    └─────────┬────────────┘
+                    ┌─────────┴────────────────────────┐
+                    │   ELIXIR RUNTIME BACKEND         │
+                    │   (Primary - All Operations)     │
+                    └─────────┬────────────────────────┘
+                              │
          ┌────────────────────┼────────────────────┐
          │                    │                    │
 ┌────────▼────────┐  ┌────────▼────────┐  ┌────────▼────────┐
-│  RUST CORE      │  │ ELIXIR BRIDGE   │  │  TURBO PARSE    │
-│ code_puppy_core │  │  (Wire Proto)   │  │ (Tree-sitter)   │
-│ (msgs/hash)     │  │ (File ops ctrl) │  │ (AST parsing)   │
+│  FILE SERVICE   │  │  PARSE SERVICE  │  │  SCHEDULER      │
+│ (list/read/grep)│  │ (Tree-sitter)   │  │ (Job Queue)     │
+│                 │  │                 │  │                 │
 └─────────────────┘  └─────────────────┘  └─────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  LEGACY RUST COMPONENTS (Scheduled for Retirement - See bd-43)              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  • code_puppy_core (msgs/hash) - RETIRING                                    │
+│  • turbo_parse (AST parsing)   - RETIRING                                    │
+│  All functionality migrating to Elixir NIFs or pure Elixir services          │
+└──────────────────────────────────────────────────────────────────────────────┘
     │
     ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -193,7 +210,7 @@ User Input
 | Aspect | Decision | Rationale |
 |--------|----------|-----------|
 | **Plugin System** | Hook-based callbacks | Hot-swappable, zero core modification |
-| **Native Accel** | Pluggable backends (Rust/Elixir/Python) | Graceful degradation, env flexibility |
+| **Native Accel** | Elixir-first runtime (bd-43 migration) | Phase 6: Thin Python shell + full Elixir backend |
 | **Agent Concurrency** | Pack Leader with MAX=8 | Prevents resource exhaustion |
 | **Model Routing** | Adaptive rate limiting | Protects against rate limit storms |
 | **MCP Security** | Circuit breaker + whitelist | Defense in depth for external tools |
