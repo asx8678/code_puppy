@@ -588,8 +588,11 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:39:49.623410",
-      "updated_at": "2026-04-16T14:39:49.623427",
-      "comments": []
+      "updated_at": "2026-04-16T15:10:42.026280",
+      "comments": [
+        "CLAIMED by pack-leader-019d96 \u2192 assigned to code-puppy-clone-5 (content_prep, ~80% exists in Text.EOL)",
+        "Shepherd review: REQUEST_CHANGES - fake early return, 3 DRY violations vs EOL, dead code"
+      ]
     },
     "bd-35": {
       "id": "bd-35",
@@ -603,8 +606,11 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:39:53.143955",
-      "updated_at": "2026-04-16T14:39:53.143961",
-      "comments": []
+      "updated_at": "2026-04-16T15:10:42.055852",
+      "comments": [
+        "CLAIMED by pack-leader-019d96 \u2192 assigned to elixir-dev-clone-1 (path_classify)",
+        "Elixir-reviewer: REQUEST_CHANGES - symlink resolution missing (security gap), struct cosmetic, stale docs"
+      ]
     },
     "bd-36": {
       "id": "bd-36",
@@ -618,14 +624,17 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:39:58.000778",
-      "updated_at": "2026-04-16T14:39:58.000789",
-      "comments": []
+      "updated_at": "2026-04-16T15:10:42.084306",
+      "comments": [
+        "CLAIMED by pack-leader-019d96 \u2192 assigned to elixir-dev-clone-3 (line_numbers)",
+        "Shepherd review: REQUEST_CHANGES - misleading docs (grapheme vs codepoint), missing is_binary guard"
+      ]
     },
     "bd-37": {
       "id": "bd-37",
       "title": "Migrate unified_diff.rs to pure Elixir (Text.Diff)",
       "description": "Migrate code_puppy_core/src/unified_diff.rs (7.7 KB) to pure Elixir.\n\nFOUNDATION for replace_engine \u2014 must be done first.\n\nCore logic: Generate unified diff format (like diff -u) between two strings.\n\nELIXIR ADVANTAGE: Can leverage List.myers_difference/2 (built into Erlang) and :io_lib.format/2 for formatting.\n\nFILES TO CREATE/MODIFY:\n- Create: elixir/.../text/diff.ex\n- Create: test/.../text/diff_test.exs\n- Modify: _edit_bridge.py \u2014 route unified_diff to Elixir when available\n- Delete: code_puppy_core/src/unified_diff.rs\n\nVALIDATION: Exact output parity with Python difflib.unified_diff and existing Rust implementation.\n\nEFFORT: ~3 days",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -633,14 +642,17 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:40:24.419494",
-      "updated_at": "2026-04-16T14:40:24.419503",
-      "comments": []
+      "updated_at": "2026-04-16T15:10:42.113103",
+      "comments": [
+        "CLAIMED by pack-leader-019d96 \u2192 assigned to elixir-dev-clone-2 (unified_diff)",
+        "Shepherd review: REQUEST_CHANGES - CRITICAL: context trimming broken, split_lines drops content, O(n2) list ops"
+      ]
     },
     "bd-38": {
       "id": "bd-38",
       "title": "Migrate fuzzy_match.rs to pure Elixir (Text.FuzzyMatch)",
       "description": "Migrate code_puppy_core/src/fuzzy_match.rs (12.8 KB) to pure Elixir. HARDEST TASK.\n\nCore logic:\n- Jaro-Winkler similarity scoring\n- Sliding window search over file lines\n- Prefix-sum pre-filters for O(1) length estimation\n- Aggressive early rejection heuristics\n\nPERFORMANCE RISK: CPU-intensive. Pure Elixir will be 5-10x slower than Rust.\nMITIGATION:\n1. Pre-filter aggressively (keep Rust heuristics)\n2. Use binary operations for scoring\n3. Consider :binary.match/3 for fast substring scanning\n4. MUST benchmark against Rust \u2014 if >3x slower on 100KB files, pivot to Rustler NIF\n\nFILES TO CREATE/MODIFY:\n- Create: elixir/.../text/fuzzy_match.ex\n- Create: elixir/.../text/jaro_winkler.ex (pure scoring algorithm)\n- Create: test/.../text/fuzzy_match_test.exs\n- Create: bench/fuzzy_match_bench.exs (CRITICAL benchmark)\n- Modify: _edit_bridge.py \u2014 route fuzzy_match_window to Elixir\n- Delete: code_puppy_core/src/fuzzy_match.rs\n\nVALIDATION: Benchmark suite comparing Rust vs Elixir on real-world edits (1KB, 10KB, 100KB files). Functional parity tests.\n\nEFFORT: ~5 days",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -648,8 +660,11 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:40:28.187314",
-      "updated_at": "2026-04-16T14:40:28.187321",
-      "comments": []
+      "updated_at": "2026-04-16T15:10:42.141934",
+      "comments": [
+        "CLAIMED by pack-leader-019d96 \u2192 assigned to elixir-dev (fuzzy_match, HARDEST)",
+        "Elixir-reviewer: REQUEST_CHANGES - CRITICAL: unicode bug in JaroWinkler, threshold=0.0 crash, score lost, perf regression"
+      ]
     },
     "bd-39": {
       "id": "bd-39",
