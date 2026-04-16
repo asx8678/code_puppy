@@ -3,16 +3,29 @@
 //! Ports Python's format_content_with_line_numbers() from file_display.py.
 //! Provides cat -n style line numbering with continuation markers for
 //! lines exceeding the maximum length.
+//!
+//! IMPORTANT: Uses character-based chunking to match Python's behavior.
+//! Python's len(line) counts characters, not bytes. For multi-byte
+//! UTF-8 content, this matters - £ is 1 char in Python but 2 bytes.
+
+/// Find the byte position of the Nth character in a string.
+/// Used for character-based chunking that matches Python's len() behavior.
+fn char_byte_offset(s: &str, char_idx: usize) -> usize {
+    s.char_indices()
+        .nth(char_idx)
+        .map(|(byte_idx, _)| byte_idx)
+        .unwrap_or(s.len())
+}
 
 /// Format content with line numbers (cat -n style).
 ///
-/// For lines exceeding max_line_length, splits into chunks with
-/// continuation markers (e.g., "5.1", "5.2", "5.3").
+/// For lines exceeding max_line_length (character count, not bytes),
+/// splits into chunks with continuation markers (e.g., "5.1", "5.2", "5.3").
 ///
 /// Args:
 ///   content: The content to format (lines separated by \n)
 ///   start_line: Starting line number (1-based)
-///   max_line_length: Maximum length before splitting into chunks
+///   max_line_length: Maximum character count before splitting into chunks
 ///   line_number_width: Width for line number column
 ///
 /// Returns:
@@ -35,9 +48,10 @@ pub fn format_line_numbers(
     // Using enumerate() instead of manual counter (clippy fix)
     for (line_idx, line) in content.split('\n').enumerate() {
         let line_num = start_line + line_idx;
-        let line_len = line.len();
+        // CHARACTER-BASED length (not bytes) to match Python's len(line)
+        let char_len = line.chars().count();
 
-        if line_len <= max_line_length {
+        if char_len <= max_line_length {
             // Normal line: just format with line number
             if line_idx > 0 {
                 result.push('\n');
@@ -45,27 +59,18 @@ pub fn format_line_numbers(
             result.push_str(&format_line(line_num, line, line_number_width));
         } else {
             // Long line: split into chunks with continuation markers
-            // Using div_ceil() instead of manual calculation (clippy fix)
-            let num_chunks = line_len.div_ceil(max_line_length);
+            // CHARACTER-BASED chunking to match Python
+            let num_chunks = char_len.div_ceil(max_line_length);
 
-            // Track the actual byte position, accounting for char boundary adjustments
-            let mut byte_pos = 0_usize;
             for chunk_idx in 0..num_chunks {
-                // UTF-8 safe slicing: ensure we land on char boundaries
-                let mut start = byte_pos;
-                // Adjust start to next char boundary if needed
-                while start < line_len && !line.is_char_boundary(start) {
-                    start += 1;
-                }
-                let mut end = (start + max_line_length).min(line_len);
-                // Adjust end to previous char boundary if needed
-                while end > start && !line.is_char_boundary(end) {
-                    end -= 1;
-                }
-                // SAFETY: both start and end are now on char boundaries
-                let chunk = &line[start..end];
-                // Update byte_pos for next chunk (end might be < start+max_line_length)
-                byte_pos = end;
+                // Calculate character indices (not byte indices)
+                let start_char = chunk_idx * max_line_length;
+                let end_char = ((chunk_idx + 1) * max_line_length).min(char_len);
+
+                // Convert char indices to byte positions for slicing
+                let start_byte = char_byte_offset(line, start_char);
+                let end_byte = char_byte_offset(line, end_char);
+                let chunk = &line[start_byte..end_byte];
 
                 if line_idx > 0 || chunk_idx > 0 {
                     result.push('\n');
@@ -271,13 +276,9 @@ mod tests {
 
     #[test]
     fn test_long_line_with_multibyte_utf8() {
-        // Create a line with multi-byte UTF-8 chars (é = 2 bytes in UTF-8)
-        // Start with 'a' (1 byte), then many é's (2 bytes each), then many a's (1 byte)
-        let line = format!("a{}{}", "é".repeat(2500), "a".repeat(2500));
-        // Total bytes: 1 + (2500 * 2) + 2500 = 1 + 5000 + 2500 = 7501 bytes
-        // This should trigger continuation markers
-
-        // Should not panic! (this was the bug - slicing mid-character would panic)
+        // CHARACTER-BASED chunking: é counts as 1 character (like Python's len())
+        // 5001 é chars = 5001 chars > 5000 limit → should trigger continuation
+        let line = "é".repeat(5001);
         let result = format_line_numbers(&line, 1, 5000, 6);
 
         // Verify basic structure
@@ -287,20 +288,102 @@ mod tests {
 
     #[test]
     fn test_multibyte_at_chunk_boundary() {
-        // Test when multi-byte char lands exactly on chunk boundary
-        // Create a line where the 5000-byte boundary might split a 3-byte UTF-8 char
-        // Using £ (2 bytes) repeated to create boundary conditions
-        let line = "£".repeat(3000); // 6000 bytes total
+        // CHARACTER-BASED chunking: £ counts as 1 character
+        // 3000 £ chars = 3000 chars < 5000 limit → NO continuation (unlike byte-based)
+        // Even though 3000 £ = 6000 bytes in UTF-8, Python counts chars, not bytes
+        let line = "£".repeat(3000);
         let result = format_line_numbers(&line, 1, 5000, 6);
 
-        // Should not panic and should have continuation
+        // Should NOT have continuation marker (character-based, not byte-based)
+        assert!(
+            !result.contains("   1.1\t"),
+            "3000 £ chars (3000 < 5000 limit) should NOT have continuation - char-based chunking"
+        );
         assert!(result.contains("     1\t"));
-        assert!(result.contains("   1.1\t"));
 
-        // Verify all characters are valid UTF-8 by checking we can iterate
+        // Verify all characters are valid UTF-8
         for ch in result.chars() {
-            // If we got here without panic, the string is valid UTF-8
             let _ = ch;
         }
+    }
+
+    #[test]
+    fn test_multibyte_chars_chunked_by_char_count() {
+        // 3000 '£' chars = 3000 chars < 5000 limit → no continuation
+        // Python: len('£' * 3000) == 3000, so no chunking needed
+        let line = "£".repeat(3000);
+        let result = format_line_numbers(&line, 1, 5000, 6);
+
+        // Single line, no continuation marker
+        assert!(
+            !result.contains(".1\t"),
+            "Should not chunk by bytes (3000 chars < 5000 limit)"
+        );
+        assert_eq!(result.matches('\n').count(), 0, "Single line should have no newlines");
+        assert!(result.starts_with("     1\t"));
+        assert!(result.ends_with("£".repeat(3000).as_str()));
+    }
+
+    #[test]
+    fn test_multibyte_chars_over_char_limit() {
+        // 5001 '£' chars > 5000 limit → should get continuation
+        let line = "£".repeat(5001);
+        let result = format_line_numbers(&line, 1, 5000, 6);
+
+        assert!(result.contains("   1.1\t"), "Should chunk at 5000 chars");
+
+        // Verify chunks are correctly sized
+        let lines: Vec<&str> = result.split('\n').collect();
+        assert_eq!(lines.len(), 2, "5001 chars should split into 2 chunks");
+
+        // First chunk: 5000 chars
+        let first_chunk_content = lines[0].strip_prefix("     1\t").unwrap();
+        assert_eq!(first_chunk_content.chars().count(), 5000);
+
+        // Second chunk: 1 char
+        let second_chunk_content = lines[1].strip_prefix("   1.1\t").unwrap();
+        assert_eq!(second_chunk_content.chars().count(), 1);
+    }
+
+    #[test]
+    fn test_mixed_multibyte_and_ascii() {
+        // Mix of ASCII and multibyte: all count as 1 char each
+        // 2500 é + 2501 a = 5001 chars > 5000 limit
+        let line = format!("{}{}", "é".repeat(2500), "a".repeat(2501));
+        let result = format_line_numbers(&line, 1, 5000, 6);
+
+        assert!(result.contains("   1.1\t"), "Mixed content should chunk at char boundary");
+
+        let lines: Vec<&str> = result.split('\n').collect();
+        assert_eq!(lines.len(), 2);
+
+        // First chunk ends with é chars (characters 2496-2500 are é)
+        let first_chunk = lines[0].strip_prefix("     1\t").unwrap();
+        assert_eq!(first_chunk.chars().count(), 5000);
+        // Last char of first chunk should be 'a' (position 5000)
+        assert_eq!(first_chunk.chars().last().unwrap(), 'a');
+    }
+
+    #[test]
+    fn test_char_count_parity_with_python() {
+        // Verify character-based length matches Python len()
+        // Python: len('£' * 1000) == 1000 (chars, not bytes)
+        // Rust (byte-based): '£'.repeat(1000).len() == 2000 (bytes)
+        // Rust (char-based): '£'.repeat(1000).chars().count() == 1000 (chars) ✓
+
+        let pound_line = "£".repeat(1000);
+        let byte_len = pound_line.len();
+        let char_len = pound_line.chars().count();
+
+        assert_eq!(byte_len, 2000, "£ is 2 bytes in UTF-8");
+        assert_eq!(char_len, 1000, "But Python/Rust char count is 1000");
+
+        // At limit 1500, byte-based would chunk (2000 > 1500)
+        // Char-based should NOT chunk (1000 < 1500)
+        let result = format_line_numbers(&pound_line, 1, 1500, 6);
+        assert!(
+            !result.contains(".1\t"),
+            "1000 chars at 1500 limit should NOT chunk"
+        );
     }
 }
