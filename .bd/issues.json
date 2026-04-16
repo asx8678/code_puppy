@@ -275,27 +275,31 @@
       "id": "bd-17",
       "title": "FileOps.Grep: matches_file_pattern? does not support glob syntax",
       "description": "",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "bug",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-16T11:36:13.094971",
-      "updated_at": "2026-04-16T11:36:13.094978",
-      "comments": []
+      "updated_at": "2026-04-16T11:50:21.169432",
+      "comments": [
+        "Claimed by planning-agent-019d95"
+      ]
     },
     "bd-18": {
       "id": "bd-18",
       "title": "FileOps: validate_path typespec says atom() but callers pass strings",
       "description": "",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "type": "chore",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-16T11:36:16.076369",
-      "updated_at": "2026-04-16T11:36:16.076376",
-      "comments": []
+      "updated_at": "2026-04-16T11:50:22.769376",
+      "comments": [
+        "Claimed by planning-agent-019d95"
+      ]
     }
   }
 }
