@@ -29,6 +29,8 @@ defmodule CodePuppyControl.Text.ContentPrep do
   # UTF-8 BOM bytes: EF BB BF
   @utf8_bom <<0xEF, 0xBB, 0xBF>>
 
+  @enforce_keys [:content, :is_text, :had_bom, :had_crlf]
+
   defstruct [
     :content,
     :is_text,
@@ -37,7 +39,6 @@ defmodule CodePuppyControl.Text.ContentPrep do
     :original_bom
   ]
 
-  @enforce_keys [:content, :is_text, :had_bom, :had_crlf]
 
   @typedoc """
   Result of preparing content.
