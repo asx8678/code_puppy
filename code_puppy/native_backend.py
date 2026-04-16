@@ -1302,11 +1302,11 @@ class NativeBackend:
         if not cls.is_active(cls.Capabilities.REPO_INDEX):
             _prefer_native = False
 
-        # bd-108: Try Elixir first if preferred and available
+        # bd-9: Try Elixir first if preferred and available (use repo_compass_index for compact format)
         if _prefer_native and cls._should_use_elixir(cls.Capabilities.REPO_INDEX):
             try:
                 result = cls._call_elixir(
-                    "index_directory",
+                    "repo_compass_index",
                     {
                         "root": root,
                         "max_files": max_files,
@@ -1317,7 +1317,7 @@ class NativeBackend:
                     cls._last_source[cls.Capabilities.REPO_INDEX] = "elixir"
                     return result.get("files", [])
             except Exception as e:
-                logger.debug(f"Elixir index_directory failed, falling back to Python: {e}")
+                logger.debug(f"Elixir repo_compass_index failed, falling back to Python: {e}")
 
         # Python fallback via repo_compass
         try:
