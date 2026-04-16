@@ -710,8 +710,10 @@
         ]
       },
       "created_at": "2026-04-16T14:40:55.997290",
-      "updated_at": "2026-04-16T14:41:31.131206",
-      "comments": []
+      "updated_at": "2026-04-16T16:08:09.669874",
+      "comments": [
+        "## Execution Plan (planning-agent-019d96)\n\n### Audit Findings (2026-04-16)\nAfter bd-39 completed, replace_engine.rs is already deleted. 5 modules remain to remove.\n\nDead code (no Python consumer at all \u2014 safe to delete immediately):\n- content_prep.rs (12.7 KB) \u2014 bridge removed in bd-31\n- path_classify/ (30.1 KB) \u2014 bridge removed in bd-31\n- line_numbers.rs (14.8 KB) \u2014 registered in PyO3 but NO Python file imports it\n\nNeeds bd-41 first (still has live Python consumers):\n- fuzzy_match.rs (12.8 KB) \u2014 imported by _edit_bridge.py\n- unified_diff.rs (7.7 KB) \u2014 imported by _edit_bridge.py\n\n### Phase 1: Delete dead-code modules (~30 min)\nCan start BEFORE bd-41 \u2014 no Python consumer exists.\n- [ ] Delete content_prep.rs, remove mod + use + pyfunction from lib.rs\n- [ ] Delete path_classify/ directory, remove mod + PathClassifier class + pyfunction from lib.rs\n- [ ] Delete line_numbers.rs, remove mod + use + format_line_numbers pyfunction from lib.rs\n- [ ] cargo check && cargo test\n\n### Phase 2: Delete bridge-dependent modules (AFTER bd-41)\n- [ ] Delete fuzzy_match.rs, remove mod + use + fuzzy_match_window + FuzzyMatchResult from lib.rs\n- [ ] Delete unified_diff.rs, remove mod + use + make_unified_diff from lib.rs\n- [ ] Remove FuzzyMatchResult import from _edit_bridge.py\n- [ ] Remove make_unified_diff import from _edit_bridge.py\n- [ ] cargo check && cargo test\n- [ ] python -m pytest tests/ -x\n\n### Phase 3: Clean Cargo.toml (~15 min)\n- [ ] Remove deps no longer needed: similar, globset, dirs, memchr\n- [ ] cargo build --release (verify clean build)\n\n### Phase 4: Verify final state\n- [ ] code_puppy_core should contain ONLY: token_estimation, pruning, serialization, message_hashing, types, hashline\n- [ ] Expected shrink: ~128 KB \u2192 ~37 KB\n- [ ] Update MIGRATION_STATUS.md\n\n### Execution order: Phase 1 (independent) \u2192 wait for bd-41 \u2192 Phase 2 \u2192 Phase 3 \u2192 Phase 4"
+      ]
     },
     "bd-41": {
       "id": "bd-41",
@@ -729,8 +731,10 @@
         ]
       },
       "created_at": "2026-04-16T14:40:58.464029",
-      "updated_at": "2026-04-16T14:41:32.953568",
-      "comments": []
+      "updated_at": "2026-04-16T16:08:09.677366",
+      "comments": [
+        "## Execution Plan (planning-agent-019d96)\n\n### Audit Findings (2026-04-16)\nOnly 2 of the 6 migrated functions still have live Rust consumers in Python:\n\n| Function | Python Consumer | Elixir Port | StdioService Method | Status |\n|----------|----------------|-------------|---------------------|--------|\n| fuzzy_match_window | _edit_bridge.py L109 | Text.FuzzyMatch \u2705 | \u274c Not yet exposed | Needs bridge update |\n| unified_diff | _edit_bridge.py L281 | Text.Diff \u2705 | \u274c Not yet exposed | Needs bridge update |\n| replace_in_content | _edit_bridge.py L151 | Text.ReplaceEngine \u2705 | text_replace \u2705 | \u2705 DONE in bd-39 |\n| format_line_numbers | \u274c No Python consumer | Text.LineNumbers \u2705 | \u274c Not needed | Dead code \u2014 just delete from Rust |\n| content_prep | \u274c Bridge removed bd-31 | Text.ContentPrep \u2705 | \u274c Not needed | Dead code \u2014 just delete from Rust |\n| path_classify | \u274c Bridge removed bd-31 | FileOps.PathClassifier \u2705 | \u274c Not needed | Dead code \u2014 just delete from Rust |\n\n### Phase 1: Add StdioService methods (~1 hour)\n- [ ] Add text_fuzzy_match method to StdioService\n  - Params: {haystack_lines: [str], needle: str, threshold: float?}\n  - Response: {matched_text, start_line, end_line, similarity} or {no_match: true}\n- [ ] Add text_diff method to StdioService\n  - Params: {original: str, modified: str, context_lines: int?, from_file: str?, to_file: str?}\n  - Response: {diff: str}\n- [ ] Add StdioService tests for both new methods\n\n### Phase 2: Update _edit_bridge.py (~1 hour)\n- [ ] Add _try_elixir_fuzzy_match() helper (same pattern as _try_elixir_replace from bd-39)\n- [ ] Add _try_elixir_unified_diff() helper\n- [ ] Route fuzzy_match_window: Elixir \u2192 Rust \u2192 Python\n- [ ] Route unified_diff: Elixir \u2192 Rust \u2192 Python\n- [ ] Keep Python fallbacks intact\n\n### Phase 3: Clean up _core_bridge.py (~30 min)\n- [ ] No changes needed \u2014 _core_bridge.py only imports message-core functions (already clean)\n\n### Execution order: Phase 1 \u2192 Phase 2 \u2192 Phase 3\n### Blocked by: nothing\n### Blocks: bd-40 (fuzzy_match and unified_diff removal from Rust)"
+      ]
     },
     "bd-42": {
       "id": "bd-42",
@@ -748,8 +752,10 @@
         ]
       },
       "created_at": "2026-04-16T14:41:01.230906",
-      "updated_at": "2026-04-16T14:41:34.449392",
-      "comments": []
+      "updated_at": "2026-04-16T16:08:09.671112",
+      "comments": [
+        "## Execution Plan (planning-agent-019d96)\n\n### Dependencies\n- bd-41: Python bridge updates (must complete)\n- bd-40: Rust crate slimdown (must complete)\n\n### Test Matrix\n\n#### 1. Full test suites (~30 min)\n- [ ] cd elixir/code_puppy_control && mix test (expect 683+ tests pass, ignore known scheduler failures)\n- [ ] cargo test (verify remaining Rust modules: token_estimation, pruning, serialization, hashline, message_hashing, types)\n- [ ] python -m pytest tests/ -x\n\n#### 2. Profile-specific testing (~30 min)\n- [ ] elixir_first profile: verify edit ops route through Elixir\n- [ ] python_only profile: verify Python fallbacks work for all edit ops\n- [ ] Verify message-core Rust functions still work (hot path unaffected)\n\n#### 3. Edit operations end-to-end (~30 min)\n- [ ] fuzzy_match_window: Elixir path returns correct results\n- [ ] unified_diff: Elixir path produces correct diffs\n- [ ] replace_in_content: Elixir path (already validated in bd-39)\n- [ ] Chained operations: fuzzy match \u2192 replace \u2192 diff in sequence\n\n#### 4. Edge cases (~30 min)\n- [ ] UTF-8 content (emoji, CJK, mixed scripts)\n- [ ] Empty files / empty strings\n- [ ] Large files (100KB+)\n- [ ] Binary file detection (should not crash)\n- [ ] Concurrent edit operations\n\n#### 5. Performance sanity check\n- [ ] fuzzy_match: < 3x slower than Rust on representative inputs\n- [ ] replace_engine: interactive-acceptable latency (< 500ms for typical edits)\n- [ ] If perf gate fails \u2192 file follow-up for Rustler NIF optimization\n\n### Exit criteria\n- All test suites pass\n- All 3 profiles work correctly\n- No performance regressions beyond acceptable thresholds\n- MIGRATION_STATUS.md fully updated"
+      ]
     }
   }
 }
