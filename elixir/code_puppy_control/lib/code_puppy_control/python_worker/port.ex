@@ -394,20 +394,17 @@ defmodule CodePuppyControl.PythonWorker.Port do
     paths = params["paths"] || []
     opts = params_to_read_opts(params)
 
-    case FileOps.read_files(paths, opts) do
-      {:ok, results} ->
-        serializable_results =
-          Enum.map(results, fn result ->
-            result
-            |> Map.update(:error, nil, fn err -> err end)
-            |> Map.update(:truncated, false, fn t -> t end)
-          end)
+    # FileOps.read_files/2 always returns {:ok, results} - errors are in the results
+    {:ok, results} = FileOps.read_files(paths, opts)
 
-        Protocol.encode_response(%{"files" => serializable_results}, nil)
+    serializable_results =
+      Enum.map(results, fn result ->
+        result
+        |> Map.update(:error, nil, fn err -> err end)
+        |> Map.update(:truncated, false, fn t -> t end)
+      end)
 
-      {:error, reason} ->
-        Protocol.encode_error(-32000, "Batch file read failed: #{inspect(reason)}", nil, nil)
-    end
+    Protocol.encode_response(%{"files" => serializable_results}, nil)
   end
 
   # Parse operation handlers using turbo_parse NIF

@@ -70,9 +70,9 @@ TODO(bd-10): Add Unix socket transport option for better performance
 import json
 import logging
 import os
+import select
 import shutil
 import subprocess
-import sys
 import threading
 import time
 from pathlib import Path
@@ -243,7 +243,12 @@ class ElixirTransport:
                 ping_id += 1
 
                 # Send ping
-                request = {"jsonrpc": "2.0", "id": ping_id, "method": "ping", "params": {}}
+                request = {
+                    "jsonrpc": "2.0",
+                    "id": ping_id,
+                    "method": "ping",
+                    "params": {},
+                }
                 req_line = json.dumps(request) + "\n"
                 self._process.stdin.write(req_line)
                 self._process.stdin.flush()
@@ -253,7 +258,6 @@ class ElixirTransport:
                 wait_start = time.time()
                 while time.time() - wait_start < 2.0:
                     # Use select to check if data is available (non-blocking)
-                    import select
                     ready, _, _ = select.select([self._process.stdout], [], [], 0.1)
                     if ready:
                         line = self._process.stdout.readline()
@@ -269,7 +273,9 @@ class ElixirTransport:
 
                 try:
                     response = json.loads(response_line)
-                    if response.get("id") == ping_id and response.get("result", {}).get("pong"):
+                    if response.get("id") == ping_id and response.get("result", {}).get(
+                        "pong"
+                    ):
                         # Success! Update the request counter
                         with self._lock:
                             self._request_id = ping_id
@@ -333,60 +339,66 @@ class ElixirTransport:
         if self._process is None or self._process.poll() is not None:
             raise ElixirTransportError("Transport not started or process died")
 
+        # Lock protects the entire send+receive cycle to ensure request/response
+        # matching and prevent interleaving of concurrent requests
         with self._lock:
             self._request_id += 1
             request_id = self._request_id
 
-        request = {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params,
-        }
+            request = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": method,
+                "params": params,
+            }
 
-        request_line = json.dumps(request) + "\n"
-        logger.debug(f"Sending request: {request_line.strip()}")
+            request_line = json.dumps(request) + "\n"
+            logger.debug(f"Sending request: {request_line.strip()}")
 
-        try:
-            self._process.stdin.write(request_line)
-            self._process.stdin.flush()
-        except (BrokenPipeError, OSError) as e:
-            raise ElixirTransportError(f"Failed to send request: {e}")
+            try:
+                self._process.stdin.write(request_line)
+                self._process.stdin.flush()
+            except (BrokenPipeError, OSError) as e:
+                raise ElixirTransportError(f"Failed to send request: {e}")
 
-        # Read response (skip empty lines that may be warnings/startup messages)
-        max_empty_reads = 10
-        response_line = ""
-        for _ in range(max_empty_reads):
-            line = self._process.stdout.readline()
-            if not line:
-                raise ElixirTransportError("Empty response from service (process died?)")
-            line = line.strip()
-            if line:  # Skip empty lines
-                response_line = line
-                break
+            # Read response (skip empty lines that may be warnings/startup messages)
+            max_empty_reads = 10
+            response_line = ""
+            for _ in range(max_empty_reads):
+                line = self._process.stdout.readline()
+                if not line:
+                    raise ElixirTransportError(
+                        "Empty response from service (process died?)"
+                    )
+                line = line.strip()
+                if line:  # Skip empty lines
+                    response_line = line
+                    break
 
-        if not response_line:
-            raise ElixirTransportError("No valid response after skipping empty lines")
+            if not response_line:
+                raise ElixirTransportError(
+                    "No valid response after skipping empty lines"
+                )
 
-        logger.debug(f"Received response: {response_line.strip()}")
+            logger.debug(f"Received response: {response_line.strip()}")
 
-        try:
-            response = json.loads(response_line)
-        except json.JSONDecodeError as e:
-            raise ElixirTransportError(f"Invalid JSON response: {e}")
+            try:
+                response = json.loads(response_line)
+            except json.JSONDecodeError as e:
+                raise ElixirTransportError(f"Invalid JSON response: {e}")
 
-        # Validate response
-        if response.get("id") != request_id:
-            raise ElixirTransportError(
-                f"Response ID mismatch: expected {request_id}, got {response.get('id')}"
-            )
+            # Validate response
+            if response.get("id") != request_id:
+                raise ElixirTransportError(
+                    f"Response ID mismatch: expected {request_id}, got {response.get('id')}"
+                )
 
-        if "error" in response:
-            error = response["error"]
-            raise ElixirTransportError(
-                f"Request failed: {error.get('message', 'Unknown error')} "
-                f"(code: {error.get('code', 'N/A')})"
-            )
+            if "error" in response:
+                error = response["error"]
+                raise ElixirTransportError(
+                    f"Request failed: {error.get('message', 'Unknown error')} "
+                    f"(code: {error.get('code', 'N/A')})"
+                )
 
         return response.get("result", {})
 
@@ -566,67 +578,12 @@ class ElixirTransport:
 
 
 # =============================================================================
-# Convenience Functions (module-level)
+# Deprecated: Module-level convenience functions have moved
 # =============================================================================
-
-
-# Module-level singleton for simple use cases
-_module_transport: ElixirTransport | None = None
-
-
-def get_transport() -> ElixirTransport:
-    """Get or create the module-level transport singleton."""
-    global _module_transport
-    if _module_transport is None:
-        _module_transport = ElixirTransport()
-        _module_transport.start()
-    return _module_transport
-
-
-def list_files(
-    directory: str = ".",
-    recursive: bool = True,
-    include_hidden: bool = False,
-    ignore_patterns: list[str] | None = None,
-    max_files: int = 10_000,
-) -> list[dict[str, Any]]:
-    """Module-level convenience function to list files."""
-    return get_transport().list_files(
-        directory, recursive, include_hidden, ignore_patterns, max_files
-    )
-
-
-def read_file(
-    path: str,
-    start_line: int | None = None,
-    num_lines: int | None = None,
-) -> dict[str, Any]:
-    """Module-level convenience function to read a file."""
-    return get_transport().read_file(path, start_line, num_lines)
-
-
-def read_files(
-    paths: list[str],
-    start_line: int | None = None,
-    num_lines: int | None = None,
-) -> list[dict[str, Any]]:
-    """Module-level convenience function to read multiple files."""
-    return get_transport().read_files(paths, start_line, num_lines)
-
-
-def grep(
-    pattern: str,
-    directory: str = ".",
-    case_sensitive: bool = True,
-    max_matches: int = 1_000,
-) -> list[dict[str, Any]]:
-    """Module-level convenience function to search files."""
-    return get_transport().grep(pattern, directory, case_sensitive, max_matches)
-
-
-def shutdown() -> None:
-    """Shutdown the module-level transport."""
-    global _module_transport
-    if _module_transport is not None:
-        _module_transport.stop()
-        _module_transport = None
+#
+# For simple use cases, import from elixir_transport_helpers instead:
+#   from code_puppy import elixir_transport_helpers as elixir
+#   files = elixir.list_files(".")
+#
+# For explicit control, use the ElixirTransport class directly.
+# =============================================================================
