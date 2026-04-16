@@ -13,6 +13,7 @@ defmodule CodePuppyControl.FileOps do
 
   require Logger
 
+  alias CodePuppyControl.Gitignore
   alias CodePuppyControl.Indexer.Constants
   alias CodePuppyControl.Text.EOL
 
@@ -203,6 +204,7 @@ defmodule CodePuppyControl.FileOps do
   - :include_hidden - boolean, default false
   - :ignore_patterns - list of glob patterns to skip
   - :max_files - integer limit
+  - :gitignore - boolean, default true. When true, respects .gitignore files
 
   ## Examples
 
@@ -216,16 +218,29 @@ defmodule CodePuppyControl.FileOps do
   def list_files(directory, opts \\ []) do
     recursive = Keyword.get(opts, :recursive, true)
     include_hidden = Keyword.get(opts, :include_hidden, false)
-    custom_ignore_patterns = Keyword.get(opts, :ignore_patterns, [])
+
+    custom_ignore_patterns =
+      Keyword.get(opts, :ignore_patterns, Constants.ignored_dirs() |> MapSet.to_list())
+
     max_files = Keyword.get(opts, :max_files, @max_list_files_entries)
+    use_gitignore = Keyword.get(opts, :gitignore, true)
 
     with {:ok, dir_path} <- validate_path(directory, "list"),
          :ok <- check_directory_exists(dir_path) do
+      # Build gitignore matcher if enabled
+      gitignore_matcher = if use_gitignore, do: Gitignore.for_directory(dir_path), else: nil
+
       results =
         if recursive do
-          list_files_recursive(dir_path, include_hidden, custom_ignore_patterns, max_files)
+          list_files_recursive(
+            dir_path,
+            include_hidden,
+            custom_ignore_patterns,
+            max_files,
+            gitignore_matcher
+          )
         else
-          list_files_shallow(dir_path, include_hidden, max_files)
+          list_files_shallow(dir_path, include_hidden, max_files, gitignore_matcher)
         end
 
       {:ok, results}
@@ -245,12 +260,15 @@ defmodule CodePuppyControl.FileOps do
     end
   end
 
-  defp list_files_shallow(dir_path, include_hidden, max_files) do
+  defp list_files_shallow(dir_path, include_hidden, max_files, gitignore_matcher) do
     case File.ls(dir_path) do
       {:ok, entries} ->
         entries
         |> Stream.reject(fn entry ->
           not include_hidden and String.starts_with?(entry, ".")
+        end)
+        |> Stream.reject(fn entry ->
+          gitignore_matcher && Gitignore.ignored?(gitignore_matcher, entry)
         end)
         |> Stream.take(max_files)
         |> Stream.map(fn entry ->
@@ -266,32 +284,58 @@ defmodule CodePuppyControl.FileOps do
     end
   end
 
-  defp list_files_recursive(dir_path, include_hidden, custom_ignore_patterns, max_files) do
-    ignored = MapSet.union(Constants.ignored_dirs(), MapSet.new(custom_ignore_patterns))
+  defp list_files_recursive(
+         dir_path,
+         include_hidden,
+         custom_ignore_patterns,
+         max_files,
+         gitignore_matcher
+       ) do
+    ignored = MapSet.new(custom_ignore_patterns)
 
     dir_path
-    |> walk_directory(ignored, include_hidden, 0)
+    |> walk_directory(ignored, include_hidden, 0, dir_path, gitignore_matcher)
     |> Stream.take(max_files)
     |> Enum.to_list()
   end
 
-  defp walk_directory(path, ignored, include_hidden, depth) do
+  defp walk_directory(path, ignored, include_hidden, depth, base_dir, gitignore_matcher) do
     Stream.resource(
-      fn -> [{{path, depth}, :dir}] end,
+      fn -> {[{{path, depth}, :dir}], %{}} end,
       fn
-        [] ->
+        {[], _matchers} ->
           {:halt, []}
 
-        [{{current, d}, :dir} | rest] ->
+        {[{{current, d}, :dir} | rest], matchers} ->
+          # Get relative path for gitignore checking
+          rel_current = Path.relative_to(current, base_dir)
+
           if should_ignore?(current, ignored, include_hidden) do
-            {[], rest}
+            {[], {rest, matchers}}
           else
+            # Get or create gitignore matcher for this specific directory
+            {dir_matcher, updated_matchers} =
+              if gitignore_matcher do
+                get_or_create_matcher(current, matchers)
+              else
+                {nil, matchers}
+              end
+
+            # Note: We don't check if the directory itself is gitignored here.
+            # The child-filtering below handles directory skipping by checking
+            # each entry. Checking Gitignore.ignored?(dir_matcher, ".") is
+            # dead code since "." is never matched by any gitignore pattern.
+
             case File.ls(current) do
               {:ok, entries} ->
                 children =
                   entries
                   |> Stream.reject(fn e ->
                     not include_hidden and hidden?(e)
+                  end)
+                  |> Stream.reject(fn e ->
+                    # Check gitignore for this entry using directory-specific matcher
+                    dir_matcher && Gitignore.ignored?(dir_matcher, e)
                   end)
                   |> Stream.map(&Path.join(current, &1))
                   |> Stream.map(fn p ->
@@ -311,30 +355,59 @@ defmodule CodePuppyControl.FileOps do
                   |> Enum.sort_by(fn {{p, _}, _} -> Path.basename(p) end)
 
                 # Emit directory info for the current directory
-                rel_path = Path.relative_to(current, path)
-
                 dir_info =
-                  if rel_path != "." do
-                    [build_file_info(current, rel_path, d)]
+                  if rel_current != "." do
+                    [build_file_info(current, rel_current, d)]
                   else
                     []
                   end
 
-                {dir_info, children ++ rest}
+                {dir_info, {children ++ rest, updated_matchers}}
 
               {:error, _} ->
-                {[], rest}
+                {[], {rest, updated_matchers}}
             end
           end
 
-        [{{current, d}, :file} | rest] ->
-          rel_path = Path.relative_to(current, path)
-          file_info = build_file_info(current, rel_path, d)
-          {[file_info], rest}
+        {[{{current, d}, :file} | rest], matchers} ->
+          rel_path = Path.relative_to(current, base_dir)
+          parent_dir = Path.dirname(current)
+
+          # Get matcher for the file's parent directory
+          dir_matcher = Map.get(matchers, parent_dir)
+          basename = Path.basename(current)
+
+          # Skip if gitignored by directory's own .gitignore
+          skip =
+            if dir_matcher do
+              Gitignore.ignored?(dir_matcher, basename)
+            else
+              # Fall back to root matcher if no directory-specific matcher
+              gitignore_matcher && Gitignore.ignored?(gitignore_matcher, rel_path)
+            end
+
+          if skip do
+            {[], {rest, matchers}}
+          else
+            file_info = build_file_info(current, rel_path, d)
+            {[file_info], {rest, matchers}}
+          end
       end,
       fn _ -> :ok end
     )
     |> Stream.reject(&is_nil/1)
+  end
+
+  # Get or create a gitignore matcher for a directory, using cache
+  defp get_or_create_matcher(dir, matchers) do
+    case Map.fetch(matchers, dir) do
+      {:ok, matcher} ->
+        {matcher, matchers}
+
+      :error ->
+        matcher = Gitignore.for_directory(dir)
+        {matcher, Map.put(matchers, dir, matcher)}
+    end
   end
 
   defp should_ignore?(path, ignored, _include_hidden) do
@@ -387,6 +460,7 @@ defmodule CodePuppyControl.FileOps do
   - :max_matches - integer limit
   - :file_pattern - glob pattern to filter files
   - :context_lines - number of lines around match
+  - :gitignore - boolean, default true. When true, excludes gitignored files
 
   ## Examples
 
@@ -402,13 +476,17 @@ defmodule CodePuppyControl.FileOps do
     max_matches = Keyword.get(opts, :max_matches, @max_grep_matches)
     file_pattern = Keyword.get(opts, :file_pattern, "*")
     context_lines = Keyword.get(opts, :context_lines, 0)
+    use_gitignore = Keyword.get(opts, :gitignore, true)
 
     with {:ok, dir_path} <- validate_path(directory, "grep"),
          :ok <- check_directory_exists(dir_path),
          {:ok, regex} <- build_regex(pattern, case_sensitive) do
+      # Build gitignore matcher if enabled
+      gitignore_matcher = if use_gitignore, do: Gitignore.for_directory(dir_path), else: nil
+
       matches =
         dir_path
-        |> stream_files_for_grep(file_pattern)
+        |> stream_files_for_grep(file_pattern, gitignore_matcher)
         |> Stream.flat_map(fn file_path ->
           search_file(file_path, regex, context_lines, dir_path)
         end)
@@ -429,19 +507,21 @@ defmodule CodePuppyControl.FileOps do
     end
   end
 
-  defp stream_files_for_grep(dir_path, file_pattern) do
-    ignored = Constants.ignored_dirs()
+  defp stream_files_for_grep(dir_path, file_pattern, gitignore_matcher) do
+    # Use Constants.ignored_dirs() as base ignore set, combined with gitignore handling
+    base_ignored = Constants.ignored_dirs()
 
     dir_path
-    |> walk_directory(ignored, false, 0)
+    |> walk_directory(base_ignored, false, 0, dir_path, gitignore_matcher)
     |> Stream.filter(fn %{type: type} -> type == :file end)
     |> Stream.map(fn %{path: path} -> Path.join(dir_path, path) end)
-    |> Stream.filter(fn path -> matches_pattern?(path, file_pattern) end)
+    |> Stream.filter(fn path -> matches_file_pattern?(path, file_pattern) end)
   end
 
-  defp matches_pattern?(_path, "*"), do: true
+  # Renamed to avoid conflict with Gitignore.pattern_match?
+  defp matches_file_pattern?(_path, "*"), do: true
 
-  defp matches_pattern?(path, pattern) do
+  defp matches_file_pattern?(path, pattern) do
     # Simple glob matching - could use Path.wildcard but that's for listing
     # This is a simplified version
     ext = Path.extname(path)
