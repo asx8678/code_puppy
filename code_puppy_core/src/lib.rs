@@ -1,19 +1,12 @@
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 
-mod hashline;
 mod message_hashing;
 mod pruning;
 
 mod serialization;
 mod token_estimation;
 mod types;
-use hashline::{
-    compute_line_hash as compute_line_hash_impl,
-    format_hashlines as format_hashlines_impl,
-    strip_hashline_prefixes as strip_hashline_prefixes_impl,
-    validate_hashline_anchor as validate_hashline_anchor_impl,
-};
 use pruning::{
     prune_and_filter_core, prune_and_filter_impl,
     split_for_summarization_core, split_for_summarization_impl, truncation_indices_impl,
@@ -140,29 +133,6 @@ fn serialize_session_incremental(
     existing_data: Option<&[u8]>,
 ) -> PyResult<Vec<u8>> {
     serialize_session_incremental_impl(new_messages, existing_data)
-}
-
-// ── Hashline functions ──────────────────────────────────────────────────────
-
-#[pyfunction]
-fn compute_line_hash(idx: u32, line: &str) -> String {
-    compute_line_hash_impl(idx, line)
-}
-
-#[pyfunction]
-#[pyo3(signature = (text, start_line=1))]
-fn format_hashlines(text: &str, start_line: u32) -> String {
-    format_hashlines_impl(text, start_line)
-}
-
-#[pyfunction]
-fn strip_hashline_prefixes(text: &str) -> String {
-    strip_hashline_prefixes_impl(text)
-}
-
-#[pyfunction]
-fn validate_hashline_anchor(idx: u32, line: &str, expected_hash: &str) -> bool {
-    validate_hashline_anchor_impl(idx, line, expected_hash)
 }
 
 // ── MessageBatch pyclass ───────────────────────────────────────────────────
@@ -331,9 +301,5 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(serialize_session, m)?)?;
     m.add_function(wrap_pyfunction!(deserialize_session, m)?)?;
     m.add_function(wrap_pyfunction!(serialize_session_incremental, m)?)?;
-    m.add_function(wrap_pyfunction!(compute_line_hash, m)?)?;
-    m.add_function(wrap_pyfunction!(format_hashlines, m)?)?;
-    m.add_function(wrap_pyfunction!(strip_hashline_prefixes, m)?)?;
-    m.add_function(wrap_pyfunction!(validate_hashline_anchor, m)?)?;
     Ok(())
 }
