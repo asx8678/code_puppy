@@ -241,7 +241,7 @@
       "id": "bd-15",
       "title": "FileOps.Security: case-variant path bypass on macOS",
       "description": "",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "bug",
       "labels": [
@@ -249,14 +249,16 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T11:36:09.461851",
-      "updated_at": "2026-04-16T11:36:09.461859",
-      "comments": []
+      "updated_at": "2026-04-16T11:48:45.130770",
+      "comments": [
+        "Claimed by planning-agent-019d95 \u2014 fixing together with bd-16 as combined canonicalization hardening"
+      ]
     },
     "bd-16": {
       "id": "bd-16",
       "title": "FileOps.Security: symlink bypass allows reading blocked files",
       "description": "",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "bug",
       "labels": [
@@ -264,8 +266,10 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T11:36:10.907322",
-      "updated_at": "2026-04-16T11:36:10.907330",
-      "comments": []
+      "updated_at": "2026-04-16T11:48:46.567199",
+      "comments": [
+        "Claimed by planning-agent-019d95 \u2014 fixing together with bd-15 as combined canonicalization hardening"
+      ]
     },
     "bd-17": {
       "id": "bd-17",
