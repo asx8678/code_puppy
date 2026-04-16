@@ -1,8 +1,8 @@
-/// Fuzzy window matching: sliding-window Jaro-Winkler similarity search.
-///
-/// Finds the best matching window of lines from a haystack against a needle,
-/// using Jaro-Winkler similarity scoring with aggressive pre-filtering for
-/// zero-allocation performance.
+//! Fuzzy window matching: sliding-window Jaro-Winkler similarity search.
+//!
+//! Finds the best matching window of lines from a haystack against a needle,
+//! using Jaro-Winkler similarity scoring with aggressive pre-filtering and
+//! a reusable buffer to minimize allocations.
 
 const JW_THRESHOLD: f64 = 0.6;
 const LENGTH_THRESHOLD_RATIO: f64 = 0.5;
@@ -20,6 +20,7 @@ pub struct MatchResult {
 
 impl MatchResult {
     /// Returns true if a valid match was found.
+    #[cfg(test)]
     pub fn is_found(&self) -> bool {
         self.end.is_some()
     }
@@ -99,11 +100,7 @@ pub fn fuzzy_match_window_impl(haystack_lines: &[&str], needle: &str) -> MatchRe
         // Pre-filter 1: First-line length check (cheap rejection)
         if needle_first_len > 0 {
             let first_line_len = first_line.len();
-            let len_diff = if first_line_len > needle_first_len {
-                first_line_len - needle_first_len
-            } else {
-                needle_first_len - first_line_len
-            };
+            let len_diff = first_line_len.abs_diff(needle_first_len);
             if len_diff as f64 > needle_first_len as f64 * LENGTH_THRESHOLD_RATIO {
                 continue;
             }
@@ -123,11 +120,7 @@ pub fn fuzzy_match_window_impl(haystack_lines: &[&str], needle: &str) -> MatchRe
         let window_chars = prefix_sum[window_end] - prefix_sum[i] + (win_size.saturating_sub(1));
 
         // Early skip: if estimated length differs by >50%, skip expensive join
-        let len_diff = if window_chars > needle_len {
-            window_chars - needle_len
-        } else {
-            needle_len - window_chars
-        };
+        let len_diff = window_chars.abs_diff(needle_len);
         let max_len = needle_len.max(window_chars);
         if max_len > 0 && (len_diff as f64) > (max_len as f64) * LENGTH_THRESHOLD_RATIO {
             continue;
