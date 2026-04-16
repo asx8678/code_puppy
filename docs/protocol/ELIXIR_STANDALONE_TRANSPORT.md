@@ -319,7 +319,7 @@ finally:
 ### Module-Level Convenience Functions
 
 ```python
-from code_puppy import elixir_transport as et
+from code_puppy import elixir_transport_helpers as et
 
 # Simple operations without managing transport lifecycle
 files = et.list_files(".", recursive=True)
@@ -350,8 +350,6 @@ See `CodePuppyControl.FileOps.sensitive_path?/1` for the complete list of blocke
 | `PUP_ELIXIR_PATH` | Path to elixir/mix executables | Auto-detected |
 | `PUP_ELIXIR_SERVICE_CMD` | Override service command | `mix code_puppy.stdio_service` |
 | `PUP_LOG_LEVEL` | Elixir service log level | `info` |
-| `PUP_MAX_LIST_FILES` | Max files in list_files | `10000` |
-| `PUP_MAX_GREP_MATCHES` | Max grep results | `1000` |
 
 ### Elixir Application Config
 

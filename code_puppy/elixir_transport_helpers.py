@@ -43,7 +43,7 @@ from typing import Any
 
 
 # Deferred import to avoid circular dependencies
-def _get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
+def get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
     """Get or create the module-level transport singleton."""
     global _module_transport
     if _module_transport is None:
@@ -52,6 +52,10 @@ def _get_transport() -> "ElixirTransport":  # type: ignore # noqa: F821
         _module_transport = ElixirTransport()
         _module_transport.start()
     return _module_transport
+
+
+# Backward compatibility alias
+_get_transport = get_transport
 
 
 # Module-level singleton for simple use cases
@@ -81,7 +85,7 @@ def list_files(
         >>> files = list_files("src", recursive=True)
         >>> print([f["path"] for f in files])
     """
-    return _get_transport().list_files(
+    return get_transport().list_files(
         directory, recursive, include_hidden, ignore_patterns, max_files
     )
 
@@ -105,7 +109,7 @@ def read_file(
         >>> result = read_file("README.md", num_lines=50)
         >>> print(result["content"])
     """
-    return _get_transport().read_file(path, start_line, num_lines)
+    return get_transport().read_file(path, start_line, num_lines)
 
 
 def read_files(
@@ -128,7 +132,7 @@ def read_files(
         >>> for r in results:
         ...     print(r["path"], len(r["content"]))
     """
-    return _get_transport().read_files(paths, start_line, num_lines)
+    return get_transport().read_files(paths, start_line, num_lines)
 
 
 def grep(
@@ -158,7 +162,7 @@ def grep(
         >>> for m in matches[:5]:
         ...     print(f"{m['file']}:{m['line_number']}: {m['line_content']}")
     """
-    return _get_transport().grep(
+    return get_transport().grep(
         pattern, directory, case_sensitive, max_matches, file_pattern, context_lines
     )
 
@@ -169,7 +173,7 @@ def ping() -> dict[str, Any]:
     Returns:
         Dict with "pong" and "timestamp" fields
     """
-    return _get_transport().ping()
+    return get_transport().ping()
 
 
 def health_check() -> dict[str, Any]:
@@ -178,7 +182,7 @@ def health_check() -> dict[str, Any]:
     Returns:
         Dict with status, version, elixir_version, otp_version, timestamp
     """
-    return _get_transport().health_check()
+    return get_transport().health_check()
 
 
 def shutdown() -> None:
