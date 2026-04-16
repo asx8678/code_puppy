@@ -1520,7 +1520,7 @@
       "id": "bd-82",
       "title": "Refresh architecture docs",
       "description": "Update ARCHITECTURE.md, architecture_mermaid.md, architecture_uml.puml, architecture_components.puml.\n\nPart of Phase 6 \u2014 Documentation & build cleanup.",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -1528,7 +1528,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T17:52:14.805923",
-      "updated_at": "2026-04-16T17:52:14.805930",
+      "updated_at": "2026-04-16T18:32:07.127927",
       "comments": []
     },
     "bd-83": {
