@@ -46,6 +46,8 @@ defmodule CodePuppyControl.Transport.StdioService do
   - `grep_search` - Search for patterns in files
 
   ### Text Operations
+  - `text_fuzzy_match` - Find best matching window using fuzzy matching
+  - `text_unified_diff` - Generate unified diff between two strings
   - `text_replace` - Apply replacements with exact/fuzzy matching
 
   ### Utility
@@ -422,6 +424,71 @@ defmodule CodePuppyControl.Transport.StdioService do
               id
             )
         end
+    end
+  end
+
+  # text_fuzzy_match - Find best matching window using fuzzy matching (bd-41)
+  defp handle_request("text_fuzzy_match", params, id) do
+    haystack_lines = params["haystack_lines"]
+    needle = params["needle"]
+
+    cond do
+      is_nil(haystack_lines) or not is_list(haystack_lines) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: haystack_lines", nil, id)
+
+      is_nil(needle) or not is_binary(needle) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: needle", nil, id)
+
+      true ->
+        alias CodePuppyControl.Text.FuzzyMatch
+
+        case FuzzyMatch.fuzzy_match_window(haystack_lines, needle) do
+          {:ok, %{matched_text: matched_text, start_line: start_line, end_line: end_line, similarity: similarity}} ->
+            Protocol.encode_response(
+              %{
+                "matched_text" => matched_text,
+                "start" => start_line,
+                "end" => end_line,
+                "score" => similarity
+              },
+              id
+            )
+
+          :no_match ->
+            Protocol.encode_response(
+              %{"matched_text" => nil, "start" => 0, "end" => nil, "score" => 0.0},
+              id
+            )
+        end
+    end
+  end
+
+  # text_unified_diff - Generate unified diff between two strings (bd-41)
+  defp handle_request("text_unified_diff", params, id) do
+    old = params["old"]
+    new = params["new"]
+
+    cond do
+      is_nil(old) or not is_binary(old) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: old", nil, id)
+
+      is_nil(new) or not is_binary(new) ->
+        Protocol.encode_error(-32602, "Missing or invalid param: new", nil, id)
+
+      true ->
+        alias CodePuppyControl.Text.Diff
+
+        context_lines = params["context_lines"] || 3
+        from_file = params["from_file"] || ""
+        to_file = params["to_file"] || ""
+
+        result = Diff.unified_diff(old, new,
+          context_lines: context_lines,
+          from_file: from_file,
+          to_file: to_file
+        )
+
+        Protocol.encode_response(%{"diff" => result}, id)
     end
   end
 

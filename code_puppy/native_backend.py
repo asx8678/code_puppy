@@ -97,6 +97,7 @@ class NativeBackend:
 
         MESSAGE_CORE = "message_core"  # code_puppy_core
         FILE_OPS = "file_ops"  # Elixir FileOps / Python fallback
+        EDIT_OPS = "edit_ops"  # Elixir Text operations (fuzzy_match, replace, diff)
         REPO_INDEX = "repo_index"  # Repository indexing (Elixir + Python fallback)
         PARSE = "parse"  # turbo_parse
 
@@ -111,6 +112,7 @@ class NativeBackend:
     _capability_enabled: dict[str, bool] = {
         Capabilities.MESSAGE_CORE: True,
         Capabilities.FILE_OPS: True,
+        Capabilities.EDIT_OPS: True,
         Capabilities.REPO_INDEX: True,
         Capabilities.PARSE: True,
     }
@@ -496,6 +498,19 @@ class NativeBackend:
                     ("python", True),  # Always available fallback
                 ]
 
+        elif capability == cls.Capabilities.EDIT_OPS:
+            # EDIT_OPS: Elixir → Python (no Rust since bd-40 removed edit modules)
+            # bd-41: Elixir-first routing for fuzzy_match, replace, diff
+            if preference == BackendPreference.PYTHON_ONLY:
+                backends = [
+                    ("python", True),  # Python fallback always available
+                ]
+            else:
+                backends = [
+                    ("elixir", elixir_avail),
+                    ("python", True),  # Always available fallback
+                ]
+
         elif capability == cls.Capabilities.PARSE:
             # PARSE: Depends on preference
             # bd-13-fix-semantics: In PYTHON_ONLY, only python_fallback is available
@@ -622,6 +637,11 @@ class NativeBackend:
         repo_index_user_enabled = cls.is_enabled(cls.Capabilities.REPO_INDEX)
         repo_index_active = repo_index_tech_available and repo_index_user_enabled
 
+        # bd-41: edit_ops availability — Elixir or Python fallback (Rust modules removed in bd-40)
+        edit_ops_tech_available = True  # Python fallback always available
+        edit_ops_user_enabled = cls.is_enabled(cls.Capabilities.EDIT_OPS)
+        edit_ops_active = edit_ops_tech_available and edit_ops_user_enabled
+
         # Determine message_core technical availability
         msg_core_tech_available = RUST_AVAILABLE
         msg_core_user_enabled = cls.is_enabled(cls.Capabilities.MESSAGE_CORE)
@@ -653,6 +673,15 @@ class NativeBackend:
                 status="active"
                 if file_ops_active
                 else ("disabled" if not file_ops_user_enabled else "unavailable"),
+            ),
+            cls.Capabilities.EDIT_OPS: CapabilityInfo(
+                name=cls.Capabilities.EDIT_OPS,
+                configured="elixir",
+                available=edit_ops_tech_available,
+                active=edit_ops_active,
+                status="active"
+                if edit_ops_active
+                else ("disabled" if not edit_ops_user_enabled else "unavailable"),
             ),
             cls.Capabilities.REPO_INDEX: CapabilityInfo(
                 name=cls.Capabilities.REPO_INDEX,
@@ -703,6 +732,12 @@ class NativeBackend:
                 "source": cls._get_file_ops_source(),
                 "backend_preference": cls._backend_preference.value,
                 "routing": cls.get_capability_routing(cls.Capabilities.FILE_OPS),
+            },
+            "edit_ops": {
+                "available": True,  # Python fallback always available
+                "elixir_available": elixir_available,
+                "source": "elixir" if elixir_available and cls.is_enabled(cls.Capabilities.EDIT_OPS) else "python",
+                "routing": cls.get_capability_routing(cls.Capabilities.EDIT_OPS),
             },
             "repo_index": {
                 "available": True,  # Python fallback always available

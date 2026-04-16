@@ -94,6 +94,7 @@ class TestNativeBackendCapabilities:
         assert NativeBackend.Capabilities.FILE_OPS == "file_ops"
         assert NativeBackend.Capabilities.REPO_INDEX == "repo_index"
         assert NativeBackend.Capabilities.PARSE == "parse"
+        assert NativeBackend.Capabilities.EDIT_OPS == "edit_ops"
 
 
 class TestNativeBackendStatus:
@@ -107,6 +108,7 @@ class TestNativeBackendStatus:
         assert NativeBackend.Capabilities.FILE_OPS in status
         assert NativeBackend.Capabilities.REPO_INDEX in status
         assert NativeBackend.Capabilities.PARSE in status
+        assert NativeBackend.Capabilities.EDIT_OPS in status
 
     def test_get_status_capability_info_types(self):
         """Test that get_status returns CapabilityInfo objects."""
@@ -697,6 +699,46 @@ class TestCapabilityRouting:
                 assert result is True
 
 
+class TestEditOpsRouting:
+    """Tests for EDIT_OPS capability routing (bd-41)."""
+
+    def test_edit_ops_capability_exists(self):
+        assert NativeBackend.Capabilities.EDIT_OPS == "edit_ops"
+
+    def test_edit_ops_in_status(self):
+        status = NativeBackend.get_status()
+        assert "edit_ops" in status
+
+    def test_edit_ops_in_detailed_status(self):
+        detailed = NativeBackend.get_detailed_status()
+        assert "edit_ops" in detailed
+        assert "routing" in detailed["edit_ops"]
+        assert "source" in detailed["edit_ops"]
+
+    def test_edit_ops_routing_elixir_first(self):
+        NativeBackend.set_backend_preference("elixir_first")
+        routing = NativeBackend.get_capability_routing("edit_ops")
+        assert routing["preference"] == "elixir_first"
+        # Should have elixir and python backends
+        backend_names = [b[0] for b in routing["backends"]]
+        assert "elixir" in backend_names
+        assert "python" in backend_names
+
+    def test_edit_ops_routing_python_only(self):
+        NativeBackend.set_backend_preference("python_only")
+        routing = NativeBackend.get_capability_routing("edit_ops")
+        backend_names = [b[0] for b in routing["backends"]]
+        assert "python" in backend_names
+        assert "elixir" not in backend_names
+        NativeBackend.set_backend_preference("elixir_first")  # Reset
+
+    def test_edit_ops_disable_enable(self):
+        NativeBackend.disable_capability("edit_ops")
+        routing = NativeBackend.get_capability_routing("edit_ops")
+        assert routing["will_use"] == "disabled"
+        NativeBackend.enable_capability("edit_ops")
+
+
 class TestDetailedStatus:
     """Tests for detailed status reporting (bd-13)."""
 
@@ -723,6 +765,7 @@ class TestDetailedStatus:
             NativeBackend.Capabilities.FILE_OPS,
             NativeBackend.Capabilities.REPO_INDEX,
             NativeBackend.Capabilities.PARSE,
+            NativeBackend.Capabilities.EDIT_OPS,
         ]:
             assert cap in status
             assert "routing" in status[cap]
