@@ -5,10 +5,9 @@ from bridge modules instead of routing through NativeBackend.
 
 Allowed files (the adapter boundary itself):
 - code_puppy/native_backend.py (IS the NativeBackend adapter)
-- code_puppy/acceleration/__init__.py (facade that delegates to NativeBackend)
 
-Note: turbo_parse_bridge was removed in bd-31. These patterns now guard
-against accidental re-introduction of direct bridge imports.
+Note: turbo_parse_bridge was removed in bd-31. acceleration/ was removed in bd-86.
+These patterns now guard against accidental re-introduction of direct bridge imports.
 """
 
 import re
@@ -22,8 +21,6 @@ import pytest
 ALLOWED_FILES = {
     # The NativeBackend adapter (uses _core_bridge for type re-exports)
     "code_puppy/native_backend.py",
-    # Facade that delegates to NativeBackend
-    "code_puppy/acceleration/__init__.py",
     # Bridge modules (adapter boundary)
     "code_puppy/_edit_bridge.py",
     # Test files that legitimately test the bridge/backends directly
@@ -33,6 +30,7 @@ ALLOWED_FILES = {
     "tests/profile_bridge_bottlenecks.py",
     "tests/test_hashline.py",
     "tests/test_edit_bridge.py",
+    "tests/test_migration_regression.py",
 }
 
 # Patterns that indicate direct bridge imports
@@ -126,7 +124,7 @@ class TestNoDirectBridgeImports:
         
         _core_bridge types should be accessed via:
             from code_puppy.native_backend import NativeBackend
-            or from code_puppy.acceleration import ...
+            or from code_puppy.native_backend import get_turbo_parse_status, etc.
         """
         root = _get_project_root()
         violations = []
@@ -154,7 +152,7 @@ class TestNoDirectBridgeImports:
             violation_list = "\n".join(violations)
             pytest.fail(
                 f"bd-13 violation: {len(violations)} direct _core_bridge import(s) found.\n"
-                f"Use NativeBackend or acceleration module instead.\n\n"
+                f"Use NativeBackend instead.\n\n"
                 f"Violations:\n{violation_list}\n\n"
                 f"If this file is part of the adapter boundary, add it to ALLOWED_FILES in\n"
                 f"tests/test_no_direct_bridge_imports.py"
