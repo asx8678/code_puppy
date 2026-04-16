@@ -119,87 +119,109 @@ defmodule CodePuppyControl.FileOps.PathClassifierTest do
 
   # ===== Sensitive path tests =====
 
-  describe "is_sensitive/1" do
-    test "detects sensitive SSH directory" do
+  describe "is_sensitive/2" do
+    setup do
+      %{classifier: PathClassifier.new()}
+    end
+
+    test "detects sensitive SSH directory", %{classifier: c} do
       # Test that ~username/.ssh paths are detected as sensitive
       # (other users' SSH directories should always be sensitive)
-      assert PathClassifier.is_sensitive("~other/.ssh/id_rsa")
-      assert PathClassifier.is_sensitive("~alice/.ssh")
-      assert PathClassifier.is_sensitive("~root/.ssh")
-      assert PathClassifier.is_sensitive("~root/.ssh/authorized_keys")
+      assert PathClassifier.is_sensitive(c, "~other/.ssh/id_rsa")
+      assert PathClassifier.is_sensitive(c, "~alice/.ssh")
+      assert PathClassifier.is_sensitive(c, "~root/.ssh")
+      assert PathClassifier.is_sensitive(c, "~root/.ssh/authorized_keys")
     end
 
-    test "detects sensitive /etc paths" do
-      assert PathClassifier.is_sensitive("/etc/shadow")
-      assert PathClassifier.is_sensitive("/etc/passwd")
-      assert PathClassifier.is_sensitive("/etc/sudoers")
+    test "detects sensitive /etc paths", %{classifier: c} do
+      assert PathClassifier.is_sensitive(c, "/etc/shadow")
+      assert PathClassifier.is_sensitive(c, "/etc/passwd")
+      assert PathClassifier.is_sensitive(c, "/etc/sudoers")
     end
 
-    test "detects sensitive /private/etc paths" do
-      assert PathClassifier.is_sensitive("/private/etc/shadow")
-      assert PathClassifier.is_sensitive("/private/etc/passwd")
-      assert PathClassifier.is_sensitive("/private/etc/sudoers")
-      assert PathClassifier.is_sensitive("/private/etc")
+    test "detects sensitive /private/etc paths", %{classifier: c} do
+      assert PathClassifier.is_sensitive(c, "/private/etc/shadow")
+      assert PathClassifier.is_sensitive(c, "/private/etc/passwd")
+      assert PathClassifier.is_sensitive(c, "/private/etc/sudoers")
+      assert PathClassifier.is_sensitive(c, "/private/etc")
     end
 
-    test "detects sensitive /dev paths" do
-      assert PathClassifier.is_sensitive("/dev/sda1")
-      assert PathClassifier.is_sensitive("/dev/null")
-      assert PathClassifier.is_sensitive("/dev")
+    test "detects sensitive /dev paths", %{classifier: c} do
+      assert PathClassifier.is_sensitive(c, "/dev/sda1")
+      assert PathClassifier.is_sensitive(c, "/dev/null")
+      assert PathClassifier.is_sensitive(c, "/dev")
     end
 
-    test "does not detect /proc as sensitive" do
+    test "does not detect /proc as sensitive", %{classifier: c} do
       # /proc paths should NOT be detected as sensitive in file operations
       # (Python is_sensitive_path does NOT have /proc check)
-      refute PathClassifier.is_sensitive("/proc/1/cmdline")
-      refute PathClassifier.is_sensitive("/proc")
+      refute PathClassifier.is_sensitive(c, "/proc/1/cmdline")
+      refute PathClassifier.is_sensitive(c, "/proc")
     end
 
-    test "does not detect /var/log as sensitive" do
+    test "does not detect /var/log as sensitive", %{classifier: c} do
       # /var/log paths should NOT be detected as sensitive in file operations
       # (Python is_sensitive_path does NOT have /var/log check)
-      refute PathClassifier.is_sensitive("/var/log/syslog")
-      refute PathClassifier.is_sensitive("/var/log/auth.log")
+      refute PathClassifier.is_sensitive(c, "/var/log/syslog")
+      refute PathClassifier.is_sensitive(c, "/var/log/auth.log")
     end
 
-    test "does not detect /root as sensitive" do
+    test "does not detect /root as sensitive", %{classifier: c} do
       # /root paths should NOT be detected as sensitive in file operations
       # (Python is_sensitive_path does NOT check /root as a prefix)
       # ~root paths ARE detected via ~username handling
-      refute PathClassifier.is_sensitive("/root")
-      refute PathClassifier.is_sensitive("/root/.bashrc")
-      assert PathClassifier.is_sensitive("~root/.ssh/id_rsa")
+      refute PathClassifier.is_sensitive(c, "/root")
+      refute PathClassifier.is_sensitive(c, "/root/.bashrc")
+      assert PathClassifier.is_sensitive(c, "~root/.ssh/id_rsa")
     end
 
-    test "detects sensitive .env files" do
+    test "detects sensitive .env files", %{classifier: c} do
       # Regular .env is sensitive
-      assert PathClassifier.is_sensitive(".env")
-      assert PathClassifier.is_sensitive("project/.env")
-      assert PathClassifier.is_sensitive("/path/to/.env")
+      assert PathClassifier.is_sensitive(c, ".env")
+      assert PathClassifier.is_sensitive(c, "project/.env")
+      assert PathClassifier.is_sensitive(c, "/path/to/.env")
 
       # Allowed variants are NOT sensitive
-      refute PathClassifier.is_sensitive(".env.example")
-      refute PathClassifier.is_sensitive(".env.sample")
-      refute PathClassifier.is_sensitive(".env.template")
-      refute PathClassifier.is_sensitive("project/.env.example")
+      refute PathClassifier.is_sensitive(c, ".env.example")
+      refute PathClassifier.is_sensitive(c, ".env.sample")
+      refute PathClassifier.is_sensitive(c, ".env.template")
+      refute PathClassifier.is_sensitive(c, "project/.env.example")
     end
 
-    test "detects sensitive extensions" do
-      assert PathClassifier.is_sensitive("id_rsa.pem")
-      assert PathClassifier.is_sensitive("server.key")
-      assert PathClassifier.is_sensitive("cert.p12")
-      assert PathClassifier.is_sensitive("keystore.pfx")
-      assert PathClassifier.is_sensitive("android.keystore")
+    test "detects sensitive extensions", %{classifier: c} do
+      assert PathClassifier.is_sensitive(c, "id_rsa.pem")
+      assert PathClassifier.is_sensitive(c, "server.key")
+      assert PathClassifier.is_sensitive(c, "cert.p12")
+      assert PathClassifier.is_sensitive(c, "keystore.pfx")
+      assert PathClassifier.is_sensitive(c, "android.keystore")
     end
 
-    test "does not detect regular files as sensitive" do
-      refute PathClassifier.is_sensitive("main.py")
-      refute PathClassifier.is_sensitive("README.md")
-      refute PathClassifier.is_sensitive("src/lib.rs")
+    test "does not detect regular files as sensitive", %{classifier: c} do
+      refute PathClassifier.is_sensitive(c, "main.py")
+      refute PathClassifier.is_sensitive(c, "README.md")
+      refute PathClassifier.is_sensitive(c, "src/lib.rs")
     end
 
-    test "empty path is not sensitive" do
-      refute PathClassifier.is_sensitive("")
+    test "empty path is not sensitive", %{classifier: c} do
+      refute PathClassifier.is_sensitive(c, "")
+    end
+
+    test "symlinked sensitive targets are still classified as sensitive", %{classifier: c} do
+      tmp = Path.join(System.tmp_dir!(), "path-classifier-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      secret = Path.join(tmp, "secret.pem")
+      link = Path.join(tmp, "innocent.txt")
+      File.write!(secret, "PRIVATE KEY DATA")
+      File.ln_s!(secret, link)
+
+      assert PathClassifier.is_sensitive(c, link)
+    end
+
+    test "non-allowlisted env variants remain sensitive", %{classifier: c} do
+      assert PathClassifier.is_sensitive(c, ".env.local")
+      assert PathClassifier.is_sensitive(c, "config/.env.production")
     end
   end
 
@@ -383,42 +405,50 @@ defmodule CodePuppyControl.FileOps.PathClassifierTest do
   end
 
   describe "home directory sensitive paths" do
-    test "detects sensitive files in home directory" do
-      home = System.user_home!()
-
-      assert PathClassifier.is_sensitive("#{home}/.ssh/id_rsa")
-      assert PathClassifier.is_sensitive("#{home}/.aws/credentials")
-      assert PathClassifier.is_sensitive("#{home}/.gnupg/secring.gpg")
-      assert PathClassifier.is_sensitive("#{home}/.kube/config")
-      assert PathClassifier.is_sensitive("#{home}/.docker/config.json")
+    setup do
+      %{classifier: PathClassifier.new()}
     end
 
-    test "detects sensitive home config files" do
+    test "detects sensitive files in home directory", %{classifier: c} do
       home = System.user_home!()
 
-      assert PathClassifier.is_sensitive("#{home}/.netrc")
-      assert PathClassifier.is_sensitive("#{home}/.pgpass")
-      assert PathClassifier.is_sensitive("#{home}/.my.cnf")
-      assert PathClassifier.is_sensitive("#{home}/.bash_history")
-      assert PathClassifier.is_sensitive("#{home}/.npmrc")
-      assert PathClassifier.is_sensitive("#{home}/.pypirc")
-      assert PathClassifier.is_sensitive("#{home}/.gitconfig")
+      assert PathClassifier.is_sensitive(c, "#{home}/.ssh/id_rsa")
+      assert PathClassifier.is_sensitive(c, "#{home}/.aws/credentials")
+      assert PathClassifier.is_sensitive(c, "#{home}/.gnupg/secring.gpg")
+      assert PathClassifier.is_sensitive(c, "#{home}/.kube/config")
+      assert PathClassifier.is_sensitive(c, "#{home}/.docker/config.json")
     end
 
-    test "handles tilde expansion" do
-      assert PathClassifier.is_sensitive("~/.ssh/id_rsa")
-      assert PathClassifier.is_sensitive("~/.aws/credentials")
-      assert PathClassifier.is_sensitive("~/.env")
+    test "detects sensitive home config files", %{classifier: c} do
+      home = System.user_home!()
+
+      assert PathClassifier.is_sensitive(c, "#{home}/.netrc")
+      assert PathClassifier.is_sensitive(c, "#{home}/.pgpass")
+      assert PathClassifier.is_sensitive(c, "#{home}/.my.cnf")
+      assert PathClassifier.is_sensitive(c, "#{home}/.bash_history")
+      assert PathClassifier.is_sensitive(c, "#{home}/.npmrc")
+      assert PathClassifier.is_sensitive(c, "#{home}/.pypirc")
+      assert PathClassifier.is_sensitive(c, "#{home}/.gitconfig")
+    end
+
+    test "handles tilde expansion", %{classifier: c} do
+      assert PathClassifier.is_sensitive(c, "~/.ssh/id_rsa")
+      assert PathClassifier.is_sensitive(c, "~/.aws/credentials")
+      assert PathClassifier.is_sensitive(c, "~/.env")
     end
   end
 
   describe "case sensitivity" do
-    test "extensions are case-insensitive for sensitivity" do
-      assert PathClassifier.is_sensitive("key.PEM")
-      assert PathClassifier.is_sensitive("key.Pem")
-      assert PathClassifier.is_sensitive("server.KEY")
-      assert PathClassifier.is_sensitive("cert.P12")
-      assert PathClassifier.is_sensitive("keystore.PFX")
+    setup do
+      %{classifier: PathClassifier.new()}
+    end
+
+    test "extensions are case-insensitive for sensitivity", %{classifier: c} do
+      assert PathClassifier.is_sensitive(c, "key.PEM")
+      assert PathClassifier.is_sensitive(c, "key.Pem")
+      assert PathClassifier.is_sensitive(c, "server.KEY")
+      assert PathClassifier.is_sensitive(c, "cert.P12")
+      assert PathClassifier.is_sensitive(c, "keystore.PFX")
     end
   end
 end

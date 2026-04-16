@@ -13,10 +13,10 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
       iex> classifier = PathClassifier.new()
       iex> PathClassifier.should_ignore(classifier, "node_modules")
       true
-      iex> PathClassifier.is_sensitive("/etc/shadow")
+      iex> PathClassifier.is_sensitive(classifier, "/etc/shadow")
       true
       iex> PathClassifier.classify_path(classifier, ".env")
-      %{ignored: false, sensitive: true}
+      %{ignored: true, sensitive: true}
   """
 
   alias CodePuppyControl.Gitignore.Pattern
@@ -379,7 +379,15 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
     ".gitconfig"
   ]
 
-  defstruct [:dir_patterns, :all_patterns, :home_dir, :sensitive_exact_files]
+  defstruct [
+    :dir_patterns,
+    :all_patterns,
+    :home_dir,
+    :sensitive_dir_prefixes,
+    :sensitive_exact_files,
+    :sensitive_filenames,
+    :sensitive_extensions
+  ]
 
   @typedoc """
   Path classifier struct containing pre-compiled patterns.
@@ -388,8 +396,14 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
           dir_patterns: [String.t()],
           all_patterns: [String.t()],
           home_dir: String.t(),
-          sensitive_exact_files: MapSet.t(String.t())
+          sensitive_dir_prefixes: [String.t()],
+          sensitive_exact_files: MapSet.t(String.t()),
+          sensitive_filenames: MapSet.t(String.t()),
+          sensitive_extensions: MapSet.t(String.t())
         }
+
+  # Maximum symlink chain depth to prevent infinite loops
+  @max_symlink_depth 20
 
   @doc """
   Create a new PathClassifier with all patterns pre-loaded.
@@ -404,11 +418,11 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
   def new do
     home_dir = System.user_home!()
 
+    # Precompute sensitive directory prefixes (full paths)
+    sensitive_dir_prefixes = Enum.map(@sensitive_dir_prefixes, &Path.join(home_dir, &1))
+
     # Build sensitive exact files set with resolved home
-    home_based_files =
-      Enum.map(@home_sensitive_files, fn file ->
-        Path.join(home_dir, file)
-      end)
+    home_based_files = Enum.map(@home_sensitive_files, &Path.join(home_dir, &1))
 
     sensitive_exact_files =
       (@sensitive_system_paths ++ home_based_files)
@@ -418,7 +432,10 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
       dir_patterns: @dir_patterns,
       all_patterns: @dir_patterns ++ @file_patterns,
       home_dir: home_dir,
-      sensitive_exact_files: sensitive_exact_files
+      sensitive_dir_prefixes: sensitive_dir_prefixes,
+      sensitive_exact_files: sensitive_exact_files,
+      sensitive_filenames: MapSet.new(@sensitive_filenames),
+      sensitive_extensions: MapSet.new(@sensitive_extensions)
     }
   end
 
@@ -459,32 +476,32 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
   @doc """
   Check if a path is sensitive (contains credentials, keys, etc.).
 
-  This is a pure function that doesn't require a classifier instance,
-  as sensitive paths are based on static patterns.
+  Uses the precomputed patterns from the classifier struct for efficient lookup.
 
   ## Examples
 
-      iex> PathClassifier.is_sensitive("/etc/shadow")
+      iex> classifier = PathClassifier.new()
+      iex> PathClassifier.is_sensitive(classifier, "/etc/shadow")
       true
-      iex> PathClassifier.is_sensitive("~/.ssh/id_rsa")
+      iex> PathClassifier.is_sensitive(classifier, "~/.ssh/id_rsa")
       true
-      iex> PathClassifier.is_sensitive("main.py")
+      iex> PathClassifier.is_sensitive(classifier, "main.py")
       false
-      iex> PathClassifier.is_sensitive(".env")
+      iex> PathClassifier.is_sensitive(classifier, ".env")
       true
-      iex> PathClassifier.is_sensitive(".env.example")
+      iex> PathClassifier.is_sensitive(classifier, ".env.example")
       false
   """
-  @spec is_sensitive(String.t()) :: boolean()
-  def is_sensitive(path) when is_binary(path) do
+  @spec is_sensitive(t(), String.t()) :: boolean()
+  def is_sensitive(%__MODULE__{} = classifier, path) when is_binary(path) do
     if path == "" do
       false
     else
-      check_tilde_username_paths(path) || check_expanded_path(path)
+      check_tilde_username_paths(path) || check_expanded_path(classifier, path)
     end
   end
 
-  def is_sensitive(_), do: false
+  def is_sensitive(_, _), do: false
 
   @doc """
   Classify a path, returning a map with `ignored` and `sensitive` flags.
@@ -497,13 +514,13 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
       iex> PathClassifier.classify_path(classifier, "node_modules")
       %{ignored: true, sensitive: false}
       iex> PathClassifier.classify_path(classifier, ".env")
-      %{ignored: false, sensitive: true}
+      %{ignored: true, sensitive: true}
   """
   @spec classify_path(t(), String.t()) :: %{ignored: boolean(), sensitive: boolean()}
   def classify_path(%__MODULE__{} = classifier, path) when is_binary(path) do
     %{
       ignored: should_ignore(classifier, path),
-      sensitive: is_sensitive(path)
+      sensitive: is_sensitive(classifier, path)
     }
   end
 
@@ -594,18 +611,14 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
     end
   end
 
-  defp check_expanded_path(path) do
-    # Expand ~ and resolve path
+  defp check_expanded_path(%__MODULE__{} = classifier, path) do
+    # Expand ~, resolve symlinks, and normalize path
     resolved = expand_and_normalize(path)
 
-    home_dir = System.user_home!()
-    home_str = to_string(home_dir)
-
-    # Check directory prefixes
+    # Check directory prefixes (precomputed)
     sensitive_dir =
-      Enum.any?(@sensitive_dir_prefixes, fn prefix ->
-        full_prefix = Path.join(home_str, prefix)
-        String.starts_with?(resolved, full_prefix <> "/") or resolved == full_prefix
+      Enum.any?(classifier.sensitive_dir_prefixes, fn prefix ->
+        String.starts_with?(resolved, prefix <> "/") or resolved == prefix
       end)
 
     # Check macOS /private/etc
@@ -615,21 +628,14 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
     # Check /dev directory
     dev_check = String.starts_with?(resolved, "/dev/") or resolved == "/dev"
 
-    # Build sensitive exact files set
-    home_based_files = Enum.map(@home_sensitive_files, &Path.join(home_str, &1))
-
-    sensitive_exact_files =
-      (@sensitive_system_paths ++ home_based_files)
-      |> MapSet.new()
-
-    # Check exact-match files
-    exact_match = MapSet.member?(sensitive_exact_files, resolved)
+    # Check exact-match files (precomputed)
+    exact_match = MapSet.member?(classifier.sensitive_exact_files, resolved)
 
     # Get basename
     basename = Path.basename(resolved)
     basename_lower = String.downcase(basename)
 
-    # Check sensitive filenames
+    # Check sensitive filenames (precomputed)
     filename_match =
       cond do
         # Check allowed env patterns first
@@ -637,7 +643,7 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
           false
 
         # Check exact sensitive filenames
-        basename_lower in @sensitive_filenames ->
+        MapSet.member?(classifier.sensitive_filenames, basename_lower) ->
           true
 
         # Check .env.* variants
@@ -648,22 +654,22 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
           false
       end
 
-    # Check extensions
+    # Check extensions (precomputed)
     ext = Path.extname(resolved) |> String.downcase()
-    ext_match = ext in @sensitive_extensions
+    ext_match = MapSet.member?(classifier.sensitive_extensions, ext)
 
     sensitive_dir or private_etc or dev_check or exact_match or filename_match or ext_match
   end
 
   defp expand_and_normalize(path) do
     # Handle ~username paths (other than ~/)
-    if String.starts_with?(path, "~") and String.length(path) > 1 and
-         not String.starts_with?(path, "~/") do
-      # This is a ~username path, return as-is for check_tilde_username_paths
-      path
-    else
-      # Standard ~ expansion
-      expanded =
+    expanded =
+      if String.starts_with?(path, "~") and String.length(path) > 1 and
+           not String.starts_with?(path, "~/") do
+        # This is a ~username path, return as-is for check_tilde_username_paths
+        path
+      else
+        # Standard ~ expansion
         cond do
           String.starts_with?(path, "~/") ->
             home = System.user_home!()
@@ -675,9 +681,44 @@ defmodule CodePuppyControl.FileOps.PathClassifier do
           true ->
             path
         end
+      end
 
-      # Expand to absolute path
-      Path.expand(expanded)
+    # Expand to absolute path
+    expanded = Path.expand(expanded)
+
+    # Resolve symlinks (security fix: bd-35)
+    resolve_symlinks(expanded)
+  end
+
+  # Resolve symlinks to their targets, with loop protection
+  defp resolve_symlinks(path, depth \\ 0)
+
+  defp resolve_symlinks(path, depth) when depth > @max_symlink_depth do
+    # Too many symlinks, return the path as-is (safer to check it than fail)
+    path
+  end
+
+  defp resolve_symlinks(path, depth) do
+    case File.lstat(path) do
+      {:ok, %File.Stat{type: :symlink}} ->
+        case File.read_link(path) do
+          {:ok, target} ->
+            abs_target =
+              if Path.type(target) == :relative do
+                Path.join(Path.dirname(path), target) |> Path.expand()
+              else
+                Path.expand(target)
+              end
+
+            resolve_symlinks(abs_target, depth + 1)
+
+          {:error, _} ->
+            path
+        end
+
+      _ ->
+        # Not a symlink or doesn't exist, return as-is
+        path
     end
   end
 end

@@ -595,7 +595,7 @@
       "id": "bd-35",
       "title": "Migrate path_classify/ to pure Elixir (FileOps.PathClassifier)",
       "description": "Migrate code_puppy_core/src/path_classify/ (21.4 KB: mod.rs, patterns.rs, sensitive.rs, tests.rs) to pure Elixir.\n\nWHAT EXISTS: Elixir FileOps.Security (path validation, sensitive detection) + Gitignore (pattern matching) cover significant ground.\n\nWHAT'S MISSING: Unified PathClassifier with should_ignore/2, is_sensitive/2, classify_path/2. The Rust version uses pre-compiled globset patterns.\n\nKEY CONCERN: Pattern lists in patterns.rs (DIR_PATTERNS, FILE_PATTERNS) and sensitive.rs (SensitivePathData) must be exactly ported.\n\nFILES TO CREATE/MODIFY:\n- Create: elixir/.../file_ops/path_classifier.ex\n- Port: patterns.rs glob lists to Elixir\n- Port: sensitive.rs to extend Security module\n- Create: test/.../file_ops/path_classifier_test.exs\n- Modify: native_backend.py \u2014 route classify_path through Elixir\n- Delete: code_puppy_core/src/path_classify/ directory\n\nVALIDATION: Property-based tests comparing Elixir vs Python fallback on real repo trees.\n\nEFFORT: ~3 days",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -603,7 +603,7 @@
       ],
       "dependencies": {},
       "created_at": "2026-04-16T14:39:53.143955",
-      "updated_at": "2026-04-16T14:39:53.143961",
+      "updated_at": "2026-04-16T14:50:51.583327",
       "comments": []
     },
     "bd-36": {
