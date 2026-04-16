@@ -641,7 +641,7 @@ defmodule CodePuppyControl.FileOps do
       iex> FileOps.read_files(["file1.ex", "file2.ex"])
       {:ok, [%{path: "file1.ex", content: "...", ...}, %{path: "file2.ex", content: "...", ...}]}
   """
-  @spec read_files([String.t()], keyword()) :: {:ok, [read_result()]} | {:error, term()}
+  @spec read_files([String.t()], keyword()) :: {:ok, [read_result()]}
   def read_files(paths, opts \\ []) do
     max_concurrency = Keyword.get(opts, :max_concurrency, System.schedulers_online())
     timeout = Keyword.get(opts, :timeout, 30_000)

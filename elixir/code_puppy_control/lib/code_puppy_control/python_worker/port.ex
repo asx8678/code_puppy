@@ -404,9 +404,6 @@ defmodule CodePuppyControl.PythonWorker.Port do
           end)
 
         Protocol.encode_response(%{"files" => serializable_results}, nil)
-
-      {:error, reason} ->
-        Protocol.encode_error(-32000, "Batch file read failed: #{inspect(reason)}", nil, nil)
     end
   end
 
