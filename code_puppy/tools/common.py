@@ -1208,18 +1208,31 @@ def _find_best_window(
     1. Accepts pre-split needle lines as cache to avoid repeated splitlines()
     2. Uses prefix-sum cumulative lengths for O(1) window size estimation
     3. Skips expensive joins for windows that fail length pre-filter (10-40x speedup)
-    4. Routes to Rust when available and no Python-only caches are provided
+    4. Routes through _edit_bridge which handles Elixir → Python fallback (bd-41)
     """
-    # Try Rust path first (only if no Python-only caches are provided)
+    # bd-41: Route through _edit_bridge for Elixir-first routing
+    # (only if no Python-only caches are provided)
     if _needle_lines_cache is None and _needle_len_cache is None:
-        from code_puppy._edit_bridge import (
-            RUST_ACTIVE,
-            fuzzy_match_window as _rust_fuzzy,
-        )
+        from code_puppy._edit_bridge import fuzzy_match_window as _bridge_fuzzy
 
-        if RUST_ACTIVE():
-            return _rust_fuzzy(haystack_lines, needle)
+        return _bridge_fuzzy(haystack_lines, needle)
 
+    # When called with caches (internal use), run pure Python implementation
+    return _do_fuzzy_match_python(haystack_lines, needle, _needle_lines_cache, _needle_len_cache)
+
+
+def _do_fuzzy_match_python(
+    haystack_lines: list[str],
+    needle: str,
+    _needle_lines_cache: list[str] | None = None,
+    _needle_len_cache: int | None = None,
+) -> tuple[tuple[int, int | None], float]:
+    """
+    Pure Python fuzzy match implementation - used by _edit_bridge as fallback.
+
+    This is the internal Python implementation that _edit_bridge calls
+    when Elixir is not available. It should NOT route back to the bridge.
+    """
     # Use cached needle lines if provided, otherwise compute once
     if _needle_lines_cache is not None:
         needle_lines = _needle_lines_cache

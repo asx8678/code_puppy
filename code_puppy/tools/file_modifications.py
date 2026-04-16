@@ -31,7 +31,7 @@ from code_puppy.messaging import (  # Structured messaging types
     get_message_bus,
 )
 from code_puppy.config import get_diff_context_lines, get_post_edit_validation_enabled
-from code_puppy.tools.common import _find_best_window, generate_group_id
+from code_puppy.tools.common import generate_group_id
 from code_puppy.utils.eol import strip_bom, restore_bom
 from code_puppy.utils.file_mutex import file_lock
 from code_puppy.utils.file_display import safe_write_file
@@ -358,81 +358,25 @@ def _replace_in_file(
         # Strip BOM for matching (LLM output never has BOM)
         original, bom = strip_bom(original)
 
-        # Try Rust bridge first for the core replacement logic
-        from code_puppy._edit_bridge import RUST_ACTIVE, replace_in_content as _rust_replace
-        if RUST_ACTIVE():
-            # Convert replacements from list[dict] to list[tuple] for Rust
-            rust_replacements = [
-                (rep.get("old_str", ""), rep.get("new_str", ""))
-                for rep in replacements
-            ]
-            result = _rust_replace(original, rust_replacements)
+        # bd-41: Route through _edit_bridge for Elixir-first routing
+        from code_puppy._edit_bridge import replace_in_content as _bridge_replace
 
-            if not result["success"]:
-                return {
-                    "error": result["error"] or "No suitable match in file (JW < 0.95)",
-                    "jw_score": result["jw_score"],
-                    "received": None,
-                    "diff": "",
-                }
+        # Convert replacements from list[dict] to list[tuple] for the bridge
+        bridge_replacements = [
+            (rep.get("old_str", ""), rep.get("new_str", ""))
+            for rep in replacements
+        ]
+        result = _bridge_replace(original, bridge_replacements)
 
-            modified = result["modified"]
-        else:
-            # Python fallback: full replacement engine
-            modified = original
-            # Cache splitlines result to avoid repeated calls
-            modified_lines: list[str] | None = None
+        if not result["success"]:
+            return {
+                "error": result["error"] or "No suitable match in file (JW < 0.95)",
+                "jw_score": result["jw_score"],
+                "received": None,
+                "diff": "",
+            }
 
-            for rep in replacements:
-                old_snippet = rep.get("old_str", "")
-                new_snippet = rep.get("new_str", "")
-
-                # Fast path: exact match
-                if old_snippet and old_snippet in modified:
-                    modified = modified.replace(old_snippet, new_snippet, 1)
-                    # Invalidate cached lines since content changed
-                    modified_lines = None
-                    continue
-
-                # Lazy initialization of cached lines
-                if modified_lines is None:
-                    modified_lines = modified.splitlines()
-
-                # Pre-compute needle lines and length for cache
-                needle_stripped = old_snippet.rstrip("\n")
-                needle_lines = needle_stripped.splitlines()
-                needle_len = len(needle_stripped)
-
-                loc, score = _find_best_window(
-                    modified_lines,
-                    old_snippet,
-                    _needle_lines_cache=needle_lines,
-                    _needle_len_cache=needle_len,
-                )
-
-                if score < 0.95 or loc is None:
-                    return {
-                        "error": "No suitable match in file (JW < 0.95)",
-                        "jw_score": score,
-                        "received": old_snippet,
-                        "diff": "",
-                    }
-
-                start, end = loc
-                # Use slice-assignment to modify lines in-place, preserving cache
-                # Avoids triple-join rebuild pattern: 100-300ms -> ~10ms on large files
-                new_lines = new_snippet.rstrip("\n").splitlines()
-                modified_lines[start:end] = new_lines
-
-                # Line cache is preserved; only rebuild string content at loop end
-                # or when fast path needs it (fast path sets modified_lines = None)
-                modified = None  # Will be rebuilt at loop end or on fast path
-
-            # Rebuild modified string from cached lines if needed (fuzzy path optimization)
-            if modified is None and modified_lines is not None:
-                modified = "\n".join(modified_lines)
-                if original.endswith("\n"):
-                    modified += "\n"
+        modified = result["modified"]
 
         # Strip surplus blank lines that the LLM may have hallucinated
         modified = strip_added_blank_lines(original, modified)
