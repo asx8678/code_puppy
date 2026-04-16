@@ -7,8 +7,6 @@ Verifies that the bridge module:
 4. Returns correct values for known patterns
 """
 
-import pytest
-
 from code_puppy import path_classify_bridge as bridge
 
 
@@ -96,13 +94,13 @@ class TestSensitivePathPatterns:
         assert bridge.is_sensitive_path("~/.ssh/id_rsa") is True
 
     def test_sensitive_credentials_json(self):
-        """credentials.json should be marked as sensitive."""
-        # Note: This depends on Python fallback behavior
-        # The Python is_sensitive_path doesn't explicitly list this,
-        # but the extension matching might catch it
+        """credentials.json is NOT sensitive in Python fallback (only .env files are)."""
+        # Note: Python is_sensitive_path only matches:
+        # - .env files (with exceptions for .env.example, .env.sample, .env.template)
+        # - SSH keys, cloud creds dirs, .pem/.key extensions
+        # credentials.json is NOT in the sensitive list
         result = bridge.is_sensitive_path("credentials.json")
-        # Should be deterministic either way
-        assert result in (True, False)
+        assert result is False
 
     def test_no_sensitive_source_files(self):
         """Source files should NOT be sensitive."""
@@ -189,3 +187,17 @@ class TestFallbackBehavior:
         bridge.is_sensitive_path(".env")
         bridge.classify_path("src/main.py")
         # No assertion needed - test passes if no exception raised
+
+
+def test_rust_path_routing(monkeypatch):
+    """Verify Rust path is used when RUST_AVAILABLE is True."""
+    mock_classifier = type('MockClassifier', (), {
+        'py_should_ignore': staticmethod(lambda path: True),
+        'py_should_ignore_dir': staticmethod(lambda path: True),
+        'py_is_sensitive': staticmethod(lambda path: False),
+        'py_classify_path': staticmethod(lambda path: (True, False)),
+    })()
+    monkeypatch.setattr(bridge, 'RUST_AVAILABLE', True)
+    monkeypatch.setattr(bridge, '_classifier', mock_classifier)
+    assert bridge.should_ignore_path("anything") is True
+    assert bridge.classify_path("anything") == (True, False)

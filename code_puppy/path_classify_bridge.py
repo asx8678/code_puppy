@@ -16,9 +16,17 @@ try:
 
     _classifier = _RustPathClassifier()
     RUST_AVAILABLE = True
-except ImportError:
+except (ImportError, SystemError):
     _classifier = None
     RUST_AVAILABLE = False
+
+__all__ = [
+    "RUST_AVAILABLE",
+    "should_ignore_path",
+    "should_ignore_dir_path",
+    "is_sensitive_path",
+    "classify_path",
+]
 
 
 def should_ignore_path(path: str) -> bool:
