@@ -742,7 +742,7 @@
       "id": "bd-42",
       "title": "Full regression test for Rust-to-Elixir migration",
       "description": "Comprehensive regression testing after all 6 Rust modules migrated to Elixir.\n\nTEST MATRIX:\n1. Full test suite pass (pytest + mix test)\n2. Benchmark edit operations: fuzzy_match, replace, unified_diff end-to-end\n3. Verify Python fallback works when Elixir is disconnected\n4. Verify Rust hot path (message processing) still works unaffected\n5. Test with all three profiles: elixir_first, rust_only, python_only\n6. Edge cases: UTF-8 content, binary files, large repos, empty files\n\nPERFORMANCE GATES:\n- fuzzy_match: must be <3x slower than Rust on 100KB files\n- replace_engine: end-to-end latency acceptable for interactive use\n- content_prep/line_numbers: no regression from Python fallback\n\nIf fuzzy_match fails performance gate, file follow-up issue to convert to Rustler NIF.\n\nEFFORT: ~2 days",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "type": "task",
       "labels": [
@@ -754,7 +754,7 @@
         ]
       },
       "created_at": "2026-04-16T14:41:01.230906",
-      "updated_at": "2026-04-16T17:23:00.555976",
+      "updated_at": "2026-04-16T17:23:29.088164",
       "comments": [
         "## Execution Plan (planning-agent-019d96)\n\n### Dependencies\n- bd-41: Python bridge updates (must complete)\n- bd-40: Rust crate slimdown (must complete)\n\n### Test Matrix\n\n#### 1. Full test suites (~30 min)\n- [ ] cd elixir/code_puppy_control && mix test (expect 683+ tests pass, ignore known scheduler failures)\n- [ ] cargo test (verify remaining Rust modules: token_estimation, pruning, serialization, hashline, message_hashing, types)\n- [ ] python -m pytest tests/ -x\n\n#### 2. Profile-specific testing (~30 min)\n- [ ] elixir_first profile: verify edit ops route through Elixir\n- [ ] python_only profile: verify Python fallbacks work for all edit ops\n- [ ] Verify message-core Rust functions still work (hot path unaffected)\n\n#### 3. Edit operations end-to-end (~30 min)\n- [ ] fuzzy_match_window: Elixir path returns correct results\n- [ ] unified_diff: Elixir path produces correct diffs\n- [ ] replace_in_content: Elixir path (already validated in bd-39)\n- [ ] Chained operations: fuzzy match \u2192 replace \u2192 diff in sequence\n\n#### 4. Edge cases (~30 min)\n- [ ] UTF-8 content (emoji, CJK, mixed scripts)\n- [ ] Empty files / empty strings\n- [ ] Large files (100KB+)\n- [ ] Binary file detection (should not crash)\n- [ ] Concurrent edit operations\n\n#### 5. Performance sanity check\n- [ ] fuzzy_match: < 3x slower than Rust on representative inputs\n- [ ] replace_engine: interactive-acceptable latency (< 500ms for typical edits)\n- [ ] If perf gate fails \u2192 file follow-up for Rustler NIF optimization\n\n### Exit criteria\n- All test suites pass\n- All 3 profiles work correctly\n- No performance regressions beyond acceptable thresholds\n- MIGRATION_STATUS.md fully updated",
         "Watchdog QA (round 2): APPROVE \u2705 \u2014 18/18 tests pass, ruff check clean.",
