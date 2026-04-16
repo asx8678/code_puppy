@@ -186,13 +186,13 @@
       "id": "bd-12",
       "title": "Consolidate migration planning documents into single source of truth",
       "description": "Repository has multiple migration planning documents that may contain drift or stale references:\n\n**Existing docs:**\n1. ELIXIR_MIGRATION_ROADMAP.md \u2014 Rust\u2192Elixir analysis, tiered migration candidates\n2. fast_puppy_elixir_rewrite_plan.md \u2014 Historical doc, still references removed Zig architecture\n3. rewrite/ELIXIR_FIRST_REWRITE_ANALYSIS.md \u2014 Repo Compass indexer first slice justification\n4. rewrite/code_puppy_elixir_rewrite_bundle/PLAN/code_puppy_python_to_elixir_plan.md \u2014 Practical PR sequence\n\n**Identified problems:**\n- fast_puppy_elixir_rewrite_plan.md: Zig references are historical/stale\n- Multiple docs describe overlapping phases but with different numbering\n- ELIXIR_FIRST_REWRITE_ANALYSIS.md says repo_compass is integrated, but code is in rewrite/ (orphaned)\n- No single doc reflects current bd-7 through bd-12 work\n\n**Acceptance criteria:**\n1. Audit all four documents for conflicts and stale info\n2. Update fast_puppy_elixir_rewrite_plan.md to remove Zig references (or mark historical)\n3. Either:\n   a) Consolidate into MIGRATION_STATUS.md with current state, OR\n   b) Create clear hierarchy: ROADMAP (vision) + STATUS (current work) + PLAN (tactical)\n4. Ensure all bd-* references in code match actual filed issues\n5. Document which migration phases are DONE vs IN-PROGRESS vs TODO\n\n**Priority reason:** Prevents confusion about what's actually implemented vs planned. Currently developers must check 4+ docs to understand state.",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "type": "chore",
       "labels": [],
       "dependencies": {},
       "created_at": "2026-04-16T07:16:56.047151",
-      "updated_at": "2026-04-16T07:16:56.047165",
+      "updated_at": "2026-04-16T09:54:01.568538",
       "comments": []
     },
     "bd-13": {

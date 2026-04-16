@@ -45,7 +45,7 @@
          │                     │                     │
 ┌────────▼────────┐   ┌────────▼────────┐   ┌────────▼────────┐
 │   RUST (Hot)    │   │  RUST (Parse)   │   │  ELIXIR (Warm)  │
-│ code_puppy_core │   │  turbo_parse    │   │ code_puppy_ctl  │
+│ code_puppy_core │   │  turbo_parse    │   │code_puppy_control│
 │                 │   │                 │   │                 │
 │ • Message prune │   │ • Tree-sitter   │   │ • File ops      │
 │ • Token estim.  │   │ • Symbols       │   │ • Grep/list     │
@@ -92,10 +92,10 @@
 
 | Item | Status | Issue | Notes |
 |------|--------|-------|-------|
-| NativeBackend parse methods | ✅ Done | bd-11 | `extract_syntax_diagnostics()`, `parse_health_check()` |
-| Elixir NIF routing | ✅ Done | — | `turbo_parse_nif` → Rust |
-| Symbol extraction | ✅ Done | — | Production stable |
-| Diagnostics | ✅ Done | — | Production stable |
+| NativeBackend parse methods | ✅ Done | (pre-bd-11) | `extract_syntax_diagnostics()`, `parse_health_check()` |
+| Elixir NIF routing | ✅ Done | (pre-bd-11) | `turbo_parse_nif` → Rust |
+| Symbol extraction | ✅ Done | (pre-bd-11) | Production stable |
+| Diagnostics | ✅ Done | (pre-bd-11) | Production stable |
 | Folds / Highlights | 📋 Pending | — | Tier 2 priority |
 | Incremental parsing | 📋 Pending | — | Future optimization |
 
@@ -154,8 +154,9 @@
 | bd-8 | Gitignore filtering | Phase 2 | 🔄 Open |
 | bd-9 | Repo Compass indexer | Phase 2 | 🔄 Open |
 | bd-10 | Standalone Elixir transport | Phase 4 | 🔄 Open |
-| bd-11 | Parse contract completion | Phase 3 | 🔄 Open |
-| bd-12 | Doc consolidation | — | 🔄 **You are here** |
+| bd-11 | Parse contract verification | Phase 3 | 🔄 Open |
+| bd-13 | NativeBackend routing fix | Phase 1 | ✅ Closed |
+| bd-12 | Doc consolidation | — | ✅ Closed |
 
 ---
 
