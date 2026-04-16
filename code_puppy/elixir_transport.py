@@ -1,0 +1,632 @@
+"""
+Standalone Elixir transport client for file operations.
+
+This module provides a Python client adapter that communicates with the
+Elixir stdio service via JSON-RPC. It mimics the turbo_ops FileOps API
+for drop-in replacement.
+
+## Usage
+
+```python
+from code_puppy.elixir_transport import ElixirTransport
+
+# Start the transport (spawns Elixir process)
+transport = ElixirTransport()
+transport.start()
+
+# List files
+files = transport.list_files(".", recursive=True)
+
+# Read a file
+result = transport.read_file("path/to/file.py")
+print(result["content"])
+
+# Search in files
+matches = transport.grep("def ", ".", case_sensitive=True)
+
+# Shutdown
+transport.stop()
+```
+
+## Comparison with turbo_ops
+
+| Feature | turbo_ops (Rust) | elixir_transport |
+|---------|-----------------|------------------|
+| list_files | ✅ | ✅ |
+| grep | ✅ | ✅ |
+| read_file | ✅ | ✅ |
+| read_files (batch) | ✅ | ✅ |
+| JSON-RPC protocol | Content-Length | Newline-delimited |
+| Streaming | No | No |
+| Security checks | ✅ | ✅ (same validation) |
+
+## When to Use
+
+**Use elixir_transport when:**
+- You need the Elixir FileOps implementation standalone
+- You're building scripts that work with the Elixir control plane
+- You want simple subprocess communication without Rust dependencies
+
+**Use turbo_ops (Rust) when:**
+- Maximum performance is critical
+- You want zero Python dependency in the worker
+- You need the optimized native implementation
+
+**Use bridge mode (PythonWorker.Port) when:**
+- Running within the full CodePuppy application
+- You need PubSub event distribution
+- You want full OTP supervision
+
+## Environment Variables
+
+- `PUP_ELIXIR_PATH` - Path to elixir/mix executable directory (default: auto-detect)
+- `PUP_ELIXIR_SERVICE_CMD` - Override the command to start the service
+- `PUP_LOG_LEVEL` - Set Elixir service log level (debug, info, warn, error)
+
+TODO(bd-10): Add connection pooling for multiple concurrent transports
+TODO(bd-10): Add Unix socket transport option for better performance
+"""
+
+import json
+import logging
+import os
+import shutil
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+
+class ElixirTransportError(Exception):
+    """Raised when the Elixir transport encounters an error."""
+
+    pass
+
+
+class ElixirTransport:
+    """
+    Client adapter for the Elixir stdio JSON-RPC service.
+
+    This class manages a subprocess running the Elixir stdio service
+    and provides a Pythonic API for file operations.
+    """
+
+    def __init__(
+        self,
+        elixir_path: str | None = None,
+        project_path: str | None = None,
+        timeout: float = 30.0,
+    ):
+        """
+        Initialize the transport.
+
+        Args:
+            elixir_path: Path to elixir/mix executables. Auto-detected if None.
+            project_path: Path to the code_puppy_control Elixir project.
+                          Auto-detected relative to this file if None.
+            timeout: Default timeout for operations in seconds.
+        """
+        self.elixir_path = elixir_path or self._detect_elixir_path()
+        self.project_path = project_path or self._detect_project_path()
+        self.timeout = timeout
+
+        self._process: subprocess.Popen | None = None
+        self._lock = threading.Lock()
+        self._request_id = 0
+        self._closed = False
+
+    def _detect_elixir_path(self) -> str:
+        """Auto-detect the path to elixir/mix."""
+        elixir_exe = shutil.which("elixir")
+        if elixir_exe:
+            return os.path.dirname(elixir_exe)
+
+        # Check common locations
+        common_paths = [
+            "/usr/local/bin",
+            "/opt/homebrew/bin",  # macOS Homebrew on Apple Silicon
+            "/usr/bin",
+            os.path.expanduser("~/.mix/escripts"),
+        ]
+
+        for path in common_paths:
+            if os.path.exists(os.path.join(path, "elixir")):
+                return path
+
+        raise ElixirTransportError(
+            "Could not find elixir executable. "
+            "Please install Elixir or set PUP_ELIXIR_PATH."
+        )
+
+    def _detect_project_path(self) -> str:
+        """Auto-detect the path to the Elixir project."""
+        # Look for the elixir directory relative to this file
+        # code_puppy/elixir_transport.py -> elixir/code_puppy_control
+        current_file = Path(__file__).resolve()
+        project_root = current_file.parent.parent
+
+        # Try several possible locations
+        possible_paths = [
+            project_root / "elixir" / "code_puppy_control",
+            project_root / ".." / "elixir" / "code_puppy_control",
+            project_root / ".." / ".." / "elixir" / "code_puppy_control",
+        ]
+
+        for path in possible_paths:
+            if (path / "mix.exs").exists():
+                return str(path.resolve())
+
+        raise ElixirTransportError(
+            f"Could not find code_puppy_control Elixir project. "
+            f"Searched: {[str(p) for p in possible_paths]}"
+        )
+
+    def start(self) -> "ElixirTransport":
+        """
+        Start the Elixir stdio service subprocess.
+
+        Returns:
+            self for method chaining
+
+        Raises:
+            ElixirTransportError: If the service fails to start
+        """
+        if self._process is not None:
+            raise ElixirTransportError("Transport already started")
+
+        # Determine the command to run
+        cmd = self._get_service_command()
+
+        logger.debug(f"Starting Elixir stdio service: {' '.join(cmd)}")
+        logger.debug(f"Working directory: {self.project_path}")
+
+        try:
+            self._process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,  # Line buffered
+                cwd=self.project_path,
+            )
+        except OSError as e:
+            raise ElixirTransportError(f"Failed to start Elixir service: {e}")
+
+        # Wait for service to be ready
+        self._wait_for_ready()
+
+        logger.info("Elixir stdio service started")
+        return self
+
+    def _get_service_command(self) -> list[str]:
+        """Get the command to start the stdio service."""
+        # Check for override
+        override = os.environ.get("PUP_ELIXIR_SERVICE_CMD")
+        if override:
+            return override.split()
+
+        # Use mix task
+        mix_exe = os.path.join(self.elixir_path, "mix")
+        if not os.path.exists(mix_exe):
+            mix_exe = "mix"  # Assume it's in PATH
+
+        return [mix_exe, "code_puppy.stdio_service"]
+
+    def _wait_for_ready(self, timeout_sec: float = 10.0) -> None:
+        """Wait for the service to be ready by sending a ping."""
+        if self._process is None or self._process.poll() is not None:
+            raise ElixirTransportError("Service process not running")
+
+        # Give the service time to fully start
+        time.sleep(0.5)
+
+        start_time = time.time()
+        ping_id = 0
+
+        while time.time() - start_time < timeout_sec:
+            # Check if process died
+            if self._process.poll() is not None:
+                stderr = ""
+                if self._process.stderr:
+                    stderr = self._process.stderr.read()
+                raise ElixirTransportError(
+                    f"Service process exited with code {self._process.returncode}. "
+                    f"Stderr: {stderr[:500]}"
+                )
+
+            try:
+                ping_id += 1
+
+                # Send ping
+                request = {"jsonrpc": "2.0", "id": ping_id, "method": "ping", "params": {}}
+                req_line = json.dumps(request) + "\n"
+                self._process.stdin.write(req_line)
+                self._process.stdin.flush()
+
+                # Wait for response with timeout
+                response_line = ""
+                wait_start = time.time()
+                while time.time() - wait_start < 2.0:
+                    # Use select to check if data is available (non-blocking)
+                    import select
+                    ready, _, _ = select.select([self._process.stdout], [], [], 0.1)
+                    if ready:
+                        line = self._process.stdout.readline()
+                        if line:
+                            stripped = line.strip()
+                            if stripped:
+                                response_line = stripped
+                                break
+
+                if not response_line:
+                    # No response yet, try again
+                    continue
+
+                try:
+                    response = json.loads(response_line)
+                    if response.get("id") == ping_id and response.get("result", {}).get("pong"):
+                        # Success! Update the request counter
+                        with self._lock:
+                            self._request_id = ping_id
+                        return
+                except json.JSONDecodeError:
+                    # Not valid JSON, might be log output
+                    pass
+
+            except Exception as e:
+                # Service might still be starting up
+                logger.debug(f"Wait for ready attempt failed: {e}")
+
+            time.sleep(0.3)
+
+        raise ElixirTransportError("Timeout waiting for service to be ready")
+
+    def stop(self) -> None:
+        """Stop the Elixir stdio service."""
+        if self._process is None:
+            return
+
+        with self._lock:
+            if self._closed:
+                return
+
+            self._closed = True
+
+            # Send shutdown signal (EOF)
+            if self._process.stdin:
+                self._process.stdin.close()
+
+            # Wait for graceful shutdown
+            try:
+                self._process.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                logger.warning("Service did not stop gracefully, terminating")
+                self._process.terminate()
+                try:
+                    self._process.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    self._process.kill()
+                    self._process.wait()
+
+            logger.info("Elixir stdio service stopped")
+            self._process = None
+
+    def _send_request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        """
+        Send a JSON-RPC request and wait for response.
+
+        Args:
+            method: The JSON-RPC method name
+            params: The method parameters
+
+        Returns:
+            The response result
+
+        Raises:
+            ElixirTransportError: If the request fails
+        """
+        if self._process is None or self._process.poll() is not None:
+            raise ElixirTransportError("Transport not started or process died")
+
+        with self._lock:
+            self._request_id += 1
+            request_id = self._request_id
+
+        request = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": method,
+            "params": params,
+        }
+
+        request_line = json.dumps(request) + "\n"
+        logger.debug(f"Sending request: {request_line.strip()}")
+
+        try:
+            self._process.stdin.write(request_line)
+            self._process.stdin.flush()
+        except (BrokenPipeError, OSError) as e:
+            raise ElixirTransportError(f"Failed to send request: {e}")
+
+        # Read response (skip empty lines that may be warnings/startup messages)
+        max_empty_reads = 10
+        response_line = ""
+        for _ in range(max_empty_reads):
+            line = self._process.stdout.readline()
+            if not line:
+                raise ElixirTransportError("Empty response from service (process died?)")
+            line = line.strip()
+            if line:  # Skip empty lines
+                response_line = line
+                break
+
+        if not response_line:
+            raise ElixirTransportError("No valid response after skipping empty lines")
+
+        logger.debug(f"Received response: {response_line.strip()}")
+
+        try:
+            response = json.loads(response_line)
+        except json.JSONDecodeError as e:
+            raise ElixirTransportError(f"Invalid JSON response: {e}")
+
+        # Validate response
+        if response.get("id") != request_id:
+            raise ElixirTransportError(
+                f"Response ID mismatch: expected {request_id}, got {response.get('id')}"
+            )
+
+        if "error" in response:
+            error = response["error"]
+            raise ElixirTransportError(
+                f"Request failed: {error.get('message', 'Unknown error')} "
+                f"(code: {error.get('code', 'N/A')})"
+            )
+
+        return response.get("result", {})
+
+    # ============================================================================
+    # Public API
+    # ============================================================================
+
+    def ping(self) -> dict[str, Any]:
+        """
+        Send a ping to check if the service is responsive.
+
+        Returns:
+            Dict with "pong" and "timestamp" fields
+        """
+        return self._send_request("ping", {})
+
+    def health_check(self) -> dict[str, Any]:
+        """
+        Get detailed health status from the service.
+
+        Returns:
+            Dict with status, version, elixir_version, otp_version, timestamp
+        """
+        return self._send_request("health_check", {})
+
+    def list_files(
+        self,
+        directory: str = ".",
+        recursive: bool = True,
+        include_hidden: bool = False,
+        ignore_patterns: list[str] | None = None,
+        max_files: int = 10_000,
+    ) -> list[dict[str, Any]]:
+        """
+        List files in a directory.
+
+        Args:
+            directory: Path to list
+            recursive: Whether to recurse into subdirectories
+            include_hidden: Whether to include hidden files
+            ignore_patterns: List of glob patterns to ignore
+            max_files: Maximum number of files to return
+
+        Returns:
+            List of file info dicts with path, type, size, modified fields
+
+        Raises:
+            ElixirTransportError: If the directory cannot be listed
+        """
+        params: dict[str, Any] = {
+            "directory": directory,
+            "recursive": recursive,
+            "include_hidden": include_hidden,
+            "max_files": max_files,
+        }
+        if ignore_patterns:
+            params["ignore_patterns"] = ignore_patterns
+
+        result = self._send_request("file_list", params)
+        return result.get("files", [])
+
+    def read_file(
+        self,
+        path: str,
+        start_line: int | None = None,
+        num_lines: int | None = None,
+    ) -> dict[str, Any]:
+        """
+        Read a single file's contents.
+
+        Args:
+            path: Path to the file
+            start_line: 1-based starting line number (optional)
+            num_lines: Maximum number of lines to read (optional)
+
+        Returns:
+            Dict with path, content, num_lines, size, truncated, error fields
+
+        Raises:
+            ElixirTransportError: If the file cannot be read
+        """
+        params: dict[str, Any] = {"path": path}
+        if start_line is not None:
+            params["start_line"] = start_line
+        if num_lines is not None:
+            params["num_lines"] = num_lines
+
+        return self._send_request("file_read", params)
+
+    def read_files(
+        self,
+        paths: list[str],
+        start_line: int | None = None,
+        num_lines: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Read multiple files concurrently.
+
+        Args:
+            paths: List of file paths
+            start_line: 1-based starting line number (optional)
+            num_lines: Maximum number of lines to read (optional)
+
+        Returns:
+            List of file result dicts
+
+        Raises:
+            ElixirTransportError: If the batch request fails
+        """
+        params: dict[str, Any] = {"paths": paths}
+        if start_line is not None:
+            params["start_line"] = start_line
+        if num_lines is not None:
+            params["num_lines"] = num_lines
+
+        result = self._send_request("file_read_batch", params)
+        return result.get("files", [])
+
+    def grep(
+        self,
+        pattern: str,
+        directory: str = ".",
+        case_sensitive: bool = True,
+        max_matches: int = 1_000,
+        file_pattern: str = "*",
+        context_lines: int = 0,
+    ) -> list[dict[str, Any]]:
+        """
+        Search for a pattern in files.
+
+        Args:
+            pattern: Regex pattern to search for
+            directory: Directory to search in
+            case_sensitive: Whether the search is case-sensitive
+            max_matches: Maximum number of matches to return
+            file_pattern: Glob pattern to filter files
+            context_lines: Number of context lines around matches (not yet implemented)
+
+        Returns:
+            List of match dicts with file, line_number, line_content, match_start, match_end
+
+        Raises:
+            ElixirTransportError: If the search fails or pattern is invalid
+        """
+        params: dict[str, Any] = {
+            "pattern": pattern,
+            "directory": directory,
+            "case_sensitive": case_sensitive,
+            "max_matches": max_matches,
+            "file_pattern": file_pattern,
+            "context_lines": context_lines,
+        }
+
+        result = self._send_request("grep_search", params)
+        return result.get("matches", [])
+
+    # ============================================================================
+    # Context Manager Support
+    # ============================================================================
+
+    def __enter__(self) -> "ElixirTransport":
+        """Context manager entry."""
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit."""
+        self.stop()
+
+    def __del__(self):
+        """Cleanup on garbage collection."""
+        if self._process is not None and not self._closed:
+            try:
+                self.stop()
+            except Exception:
+                pass
+
+
+# =============================================================================
+# Convenience Functions (module-level)
+# =============================================================================
+
+
+# Module-level singleton for simple use cases
+_module_transport: ElixirTransport | None = None
+
+
+def get_transport() -> ElixirTransport:
+    """Get or create the module-level transport singleton."""
+    global _module_transport
+    if _module_transport is None:
+        _module_transport = ElixirTransport()
+        _module_transport.start()
+    return _module_transport
+
+
+def list_files(
+    directory: str = ".",
+    recursive: bool = True,
+    include_hidden: bool = False,
+    ignore_patterns: list[str] | None = None,
+    max_files: int = 10_000,
+) -> list[dict[str, Any]]:
+    """Module-level convenience function to list files."""
+    return get_transport().list_files(
+        directory, recursive, include_hidden, ignore_patterns, max_files
+    )
+
+
+def read_file(
+    path: str,
+    start_line: int | None = None,
+    num_lines: int | None = None,
+) -> dict[str, Any]:
+    """Module-level convenience function to read a file."""
+    return get_transport().read_file(path, start_line, num_lines)
+
+
+def read_files(
+    paths: list[str],
+    start_line: int | None = None,
+    num_lines: int | None = None,
+) -> list[dict[str, Any]]:
+    """Module-level convenience function to read multiple files."""
+    return get_transport().read_files(paths, start_line, num_lines)
+
+
+def grep(
+    pattern: str,
+    directory: str = ".",
+    case_sensitive: bool = True,
+    max_matches: int = 1_000,
+) -> list[dict[str, Any]]:
+    """Module-level convenience function to search files."""
+    return get_transport().grep(pattern, directory, case_sensitive, max_matches)
+
+
+def shutdown() -> None:
+    """Shutdown the module-level transport."""
+    global _module_transport
+    if _module_transport is not None:
+        _module_transport.stop()
+        _module_transport = None
