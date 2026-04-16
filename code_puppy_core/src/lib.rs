@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyList;
 
 mod hashline;
+mod line_numbers;
 mod message_hashing;
 mod pruning;
 mod serialization;
@@ -14,6 +15,7 @@ use hashline::{
     strip_hashline_prefixes as strip_hashline_prefixes_impl,
     validate_hashline_anchor as validate_hashline_anchor_impl,
 };
+use line_numbers::format_line_numbers as format_line_numbers_impl;
 use pruning::{
     prune_and_filter_core, prune_and_filter_impl,
     split_for_summarization_core, split_for_summarization_impl, truncation_indices_impl,
@@ -163,6 +165,19 @@ fn strip_hashline_prefixes(text: &str) -> String {
 #[pyfunction]
 fn validate_hashline_anchor(idx: u32, line: &str, expected_hash: &str) -> bool {
     validate_hashline_anchor_impl(idx, line, expected_hash)
+}
+
+// ── Line numbers functions ─────────────────────────────────────────────────
+
+#[pyfunction]
+#[pyo3(signature = (content, start_line=1, max_line_length=5000, line_number_width=6))]
+fn format_line_numbers(
+    content: &str,
+    start_line: usize,
+    max_line_length: usize,
+    line_number_width: usize,
+) -> String {
+    format_line_numbers_impl(content, start_line, max_line_length, line_number_width)
 }
 
 // ── MessageBatch pyclass ───────────────────────────────────────────────────
@@ -335,5 +350,6 @@ fn _code_puppy_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(format_hashlines, m)?)?;
     m.add_function(wrap_pyfunction!(strip_hashline_prefixes, m)?)?;
     m.add_function(wrap_pyfunction!(validate_hashline_anchor, m)?)?;
+    m.add_function(wrap_pyfunction!(format_line_numbers, m)?)?;
     Ok(())
 }
